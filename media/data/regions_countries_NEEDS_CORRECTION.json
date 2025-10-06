@@ -1,0 +1,1326 @@
+[
+    {
+        "text": "Regions",
+        "children": [
+            {
+                "id": 72,
+                "text": "Antarctica",
+                "ccodes": [
+                    "TF",
+                    "HM",
+                    "GS",
+                    "ZA",
+                    "AQ"
+                ]
+            },
+            {
+                "id": 73,
+                "text": "Asiatic Russia",
+                "ccodes": [
+                    "CN",
+                    "KP",
+                    "KZ",
+                    "MN",
+                    "RU"
+                ]
+            },
+            {
+                "id": 74,
+                "text": "Australia/New Zealand",
+                "ccodes": [
+                    "AU",
+                    "NZ"
+                ]
+            },
+            {
+                "id": 75,
+                "text": "Caribbean",
+                "ccodes": [
+                    "AG",
+                    "BB",
+                    "BS",
+                    "CU",
+                    "DM",
+                    "DO",
+                    "GD",
+                    "JM",
+                    "HT",
+                    "LC",
+                    "KN",
+                    "NL",
+                    "PR",
+                    "VI",
+                    "TT",
+                    "VC",
+                    "KY",
+                    "CW"
+                ]
+            },
+            {
+                "id": 76,
+                "text": "Central America",
+                "ccodes": [
+                    "BZ",
+                    "CR",
+                    "CO",
+                    "GT",
+                    "HN",
+                    "MX",
+                    "NI",
+                    "PA",
+                    "SV",
+                    "US"
+                ]
+            },
+            {
+                "id": 77,
+                "text": "Central Asia",
+                "ccodes": [
+                    "AF",
+                    "CN",
+                    "IR",
+                    "KG",
+                    "KZ",
+                    "RU",
+                    "TJ",
+                    "TM",
+                    "UZ"
+                ]
+            },
+            {
+                "id": 78,
+                "text": "Eastern Africa",
+                "ccodes": [
+                    "AO",
+                    "BI",
+                    "BW",
+                    "CD",
+                    "DJ",
+                    "ER",
+                    "ET",
+                    "KE",
+                    "KM",
+                    "MZ",
+                    "MG",
+                    "MU",
+                    "MW",
+                    "NA",
+                    "RW",
+                    "SD",
+                    "SO",
+                    "SS",
+                    "UG",
+                    "TZ",
+                    "ZA",
+                    "ZW",
+                    "ZM"
+                ]
+            },
+            {
+                "id": 79,
+                "text": "Eastern Asia",
+                "ccodes": [
+                    "AF",
+                    "BT",
+                    "TW",
+                    "CN",
+                    "JP",
+                    "IN",
+                    "KG",
+                    "KP",
+                    "HK",
+                    "KR",
+                    "KZ",
+                    "LA",
+                    "MM",
+                    "MN",
+                    "NP",
+                    "PK",
+                    "RU",
+                    "TJ",
+                    "VN"
+                ]
+            },
+            {
+                "id": 80,
+                "text": "Eastern Europe",
+                "ccodes": [
+                    "BG",
+                    "AT",
+                    "BY",
+                    "CZ",
+                    "DE",
+                    "EE",
+                    "GR",
+                    "HR",
+                    "HU",
+                    "LT",
+                    "LV",
+                    "MK",
+                    "MD",
+                    "PL",
+                    "SK",
+                    "RO",
+                    "RS",
+                    "RU",
+                    "SI",
+                    "TR",
+                    "UA"
+                ]
+            },
+            {
+                "id": 81,
+                "text": "European Russia",
+                "ccodes": [
+                    "AZ",
+                    "BY",
+                    "EE",
+                    "GE",
+                    "FI",
+                    "KZ",
+                    "LT",
+                    "LV",
+                    "NO",
+                    "PL",
+                    "RU",
+                    "UA"
+                ]
+            },
+            {
+                "id": 82,
+                "text": "Melanesia",
+                "ccodes": [
+                    "ID",
+                    "NC",
+                    "PG",
+                    "SB",
+                    "VU"
+                ]
+            },
+            {
+                "id": 83,
+                "text": "Micronesia",
+                "ccodes": [
+                    "FM",
+                    "KI",
+                    "GU",
+                    "NU",
+                    "PW"
+                ]
+            },
+            {
+                "id": 84,
+                "text": "Middle Africa",
+                "ccodes": [
+                    "AO",
+                    "BI",
+                    "GQ",
+                    "CF",
+                    "CG",
+                    "CM",
+                    "CD",
+                    "GA",
+                    "LY",
+                    "NA",
+                    "NE",
+                    "NG",
+                    "RW",
+                    "SD",
+                    "SS",
+                    "ST",
+                    "TD",
+                    "UG",
+                    "TZ",
+                    "ZM"
+                ]
+            },
+            {
+                "id": 85,
+                "text": "Northern Africa",
+                "ccodes": [
+                    "CF",
+                    "EG",
+                    "CD",
+                    "DZ",
+                    "ER",
+                    "ET",
+                    "IL",
+                    "KE",
+                    "LY",
+                    "MA",
+                    "ML",
+                    "MR",
+                    "NE",
+                    "PS",
+                    "SD",
+                    "SS",
+                    "TD",
+                    "UG",
+                    "TN",
+                    "EH"
+                ]
+            },
+            {
+                "id": 86,
+                "text": "Northern America",
+                "ccodes": [
+                    "CA",
+                    "GL",
+                    "MX",
+                    "US"
+                ]
+            },
+            {
+                "id": 87,
+                "text": "Northern Europe",
+                "ccodes": [
+                    "DK",
+                    "DE",
+                    "FI",
+                    "IE",
+                    "GB",
+                    "IS",
+                    "IM",
+                    "NO",
+                    "RU",
+                    "SE",
+                    "AX",
+                    "FO"
+                ]
+            },
+            {
+                "id": 88,
+                "text": "Polynesia",
+                "ccodes": [
+                    "PF",
+                    "FJ",
+                    "US",
+                    "WS",
+                    "AS"
+                ]
+            },
+            {
+                "id": 89,
+                "text": "South America",
+                "ccodes": [
+                    "AR",
+                    "BO",
+                    "BR",
+                    "CL",
+                    "CO",
+                    "EC",
+                    "GY",
+                    "PA",
+                    "PE",
+                    "PY",
+                    "SR",
+                    "UY",
+                    "VE",
+                    "FK"
+                ]
+            },
+            {
+                "id": 90,
+                "text": "Southeastern Asia",
+                "ccodes": [
+                    "BD",
+                    "BN",
+                    "CN",
+                    "IN",
+                    "ID",
+                    "KH",
+                    "LA",
+                    "MM",
+                    "MY",
+                    "PG",
+                    "PH",
+                    "SG",
+                    "TL",
+                    "TH",
+                    "VN"
+                ]
+            },
+            {
+                "id": 91,
+                "text": "Southern Africa",
+                "ccodes": [
+                    "AO",
+                    "SZ",
+                    "BW",
+                    "MZ",
+                    "LS",
+                    "NA",
+                    "ZA",
+                    "ZW",
+                    "ZM"
+                ]
+            },
+            {
+                "id": 92,
+                "text": "Southern Asia",
+                "ccodes": [
+                    "AF",
+                    "AZ",
+                    "BD",
+                    "BT",
+                    "CN",
+                    "IN",
+                    "IQ",
+                    "IR",
+                    "LK",
+                    "MM",
+                    "NP",
+                    "PK",
+                    "TJ",
+                    "TM",
+                    "TR",
+                    "UZ"
+                ]
+            },
+            {
+                "id": 93,
+                "text": "Southern Europe",
+                "ccodes": [
+                    "AD",
+                    "AL",
+                    "BG",
+                    "AT",
+                    "BA",
+                    "IT",
+                    "ES",
+                    "FR",
+                    "GR",
+                    "HR",
+                    "HU",
+                    "XK",
+                    "MK",
+                    "ME",
+                    "MT",
+                    "PT",
+                    "RO",
+                    "RS",
+                    "SI",
+                    "CH",
+                    "TR"
+                ]
+            },
+            {
+                "id": 94,
+                "text": "Western Africa",
+                "ccodes": [
+                    "CV",
+                    "BF",
+                    "BJ",
+                    "CI",
+                    "CM",
+                    "DZ",
+                    "ES",
+                    "GW",
+                    "GH",
+                    "GM",
+                    "GN",
+                    "LR",
+                    "LY",
+                    "SN",
+                    "ML",
+                    "MR",
+                    "NE",
+                    "NG",
+                    "PT",
+                    "SL",
+                    "TD",
+                    "TG",
+                    "EH"
+                ]
+            },
+            {
+                "id": 95,
+                "text": "Western Asia",
+                "ccodes": [
+                    "AE",
+                    "AM",
+                    "BG",
+                    "BH",
+                    "AZ",
+                    "JO",
+                    "CY",
+                    "GE",
+                    "GR",
+                    "IL",
+                    "IQ",
+                    "IR",
+                    "KW",
+                    "LB",
+                    "OM",
+                    "PS",
+                    "QA",
+                    "RU",
+                    "SA",
+                    "SY",
+                    "TR",
+                    "YE"
+                ]
+            },
+            {
+                "id": 96,
+                "text": "Western Europe",
+                "ccodes": [
+                    "AD",
+                    "AT",
+                    "BE",
+                    "DK",
+                    "LI",
+                    "IT",
+                    "CZ",
+                    "DE",
+                    "ES",
+                    "FR",
+                    "HU",
+                    "LU",
+                    "NL",
+                    "PL",
+                    "SK",
+                    "SI",
+                    "CH"
+                ]
+            }
+        ]
+    },
+    {
+        "text": "Countries",
+        "children": [
+            {
+                "id": "AF",
+                "text": "Afghanistan (Afghānestān)"
+            },
+            {
+                "id": "AX",
+                "text": "Aland Islands"
+            },
+            {
+                "id": "AL",
+                "text": "Albania (Shqipëria)"
+            },
+            {
+                "id": "DZ",
+                "text": "Algeria (Al-Jazā'ir)"
+            },
+            {
+                "id": "AS",
+                "text": "American Samoa"
+            },
+            {
+                "id": "AD",
+                "text": "Andorra"
+            },
+            {
+                "id": "AO",
+                "text": "Angola"
+            },
+            {
+                "id": "AQ",
+                "text": "Antarctica"
+            },
+            {
+                "id": "AG",
+                "text": "Antigua and Barbuda"
+            },
+            {
+                "id": "AR",
+                "text": "Argentina"
+            },
+            {
+                "id": "AM",
+                "text": "Armenia (Hayastan)"
+            },
+            {
+                "id": "AU",
+                "text": "Australia"
+            },
+            {
+                "id": "AT",
+                "text": "Austria (Österreich)"
+            },
+            {
+                "id": "AZ",
+                "text": "Azerbaijan (Azǝrbaycan)"
+            },
+            {
+                "id": "BS",
+                "text": "Bahamas"
+            },
+            {
+                "id": "BH",
+                "text": "Bahrain (Al Baḥrayn)"
+            },
+            {
+                "id": "BD",
+                "text": "Bangladesh (Bāṁlādesh)"
+            },
+            {
+                "id": "BB",
+                "text": "Barbados"
+            },
+            {
+                "id": "BY",
+                "text": "Belarus (Bieloruś)"
+            },
+            {
+                "id": "BE",
+                "text": "Belgium (België)"
+            },
+            {
+                "id": "BZ",
+                "text": "Belize"
+            },
+            {
+                "id": "BJ",
+                "text": "Benin (Bénin)"
+            },
+            {
+                "id": "BT",
+                "text": "Bhutan (Druk Yul)"
+            },
+            {
+                "id": "BO",
+                "text": "Bolivia"
+            },
+            {
+                "id": "BA",
+                "text": "Bosnia and Herzegovina (Bosna i Hercegovina)"
+            },
+            {
+                "id": "BW",
+                "text": "Botswana"
+            },
+            {
+                "id": "BR",
+                "text": "Brazil (Brasil)"
+            },
+            {
+                "id": "BN",
+                "text": "Brunei"
+            },
+            {
+                "id": "BG",
+                "text": "Bulgaria"
+            },
+            {
+                "id": "BF",
+                "text": "Burkina Faso (Burkina)"
+            },
+            {
+                "id": "BI",
+                "text": "Burundi"
+            },
+            {
+                "id": "KH",
+                "text": "Cambodia (Kâmpŭchéa)"
+            },
+            {
+                "id": "CM",
+                "text": "Cameroon (Cameroun)"
+            },
+            {
+                "id": "CA",
+                "text": "Canada"
+            },
+            {
+                "id": "CV",
+                "text": "Cape Verde (Cabo Verde)"
+            },
+            {
+                "id": "KY",
+                "text": "Cayman Islands"
+            },
+            {
+                "id": "CF",
+                "text": "Central African Republic (République centrafricaine)"
+            },
+            {
+                "id": "TD",
+                "text": "Chad (Tchād)"
+            },
+            {
+                "id": "CL",
+                "text": "Chile"
+            },
+            {
+                "id": "CN",
+                "text": "China (Zhongguo)"
+            },
+            {
+                "id": "CO",
+                "text": "Colombia"
+            },
+            {
+                "id": "KM",
+                "text": "Comoros (Comores)"
+            },
+            {
+                "id": "CR",
+                "text": "Costa Rica"
+            },
+            {
+                "id": "HR",
+                "text": "Croatia (Hrvatska)"
+            },
+            {
+                "id": "CU",
+                "text": "Cuba"
+            },
+            {
+                "id": "CW",
+                "text": "Curacao"
+            },
+            {
+                "id": "CY",
+                "text": "Cyprus (Kypriakí Dimokratía)"
+            },
+            {
+                "id": "CZ",
+                "text": "Czech Republic (Česko)"
+            },
+            {
+                "id": "CD",
+                "text": "Democratic Republic of the Congo (Congo, République Démocratique du)"
+            },
+            {
+                "id": "DK",
+                "text": "Denmark (Danmark)"
+            },
+            {
+                "id": "DJ",
+                "text": "Djibouti (Jībūtī)"
+            },
+            {
+                "id": "DM",
+                "text": "Dominica"
+            },
+            {
+                "id": "DO",
+                "text": "Dominican Republic (República Dominicana)"
+            },
+            {
+                "id": "TL",
+                "text": "East Timor (Timor-Leste)"
+            },
+            {
+                "id": "EC",
+                "text": "Ecuador"
+            },
+            {
+                "id": "EG",
+                "text": "Egypt (Miṣr)"
+            },
+            {
+                "id": "SV",
+                "text": "El Salvador"
+            },
+            {
+                "id": "GQ",
+                "text": "Equatorial Guinea (Guinea Ecuatorial)"
+            },
+            {
+                "id": "ER",
+                "text": "Eritrea (Iritriyā)"
+            },
+            {
+                "id": "EE",
+                "text": "Estonia (Eesti)"
+            },
+            {
+                "id": "ET",
+                "text": "Ethiopia (Ityop'iya)"
+            },
+            {
+                "id": "FK",
+                "text": "Falkland Islands"
+            },
+            {
+                "id": "FO",
+                "text": "Faroe Islands"
+            },
+            {
+                "id": "FJ",
+                "text": "Fiji"
+            },
+            {
+                "id": "FI",
+                "text": "Finland (Suomi)"
+            },
+            {
+                "id": "FR",
+                "text": "France"
+            },
+            {
+                "id": "PF",
+                "text": "French Polynesia"
+            },
+            {
+                "id": "TF",
+                "text": "French Southern Territories"
+            },
+            {
+                "id": "GA",
+                "text": "Gabon"
+            },
+            {
+                "id": "GM",
+                "text": "Gambia (Gambia, The)"
+            },
+            {
+                "id": "GE",
+                "text": "Georgia (Sakartvelo)"
+            },
+            {
+                "id": "DE",
+                "text": "Germany (Deutschland)"
+            },
+            {
+                "id": "GH",
+                "text": "Ghana"
+            },
+            {
+                "id": "GR",
+                "text": "Greece (Ellás)"
+            },
+            {
+                "id": "GL",
+                "text": "Greenland"
+            },
+            {
+                "id": "GD",
+                "text": "Grenada"
+            },
+            {
+                "id": "GU",
+                "text": "Guam"
+            },
+            {
+                "id": "GT",
+                "text": "Guatemala"
+            },
+            {
+                "id": "GN",
+                "text": "Guinea (Guinée)"
+            },
+            {
+                "id": "GW",
+                "text": "Guinea-Bissau (Guiné-Bissau)"
+            },
+            {
+                "id": "GY",
+                "text": "Guyana"
+            },
+            {
+                "id": "HT",
+                "text": "Haiti (Haïti)"
+            },
+            {
+                "id": "HM",
+                "text": "Heard Island and McDonald Islands"
+            },
+            {
+                "id": "HN",
+                "text": "Honduras"
+            },
+            {
+                "id": "HK",
+                "text": "Hong Kong"
+            },
+            {
+                "id": "HU",
+                "text": "Hungary (Magyarország)"
+            },
+            {
+                "id": "IS",
+                "text": "Iceland (Ísland)"
+            },
+            {
+                "id": "IN",
+                "text": "India (Bhārat)"
+            },
+            {
+                "id": "ID",
+                "text": "Indonesia"
+            },
+            {
+                "id": "IR",
+                "text": "Iran (Īrān)"
+            },
+            {
+                "id": "IQ",
+                "text": "Iraq (Al-ʻIrāq)"
+            },
+            {
+                "id": "IE",
+                "text": "Ireland"
+            },
+            {
+                "id": "IM",
+                "text": "Isle of Man"
+            },
+            {
+                "id": "IL",
+                "text": "Israel (Yisra'el)"
+            },
+            {
+                "id": "IT",
+                "text": "Italy (Italia)"
+            },
+            {
+                "id": "CI",
+                "text": "Ivory Coast (Côte d'Ivoire)"
+            },
+            {
+                "id": "JM",
+                "text": "Jamaica"
+            },
+            {
+                "id": "JP",
+                "text": "Japan (Nihon)"
+            },
+            {
+                "id": "JO",
+                "text": "Jordan (Al Urdun)"
+            },
+            {
+                "id": "KZ",
+                "text": "Kazakhstan (Qazaqstan)"
+            },
+            {
+                "id": "KE",
+                "text": "Kenya"
+            },
+            {
+                "id": "KI",
+                "text": "Kiribati"
+            },
+            {
+                "id": "XK",
+                "text": "Kosovo"
+            },
+            {
+                "id": "KW",
+                "text": "Kuwait (Al Kuwayt)"
+            },
+            {
+                "id": "KG",
+                "text": "Kyrgyzstan"
+            },
+            {
+                "id": "LA",
+                "text": "Laos (Sathalanalat Paxathipatai Paxaxôn Lao)"
+            },
+            {
+                "id": "LV",
+                "text": "Latvia (Latvija)"
+            },
+            {
+                "id": "LB",
+                "text": "Lebanon (Lubnān)"
+            },
+            {
+                "id": "LS",
+                "text": "Lesotho"
+            },
+            {
+                "id": "LR",
+                "text": "Liberia"
+            },
+            {
+                "id": "LY",
+                "text": "Libya (Lībiyā)"
+            },
+            {
+                "id": "LI",
+                "text": "Liechtenstein"
+            },
+            {
+                "id": "LT",
+                "text": "Lithuania (Lietuva)"
+            },
+            {
+                "id": "LU",
+                "text": "Luxembourg"
+            },
+            {
+                "id": "MK",
+                "text": "Macedonia (Makedonija, Republika)"
+            },
+            {
+                "id": "MG",
+                "text": "Madagascar (Madagasikara)"
+            },
+            {
+                "id": "MW",
+                "text": "Malawi (Malaŵi)"
+            },
+            {
+                "id": "MY",
+                "text": "Malaysia"
+            },
+            {
+                "id": "ML",
+                "text": "Mali"
+            },
+            {
+                "id": "MT",
+                "text": "Malta"
+            },
+            {
+                "id": "MR",
+                "text": "Mauritania (Mūrītānīyā)"
+            },
+            {
+                "id": "MU",
+                "text": "Mauritius"
+            },
+            {
+                "id": "MX",
+                "text": "Mexico (México)"
+            },
+            {
+                "id": "FM",
+                "text": "Micronesia (Federated States of Micronesia)"
+            },
+            {
+                "id": "MD",
+                "text": "Moldova"
+            },
+            {
+                "id": "MN",
+                "text": "Mongolia (Mongol)"
+            },
+            {
+                "id": "ME",
+                "text": "Montenegro (Crna Gora)"
+            },
+            {
+                "id": "MA",
+                "text": "Morocco (Al Maghrib)"
+            },
+            {
+                "id": "MZ",
+                "text": "Mozambique (Moçambique)"
+            },
+            {
+                "id": "MM",
+                "text": "Myanmar (Myanma)"
+            },
+            {
+                "id": "NA",
+                "text": "Namibia"
+            },
+            {
+                "id": "NP",
+                "text": "Nepal (Nepāl)"
+            },
+            {
+                "id": "NL",
+                "text": "Netherlands (Nederland)"
+            },
+            {
+                "id": "NC",
+                "text": "New Caledonia"
+            },
+            {
+                "id": "NZ",
+                "text": "New Zealand"
+            },
+            {
+                "id": "NI",
+                "text": "Nicaragua"
+            },
+            {
+                "id": "NE",
+                "text": "Niger"
+            },
+            {
+                "id": "NG",
+                "text": "Nigeria"
+            },
+            {
+                "id": "NU",
+                "text": "Niue"
+            },
+            {
+                "id": "KP",
+                "text": "North Korea (Chosŏn)"
+            },
+            {
+                "id": "NO",
+                "text": "Norway (Norge)"
+            },
+            {
+                "id": "OM",
+                "text": "Oman (ʻUmān)"
+            },
+            {
+                "id": "PK",
+                "text": "Pakistan (Pākistān)"
+            },
+            {
+                "id": "PW",
+                "text": "Palau (Belau)"
+            },
+            {
+                "id": "PS",
+                "text": "Palestine"
+            },
+            {
+                "id": "PA",
+                "text": "Panama (Panamá)"
+            },
+            {
+                "id": "PG",
+                "text": "Papua New Guinea"
+            },
+            {
+                "id": "PY",
+                "text": "Paraguay"
+            },
+            {
+                "id": "PE",
+                "text": "Peru (Perú)"
+            },
+            {
+                "id": "PH",
+                "text": "Philippines (Pilipinas)"
+            },
+            {
+                "id": "PL",
+                "text": "Poland (Polska)"
+            },
+            {
+                "id": "PT",
+                "text": "Portugal"
+            },
+            {
+                "id": "PR",
+                "text": "Puerto Rico"
+            },
+            {
+                "id": "QA",
+                "text": "Qaṭar"
+            },
+            {
+                "id": "CG",
+                "text": "Republic of the Congo (Congo)"
+            },
+            {
+                "id": "RO",
+                "text": "Romania (România)"
+            },
+            {
+                "id": "RU",
+                "text": "Russia (Rossija)"
+            },
+            {
+                "id": "RW",
+                "text": "Rwanda"
+            },
+            {
+                "id": "KN",
+                "text": "Saint Kitts and Nevis"
+            },
+            {
+                "id": "LC",
+                "text": "Saint Lucia"
+            },
+            {
+                "id": "VC",
+                "text": "Saint Vincent and the Grenadines"
+            },
+            {
+                "id": "WS",
+                "text": "Samoa"
+            },
+            {
+                "id": "ST",
+                "text": "Sao Tome and Principe (São Tomé e Príncipe)"
+            },
+            {
+                "id": "SA",
+                "text": "Saudi Arabia (As Suʻūdīyyah)"
+            },
+            {
+                "id": "SN",
+                "text": "Senegal (Sénégal)"
+            },
+            {
+                "id": "RS",
+                "text": "Serbia (Srbija)"
+            },
+            {
+                "id": "SL",
+                "text": "Sierra Leone"
+            },
+            {
+                "id": "SG",
+                "text": "Singapore"
+            },
+            {
+                "id": "SK",
+                "text": "Slovakia (Slovensko)"
+            },
+            {
+                "id": "SI",
+                "text": "Slovenia (Slovenija)"
+            },
+            {
+                "id": "SB",
+                "text": "Solomon Islands"
+            },
+            {
+                "id": "SO",
+                "text": "Somalia (Soomaaliya)"
+            },
+            {
+                "id": "ZA",
+                "text": "South Africa"
+            },
+            {
+                "id": "GS",
+                "text": "South Georgia and the South Sandwich Islands"
+            },
+            {
+                "id": "KR",
+                "text": "South Korea (Han'guk)"
+            },
+            {
+                "id": "SS",
+                "text": "South Sudan"
+            },
+            {
+                "id": "ES",
+                "text": "Spain (España)"
+            },
+            {
+                "id": "LK",
+                "text": "Sri Lanka (Shrī Laṁkā)"
+            },
+            {
+                "id": "SD",
+                "text": "Sudan (As Sūdān)"
+            },
+            {
+                "id": "SR",
+                "text": "Suriname"
+            },
+            {
+                "id": "SZ",
+                "text": "Swaziland"
+            },
+            {
+                "id": "SE",
+                "text": "Sweden (Sverige)"
+            },
+            {
+                "id": "CH",
+                "text": "Switzerland (Schweiz)"
+            },
+            {
+                "id": "SY",
+                "text": "Syria (Sūrīyah)"
+            },
+            {
+                "id": "TW",
+                "text": "Taiwan (Chung-hua Min-kuo)"
+            },
+            {
+                "id": "TJ",
+                "text": "Tajikistan (Tojikiston)"
+            },
+            {
+                "id": "TZ",
+                "text": "Tanzania"
+            },
+            {
+                "id": "TH",
+                "text": "Thailand (Prathet Thai)"
+            },
+            {
+                "id": "TG",
+                "text": "Togo"
+            },
+            {
+                "id": "TT",
+                "text": "Trinidad and Tobago"
+            },
+            {
+                "id": "TN",
+                "text": "Tunisia (Tūnis)"
+            },
+            {
+                "id": "TR",
+                "text": "Turkey (Türkiye)"
+            },
+            {
+                "id": "TM",
+                "text": "Turkmenistan (Türkmenistan)"
+            },
+            {
+                "id": "VI",
+                "text": "U.S. Virgin Islands"
+            },
+            {
+                "id": "UG",
+                "text": "Uganda"
+            },
+            {
+                "id": "UA",
+                "text": "Ukraine (Ukraina)"
+            },
+            {
+                "id": "AE",
+                "text": "United Arab Emirates (Al Imārāt)"
+            },
+            {
+                "id": "GB",
+                "text": "United Kingdom"
+            },
+            {
+                "id": "US",
+                "text": "United States"
+            },
+            {
+                "id": "UY",
+                "text": "Uruguay"
+            },
+            {
+                "id": "UZ",
+                "text": "Uzbekistan (O'zbekiston)"
+            },
+            {
+                "id": "VU",
+                "text": "Vanuatu"
+            },
+            {
+                "id": "VE",
+                "text": "Venezuela"
+            },
+            {
+                "id": "VN",
+                "text": "Vietnam (Việt Nam)"
+            },
+            {
+                "id": "EH",
+                "text": "Western Sahara"
+            },
+            {
+                "id": "YE",
+                "text": "Yemen (Al Yaman)"
+            },
+            {
+                "id": "ZM",
+                "text": "Zambia"
+            },
+            {
+                "id": "ZW",
+                "text": "Zimbabwe"
+            }
+        ]
+    }
+]
