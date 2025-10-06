@@ -137,7 +137,6 @@ PASSES = [
 
 REGIONS = (
     (72, 'Antarctica'),
-    (73, 'Asiatic Russia'),
     (74, 'Australia/New Zealand'),
     (75, 'Caribbean'),
     (76, 'Central America'),
@@ -145,7 +144,6 @@ REGIONS = (
     (78, 'Eastern Africa'),
     (79, 'Eastern Asia'),
     (80, 'Eastern Europe'),
-    (81, 'European Russia'),
     (82, 'Melanesia'),
     (83, 'Micronesia'),
     (84, 'Middle Africa'),
