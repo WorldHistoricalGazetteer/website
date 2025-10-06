@@ -14,17 +14,6 @@
                 ]
             },
             {
-                "id": 73,
-                "text": "Asiatic Russia",
-                "ccodes": [
-                    "CN",
-                    "KP",
-                    "KZ",
-                    "MN",
-                    "RU"
-                ]
-            },
-            {
                 "id": 74,
                 "text": "Australia/New Zealand",
                 "ccodes": [
@@ -165,24 +154,6 @@
                     "RU",
                     "SI",
                     "TR",
-                    "UA"
-                ]
-            },
-            {
-                "id": 81,
-                "text": "European Russia",
-                "ccodes": [
-                    "AZ",
-                    "BY",
-                    "EE",
-                    "GE",
-                    "FI",
-                    "KZ",
-                    "LT",
-                    "LV",
-                    "NO",
-                    "PL",
-                    "RU",
                     "UA"
                 ]
             },
