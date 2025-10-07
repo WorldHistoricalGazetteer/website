@@ -32,7 +32,8 @@ RUN set -eux; \
         psmisc \
         # Version control
         git && \
-    # Set up Python virtual environment
+    # Set up fresh Python virtual environment
+    rm -rf /py && \
     python -m venv /py && \
     /py/bin/pip install --upgrade pip && \
     /py/bin/pip install -r /tmp/requirements.txt && \

@@ -233,19 +233,19 @@ Promise.all([
         $('#clearButton').click();
         switch ($(this).val()) {
             case 'regions':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: dropdown_data[0].children
                 });
                 break;
             case 'countries':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: dropdown_data[1].children
                 });
                 break;
             case 'userareas':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: user_areas.map(feature => ({
                         id: feature.properties.id,
@@ -255,7 +255,7 @@ Promise.all([
                 });
                 break;
             default:
-                $('#entrySelector').prop('disabled', true).select2({
+                $('#entrySelector').prop('disabled', true).empty().select2({
                     placeholder: '(choose type)',
                     data: []
                 });

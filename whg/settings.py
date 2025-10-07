@@ -80,6 +80,7 @@ INSTALLED_APPS = [
     'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
     'places.apps.PlacesConfig',
+    'regions.apps.RegionsConfig',
     'resources.apps.ResourcesConfig',  # for teaching
     'search.apps.SearchConfig',
     'sitemap.apps.SitemapConfig',
