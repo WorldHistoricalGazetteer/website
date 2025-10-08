@@ -238,6 +238,11 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 "start",
                 "end",
             ]
+
+            # Add dataset columns for collections
+            if obj_type == "collection":
+                headers.extend(["dataset_id", "dataset_title", "dataset_label"])
+
             yield from write_and_yield('\t'.join(headers) + '\n')
 
             if obj_type == "dataset":
@@ -433,6 +438,16 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                     start,
                     end,
                 ]
+
+                # Add dataset information for collections
+                if obj_type == "collection":
+                    dataset_id = str(feature.get('dataset_id', ''))
+                    dataset_title = feature.get('dataset', '')
+                    # Get label from the actual dataset object if available
+                    dataset_label = ''
+                    if hasattr(place, 'dataset') and place.dataset:
+                        dataset_label = getattr(place.dataset, 'label', '')
+                    row.extend([dataset_id, dataset_title, dataset_label])
 
                 # Escape tabs, newlines, and carriage returns in field values
                 row = [

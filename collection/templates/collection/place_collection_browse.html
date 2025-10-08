@@ -157,48 +157,46 @@
 					<div class="dl-blurb">
 						{% include 'main/licensing_info.html' %}
 					</div>
-					<div class="row">
-						<div class="col-sm-8 pe-0 scroll-div">
-							<p class="modal-col-head p-1 mb-2">
-								Collection <small>({{ num_places }} total rows)</small>
-							</p>
-							<p>
-								<a href="#" class="a-dl" data-collid={{ object.id }}>
-									<i class="fa fa-download" title="Download"></i> download entire collection
-									                                                w/metadata</a></p>
-							<p class="small">The download task will be queued and when ready, you will receive an email
-							                 notification.
-							                 It will also be listed on <a href="{% url 'dashboard' %}">your 'My Data'
-							                                                                           dashboard</a></p>
-							<p class="modal-col-head p-1 mb-2">Datasets represented <small>w/citations</small>
-							</p>
-							{% for d in ds_list %}<p class="my-1">{{ d.title }}&nbsp;
-								<a id="cite_{{ d.id }}" class="clippy" aria-label="
-										{% if d.citation %}{{ d.citation }}{% else %}{{ d.title }}. [Data file (partial), Retrieved from {{ url_front }}collections/{{ object.id }}/browse_pl, {% now 'd M Y' %}{% endif %}"
-								   rel="tooltip" title="copy to clipboard"> citation: <i
-										class="fas fa-clipboard linky"></i></a></p>
-							{% endfor %}
-							<div id=""></div>
-							<div id="celery-result"></div>
-						</div>
-						<div class="col-sm-4">
-							<p class="modal-col-head p-1 mb-2">File Formats</p>
-							<div class="p-1 small">
-								<p class="my-1">
-									<sr>Linked Places format (LPF)</sr>
-									is JSON-based,
-									valid GeoJSON and valid JSON-LD (rdf) with temporal extensions
-								</p>
-								<p class="my-1">
-									<sr>LP-TSV downloads</sr>
-									are tab-separated text files.
-								</p>
-							</div>
-							<div id="progress-bar-message" class="hidden">Waiting for progress to start...</div>
-							<span id='progress-bar' class='progress-bar'
-							      style="background-color: #68a9ef; width: 0%; line-height:.5rem;">&nbsp;</span>
-						</div>
-					</div>
+                    <div class="row">
+                        <div class="col-12">
+                            <h4 class="mb-3">
+                                {{ object.title }}
+                                <span class="small text-muted">({{ object.numrows }} features)</span>
+
+                                <a id="cite_{{ object.id }}" class="clippy ms-2"
+                                   aria-label="{% if object.citation %}{{ object.citation }}{% else %}{{ object.title }}. [Data file, last modified {{ object.last_modified_text }}]. Retrieved from http://whgazetteer.org/datasets/{{ object.id }}/places/, {% now 'd M Y' %}{% endif %}"
+                                   data-bs-toggle="tooltip" data-bs-placement="top" title="copy citation to clipboard">
+                                    <i class="fas fa-clipboard linky"></i>
+                                </a>
+                            </h4>
+
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="text-muted me-3">Choose Format:</span>
+
+                                <a href="/entity/collection:{{ object.id }}/api"
+                                   class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   title="Linked Places format (LPF): JSON-based, valid GeoJSON and JSON-LD with temporal extensions.">
+                                    <i class="fa fa-download me-1 nocolour"></i> Download LPF
+                                </a>
+
+                                <a href="/entity/collection:{{ object.id }}/api?filetype=tsv"
+                                   class="btn btn-sm btn-outline-warning tsv-btn" data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   title="LP-TSV: Tab-separated text file for easy import into spreadsheets or databases. <em>NOTE: Conversion to TSV results in significant loss of detail in the data.</em>">
+                                    <i class="fa fa-download me-1 nocolour"></i> Download TSV
+                                </a>
+                            </div>
+                        </div>
+						<p class="modal-col-head p-1 mb-2">Datasets represented <small>w/citations</small>
+						</p>
+						{% for d in ds_list %}<p class="my-1">{{ d.title }}&nbsp;
+							<a id="cite_{{ d.id }}" class="clippy" aria-label="
+									{% if d.citation %}{{ d.citation }}{% else %}{{ d.title }}. [Data file (partial), Retrieved from {{ url_front }}collections/{{ object.id }}/browse_pl, {% now 'd M Y' %}{% endif %}"
+							   rel="tooltip" title="copy to clipboard"> citation: <i
+									class="fas fa-clipboard linky"></i></a></p>
+						{% endfor %}
+                    </div>
 					<!--</form>-->
 				</div>
 				<!-- .modal-body -->
