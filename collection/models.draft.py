@@ -4,7 +4,7 @@ from itertools import chain
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.db import models as geomodels
-from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
+from django.contrib.gis.geos import GEOSGeometry
 from django.contrib.postgres.fields import ArrayField
 from django.core.cache import caches
 from django.core.validators import URLValidator
@@ -14,13 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django_resized import ResizedImageField
 from geojson import dumps, loads
-import pyproj  # Keep pyproj for coordinate_density calculation
-from shapely.geometry import shape
 
-# Import the new Mixin
-from utils.mixins import CollectionGeospatialMixin
-
-from datasets.models import Dataset
 from main.choices import (COLLECTIONCLASSES, COLLECTIONGROUP_TYPES, LINKTYPES,
                           STATUS_COLL, TEAMROLES)
 from places.models import Place
@@ -31,6 +25,7 @@ from utils.csl_citation_formatter import csl_citation
 from utils.feature_collection import feature_collection
 from utils.heatmap_geometries import heatmapped_geometries
 from utils.hull_geometries import hull_geometries
+from utils.mixins import CollectionGeospatialMixin
 
 User = get_user_model()
 
