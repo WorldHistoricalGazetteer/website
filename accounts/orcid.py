@@ -156,14 +156,9 @@ class OIDCBackend(BaseBackend):
         # Extract verified email(s)
         email = get_best_email(record)
         if not email:
-            logger.warning(f"No verified email found for ORCiD user {orcid_identifier}")
-            if request:
-                messages.error(request,
-                               "<h4><i class='fas fa-triangle-exclamation'></i> Your email address cannot be read.</h4>" +
-                               "<p>As detailed below, it is a requirement of WHG registration that you have at least one verified email address with visibility set set to either 'Trusted parties' or 'Everyone'.</p>" +
-                               f"<p>Please check your <a href='{settings.ORCID_BASE}/my-orcid' target='_blank' rel='noopener noreferrer'>ORCiD profile</a> and then try again. <i>If you have only just signed up with ORCiD, you will need to verify your email address and adjust its visibility before proceeding.</i></p>"
-                               )
-            return None
+            # This might be a returning user with an email address already stored
+            if request and request.user.is_authenticated and request.user.orcid == orcid_id and request.user.email:
+                email = request.user.email
 
         if request and request.user.is_authenticated and not request.user.orcid:
             # Existing legacy user, now linking ORCiD - TODO: remove this block after FULL migration
