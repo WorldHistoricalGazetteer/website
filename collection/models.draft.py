@@ -1,5 +1,6 @@
 from collections import Counter
 from itertools import chain
+import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -27,6 +28,7 @@ from utils.heatmap_geometries import heatmapped_geometries
 from utils.hull_geometries import hull_geometries
 from utils.mixins import CollectionGeospatialMixin
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -73,6 +75,9 @@ class CollDataset(models.Model):
 class Collection(CollectionGeospatialMixin, models.Model):
     """
     A curated collection of places or datasets.
+
+    Collections can be either 'place' or 'dataset' class, and may belong to
+    CollectionGroups for collaborative work or instruction.
     """
 
     # ===============================================
@@ -113,7 +118,6 @@ class Collection(CollectionGeospatialMixin, models.Model):
     webpage = models.URLField(null=True, blank=True)
     doi = models.BooleanField(default=False, help_text="Indicates if a DOI is associated with this collection")
 
-    # Cached CSL-formatted citation property
     @property
     def citation_csl(self):
         """Cached CSL-formatted citation."""
@@ -182,6 +186,14 @@ class Collection(CollectionGeospatialMixin, models.Model):
     )
     coordinate_density = models.FloatField(null=True, blank=True)
 
+    def invalidate_geometry_cache(self):
+        """Clear cached geometries (e.g., after places are added/removed)."""
+        self.unioned_geometries = None
+        self.unioned_hulls = None
+        self.coordinate_density = None
+        self.save(update_fields=['unioned_geometries', 'unioned_hulls', 'coordinate_density'])
+        logger.info(f"Geometry cache invalidated for collection {self.pk}")
+
     @property
     def coordinate_density_value(self):
         """
@@ -191,21 +203,26 @@ class Collection(CollectionGeospatialMixin, models.Model):
         if self.coordinate_density is not None:
             return self.coordinate_density
 
-        clustered_geometries = calculate_clustered_geometries(self, min_clusters=7)
+        try:
+            clustered_geometries = calculate_clustered_geometries(self, min_clusters=7)
 
-        total_area = 0
-        for hull in clustered_geometries['features']:
-            geometry = hull['geometry']
-            if isinstance(geometry, dict):
-                geojson_obj = loads(dumps(geometry))
-                geometry = GEOSGeometry(str(geojson_obj))
-            total_area += geometry.area
+            total_area = 0
+            for hull in clustered_geometries['features']:
+                geometry = hull['geometry']
+                if isinstance(geometry, dict):
+                    geojson_obj = loads(dumps(geometry))
+                    geometry = GEOSGeometry(str(geojson_obj))
+                total_area += geometry.area
 
-        density = clustered_geometries['properties'].get('coordinate_count', 0) / total_area if total_area > 0 else 0
+            density = clustered_geometries['properties'].get('coordinate_count',
+                                                             0) / total_area if total_area > 0 else 0
 
-        self.coordinate_density = density
-        self.save()
-        return density
+            self.coordinate_density = density
+            self.save()
+            return density
+        except Exception as e:
+            logger.error(f"Error calculating coordinate density for collection {self.pk}: {e}")
+            return 0
 
     # ===============================================
     # 7. DISPLAY & FILES
@@ -217,7 +234,6 @@ class Collection(CollectionGeospatialMixin, models.Model):
     def get_absolute_url(self):
         return reverse('data-collections')
 
-    # Cached carousel metadata property
     @property
     def carousel_metadata(self):
         """Cached carousel display metadata."""
@@ -279,7 +295,7 @@ class Collection(CollectionGeospatialMixin, models.Model):
         return self.num_places
 
     @property
-    def dl_est(self):  # TODO: Deprecate on implementation of streamed downloads
+    def dl_est(self):
         """Estimated download time based on number of place records (20 seconds per 1000 records)."""
         num_records = self.places_all.count()
         est_time_in_sec = (num_records / 1000) * 20
@@ -290,7 +306,6 @@ class Collection(CollectionGeospatialMixin, models.Model):
         elif seconds >= 10:
             return f"{minutes:02.0f} min {seconds:02.0f} sec"
         else:
-            # Simplified return for times > 1 min but < 10 sec remaining (as per suggestion)
             return f"{minutes:02.0f} min"
 
     @property
@@ -319,7 +334,6 @@ class Collection(CollectionGeospatialMixin, models.Model):
     def last_modified_iso(self):
         """ISO-formatted date of last modification (from logs or creation)."""
         logtypes_to_include = ['create', 'update']
-        # Note: self.log is assumed to be a reverse relation
         filtered_logs = self.log.filter(logtype__in=logtypes_to_include)
 
         if filtered_logs.count() > 0:
@@ -360,6 +374,8 @@ class Collection(CollectionGeospatialMixin, models.Model):
         db_table = 'collections'
         indexes = [
             models.Index(fields=['namespace', 'local_id']),
+            geomodels.Index(fields=['unioned_geometries']),
+            geomodels.Index(fields=['unioned_hulls']),
         ]
 
 
@@ -368,6 +384,7 @@ class Collection(CollectionGeospatialMixin, models.Model):
 class CollPlace(models.Model):
     """
     Through model for place membership in collections.
+    Sequence is managed separately in TraceAnnotation.
     """
     collection = models.ForeignKey(Collection, related_name='annos', on_delete=models.CASCADE)
     place = models.ForeignKey(Place, related_name='annos', on_delete=models.CASCADE)
@@ -392,6 +409,7 @@ class CollectionUser(models.Model):
 class CollectionGroup(models.Model):
     """
     Groups for organizing collections (e.g., instructor-led assignments, workshops).
+    Collections can belong to multiple groups.
     """
     owner = models.ForeignKey(settings.AUTH_USER_MODEL,
                               related_name='collection_groups', on_delete=models.CASCADE)
@@ -438,6 +456,7 @@ class CollectionGroupUser(models.Model):
 class CollectionLink(models.Model):
     """
     External links associated with collections.
+    Note: Consider deprecating in favor of embedded Link model.
     """
     collection = models.ForeignKey(Collection, default=None,
                                    on_delete=models.CASCADE, related_name='links')
@@ -469,7 +488,7 @@ class CollectionRelation(models.Model):
     )
     relation_type = models.CharField(
         max_length=128,
-        help_text="LPF relationType, e.g. 'gvp:broaderPartitive' (is part of), 'gvp:narrowerPartitive' (contains), 'gvp:tgn3000_related_to'"
+        help_text="LPF relationType, e.g. 'gvp:broaderPartitive' (is part of), 'gvp:narrowerPartitive' (contains)"
     )
     label = models.CharField(
         max_length=512, null=True, blank=True,
@@ -499,13 +518,9 @@ class CollectionRelation(models.Model):
         return f"{self.source.identifier or self.source_id} → {self.target.identifier or self.target_id} ({self.relation_type})"
 
 
-##########################################
-########## Namespace Model ##########
-##########################################
-
 class Namespace(models.Model):
     """
-    Registry of controlled identifier namespaces used across WHG.
+    Registry of controlled identifier namespaces used across WHG. # TODO: Use in other models in place of current global JSON object.
     """
     prefix = models.CharField(
         max_length=64, unique=True,
@@ -534,3 +549,65 @@ class Namespace(models.Model):
 
     def __str__(self):
         return self.prefix
+
+## TODO: Move the following into `signals.py` file
+
+"""
+Signal handlers for Collection model to maintain geometry cache integrity.
+"""
+import logging
+
+from django.db.models.signals import post_save, post_delete, m2m_changed
+from django.dispatch import receiver
+
+from collection.models import CollPlace, CollDataset
+
+logger = logging.getLogger(__name__)
+
+
+@receiver([post_save, post_delete], sender=CollPlace)
+def invalidate_collection_geometries_on_place_change(sender, instance, **kwargs):
+    """
+    Invalidate cached geometries when a place is added to or removed from a collection.
+    """
+    try:
+        instance.collection.invalidate_geometry_cache()
+    except Exception as e:
+        logger.error(f"Error invalidating geometry cache for collection {instance.collection_id}: {e}")
+
+
+@receiver([post_save, post_delete], sender=CollDataset)
+def invalidate_collection_geometries_on_dataset_change(sender, instance, **kwargs):
+    """
+    Invalidate cached geometries when a dataset is added to or removed from a collection.
+    """
+    try:
+        instance.collection.invalidate_geometry_cache()
+    except Exception as e:
+        logger.error(f"Error invalidating geometry cache for collection {instance.collection_id}: {e}")
+
+
+@receiver(m2m_changed, sender='collection.Collection.places.through')
+def invalidate_on_places_m2m_change(sender, instance, action, **kwargs):
+    """
+    Invalidate cached geometries when places M2M relationship changes.
+    Triggered on add, remove, or clear actions.
+    """
+    if action in ['post_add', 'post_remove', 'post_clear']:
+        try:
+            instance.invalidate_geometry_cache()
+        except Exception as e:
+            logger.error(f"Error invalidating geometry cache for collection {instance.pk}: {e}")
+
+
+@receiver(m2m_changed, sender='collection.Collection.datasets.through')
+def invalidate_on_datasets_m2m_change(sender, instance, action, **kwargs):
+    """
+    Invalidate cached geometries when datasets M2M relationship changes.
+    Triggered on add, remove, or clear actions.
+    """
+    if action in ['post_add', 'post_remove', 'post_clear']:
+        try:
+            instance.invalidate_geometry_cache()
+        except Exception as e:
+            logger.error(f"Error invalidating geometry cache for collection {instance.pk}: {e}")
