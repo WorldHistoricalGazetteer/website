@@ -78,6 +78,27 @@ class Collection(CollectionGeospatialMixin, models.Model):
 
     Collections can be either 'place' or 'dataset' class, and may belong to
     CollectionGroups for collaborative work or instruction.
+
+    ----------------------------------------------------------------------
+    EXPLICIT FOREIGN KEYS (FKs)
+    ----------------------------------------------------------------------
+    - owner: settings.AUTH_USER_MODEL (FK) - Primary creator/owner.
+    - namespace: Namespace (FK, Nullable) - Local identifier context (e.g., 'unm49').
+    - group: CollectionGroup (FK, Nullable) - Group this collection belongs to.
+
+    ----------------------------------------------------------------------
+    REVERSE RELATIONSHIPS (Related via M2M or Reverse FKs)
+    ----------------------------------------------------------------------
+    - toponyms: CollectionToponym.collection (Reverse FK) - All names/alternate toponyms for this Collection.
+    - links: CollectionLink.collection (Reverse FK) - External links associated with the collection.
+    - collabs: CollectionUser.collection (Reverse FK) - User membership and roles in the collection.
+    - relations_from: CollectionRelation.source (Reverse FK) - Outgoing collection relations (e.g., 'is part of').
+    - relations_to: CollectionRelation.target (Reverse FK) - Incoming collection relations (e.g., 'contains').
+    - annos: CollPlace.collection (Reverse FK) - Through model records linking Places to this Collection.
+
+    - datasets: datasets.Dataset (M2M via CollDataset) - Datasets associated with this collection.
+    - places: places.Place (M2M via CollPlace) - Individual Places directly linked to this collection.
+    - relations: Collection (M2M via CollectionRelation) - Self-referential M2M for hierarchical/lateral links.
     """
 
     # ===============================================
