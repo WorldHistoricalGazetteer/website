@@ -205,10 +205,9 @@ def profile_edit(request):
             '<i class="fas fa-circle-exclamation text-muted ms-1" '
             'data-bs-toggle="tooltip" '
             'data-bs-title="This information could be made available to WHG by updating your '
-            '<a href=\'{}\' target=\'_blank\' rel=\'noopener noreferrer\'>ORCiD profile</a> '
+            'ORCiD profile '
             'and ensuring the {} field has visibility set to \'Trusted parties\' or \'Everyone\'." '
-            'style="cursor: help;"></i>',
-            f"{settings.ORCID_BASE}/my-orcid",
+            'style="cursor: help; font-size: 0.75em; vertical-align: super;"></i>',
             field_name
         )
 
