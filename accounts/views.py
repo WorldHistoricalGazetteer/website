@@ -212,6 +212,7 @@ def profile_edit(request):
         )
 
     context = {
+        'has_email': bool(request.user.email),
         'email_display': request.user.email or not_available_html('email'),
         'given_name_display': request.user.given_name or not_available_html('given name'),
         'surname_display': request.user.surname or not_available_html('family name'),

@@ -155,10 +155,6 @@ class OIDCBackend(BaseBackend):
 
         # Extract verified email(s)
         email = get_best_email(record)
-        if not email:
-            # This might be a returning user with an email address already stored
-            if request and request.user.is_authenticated and request.user.orcid == orcid_id and request.user.email:
-                email = request.user.email
 
         if request and request.user.is_authenticated and not request.user.orcid:
             # Existing legacy user, now linking ORCiD - TODO: remove this block after FULL migration
