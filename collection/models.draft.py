@@ -1,6 +1,6 @@
+import logging
 from collections import Counter
 from itertools import chain
-import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -17,7 +17,7 @@ from django_resized import ResizedImageField
 from geojson import dumps, loads
 
 from main.choices import (COLLECTIONCLASSES, COLLECTIONGROUP_TYPES, LINKTYPES,
-                          STATUS_COLL, TEAMROLES)
+                          STATUS_COLL, TEAMROLES, TOPONYM_TYPES)  # TODO: Expand TOPONYM_TYPES
 from places.models import Place
 from utils.carousel_metadata import carousel_metadata
 from utils.cluster_geometries import \
@@ -453,6 +453,68 @@ class CollectionGroupUser(models.Model):
         db_table = 'collection_group_user'
 
 
+class CollectionToponym(models.Model):  # TODO: Generalise for Places too
+    collection = models.ForeignKey(
+        'Collection',
+        related_name='toponyms',
+        on_delete=models.CASCADE,
+        help_text="The collection this toponym is associated with."
+    )
+
+    # TODO: Add a ForeignKey for the Place model
+    # place = models.ForeignKey(
+    #     'places.Place',
+    #     related_name='toponyms',
+    #     on_delete=models.CASCADE,
+    #     null=True, blank=True,
+    #     help_text="The place this toponym is associated with."
+    # )
+
+    name = models.CharField(
+        max_length=255,
+        help_text="The toponym/name string itself."
+    )
+    language = models.CharField(
+        max_length=15,
+        blank=True,
+        null=True,
+        help_text="BCP47 language code (e.g., 'en', 'fr')."
+    )
+    script = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text="BCP47 script code (e.g., 'Latn', 'Arab')."
+    )
+    variant = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Optional variant code or qualifier."
+    )
+    types = ArrayField(
+        models.CharField(max_length=50, choices=TOPONYM_TYPES),
+        default=list,
+        blank=True,
+        help_text="A list of types, e.g., ['canonical', 'historical', 'native_script']."
+    )
+
+    # LPF-style Temporal Field
+    when = JSONField(
+        null=True, blank=True,
+        help_text="LPF-style temporal object (e.g., {'timespans': [{'start': {'earliest': '1800'}}]})."
+    )
+
+    class Meta:
+        # Ensures efficient lookups by name and type
+        indexes = [
+            models.Index(fields=['name']),
+            models.Index(fields=['collection', 'types']),
+        ]
+        verbose_name = "Collection Toponym"
+        verbose_name_plural = "Collection Toponyms"
+
+
 class CollectionLink(models.Model):
     """
     External links associated with collections.
@@ -550,6 +612,7 @@ class Namespace(models.Model):
     def __str__(self):
         return self.prefix
 
+
 ## TODO: Move the following into `signals.py` file
 
 """
@@ -563,6 +626,47 @@ from django.dispatch import receiver
 from collection.models import CollPlace, CollDataset
 
 logger = logging.getLogger(__name__)
+
+
+def update_collection_title(instance):
+    """
+    Finds the canonical toponym for the collection and updates the
+    Collection.title field.
+    """
+    collection = instance.collection
+    if not collection:
+        return
+
+    # 1. Look for the most recently saved toponym marked as 'canonical'
+    try:
+        canonical_toponym = collection.toponyms.filter(
+            types__contains=['canonical']
+        ).order_by('-pk').first()
+
+        new_title = canonical_toponym.name
+
+    except AttributeError:
+        # If no canonical toponym exists, fall back to the first name,
+        # or a placeholder (e.g., the local_id).
+        new_title = collection.local_id if collection.local_id else f"Collection {collection.pk}"
+
+    # 2. Update the Collection.title field only if it has changed
+    if collection.title != new_title:
+        collection.title = new_title
+        # Use update_fields for efficiency to avoid triggering recursive saves/signals
+        collection.save(update_fields=['title'])
+
+
+@receiver(post_save, sender=CollectionToponym)
+def toponym_saved(sender, instance, **kwargs):
+    """Triggered after a CollectionToponym is saved."""
+    update_collection_title(instance)
+
+
+@receiver(post_delete, sender=CollectionToponym)
+def toponym_deleted(sender, instance, **kwargs):
+    """Triggered after a CollectionToponym is deleted."""
+    update_collection_title(instance)
 
 
 @receiver([post_save, post_delete], sender=CollPlace)

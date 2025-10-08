@@ -227,6 +227,17 @@ TEAMROLES = [
     ('member', 'Member'),
 ]
 
+TOPONYM_TYPES = [  # TODO: Gather more types from sources such as OSM, Getty, GeoNames, Wikidata etc.
+    'canonical',
+    'variant',
+    'historic',
+    'short',
+    'abbreviation',
+    'demonym',
+    'colloquial',
+    'misprint',
+]
+
 TRACERELATIONS = [
     ('subject','Subject'),
     ('waypoint','Waypoint'),
