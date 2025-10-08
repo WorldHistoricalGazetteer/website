@@ -36,6 +36,11 @@
                         <td>
                             {{ form.from_email }}
                             <div class="invalid-feedback">Please enter a valid email address.</div>
+                            {% if user.is_authenticated and not user.email %}
+                                <small class="form-text text-muted">
+                                    No email address is available from your ORCiD profile. You can optionally add one via your <a href="{% url 'accounts:profile' %}">profile page</a>.
+                                </small>
+                            {% endif %}
                         </td>
                     </tr>
                 {% else %}
