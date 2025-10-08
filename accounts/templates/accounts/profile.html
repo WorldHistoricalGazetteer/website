@@ -49,25 +49,29 @@
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Given Name</div>
-        <div class="flex-grow-1 ps-3">{{ user.given_name }}</div>
+        <div class="flex-grow-1 ps-3">{{ given_name_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Family Name</div>
-        <div class="flex-grow-1 ps-3">{{ user.surname }}</div>
+        <div class="flex-grow-1 ps-3">{{ surname_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email</div>
-        <div class="flex-grow-1 ps-3">{{ user.email }}</div>
+        <div class="flex-grow-1 ps-3">{{ email_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Affiliation</div>
-        <div class="flex-grow-1 ps-3">{{ user.affiliation }}</div>
+        <div class="flex-grow-1 ps-3">{{ affiliation_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Web page</div>
-        <div class="flex-grow-1 ps-3">
-          <a href="{{ user.web_page }}" target="_blank" rel="noopener noreferrer">{{ user.web_page }}</a>
-        </div>
+          <div class="flex-grow-1 ps-3">
+            {% if user.web_page %}
+              <a href="{{ user.web_page }}" target="_blank" rel="noopener noreferrer">{{ user.web_page }}</a>
+            {% else %}
+              {{ web_page_display|safe }}
+            {% endif %}
+          </div>
       </div>
     </section>
 

@@ -5,6 +5,7 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
+from django.utils.html import format_html
 from django.views import View
 from django.views.decorators.http import require_POST
 
@@ -197,7 +198,26 @@ def profile_edit(request):
     remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
     total_quota = api_profile.daily_limit
 
+    # Helper to generate "not available" HTML with tooltip
+    def not_available_html(field_name):
+        return format_html(
+            '<span class="text-muted fst-italic">Not available</span> '
+            '<i class="fas fa-circle-exclamation text-muted ms-1" '
+            'data-bs-toggle="tooltip" '
+            'data-bs-title="This information could be made available to WHG by updating your '
+            '<a href=\'{}\' target=\'_blank\' rel=\'noopener noreferrer\'>ORCiD profile</a> '
+            'and ensuring the {} field has visibility set to \'Trusted parties\' or \'Everyone\'." '
+            'style="cursor: help;"></i>',
+            f"{settings.ORCID_BASE}/my-orcid",
+            field_name
+        )
+
     context = {
+        'email_display': request.user.email or not_available_html('email'),
+        'given_name_display': request.user.given_name or not_available_html('given name'),
+        'surname_display': request.user.surname or not_available_html('family name'),
+        'affiliation_display': request.user.affiliation or not_available_html('affiliation'),
+        'web_page_display': request.user.web_page or not_available_html('web page'),
         'is_admin': request.user.groups.filter(name='whg_admins').exists(),
         'needs_news_check': request.session.pop("_needs_news_check", False),
         'form': form,

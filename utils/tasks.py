@@ -468,7 +468,7 @@ def make_download(self, *args, **kwargs):
                             "ccodes": p.ccodes,
                             "comment": [
                                 {
-                                    "user": c.user.display_name,
+                                    "user": c.user.name,
                                     "note": c.note,
                                     "created": c.created.isoformat(),
                                 }
@@ -525,7 +525,7 @@ def make_download(self, *args, **kwargs):
         'template': 'download_ready',
         'subject': 'WHG download file is ready',
         'to_email': user.email,
-        'greeting_name': user.display_name,
+        'greeting_name': user.name,
         'title': ds.title if dsid else coll.title,
     })
 

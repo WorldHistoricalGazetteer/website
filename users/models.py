@@ -96,14 +96,8 @@ class User(AbstractUser, PermissionsMixin):
         db_table = "auth_users"
 
     def save(self, *args, **kwargs):
-        self.name = f"{self.given_name} {self.surname}"
+        self.name = " ".join(filter(None, [self.given_name, self.surname])) or self.username
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.username
-
-    @property
-    def display_name(self):  # TODO: This redundantly reproduces the logic used to generate `name` in `save` above
-        if self.given_name and self.surname:
-            return f"{self.given_name} {self.surname}"
-        return self.name if self.name else self.username

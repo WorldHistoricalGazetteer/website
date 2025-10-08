@@ -114,10 +114,10 @@ def WHGmail(request=None, context={}):
         if not template:
             raise ValueError("No template name specified.")
         
-        if isinstance(user, AnonymousUser):
+        if isinstance(user, AnonymousUser) or user is None:
             context.setdefault('greeting_name', "")
         else:
-            context.setdefault('greeting_name', f" {user.display_name}!" if user and user.display_name else "")
+            context.setdefault('greeting_name', f" {user.name}!" if user and user.name else "")
         
         context.setdefault('subject', "WHG Communication")
         context.setdefault('from_name', "The WHG Project Team")
