@@ -173,80 +173,35 @@
                         {% include 'main/licensing_info.html' %}
                     </div>
                     <div class="row">
-                        <div class="col-sm-8 pr-0 scroll-div">
-                            <p class="modal-col-head p-1 mb-2">Dataset
-                                <span class="float-end me-2">
-                                  <span id="progress-bar" style="display: block;
-                                  height:8px;background-color: #0d6efd; width:0;"></span>
-                                  <span id="progress-message" class="ms-3 small"></span>
-                                </span>
-                            </p>
-                            <table class="dl-table small">
-                                <thead>
-                                <tr>
-                                    <th>Title</th>
-                                    <th>Rows</th>
-                                    <th>Formats</th>
-                                    <th></th>
-                                </tr>
-                                </thead>
-                                <tbody>
-                                <tr class="align-top">
-                                    <td>{{ object.title }}&nbsp;
-                                        <a id="cite_{{ object.id }}" class="clippy" aria-label="
+                        <div class="col-12">
+                            <h4 class="mb-3">
+                                {{ object.title }}
+                                <span class="small text-muted">({{ object.numrows }} features)</span>
 
+                                <a id="cite_{{ object.id }}" class="clippy ms-2"
+                                   aria-label="{% if object.citation %}{{ object.citation }}{% else %}{{ object.title }}. [Data file, last modified {{ object.last_modified_text }}]. Retrieved from http://whgazetteer.org/datasets/{{ object.id }}/places/, {% now 'd M Y' %}{% endif %}"
+                                   data-bs-toggle="tooltip" data-bs-placement="top" title="copy citation to clipboard">
+                                    <i class="fas fa-clipboard linky"></i>
+                                </a>
+                            </h4>
 
+                            <div class="d-flex align-items-center mb-3">
+                                <span class="text-muted me-3">Choose Format:</span>
 
-                                                {% if object.citation %}{{ object.citation }}{% else %}{{ object.title }}. [Data file, last modified {{ object.last_modified_text }}]. Retrieved from http://whgazetteer.org/datasets/{{ object.id }}/places/, {% now 'd M Y' %}{% endif %}"
-                                           rel="tooltip" title="copy to clipboard">
-                                            <i class="fas fa-clipboard linky"></i></a><br/>
-                                        <span class="ml-2 small" style="disply:block">
-	                        <i>est. file creation time: {{ object.dl_est }}</i></span>
-                                    </td>
-                                    <td>{{ object.numrows }}</td>
-                                    <td> <!-- always offer lpf -->
-                                        <div class="form-check form-check-inline">
-                                            <input class="form-check-input hover" type="radio" name="format"
-                                                   value="lpf">
-                                            <label class="form-check-label" for="r_lpf">LPF</label>
-                                        </div>
-                                        {% if object.format == 'delimited-TEMPORARILY-DISABLED' %}
-	                                        <!-- Some transformation and loss of detail would be required to generate a delimited dataset for augmented data  -->
-                                            <div class="form-check form-check-inline ml-1">
-                                                <input class="form-check-input hover" type="radio" name="format"
-                                                       value="tsv" checked="checked">
-                                                <label class="form-check-label" for="r_LP-TSV">LP-TSV</label>
-                                            </div>
-                                        {% endif %}
-                                    </td>
-                                    <td class="px-1">
-                                        <a class="a-dl" data-id={{ object.id }} data-user={{ user }}>
-                                            <i class="fa fa-download" title="Download"></i>
-                                        </a>
-                                    </td>
-                                </tr>
-                                </tbody>
-                            </table>
-                            <p class="small mt-2">The download file creation will be queued. When ready, you will receive an
-                                email notification.
-                                It will also be listed on <a href="{% url 'dashboard' %}">your 'My Data' dashboard</a>
-                            </p>
-                        </div>
-                        <div class="col-sm-4">
-                            <p class="modal-col-head p-1 mb-2">File Formats</p>
-                            <div class="p-1 small">
-                                <p class="my-1">
-                                    <sr>Linked Places format (LPF)</sr>
-                                    is JSON-based, valid GeoJSON and valid JSON-LD (rdf) with temporal extensions
-                                </p>
-                                <p class="my-1">
-                                    <sr>LP-TSV downloads</sr>
-                                    are tab-separated text files.
-                                </p>
+                                <a href="/entity/dataset:{{ object.id }}/api"
+                                   class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   title="Linked Places format (LPF): JSON-based, valid GeoJSON and JSON-LD with temporal extensions.">
+                                    <i class="fa fa-download me-1 nocolour"></i> Download LPF
+                                </a>
+
+                                <a href="/entity/dataset:{{ object.id }}/api?filetype=tsv"
+                                   class="btn btn-sm btn-outline-warning tsv-btn" data-bs-toggle="tooltip"
+                                   data-bs-placement="top"
+                                   title="LP-TSV: Tab-separated text file for easy import into spreadsheets or databases. <em>NOTE: Conversion to TSV results in significant loss of detail in the data.</em>">
+                                    <i class="fa fa-download me-1 nocolour"></i> Download TSV
+                                </a>
                             </div>
-                            <div id="progress-bar-message" class="hidden">Waiting for progress to start...</div>
-                            <span id='progress-bar' class='progress-bar'
-                                  style="background-color: #68a9ef; width: 0%; line-height:.5rem;">&nbsp;</span>
                         </div>
                     </div>
                 </div> <!-- .modal-body -->

@@ -280,8 +280,7 @@ export function initPopups(table) {
             topFeature.properties.title = datasetFeature.properties.title;
             topFeature.properties.min = datasetFeature.properties.min;
             topFeature.properties.max = datasetFeature.properties.max;
-        }
-        else {
+        } else {
             console.warn('Feature not found in dataset:', topFeature.id);
         }
 

@@ -16,7 +16,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from api.authentication import AuthenticatedAPIView
-from api.download_lpf import LPFCache, lpf_stream_from_file, lpf_stream_live, redis_client
+from api.download_file import FileCache, stream_live, stream_from_file
 from api.schemas import entity_schema, TYPE_MAP
 
 logger = logging.getLogger('reconciliation')
@@ -78,14 +78,13 @@ class EntityDetailView(AuthenticatedAPIView):
 @entity_schema('feature')
 class EntityFeatureView(AuthenticatedAPIView):
     """
-    Returns a machine-readable LPF representation (Linked Places Format).
-    /{obj_type}/api/{id}/
+    Returns a machine-readable LPF or TSV representation.
+    /{obj_type}/api/{id}/?filetype=lpf|tsv
     """
 
     def get(self, request, entity_id, *args, **kwargs):
-
         try:
-            obj_type, id = entity_id.split(":", 1)
+            obj_type, obj_id = entity_id.split(":", 1)
         except ValueError:
             raise Http404(f"Invalid entity_id format: {entity_id}")
 
@@ -93,68 +92,62 @@ class EntityFeatureView(AuthenticatedAPIView):
         if not config:
             raise Http404(f"Unsupported object type: {obj_type}")
 
+        filetype = request.GET.get('filetype', 'lpf').lower()
+        if filetype not in ['lpf', 'tsv']:
+            filetype = 'lpf'
+
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
         qs = queryset_fn(request.user)
-        obj = get_object_or_404(qs, pk=id)
+        obj = get_object_or_404(qs, pk=obj_id)
 
-        # Handle non-streaming serializers
+        # Non-streaming serializers (e.g., for certain object types)
         serializer_class = config.get("feature_serializer", None)
-        if serializer_class:
+        if serializer_class and filetype == 'lpf':
             serializer = serializer_class(obj, context={"request": request})
             return Response(serializer.data, status=status.HTTP_200_OK)
 
-        filename = f"whg_{obj_type}_{id}.lpf.geojson"
-        cache_path = LPFCache.get_cache_path(obj_type, id)
+        # Determine cache path
+        cache_path = FileCache.get_cache_path(obj_type, obj_id, filetype=filetype)
+        filename = f"whg_{obj_type}_{obj_id}.{filetype}"
 
-        # Log all LPFCache properties for debugging
-        logger.debug(f"Cache file exists: {os.path.exists(cache_path)}")
-        logger.debug(f"Cache file size: {os.path.getsize(cache_path) if os.path.exists(cache_path) else 'N/A'}")
-        logger.debug(f"Build lock key: {LPFCache.get_build_lock_key(obj_type, id)}")
-        logger.debug(f"Redis lock TTL: {redis_client.ttl(LPFCache.get_build_lock_key(obj_type, id))}")
-        logger.debug(f"LPFCache status for {obj_type} id={id}: is_cached={LPFCache.is_cached(obj_type, id)}, "
-                     f"is_building={LPFCache.is_building(obj_type, id)}")
-
-        # Strategy: Stream from cache if available, otherwise stream live and build cache
-        if LPFCache.is_cached(obj_type, id):
-            logger.debug(f"Serving cached LPF for {obj_type} id={id}")
-            # Stream from cached file
+        # Stream from cache if available
+        if FileCache.is_cached(obj_type, obj_id, filetype=filetype):
+            logger.debug(f"Serving cached {filetype.upper()} for {obj_type}:{obj_id}")
             response = StreamingHttpResponse(
-                lpf_stream_from_file(cache_path),
-                content_type="application/geo+json"
+                stream_from_file(cache_path),
+                content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
             )
+            response["Content-Length"] = str(os.path.getsize(cache_path))
+
         else:
-            # Check if another request is already building the cache
-            if not LPFCache.is_building(obj_type, id):
-                # Try to acquire lock to build cache
-                if LPFCache.acquire_build_lock(obj_type, id):
-                    logger.debug(f"Acquired build lock for {obj_type} id={id}")
-                    # We got the lock - stream live while building cache
+            # Check if another request is building the cache
+            if not FileCache.is_building(obj_type, obj_id, filetype=filetype):
+                if FileCache.acquire_build_lock(obj_type, obj_id, filetype=filetype):
+                    logger.debug(f"Acquired build lock for {filetype.upper()} {obj_type}:{obj_id}")
+                    # Stream live while building cache
                     response = StreamingHttpResponse(
-                        lpf_stream_live(obj_type, obj, request, cache_path),
-                        content_type="application/geo+json"
+                        stream_live(obj_type, obj, request, cache_filepath=cache_path, filetype=filetype),
+                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
                     )
                 else:
-                    logger.debug(f"Failed to acquire build lock for {obj_type} id={id}")
-                    # Someone else got the lock just before us - stream live without caching
+                    logger.debug(f"Failed to acquire build lock for {filetype.upper()} {obj_type}:{obj_id}")
+                    # Someone else got the lock - stream live without caching
                     response = StreamingHttpResponse(
-                        lpf_stream_live(obj_type, obj, request),
-                        content_type="application/geo+json"
+                        stream_live(obj_type, obj, request, filetype=filetype),
+                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
                     )
             else:
-                logger.debug(f"Cache is being built for {obj_type} id={id}, streaming live")
-                # Cache is being built by another request - stream live without caching
+                logger.debug(f"Cache is being built for {filetype.upper()} {obj_type}:{obj_id}, streaming live")
                 response = StreamingHttpResponse(
-                    lpf_stream_live(obj_type, obj, request),
-                    content_type="application/geo+json"
+                    stream_live(obj_type, obj, request, filetype=filetype),
+                    content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
                 )
 
         response['Content-Disposition'] = f'attachment; filename="{urlquote(filename)}"'
         response['Content-Encoding'] = 'gzip'
-
-        # Keep headers for API consumers, but filename is the key for persistence
-        response['X-Format'] = 'Linked Places Format (LPF)'
-        response['X-Format-Version'] = 'v1.1'
-        response['X-Compatible-With'] = 'GeoJSON'
+        response['X-Format'] = 'Linked Places Format (LPF)' if filetype == 'lpf' else 'Tab-separated values (TSV)'
+        response['X-Format-Version'] = 'v1.1' if filetype == 'lpf' else 'v1'
+        response['X-Compatible-With'] = 'GeoJSON' if filetype == 'lpf' else 'WHG TSV consumer'
 
         return response
 
