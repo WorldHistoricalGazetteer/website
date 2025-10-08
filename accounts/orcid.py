@@ -143,8 +143,15 @@ class OIDCBackend(BaseBackend):
         person = record.get("person", {})
         name_obj = person.get("name", {}) if person else {}
         given_name = name_obj.get("given-names", {}).get("value") or ""
-        family_name = name_obj.get("family-name", {}).get("value") or ""
-        new_username = f"{given_name.replace(' ', '_')}-{family_name.replace(' ', '_')}-{orcid_identifier}"
+        family_name_obj = name_obj.get("family-name")
+        family_name = family_name_obj.get("value") if family_name_obj else ""
+
+        # Build username - only include family name if present
+        username_parts = [given_name] if given_name else []
+        if family_name:
+            username_parts.append(family_name)
+        username_parts.append(orcid_identifier)
+        new_username = "-".join(username_parts).replace(' ', '_')
 
         # Extract verified email(s)
         email = get_best_email(record)
