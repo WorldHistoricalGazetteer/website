@@ -845,8 +845,14 @@ def contact_modal_view(request):
         initial_data['subject'] = request.GET.get('subject')
 
     form = ContactForm(request.POST or None, initial=initial_data)
+
+    show_name_field = not request.user.is_authenticated
+    show_email_field = not request.user.is_authenticated or not request.user.email
+
     context = {
         'form': form,
+        'show_name_field': show_name_field,
+        'show_email_field': show_email_field,
         'TURNSTILE_SITE_KEY': settings.TURNSTILE_SITE_KEY
     }
 

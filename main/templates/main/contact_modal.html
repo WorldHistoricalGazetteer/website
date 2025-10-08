@@ -15,7 +15,7 @@
                     href="https://github.com/WorldHistoricalGazetteer/whg3/issues" target="_blank">here</a>.</i></p>
 
             <table id="contact_form">
-                {% if not user.is_authenticated %}
+                {% if show_name_field %}
                     <tr>
                         <td>Name</td>
                         <td>
@@ -26,6 +26,11 @@
                             </small>
                         </td>
                     </tr>
+                {% else %}
+                    {{ form.name.as_hidden }}
+                {% endif %}
+
+                {% if show_email_field %}
                     <tr>
                         <td>Email</td>
                         <td>
@@ -34,8 +39,10 @@
                         </td>
                     </tr>
                 {% else %}
-                    {{ form.name.as_hidden }}
                     {{ form.from_email.as_hidden }}
+                {% endif %}
+
+                {% if not show_name_field %}
                     {{ form.username }}
                 {% endif %}
 
