@@ -258,16 +258,6 @@ class Collection(models.Model):
                     "modified": d.last_modified_text} for d in datasets]
             return list({item['id']: item for item in dsp}.values())
 
-    # @property
-    # def ds_list(self):
-    #   dsc = [{"id": d.id, "label": d.label, "bounds": d.bounds, "title": d.title, "dl_est": d.dl_est,
-    #           "numrows": d.numrows, "modified": d.last_modified_text} for d in self.datasets.all()]
-    #   # TODO: list datasets represented in place collection
-    #   # dsp = [{"id": p.dataset.id, "label": p.dataset.label, "title": p.dataset.title,
-    #   #         "modified": p.dataset.last_modified_text} for p in self.places.all()]
-    #   # return list({ item['id'] : item for item in dsp+dsc}.values())
-    #   return list({ item['id'] : item for item in dsc}.values())
-
     @property
     def feature_collection(self):
         return feature_collection(self)
