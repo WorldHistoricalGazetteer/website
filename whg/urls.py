@@ -109,8 +109,6 @@ urlpatterns = [
                   path('journeys_routes/', TemplateView.as_view(template_name="main/journeys_routes.html"),
                        name="journeys-routes"),
 
-                  path('v3_new/', TemplateView.as_view(template_name="main/v3_new.html"), name="v3-new"),
-
                   # path('modal_home/', views.home_modal, name="modal-home"),
 
                   path('announcement/create/', views.AnnouncementCreateView.as_view(), name='announcement-create'),
