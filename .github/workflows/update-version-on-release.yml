@@ -1,0 +1,31 @@
+name: Update VERSION on Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract release tag and write to VERSION
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          CLEAN_TAG="${TAG_NAME#v}"  # Remove leading 'v' if present
+          echo "Updating VERSION to ${CLEAN_TAG}"
+          echo "${CLEAN_TAG}" > VERSION
+
+      - name: Commit and push VERSION file
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add VERSION
+          git commit -m "Update VERSION to ${CLEAN_TAG}" || echo "No changes to commit"
+          git push origin HEAD:main
