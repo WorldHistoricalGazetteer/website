@@ -32,29 +32,29 @@ jobs:
           TOTAL_WIDTH=$((LABEL_WIDTH + VALUE_WIDTH))
           COLOR="#4c1"   # green (success)
           
-          # Use single quotes around EOF to prevent early Bash variable expansion
-          cat > VERSION-BADGE.svg <<'EOF'
-            <svg xmlns="http://www.w3.org/2000/svg" width="${TOTAL_WIDTH}" height="20">
-              <linearGradient id="b" x2="0" y2="100%">
-                <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-                <stop offset="1" stop-opacity=".1"/>
-              </linearGradient>
-              <mask id="a">
-                <rect width="${TOTAL_WIDTH}" height="20" rx="3" fill="#fff"/>
-              </mask>
-              <g mask="url(#a)">
-                <rect width="${LABEL_WIDTH}" height="20" fill="#555"/>
-                <rect x="${LABEL_WIDTH}" width="${VALUE_WIDTH}" height="20" fill="${COLOR}"/>
-                <rect width="${TOTAL_WIDTH}" height="20" fill="url(#b)"/>
-              </g>
-              <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
-                <text x="$((LABEL_WIDTH/2))" y="14">${LABEL}</text>
-                <text x="$((LABEL_WIDTH + VALUE_WIDTH/2))" y="14">v${VERSION}</text>
-              </g>
-            </svg>
+          # Use the Bash hyphen delimiter (<<-EOF) to ignore leading *tabs* # on the lines, and ensure the closing EOF is flush left.
+          cat > VERSION-BADGE.svg <<-EOF
+<svg xmlns="http://www.w3.org/2000/svg" width="${TOTAL_WIDTH}" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a">
+    <rect width="${TOTAL_WIDTH}" height="20" rx="3" fill="#fff"/>
+  </mask>
+  <g mask="url(#a)">
+    <rect width="${LABEL_WIDTH}" height="20" fill="#555"/>
+    <rect x="${LABEL_WIDTH}" width="${VALUE_WIDTH}" height="20" fill="${COLOR}"/>
+    <rect width="${TOTAL_WIDTH}" height="20" fill="url(#b)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <text x="$((LABEL_WIDTH/2))" y="14">${LABEL}</text>
+    <text x="$((LABEL_WIDTH + VALUE_WIDTH/2))" y="14">v${VERSION}</text>
+  </g>
+</svg>
 EOF
       
-      # 3. Commit badge (Starts cleanly after the EOF marker)
+      # 3. Commit badge
       - name: Commit badge
         run: |
           git config user.name "github-actions"
