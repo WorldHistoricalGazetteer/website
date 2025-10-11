@@ -123,11 +123,11 @@
             <div class="collapse navbar-collapse smallish pt-2" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <div id="links_home">
-                        <span id="version_badge"
-                              class="badge {% if 'beta' in APP_VERSION|lower %}text-bg-info{% else %}text-bg-success{% endif %}">
-                            v{{ APP_VERSION }}
-                        </span>
-                        <span id="beta_links"></span>
+                        <a id="version_badge"
+                           href="https://github.com/WorldHistoricalGazetteer/website/releases/latest">
+                           <img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?label=&display_name=tag&color=success"
+                                alt="Latest Release">
+                        </a>
                         <a data-whg-modal="/contact_modal/">contact</a>
                     </div>
                     <div id="links_other" class="d-none">
