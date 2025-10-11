@@ -51,6 +51,8 @@
         {% endif %}
         }
 
+        {% block extra_css %}{% endblock %}
+
         .maintenance-banner {
             /* display: none; */
             background-color: #ffc1078f;
@@ -199,6 +201,12 @@
                         <hr class="dropdown-divider">
                     </li>
                     <li>
+                        <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
+                    </li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li>
                         <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
                     </li>
                 </ul>
@@ -230,10 +238,7 @@
                 </li>
                 <!-- user --> {% else %}
                 <li class="nav-item">
-                    <a class="nav-link ms-3" href="{% url 'accounts:register' %}"><i class="fas fa-user" style="color:#198754;"></i> Register</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-user" style="color:#336699;"></i> Login</a>
+                    <a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-user" style="color:#336699;"></i> Login/Register</a>
                 </li>
                 {% endif %}
                 </ul>
@@ -241,6 +246,15 @@
         </div>
     </nav>
 </header>
+
+<!--{% if messages %}-->
+<!--  <ul class="messages">-->
+<!--    {% for message in messages %}-->
+<!--      <li class="{{ message.tags }}">{{ message }}</li>-->
+<!--    {% endfor %}-->
+<!--  </ul>-->
+<!--{% endif %}-->
+
 {% block content %}
 {% endblock %}
 
@@ -264,5 +278,7 @@
     <a data-whg-modal="/privacy_policy/">Privacy Policy</a>
     <!-- | Sponsors | Disclaimer -->
 </footer>
+
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </body>
 </html>

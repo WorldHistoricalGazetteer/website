@@ -4,9 +4,7 @@ import {errorModal} from './error-modal.js';
 import Dateline from './dateline';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import {
-    geomsGeoJSON,
-} from './utilities';
+import {geomsGeoJSON,} from './utilities';
 import CountryParents from './countryParents';
 import {CountryCacheFeatureCollection} from './countryCache';
 import './toggle-truncate.js';
@@ -235,19 +233,19 @@ Promise.all([
         $('#clearButton').click();
         switch ($(this).val()) {
             case 'regions':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: dropdown_data[0].children
                 });
                 break;
             case 'countries':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: dropdown_data[1].children
                 });
                 break;
             case 'userareas':
-                $('#entrySelector').prop('disabled', false).select2({
+                $('#entrySelector').prop('disabled', false).empty().select2({
                     placeholder: 'None',
                     data: user_areas.map(feature => ({
                         id: feature.properties.id,
@@ -257,7 +255,7 @@ Promise.all([
                 });
                 break;
             default:
-                $('#entrySelector').prop('disabled', true).select2({
+                $('#entrySelector').prop('disabled', true).empty().select2({
                     placeholder: '(choose type)',
                     data: []
                 });
@@ -326,6 +324,149 @@ Promise.all([
         .on('change', function () {
             initialiseSuggestions();
         });
+
+    function deriveOuterBounds(period) {
+        if (!period.when || !Array.isArray(period.when.timespans) || period.when.timespans.length === 0) {
+            return {outerStart: null, outerEnd: null};
+        }
+
+        let minStart = Infinity;
+        let maxEnd = -Infinity;
+
+        for (const span of period.when.timespans) {
+            const start = span.start || {};
+            const end = span.end || {};
+
+            const s = start.in ?? start.earliest;
+            const e = end.in ?? end.latest;
+
+            if (s !== undefined && s !== null) {
+                const val = Number(s);
+                if (!isNaN(val)) minStart = Math.min(minStart, val);
+            }
+
+            if (e !== undefined && e !== null) {
+                const val = Number(e);
+                if (!isNaN(val)) maxEnd = Math.max(maxEnd, val);
+            }
+        }
+
+        return {
+            outerStart: minStart === Infinity ? null : minStart,
+            outerEnd: maxEnd === -Infinity ? null : maxEnd,
+        };
+    }
+
+    function initialiseChrononymSuggestions() {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+
+        const chrononyms = new Bloodhound({
+            datumTokenizer: Bloodhound.tokenizers.whitespace,
+            queryTokenizer: Bloodhound.tokenizers.whitespace,
+            limit: 50,
+            remote: {
+                url: '/suggest/entity?limit=60&type=period&mode=nosort&prefix=%QUERY',
+                wildcard: '%QUERY',
+                rateLimitBy: 'debounce',
+                rateLimitWait: 200,
+                transport: function (opts, onSuccess, onError) {
+                    $.ajax({
+                        url: opts.url,
+                        type: 'GET',
+                        headers: {
+                            'X-CSRF-Token': csrfToken,
+                        },
+                        success: function (data) {
+                            // Map API response to array of suggestions
+                            const suggestions = data.result
+                                .map(r => ({
+                                    id: r.id,
+                                    name: r.name,
+                                    description: r.description,
+                                }));
+                            onSuccess(suggestions);
+                        },
+                        error: onError,
+                    });
+                },
+            },
+        });
+
+        $('#chrononym_input').typeahead('destroy').typeahead({
+            highlight: true,
+            hint: true,
+            minLength: 2,
+        }, {
+            name: 'Chrononyms',
+            display: 'name',  // what goes into the input when selected
+            source: chrononyms.ttAdapter(),
+            limit: 50,
+            templates: {
+                suggestion: function (data) {
+                    return `
+                      <div>
+                        <strong>${data.name}</strong><br>
+                        <small>${data.description}</small>
+                      </div>
+                    `;
+                },
+                empty: `
+                  <div class="tt-empty-message">
+                    <i>No matching chrononyms found</i>
+                  </div>
+                `
+            },
+        }).on('typeahead:select', function (e, item) {
+            const url = `/entity/${item.id}/api`;
+
+            $.ajax({
+                url: url,
+                type: 'GET',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                success: function (period) {
+                    console.debug('Entity API response:', period);
+                    const {outerStart, outerEnd} = deriveOuterBounds(period);
+                    if (outerStart !== null && outerEnd !== null) {
+                        dateline.reconfigure(outerStart, outerEnd, outerStart, outerEnd, true);
+                    }
+                    draw.deleteAll();
+                    if (!!period.geometry) {
+                        if (period.geometry.type === "GeometryCollection") {
+                            // Split collection and add each geometry separately
+                            period.geometry.geometries.forEach(geom => {
+                                const feature = {
+                                    type: "Feature",
+                                    properties: period.properties || {},
+                                    geometry: geom
+                                };
+                                draw.add(feature);
+                            });
+                        } else {
+                            draw.add(period);
+                        }
+                        whg_map.fitViewport(bbox(period));
+                        $drawControl.show();
+                    } else {
+                        whg_map.reset();
+                    }
+                },
+                error: function (xhr) {
+                    console.error('Error fetching entity:', xhr.responseText);
+                }
+            });
+            // initiateSearch();
+        });
+
+        $('#clear_chrononym').on('click', function () {
+            $('#chrononym_input').typeahead('val', '');
+            $('#chrononym_input').removeData('chrononym-id');
+            initiateSearch();
+        });
+    }
+
+    initialiseChrononymSuggestions();
 
     // Initialise mechanism to prevent reappearance of tooltip on `#search_input`
     const tooltipKey = 'searchTooltipHidden';

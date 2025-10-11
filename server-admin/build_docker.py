@@ -39,7 +39,8 @@ def build_and_tag_image(docker_image, new_version):
     try:
         subprocess.run([
             "docker", 
-            "build", 
+            "build",
+            "--no-cache",
             "-t", 
             f"{docker_image}:{new_version}", 
             "--build-arg", 

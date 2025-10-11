@@ -1,24 +1,23 @@
 # various search.views
 
+import logging
+from datetime import datetime
+
+import simplejson as json
+import sys
 from django.conf import settings
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Q, Count
 from django.http import JsonResponse
-from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic import View
 from django.views.generic.base import TemplateView
-import simplejson as json, sys
-from api.serializers import SearchDatabaseSerializer
+
+from api.reconcile import DOCS_URL
 from areas.models import Area
 from collection.models import Collection
-from datasets.models import Dataset, Hit
-from datasets.tasks import normalize, get_bounds_filter
+from datasets.models import Dataset
+from datasets.tasks import get_bounds_filter
 from places.models import Place, PlaceGeom
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
-from datetime import datetime
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +61,15 @@ def TypeaheadSuggestions(request):
 # new
 class SearchPageView(TemplateView):
     template_name = 'search/search.html'
+
+    def get(self, request, *args, **kwargs):
+        if request.GET.get('filter'):
+            return JsonResponse({
+                "result": [],
+                "message": "OpenRefine legacy search call: no results. Use /suggest/entity endpoint instead. See documentation: " + DOCS_URL
+            })
+
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, *args, **kwargs):
         # return list of datasets
@@ -705,7 +713,7 @@ class SearchDatabaseView(View):
         dsid = request.GET.get('dsid')
         ds = Dataset.objects.get(pk=int(dsid)) if dsid else None
 
-        from django.contrib.gis.geos import GEOSGeometry, MultiPolygon
+        from django.contrib.gis.geos import GEOSGeometry
         if bounds:
             bounds = json.loads(bounds)
             area = Area.objects.get(id=bounds['id'][0])

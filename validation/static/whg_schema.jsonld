@@ -1,0 +1,575 @@
+{
+  "@context": {
+    "whg": "https://whgazetteer.org/schema/whg#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "geo": "http://www.opengis.net/ont/geosparql#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "lpf": "https://github.com/LinkedPasts/linked-places-format",
+    "bcp47": "https://tools.ietf.org/html/bcp47",
+    "iso639": "http://id.loc.gov/vocabulary/iso639-2/",
+    "iso15924": "http://id.loc.gov/vocabulary/iso15924/",
+    "iso3166": "http://id.loc.gov/vocabulary/iso3166/",
+    "dcterms": "http://purl.org/dc/terms/",
+    "skos": "http://www.w3.org/2004/02/skos/core#",
+    "aat": "http://vocab.getty.edu/aat/",
+    "gn": "https://sws.geonames.org/",
+    "wd": "http://www.wikidata.org/entity/",
+    "periodo": "http://n2t.net/ark:/99152/"
+  },
+  "@graph": [
+    {
+      "@id": "whg:Place",
+      "@type": "rdfs:Class",
+      "rdfs:label": "Place",
+      "rdfs:comment": "A named geographic entity with spatial, temporal and administrative properties. This is the primary class for WHG gazetteer records."
+    },
+    {
+      "@id": "whg:Dataset",
+      "@type": "rdfs:Class",
+      "rdfs:label": "Dataset",
+      "rdfs:comment": "A dataset contributed to WHG containing places and associated metadata."
+    },
+    {
+      "@id": "whg:Collection",
+      "@type": "rdfs:Class",
+      "rdfs:label": "Collection",
+      "rdfs:comment": "A collection grouping Datasets and/or Places (thematic or project grouping)."
+    },
+    {
+      "@id": "whg:Area",
+      "@type": "rdfs:Class",
+      "rdfs:label": "Area",
+      "rdfs:comment": "A defined geographic area used for filtering, bounding or grouping places."
+    },
+    {
+      "@id": "whg:Period",
+      "@type": "rdfs:Class",
+      "rdfs:label": "Period",
+      "rdfs:comment": "A temporal period or chrononym from PeriodO or other chronological authorities, representing named spans of time used in historical and archaeological contexts."
+    },
+
+    {
+      "@id": "whg:apiView",
+      "@type": "rdf:Property",
+      "rdfs:label": "API view descriptor",
+      "rdfs:comment": "Extension used to describe alternative API representations / views for a property.",
+      "rdfs:domain": "rdfs:Resource",
+      "rdfs:range": "xsd:string"
+    },
+
+    {
+      "@id": "whg:identifier",
+      "@type": "rdf:Property",
+      "rdfs:label": "Persistent identifier",
+      "rdfs:comment": "Persistent identifier (URI) for a WHG entity.",
+      "rdfs:domain": [
+        "whg:Place",
+        "whg:Dataset",
+        "whg:Collection",
+        "whg:Area"
+      ],
+      "rdfs:range": "xsd:anyURI",
+      "whg:example": "https://whgazetteer.org/place/12345",
+      "whg:apiView": [
+        {
+          "id": "whg:id_short",
+          "name": "Identifier (short)",
+          "description": "Canonical WHG URI for the entity as a single string."
+        },
+        {
+          "id": "whg:id_object",
+          "name": "Identifier (object)",
+          "description": "Structured identifier object containing {\"id\": <iri>, \"label\": <preferred label>}."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:names",
+      "@type": "rdf:Property",
+      "rdfs:label": "Names (aliases and attestations)",
+      "rdfs:comment": "Array of name objects following an LPF-compatible pattern. Each object should include at least a 'toponym'. Optional fields: 'lang' (BCP47), 'script' (ISO 15924), 'attestedIn' (source), 'note', 'status' (e.g. preferred, variant).",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "lpf:Name",
+      "whg:example": [
+        {
+          "toponym": "Al-Qāhirah",
+          "lang": "ar",
+          "script": "Arab",
+          "transcription": "al-qāhirah",
+          "attestedIn": {
+            "id": "https://example.org/source/ottoman-census",
+            "label": "Ottoman census 1847"
+          },
+          "status": "preferred"
+        },
+        {
+          "toponym": "Cairo",
+          "lang": "en",
+          "script": "Latn",
+          "attestedIn": {
+            "id": "https://whgazetteer.org/dataset/gn",
+            "label": "GeoNames"
+          },
+          "status": "variant"
+        }
+      ],
+      "whg:languageMetadata": {
+        "bcp47": "bcp47",
+        "standards": {
+          "language": "iso639",
+          "script": "iso15924",
+          "region": "iso3166"
+        },
+        "note": "Use BCP 47 for the language tag; where a script or region code is supplied use the LOC vocabulary URIs defined in the @context."
+      },
+      "whg:apiView": [
+        {
+          "id": "whg:names_canonical",
+          "name": "Name (canonical)",
+          "description": "String representation of the preferred name (or first listed name if no preferred)."
+        },
+        {
+          "id": "whg:names_array",
+          "name": "Names (array)",
+          "description": "LPF-compatible array of name objects."
+        },
+        {
+          "id": "whg:names_summary",
+          "name": "Names (summary)",
+          "description": "Flat array of name strings (useful for simple search results)."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:wkt",
+      "@type": "rdf:Property",
+      "rdfs:label": "WKT Geometry",
+      "rdfs:comment": "The geometry as a WKT string.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "xsd:string",
+      "whg:example": "POINT(31.2001 29.9187)",
+      "whg:apiView": {
+        "id": "whg:geometry_wkt",
+        "name": "Geometry (WKT)",
+        "description": "Geometry as WKT string."
+      }
+    },
+    {
+      "@id": "whg:geojson",
+      "@type": "rdf:Property",
+      "rdfs:label": "GeoJSON Geometry",
+      "rdfs:comment": "The geometry as a GeoJSON object.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "geo:Geometry",
+      "whg:example": {
+        "type": "Point",
+        "coordinates": [31.2001, 29.9187]
+      },
+      "whg:apiView": {
+        "id": "whg:geometry_geojson",
+        "name": "Geometry (GeoJSON)",
+        "description": "Geometry as a GeoJSON geometry object."
+      }
+    },
+    {
+      "@id": "whg:centroid",
+      "@type": "rdf:Property",
+      "rdfs:label": "Centroid",
+      "rdfs:comment": "The representative centroid.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "xsd:string",
+      "whg:example": "29.9187, 31.2001",
+      "whg:apiView": {
+        "id": "whg:geometry_centroid",
+        "name": "Geometry (centroid)",
+        "description": "Representative centroid as {lat, lng}."
+      }
+    },
+    {
+      "@id": "whg:bbox",
+      "@type": "rdf:Property",
+      "rdfs:label": "Bounding box",
+      "rdfs:comment": "The bounding box of the geometry.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "xsd:string",
+      "whg:example": "31.1989,29.9174,31.2013,29.9200",
+      "whg:apiView": {
+        "id": "whg:geometry_bbox",
+        "name": "Geometry (bounding box)",
+        "description": "Bounding box [minLng, minLat, maxLng, maxLat]."
+      }
+    },
+
+    {
+      "@id": "whg:temporal",
+      "@type": "rdf:Property",
+      "rdfs:label": "Temporal coverage",
+      "rdfs:comment": "Structured temporal coverage. LPF-compatible 'timespan' objects are recommended (begin, end, circa, note). A simple string range YYYY-YYYY is allowed for legacy records.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "lpf:Timespan",
+      "whg:example": [
+        {
+          "timespans": [
+            {
+              "begin": "1200-01-01",
+              "end": "1600-12-31",
+              "precision": "year",
+              "note": "Primary attested range in historical sources."
+            }
+          ]
+        },
+        "1200-1600"
+      ],
+      "whg:apiView": [
+        {
+          "id": "whg:temporal_objects",
+          "name": "Temporal (objects)",
+          "description": "Array of timespan objects."
+        },
+        {
+          "id": "whg:temporal_years",
+          "name": "Temporal (years)",
+          "description": "Year range as {start, end}."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:countries",
+      "@type": "rdf:Property",
+      "rdfs:label": "Countries (ISO 3166-1 alpha-2)",
+      "rdfs:comment": "ISO 3166-1 alpha-2 country codes.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "xsd:string",
+      "whg:example": [
+        "EG",
+        "FR"
+      ],
+      "whg:reference": "iso3166",
+      "whg:apiView": [
+        {
+          "id": "whg:countries_codes",
+          "name": "Country codes",
+          "description": "Array of ISO alpha-2 strings."
+        },
+        {
+          "id": "whg:countries_objects",
+          "name": "Country objects",
+          "description": "Array of objects {\"code\": \"EG\", \"uri\": \"http://id.loc.gov/..\", \"label\": \"Egypt\"}."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:classes",
+      "@type": "rdf:Property",
+      "rdfs:label": "Feature classes",
+      "rdfs:comment": "WHG feature class (aligns with GeoNames feature class codes). Use the allowed single-letter values or objects referencing the GeoNames vocabulary.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "xsd:string",
+      "whg:allowedValues": [
+          {
+            "code": "A",
+            "label": "Administrative boundary",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#A"
+          },
+          {
+            "code": "H",
+            "label": "Hydrographic",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#H"
+          },
+          {
+            "code": "L",
+            "label": "Area",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#L"
+          },
+          {
+            "code": "P",
+            "label": "Populated place",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#P"
+          },
+          {
+            "code": "R",
+            "label": "Road / Railroad",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#R"
+          },
+          {
+            "code": "S",
+            "label": "Spot / Building / Farm",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#S"
+          },
+          {
+            "code": "T",
+            "label": "Hypsographic (mountain, hill, rock, etc.)",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#T"
+          },
+          {
+            "code": "U",
+            "label": "Undersea",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#U"
+          },
+          {
+            "code": "V",
+            "label": "Vegetation",
+            "reference": "https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html#V"
+          }
+        ],
+      "whg:apiView": [
+        {
+          "id": "whg:classes_codes",
+          "name": "Classes (codes)",
+          "description": "Array of GeoNames class codes (single letters)."
+        },
+        {
+          "id": "whg:classes_objects",
+          "name": "Classes (objects)",
+          "description": "Array of objects {\"code\",\"label\",\"reference\"} for richer UI."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:types",
+      "@type": "rdf:Property",
+      "rdfs:label": "Types / feature types",
+      "rdfs:comment": "More granular place types. Recommended structure: array of objects {\"id\": <uri>, \"label\": <string>, \"source\": <uri>}. This aligns with LPF 'types' patterns.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "rdfs:Resource",
+      "whg:example": [
+        {
+          "id": "aat:300008347",
+          "label": "Market towns",
+          "source": "aat:"
+        },
+        {
+          "id": "wd:Q3957",
+          "label": "River",
+          "source": "wd:"
+        }
+      ],
+      "whg:apiView": [
+        {
+          "id": "whg:types_objects",
+          "name": "Types (objects)",
+          "description": "Array of type objects with id, label, source."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:dataset",
+      "@type": "rdf:Property",
+      "rdfs:label": "Source dataset",
+      "rdfs:comment": "Dataset in which this place record appears. Use whg:Dataset references or an object {id, name}.",
+      "rdfs:domain": "whg:Place",
+      "rdfs:range": "whg:Dataset",
+      "whg:example": [
+        {
+          "id": "osm:",
+          "name": "OpenStreetMap"
+        },
+        {
+          "id": "wd:",
+          "name": "Wikidata"
+        },
+        {
+          "id": "gn:",
+          "name": "Geonames"
+        },
+        {
+          "id": "https://whgazetteer.org/dataset/189",
+          "name": "Custom contributor dataset"
+        }
+      ],
+      "whg:apiView": [
+        {
+          "id": "whg:dataset",
+          "name": "Source dataset",
+          "description": "Object containing dataset id and display name."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:chrononym",
+      "@type": "rdf:Property",
+      "rdfs:label": "Chrononym",
+      "rdfs:comment": "The primary label or name for a temporal period. This is the canonical name by which the period is known.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "xsd:string",
+      "whg:example": "Roman Empire",
+      "whg:apiView": [
+        {
+          "id": "whg:chrononym_canonical",
+          "name": "Chrononym (canonical)",
+          "description": "Primary chrononym label as a string."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:chrononym_variants",
+      "@type": "rdf:Property",
+      "rdfs:label": "Chrononym variants",
+      "rdfs:comment": "Alternative names or labels for the period in different languages or scholarly traditions. Each variant includes the label and language tag.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "rdf:Seq",
+      "whg:example": [
+        {
+          "label": "Roman Empire",
+          "lang": "en"
+        },
+        {
+          "label": "Empire romain",
+          "lang": "fr"
+        },
+        {
+          "label": "Römisches Reich",
+          "lang": "de"
+        }
+      ],
+      "whg:languageMetadata": {
+        "bcp47": "bcp47",
+        "standards": {
+          "language": "iso639"
+        }
+      },
+      "whg:apiView": [
+        {
+          "id": "whg:chrononym_variants_array",
+          "name": "Chrononym variants (array)",
+          "description": "Array of chrononym variant objects with label and language."
+        },
+        {
+          "id": "whg:chrononym_variants_summary",
+          "name": "Chrononym variants (summary)",
+          "description": "Flat array of variant label strings."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:period_authority",
+      "@type": "rdf:Property",
+      "rdfs:label": "Period authority",
+      "rdfs:comment": "The scholarly authority or source that defined this period. References the bibliographic source or dataset from which the period definition derives.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "rdfs:Resource",
+      "whg:example": {
+        "id": "http://n2t.net/ark:/99152/p0ndpcq",
+        "label": "Gassner, Verena; Jilek, Sonja; Ladstätter, Sabine (2002–2003): Am Rande des Reiches"
+      },
+      "whg:apiView": [
+        {
+          "id": "whg:period_authority_object",
+          "name": "Period authority",
+          "description": "Authority object with id and label."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:temporal_bounds",
+      "@type": "rdf:Property",
+      "rdfs:label": "Temporal bounds",
+      "rdfs:comment": "Start and end temporal bounds for the period. Includes both human-readable labels and computed numeric years for temporal queries.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "lpf:Timespan",
+      "whg:example": {
+        "start": {
+          "label": "c. 50 BC",
+          "year": "-0049",
+          "earliestYear": -50,
+          "latestYear": -49
+        },
+        "stop": {
+          "label": "noch vor der Mitte des 1. Jahrhunderts n. Chr.",
+          "year": "0040-0050",
+          "earliestYear": 40,
+          "latestYear": 50
+        }
+      },
+      "whg:apiView": [
+        {
+          "id": "whg:temporal_bounds_objects",
+          "name": "Temporal bounds (objects)",
+          "description": "Structured start/stop objects with labels and computed years."
+        },
+        {
+          "id": "whg:temporal_bounds_years",
+          "name": "Temporal bounds (years)",
+          "description": "Numeric year range as {start, end} for computational use."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:spatial_coverage",
+      "@type": "rdf:Property",
+      "rdfs:label": "Spatial coverage",
+      "rdfs:comment": "Geographic entities or places associated with this period. Links to WHG places or external gazetteer identifiers.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "whg:Place",
+      "whg:example": [
+        {
+          "id": "http://www.wikidata.org/entity/Q40",
+          "label": "Austria"
+        },
+        {
+          "id": "https://whgazetteer.org/place/12345",
+          "label": "Vienna"
+        }
+      ],
+      "whg:apiView": [
+        {
+          "id": "whg:spatial_coverage_objects",
+          "name": "Spatial coverage (objects)",
+          "description": "Array of linked place objects with id and label."
+        },
+        {
+          "id": "whg:spatial_coverage_geometry",
+          "name": "Spatial coverage (geometry)",
+          "description": "Computed bounding geometry for all associated places."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:periodo_identifier",
+      "@type": "rdf:Property",
+      "rdfs:label": "PeriodO identifier",
+      "rdfs:comment": "Original PeriodO ARK identifier for periods sourced from the PeriodO dataset.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "xsd:anyURI",
+      "whg:example": "http://n2t.net/ark:/99152/p0ndpcqmz45",
+      "whg:reference": "periodo",
+      "whg:apiView": [
+        {
+          "id": "whg:periodo_identifier",
+          "name": "PeriodO identifier",
+          "description": "ARK identifier from PeriodO as URI string."
+        }
+      ]
+    },
+
+    {
+      "@id": "whg:period_notes",
+      "@type": "rdf:Property",
+      "rdfs:label": "Period notes",
+      "rdfs:comment": "Editorial notes, broader/narrower relationships, and additional contextual information about the period definition.",
+      "rdfs:domain": "whg:Period",
+      "rdfs:range": "xsd:string",
+      "whg:example": "The settlement on the Magdalensberg belongs to several pre-Roman and Roman phases...",
+      "whg:apiView": [
+        {
+          "id": "whg:period_notes_editorial",
+          "name": "Editorial notes",
+          "description": "Editorial and contextual notes as text."
+        }
+      ]
+    }
+  ]
+}

@@ -32,7 +32,8 @@ RUN set -eux; \
         psmisc \
         # Version control
         git && \
-    # Set up Python virtual environment
+    # Set up fresh Python virtual environment
+    rm -rf /py && \
     python -m venv /py && \
     /py/bin/pip install --upgrade pip && \
     /py/bin/pip install -r /tmp/requirements.txt && \
@@ -45,7 +46,7 @@ RUN set -eux; \
 	# Create a new sudoers file for the user
 	echo "$USER_NAME ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/"$USER_NAME" && \
     # Set ownership
-    chown -R 1000:0 /py/lib/python3.10/site-packages/captcha/migrations/ /py/lib/python3.10/site-packages/guardian/migrations/    
+    chown -R 1000:0 /py/lib/python3.10/site-packages/guardian/migrations/
 
 WORKDIR /app
 

@@ -14,10 +14,11 @@ from django.views.generic.base import TemplateView
 from django.views.static import serve
 
 import resources.views
+
+from accounts import orcid
 from accounts.views import profile_edit
 from datasets.views import PublicListsView  # , DataListsView
 from main import views
-from metrics.admin import RequestCountAdmin
 from resources.views import TeachingPortalView
 from sitemap.views import StaticViewSitemap, ToponymSitemap
 from utils import mapdata
@@ -70,12 +71,17 @@ urlpatterns = [
                   ),
                   path('whgmail/', include('whgmail.urls')),
 
+
+
+
+
                   path('teaching/', TeachingPortalView.as_view(), name="teaching"),
                   path("api/teaching/", resources.views.teaching_json, name="teaching_json"),
 
                   path('public_data/', PublicListsView.as_view(), name='public-lists'),
 
-                  # profile and settings
+                  # orcid authentication, profile and settings
+                  path('orcid-callback/', orcid.orcid_callback, name='orcid-callback'),
                   path('profile/', profile_edit, name="profile-edit"),
 
                   path('dashboard/', views.dashboard_redirect, name="dashboard"),  # redirect to user or admin
@@ -88,8 +94,6 @@ urlpatterns = [
 
                   path('people_overview/', TemplateView.as_view(template_name="main/people_overview.html"),
                        name="credits"),
-                  path('licensing/', TemplateView.as_view(template_name="main/licensing.html.DEPRECATED"),
-                       name="licensing"),
                   # path('system/', TemplateView.as_view(template_name="main/../_local/_older/system.html"), name="system"),
 
                   path('publications/', TemplateView.as_view(template_name="main/publications.html"),
@@ -131,11 +135,10 @@ urlpatterns = [
                   path('create_link/', views.create_link, name="create-link"),
 
                   # backend stuff
+                  path("", include("api.urls_root")),  # reconcile/suggest API
                   path('api/', include('api.urls')),
-                  path('remote/', include('remote.urls')),
                   path('accounts/', include('accounts.urls')),
                   path('admin/', admin.site.urls),
-                  path('captcha/', include('captcha.urls')),
                   path('health', views.health_check, name='health_check'),
                   # for celery tasks
                   # initiate downloads of augmented datasets via celery task (called from ajax)

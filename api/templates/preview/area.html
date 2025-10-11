@@ -1,0 +1,16 @@
+{% extends "preview/base_preview.html" %}
+{% load preview_extras %}
+
+{% block title %}{{ object.title }}{% endblock %}
+
+{% block fields %}
+    <span class="record-field">ID:</span> {{ object.id|default:"N/A" }}<br>
+    <span class="record-field">Description:</span> {{ object.description|default:"N/A" }}<br>
+    <span class="record-field">Created:</span> {{ object.created|iso_to_date }}<br>
+    <span class="record-field">Country Codes:</span>
+    {% if object.ccodes %}
+        {{ object.ccodes|join:", " }}
+    {% else %}
+        N/A
+    {% endif %}
+{% endblock %}

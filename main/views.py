@@ -1,35 +1,31 @@
 # main.views
 from celery.backends.base import DisabledBackend
+from celery.result import AsyncResult
+from celery.utils.log import get_task_logger
 from django.apps import apps
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
-from django.core.exceptions import ObjectDoesNotExist
 from django.core.mail import BadHeaderError
 from django.db.models import Q
 from django.db.models.functions import Lower
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseForbidden, HttpResponseServerError
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseServerError
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.html import escape
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.views.generic.base import TemplateView
 
-from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm
 from areas.models import Area
-from celery.result import AsyncResult
-from celery.utils.log import get_task_logger
+from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm
 
 logger = get_task_logger(__name__)
 from collection.models import Collection, CollectionGroup
 from datasets.models import Dataset
 from datasets.tasks import testAdd
-from main.decorators import uber_user_required
 from .models import Announcement, Link, DownloadFile, Comment
 from places.models import Place
 from resources.models import Resource
@@ -140,6 +136,7 @@ class AnnouncementUpdateView(LoginRequiredMixin, PermissionRequiredMixin, Update
         else:
             logger.debug(f'form.errors: {form.errors}')
             return self.form_invalid(form)
+
 
 # Mixin for checking splash screen pass
 class SplashCheckMixin:
@@ -652,6 +649,7 @@ def server_error_view(request):
         # In case rendering the error page fails, return a plain HTTP response
         return HttpResponseServerError('An unexpected error occurred and we were unable to handle it properly.')
 
+
 def custom_404(request, exception):
     logger.debug(f'404 error request: {request.GET.__dict__}')
     return render(request, 'main/404.html', {}, status=404)
@@ -760,8 +758,8 @@ def volunteer_view(request):
                 'subject': 'WHG Volunteer to Review',
                 'to_email': dataset.owner.email,
                 'bcc': [settings.DEFAULT_FROM_EDITORIAL],
-                'greeting_name': dataset.owner.display_name,
-                'volunteer_greeting': request.user.display_name,
+                'greeting_name': dataset.owner.name,
+                'volunteer_greeting': request.user.name,
                 'volunteer_username': request.user.username,
                 'volunteer_email': request.user.email,
                 'message': form.cleaned_data['message'],
@@ -776,16 +774,116 @@ def volunteer_view(request):
 
     return render(request, 'volunteer.html', {'form': form})
 
+
+
+
+# def contact_modal_view(request):
+#     if request.method == 'GET':
+#         initial_data = {}
+#         if request.user.is_authenticated:
+#             initial_data['from_email'] = request.user.email
+#             initial_data['name'] = request.user.username
+#             initial_data['subject'] = request.GET['subject'] if 'subject' in request.GET else None
+#         form = ContactForm(initial=initial_data)
+#     else:
+#         form = ContactForm(request.POST)
+#         if form.is_valid():
+#             name = form.cleaned_data['name']
+#             username = form.cleaned_data.get('username', None)
+#             user_subject = form.cleaned_data['subject']
+#             user_email = form.cleaned_data['from_email']
+#             user_message = form.cleaned_data['message']
+#             page_url = request.POST.get('page_url', 'No page URL provided')
+#
+#             # URL-encode the subject and body for the mailto link
+#             encoded_subject = urllib.parse.quote(user_subject)
+#             encoded_body = urllib.parse.quote(
+#                 f"\n\n\nOriginal message:\nSent on: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n{user_message}"
+#             )
+#             mailto_link = f"mailto:{user_email}?subject={encoded_subject}&body={encoded_body}"
+#
+#             try:
+#
+#                 slack_message = (
+#                     f"*Subject:* {user_subject}\n"
+#                     f"*From:* {name} (username: {username or '(none)'})\n"
+#                     f"*Email Address:* <{mailto_link}|{user_email}>\n"
+#                     f"*Message:* ```{user_message}```\n"
+#                     f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
+#                     f"----------------------------------------"
+#                 )
+#                 response = requests.post(settings.SLACK_CONTACT_WEBHOOK, json={"text": slack_message})
+#                 if not response.status_code == 200:
+#                     logger.debug(f"Failed to send message to Slack: {response.status_code}, {response.text}")
+#
+#                 messages.success(request, "Your message has been sent successfully.")
+#                 return JsonResponse({'success': True})
+#
+#             except BadHeaderError:
+#                 return HttpResponse('Invalid header found.')
+#
+#             except Exception as e:
+#                 logger.error("An error occurred while processing the contact form: %s", e)
+#                 messages.error(request, "There was an error sending your message. Please try again later.")
+#                 return JsonResponse({'success': False, 'error': str(e)})
+#         else:
+#             logger.debug(f'form.errors: {form.errors}')
+#             # Form is not valid, render the form again with errors
+#             return render(request, 'main/contact_modal.html', {'form': form})
+#
+#     context = {'form': form}
+#     return render(request, 'main/contact_modal.html', context)
+
+
 def contact_modal_view(request):
-    if request.method == 'GET':
-        initial_data = {}
-        if request.user.is_authenticated:
-            initial_data['from_email'] = request.user.email
-            initial_data['name'] = request.user.username
-            initial_data['subject'] = request.GET['subject'] if 'subject' in request.GET else None
-        form = ContactForm(initial=initial_data)
-    else:
-        form = ContactForm(request.POST)
+    # Prepare initial form data
+    initial_data = {}
+    if request.user.is_authenticated:
+        initial_data['from_email'] = request.user.email
+        initial_data['name'] = request.user.name
+        initial_data['username'] = request.user.username
+        initial_data['subject'] = request.GET.get('subject')
+
+    form = ContactForm(request.POST or None, initial=initial_data)
+
+    show_name_field = not request.user.is_authenticated
+    show_email_field = not request.user.is_authenticated or not request.user.email
+
+    context = {
+        'form': form,
+        'show_name_field': show_name_field,
+        'show_email_field': show_email_field,
+        'TURNSTILE_SITE_KEY': settings.TURNSTILE_SITE_KEY
+    }
+
+    if request.method == 'POST':
+        # Only check Turnstile for anonymous users
+        if not request.user.is_authenticated:
+            token = request.POST.get("cf-turnstile-response")
+            if not token:
+                form.add_error(None, "Please verify that you are human.")
+                return render(request, 'main/contact_modal.html', context)
+
+            try:
+                resp = requests.post(
+                    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                    data={
+                        "secret": settings.TURNSTILE_SECRET_KEY,
+                        "response": token,
+                        "remoteip": request.META.get("REMOTE_ADDR", ""),
+                    },
+                    timeout=5,
+                )
+                result = resp.json()
+            except Exception as e:
+                logger.error("Error contacting Turnstile API: %s", e)
+                form.add_error(None, "Unable to verify CAPTCHA. Please try again.")
+                return render(request, "main/contact_modal.html", context)
+
+            if not result.get("success"):
+                form.add_error(None, "CAPTCHA verification failed. Please try again.")
+                return render(request, "main/contact_modal.html", context)
+
         if form.is_valid():
             name = form.cleaned_data['name']
             username = form.cleaned_data.get('username', None)
@@ -794,7 +892,6 @@ def contact_modal_view(request):
             user_message = form.cleaned_data['message']
             page_url = request.POST.get('page_url', 'No page URL provided')
 
-            # URL-encode the subject and body for the mailto link
             encoded_subject = urllib.parse.quote(user_subject)
             encoded_body = urllib.parse.quote(
                 f"\n\n\nOriginal message:\nSent on: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n{user_message}"
@@ -802,17 +899,16 @@ def contact_modal_view(request):
             mailto_link = f"mailto:{user_email}?subject={encoded_subject}&body={encoded_body}"
 
             try:
-
                 slack_message = (
                     f"*Subject:* {user_subject}\n"
-                    f"*From:* {name} (username: {username or '(none)'})\n"
+                    f"*From:* {name} (username: {username or 'N/A - Unauthenticated User'})\n"
                     f"*Email Address:* <{mailto_link}|{user_email}>\n"
                     f"*Message:* ```{user_message}```\n"
                     f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
                     f"----------------------------------------"
                 )
                 response = requests.post(settings.SLACK_CONTACT_WEBHOOK, json={"text": slack_message})
-                if not response.status_code == 200:
+                if response.status_code != 200:
                     logger.debug(f"Failed to send message to Slack: {response.status_code}, {response.text}")
 
                 messages.success(request, "Your message has been sent successfully.")
@@ -822,15 +918,14 @@ def contact_modal_view(request):
                 return HttpResponse('Invalid header found.')
 
             except Exception as e:
-                logger.error("An error occurred while processing the contact form: %s", e)
+                logger.error("Error processing contact form: %s", e)
                 messages.error(request, "There was an error sending your message. Please try again later.")
                 return JsonResponse({'success': False, 'error': str(e)})
+
         else:
             logger.debug(f'form.errors: {form.errors}')
-            # Form is not valid, render the form again with errors
-            return render(request, 'main/contact_modal.html', {'form': form})
 
-    context = {'form': form}
+    # GET request or form errors
     return render(request, 'main/contact_modal.html', context)
 
 

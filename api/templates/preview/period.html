@@ -1,0 +1,28 @@
+{% extends "preview/base_preview.html" %}
+{% load preview_extras %}
+
+{% block title %}{{ object.chrononym|default:"Untitled Period" }}{% endblock %}
+{% block note %}Authority: {{ object.authority_label }}{% endblock %}
+
+{% block fields %}
+    {% if object.chrononyms_preview %}
+        <span class="record-field">Alternative Names:</span>
+        {{ object.chrononyms_preview|join:", " }}{% if object.chrononym_count > 3 %} …{% endif %}<br>
+    {% endif %}
+
+    {% if object.start %}
+        <span class="record-field">Start:</span> {{ object.start }}<br>
+    {% endif %}
+    {% if object.stop %}
+        <span class="record-field">Stop:</span> {{ object.stop }}<br>
+    {% endif %}
+
+    {% if object.spatial_preview %}
+        <span class="record-field">Geographic Coverage:</span>
+        {{ object.spatial_preview|join:", " }}{% if object.spatial_count > 3 %} …{% endif %}<br>
+    {% endif %}
+
+    {% if object.note %}
+        <span class="record-field">Note:</span> {{ object.note|truncatewords:20 }}<br>
+    {% endif %}
+{% endblock %}

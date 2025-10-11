@@ -44,7 +44,6 @@ INSTALLED_APPS = [
 
     # 3rd party
     'bootstrap_modal_forms',
-    'captcha',
     'celery_progress',
     # uncomment for debug toolbar
     # 'debug_toolbar',
@@ -60,6 +59,7 @@ INSTALLED_APPS = [
     'guardian',
     'leaflet',
     'mathfilters',
+    "mozilla_django_oidc",
     'multiselectfield',
     'rest_framework',
     'rest_framework.authtoken',
@@ -77,10 +77,10 @@ INSTALLED_APPS = [
     'elastic.apps.ElasticConfig',
     'ingestion.apps.IngestionConfig',
     'main.apps.MainConfig',
-    'metrics.apps.MetricsConfig',
+    'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
     'places.apps.PlacesConfig',
-    'remote.apps.RemoteConfig',
+    'regions.apps.RegionsConfig',
     'resources.apps.ResourcesConfig',  # for teaching
     'search.apps.SearchConfig',
     'sitemap.apps.SitemapConfig',
@@ -139,7 +139,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    "metrics.middleware.MetricsMiddleware",
+    'api.middleware.PlausibleAPIMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.middleware.locale.LocaleMiddleware',
@@ -174,11 +174,6 @@ CELERY_RESULT_EXTENDED = True
 CELERY_RESULT_EXPIRES = None
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-CAPTCHA_NOISE_FUNCTIONS = (
-    'captcha.helpers.noise_arcs',
-    'captcha.helpers.noise_dots',)
-CAPTCHA_LENGTH = 6
-
 DJANGORESIZED_DEFAULT_SIZE = [1000, 800]
 DJANGORESIZED_DEFAULT_QUALITY = 75
 DJANGORESIZED_DEFAULT_KEEP_META = True
@@ -191,9 +186,8 @@ DJANGORESIZED_DEFAULT_NORMALIZE_ROTATION = True
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
         'rest_framework.renderers.JSONRenderer',
-        # 'api.views.PrettyJsonRenderer',
-        # 'rest_framework.renderers.BrowsableAPIRenderer',
-        'rest_framework_datatables.renderers.DatatablesRenderer',
+        # Any additional renderers will appear as unwanted options in the Swagger UI
+        # 'rest_framework_datatables.renderers.DatatablesRenderer',
     ),
     'DEFAULT_FILTER_BACKENDS': (
         'rest_framework_datatables.filters.DatatablesFilterBackend',
@@ -283,6 +277,14 @@ LOGGING = {
             'backupCount': 5,  # Number of backup files to keep
             'formatter': 'verbose',
         },
+        'authentication_file': {
+            'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(BASE_DIR, 'whg/logs/authentication.log'),
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 5,  # Number of backup files to keep
+            'formatter': 'verbose',
+        },
         'mapdata_file': {
             'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
             'class': 'logging.handlers.RotatingFileHandler',
@@ -360,6 +362,11 @@ LOGGING = {
             'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
             'propagate': False,  # Ensure logs do not propagate to root logger
         },
+        'authentication': {
+            'handlers': ['authentication_file', 'console'],
+            'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
+            'propagate': False,  # Ensure logs do not propagate to root logger
+        },
         'mapdata': {
             'handlers': ['mapdata_file', 'console'],
             'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
@@ -399,14 +406,26 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so.28'
 GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so.1'
 
-LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/accounts/login/'
-LOGOUT_REDIRECT_URL = '/'
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Needs to be set for proper request.build_absolute_uri handling
 
 AUTHENTICATION_BACKENDS = (
-    'django.contrib.auth.backends.ModelBackend',  # default
+    'django.contrib.auth.backends.ModelBackend',  # TODO: Remove this after ORCiD migration
     'guardian.backends.ObjectPermissionBackend',
+    'accounts.orcid.OIDCBackend',
 )
+
+OIDC_RP_SCOPES = "openid"  # ORCiD base url and credentials must be set in `env_template.py`
+ORCID_BASE_URL = os.environ.get("ORCID_BASE")
+OIDC_RP_CLIENT_ID = os.environ.get("ORCID_CLIENT_ID")
+OIDC_RP_CLIENT_SECRET = os.environ.get("ORCID_CLIENT_SECRET")
+OIDC_OP_DISCOVERY_ENDPOINT = f"{ORCID_BASE_URL}/.well-known/openid-configuration"
+OIDC_OP_AUTHORIZATION_ENDPOINT = f"{ORCID_BASE_URL}/oauth/authorize"
+OIDC_OP_TOKEN_ENDPOINT = f"{ORCID_BASE_URL}/oauth/token"
+OIDC_OP_USER_ENDPOINT = f"{ORCID_BASE_URL}/oauth/userinfo"
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -425,6 +444,7 @@ TIME_ZONE = 'UTC'
 
 USE_I18N = True
 USE_L10N = True
+USE_THOUSAND_SEPARATOR = True
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 MEDIA_URL = '/media/'
@@ -481,18 +501,45 @@ GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so.28'
 GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so.1'
 
 SPECTACULAR_SETTINGS = {
+    'TITLE': 'WHG API',
+    'DESCRIPTION': (
+        "The World Historical Gazetteer (WHG) API provides programmatic access to place data, "
+        "supporting discovery, reconciliation, and integration of historical geographic information. "
+        "It implements both general REST endpoints for querying WHG resources and a full "
+        "[Reconciliation Service API v0.2](https://www.w3.org/community/reports/reconciliation/CG-FINAL-specs-0.2-20230410/) "
+        "for linking external datasets against WHG identifiers.\n\n"
+        "Main features include:\n"
+        "- **Place & Period Search & Retrieval**: access detailed information about places or periods, their names, "
+        "types, geometries, temporal coverage, and datasets of origin.\n"
+        "- **Reconciliation API**: resolve place and period names to WHG or [PeriodO](https://perio.do/) identifiers, with canonical labels and metadata.\n"
+        "- **Extension Service**: enrich external records with WHG or PeriodO properties (e.g. country codes, "
+        "feature classes, geometries, and temporal ranges).\n\n"
+        "Most endpoints require a valid API token for authentication, which can be submitted either "
+        "as a URL query parameter or in an Authorization header. "
+        "See the [documentation](https://docs.whgazetteer.org/content/400-Technical.html#api-tokens) for details."
+    ),
+    'TAGS': [
+        {"name": "Schema", "description": "API schema and documentation"},
+        {"name": "Entity API", "description": "Query (_in some cases modify_) **Places**, **Periods**, **Datasets**, **Collections**, or **Areas**"},
+        {"name": "Reconciliation API", "description": "for **Places** and **Periods** ([Reconciliation Service API v0.2](https://www.w3.org/community/reports/reconciliation/CG-FINAL-specs-0.2-20230410/))"},
+    ],
+    'VERSION': '1.0.0',
     'SWAGGER_UI_SETTINGS': {
         'deepLinking': True,
         'persistAuthorization': True,
     },
+    "SWAGGER_UI_FAVICON_HREF": "/static/images/favicon.ico",
     'SORT_OPERATION_PARAMETERS': False,
     'PREPROCESSING_HOOKS': [
         'drf_spectacular.hooks.preprocess_exclude_path_format',
     ],
+    'AUTHENTICATION_WHITELIST': [],
+    'SECURITY': [],
 }
 
-# Anonymising salt does not need to be secret, just consistent
-METRICS_VISITOR_SALT = "a9f3b8e2-1c4d-4e6f-8b2d-3e5f7a9b0c1d"
+PLAUSIBLE_BASE_URL="https://analytics.whgazetteer.org"  # TODO: Change this to network IP once co-located within K8s
+PLAUSIBLE_SITE="whgazetteer.org"
+# PLAUSIBLE_API_KEY is in local_settings
 
 # Settings for DataCite API (DOI registration)
 DOI_USER_ID = os.environ.get("DOI_USER_ID")

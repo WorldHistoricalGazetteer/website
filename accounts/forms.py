@@ -43,60 +43,20 @@ class LoginForm(forms.Form):
         return user
 
 
-# used to edit
 class UserModelForm(forms.ModelForm):
     class Meta:
         model = User
-        # fields = ('username', 'email', 'given_name', 'surname', 'name', 'affiliation',
-        #           'role', 'web_page', 'image_file')
-        fields = ('username', 'email', 'given_name', 'surname', 'affiliation',
-                  'role', 'web_page', 'image_file')
+        fields = ('news_permitted',)
         exclude = ('password',)
 
         widgets = {
-            'username': forms.TextInput(attrs={'size': 50}),
-            'email': forms.TextInput(attrs={'size': 50}),
-            # 'name': forms.TextInput(attrs={'size': 50}),
-            'given_name': forms.TextInput(attrs={'size': 50}),
-            'surname': forms.TextInput(attrs={'size': 50}),
-            'affiliation': forms.TextInput(attrs={'size': 50}),
-            'web_page': forms.TextInput(attrs={'size': 50}),
-            'image_file': forms.FileInput(attrs={'class': 'fileinput'}),
+            'news_permitted': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'style': 'cursor: pointer;',
+                'data-bs-toggle': 'tooltip',
+                'data-bs-title': (
+                    '<i class="fas fa-newspaper"></i> By checking this box, you consent to our sending occasional newsletters and updates via email.<br><br>'
+                    '<strong>Note:</strong> <i>You can withdraw your consent at any time by unchecking this box.</i>'
+                ),
+            }),
         }
-
-    def clean_username(self):
-        username = self.cleaned_data.get('username', '')
-        # Check for obvious URL patterns in usernames
-        validate_no_urls(username)
-        return username
-
-    def clean_given_name(self):
-        given_name = self.cleaned_data.get('given_name', '')
-        validate_no_urls(given_name)
-        return given_name
-
-    def clean_surname(self):
-        surname = self.cleaned_data.get('surname', '')
-        validate_no_urls(surname)
-        return surname
-
-    def clean_email(self):
-        email = self.cleaned_data.get('email')
-        try:
-            validate_email(email)
-        except ValidationError:
-            raise ValidationError("Invalid email address")
-        return email
-
-    def clean(self):
-        cleaned_data = super().clean()
-        for field in self.Meta.fields:
-            if field not in cleaned_data and self.fields[field].required and not self.errors.get(field):
-                self.add_error(field, "This field is required")
-        return cleaned_data
-
-    def __init__(self, *args, **kwargs):
-        super(UserModelForm, self).__init__(*args, **kwargs)
-        self.fields['affiliation'].required = False
-        self.fields['role'].required = False
-        self.fields['image_file'].required = False

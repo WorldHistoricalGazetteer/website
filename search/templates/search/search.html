@@ -122,6 +122,25 @@
                     </p>
 					{% endfor %}
 				</div>
+                <div class="mt-3 mx-0">
+                  <p class="mb-0">
+                    <span class="categories ms-1">period filter</span> <em class="smaller">(temporal + spatial)</em>
+                  </p>
+                  <div id="chrononym_selector" class="input-group">
+                    <input id="chrononym_input"
+                           class="form-control typeahead"
+                           type="text"
+                           placeholder="Enter chrononym (PeriodO name)"
+                           aria-label="Chrononym filter"
+                           autocomplete="off"
+                           spellcheck="false">
+                    <button id="clear_chrononym"
+                            class="btn btn-outline-secondary"
+                            type="button">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  </div>
+                </div>
                 <!-- 	        <div class="mt-2 ps-1 border-secondary small fst-italic"><p>Select or de-select place type categories to filter initial results</p></div> -->
                 <div class="mt-3 mx-0">
                     <p class="mb-0">

@@ -59,12 +59,9 @@ class UserManager(BaseUserManager):
 
 class User(AbstractUser, PermissionsMixin):
 
-    # TODO: Uncomment these fields when implementing ORCiD authentication
-    # orcid = models.URLField(max_length=255, unique=True, null=True, blank=True)
-    # orcid_access_token = EncryptedTextField(null=True, blank=True)
-    # orcid_refresh_token = EncryptedTextField(null=True, blank=True)
-    # orcid_token_scope = models.TextField(null=True, blank=True)
-    # orcid_token_expires_at = models.DateTimeField(null=True, blank=True)
+    orcid = models.URLField(max_length=255, unique=True, null=True, blank=True)
+    orcid_refresh_token = EncryptedTextField(null=True, blank=True)
+    orcid_token_expires_at = models.DateTimeField(null=True, blank=True)
 
     # TODO: Repopulate these existing fields from ORCiD data
     email = EncryptedTextField(validators=[EmailValidator()], null=True, blank=True)  # 🔐 encrypted email address
@@ -74,15 +71,13 @@ class User(AbstractUser, PermissionsMixin):
     web_page = models.URLField(max_length=255, null=True, blank=True)
     name = models.CharField(max_length=255)  # TODO: Currently generated from given_name + surname; could use `Publication Name` from ORCiD
 
-    # TODO: For new users, generate a unique username based on names, ORCiD, or other criteria (see `save` method below)
+    # For new users, the unique username is f"{given_name}-{family_name}-{user.id}"
     username = models.CharField(max_length=100, unique=True)
 
     role = models.CharField(max_length=24, choices=USER_ROLE, default="normal")
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
-    image_file = ResizedImageField(
-        size=[800, 600], upload_to=user_directory_path, blank=True, null=True
-    )
+    news_permitted = models.BooleanField(default=False)
 
     # TODO: Remove following migration to ORCiD authentication
     email_confirmed = models.BooleanField(default=False)
@@ -101,14 +96,8 @@ class User(AbstractUser, PermissionsMixin):
         db_table = "auth_users"
 
     def save(self, *args, **kwargs):
-        self.name = f"{self.given_name} {self.surname}"
+        self.name = " ".join(filter(None, [self.given_name, self.surname])) or self.username
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.username
-
-    @property
-    def display_name(self):  # TODO: This redundantly reproduces the logic used to generate `name` in `save` above
-        if self.given_name and self.surname:
-            return f"{self.given_name} {self.surname}"
-        return self.name if self.name else self.username

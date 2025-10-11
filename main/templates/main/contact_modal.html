@@ -1,69 +1,93 @@
 <form id="contactForm" method="post" data-url="/contact_modal/" class="needs-validation" novalidate>
-	<div class="modal-header">
-	    <h5 class="modal-title" id="contactModalLabel">
-			<img alt="WHG" height="38" src="/static/images/whg_logo.svg" width="50">
-	        Contact Us
-	    </h5>
-	    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-	</div>
-	<div class="modal-body">
+    {% csrf_token %}
+    <div class="modal-header">
+        <h5 class="modal-title" id="contactModalLabel">
+            <img alt="WHG" height="38" src="/static/images/whg_logo.svg" width="50">
+            Contact Us
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    </div>
+
+    <div class="modal-body">
         <div id="contactFormContent">
-		    <h5 class="mb-3">Questions, bug reports, feature requests, support requests and comments all welcome!</h5>
-		    <p><i>Developers: You can search for relevant Issues and create your own on our GitHub repository <a href="https://github.com/WorldHistoricalGazetteer/whg3/issues" target="_blank">here</a>.</i></p>
-	        <table id="contact_form">
-	            <tr>
-	                <td>Name</td>
-	                <td>
-	                	{{ form.name }}
-	                	<div class="invalid-feedback">Please enter your name.</div>
-	                </td>
-	            </tr>
-	            <tr>
-	                <td>Email</td>
-	                <td>
-	                	{{ form.from_email }}
-	                	<div class="invalid-feedback">Please enter a valid email address.</div>
-	                </td>
-	            </tr>
-	            <tr>
-	                <td>Subject</td>
-	                <td>
-	                	{{ form.subject }}
-	                	<div class="invalid-feedback">Please enter a subject.</div>
-	                </td>
-	            </tr>
-	            <tr>
-	                <td>Message</td>
-	                <td>
-	                	{{ form.message }}
-	                	<div class="invalid-feedback">Please enter a message.</div>
-	                </td>
-	            </tr>
-	        </table>
-	        <div class="captcha-container">
-	            <p>Please type the characters in this image:</p>
-	            <span class="ms-2">{{ form.captcha }}
-	            <a class="captcha smaller" href="#">refresh</a></span>
-		        <div class="invalid-feedback">
-		        	<p>Please enter exactly 6 characters.</p>
-		            {% for error in form.captcha.errors %}
-		                {{ error }}
-		            {% endfor %}
-		        </div>
-	        </div>
-	        {% if user.is_authenticated %}
-	            <input type="hidden" name="username" value="{{ user.username }}">
-	        {% endif %}
-		</div>
+            <h5 class="mb-3">Questions, bug reports, feature requests, support requests and comments all welcome!</h5>
+            <p><i>Developers: You can search for relevant Issues and create your own on our GitHub repository <a
+                    href="https://github.com/WorldHistoricalGazetteer/whg3/issues" target="_blank">here</a>.</i></p>
+
+            <table id="contact_form">
+                {% if show_name_field %}
+                    <tr>
+                        <td>Name</td>
+                        <td>
+                            {{ form.name }}
+                            <div class="invalid-feedback">Please enter your name.</div>
+                            <small class="form-text text-muted">
+                                Already registered? <a href="{% url 'accounts:login' %}">Log in</a> to skip entering your details.
+                            </small>
+                        </td>
+                    </tr>
+                {% else %}
+                    {{ form.name.as_hidden }}
+                {% endif %}
+
+                {% if show_email_field %}
+                    <tr>
+                        <td>Email</td>
+                        <td>
+                            {{ form.from_email }}
+                            <div class="invalid-feedback">Please enter a valid email address.</div>
+                            {% if not show_name_field %}
+                                <small class="form-text text-muted">
+                                    No email address is available from your ORCiD profile. You can optionally add one via your <a href="{% url 'profile-edit' %}">profile page</a>.
+                                </small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    {{ form.from_email.as_hidden }}
+                {% endif %}
+
+                {% if not show_name_field %}
+                    {{ form.username }}
+                {% endif %}
+
+                <tr>
+                    <td>Subject</td>
+                    <td>
+                        {{ form.subject }}
+                        <div class="invalid-feedback">Please enter a subject.</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Message</td>
+                    <td>
+                        {{ form.message }}
+                        <div class="invalid-feedback">Please enter a message.</div>
+                    </td>
+                </tr>
+            </table>
+
+            {% if not user.is_authenticated %}
+              <div class="turnstile-container d-flex justify-content-end align-items-center mt-2 me-2">
+                  <div class="invalid-feedback d-block me-2">
+                    {% for error in form.non_field_errors %}
+                      {{ error }}
+                    {% endfor %}
+                  </div>
+                  <div class="cf-turnstile" data-sitekey="{{ TURNSTILE_SITE_KEY }}"></div>
+              </div>
+            {% endif %}
+        </div>
+
         <div id="confirmationMessage" class="d-none">
             <h5>Thank you!</h5>
             <p>Your message has been sent.</p>
         </div>
-	</div>
-	<div class="modal-footer">
-	    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-	    <button type="submit" class="submit-btn btn btn-primary">Send</button>
-	    <button type="button" class="btn btn-primary d-none" id="closeButton" data-bs-dismiss="modal">Close</button>
-	</div>
-	{% csrf_token %}
+    </div>
+
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="submit-btn btn btn-primary">Send</button>
+        <button type="button" class="btn btn-primary d-none" id="closeButton" data-bs-dismiss="modal">Close</button>
+    </div>
 </form>

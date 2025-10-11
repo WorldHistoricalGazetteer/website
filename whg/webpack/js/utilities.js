@@ -369,6 +369,65 @@ export function initUtils(whg_map) {
     });
 }
 
+export function initClipboard() {
+    // Insert clipboard buttons after all .clippable elements
+    document.querySelectorAll(".clippable").forEach((el, idx) => {
+        const btn = document.createElement("i");
+        btn.className = "fas fa-clipboard ms-2 text-secondary";
+        btn.style.cursor = "pointer";
+
+        // give the source element an id if it doesn't have one
+        if (!el.id) {
+            el.id = `clippable-${idx}`;
+        }
+        btn.setAttribute("data-clipboard-target", `#${el.id}`);
+
+        // tooltip title: use element attr or default
+        const title = el.dataset.clippableTitle || "Copy to clipboard";
+        btn.setAttribute("data-bs-toggle", "tooltip");
+        btn.setAttribute("data-bs-placement", "top");
+        btn.setAttribute("title", title);
+
+        // insert after the element
+        el.insertAdjacentElement("afterend", btn);
+    });
+
+    // init ClipboardJS
+    const clipboard = new ClipboardJS(".fa-clipboard");
+
+    clipboard.on("success", function (e) {
+        const icon = e.trigger;
+        const tooltip = bootstrap.Tooltip.getInstance(icon);
+        if (!tooltip) return;
+
+        // clear highlight
+        e.clearSelection();
+
+        // flash colour
+        icon.classList.remove("text-secondary");
+        icon.classList.add("text-success");
+
+        // change tooltip content
+        icon.setAttribute("data-bs-original-title", "Copied!");
+        tooltip.show();
+
+        // reset after 2s
+        setTimeout(() => {
+            const original = icon.dataset.clippableTitle || "Copy to clipboard";
+            icon.setAttribute("data-bs-original-title", original);
+
+            icon.classList.remove("text-success");
+            icon.classList.add("text-secondary");
+
+            tooltip.hide();
+        }, 2000);
+    });
+
+    clipboard.on("error", function () {
+        alert("Failed to copy.");
+    });
+}
+
 export function minmaxer(timespans) {
     let starts = [], ends = [];
 

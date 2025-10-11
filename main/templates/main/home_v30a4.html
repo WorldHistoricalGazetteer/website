@@ -132,7 +132,7 @@
                                 <i class="fas fa-user-plus me-2"></i>
                                 <strong>You can explore World Historical Gazetteer without a User
                                     Account!</strong> But do please <a
-                                    href="{% url 'accounts:register' %}">sign up</a> to stay up to date with WHG news
+                                    href="{% url 'accounts:login' %}">sign up</a> to stay up to date with WHG news
                                 and
                                 announcements. You will be <i>required</i> to sign up only if you want to download or create datasets or collections.
                             </p>
@@ -172,9 +172,7 @@
                                     <i class="fas fa-code me-2 text-info"></i>
                                     <strong>API (Application Programming Interface)</strong>: If you are a developer, you can use a programmatic interface
                                     for querying WHG data, performing spatial queries, and accessing geocoding services
-                                    from external applications. Read more <a
-                                        href="https://docs.whgazetteer.org/content/400-Technical.html#api"
-                                        target="_blank">here <i class="fas fa-external-link-alt small"></i></a>.
+                                    from external applications. See <a href="{% url 'swagger-ui' %}">Swagger Documentation</a>.
                                 </li>
                             </ul>
                         </div>

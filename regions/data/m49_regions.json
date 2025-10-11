@@ -1,0 +1,7703 @@
+{
+  "001": {
+    "m49": "001",
+    "level": "global",
+    "labels": {
+      "en": "World",
+      "zh": "世界",
+      "ru": "Весь мир",
+      "fr": "Monde",
+      "es": "Mundo",
+      "ar": "العالم"
+    },
+    "parents": [],
+    "children": [
+      "010",
+      "015",
+      "021",
+      "030",
+      "034",
+      "035",
+      "039",
+      "053",
+      "054",
+      "057",
+      "061",
+      "143",
+      "145",
+      "151",
+      "154",
+      "155",
+      "202",
+      "419"
+    ],
+    "members": [
+      "004",
+      "008",
+      "010",
+      "012",
+      "016",
+      "020",
+      "024",
+      "028",
+      "031",
+      "032",
+      "036",
+      "040",
+      "044",
+      "048",
+      "050",
+      "051",
+      "052",
+      "056",
+      "060",
+      "064",
+      "068",
+      "070",
+      "072",
+      "074",
+      "076",
+      "084",
+      "086",
+      "090",
+      "092",
+      "096",
+      "100",
+      "104",
+      "108",
+      "112",
+      "116",
+      "120",
+      "124",
+      "132",
+      "136",
+      "140",
+      "144",
+      "148",
+      "152",
+      "156",
+      "162",
+      "166",
+      "170",
+      "174",
+      "175",
+      "178",
+      "180",
+      "184",
+      "188",
+      "191",
+      "192",
+      "196",
+      "203",
+      "204",
+      "208",
+      "212",
+      "214",
+      "218",
+      "222",
+      "226",
+      "231",
+      "232",
+      "233",
+      "234",
+      "238",
+      "239",
+      "242",
+      "246",
+      "248",
+      "250",
+      "254",
+      "258",
+      "260",
+      "262",
+      "266",
+      "268",
+      "270",
+      "275",
+      "276",
+      "288",
+      "292",
+      "296",
+      "300",
+      "304",
+      "308",
+      "312",
+      "316",
+      "320",
+      "324",
+      "328",
+      "332",
+      "334",
+      "336",
+      "340",
+      "344",
+      "348",
+      "352",
+      "356",
+      "360",
+      "364",
+      "368",
+      "372",
+      "376",
+      "380",
+      "384",
+      "388",
+      "392",
+      "398",
+      "400",
+      "404",
+      "408",
+      "410",
+      "414",
+      "417",
+      "418",
+      "422",
+      "426",
+      "428",
+      "430",
+      "434",
+      "438",
+      "440",
+      "442",
+      "446",
+      "450",
+      "454",
+      "458",
+      "462",
+      "466",
+      "470",
+      "474",
+      "478",
+      "480",
+      "484",
+      "492",
+      "496",
+      "498",
+      "499",
+      "500",
+      "504",
+      "508",
+      "512",
+      "516",
+      "520",
+      "524",
+      "528",
+      "531",
+      "533",
+      "534",
+      "535",
+      "540",
+      "548",
+      "554",
+      "558",
+      "562",
+      "566",
+      "570",
+      "574",
+      "578",
+      "580",
+      "581",
+      "583",
+      "584",
+      "585",
+      "586",
+      "591",
+      "598",
+      "600",
+      "604",
+      "608",
+      "612",
+      "616",
+      "620",
+      "624",
+      "626",
+      "630",
+      "634",
+      "638",
+      "642",
+      "643",
+      "646",
+      "652",
+      "654",
+      "659",
+      "660",
+      "662",
+      "663",
+      "666",
+      "670",
+      "674",
+      "678",
+      "682",
+      "686",
+      "688",
+      "690",
+      "694",
+      "702",
+      "703",
+      "704",
+      "705",
+      "706",
+      "710",
+      "716",
+      "724",
+      "728",
+      "729",
+      "732",
+      "740",
+      "744",
+      "748",
+      "752",
+      "756",
+      "760",
+      "762",
+      "764",
+      "768",
+      "772",
+      "776",
+      "780",
+      "784",
+      "788",
+      "792",
+      "795",
+      "796",
+      "798",
+      "800",
+      "804",
+      "807",
+      "818",
+      "826",
+      "831",
+      "832",
+      "833",
+      "834",
+      "840",
+      "850",
+      "854",
+      "858",
+      "860",
+      "862",
+      "876",
+      "882",
+      "887",
+      "894"
+    ],
+    "iso_alpha2": [
+      "AD",
+      "AE",
+      "AF",
+      "AG",
+      "AI",
+      "AL",
+      "AM",
+      "AO",
+      "AQ",
+      "AR",
+      "AS",
+      "AT",
+      "AU",
+      "AW",
+      "AX",
+      "AZ",
+      "BA",
+      "BB",
+      "BD",
+      "BE",
+      "BF",
+      "BG",
+      "BH",
+      "BI",
+      "BJ",
+      "BL",
+      "BM",
+      "BN",
+      "BO",
+      "BQ",
+      "BR",
+      "BS",
+      "BT",
+      "BV",
+      "BW",
+      "BY",
+      "BZ",
+      "CA",
+      "CC",
+      "CD",
+      "CF",
+      "CG",
+      "CH",
+      "CI",
+      "CK",
+      "CL",
+      "CM",
+      "CN",
+      "CO",
+      "CR",
+      "CU",
+      "CV",
+      "CW",
+      "CX",
+      "CY",
+      "CZ",
+      "DE",
+      "DJ",
+      "DK",
+      "DM",
+      "DO",
+      "DZ",
+      "EC",
+      "EE",
+      "EG",
+      "EH",
+      "ER",
+      "ES",
+      "ET",
+      "FI",
+      "FJ",
+      "FK",
+      "FM",
+      "FO",
+      "FR",
+      "GA",
+      "GB",
+      "GD",
+      "GE",
+      "GF",
+      "GG",
+      "GH",
+      "GI",
+      "GL",
+      "GM",
+      "GN",
+      "GP",
+      "GQ",
+      "GR",
+      "GS",
+      "GT",
+      "GU",
+      "GW",
+      "GY",
+      "HK",
+      "HM",
+      "HN",
+      "HR",
+      "HT",
+      "HU",
+      "ID",
+      "IE",
+      "IL",
+      "IM",
+      "IN",
+      "IO",
+      "IQ",
+      "IR",
+      "IS",
+      "IT",
+      "JE",
+      "JM",
+      "JO",
+      "JP",
+      "KE",
+      "KG",
+      "KH",
+      "KI",
+      "KM",
+      "KN",
+      "KP",
+      "KR",
+      "KW",
+      "KY",
+      "KZ",
+      "LA",
+      "LB",
+      "LC",
+      "LI",
+      "LK",
+      "LR",
+      "LS",
+      "LT",
+      "LU",
+      "LV",
+      "LY",
+      "MA",
+      "MC",
+      "MD",
+      "ME",
+      "MF",
+      "MG",
+      "MH",
+      "MK",
+      "ML",
+      "MM",
+      "MN",
+      "MO",
+      "MP",
+      "MQ",
+      "MR",
+      "MS",
+      "MT",
+      "MU",
+      "MV",
+      "MW",
+      "MX",
+      "MY",
+      "MZ",
+      "NA",
+      "NC",
+      "NE",
+      "NF",
+      "NG",
+      "NI",
+      "NL",
+      "NO",
+      "NP",
+      "NR",
+      "NU",
+      "NZ",
+      "OM",
+      "PA",
+      "PE",
+      "PF",
+      "PG",
+      "PH",
+      "PK",
+      "PL",
+      "PM",
+      "PN",
+      "PR",
+      "PS",
+      "PT",
+      "PW",
+      "PY",
+      "QA",
+      "RE",
+      "RO",
+      "RS",
+      "RU",
+      "RW",
+      "SA",
+      "SB",
+      "SC",
+      "SD",
+      "SE",
+      "SG",
+      "SH",
+      "SI",
+      "SJ",
+      "SK",
+      "SL",
+      "SM",
+      "SN",
+      "SO",
+      "SR",
+      "SS",
+      "ST",
+      "SV",
+      "SX",
+      "SY",
+      "SZ",
+      "TC",
+      "TD",
+      "TF",
+      "TG",
+      "TH",
+      "TJ",
+      "TK",
+      "TL",
+      "TM",
+      "TN",
+      "TO",
+      "TR",
+      "TT",
+      "TV",
+      "TZ",
+      "UA",
+      "UG",
+      "UM",
+      "US",
+      "UY",
+      "UZ",
+      "VA",
+      "VC",
+      "VE",
+      "VG",
+      "VI",
+      "VN",
+      "VU",
+      "WF",
+      "WS",
+      "YE",
+      "YT",
+      "ZA",
+      "ZM",
+      "ZW"
+    ],
+    "iso_alpha3": []
+  },
+  "015": {
+    "m49": "015",
+    "level": "region",
+    "labels": {
+      "en": "Northern Africa",
+      "zh": "北非",
+      "ru": "Северная Африка",
+      "fr": "Afrique septentrionale",
+      "es": "África septentrional",
+      "ar": "أفريقيا الشمالية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "012",
+      "434",
+      "504",
+      "729",
+      "732",
+      "788",
+      "818"
+    ],
+    "members": [
+      "012",
+      "434",
+      "504",
+      "729",
+      "732",
+      "788",
+      "818"
+    ],
+    "iso_alpha2": [
+      "DZ",
+      "EG",
+      "EH",
+      "LY",
+      "MA",
+      "SD",
+      "TN"
+    ],
+    "iso_alpha3": []
+  },
+  "012": {
+    "m49": "012",
+    "level": "country",
+    "labels": {
+      "en": "Algeria",
+      "zh": "阿尔及利亚",
+      "ru": "Алжир",
+      "fr": "Algérie",
+      "es": "Argelia",
+      "ar": "الجزائر"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DZ"
+    ],
+    "iso_alpha3": [
+      "DZA"
+    ]
+  },
+  "818": {
+    "m49": "818",
+    "level": "country",
+    "labels": {
+      "en": "Egypt",
+      "zh": "埃及",
+      "ru": "Египет",
+      "fr": "Égypte",
+      "es": "Egipto",
+      "ar": "مصر"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "EG"
+    ],
+    "iso_alpha3": [
+      "EGY"
+    ]
+  },
+  "434": {
+    "m49": "434",
+    "level": "country",
+    "labels": {
+      "en": "Libya",
+      "zh": "利比亚",
+      "ru": "Ливия",
+      "fr": "Libye",
+      "es": "Libia",
+      "ar": "ليبيا"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LY"
+    ],
+    "iso_alpha3": [
+      "LBY"
+    ]
+  },
+  "504": {
+    "m49": "504",
+    "level": "country",
+    "labels": {
+      "en": "Morocco",
+      "zh": "摩洛哥",
+      "ru": "Марокко",
+      "fr": "Maroc",
+      "es": "Marruecos",
+      "ar": "المغرب"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MA"
+    ],
+    "iso_alpha3": [
+      "MAR"
+    ]
+  },
+  "729": {
+    "m49": "729",
+    "level": "country",
+    "labels": {
+      "en": "Sudan",
+      "zh": "苏丹",
+      "ru": "Судан",
+      "fr": "Soudan",
+      "es": "Sudán",
+      "ar": "السودان"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SD"
+    ],
+    "iso_alpha3": [
+      "SDN"
+    ]
+  },
+  "788": {
+    "m49": "788",
+    "level": "country",
+    "labels": {
+      "en": "Tunisia",
+      "zh": "突尼斯",
+      "ru": "Тунис",
+      "fr": "Tunisie",
+      "es": "Túnez",
+      "ar": "تونس"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TN"
+    ],
+    "iso_alpha3": [
+      "TUN"
+    ]
+  },
+  "732": {
+    "m49": "732",
+    "level": "country",
+    "labels": {
+      "en": "Western Sahara",
+      "zh": "西撒哈拉",
+      "ru": "Западная Сахара",
+      "fr": "Sahara occidental",
+      "es": "Sáhara Occidental",
+      "ar": "الصحراء الغربية"
+    },
+    "parents": [
+      "015"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "EH"
+    ],
+    "iso_alpha3": [
+      "ESH"
+    ]
+  },
+  "202": {
+    "m49": "202",
+    "level": "region",
+    "labels": {
+      "en": "Sub-Saharan Africa",
+      "zh": "撒哈拉以南非洲",
+      "ru": "Африка к югу от Сахары",
+      "fr": "Afrique subsaharienne",
+      "es": "África Subsahariana",
+      "ar": "أفريقيا جنوب الصحراء الكبرى"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [],
+    "members": [
+      "024",
+      "072",
+      "086",
+      "108",
+      "120",
+      "132",
+      "140",
+      "148",
+      "174",
+      "175",
+      "178",
+      "180",
+      "204",
+      "226",
+      "231",
+      "232",
+      "260",
+      "262",
+      "266",
+      "270",
+      "288",
+      "324",
+      "384",
+      "404",
+      "426",
+      "430",
+      "450",
+      "454",
+      "466",
+      "478",
+      "480",
+      "508",
+      "516",
+      "562",
+      "566",
+      "624",
+      "638",
+      "646",
+      "654",
+      "678",
+      "686",
+      "690",
+      "694",
+      "706",
+      "710",
+      "716",
+      "728",
+      "748",
+      "768",
+      "800",
+      "834",
+      "854",
+      "894"
+    ],
+    "iso_alpha2": [
+      "AO",
+      "BF",
+      "BI",
+      "BJ",
+      "BW",
+      "CD",
+      "CF",
+      "CG",
+      "CI",
+      "CM",
+      "CV",
+      "DJ",
+      "ER",
+      "ET",
+      "GA",
+      "GH",
+      "GM",
+      "GN",
+      "GQ",
+      "GW",
+      "IO",
+      "KE",
+      "KM",
+      "LR",
+      "LS",
+      "MG",
+      "ML",
+      "MR",
+      "MU",
+      "MW",
+      "MZ",
+      "NA",
+      "NE",
+      "NG",
+      "RE",
+      "RW",
+      "SC",
+      "SH",
+      "SL",
+      "SN",
+      "SO",
+      "SS",
+      "ST",
+      "SZ",
+      "TD",
+      "TF",
+      "TG",
+      "TZ",
+      "UG",
+      "YT",
+      "ZA",
+      "ZM",
+      "ZW"
+    ],
+    "iso_alpha3": []
+  },
+  "014": {
+    "m49": "014",
+    "level": "intermediate",
+    "labels": {
+      "en": "Eastern Africa",
+      "zh": "东非",
+      "ru": "Восточная Африка",
+      "fr": "Afrique orientale",
+      "es": "África oriental",
+      "ar": "شرق أفريقيا"
+    },
+    "parents": [],
+    "children": [
+      "086",
+      "108",
+      "174",
+      "175",
+      "231",
+      "232",
+      "260",
+      "262",
+      "404",
+      "450",
+      "454",
+      "480",
+      "508",
+      "638",
+      "646",
+      "690",
+      "706",
+      "716",
+      "728",
+      "800",
+      "834",
+      "894"
+    ],
+    "members": [
+      "086",
+      "108",
+      "174",
+      "175",
+      "231",
+      "232",
+      "260",
+      "262",
+      "404",
+      "450",
+      "454",
+      "480",
+      "508",
+      "638",
+      "646",
+      "690",
+      "706",
+      "716",
+      "728",
+      "800",
+      "834",
+      "894"
+    ],
+    "iso_alpha2": [
+      "BI",
+      "DJ",
+      "ER",
+      "ET",
+      "IO",
+      "KE",
+      "KM",
+      "MG",
+      "MU",
+      "MW",
+      "MZ",
+      "RE",
+      "RW",
+      "SC",
+      "SO",
+      "SS",
+      "TF",
+      "TZ",
+      "UG",
+      "YT",
+      "ZM",
+      "ZW"
+    ],
+    "iso_alpha3": []
+  },
+  "086": {
+    "m49": "086",
+    "level": "country",
+    "labels": {
+      "en": "British Indian Ocean Territory",
+      "zh": "英属印度洋领土",
+      "ru": "Британская территория в Индийском океане",
+      "fr": "Territoire britannique de l'océan Indien",
+      "es": "Territorio Británico del Océano Índico",
+      "ar": "المحيط الهندي الإقليم البريطاني في"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IO"
+    ],
+    "iso_alpha3": [
+      "IOT"
+    ]
+  },
+  "108": {
+    "m49": "108",
+    "level": "country",
+    "labels": {
+      "en": "Burundi",
+      "zh": "布隆迪",
+      "ru": "Бурунди",
+      "fr": "Burundi",
+      "es": "Burundi",
+      "ar": "بوروندي"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BI"
+    ],
+    "iso_alpha3": [
+      "BDI"
+    ]
+  },
+  "174": {
+    "m49": "174",
+    "level": "country",
+    "labels": {
+      "en": "Comoros",
+      "zh": "科摩罗",
+      "ru": "Коморские Острова",
+      "fr": "Comores",
+      "es": "Comoras",
+      "ar": "جزر القمر"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KM"
+    ],
+    "iso_alpha3": [
+      "COM"
+    ]
+  },
+  "262": {
+    "m49": "262",
+    "level": "country",
+    "labels": {
+      "en": "Djibouti",
+      "zh": "吉布提",
+      "ru": "Джибути",
+      "fr": "Djibouti",
+      "es": "Djibouti",
+      "ar": "جيبوتي"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DJ"
+    ],
+    "iso_alpha3": [
+      "DJI"
+    ]
+  },
+  "232": {
+    "m49": "232",
+    "level": "country",
+    "labels": {
+      "en": "Eritrea",
+      "zh": "厄立特里亚",
+      "ru": "Эритрея",
+      "fr": "Érythrée",
+      "es": "Eritrea",
+      "ar": "إريتريا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ER"
+    ],
+    "iso_alpha3": [
+      "ERI"
+    ]
+  },
+  "231": {
+    "m49": "231",
+    "level": "country",
+    "labels": {
+      "en": "Ethiopia",
+      "zh": "埃塞俄比亚",
+      "ru": "Эфиопия",
+      "fr": "Éthiopie",
+      "es": "Etiopía",
+      "ar": "إثيوبيا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ET"
+    ],
+    "iso_alpha3": [
+      "ETH"
+    ]
+  },
+  "260": {
+    "m49": "260",
+    "level": "country",
+    "labels": {
+      "en": "French Southern Territories",
+      "zh": "法属南方领地",
+      "ru": "Южные земли (французская заморская территория)",
+      "fr": "Terres australes françaises",
+      "es": "Territorio de las Tierras Australes Francesas",
+      "ar": "الأراضي الفرنسية الجنوبية الجنوبية"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TF"
+    ],
+    "iso_alpha3": [
+      "ATF"
+    ]
+  },
+  "404": {
+    "m49": "404",
+    "level": "country",
+    "labels": {
+      "en": "Kenya",
+      "zh": "肯尼亚",
+      "ru": "Кения",
+      "fr": "Kenya",
+      "es": "Kenya",
+      "ar": "كينيا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KE"
+    ],
+    "iso_alpha3": [
+      "KEN"
+    ]
+  },
+  "450": {
+    "m49": "450",
+    "level": "country",
+    "labels": {
+      "en": "Madagascar",
+      "zh": "马达加斯加",
+      "ru": "Мадагаскар",
+      "fr": "Madagascar",
+      "es": "Madagascar",
+      "ar": "مدغشقر"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MG"
+    ],
+    "iso_alpha3": [
+      "MDG"
+    ]
+  },
+  "454": {
+    "m49": "454",
+    "level": "country",
+    "labels": {
+      "en": "Malawi",
+      "zh": "马拉维",
+      "ru": "Малави",
+      "fr": "Malawi",
+      "es": "Malawi",
+      "ar": "ملاوي"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MW"
+    ],
+    "iso_alpha3": [
+      "MWI"
+    ]
+  },
+  "480": {
+    "m49": "480",
+    "level": "country",
+    "labels": {
+      "en": "Mauritius",
+      "zh": "毛里求斯",
+      "ru": "Маврикий",
+      "fr": "Maurice",
+      "es": "Mauricio",
+      "ar": "موريشيوس"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MU"
+    ],
+    "iso_alpha3": [
+      "MUS"
+    ]
+  },
+  "175": {
+    "m49": "175",
+    "level": "country",
+    "labels": {
+      "en": "Mayotte",
+      "zh": "马约特",
+      "ru": "Остров Майотта",
+      "fr": "Mayotte",
+      "es": "Mayotte",
+      "ar": "مايوت"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "YT"
+    ],
+    "iso_alpha3": [
+      "MYT"
+    ]
+  },
+  "508": {
+    "m49": "508",
+    "level": "country",
+    "labels": {
+      "en": "Mozambique",
+      "zh": "莫桑比克",
+      "ru": "Мозамбик",
+      "fr": "Mozambique",
+      "es": "Mozambique",
+      "ar": "موزامبيق"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MZ"
+    ],
+    "iso_alpha3": [
+      "MOZ"
+    ]
+  },
+  "638": {
+    "m49": "638",
+    "level": "country",
+    "labels": {
+      "en": "Réunion",
+      "zh": "留尼汪",
+      "ru": "Реюньон",
+      "fr": "Réunion",
+      "es": "Reunión",
+      "ar": "ريونيون"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "RE"
+    ],
+    "iso_alpha3": [
+      "REU"
+    ]
+  },
+  "646": {
+    "m49": "646",
+    "level": "country",
+    "labels": {
+      "en": "Rwanda",
+      "zh": "卢旺达",
+      "ru": "Руанда",
+      "fr": "Rwanda",
+      "es": "Rwanda",
+      "ar": "رواندا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "RW"
+    ],
+    "iso_alpha3": [
+      "RWA"
+    ]
+  },
+  "690": {
+    "m49": "690",
+    "level": "country",
+    "labels": {
+      "en": "Seychelles",
+      "zh": "塞舌尔",
+      "ru": "Сейшельские Острова",
+      "fr": "Seychelles",
+      "es": "Seychelles",
+      "ar": "سيشيل"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SC"
+    ],
+    "iso_alpha3": [
+      "SYC"
+    ]
+  },
+  "706": {
+    "m49": "706",
+    "level": "country",
+    "labels": {
+      "en": "Somalia",
+      "zh": "索马里",
+      "ru": "Сомали",
+      "fr": "Somalie",
+      "es": "Somalia",
+      "ar": "الصومال"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SO"
+    ],
+    "iso_alpha3": [
+      "SOM"
+    ]
+  },
+  "728": {
+    "m49": "728",
+    "level": "country",
+    "labels": {
+      "en": "South Sudan",
+      "zh": "南苏丹",
+      "ru": "Южный Судан",
+      "fr": "Soudan du Sud",
+      "es": "Sudán del Sur",
+      "ar": "جنوب السودان"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SS"
+    ],
+    "iso_alpha3": [
+      "SSD"
+    ]
+  },
+  "800": {
+    "m49": "800",
+    "level": "country",
+    "labels": {
+      "en": "Uganda",
+      "zh": "乌干达",
+      "ru": "Уганда",
+      "fr": "Ouganda",
+      "es": "Uganda",
+      "ar": "أوغندا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "UG"
+    ],
+    "iso_alpha3": [
+      "UGA"
+    ]
+  },
+  "834": {
+    "m49": "834",
+    "level": "country",
+    "labels": {
+      "en": "United Republic of Tanzania",
+      "zh": "坦桑尼亚联合共和国",
+      "ru": "Объединенная Республика Танзания",
+      "fr": "République-Unie de Tanzanie",
+      "es": "República Unida de Tanzanía",
+      "ar": "جمهورية تنزانيا المتحدة"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TZ"
+    ],
+    "iso_alpha3": [
+      "TZA"
+    ]
+  },
+  "894": {
+    "m49": "894",
+    "level": "country",
+    "labels": {
+      "en": "Zambia",
+      "zh": "赞比亚",
+      "ru": "Замбия",
+      "fr": "Zambie",
+      "es": "Zambia",
+      "ar": "زامبيا"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ZM"
+    ],
+    "iso_alpha3": [
+      "ZMB"
+    ]
+  },
+  "716": {
+    "m49": "716",
+    "level": "country",
+    "labels": {
+      "en": "Zimbabwe",
+      "zh": "津巴布韦",
+      "ru": "Зимбабве",
+      "fr": "Zimbabwe",
+      "es": "Zimbabwe",
+      "ar": "زمبابوي"
+    },
+    "parents": [
+      "014"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ZW"
+    ],
+    "iso_alpha3": [
+      "ZWE"
+    ]
+  },
+  "017": {
+    "m49": "017",
+    "level": "intermediate",
+    "labels": {
+      "en": "Middle Africa",
+      "zh": "中非",
+      "ru": "Центральная Африка",
+      "fr": "Afrique centrale",
+      "es": "África central",
+      "ar": "وسط أفريقيا"
+    },
+    "parents": [],
+    "children": [
+      "024",
+      "120",
+      "140",
+      "148",
+      "178",
+      "180",
+      "226",
+      "266",
+      "678"
+    ],
+    "members": [
+      "024",
+      "120",
+      "140",
+      "148",
+      "178",
+      "180",
+      "226",
+      "266",
+      "678"
+    ],
+    "iso_alpha2": [
+      "AO",
+      "CD",
+      "CF",
+      "CG",
+      "CM",
+      "GA",
+      "GQ",
+      "ST",
+      "TD"
+    ],
+    "iso_alpha3": []
+  },
+  "024": {
+    "m49": "024",
+    "level": "country",
+    "labels": {
+      "en": "Angola",
+      "zh": "安哥拉",
+      "ru": "Ангола",
+      "fr": "Angola",
+      "es": "Angola",
+      "ar": "أنغولا"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AO"
+    ],
+    "iso_alpha3": [
+      "AGO"
+    ]
+  },
+  "120": {
+    "m49": "120",
+    "level": "country",
+    "labels": {
+      "en": "Cameroon",
+      "zh": "喀麦隆",
+      "ru": "Камерун",
+      "fr": "Cameroun",
+      "es": "Camerún",
+      "ar": "الكاميرون"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CM"
+    ],
+    "iso_alpha3": [
+      "CMR"
+    ]
+  },
+  "140": {
+    "m49": "140",
+    "level": "country",
+    "labels": {
+      "en": "Central African Republic",
+      "zh": "中非共和国",
+      "ru": "Центральноафриканская Республика",
+      "fr": "République centrafricaine",
+      "es": "República Centroafricana",
+      "ar": "جمهورية أفريقيا الوسطى"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CF"
+    ],
+    "iso_alpha3": [
+      "CAF"
+    ]
+  },
+  "148": {
+    "m49": "148",
+    "level": "country",
+    "labels": {
+      "en": "Chad",
+      "zh": "乍得",
+      "ru": "Чад",
+      "fr": "Tchad",
+      "es": "Chad",
+      "ar": "تشاد"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TD"
+    ],
+    "iso_alpha3": [
+      "TCD"
+    ]
+  },
+  "178": {
+    "m49": "178",
+    "level": "country",
+    "labels": {
+      "en": "Congo",
+      "zh": "刚果",
+      "ru": "Конго",
+      "fr": "Congo",
+      "es": "Congo",
+      "ar": "الكونغو"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CG"
+    ],
+    "iso_alpha3": [
+      "COG"
+    ]
+  },
+  "180": {
+    "m49": "180",
+    "level": "country",
+    "labels": {
+      "en": "Democratic Republic of the Congo",
+      "zh": "刚果民主共和国",
+      "ru": "Демократическая Республика Конго",
+      "fr": "République démocratique du Congo",
+      "es": "República Democrática del Congo",
+      "ar": "جمهورية الكونغو الديمقراطية"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CD"
+    ],
+    "iso_alpha3": [
+      "COD"
+    ]
+  },
+  "226": {
+    "m49": "226",
+    "level": "country",
+    "labels": {
+      "en": "Equatorial Guinea",
+      "zh": "赤道几内亚",
+      "ru": "Экваториальная Гвинея",
+      "fr": "Guinée équatoriale",
+      "es": "Guinea Ecuatorial",
+      "ar": "غينيا الاستوائية"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GQ"
+    ],
+    "iso_alpha3": [
+      "GNQ"
+    ]
+  },
+  "266": {
+    "m49": "266",
+    "level": "country",
+    "labels": {
+      "en": "Gabon",
+      "zh": "加蓬",
+      "ru": "Габон",
+      "fr": "Gabon",
+      "es": "Gabón",
+      "ar": "غابون"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GA"
+    ],
+    "iso_alpha3": [
+      "GAB"
+    ]
+  },
+  "678": {
+    "m49": "678",
+    "level": "country",
+    "labels": {
+      "en": "Sao Tome and Principe",
+      "zh": "圣多美和普林西比",
+      "ru": "Сан-Томе и Принсипи",
+      "fr": "Sao Tomé-et-Principe",
+      "es": "Santo Tomé y Príncipe",
+      "ar": "سان تومي وبرينسيبي"
+    },
+    "parents": [
+      "017"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ST"
+    ],
+    "iso_alpha3": [
+      "STP"
+    ]
+  },
+  "018": {
+    "m49": "018",
+    "level": "intermediate",
+    "labels": {
+      "en": "Southern Africa",
+      "zh": "南部非洲",
+      "ru": "Южная часть Африки",
+      "fr": "Afrique australe",
+      "es": "África meridional",
+      "ar": "الجنوب الأفريقي"
+    },
+    "parents": [],
+    "children": [
+      "072",
+      "426",
+      "516",
+      "710",
+      "748"
+    ],
+    "members": [
+      "072",
+      "426",
+      "516",
+      "710",
+      "748"
+    ],
+    "iso_alpha2": [
+      "BW",
+      "LS",
+      "NA",
+      "SZ",
+      "ZA"
+    ],
+    "iso_alpha3": []
+  },
+  "072": {
+    "m49": "072",
+    "level": "country",
+    "labels": {
+      "en": "Botswana",
+      "zh": "博茨瓦纳",
+      "ru": "Ботсвана",
+      "fr": "Botswana",
+      "es": "Botswana",
+      "ar": "بوتسوانا"
+    },
+    "parents": [
+      "018"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BW"
+    ],
+    "iso_alpha3": [
+      "BWA"
+    ]
+  },
+  "748": {
+    "m49": "748",
+    "level": "country",
+    "labels": {
+      "en": "Eswatini",
+      "zh": "斯威士兰",
+      "ru": "Эсватини",
+      "fr": "Eswatini",
+      "es": "Eswatini",
+      "ar": "إسواتيني"
+    },
+    "parents": [
+      "018"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SZ"
+    ],
+    "iso_alpha3": [
+      "SWZ"
+    ]
+  },
+  "426": {
+    "m49": "426",
+    "level": "country",
+    "labels": {
+      "en": "Lesotho",
+      "zh": "莱索托",
+      "ru": "Лесото",
+      "fr": "Lesotho",
+      "es": "Lesotho",
+      "ar": "ليسوتو"
+    },
+    "parents": [
+      "018"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LS"
+    ],
+    "iso_alpha3": [
+      "LSO"
+    ]
+  },
+  "516": {
+    "m49": "516",
+    "level": "country",
+    "labels": {
+      "en": "Namibia",
+      "zh": "纳米比亚",
+      "ru": "Намибия",
+      "fr": "Namibie",
+      "es": "Namibia",
+      "ar": "ناميبيا"
+    },
+    "parents": [
+      "018"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NA"
+    ],
+    "iso_alpha3": [
+      "NAM"
+    ]
+  },
+  "710": {
+    "m49": "710",
+    "level": "country",
+    "labels": {
+      "en": "South Africa",
+      "zh": "南非",
+      "ru": "Южная Африка",
+      "fr": "Afrique du Sud",
+      "es": "Sudáfrica",
+      "ar": "جنوب أفريقيا"
+    },
+    "parents": [
+      "018"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ZA"
+    ],
+    "iso_alpha3": [
+      "ZAF"
+    ]
+  },
+  "011": {
+    "m49": "011",
+    "level": "intermediate",
+    "labels": {
+      "en": "Western Africa",
+      "zh": "西非",
+      "ru": "Западная Африка",
+      "fr": "Afrique occidentale",
+      "es": "África occidental",
+      "ar": "غرب أفريقيا"
+    },
+    "parents": [],
+    "children": [
+      "132",
+      "204",
+      "270",
+      "288",
+      "324",
+      "384",
+      "430",
+      "466",
+      "478",
+      "562",
+      "566",
+      "624",
+      "654",
+      "686",
+      "694",
+      "768",
+      "854"
+    ],
+    "members": [
+      "132",
+      "204",
+      "270",
+      "288",
+      "324",
+      "384",
+      "430",
+      "466",
+      "478",
+      "562",
+      "566",
+      "624",
+      "654",
+      "686",
+      "694",
+      "768",
+      "854"
+    ],
+    "iso_alpha2": [
+      "BF",
+      "BJ",
+      "CI",
+      "CV",
+      "GH",
+      "GM",
+      "GN",
+      "GW",
+      "LR",
+      "ML",
+      "MR",
+      "NE",
+      "NG",
+      "SH",
+      "SL",
+      "SN",
+      "TG"
+    ],
+    "iso_alpha3": []
+  },
+  "204": {
+    "m49": "204",
+    "level": "country",
+    "labels": {
+      "en": "Benin",
+      "zh": "贝宁",
+      "ru": "Бенин",
+      "fr": "Bénin",
+      "es": "Benin",
+      "ar": "بنن"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BJ"
+    ],
+    "iso_alpha3": [
+      "BEN"
+    ]
+  },
+  "854": {
+    "m49": "854",
+    "level": "country",
+    "labels": {
+      "en": "Burkina Faso",
+      "zh": "布基纳法索",
+      "ru": "Буркина-Фасо",
+      "fr": "Burkina Faso",
+      "es": "Burkina Faso",
+      "ar": "بوركينا فاسو"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BF"
+    ],
+    "iso_alpha3": [
+      "BFA"
+    ]
+  },
+  "132": {
+    "m49": "132",
+    "level": "country",
+    "labels": {
+      "en": "Cabo Verde",
+      "zh": "佛得角",
+      "ru": "Кабо-Верде",
+      "fr": "Cabo Verde",
+      "es": "Cabo Verde",
+      "ar": "كابو فيردي"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CV"
+    ],
+    "iso_alpha3": [
+      "CPV"
+    ]
+  },
+  "384": {
+    "m49": "384",
+    "level": "country",
+    "labels": {
+      "en": "Côte d’Ivoire",
+      "zh": "科特迪瓦",
+      "ru": "Кот-д'Ивуар",
+      "fr": "Côte d’Ivoire",
+      "es": "Côte d’Ivoire",
+      "ar": "كوت ديفوار"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CI"
+    ],
+    "iso_alpha3": [
+      "CIV"
+    ]
+  },
+  "270": {
+    "m49": "270",
+    "level": "country",
+    "labels": {
+      "en": "Gambia",
+      "zh": "冈比亚",
+      "ru": "Гамбия",
+      "fr": "Gambie",
+      "es": "Gambia",
+      "ar": "غامبيا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GM"
+    ],
+    "iso_alpha3": [
+      "GMB"
+    ]
+  },
+  "288": {
+    "m49": "288",
+    "level": "country",
+    "labels": {
+      "en": "Ghana",
+      "zh": "加纳",
+      "ru": "Гана",
+      "fr": "Ghana",
+      "es": "Ghana",
+      "ar": "غانا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GH"
+    ],
+    "iso_alpha3": [
+      "GHA"
+    ]
+  },
+  "324": {
+    "m49": "324",
+    "level": "country",
+    "labels": {
+      "en": "Guinea",
+      "zh": "几内亚",
+      "ru": "Гвинея",
+      "fr": "Guinée",
+      "es": "Guinea",
+      "ar": "غينيا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GN"
+    ],
+    "iso_alpha3": [
+      "GIN"
+    ]
+  },
+  "624": {
+    "m49": "624",
+    "level": "country",
+    "labels": {
+      "en": "Guinea-Bissau",
+      "zh": "几内亚比绍",
+      "ru": "Гвинея-Бисау",
+      "fr": "Guinée-Bissau",
+      "es": "Guinea-Bissau",
+      "ar": "غينيا - بيساو"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GW"
+    ],
+    "iso_alpha3": [
+      "GNB"
+    ]
+  },
+  "430": {
+    "m49": "430",
+    "level": "country",
+    "labels": {
+      "en": "Liberia",
+      "zh": "利比里亚",
+      "ru": "Либерия",
+      "fr": "Libéria",
+      "es": "Liberia",
+      "ar": "ليبريا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LR"
+    ],
+    "iso_alpha3": [
+      "LBR"
+    ]
+  },
+  "466": {
+    "m49": "466",
+    "level": "country",
+    "labels": {
+      "en": "Mali",
+      "zh": "马里",
+      "ru": "Мали",
+      "fr": "Mali",
+      "es": "Malí",
+      "ar": "مالي"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ML"
+    ],
+    "iso_alpha3": [
+      "MLI"
+    ]
+  },
+  "478": {
+    "m49": "478",
+    "level": "country",
+    "labels": {
+      "en": "Mauritania",
+      "zh": "毛里塔尼亚",
+      "ru": "Мавритания",
+      "fr": "Mauritanie",
+      "es": "Mauritania",
+      "ar": "موريتانيا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MR"
+    ],
+    "iso_alpha3": [
+      "MRT"
+    ]
+  },
+  "562": {
+    "m49": "562",
+    "level": "country",
+    "labels": {
+      "en": "Niger",
+      "zh": "尼日尔",
+      "ru": "Нигер",
+      "fr": "Niger",
+      "es": "Níger",
+      "ar": "النيجر"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NE"
+    ],
+    "iso_alpha3": [
+      "NER"
+    ]
+  },
+  "566": {
+    "m49": "566",
+    "level": "country",
+    "labels": {
+      "en": "Nigeria",
+      "zh": "尼日利亚",
+      "ru": "Нигерия",
+      "fr": "Nigéria",
+      "es": "Nigeria",
+      "ar": "نيجيريا"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NG"
+    ],
+    "iso_alpha3": [
+      "NGA"
+    ]
+  },
+  "654": {
+    "m49": "654",
+    "level": "country",
+    "labels": {
+      "en": "Saint Helena",
+      "zh": "圣赫勒拿",
+      "ru": "Остров Святой Елены",
+      "fr": "Sainte-Hélène",
+      "es": "Santa Elena",
+      "ar": "سانت هيلانة"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SH"
+    ],
+    "iso_alpha3": [
+      "SHN"
+    ]
+  },
+  "686": {
+    "m49": "686",
+    "level": "country",
+    "labels": {
+      "en": "Senegal",
+      "zh": "塞内加尔",
+      "ru": "Сенегал",
+      "fr": "Sénégal",
+      "es": "Senegal",
+      "ar": "السنغال"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SN"
+    ],
+    "iso_alpha3": [
+      "SEN"
+    ]
+  },
+  "694": {
+    "m49": "694",
+    "level": "country",
+    "labels": {
+      "en": "Sierra Leone",
+      "zh": "塞拉利昂",
+      "ru": "Сьерра-Леоне",
+      "fr": "Sierra Leone",
+      "es": "Sierra Leona",
+      "ar": "سيراليون"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SL"
+    ],
+    "iso_alpha3": [
+      "SLE"
+    ]
+  },
+  "768": {
+    "m49": "768",
+    "level": "country",
+    "labels": {
+      "en": "Togo",
+      "zh": "多哥",
+      "ru": "Того",
+      "fr": "Togo",
+      "es": "Togo",
+      "ar": "توغو"
+    },
+    "parents": [
+      "011"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TG"
+    ],
+    "iso_alpha3": [
+      "TGO"
+    ]
+  },
+  "419": {
+    "m49": "419",
+    "level": "region",
+    "labels": {
+      "en": "Latin America and the Caribbean",
+      "zh": "拉丁美洲和加勒比",
+      "ru": "Латинская Америка и Карибский бассейн",
+      "fr": "Amérique latine et Caraïbes",
+      "es": "América Latina y el Caribe",
+      "ar": "أمريكا اللاتينية ومنطقة البحر الكاريبي"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [],
+    "members": [
+      "028",
+      "032",
+      "044",
+      "052",
+      "068",
+      "074",
+      "076",
+      "084",
+      "092",
+      "136",
+      "152",
+      "170",
+      "188",
+      "192",
+      "212",
+      "214",
+      "218",
+      "222",
+      "238",
+      "239",
+      "254",
+      "308",
+      "312",
+      "320",
+      "328",
+      "332",
+      "340",
+      "388",
+      "474",
+      "484",
+      "500",
+      "531",
+      "533",
+      "534",
+      "535",
+      "558",
+      "591",
+      "600",
+      "604",
+      "630",
+      "652",
+      "659",
+      "660",
+      "662",
+      "663",
+      "670",
+      "740",
+      "780",
+      "796",
+      "850",
+      "858",
+      "862"
+    ],
+    "iso_alpha2": [
+      "AG",
+      "AI",
+      "AR",
+      "AW",
+      "BB",
+      "BL",
+      "BO",
+      "BQ",
+      "BR",
+      "BS",
+      "BV",
+      "BZ",
+      "CL",
+      "CO",
+      "CR",
+      "CU",
+      "CW",
+      "DM",
+      "DO",
+      "EC",
+      "FK",
+      "GD",
+      "GF",
+      "GP",
+      "GS",
+      "GT",
+      "GY",
+      "HN",
+      "HT",
+      "JM",
+      "KN",
+      "KY",
+      "LC",
+      "MF",
+      "MQ",
+      "MS",
+      "MX",
+      "NI",
+      "PA",
+      "PE",
+      "PR",
+      "PY",
+      "SR",
+      "SV",
+      "SX",
+      "TC",
+      "TT",
+      "UY",
+      "VC",
+      "VE",
+      "VG",
+      "VI"
+    ],
+    "iso_alpha3": []
+  },
+  "029": {
+    "m49": "029",
+    "level": "intermediate",
+    "labels": {
+      "en": "Caribbean",
+      "zh": "加勒比",
+      "ru": "Карибский бассейн",
+      "fr": "Caraïbes",
+      "es": "El Caribe",
+      "ar": "منطقة البحر الكاريبي"
+    },
+    "parents": [],
+    "children": [
+      "028",
+      "044",
+      "052",
+      "092",
+      "136",
+      "192",
+      "212",
+      "214",
+      "308",
+      "312",
+      "332",
+      "388",
+      "474",
+      "500",
+      "531",
+      "533",
+      "534",
+      "535",
+      "630",
+      "652",
+      "659",
+      "660",
+      "662",
+      "663",
+      "670",
+      "780",
+      "796",
+      "850"
+    ],
+    "members": [
+      "028",
+      "044",
+      "052",
+      "092",
+      "136",
+      "192",
+      "212",
+      "214",
+      "308",
+      "312",
+      "332",
+      "388",
+      "474",
+      "500",
+      "531",
+      "533",
+      "534",
+      "535",
+      "630",
+      "652",
+      "659",
+      "660",
+      "662",
+      "663",
+      "670",
+      "780",
+      "796",
+      "850"
+    ],
+    "iso_alpha2": [
+      "AG",
+      "AI",
+      "AW",
+      "BB",
+      "BL",
+      "BQ",
+      "BS",
+      "CU",
+      "CW",
+      "DM",
+      "DO",
+      "GD",
+      "GP",
+      "HT",
+      "JM",
+      "KN",
+      "KY",
+      "LC",
+      "MF",
+      "MQ",
+      "MS",
+      "PR",
+      "SX",
+      "TC",
+      "TT",
+      "VC",
+      "VG",
+      "VI"
+    ],
+    "iso_alpha3": []
+  },
+  "660": {
+    "m49": "660",
+    "level": "country",
+    "labels": {
+      "en": "Anguilla",
+      "zh": "安圭拉",
+      "ru": "Ангилья",
+      "fr": "Anguilla",
+      "es": "Anguila",
+      "ar": "أنغويلا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AI"
+    ],
+    "iso_alpha3": [
+      "AIA"
+    ]
+  },
+  "028": {
+    "m49": "028",
+    "level": "country",
+    "labels": {
+      "en": "Antigua and Barbuda",
+      "zh": "安提瓜和巴布达",
+      "ru": "Антигуа и Барбуда",
+      "fr": "Antigua-et-Barbuda",
+      "es": "Antigua y Barbuda",
+      "ar": "أنتيغوا وبربودا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AG"
+    ],
+    "iso_alpha3": [
+      "ATG"
+    ]
+  },
+  "533": {
+    "m49": "533",
+    "level": "country",
+    "labels": {
+      "en": "Aruba",
+      "zh": "阿鲁巴",
+      "ru": "Аруба",
+      "fr": "Aruba",
+      "es": "Aruba",
+      "ar": "أروبا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AW"
+    ],
+    "iso_alpha3": [
+      "ABW"
+    ]
+  },
+  "044": {
+    "m49": "044",
+    "level": "country",
+    "labels": {
+      "en": "Bahamas",
+      "zh": "巴哈马",
+      "ru": "Багамские Острова",
+      "fr": "Bahamas",
+      "es": "Bahamas",
+      "ar": "جزر البهاما"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BS"
+    ],
+    "iso_alpha3": [
+      "BHS"
+    ]
+  },
+  "052": {
+    "m49": "052",
+    "level": "country",
+    "labels": {
+      "en": "Barbados",
+      "zh": "巴巴多斯",
+      "ru": "Барбадос",
+      "fr": "Barbade",
+      "es": "Barbados",
+      "ar": "بربادوس"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BB"
+    ],
+    "iso_alpha3": [
+      "BRB"
+    ]
+  },
+  "535": {
+    "m49": "535",
+    "level": "country",
+    "labels": {
+      "en": "Bonaire, Sint Eustatius and Saba",
+      "zh": "博纳尔，圣俄斯塔休斯和萨巴",
+      "ru": "Бонайре, Синт-Эстатиус и Саба",
+      "fr": "Bonaire, Saint-Eustache et Saba",
+      "es": "Bonaire, San Eustaquio y Saba",
+      "ar": "بونير وسانت يوستاشيوس وسابا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BQ"
+    ],
+    "iso_alpha3": [
+      "BES"
+    ]
+  },
+  "092": {
+    "m49": "092",
+    "level": "country",
+    "labels": {
+      "en": "British Virgin Islands",
+      "zh": "英属维尔京群岛",
+      "ru": "Британские Виргинские острова",
+      "fr": "Îles Vierges britanniques",
+      "es": "Islas Vírgenes Británicas",
+      "ar": "جزر فرجن البريطانية"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VG"
+    ],
+    "iso_alpha3": [
+      "VGB"
+    ]
+  },
+  "136": {
+    "m49": "136",
+    "level": "country",
+    "labels": {
+      "en": "Cayman Islands",
+      "zh": "开曼群岛",
+      "ru": "Кайман острова",
+      "fr": "Îles Caïmanes",
+      "es": "Islas Caimán",
+      "ar": "جزر كايمان"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KY"
+    ],
+    "iso_alpha3": [
+      "CYM"
+    ]
+  },
+  "192": {
+    "m49": "192",
+    "level": "country",
+    "labels": {
+      "en": "Cuba",
+      "zh": "古巴",
+      "ru": "Куба",
+      "fr": "Cuba",
+      "es": "Cuba",
+      "ar": "كوبا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CU"
+    ],
+    "iso_alpha3": [
+      "CUB"
+    ]
+  },
+  "531": {
+    "m49": "531",
+    "level": "country",
+    "labels": {
+      "en": "Curaçao",
+      "zh": "库拉索",
+      "ru": "Кюрасао",
+      "fr": "Curaçao",
+      "es": "Curazao",
+      "ar": "كوراساو"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CW"
+    ],
+    "iso_alpha3": [
+      "CUW"
+    ]
+  },
+  "212": {
+    "m49": "212",
+    "level": "country",
+    "labels": {
+      "en": "Dominica",
+      "zh": "多米尼克",
+      "ru": "Доминика",
+      "fr": "Dominique",
+      "es": "Dominica",
+      "ar": "دومينيكا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DM"
+    ],
+    "iso_alpha3": [
+      "DMA"
+    ]
+  },
+  "214": {
+    "m49": "214",
+    "level": "country",
+    "labels": {
+      "en": "Dominican Republic",
+      "zh": "多米尼加",
+      "ru": "Доминиканская Республика",
+      "fr": "République dominicaine",
+      "es": "República Dominicana",
+      "ar": "الجمهورية الدومينيكية"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DO"
+    ],
+    "iso_alpha3": [
+      "DOM"
+    ]
+  },
+  "308": {
+    "m49": "308",
+    "level": "country",
+    "labels": {
+      "en": "Grenada",
+      "zh": "格林纳达",
+      "ru": "Гренада",
+      "fr": "Grenade",
+      "es": "Granada",
+      "ar": "غرينادا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GD"
+    ],
+    "iso_alpha3": [
+      "GRD"
+    ]
+  },
+  "312": {
+    "m49": "312",
+    "level": "country",
+    "labels": {
+      "en": "Guadeloupe",
+      "zh": "瓜德罗普",
+      "ru": "Гваделупа",
+      "fr": "Guadeloupe",
+      "es": "Guadalupe",
+      "ar": "غوادلوب"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GP"
+    ],
+    "iso_alpha3": [
+      "GLP"
+    ]
+  },
+  "332": {
+    "m49": "332",
+    "level": "country",
+    "labels": {
+      "en": "Haiti",
+      "zh": "海地",
+      "ru": "Гаити",
+      "fr": "Haïti",
+      "es": "Haití",
+      "ar": "هايتي"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HT"
+    ],
+    "iso_alpha3": [
+      "HTI"
+    ]
+  },
+  "388": {
+    "m49": "388",
+    "level": "country",
+    "labels": {
+      "en": "Jamaica",
+      "zh": "牙买加",
+      "ru": "Ямайка",
+      "fr": "Jamaïque",
+      "es": "Jamaica",
+      "ar": "جامايكا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "JM"
+    ],
+    "iso_alpha3": [
+      "JAM"
+    ]
+  },
+  "474": {
+    "m49": "474",
+    "level": "country",
+    "labels": {
+      "en": "Martinique",
+      "zh": "马提尼克",
+      "ru": "Мартиника",
+      "fr": "Martinique",
+      "es": "Martinica",
+      "ar": "مارتينيك"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MQ"
+    ],
+    "iso_alpha3": [
+      "MTQ"
+    ]
+  },
+  "500": {
+    "m49": "500",
+    "level": "country",
+    "labels": {
+      "en": "Montserrat",
+      "zh": "蒙特塞拉特",
+      "ru": "Монтсеррат",
+      "fr": "Montserrat",
+      "es": "Montserrat",
+      "ar": "مونتسيرات"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MS"
+    ],
+    "iso_alpha3": [
+      "MSR"
+    ]
+  },
+  "630": {
+    "m49": "630",
+    "level": "country",
+    "labels": {
+      "en": "Puerto Rico",
+      "zh": "波多黎各",
+      "ru": "Пуэрто-Рико",
+      "fr": "Porto Rico",
+      "es": "Puerto Rico",
+      "ar": "بورتوريكو"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PR"
+    ],
+    "iso_alpha3": [
+      "PRI"
+    ]
+  },
+  "652": {
+    "m49": "652",
+    "level": "country",
+    "labels": {
+      "en": "Saint Barthélemy",
+      "zh": "圣巴泰勒米",
+      "ru": "Сен-Бартелеми",
+      "fr": "Saint-Barthélemy",
+      "es": "San Barthélemy",
+      "ar": "سان بارتليمي"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BL"
+    ],
+    "iso_alpha3": [
+      "BLM"
+    ]
+  },
+  "659": {
+    "m49": "659",
+    "level": "country",
+    "labels": {
+      "en": "Saint Kitts and Nevis",
+      "zh": "圣基茨和尼维斯",
+      "ru": "Сент-Китс и Невис",
+      "fr": "Saint-Kitts-et-Nevis",
+      "es": "Saint Kitts y Nevis",
+      "ar": "سانت كيتس ونيفس"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KN"
+    ],
+    "iso_alpha3": [
+      "KNA"
+    ]
+  },
+  "662": {
+    "m49": "662",
+    "level": "country",
+    "labels": {
+      "en": "Saint Lucia",
+      "zh": "圣卢西亚",
+      "ru": "Сент-Люсия",
+      "fr": "Sainte-Lucie",
+      "es": "Santa Lucía",
+      "ar": "سانت لوسيا"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LC"
+    ],
+    "iso_alpha3": [
+      "LCA"
+    ]
+  },
+  "663": {
+    "m49": "663",
+    "level": "country",
+    "labels": {
+      "en": "Saint Martin (French Part)",
+      "zh": "圣马丁（法属）",
+      "ru": "Сен-Мартен (французская часть)",
+      "fr": "Saint-Martin (partie française)",
+      "es": "San Martín (parte francesa)",
+      "ar": "سانت مارتن (الجزء الفرنسي)"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MF"
+    ],
+    "iso_alpha3": [
+      "MAF"
+    ]
+  },
+  "670": {
+    "m49": "670",
+    "level": "country",
+    "labels": {
+      "en": "Saint Vincent and the Grenadines",
+      "zh": "圣文森特和格林纳丁斯",
+      "ru": "Сент-Винсент и Гренадины",
+      "fr": "Saint-Vincent-et-les Grenadines",
+      "es": "San Vicente y las Granadinas",
+      "ar": "سانت فنسنت وجزر غرينادين"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VC"
+    ],
+    "iso_alpha3": [
+      "VCT"
+    ]
+  },
+  "534": {
+    "m49": "534",
+    "level": "country",
+    "labels": {
+      "en": "Sint Maarten (Dutch part)",
+      "zh": "圣马丁（荷属）",
+      "ru": "Синт-Мартен (нидерландская часть)",
+      "fr": "Saint-Martin (partie néerlandaise)",
+      "es": "San Martín (parte Holandesa)",
+      "ar": "سانت مارتن (الجزء الهولندي)"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SX"
+    ],
+    "iso_alpha3": [
+      "SXM"
+    ]
+  },
+  "780": {
+    "m49": "780",
+    "level": "country",
+    "labels": {
+      "en": "Trinidad and Tobago",
+      "zh": "特立尼达和多巴哥",
+      "ru": "Тринидад и Тобаго",
+      "fr": "Trinité-et-Tobago",
+      "es": "Trinidad y Tabago",
+      "ar": "ترينيداد وتوباغو"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TT"
+    ],
+    "iso_alpha3": [
+      "TTO"
+    ]
+  },
+  "796": {
+    "m49": "796",
+    "level": "country",
+    "labels": {
+      "en": "Turks and Caicos Islands",
+      "zh": "特克斯和凯科斯群岛",
+      "ru": "Острова Теркс и Кайкос",
+      "fr": "Îles Turques-et-Caïques",
+      "es": "Islas Turcas y Caicos",
+      "ar": "جزر تركس وكايكوس"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TC"
+    ],
+    "iso_alpha3": [
+      "TCA"
+    ]
+  },
+  "850": {
+    "m49": "850",
+    "level": "country",
+    "labels": {
+      "en": "United States Virgin Islands",
+      "zh": "美属维尔京群岛",
+      "ru": "Виргинские острова Соединенных Штатов",
+      "fr": "Îles Vierges américaines",
+      "es": "Islas Vírgenes de los Estados Unidos",
+      "ar": "جزر فرجن التابعة للولايات المتحدة"
+    },
+    "parents": [
+      "029"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VI"
+    ],
+    "iso_alpha3": [
+      "VIR"
+    ]
+  },
+  "013": {
+    "m49": "013",
+    "level": "intermediate",
+    "labels": {
+      "en": "Central America",
+      "zh": "中美洲",
+      "ru": "Центральная Америка",
+      "fr": "Amérique centrale",
+      "es": "América central",
+      "ar": "أمريكا الوسطى"
+    },
+    "parents": [],
+    "children": [
+      "084",
+      "188",
+      "222",
+      "320",
+      "340",
+      "484",
+      "558",
+      "591"
+    ],
+    "members": [
+      "084",
+      "188",
+      "222",
+      "320",
+      "340",
+      "484",
+      "558",
+      "591"
+    ],
+    "iso_alpha2": [
+      "BZ",
+      "CR",
+      "GT",
+      "HN",
+      "MX",
+      "NI",
+      "PA",
+      "SV"
+    ],
+    "iso_alpha3": []
+  },
+  "084": {
+    "m49": "084",
+    "level": "country",
+    "labels": {
+      "en": "Belize",
+      "zh": "伯利兹",
+      "ru": "Белиз",
+      "fr": "Belize",
+      "es": "Belice",
+      "ar": "بليز"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BZ"
+    ],
+    "iso_alpha3": [
+      "BLZ"
+    ]
+  },
+  "188": {
+    "m49": "188",
+    "level": "country",
+    "labels": {
+      "en": "Costa Rica",
+      "zh": "哥斯达黎加",
+      "ru": "Коста-Рика",
+      "fr": "Costa Rica",
+      "es": "Costa Rica",
+      "ar": "كوستاريكا"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CR"
+    ],
+    "iso_alpha3": [
+      "CRI"
+    ]
+  },
+  "222": {
+    "m49": "222",
+    "level": "country",
+    "labels": {
+      "en": "El Salvador",
+      "zh": "萨尔瓦多",
+      "ru": "Сальвадор",
+      "fr": "El Salvador",
+      "es": "El Salvador",
+      "ar": "السلفادور"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SV"
+    ],
+    "iso_alpha3": [
+      "SLV"
+    ]
+  },
+  "320": {
+    "m49": "320",
+    "level": "country",
+    "labels": {
+      "en": "Guatemala",
+      "zh": "危地马拉",
+      "ru": "Гватемала",
+      "fr": "Guatemala",
+      "es": "Guatemala",
+      "ar": "غواتيمالا"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GT"
+    ],
+    "iso_alpha3": [
+      "GTM"
+    ]
+  },
+  "340": {
+    "m49": "340",
+    "level": "country",
+    "labels": {
+      "en": "Honduras",
+      "zh": "洪都拉斯",
+      "ru": "Гондурас",
+      "fr": "Honduras",
+      "es": "Honduras",
+      "ar": "هندوراس"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HN"
+    ],
+    "iso_alpha3": [
+      "HND"
+    ]
+  },
+  "484": {
+    "m49": "484",
+    "level": "country",
+    "labels": {
+      "en": "Mexico",
+      "zh": "墨西哥",
+      "ru": "Мексика",
+      "fr": "Mexique",
+      "es": "México",
+      "ar": "المكسيك"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MX"
+    ],
+    "iso_alpha3": [
+      "MEX"
+    ]
+  },
+  "558": {
+    "m49": "558",
+    "level": "country",
+    "labels": {
+      "en": "Nicaragua",
+      "zh": "尼加拉瓜",
+      "ru": "Никарагуа",
+      "fr": "Nicaragua",
+      "es": "Nicaragua",
+      "ar": "نيكاراغوا"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NI"
+    ],
+    "iso_alpha3": [
+      "NIC"
+    ]
+  },
+  "591": {
+    "m49": "591",
+    "level": "country",
+    "labels": {
+      "en": "Panama",
+      "zh": "巴拿马",
+      "ru": "Панама",
+      "fr": "Panama",
+      "es": "Panamá",
+      "ar": "بنما"
+    },
+    "parents": [
+      "013"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PA"
+    ],
+    "iso_alpha3": [
+      "PAN"
+    ]
+  },
+  "005": {
+    "m49": "005",
+    "level": "intermediate",
+    "labels": {
+      "en": "South America",
+      "zh": "南美洲",
+      "ru": "Южная Америка",
+      "fr": "Amérique du Sud",
+      "es": "América del Sur",
+      "ar": "أمريكا الجنوبية"
+    },
+    "parents": [],
+    "children": [
+      "032",
+      "068",
+      "074",
+      "076",
+      "152",
+      "170",
+      "218",
+      "238",
+      "239",
+      "254",
+      "328",
+      "600",
+      "604",
+      "740",
+      "858",
+      "862"
+    ],
+    "members": [
+      "032",
+      "068",
+      "074",
+      "076",
+      "152",
+      "170",
+      "218",
+      "238",
+      "239",
+      "254",
+      "328",
+      "600",
+      "604",
+      "740",
+      "858",
+      "862"
+    ],
+    "iso_alpha2": [
+      "AR",
+      "BO",
+      "BR",
+      "BV",
+      "CL",
+      "CO",
+      "EC",
+      "FK",
+      "GF",
+      "GS",
+      "GY",
+      "PE",
+      "PY",
+      "SR",
+      "UY",
+      "VE"
+    ],
+    "iso_alpha3": []
+  },
+  "032": {
+    "m49": "032",
+    "level": "country",
+    "labels": {
+      "en": "Argentina",
+      "zh": "阿根廷",
+      "ru": "Аргентина",
+      "fr": "Argentine",
+      "es": "Argentina",
+      "ar": "الأرجنتين"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AR"
+    ],
+    "iso_alpha3": [
+      "ARG"
+    ]
+  },
+  "068": {
+    "m49": "068",
+    "level": "country",
+    "labels": {
+      "en": "Bolivia (Plurinational State of)",
+      "zh": "多民族玻利维亚国",
+      "ru": "Боливия (Многонациональное Государство)",
+      "fr": "Bolivie (État plurinational de)",
+      "es": "Bolivia (Estado Plurinacional de)",
+      "ar": "بوليفيا (دولة - المتعددة القوميات)"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BO"
+    ],
+    "iso_alpha3": [
+      "BOL"
+    ]
+  },
+  "074": {
+    "m49": "074",
+    "level": "country",
+    "labels": {
+      "en": "Bouvet Island",
+      "zh": "布维岛",
+      "ru": "Остров Буве",
+      "fr": "Île Bouvet",
+      "es": "Isla Bouvet",
+      "ar": "جزيرة بوفيت"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BV"
+    ],
+    "iso_alpha3": [
+      "BVT"
+    ]
+  },
+  "076": {
+    "m49": "076",
+    "level": "country",
+    "labels": {
+      "en": "Brazil",
+      "zh": "巴西",
+      "ru": "Бразилия",
+      "fr": "Brésil",
+      "es": "Brasil",
+      "ar": "البرازيل"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BR"
+    ],
+    "iso_alpha3": [
+      "BRA"
+    ]
+  },
+  "152": {
+    "m49": "152",
+    "level": "country",
+    "labels": {
+      "en": "Chile",
+      "zh": "智利",
+      "ru": "Чили",
+      "fr": "Chili",
+      "es": "Chile",
+      "ar": "شيلي"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CL"
+    ],
+    "iso_alpha3": [
+      "CHL"
+    ]
+  },
+  "170": {
+    "m49": "170",
+    "level": "country",
+    "labels": {
+      "en": "Colombia",
+      "zh": "哥伦比亚",
+      "ru": "Колумбия",
+      "fr": "Colombie",
+      "es": "Colombia",
+      "ar": "كولومبيا"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CO"
+    ],
+    "iso_alpha3": [
+      "COL"
+    ]
+  },
+  "218": {
+    "m49": "218",
+    "level": "country",
+    "labels": {
+      "en": "Ecuador",
+      "zh": "厄瓜多尔",
+      "ru": "Эквадор",
+      "fr": "Équateur",
+      "es": "Ecuador",
+      "ar": "إكوادور"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "EC"
+    ],
+    "iso_alpha3": [
+      "ECU"
+    ]
+  },
+  "238": {
+    "m49": "238",
+    "level": "country",
+    "labels": {
+      "en": "Falkland Islands (Malvinas)",
+      "zh": "福克兰群岛（马尔维纳斯）",
+      "ru": "Фолклендские (Мальвинские) острова",
+      "fr": "Îles Falkland (Malvinas)",
+      "es": "Islas Malvinas (Falkland)",
+      "ar": "جزر فوكلاند (مالفيناس)"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FK"
+    ],
+    "iso_alpha3": [
+      "FLK"
+    ]
+  },
+  "254": {
+    "m49": "254",
+    "level": "country",
+    "labels": {
+      "en": "French Guiana",
+      "zh": "法属圭亚那",
+      "ru": "Французская Гвиана",
+      "fr": "Guyane française",
+      "es": "Guayana Francesa",
+      "ar": "غيانا الفرنسية"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GF"
+    ],
+    "iso_alpha3": [
+      "GUF"
+    ]
+  },
+  "328": {
+    "m49": "328",
+    "level": "country",
+    "labels": {
+      "en": "Guyana",
+      "zh": "圭亚那",
+      "ru": "Гайана",
+      "fr": "Guyana",
+      "es": "Guyana",
+      "ar": "غيانا"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GY"
+    ],
+    "iso_alpha3": [
+      "GUY"
+    ]
+  },
+  "600": {
+    "m49": "600",
+    "level": "country",
+    "labels": {
+      "en": "Paraguay",
+      "zh": "巴拉圭",
+      "ru": "Парагвай",
+      "fr": "Paraguay",
+      "es": "Paraguay",
+      "ar": "باراغواي"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PY"
+    ],
+    "iso_alpha3": [
+      "PRY"
+    ]
+  },
+  "604": {
+    "m49": "604",
+    "level": "country",
+    "labels": {
+      "en": "Peru",
+      "zh": "秘鲁",
+      "ru": "Перу",
+      "fr": "Pérou",
+      "es": "Perú",
+      "ar": "بيرو"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PE"
+    ],
+    "iso_alpha3": [
+      "PER"
+    ]
+  },
+  "239": {
+    "m49": "239",
+    "level": "country",
+    "labels": {
+      "en": "South Georgia and the South Sandwich Islands",
+      "zh": "南乔治亚岛和南桑德韦奇岛",
+      "ru": "Южная Джорджия и Южные Сандвичевы острова",
+      "fr": "Géorgie du Sud-et-les Îles Sandwich du Sud",
+      "es": "Georgia del Sur y las Islas Sandwich del Sur",
+      "ar": "جورجيا الجنوبية وجزر ساندويتش الجنوبية"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GS"
+    ],
+    "iso_alpha3": [
+      "SGS"
+    ]
+  },
+  "740": {
+    "m49": "740",
+    "level": "country",
+    "labels": {
+      "en": "Suriname",
+      "zh": "苏里南",
+      "ru": "Суринам",
+      "fr": "Suriname",
+      "es": "Suriname",
+      "ar": "سورينام"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SR"
+    ],
+    "iso_alpha3": [
+      "SUR"
+    ]
+  },
+  "858": {
+    "m49": "858",
+    "level": "country",
+    "labels": {
+      "en": "Uruguay",
+      "zh": "乌拉圭",
+      "ru": "Уругвай",
+      "fr": "Uruguay",
+      "es": "Uruguay",
+      "ar": "أوروغواي"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "UY"
+    ],
+    "iso_alpha3": [
+      "URY"
+    ]
+  },
+  "862": {
+    "m49": "862",
+    "level": "country",
+    "labels": {
+      "en": "Venezuela (Bolivarian Republic of)",
+      "zh": "委内瑞拉玻利瓦尔共和国",
+      "ru": "Венесуэла (Боливарианская Республика)",
+      "fr": "Venezuela (République bolivarienne du)",
+      "es": "Venezuela (República Bolivariana de)",
+      "ar": "فنزويلا (جمهورية - البوليفارية)"
+    },
+    "parents": [
+      "005"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VE"
+    ],
+    "iso_alpha3": [
+      "VEN"
+    ]
+  },
+  "021": {
+    "m49": "021",
+    "level": "region",
+    "labels": {
+      "en": "Northern America",
+      "zh": "北美",
+      "ru": "Северная Америка",
+      "fr": "Amérique septentrionale",
+      "es": "América septentrional",
+      "ar": "أمريكا الشمالية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "060",
+      "124",
+      "304",
+      "666",
+      "840"
+    ],
+    "members": [
+      "060",
+      "124",
+      "304",
+      "666",
+      "840"
+    ],
+    "iso_alpha2": [
+      "BM",
+      "CA",
+      "GL",
+      "PM",
+      "US"
+    ],
+    "iso_alpha3": []
+  },
+  "060": {
+    "m49": "060",
+    "level": "country",
+    "labels": {
+      "en": "Bermuda",
+      "zh": "百慕大",
+      "ru": "Бермудские острова",
+      "fr": "Bermudes",
+      "es": "Bermuda",
+      "ar": "برمودا"
+    },
+    "parents": [
+      "021"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BM"
+    ],
+    "iso_alpha3": [
+      "BMU"
+    ]
+  },
+  "124": {
+    "m49": "124",
+    "level": "country",
+    "labels": {
+      "en": "Canada",
+      "zh": "加拿大",
+      "ru": "Канада",
+      "fr": "Canada",
+      "es": "Canadá",
+      "ar": "كندا"
+    },
+    "parents": [
+      "021"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CA"
+    ],
+    "iso_alpha3": [
+      "CAN"
+    ]
+  },
+  "304": {
+    "m49": "304",
+    "level": "country",
+    "labels": {
+      "en": "Greenland",
+      "zh": "格陵兰",
+      "ru": "Гренландия",
+      "fr": "Groenland",
+      "es": "Groenlandia",
+      "ar": "غرينلند"
+    },
+    "parents": [
+      "021"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GL"
+    ],
+    "iso_alpha3": [
+      "GRL"
+    ]
+  },
+  "666": {
+    "m49": "666",
+    "level": "country",
+    "labels": {
+      "en": "Saint Pierre and Miquelon",
+      "zh": "圣皮埃尔和密克隆",
+      "ru": "Сен-Пьер и Микелон",
+      "fr": "Saint-Pierre-et-Miquelon",
+      "es": "San Pedro y Miquelón",
+      "ar": "سان بيير وميكلون"
+    },
+    "parents": [
+      "021"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PM"
+    ],
+    "iso_alpha3": [
+      "SPM"
+    ]
+  },
+  "840": {
+    "m49": "840",
+    "level": "country",
+    "labels": {
+      "en": "United States of America",
+      "zh": "美利坚合众国",
+      "ru": "Соединенные Штаты Америки",
+      "fr": "États-Unis d’Amérique",
+      "es": "Estados Unidos de América",
+      "ar": "الولايات المتحدة الأمريكية"
+    },
+    "parents": [
+      "021"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "US"
+    ],
+    "iso_alpha3": [
+      "USA"
+    ]
+  },
+  "010": {
+    "m49": "010",
+    "level": "country",
+    "labels": {
+      "en": "Antarctica",
+      "zh": "南极洲",
+      "ru": "Антарктике",
+      "fr": "Antarctique",
+      "es": "Antártida",
+      "ar": "أنتاركتيكا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AQ"
+    ],
+    "iso_alpha3": [
+      "ATA"
+    ]
+  },
+  "143": {
+    "m49": "143",
+    "level": "region",
+    "labels": {
+      "en": "Central Asia",
+      "zh": "中亚",
+      "ru": "Центральная Азия",
+      "fr": "Asie centrale",
+      "es": "Asia central",
+      "ar": "آسيا الوسطى"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "398",
+      "417",
+      "762",
+      "795",
+      "860"
+    ],
+    "members": [
+      "398",
+      "417",
+      "762",
+      "795",
+      "860"
+    ],
+    "iso_alpha2": [
+      "KG",
+      "KZ",
+      "TJ",
+      "TM",
+      "UZ"
+    ],
+    "iso_alpha3": []
+  },
+  "398": {
+    "m49": "398",
+    "level": "country",
+    "labels": {
+      "en": "Kazakhstan",
+      "zh": "哈萨克斯坦",
+      "ru": "Казахстан",
+      "fr": "Kazakhstan",
+      "es": "Kazajstán",
+      "ar": "كازاخستان"
+    },
+    "parents": [
+      "143"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KZ"
+    ],
+    "iso_alpha3": [
+      "KAZ"
+    ]
+  },
+  "417": {
+    "m49": "417",
+    "level": "country",
+    "labels": {
+      "en": "Kyrgyzstan",
+      "zh": "吉尔吉斯斯坦",
+      "ru": "Кыргызстан",
+      "fr": "Kirghizistan",
+      "es": "Kirguistán",
+      "ar": "قيرغيزستان"
+    },
+    "parents": [
+      "143"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KG"
+    ],
+    "iso_alpha3": [
+      "KGZ"
+    ]
+  },
+  "762": {
+    "m49": "762",
+    "level": "country",
+    "labels": {
+      "en": "Tajikistan",
+      "zh": "塔吉克斯坦",
+      "ru": "Таджикистан",
+      "fr": "Tadjikistan",
+      "es": "Tayikistán",
+      "ar": "طاجيكستان"
+    },
+    "parents": [
+      "143"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TJ"
+    ],
+    "iso_alpha3": [
+      "TJK"
+    ]
+  },
+  "795": {
+    "m49": "795",
+    "level": "country",
+    "labels": {
+      "en": "Turkmenistan",
+      "zh": "土库曼斯坦",
+      "ru": "Туркменистан",
+      "fr": "Turkménistan",
+      "es": "Turkmenistán",
+      "ar": "تركمانستان"
+    },
+    "parents": [
+      "143"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TM"
+    ],
+    "iso_alpha3": [
+      "TKM"
+    ]
+  },
+  "860": {
+    "m49": "860",
+    "level": "country",
+    "labels": {
+      "en": "Uzbekistan",
+      "zh": "乌兹别克斯坦",
+      "ru": "Узбекистан",
+      "fr": "Ouzbékistan",
+      "es": "Uzbekistán",
+      "ar": "أوزبكستان"
+    },
+    "parents": [
+      "143"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "UZ"
+    ],
+    "iso_alpha3": [
+      "UZB"
+    ]
+  },
+  "030": {
+    "m49": "030",
+    "level": "region",
+    "labels": {
+      "en": "Eastern Asia",
+      "zh": "东亚",
+      "ru": "Восточная Азия",
+      "fr": "Asie orientale",
+      "es": "Asia oriental",
+      "ar": "شرقي آسيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "156",
+      "344",
+      "392",
+      "408",
+      "410",
+      "446",
+      "496"
+    ],
+    "members": [
+      "156",
+      "344",
+      "392",
+      "408",
+      "410",
+      "446",
+      "496"
+    ],
+    "iso_alpha2": [
+      "CN",
+      "HK",
+      "JP",
+      "KP",
+      "KR",
+      "MN",
+      "MO"
+    ],
+    "iso_alpha3": []
+  },
+  "156": {
+    "m49": "156",
+    "level": "country",
+    "labels": {
+      "en": "China",
+      "zh": "中国",
+      "ru": "Китай",
+      "fr": "Chine",
+      "es": "China",
+      "ar": "الصين"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CN"
+    ],
+    "iso_alpha3": [
+      "CHN"
+    ]
+  },
+  "344": {
+    "m49": "344",
+    "level": "country",
+    "labels": {
+      "en": "China, Hong Kong Special Administrative Region",
+      "zh": "中国香港特别行政区",
+      "ru": "Китай, Специальный административный район Гонконг",
+      "fr": "Chine, région administrative spéciale de Hong Kong",
+      "es": "China, región administrativa especial de Hong Kong",
+      "ar": "الصين، منطقة هونغ كونغ الإدارية الخاصة"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HK"
+    ],
+    "iso_alpha3": [
+      "HKG"
+    ]
+  },
+  "446": {
+    "m49": "446",
+    "level": "country",
+    "labels": {
+      "en": "China, Macao Special Administrative Region",
+      "zh": "中国澳门特别行政区",
+      "ru": "Китай, Специальный административный район Макао",
+      "fr": "Chine, région administrative spéciale de Macao",
+      "es": "China, región administrativa especial de Macao",
+      "ar": "الصين، منطقة ماكاو الإدارية الخاصة"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MO"
+    ],
+    "iso_alpha3": [
+      "MAC"
+    ]
+  },
+  "408": {
+    "m49": "408",
+    "level": "country",
+    "labels": {
+      "en": "Democratic People's Republic of Korea",
+      "zh": "朝鲜民主主义人民共和国",
+      "ru": "Корейская Народно-Демократическая Республика",
+      "fr": "République populaire démocratique de Corée",
+      "es": "República Popular Democrática de Corea",
+      "ar": "جمهورية كوريا الشعبية الديمقراطية"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KP"
+    ],
+    "iso_alpha3": [
+      "PRK"
+    ]
+  },
+  "392": {
+    "m49": "392",
+    "level": "country",
+    "labels": {
+      "en": "Japan",
+      "zh": "日本",
+      "ru": "Япония",
+      "fr": "Japon",
+      "es": "Japón",
+      "ar": "اليابان"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "JP"
+    ],
+    "iso_alpha3": [
+      "JPN"
+    ]
+  },
+  "496": {
+    "m49": "496",
+    "level": "country",
+    "labels": {
+      "en": "Mongolia",
+      "zh": "蒙古",
+      "ru": "Монголия",
+      "fr": "Mongolie",
+      "es": "Mongolia",
+      "ar": "منغوليا"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MN"
+    ],
+    "iso_alpha3": [
+      "MNG"
+    ]
+  },
+  "410": {
+    "m49": "410",
+    "level": "country",
+    "labels": {
+      "en": "Republic of Korea",
+      "zh": "大韩民国",
+      "ru": "Республика Корея",
+      "fr": "République de Corée",
+      "es": "República de Corea",
+      "ar": "جمهورية كوريا"
+    },
+    "parents": [
+      "030"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KR"
+    ],
+    "iso_alpha3": [
+      "KOR"
+    ]
+  },
+  "035": {
+    "m49": "035",
+    "level": "region",
+    "labels": {
+      "en": "South-eastern Asia",
+      "zh": "东南亚",
+      "ru": "Юго-Восточная Азия",
+      "fr": "Asie du Sud-Est",
+      "es": "Asia sudoriental",
+      "ar": "جنوب شرقي آسيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "096",
+      "104",
+      "116",
+      "360",
+      "418",
+      "458",
+      "608",
+      "626",
+      "702",
+      "704",
+      "764"
+    ],
+    "members": [
+      "096",
+      "104",
+      "116",
+      "360",
+      "418",
+      "458",
+      "608",
+      "626",
+      "702",
+      "704",
+      "764"
+    ],
+    "iso_alpha2": [
+      "BN",
+      "ID",
+      "KH",
+      "LA",
+      "MM",
+      "MY",
+      "PH",
+      "SG",
+      "TH",
+      "TL",
+      "VN"
+    ],
+    "iso_alpha3": []
+  },
+  "096": {
+    "m49": "096",
+    "level": "country",
+    "labels": {
+      "en": "Brunei Darussalam",
+      "zh": "文莱达鲁萨兰国",
+      "ru": "Бруней-Даруссалам",
+      "fr": "Brunéi Darussalam",
+      "es": "Brunei Darussalam",
+      "ar": "بروني دار السلام"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BN"
+    ],
+    "iso_alpha3": [
+      "BRN"
+    ]
+  },
+  "116": {
+    "m49": "116",
+    "level": "country",
+    "labels": {
+      "en": "Cambodia",
+      "zh": "柬埔寨",
+      "ru": "Камбоджа",
+      "fr": "Cambodge",
+      "es": "Camboya",
+      "ar": "كمبوديا"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KH"
+    ],
+    "iso_alpha3": [
+      "KHM"
+    ]
+  },
+  "360": {
+    "m49": "360",
+    "level": "country",
+    "labels": {
+      "en": "Indonesia",
+      "zh": "印度尼西亚",
+      "ru": "Индонезия",
+      "fr": "Indonésie",
+      "es": "Indonesia",
+      "ar": "إندونيسيا"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ID"
+    ],
+    "iso_alpha3": [
+      "IDN"
+    ]
+  },
+  "418": {
+    "m49": "418",
+    "level": "country",
+    "labels": {
+      "en": "Lao People's Democratic Republic",
+      "zh": "老挝人民民主共和国",
+      "ru": "Лаосская Народно-Демократическая Республика",
+      "fr": "République démocratique populaire lao",
+      "es": "República Democrática Popular Lao",
+      "ar": "جمهورية لاو الديمقراطية الشعبية"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LA"
+    ],
+    "iso_alpha3": [
+      "LAO"
+    ]
+  },
+  "458": {
+    "m49": "458",
+    "level": "country",
+    "labels": {
+      "en": "Malaysia",
+      "zh": "马来西亚",
+      "ru": "Малайзия",
+      "fr": "Malaisie",
+      "es": "Malasia",
+      "ar": "ماليزيا"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MY"
+    ],
+    "iso_alpha3": [
+      "MYS"
+    ]
+  },
+  "104": {
+    "m49": "104",
+    "level": "country",
+    "labels": {
+      "en": "Myanmar",
+      "zh": "缅甸",
+      "ru": "Мьянма",
+      "fr": "Myanmar",
+      "es": "Myanmar",
+      "ar": "ميانمار"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MM"
+    ],
+    "iso_alpha3": [
+      "MMR"
+    ]
+  },
+  "608": {
+    "m49": "608",
+    "level": "country",
+    "labels": {
+      "en": "Philippines",
+      "zh": "菲律宾",
+      "ru": "Филиппины",
+      "fr": "Philippines",
+      "es": "Filipinas",
+      "ar": "الفلبين"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PH"
+    ],
+    "iso_alpha3": [
+      "PHL"
+    ]
+  },
+  "702": {
+    "m49": "702",
+    "level": "country",
+    "labels": {
+      "en": "Singapore",
+      "zh": "新加坡",
+      "ru": "Сингапур",
+      "fr": "Singapour",
+      "es": "Singapur",
+      "ar": "سنغافورة"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SG"
+    ],
+    "iso_alpha3": [
+      "SGP"
+    ]
+  },
+  "764": {
+    "m49": "764",
+    "level": "country",
+    "labels": {
+      "en": "Thailand",
+      "zh": "泰国",
+      "ru": "Таиланд",
+      "fr": "Thaïlande",
+      "es": "Tailandia",
+      "ar": "تايلند"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TH"
+    ],
+    "iso_alpha3": [
+      "THA"
+    ]
+  },
+  "626": {
+    "m49": "626",
+    "level": "country",
+    "labels": {
+      "en": "Timor-Leste",
+      "zh": "东帝汶",
+      "ru": "Тимор-Лешти",
+      "fr": "Timor-Leste",
+      "es": "Timor-Leste",
+      "ar": "تيمور - ليشتي"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TL"
+    ],
+    "iso_alpha3": [
+      "TLS"
+    ]
+  },
+  "704": {
+    "m49": "704",
+    "level": "country",
+    "labels": {
+      "en": "Viet Nam",
+      "zh": "越南",
+      "ru": "Вьетнам",
+      "fr": "Viet Nam",
+      "es": "Viet Nam",
+      "ar": "فييت نام"
+    },
+    "parents": [
+      "035"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VN"
+    ],
+    "iso_alpha3": [
+      "VNM"
+    ]
+  },
+  "034": {
+    "m49": "034",
+    "level": "region",
+    "labels": {
+      "en": "Southern Asia",
+      "zh": "南亚",
+      "ru": "Южная Азия",
+      "fr": "Asie méridionale",
+      "es": "Asia meridional",
+      "ar": "جنوب آسيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "004",
+      "050",
+      "064",
+      "144",
+      "356",
+      "364",
+      "462",
+      "524",
+      "586"
+    ],
+    "members": [
+      "004",
+      "050",
+      "064",
+      "144",
+      "356",
+      "364",
+      "462",
+      "524",
+      "586"
+    ],
+    "iso_alpha2": [
+      "AF",
+      "BD",
+      "BT",
+      "IN",
+      "IR",
+      "LK",
+      "MV",
+      "NP",
+      "PK"
+    ],
+    "iso_alpha3": []
+  },
+  "004": {
+    "m49": "004",
+    "level": "country",
+    "labels": {
+      "en": "Afghanistan",
+      "zh": "阿富汗",
+      "ru": "Афганистан",
+      "fr": "Afghanistan",
+      "es": "Afganistán",
+      "ar": "أفغانستان"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AF"
+    ],
+    "iso_alpha3": [
+      "AFG"
+    ]
+  },
+  "050": {
+    "m49": "050",
+    "level": "country",
+    "labels": {
+      "en": "Bangladesh",
+      "zh": "孟加拉国",
+      "ru": "Бангладеш",
+      "fr": "Bangladesh",
+      "es": "Bangladesh",
+      "ar": "بنغلاديش"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BD"
+    ],
+    "iso_alpha3": [
+      "BGD"
+    ]
+  },
+  "064": {
+    "m49": "064",
+    "level": "country",
+    "labels": {
+      "en": "Bhutan",
+      "zh": "不丹",
+      "ru": "Бутан",
+      "fr": "Bhoutan",
+      "es": "Bhután",
+      "ar": "بوتان"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BT"
+    ],
+    "iso_alpha3": [
+      "BTN"
+    ]
+  },
+  "356": {
+    "m49": "356",
+    "level": "country",
+    "labels": {
+      "en": "India",
+      "zh": "印度",
+      "ru": "Индия",
+      "fr": "Inde",
+      "es": "India",
+      "ar": "الهند"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IN"
+    ],
+    "iso_alpha3": [
+      "IND"
+    ]
+  },
+  "364": {
+    "m49": "364",
+    "level": "country",
+    "labels": {
+      "en": "Iran (Islamic Republic of)",
+      "zh": "伊朗伊斯兰共和国",
+      "ru": "Иран (Исламская Республика)",
+      "fr": "Iran (République islamique d’)",
+      "es": "Irán (República Islámica del)",
+      "ar": "إيران (جمهورية - الإسلامية)"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IR"
+    ],
+    "iso_alpha3": [
+      "IRN"
+    ]
+  },
+  "462": {
+    "m49": "462",
+    "level": "country",
+    "labels": {
+      "en": "Maldives",
+      "zh": "马尔代夫",
+      "ru": "Мальдивские Острова",
+      "fr": "Maldives",
+      "es": "Maldivas",
+      "ar": "ملديف"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MV"
+    ],
+    "iso_alpha3": [
+      "MDV"
+    ]
+  },
+  "524": {
+    "m49": "524",
+    "level": "country",
+    "labels": {
+      "en": "Nepal",
+      "zh": "尼泊尔",
+      "ru": "Непал",
+      "fr": "Népal",
+      "es": "Nepal",
+      "ar": "نيبال"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NP"
+    ],
+    "iso_alpha3": [
+      "NPL"
+    ]
+  },
+  "586": {
+    "m49": "586",
+    "level": "country",
+    "labels": {
+      "en": "Pakistan",
+      "zh": "巴基斯坦",
+      "ru": "Пакистан",
+      "fr": "Pakistan",
+      "es": "Pakistán",
+      "ar": "باكستان"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PK"
+    ],
+    "iso_alpha3": [
+      "PAK"
+    ]
+  },
+  "144": {
+    "m49": "144",
+    "level": "country",
+    "labels": {
+      "en": "Sri Lanka",
+      "zh": "斯里兰卡",
+      "ru": "Шри-Ланка",
+      "fr": "Sri Lanka",
+      "es": "Sri Lanka",
+      "ar": "سري لانكا"
+    },
+    "parents": [
+      "034"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LK"
+    ],
+    "iso_alpha3": [
+      "LKA"
+    ]
+  },
+  "145": {
+    "m49": "145",
+    "level": "region",
+    "labels": {
+      "en": "Western Asia",
+      "zh": "西亚",
+      "ru": "Западная Азия",
+      "fr": "Asie occidentale",
+      "es": "Asia occidental",
+      "ar": "غربي آسيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "031",
+      "048",
+      "051",
+      "196",
+      "268",
+      "275",
+      "368",
+      "376",
+      "400",
+      "414",
+      "422",
+      "512",
+      "634",
+      "682",
+      "760",
+      "784",
+      "792",
+      "887"
+    ],
+    "members": [
+      "031",
+      "048",
+      "051",
+      "196",
+      "268",
+      "275",
+      "368",
+      "376",
+      "400",
+      "414",
+      "422",
+      "512",
+      "634",
+      "682",
+      "760",
+      "784",
+      "792",
+      "887"
+    ],
+    "iso_alpha2": [
+      "AE",
+      "AM",
+      "AZ",
+      "BH",
+      "CY",
+      "GE",
+      "IL",
+      "IQ",
+      "JO",
+      "KW",
+      "LB",
+      "OM",
+      "PS",
+      "QA",
+      "SA",
+      "SY",
+      "TR",
+      "YE"
+    ],
+    "iso_alpha3": []
+  },
+  "051": {
+    "m49": "051",
+    "level": "country",
+    "labels": {
+      "en": "Armenia",
+      "zh": "亚美尼亚",
+      "ru": "Армения",
+      "fr": "Arménie",
+      "es": "Armenia",
+      "ar": "أرمينيا"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AM"
+    ],
+    "iso_alpha3": [
+      "ARM"
+    ]
+  },
+  "031": {
+    "m49": "031",
+    "level": "country",
+    "labels": {
+      "en": "Azerbaijan",
+      "zh": "阿塞拜疆",
+      "ru": "Азербайджан",
+      "fr": "Azerbaïdjan",
+      "es": "Azerbaiyán",
+      "ar": "أذربيجان"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AZ"
+    ],
+    "iso_alpha3": [
+      "AZE"
+    ]
+  },
+  "048": {
+    "m49": "048",
+    "level": "country",
+    "labels": {
+      "en": "Bahrain",
+      "zh": "巴林",
+      "ru": "Бахрейн",
+      "fr": "Bahreïn",
+      "es": "Bahrein",
+      "ar": "البحرين"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BH"
+    ],
+    "iso_alpha3": [
+      "BHR"
+    ]
+  },
+  "196": {
+    "m49": "196",
+    "level": "country",
+    "labels": {
+      "en": "Cyprus",
+      "zh": "塞浦路斯",
+      "ru": "Кипр",
+      "fr": "Chypre",
+      "es": "Chipre",
+      "ar": "قبرص"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CY"
+    ],
+    "iso_alpha3": [
+      "CYP"
+    ]
+  },
+  "268": {
+    "m49": "268",
+    "level": "country",
+    "labels": {
+      "en": "Georgia",
+      "zh": "格鲁吉亚",
+      "ru": "Грузия",
+      "fr": "Géorgie",
+      "es": "Georgia",
+      "ar": "جورجيا"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GE"
+    ],
+    "iso_alpha3": [
+      "GEO"
+    ]
+  },
+  "368": {
+    "m49": "368",
+    "level": "country",
+    "labels": {
+      "en": "Iraq",
+      "zh": "伊拉克",
+      "ru": "Ирак",
+      "fr": "Iraq",
+      "es": "Iraq",
+      "ar": "العراق"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IQ"
+    ],
+    "iso_alpha3": [
+      "IRQ"
+    ]
+  },
+  "376": {
+    "m49": "376",
+    "level": "country",
+    "labels": {
+      "en": "Israel",
+      "zh": "以色列",
+      "ru": "Израиль",
+      "fr": "Israël",
+      "es": "Israel",
+      "ar": "إسرائيل"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IL"
+    ],
+    "iso_alpha3": [
+      "ISR"
+    ]
+  },
+  "400": {
+    "m49": "400",
+    "level": "country",
+    "labels": {
+      "en": "Jordan",
+      "zh": "约旦",
+      "ru": "Иордания",
+      "fr": "Jordanie",
+      "es": "Jordania",
+      "ar": "الأردن"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "JO"
+    ],
+    "iso_alpha3": [
+      "JOR"
+    ]
+  },
+  "414": {
+    "m49": "414",
+    "level": "country",
+    "labels": {
+      "en": "Kuwait",
+      "zh": "科威特",
+      "ru": "Кувейт",
+      "fr": "Koweït",
+      "es": "Kuwait",
+      "ar": "الكويت"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KW"
+    ],
+    "iso_alpha3": [
+      "KWT"
+    ]
+  },
+  "422": {
+    "m49": "422",
+    "level": "country",
+    "labels": {
+      "en": "Lebanon",
+      "zh": "黎巴嫩",
+      "ru": "Ливан",
+      "fr": "Liban",
+      "es": "Líbano",
+      "ar": "لبنان"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LB"
+    ],
+    "iso_alpha3": [
+      "LBN"
+    ]
+  },
+  "512": {
+    "m49": "512",
+    "level": "country",
+    "labels": {
+      "en": "Oman",
+      "zh": "阿曼",
+      "ru": "Оман",
+      "fr": "Oman",
+      "es": "Omán",
+      "ar": "عمان"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "OM"
+    ],
+    "iso_alpha3": [
+      "OMN"
+    ]
+  },
+  "634": {
+    "m49": "634",
+    "level": "country",
+    "labels": {
+      "en": "Qatar",
+      "zh": "卡塔尔",
+      "ru": "Катар",
+      "fr": "Qatar",
+      "es": "Qatar",
+      "ar": "قطر"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "QA"
+    ],
+    "iso_alpha3": [
+      "QAT"
+    ]
+  },
+  "682": {
+    "m49": "682",
+    "level": "country",
+    "labels": {
+      "en": "Saudi Arabia",
+      "zh": "沙特阿拉伯",
+      "ru": "Саудовская Аравия",
+      "fr": "Arabie saoudite",
+      "es": "Arabia Saudita",
+      "ar": "المملكة العربية السعودية"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SA"
+    ],
+    "iso_alpha3": [
+      "SAU"
+    ]
+  },
+  "275": {
+    "m49": "275",
+    "level": "country",
+    "labels": {
+      "en": "State of Palestine",
+      "zh": "巴勒斯坦国",
+      "ru": "Государство Палестина",
+      "fr": "État de Palestine",
+      "es": "Estado de Palestina",
+      "ar": "دولة فلسطين"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PS"
+    ],
+    "iso_alpha3": [
+      "PSE"
+    ]
+  },
+  "760": {
+    "m49": "760",
+    "level": "country",
+    "labels": {
+      "en": "Syrian Arab Republic",
+      "zh": "阿拉伯叙利亚共和国",
+      "ru": "Сирийская Арабская Республика",
+      "fr": "République arabe syrienne",
+      "es": "República Árabe Siria",
+      "ar": "الجمهورية العربية السورية"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SY"
+    ],
+    "iso_alpha3": [
+      "SYR"
+    ]
+  },
+  "792": {
+    "m49": "792",
+    "level": "country",
+    "labels": {
+      "en": "Türkiye",
+      "zh": "土耳其",
+      "ru": "Турция",
+      "fr": "Türkiye",
+      "es": "Türkiye",
+      "ar": "تركيا"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TR"
+    ],
+    "iso_alpha3": [
+      "TUR"
+    ]
+  },
+  "784": {
+    "m49": "784",
+    "level": "country",
+    "labels": {
+      "en": "United Arab Emirates",
+      "zh": "阿拉伯联合酋长国",
+      "ru": "Объединенные Арабские Эмираты",
+      "fr": "Émirats arabes unis",
+      "es": "Emiratos Árabes Unidos",
+      "ar": "الإمارات العربية المتحدة"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AE"
+    ],
+    "iso_alpha3": [
+      "ARE"
+    ]
+  },
+  "887": {
+    "m49": "887",
+    "level": "country",
+    "labels": {
+      "en": "Yemen",
+      "zh": "也门",
+      "ru": "Йемен",
+      "fr": "Yémen",
+      "es": "Yemen",
+      "ar": "اليمن"
+    },
+    "parents": [
+      "145"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "YE"
+    ],
+    "iso_alpha3": [
+      "YEM"
+    ]
+  },
+  "151": {
+    "m49": "151",
+    "level": "region",
+    "labels": {
+      "en": "Eastern Europe",
+      "zh": "东欧",
+      "ru": "Восточная Европа",
+      "fr": "Europe orientale",
+      "es": "Europa oriental",
+      "ar": "أوروبا الشرقية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "100",
+      "112",
+      "203",
+      "348",
+      "498",
+      "616",
+      "642",
+      "643",
+      "703",
+      "804"
+    ],
+    "members": [
+      "100",
+      "112",
+      "203",
+      "348",
+      "498",
+      "616",
+      "642",
+      "643",
+      "703",
+      "804"
+    ],
+    "iso_alpha2": [
+      "BG",
+      "BY",
+      "CZ",
+      "HU",
+      "MD",
+      "PL",
+      "RO",
+      "RU",
+      "SK",
+      "UA"
+    ],
+    "iso_alpha3": []
+  },
+  "112": {
+    "m49": "112",
+    "level": "country",
+    "labels": {
+      "en": "Belarus",
+      "zh": "白俄罗斯",
+      "ru": "Беларусь",
+      "fr": "Bélarus",
+      "es": "Belarús",
+      "ar": "بيلاروس"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BY"
+    ],
+    "iso_alpha3": [
+      "BLR"
+    ]
+  },
+  "100": {
+    "m49": "100",
+    "level": "country",
+    "labels": {
+      "en": "Bulgaria",
+      "zh": "保加利亚",
+      "ru": "Болгария",
+      "fr": "Bulgarie",
+      "es": "Bulgaria",
+      "ar": "بلغاريا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BG"
+    ],
+    "iso_alpha3": [
+      "BGR"
+    ]
+  },
+  "203": {
+    "m49": "203",
+    "level": "country",
+    "labels": {
+      "en": "Czechia",
+      "zh": "捷克",
+      "ru": "Чехия",
+      "fr": "Tchéquie",
+      "es": "Chequia",
+      "ar": "تشيكيا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CZ"
+    ],
+    "iso_alpha3": [
+      "CZE"
+    ]
+  },
+  "348": {
+    "m49": "348",
+    "level": "country",
+    "labels": {
+      "en": "Hungary",
+      "zh": "匈牙利",
+      "ru": "Венгрия",
+      "fr": "Hongrie",
+      "es": "Hungría",
+      "ar": "هنغاريا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HU"
+    ],
+    "iso_alpha3": [
+      "HUN"
+    ]
+  },
+  "616": {
+    "m49": "616",
+    "level": "country",
+    "labels": {
+      "en": "Poland",
+      "zh": "波兰",
+      "ru": "Польша",
+      "fr": "Pologne",
+      "es": "Polonia",
+      "ar": "بولندا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PL"
+    ],
+    "iso_alpha3": [
+      "POL"
+    ]
+  },
+  "498": {
+    "m49": "498",
+    "level": "country",
+    "labels": {
+      "en": "Republic of Moldova",
+      "zh": "摩尔多瓦共和国",
+      "ru": "Республика Молдова",
+      "fr": "République de Moldova",
+      "es": "República de Moldova",
+      "ar": "جمهورية مولدوفا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MD"
+    ],
+    "iso_alpha3": [
+      "MDA"
+    ]
+  },
+  "642": {
+    "m49": "642",
+    "level": "country",
+    "labels": {
+      "en": "Romania",
+      "zh": "罗马尼亚",
+      "ru": "Румыния",
+      "fr": "Roumanie",
+      "es": "Rumania",
+      "ar": "رومانيا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "RO"
+    ],
+    "iso_alpha3": [
+      "ROU"
+    ]
+  },
+  "643": {
+    "m49": "643",
+    "level": "country",
+    "labels": {
+      "en": "Russian Federation",
+      "zh": "俄罗斯联邦",
+      "ru": "Российская Федерация",
+      "fr": "Fédération de Russie",
+      "es": "Federación de Rusia",
+      "ar": "الاتحاد الروسي"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "RU"
+    ],
+    "iso_alpha3": [
+      "RUS"
+    ]
+  },
+  "703": {
+    "m49": "703",
+    "level": "country",
+    "labels": {
+      "en": "Slovakia",
+      "zh": "斯洛伐克",
+      "ru": "Словакия",
+      "fr": "Slovaquie",
+      "es": "Eslovaquia",
+      "ar": "سلوفاكيا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SK"
+    ],
+    "iso_alpha3": [
+      "SVK"
+    ]
+  },
+  "804": {
+    "m49": "804",
+    "level": "country",
+    "labels": {
+      "en": "Ukraine",
+      "zh": "乌克兰",
+      "ru": "Украина",
+      "fr": "Ukraine",
+      "es": "Ucrania",
+      "ar": "أوكرانيا"
+    },
+    "parents": [
+      "151"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "UA"
+    ],
+    "iso_alpha3": [
+      "UKR"
+    ]
+  },
+  "154": {
+    "m49": "154",
+    "level": "region",
+    "labels": {
+      "en": "Northern Europe",
+      "zh": "北欧",
+      "ru": "Северная Европа",
+      "fr": "Europe septentrionale",
+      "es": "Europa septentrional",
+      "ar": "أوروبا الشمالية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "208",
+      "233",
+      "234",
+      "246",
+      "248",
+      "352",
+      "372",
+      "428",
+      "440",
+      "578",
+      "744",
+      "752",
+      "826",
+      "831",
+      "832",
+      "833"
+    ],
+    "members": [
+      "208",
+      "233",
+      "234",
+      "246",
+      "248",
+      "352",
+      "372",
+      "428",
+      "440",
+      "578",
+      "744",
+      "752",
+      "826",
+      "831",
+      "832",
+      "833"
+    ],
+    "iso_alpha2": [
+      "AX",
+      "DK",
+      "EE",
+      "FI",
+      "FO",
+      "GB",
+      "GG",
+      "IE",
+      "IM",
+      "IS",
+      "JE",
+      "LT",
+      "LV",
+      "NO",
+      "SE",
+      "SJ"
+    ],
+    "iso_alpha3": []
+  },
+  "248": {
+    "m49": "248",
+    "level": "country",
+    "labels": {
+      "en": "Åland Islands",
+      "zh": "奥兰群岛",
+      "ru": "Аландских островов",
+      "fr": "Îles d’Åland",
+      "es": "Islas Åland",
+      "ar": "جزر ألاند"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AX"
+    ],
+    "iso_alpha3": [
+      "ALA"
+    ]
+  },
+  "208": {
+    "m49": "208",
+    "level": "country",
+    "labels": {
+      "en": "Denmark",
+      "zh": "丹麦",
+      "ru": "Дания",
+      "fr": "Danemark",
+      "es": "Dinamarca",
+      "ar": "الدانمرك"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DK"
+    ],
+    "iso_alpha3": [
+      "DNK"
+    ]
+  },
+  "233": {
+    "m49": "233",
+    "level": "country",
+    "labels": {
+      "en": "Estonia",
+      "zh": "爱沙尼亚",
+      "ru": "Эстония",
+      "fr": "Estonie",
+      "es": "Estonia",
+      "ar": "إستونيا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "EE"
+    ],
+    "iso_alpha3": [
+      "EST"
+    ]
+  },
+  "234": {
+    "m49": "234",
+    "level": "country",
+    "labels": {
+      "en": "Faroe Islands",
+      "zh": "法罗群岛",
+      "ru": "Фарерские острова",
+      "fr": "Îles Féroé",
+      "es": "Islas Feroe",
+      "ar": "جزر فايرو"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FO"
+    ],
+    "iso_alpha3": [
+      "FRO"
+    ]
+  },
+  "246": {
+    "m49": "246",
+    "level": "country",
+    "labels": {
+      "en": "Finland",
+      "zh": "芬兰",
+      "ru": "Финляндия",
+      "fr": "Finlande",
+      "es": "Finlandia",
+      "ar": "فنلندا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FI"
+    ],
+    "iso_alpha3": [
+      "FIN"
+    ]
+  },
+  "831": {
+    "m49": "831",
+    "level": "country",
+    "labels": {
+      "en": "Guernsey",
+      "zh": "格恩西",
+      "ru": "Гернси",
+      "fr": "Guernesey",
+      "es": "Guernsey",
+      "ar": "غيرنسي"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GG"
+    ],
+    "iso_alpha3": [
+      "GGY"
+    ]
+  },
+  "352": {
+    "m49": "352",
+    "level": "country",
+    "labels": {
+      "en": "Iceland",
+      "zh": "冰岛",
+      "ru": "Исландия",
+      "fr": "Islande",
+      "es": "Islandia",
+      "ar": "آيسلندا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IS"
+    ],
+    "iso_alpha3": [
+      "ISL"
+    ]
+  },
+  "372": {
+    "m49": "372",
+    "level": "country",
+    "labels": {
+      "en": "Ireland",
+      "zh": "爱尔兰",
+      "ru": "Ирландия",
+      "fr": "Irlande",
+      "es": "Irlanda",
+      "ar": "آيرلندا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IE"
+    ],
+    "iso_alpha3": [
+      "IRL"
+    ]
+  },
+  "833": {
+    "m49": "833",
+    "level": "country",
+    "labels": {
+      "en": "Isle of Man",
+      "zh": "马恩岛",
+      "ru": "Остров Мэн",
+      "fr": "Île de Man",
+      "es": "Isla de Man",
+      "ar": "جزيرة مان"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IM"
+    ],
+    "iso_alpha3": [
+      "IMN"
+    ]
+  },
+  "832": {
+    "m49": "832",
+    "level": "country",
+    "labels": {
+      "en": "Jersey",
+      "zh": "泽西",
+      "ru": "Джерси",
+      "fr": "Jersey",
+      "es": "Jersey",
+      "ar": "جيرسي"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "JE"
+    ],
+    "iso_alpha3": [
+      "JEY"
+    ]
+  },
+  "428": {
+    "m49": "428",
+    "level": "country",
+    "labels": {
+      "en": "Latvia",
+      "zh": "拉脱维亚",
+      "ru": "Латвия",
+      "fr": "Lettonie",
+      "es": "Letonia",
+      "ar": "لاتفيا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LV"
+    ],
+    "iso_alpha3": [
+      "LVA"
+    ]
+  },
+  "440": {
+    "m49": "440",
+    "level": "country",
+    "labels": {
+      "en": "Lithuania",
+      "zh": "立陶宛",
+      "ru": "Литва",
+      "fr": "Lituanie",
+      "es": "Lituania",
+      "ar": "ليتوانيا"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LT"
+    ],
+    "iso_alpha3": [
+      "LTU"
+    ]
+  },
+  "578": {
+    "m49": "578",
+    "level": "country",
+    "labels": {
+      "en": "Norway",
+      "zh": "挪威",
+      "ru": "Норвегия",
+      "fr": "Norvège",
+      "es": "Noruega",
+      "ar": "النرويج"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NO"
+    ],
+    "iso_alpha3": [
+      "NOR"
+    ]
+  },
+  "744": {
+    "m49": "744",
+    "level": "country",
+    "labels": {
+      "en": "Svalbard and Jan Mayen Islands",
+      "zh": "斯瓦尔巴群岛和扬马延岛",
+      "ru": "Острова Свальбард и Ян-Майен",
+      "fr": "Îles Svalbard-et-Jan Mayen",
+      "es": "Islas Svalbard y Jan Mayen",
+      "ar": "جزيرتي سفالبارد وجان مايِن"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SJ"
+    ],
+    "iso_alpha3": [
+      "SJM"
+    ]
+  },
+  "752": {
+    "m49": "752",
+    "level": "country",
+    "labels": {
+      "en": "Sweden",
+      "zh": "瑞典",
+      "ru": "Швеция",
+      "fr": "Suède",
+      "es": "Suecia",
+      "ar": "السويد"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SE"
+    ],
+    "iso_alpha3": [
+      "SWE"
+    ]
+  },
+  "826": {
+    "m49": "826",
+    "level": "country",
+    "labels": {
+      "en": "United Kingdom of Great Britain and Northern Ireland",
+      "zh": "大不列颠及北爱尔兰联合王国",
+      "ru": "Соединенное Королевство Великобритании и Северной Ирландии",
+      "fr": "Royaume-Uni de Grande-Bretagne et d’Irlande du Nord",
+      "es": "Reino Unido de Gran Bretaña e Irlanda del Norte",
+      "ar": "المملكة المتحدة لبريطانيا العظمى وآيرلندا الشمالية"
+    },
+    "parents": [
+      "154"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GB"
+    ],
+    "iso_alpha3": [
+      "GBR"
+    ]
+  },
+  "039": {
+    "m49": "039",
+    "level": "region",
+    "labels": {
+      "en": "Southern Europe",
+      "zh": "南欧",
+      "ru": "Южная Европа",
+      "fr": "Europe méridionale",
+      "es": "Europa meridional",
+      "ar": "أوروبا الجنوبية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "008",
+      "020",
+      "070",
+      "191",
+      "292",
+      "300",
+      "336",
+      "380",
+      "470",
+      "499",
+      "620",
+      "674",
+      "688",
+      "705",
+      "724",
+      "807"
+    ],
+    "members": [
+      "008",
+      "020",
+      "070",
+      "191",
+      "292",
+      "300",
+      "336",
+      "380",
+      "470",
+      "499",
+      "620",
+      "674",
+      "688",
+      "705",
+      "724",
+      "807"
+    ],
+    "iso_alpha2": [
+      "AD",
+      "AL",
+      "BA",
+      "ES",
+      "GI",
+      "GR",
+      "HR",
+      "IT",
+      "ME",
+      "MK",
+      "MT",
+      "PT",
+      "RS",
+      "SI",
+      "SM",
+      "VA"
+    ],
+    "iso_alpha3": []
+  },
+  "008": {
+    "m49": "008",
+    "level": "country",
+    "labels": {
+      "en": "Albania",
+      "zh": "阿尔巴尼亚",
+      "ru": "Албания",
+      "fr": "Albanie",
+      "es": "Albania",
+      "ar": "ألبانيا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AL"
+    ],
+    "iso_alpha3": [
+      "ALB"
+    ]
+  },
+  "020": {
+    "m49": "020",
+    "level": "country",
+    "labels": {
+      "en": "Andorra",
+      "zh": "安道尔",
+      "ru": "Андорра",
+      "fr": "Andorre",
+      "es": "Andorra",
+      "ar": "أندورا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AD"
+    ],
+    "iso_alpha3": [
+      "AND"
+    ]
+  },
+  "070": {
+    "m49": "070",
+    "level": "country",
+    "labels": {
+      "en": "Bosnia and Herzegovina",
+      "zh": "波斯尼亚和黑塞哥维那",
+      "ru": "Босния и Герцеговина",
+      "fr": "Bosnie-Herzégovine",
+      "es": "Bosnia y Herzegovina",
+      "ar": "البوسنة والهرسك"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BA"
+    ],
+    "iso_alpha3": [
+      "BIH"
+    ]
+  },
+  "191": {
+    "m49": "191",
+    "level": "country",
+    "labels": {
+      "en": "Croatia",
+      "zh": "克罗地亚",
+      "ru": "Хорватия",
+      "fr": "Croatie",
+      "es": "Croacia",
+      "ar": "كرواتيا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HR"
+    ],
+    "iso_alpha3": [
+      "HRV"
+    ]
+  },
+  "292": {
+    "m49": "292",
+    "level": "country",
+    "labels": {
+      "en": "Gibraltar",
+      "zh": "直布罗陀",
+      "ru": "Гибралтар",
+      "fr": "Gibraltar",
+      "es": "Gibraltar",
+      "ar": "جبل طارق"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GI"
+    ],
+    "iso_alpha3": [
+      "GIB"
+    ]
+  },
+  "300": {
+    "m49": "300",
+    "level": "country",
+    "labels": {
+      "en": "Greece",
+      "zh": "希腊",
+      "ru": "Греция",
+      "fr": "Grèce",
+      "es": "Grecia",
+      "ar": "اليونان"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GR"
+    ],
+    "iso_alpha3": [
+      "GRC"
+    ]
+  },
+  "336": {
+    "m49": "336",
+    "level": "country",
+    "labels": {
+      "en": "Holy See",
+      "zh": "教廷",
+      "ru": "Святой Престол",
+      "fr": "Saint-Siège",
+      "es": "Santa Sede",
+      "ar": "الكرسي الرسولي"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VA"
+    ],
+    "iso_alpha3": [
+      "VAT"
+    ]
+  },
+  "380": {
+    "m49": "380",
+    "level": "country",
+    "labels": {
+      "en": "Italy",
+      "zh": "意大利",
+      "ru": "Италия",
+      "fr": "Italie",
+      "es": "Italia",
+      "ar": "إيطاليا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "IT"
+    ],
+    "iso_alpha3": [
+      "ITA"
+    ]
+  },
+  "470": {
+    "m49": "470",
+    "level": "country",
+    "labels": {
+      "en": "Malta",
+      "zh": "马耳他",
+      "ru": "Мальта",
+      "fr": "Malte",
+      "es": "Malta",
+      "ar": "مالطة"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MT"
+    ],
+    "iso_alpha3": [
+      "MLT"
+    ]
+  },
+  "499": {
+    "m49": "499",
+    "level": "country",
+    "labels": {
+      "en": "Montenegro",
+      "zh": "黑山",
+      "ru": "Черногория",
+      "fr": "Monténégro",
+      "es": "Montenegro",
+      "ar": "الجبل الأسود"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ME"
+    ],
+    "iso_alpha3": [
+      "MNE"
+    ]
+  },
+  "807": {
+    "m49": "807",
+    "level": "country",
+    "labels": {
+      "en": "North Macedonia",
+      "zh": "北马其顿",
+      "ru": "Северная Македония",
+      "fr": "Macédoine du Nord",
+      "es": "Macedonia del Norte",
+      "ar": "مقدونيا الشمالية"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MK"
+    ],
+    "iso_alpha3": [
+      "MKD"
+    ]
+  },
+  "620": {
+    "m49": "620",
+    "level": "country",
+    "labels": {
+      "en": "Portugal",
+      "zh": "葡萄牙",
+      "ru": "Португалия",
+      "fr": "Portugal",
+      "es": "Portugal",
+      "ar": "البرتغال"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PT"
+    ],
+    "iso_alpha3": [
+      "PRT"
+    ]
+  },
+  "674": {
+    "m49": "674",
+    "level": "country",
+    "labels": {
+      "en": "San Marino",
+      "zh": "圣马力诺",
+      "ru": "Сан-Марино",
+      "fr": "Saint-Marin",
+      "es": "San Marino",
+      "ar": "سان مارينو"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SM"
+    ],
+    "iso_alpha3": [
+      "SMR"
+    ]
+  },
+  "688": {
+    "m49": "688",
+    "level": "country",
+    "labels": {
+      "en": "Serbia",
+      "zh": "塞尔维亚",
+      "ru": "Сербия",
+      "fr": "Serbie",
+      "es": "Serbia",
+      "ar": "صربيا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "RS"
+    ],
+    "iso_alpha3": [
+      "SRB"
+    ]
+  },
+  "705": {
+    "m49": "705",
+    "level": "country",
+    "labels": {
+      "en": "Slovenia",
+      "zh": "斯洛文尼亚",
+      "ru": "Словения",
+      "fr": "Slovénie",
+      "es": "Eslovenia",
+      "ar": "سلوفينيا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SI"
+    ],
+    "iso_alpha3": [
+      "SVN"
+    ]
+  },
+  "724": {
+    "m49": "724",
+    "level": "country",
+    "labels": {
+      "en": "Spain",
+      "zh": "西班牙",
+      "ru": "Испания",
+      "fr": "Espagne",
+      "es": "España",
+      "ar": "إسبانيا"
+    },
+    "parents": [
+      "039"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "ES"
+    ],
+    "iso_alpha3": [
+      "ESP"
+    ]
+  },
+  "155": {
+    "m49": "155",
+    "level": "region",
+    "labels": {
+      "en": "Western Europe",
+      "zh": "西欧",
+      "ru": "Западная Европа",
+      "fr": "Europe occidentale",
+      "es": "Europa occidental",
+      "ar": "أوروبا الغربية"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "040",
+      "056",
+      "250",
+      "276",
+      "438",
+      "442",
+      "492",
+      "528",
+      "756"
+    ],
+    "members": [
+      "040",
+      "056",
+      "250",
+      "276",
+      "438",
+      "442",
+      "492",
+      "528",
+      "756"
+    ],
+    "iso_alpha2": [
+      "AT",
+      "BE",
+      "CH",
+      "DE",
+      "FR",
+      "LI",
+      "LU",
+      "MC",
+      "NL"
+    ],
+    "iso_alpha3": []
+  },
+  "040": {
+    "m49": "040",
+    "level": "country",
+    "labels": {
+      "en": "Austria",
+      "zh": "奥地利",
+      "ru": "Австрия",
+      "fr": "Autriche",
+      "es": "Austria",
+      "ar": "النمسا"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AT"
+    ],
+    "iso_alpha3": [
+      "AUT"
+    ]
+  },
+  "056": {
+    "m49": "056",
+    "level": "country",
+    "labels": {
+      "en": "Belgium",
+      "zh": "比利时",
+      "ru": "Бельгия",
+      "fr": "Belgique",
+      "es": "Bélgica",
+      "ar": "بلجيكا"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "BE"
+    ],
+    "iso_alpha3": [
+      "BEL"
+    ]
+  },
+  "250": {
+    "m49": "250",
+    "level": "country",
+    "labels": {
+      "en": "France",
+      "zh": "法国",
+      "ru": "Франция",
+      "fr": "France",
+      "es": "Francia",
+      "ar": "فرنسا"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FR"
+    ],
+    "iso_alpha3": [
+      "FRA"
+    ]
+  },
+  "276": {
+    "m49": "276",
+    "level": "country",
+    "labels": {
+      "en": "Germany",
+      "zh": "德国",
+      "ru": "Германия",
+      "fr": "Allemagne",
+      "es": "Alemania",
+      "ar": "ألمانيا"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "DE"
+    ],
+    "iso_alpha3": [
+      "DEU"
+    ]
+  },
+  "438": {
+    "m49": "438",
+    "level": "country",
+    "labels": {
+      "en": "Liechtenstein",
+      "zh": "列支敦士登",
+      "ru": "Лихтенштейн",
+      "fr": "Liechtenstein",
+      "es": "Liechtenstein",
+      "ar": "ليختنشتاين"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LI"
+    ],
+    "iso_alpha3": [
+      "LIE"
+    ]
+  },
+  "442": {
+    "m49": "442",
+    "level": "country",
+    "labels": {
+      "en": "Luxembourg",
+      "zh": "卢森堡",
+      "ru": "Люксембург",
+      "fr": "Luxembourg",
+      "es": "Luxemburgo",
+      "ar": "لكسمبرغ"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "LU"
+    ],
+    "iso_alpha3": [
+      "LUX"
+    ]
+  },
+  "492": {
+    "m49": "492",
+    "level": "country",
+    "labels": {
+      "en": "Monaco",
+      "zh": "摩纳哥",
+      "ru": "Монако",
+      "fr": "Monaco",
+      "es": "Mónaco",
+      "ar": "موناكو"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MC"
+    ],
+    "iso_alpha3": [
+      "MCO"
+    ]
+  },
+  "528": {
+    "m49": "528",
+    "level": "country",
+    "labels": {
+      "en": "Netherlands (Kingdom of the)",
+      "zh": "荷兰王国",
+      "ru": "Нидерланды (Королевство)",
+      "fr": "Pays-Bas (Royaume des)",
+      "es": "Países Bajos (Reino de los)",
+      "ar": "هولندا (مملكة _)"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NL"
+    ],
+    "iso_alpha3": [
+      "NLD"
+    ]
+  },
+  "756": {
+    "m49": "756",
+    "level": "country",
+    "labels": {
+      "en": "Switzerland",
+      "zh": "瑞士",
+      "ru": "Швейцария",
+      "fr": "Suisse",
+      "es": "Suiza",
+      "ar": "سويسرا"
+    },
+    "parents": [
+      "155"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CH"
+    ],
+    "iso_alpha3": [
+      "CHE"
+    ]
+  },
+  "053": {
+    "m49": "053",
+    "level": "region",
+    "labels": {
+      "en": "Australia and New Zealand",
+      "zh": "澳大利亚和新西兰",
+      "ru": "Австралия и Новая Зеландия",
+      "fr": "Australie et Nouvelle-Zélande",
+      "es": "Australia y Nueva Zelandia",
+      "ar": "أستراليا ونيوزيلندا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "036",
+      "162",
+      "166",
+      "334",
+      "554",
+      "574"
+    ],
+    "members": [
+      "036",
+      "162",
+      "166",
+      "334",
+      "554",
+      "574"
+    ],
+    "iso_alpha2": [
+      "AU",
+      "CC",
+      "CX",
+      "HM",
+      "NF",
+      "NZ"
+    ],
+    "iso_alpha3": []
+  },
+  "036": {
+    "m49": "036",
+    "level": "country",
+    "labels": {
+      "en": "Australia",
+      "zh": "澳大利亚",
+      "ru": "Австралия",
+      "fr": "Australie",
+      "es": "Australia",
+      "ar": "أستراليا"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AU"
+    ],
+    "iso_alpha3": [
+      "AUS"
+    ]
+  },
+  "162": {
+    "m49": "162",
+    "level": "country",
+    "labels": {
+      "en": "Christmas Island",
+      "zh": "圣诞岛",
+      "ru": "остров Рождества",
+      "fr": "Île Christmas",
+      "es": "Isla Christmas",
+      "ar": "جزيرة عيد الميلاد"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CX"
+    ],
+    "iso_alpha3": [
+      "CXR"
+    ]
+  },
+  "166": {
+    "m49": "166",
+    "level": "country",
+    "labels": {
+      "en": "Cocos (Keeling) Islands",
+      "zh": "科科斯（基林）群岛",
+      "ru": "Кокосовых (Килинг) островов",
+      "fr": "Îles des Cocos (Keeling)",
+      "es": "Islas Cocos (Keeling)",
+      "ar": "جزر كوكس (كيلينغ)"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CC"
+    ],
+    "iso_alpha3": [
+      "CCK"
+    ]
+  },
+  "334": {
+    "m49": "334",
+    "level": "country",
+    "labels": {
+      "en": "Heard Island and McDonald Islands",
+      "zh": "赫德岛和麦克唐纳岛",
+      "ru": "Остров Херд и острова Макдональд",
+      "fr": "Île Heard-et-Îles MacDonald",
+      "es": "Islas Heard y McDonald",
+      "ar": "جزيرة هيرد وجزر ماكدونالد"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "HM"
+    ],
+    "iso_alpha3": [
+      "HMD"
+    ]
+  },
+  "554": {
+    "m49": "554",
+    "level": "country",
+    "labels": {
+      "en": "New Zealand",
+      "zh": "新西兰",
+      "ru": "Новая Зеландия",
+      "fr": "Nouvelle-Zélande",
+      "es": "Nueva Zelandia",
+      "ar": "نيوزيلندا"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NZ"
+    ],
+    "iso_alpha3": [
+      "NZL"
+    ]
+  },
+  "574": {
+    "m49": "574",
+    "level": "country",
+    "labels": {
+      "en": "Norfolk Island",
+      "zh": "诺福克岛",
+      "ru": "Остров Норфолк",
+      "fr": "Île Norfolk",
+      "es": "Isla Norfolk",
+      "ar": "جزيرة نورفولك"
+    },
+    "parents": [
+      "053"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NF"
+    ],
+    "iso_alpha3": [
+      "NFK"
+    ]
+  },
+  "054": {
+    "m49": "054",
+    "level": "region",
+    "labels": {
+      "en": "Melanesia",
+      "zh": "美拉尼西亚",
+      "ru": "Меланезия",
+      "fr": "Mélanésie",
+      "es": "Melanesia",
+      "ar": "ميلانيزيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "090",
+      "242",
+      "540",
+      "548",
+      "598"
+    ],
+    "members": [
+      "090",
+      "242",
+      "540",
+      "548",
+      "598"
+    ],
+    "iso_alpha2": [
+      "FJ",
+      "NC",
+      "PG",
+      "SB",
+      "VU"
+    ],
+    "iso_alpha3": []
+  },
+  "242": {
+    "m49": "242",
+    "level": "country",
+    "labels": {
+      "en": "Fiji",
+      "zh": "斐济",
+      "ru": "Фиджи",
+      "fr": "Fidji",
+      "es": "Fiji",
+      "ar": "فيجي"
+    },
+    "parents": [
+      "054"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FJ"
+    ],
+    "iso_alpha3": [
+      "FJI"
+    ]
+  },
+  "540": {
+    "m49": "540",
+    "level": "country",
+    "labels": {
+      "en": "New Caledonia",
+      "zh": "新喀里多尼亚",
+      "ru": "Новая Каледония",
+      "fr": "Nouvelle-Calédonie",
+      "es": "Nueva Caledonia",
+      "ar": "كاليدونيا الجديدة"
+    },
+    "parents": [
+      "054"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NC"
+    ],
+    "iso_alpha3": [
+      "NCL"
+    ]
+  },
+  "598": {
+    "m49": "598",
+    "level": "country",
+    "labels": {
+      "en": "Papua New Guinea",
+      "zh": "巴布亚新几内亚",
+      "ru": "Папуа-Новая Гвинея",
+      "fr": "Papouasie-Nouvelle-Guinée",
+      "es": "Papua Nueva Guinea",
+      "ar": "بابوا غينيا الجديدة"
+    },
+    "parents": [
+      "054"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PG"
+    ],
+    "iso_alpha3": [
+      "PNG"
+    ]
+  },
+  "090": {
+    "m49": "090",
+    "level": "country",
+    "labels": {
+      "en": "Solomon Islands",
+      "zh": "所罗门群岛",
+      "ru": "Соломоновы Острова",
+      "fr": "Îles Salomon",
+      "es": "Islas Salomón",
+      "ar": "جزر سليمان"
+    },
+    "parents": [
+      "054"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "SB"
+    ],
+    "iso_alpha3": [
+      "SLB"
+    ]
+  },
+  "548": {
+    "m49": "548",
+    "level": "country",
+    "labels": {
+      "en": "Vanuatu",
+      "zh": "瓦努阿图",
+      "ru": "Вануату",
+      "fr": "Vanuatu",
+      "es": "Vanuatu",
+      "ar": "فانواتو"
+    },
+    "parents": [
+      "054"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "VU"
+    ],
+    "iso_alpha3": [
+      "VUT"
+    ]
+  },
+  "057": {
+    "m49": "057",
+    "level": "region",
+    "labels": {
+      "en": "Micronesia",
+      "zh": "密克罗尼西亚",
+      "ru": "Микронезия",
+      "fr": "Micronésie",
+      "es": "Micronesia",
+      "ar": "ميكرونيزيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "296",
+      "316",
+      "520",
+      "580",
+      "581",
+      "583",
+      "584",
+      "585"
+    ],
+    "members": [
+      "296",
+      "316",
+      "520",
+      "580",
+      "581",
+      "583",
+      "584",
+      "585"
+    ],
+    "iso_alpha2": [
+      "FM",
+      "GU",
+      "KI",
+      "MH",
+      "MP",
+      "NR",
+      "PW",
+      "UM"
+    ],
+    "iso_alpha3": []
+  },
+  "316": {
+    "m49": "316",
+    "level": "country",
+    "labels": {
+      "en": "Guam",
+      "zh": "关岛",
+      "ru": "Гуам",
+      "fr": "Guam",
+      "es": "Guam",
+      "ar": "غوام"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "GU"
+    ],
+    "iso_alpha3": [
+      "GUM"
+    ]
+  },
+  "296": {
+    "m49": "296",
+    "level": "country",
+    "labels": {
+      "en": "Kiribati",
+      "zh": "基里巴斯",
+      "ru": "Кирибати",
+      "fr": "Kiribati",
+      "es": "Kiribati",
+      "ar": "كيريباس"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "KI"
+    ],
+    "iso_alpha3": [
+      "KIR"
+    ]
+  },
+  "584": {
+    "m49": "584",
+    "level": "country",
+    "labels": {
+      "en": "Marshall Islands",
+      "zh": "马绍尔群岛",
+      "ru": "Маршалловы Острова",
+      "fr": "Îles Marshall",
+      "es": "Islas Marshall",
+      "ar": "جزر مارشال"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MH"
+    ],
+    "iso_alpha3": [
+      "MHL"
+    ]
+  },
+  "583": {
+    "m49": "583",
+    "level": "country",
+    "labels": {
+      "en": "Micronesia (Federated States of)",
+      "zh": "密克罗尼西亚联邦",
+      "ru": "Микронезия (Федеративные Штаты)",
+      "fr": "Micronésie (États fédérés de)",
+      "es": "Micronesia (Estados Federados de)",
+      "ar": "ميكرونيزيا (ولايات - الموحدة)"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "FM"
+    ],
+    "iso_alpha3": [
+      "FSM"
+    ]
+  },
+  "520": {
+    "m49": "520",
+    "level": "country",
+    "labels": {
+      "en": "Nauru",
+      "zh": "瑙鲁",
+      "ru": "Науру",
+      "fr": "Nauru",
+      "es": "Nauru",
+      "ar": "ناورو"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NR"
+    ],
+    "iso_alpha3": [
+      "NRU"
+    ]
+  },
+  "580": {
+    "m49": "580",
+    "level": "country",
+    "labels": {
+      "en": "Northern Mariana Islands",
+      "zh": "北马里亚纳群岛",
+      "ru": "Северные Марианские острова",
+      "fr": "Îles Mariannes du Nord",
+      "es": "Islas Marianas Septentrionales",
+      "ar": "جزر ماريانا الشمالية"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "MP"
+    ],
+    "iso_alpha3": [
+      "MNP"
+    ]
+  },
+  "585": {
+    "m49": "585",
+    "level": "country",
+    "labels": {
+      "en": "Palau",
+      "zh": "帕劳",
+      "ru": "Палау",
+      "fr": "Palaos",
+      "es": "Palau",
+      "ar": "بالاو"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PW"
+    ],
+    "iso_alpha3": [
+      "PLW"
+    ]
+  },
+  "581": {
+    "m49": "581",
+    "level": "country",
+    "labels": {
+      "en": "United States Minor Outlying Islands",
+      "zh": "美国本土外小岛屿",
+      "ru": "Внешние малые острова Соединенных Штатов",
+      "fr": "Îles mineures éloignées des États-Unis",
+      "es": "Islas menores alejadas de Estados Unidos",
+      "ar": "نائية التابعة للولايات المتحدة"
+    },
+    "parents": [
+      "057"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "UM"
+    ],
+    "iso_alpha3": [
+      "UMI"
+    ]
+  },
+  "061": {
+    "m49": "061",
+    "level": "region",
+    "labels": {
+      "en": "Polynesia",
+      "zh": "波利尼西亚",
+      "ru": "Полинезия",
+      "fr": "Polynésie",
+      "es": "Polinesia",
+      "ar": "بولينيزيا"
+    },
+    "parents": [
+      "001"
+    ],
+    "children": [
+      "016",
+      "184",
+      "258",
+      "570",
+      "612",
+      "772",
+      "776",
+      "798",
+      "876",
+      "882"
+    ],
+    "members": [
+      "016",
+      "184",
+      "258",
+      "570",
+      "612",
+      "772",
+      "776",
+      "798",
+      "876",
+      "882"
+    ],
+    "iso_alpha2": [
+      "AS",
+      "CK",
+      "NU",
+      "PF",
+      "PN",
+      "TK",
+      "TO",
+      "TV",
+      "WF",
+      "WS"
+    ],
+    "iso_alpha3": []
+  },
+  "016": {
+    "m49": "016",
+    "level": "country",
+    "labels": {
+      "en": "American Samoa",
+      "zh": "美属萨摩亚",
+      "ru": "Американское Самоа",
+      "fr": "Samoa américaines",
+      "es": "Samoa Americana",
+      "ar": "ساموا الأمريكية"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "AS"
+    ],
+    "iso_alpha3": [
+      "ASM"
+    ]
+  },
+  "184": {
+    "m49": "184",
+    "level": "country",
+    "labels": {
+      "en": "Cook Islands",
+      "zh": "库克群岛",
+      "ru": "Острова Кука",
+      "fr": "Îles Cook",
+      "es": "Islas Cook",
+      "ar": "جزر كوك"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "CK"
+    ],
+    "iso_alpha3": [
+      "COK"
+    ]
+  },
+  "258": {
+    "m49": "258",
+    "level": "country",
+    "labels": {
+      "en": "French Polynesia",
+      "zh": "法属波利尼西亚",
+      "ru": "Французская Полинезия",
+      "fr": "Polynésie française",
+      "es": "Polinesia Francesa",
+      "ar": "بولينيزيا الفرنسية"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PF"
+    ],
+    "iso_alpha3": [
+      "PYF"
+    ]
+  },
+  "570": {
+    "m49": "570",
+    "level": "country",
+    "labels": {
+      "en": "Niue",
+      "zh": "纽埃",
+      "ru": "Ниуэ",
+      "fr": "Nioué",
+      "es": "Niue",
+      "ar": "نيوي"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "NU"
+    ],
+    "iso_alpha3": [
+      "NIU"
+    ]
+  },
+  "612": {
+    "m49": "612",
+    "level": "country",
+    "labels": {
+      "en": "Pitcairn",
+      "zh": "皮特凯恩",
+      "ru": "Питкэрн",
+      "fr": "Pitcairn",
+      "es": "Pitcairn",
+      "ar": "بيتكرن"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "PN"
+    ],
+    "iso_alpha3": [
+      "PCN"
+    ]
+  },
+  "882": {
+    "m49": "882",
+    "level": "country",
+    "labels": {
+      "en": "Samoa",
+      "zh": "萨摩亚",
+      "ru": "Самоа",
+      "fr": "Samoa",
+      "es": "Samoa",
+      "ar": "ساموا"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "WS"
+    ],
+    "iso_alpha3": [
+      "WSM"
+    ]
+  },
+  "772": {
+    "m49": "772",
+    "level": "country",
+    "labels": {
+      "en": "Tokelau",
+      "zh": "托克劳",
+      "ru": "Токелау",
+      "fr": "Tokélaou",
+      "es": "Tokelau",
+      "ar": "توكيلاو"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TK"
+    ],
+    "iso_alpha3": [
+      "TKL"
+    ]
+  },
+  "776": {
+    "m49": "776",
+    "level": "country",
+    "labels": {
+      "en": "Tonga",
+      "zh": "汤加",
+      "ru": "Тонга",
+      "fr": "Tonga",
+      "es": "Tonga",
+      "ar": "تونغا"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TO"
+    ],
+    "iso_alpha3": [
+      "TON"
+    ]
+  },
+  "798": {
+    "m49": "798",
+    "level": "country",
+    "labels": {
+      "en": "Tuvalu",
+      "zh": "图瓦卢",
+      "ru": "Тувалу",
+      "fr": "Tuvalu",
+      "es": "Tuvalu",
+      "ar": "توفالو"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "TV"
+    ],
+    "iso_alpha3": [
+      "TUV"
+    ]
+  },
+  "876": {
+    "m49": "876",
+    "level": "country",
+    "labels": {
+      "en": "Wallis and Futuna Islands",
+      "zh": "瓦利斯群岛和富图纳群岛",
+      "ru": "Острова Уоллис и Футуна",
+      "fr": "Îles Wallis-et-Futuna",
+      "es": "Islas Wallis y Futuna",
+      "ar": "جزر واليس وفوتونا"
+    },
+    "parents": [
+      "061"
+    ],
+    "children": [],
+    "members": [],
+    "iso_alpha2": [
+      "WF"
+    ],
+    "iso_alpha3": [
+      "WLF"
+    ]
+  }
+}

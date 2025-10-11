@@ -853,7 +853,7 @@ em { color: #993333;}
 .dl-blurb p {font-size:.8rem; margin-bottom: .3rem;}
 .ds_title { font-weight:600; color:#993333;}
 .ds_fields p { font-size: .8rem;}
-.fa-download { cursor: pointer; color:#336699;}
+.fa-download:not(.nocolour) { cursor: pointer; color:#336699;}
 /**
   place portal
 **/

@@ -1,0 +1,14 @@
+{% extends "preview/base_preview.html" %}
+{% load preview_extras %}
+
+{% block title %}{{ object.title }}{% endblock %}
+{% block note %}Map previews are not yet available.{% endblock %}
+
+{% block fields %}
+    <span class="record-field">Alternative Names:</span> {{ object.names|format_list }}<br>
+    <span class="record-field">Types:</span> {{ object.types|format_list }}<br>
+    <span class="record-field">Country Codes:</span> {{ object.ccodes|format_list }}<br>
+    <span class="record-field">Feature Classes:</span> {{ object.fclasses|format_list }}<br>
+    <span class="record-field">Timespans:</span> {{ object.year_ranges|format_list }}<br>
+    <span class="record-field">Dataset:</span> {{ object.dataset }}
+{% endblock %}

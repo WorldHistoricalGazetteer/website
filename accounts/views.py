@@ -1,60 +1,62 @@
-from django.contrib.auth.decorators import login_required
+import secrets
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.http import JsonResponse
+from django.utils.html import format_html
+from django.views import View
+from django.views.decorators.http import require_POST
+
+from api.models import UserAPIProfile, APIToken
 
 User = get_user_model()
 from django.conf import settings
 from django.contrib import auth, messages
-from django.core.signing import Signer, BadSignature
-from django.db import transaction
-from django.shortcuts import render, redirect, reverse, get_object_or_404
+from django.shortcuts import render, redirect, reverse
 
 from accounts.forms import UserModelForm
-from collection.models import Collection, CollectionGroupUser, CollectionUser  # CollectionGroup,
-from datasets.models import Dataset, DatasetUser
+from collection.models import CollectionGroupUser  # CollectionGroup,
 import logging
 
-logger = logging.getLogger(__name__)
-import traceback
-from urllib.parse import urljoin
-from whgmail.messaging import WHGmail
+logger = logging.getLogger('authentication')
+from urllib.parse import urlencode
 
 
-def register(request):
-    if request.method == 'POST':
-        form = UserModelForm(request.POST)
-        if form.is_valid():
-            user = form.save(commit=False)
-            user.set_password(request.POST['password1'])
-            user.save()
+def orcid_denied_modal(request):
+    return render(request, "accounts/orcid_denied_modal.html", {})
 
-            signer = Signer()
-            token = signer.sign(user.pk)
 
-            WHGmail(request, {
-                'template': 'register_confirm',
-                'subject': 'Confirm your registration at World Historical Gazetteer',
-                'confirm_url': urljoin(settings.URL_FRONT, reverse('accounts:confirm-email', args=[token])),
-                'user': user,
-            })
+def build_orcid_authorize_url(request):
+    state = secrets.token_urlsafe(24)
+    nonce = secrets.token_urlsafe(24)
 
-            return redirect('accounts:confirmation-sent')
-        else:
-            return render(request, 'register/register.html', {'form': form})
-    else:
-        form = UserModelForm()
-        return render(request, 'register/register.html', {'form': form})
+    request.session["oidc_state"] = state
+    request.session["oidc_nonce"] = nonce
+
+    params = {
+        "client_id": settings.ORCID_CLIENT_ID,
+        "response_type": "code",
+        "scope": "/read-limited",
+        "redirect_uri": request.build_absolute_uri(reverse("orcid-callback")),
+        "state": state,
+        "nonce": nonce,
+    }
+    return f"{settings.ORCID_BASE}/oauth/authorize?{urlencode(params)}"
 
 
 def login(request):
     if request.method == 'POST':
+        # Legacy WHG Login -> ORCiD
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '').strip()
+        orcid_auth_url = request.POST.get('orcid_auth_url', '')
 
         # Check for missing fields
         if not username or not password:
             messages.error(request, "Both Username and Password are required.")
-            return render(request, 'accounts/login.html')
+            return redirect("accounts:login")
 
         try:
             # Check if user exists
@@ -64,21 +66,42 @@ def login(request):
                 request.session['username_for_reset'] = username
                 return redirect('accounts:password_reset')
             else:
-                # Attempt to authenticate only if no password reset is required
-                user = auth.authenticate(request, username=username, password=password)
+                # Attempt to authenticate using legacy backend only if no password reset is required
+                user = auth.authenticate(request, username=username, password=password,
+                                         backend='django.contrib.auth.backends.ModelBackend')
                 if user is not None:
                     auth.login(request, user)
-                    return redirect('home')
+                    # Redirect to the ORCiD authorisation URL if provided
+                    if orcid_auth_url:
+                        # Ensure the ORCiD URL is valid
+                        if orcid_auth_url.startswith(settings.ORCID_BASE):
+                            return redirect(orcid_auth_url)
+                        else:
+                            logger.error("Invalid ORCiD authorisation URL.")
+                            return redirect('accounts:login')
+                    else:
+                        # No ORCiD URL provided, redirect to home
+                        return redirect('home')
                 else:
                     # Authentication fails
                     messages.error(request, "Invalid password.")
                     return redirect('accounts:login')
         except User.DoesNotExist:
             # User not found
-            messages.error(request, "Invalid username.")
-            return redirect('accounts:login')  # Or render with an error message
+            messages.error(request,
+                           "<h4><i class='fas fa-triangle-exclamation'></i> Invalid WHG username.</h4><p>Please correct this and try again.</p>")
+            return redirect('accounts:login')
     else:
-        return render(request, 'accounts/login.html')
+        # Prevent login page view if user is already authenticated
+        if request.user.is_authenticated:
+            return redirect('home')
+
+        # GET request, render the login page with ORCiD auth URL
+        return render(
+            request,
+            'accounts/login.html',
+            context={"orcid_auth_url": build_orcid_authorize_url(request)}
+        )
 
 
 def logout(request):
@@ -86,41 +109,6 @@ def logout(request):
         request.session.pop('username_for_reset', None)
         auth.logout(request)
         return redirect('home')
-
-
-def confirm_email(request, token):
-    signer = Signer()
-    try:
-        user_id = signer.unsign(token)
-        user = User.objects.get(pk=user_id)
-        user.email_confirmed = True
-        user.save()
-
-        # Redirect to a success page
-        return redirect('accounts:confirmation-success')
-    except BadSignature:
-        # Handle invalid token
-        logger.error(f"Invalid token: {token}")
-        traceback.print_exc()
-        return render(request, 'register/invalid_token.html', {'error': 'Invalid token.'})
-    except User.DoesNotExist:
-        # Handle non-existent user
-        logger.error(f"User does not exist for token: {token}")
-        traceback.print_exc()
-        return render(request, 'register/invalid_token.html', {'error': 'User does not exist.'})
-    except Exception as e:
-        # Handle any other exceptions
-        logger.error(f"Exception while confirming email for token {token}: {str(e)}")
-        traceback.print_exc()
-        return render(request, 'register/invalid_token.html', {'error': str(e)})
-
-
-def confirmation_sent(request):
-    return render(request, 'register/confirmation_sent.html')
-
-
-def confirmation_success(request):
-    return render(request, 'register/confirmation_success.html')
 
 
 class CustomPasswordResetView(auth_views.PasswordResetView):
@@ -201,62 +189,122 @@ def add_to_group(cg, member):
 
 @login_required
 def profile_edit(request):
-    if request.method == 'POST':
-        form = UserModelForm(request.POST, request.FILES, instance=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect('profile-edit')
-        else:
-            logger.debug(f"Form Errors: {form.errors}")
-            logger.debug(f"Cleansed Data: {form.cleaned_data}")
-    else:
-        form = UserModelForm(instance=request.user)
+    form = UserModelForm(instance=request.user)
+    api_token = getattr(request.user, "api_token", None)
 
-    is_admin = request.user.groups.filter(name='whg_admins').exists()
-    context = {'is_admin': is_admin, 'form': form}
+    # Ensure profile exists
+    api_profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
+
+    remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
+    total_quota = api_profile.daily_limit
+
+    # Helper to generate "not available" HTML with tooltip
+    def not_available_html(field_name):
+        return format_html(
+            '<span class="text-muted fst-italic">Not available</span> '
+            '<i class="fas fa-circle-exclamation text-muted ms-1" '
+            'data-bs-toggle="tooltip" '
+            'data-bs-title="This information could be made available to WHG by updating your '
+            'ORCiD profile '
+            'and ensuring the {} field has visibility set to \'Trusted parties\' or \'Everyone\'." '
+            'style="cursor: help; font-size: 0.75em; vertical-align: super;"></i>',
+            field_name
+        )
+
+    context = {
+        'has_email': bool(request.user.email),
+        'email_display': request.user.email or not_available_html('email'),
+        'given_name_display': request.user.given_name or not_available_html('given name'),
+        'surname_display': request.user.surname or not_available_html('family name'),
+        'affiliation_display': request.user.affiliation or not_available_html('affiliation'),
+        'web_page_display': request.user.web_page or not_available_html('web page'),
+        'is_admin': request.user.groups.filter(name='whg_admins').exists(),
+        'needs_news_check': request.session.pop("_needs_news_check", False),
+        'form': form,
+        'ORCID_BASE': settings.ORCID_BASE,
+        "api_token_key": getattr(api_token, "key", ""),
+        "api_token_quota_remaining": remaining_quota,
+        "api_token_quota": total_quota,
+    }
+
+    # logger.debug(context)
+
     return render(request, 'accounts/profile.html', context=context)
 
 
 @login_required
-@transaction.atomic
-def update_profile(request):
-    context = {}
+def profile_download(request):
+    user = request.user
+    data = {
+        'username': user.username,
+        'email': user.email,
+        'given_name': getattr(user, 'given_name', ''),
+        'surname': getattr(user, 'surname', ''),
+        'orcid': getattr(user, 'orcid', ''),
+        'affiliation': getattr(user, 'affiliation', ''),
+        'web_page': getattr(user, 'web_page', ''),
+        'news_permitted': getattr(user, 'news_permitted', False),
+    }
+    response = JsonResponse(data)
+    response['Content-Disposition'] = 'attachment; filename="user_data.json"'
+    return response
+
+
+@login_required
+@require_POST
+def profile_news_toggle(request):
+    user = request.user
+    news_permitted = request.POST.get('news_permitted') == 'on'
+    user.news_permitted = news_permitted
+    user.save()
+    return JsonResponse({'status': 'success', 'news_permitted': news_permitted})
+
+
+@login_required
+def profile_delete(request):
     if request.method == 'POST':
-        user_form = UserModelForm(request.POST, instance=request.user)
-        # profile_form = ProfileModelForm(request.POST, instance=request.user.profile)
-        if user_form.is_valid():
-            # if user_form.is_valid() and profile_form.is_valid():
-            user_form.save()
-            # profile_form.save()
-            messages.success(request, ('Your profile was successfully updated!'))
-            return redirect('accounts:profile')
-        else:
-            messages.error(request, ('Please correct the error below.'))
+        user = request.user
+        user.delete()
+        messages.success(request, "Your account has been deleted.")
+        return redirect('home')
     else:
-        user_form = UserModelForm(instance=request.user)
-        # profile_form = ProfileModelForm(instance=request.user.profile)
-        id_ = request.user.id
-        u = get_object_or_404(User, id=id_)
-        ds_owned = [[ds.id, ds.title, 'owner'] for ds in Dataset.objects.filter(owner=u).order_by('title')]
-        ds_collabs = [[dc.dataset_id.id, dc.dataset_id.title, dc.role] for dc in
-                      DatasetUser.objects.filter(user_id_id=id_)]
-        # groups = u.groups.values_list('name', flat=True)
-        groups_owned = u.groups.all()
-        group_leader = 'group_leaders' in u.groups.values_list('name', flat=True)  # True or False
+        return redirect('profile-edit')
 
-        context['ds_owned'] = ds_owned
-        context['ds_collabs'] = ds_collabs
-        # TODO: context object for collections - place or dataset, owned or collaborated on
-        context['coll_owned'] = Collection.objects.filter(owner=u, collection_class='place')
-        context['coll_collab'] = CollectionUser.objects.filter(user=u)
-        # context['collections'] = Collection.objects.filter(owner=u)
-        context['groups_owned'] = groups_owned
-        context['mygroups'] = [g.collectiongroup for g in CollectionGroupUser.objects.filter(user=u)]
-        context['group_leader'] = group_leader
-        context['comments'] = 'get comments associated with projects I own'
 
-        return render(request, 'accounts/profile.html', {
-            'user_form': user_form,
-            # 'profile_form': profile_form,
-            'context': context
-        })
+class ProfileAPITokenView(LoginRequiredMixin, View):
+    """
+    Handles generating/regenerating and deleting a user's API token.
+    """
+
+    def post(self, request, *args, **kwargs):
+        """
+        Handles AJAX POST requests.
+        Requires a POST parameter 'action' with value 'generate' or 'delete'.
+        """
+        action = request.POST.get('action')
+        if action == "generate":
+            return self._generate_or_regenerate(request)
+        elif action == "delete":
+            return self._delete(request)
+        else:
+            return JsonResponse({"error": "Invalid action."}, status=400)
+
+    def _generate_or_regenerate(self, request):
+        # Ensure the user has a profile
+        UserAPIProfile.objects.get_or_create(user=request.user)
+
+        token, created = APIToken.objects.get_or_create(
+            user=request.user,
+            defaults={"key": secrets.token_urlsafe(32)}
+        )
+        if not created:
+            token.regenerate()
+        return JsonResponse({"token": token.key})
+
+    def _delete(self, request):
+        try:
+            token = request.user.api_token
+            token.delete()
+            return JsonResponse({"success": True})
+        except APIToken.DoesNotExist:
+            return JsonResponse({"error": "No API token exists for this user."}, status=400)

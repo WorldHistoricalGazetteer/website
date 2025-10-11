@@ -192,7 +192,7 @@ def nominator(request, *args, **kwargs):
             'subject': 'WHG Student Place Collection nomination',
             'nominated_title': coll.title,
             'nominated_id': coll.id,
-            'leader_name': request.user.display_name,
+            'leader_name': request.user.name,
             'leader_email': request.user.email,
             'owner_name': coll.owner,
             'nominated_url': f'{settings.URL_FRONT}collections/{str(coll.id)}',

@@ -1,0 +1,10 @@
+{% extends "admin/change_list.html" %}
+{% block content %}
+  <ul class="messagelist">
+    <li class="info">
+      Daily API limit can be set per user. Set <strong>0</strong> for unlimited calls.
+      Quota resets at midnight UTC.
+    </li>
+  </ul>
+  {{ block.super }}
+{% endblock %}

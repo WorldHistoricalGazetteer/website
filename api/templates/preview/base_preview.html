@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .record-container {
+            font-family: sans-serif;
+            font-size: 14px;
+            padding: 10px;
+            line-height: 1.5;
+            background-color: #f9f9f9;
+            border-left: 3px solid #007BFF;
+            margin-bottom: 10px;
+        }
+        .record-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .record-field {
+            font-weight: bold;
+        }
+        .record-info {
+            margin-top: 5px;
+        }
+        .record-note {
+            font-size: 10px;
+            color: #888;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="record-container">
+        <div class="record-title">
+            {% block title %}{% endblock %}
+            <span class="record-note">{% block note %}{% endblock %}</span>
+        </div>
+        <div class="record-info">
+            {% block fields %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html>

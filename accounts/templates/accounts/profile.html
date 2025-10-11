@@ -1,293 +1,225 @@
 {% extends "main/base_webpack.html" %}
+{% load static %}
+{% load l10n %}
 
-{% block extra_head %}
-<style>
-  #container {
-    min-height: calc(100vh - 90px);
-  }
-
-  .page-title-container {
-    display: flex;
-    position: relative;
-    margin-bottom: .5rem;
-  }
-
-  .page-title {
-    margin: 0 auto;
-  }
-
-  .header-link {
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    align-items: center;
-  }
-
-  .header-link i {
-    margin-right: 5px;
-  }
-
-  .profile-placeholder {
-    width: 100px;
-    height: 100px;
-    background-color: aliceblue;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 50px;
-    font-weight: bold;
-    line-height: 1;
-    vertical-align: middle;
-    margin-bottom: 1rem;
-    margin-left: auto;
-    margin-right: auto;
-  }
-
-  .profile-info {
-    {#border: 1px solid #f2f2f2;#}
-    {#border-radius: 10px;#}
-    {#padding: 1rem;#}
-  }
-
-  .table.profile-table {
-    width: 60%; /* Adjust this width as needed */
-    margin: 0 auto;
-    table-layout: fixed; /* Forces columns to respect the width given */
-  }
-
-  .table.profile-table td {
-    width: 50%; /* Makes both columns equal width */
-  }
-
-  .table.profile-table td:first-child {
-    text-align: right;
-    padding-right: 20px;
-  }
-
-  .table.profile-table td:nth-child(2) {
-    text-align: left;
-  }
-
-  {#.btn-primary, .change-password-link {#}
-  .btn-primary {
-    display: block;
-    margin: 20px auto;
-  }
-
-  .profile-table tr {
-    border-color: white;
-    border-style: none !important;
-  }
-  .profile-table td {
-    padding-top: .2rem !important;
-    padding-bottom: 0 !important;
-  }
-  .current-file {
-    font-size: .8rem;
-  }
-  .edit-field {
-    width: fit-content;
-  }
-
-</style>
-
-{% endblock %}
-
-{% block content %}
-<div id="container" class="container mt-1">
-  <div class="page-title-container mt-3">
-    <h4 class="page-title">My Profile</h4>
-    <a href="{% url 'dashboard' %}" class="header-link">
-      {% if is_admin %}Admin {% else %}My {% endif %}Dashboard<i class="fas fa-columns ms-2"></i>
-    </a>
-  </div>
-  <div class="row mt-4">
-    <div class="col-md-2"></div>
-    <div class="col-md-8">
-      <div class="text-center">
-        {% if user.image_file %}
-          <img src="{{ user.image_file.url }}" class="profile-placeholder" alt="{{ user.name }}">
-        {% else %}
-          <div class="profile-placeholder">{{ user.name|first }}</div>
-        {% endif %}
-        <h5>{{ user.given_name }} {{ user.surname }}<small> ({{ user.username }})</small>
-          <a href="#" class="edit-link small" onclick="toggleEdit(); return false;">edit
-          <i class="fas fa-edit ms-1"></i></a>
-        </h5>
-      </div>
-      <div class="profile-info">
-        <form method="post" action="{% url 'profile-edit' %}" enctype="multipart/form-data">
-          {% csrf_token %}
-          <table class="table profile-table">
-            {% for field in form %}
-            <tr>
-              <td>{% if field.label == 'Name' %}Display name{% else %}{{ field.label }}{% endif %}</td>
-              <td>
-                <div id="static_{{ field.name }}" class="static-field">{{ field.value|default:"None" }}</div>
-                <div id="edit_{{ field.name }}" class="edit-field" style="display:none;">
-                  {{ field }}
-                  {% if field.name == 'image_file' and user.image_file %}
-                    <!-- Reminder of the current file during edit -->
-                    <br/><span class="current-file">Current file: {{ user.image_file.name }}</span>
-                  {% endif %}
-                </div>
-              </td>
-            </tr>
-            {% endfor %}
-          </table>
-          <div class="form-buttons text-center" style="display: none;">
-            <button type="button" class="btn btn-secondary" onclick="toggleEdit()">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-          </div>
-        </form>
-
-        <p class="text-center mt-2">
-          <a href="{% url 'accounts:password_change' %}" class="change-password-link">change password</a>
-        </p>
-      </div>
-    </div>
-    <div class="col-md-2"></div>
-  </div>
-</div>
-<script>
-
-function toggleEdit() {
-  const fieldsToEdit = ['given_name', 'surname', 'email', 'affiliation', 'web_page', 'name', 'image_file']; // List editable fields
-  const editing = document.querySelector('.form-buttons').style.display === 'none'; // Check if we are currently editing
-
-  // Toggle visibility based on whether we are currently editing or not
-  fieldsToEdit.forEach(field => {
-    var staticField = document.getElementById('static_' + field);
-    var editField = document.getElementById('edit_' + field);
-    if (editing) {
-      staticField.style.display = 'none';
-      editField.style.display = '';
-    } else {
-      staticField.style.display = '';
-      editField.style.display = 'none';
+{% block extra_css %}
+    #api-token-section.has-token #no-token {
+      display: none;
     }
-  });
-
-  // Toggle form buttons visibility
-  document.querySelector('.form-buttons').style.display = editing ? '' : 'none';
-}
-</script>
-
-{#function toggleEdit() {#}
-{#  const fieldsToEdit = ['given_name', 'surname', 'email', 'affiliation', 'web_page', 'name', 'image_file']; // List editable fields#}
-{#  fieldsToEdit.forEach(field => {#}
-{#    var staticField = document.getElementById('static_' + field);#}
-{#    var editField = document.getElementById('edit_' + field);#}
-{#    staticField.style.display = 'none';#}
-{#    editField.style.display = '';#}
-{#  });#}
-{#  document.querySelector('.btn-primary').style.display = 'block'; // Show save button#}
-{# }#}
-
-</script>
+    #api-token-section:not(.has-token) #has-token {
+      display: none;
+    }
 {% endblock %}
 
-{% comment %}
 {% block content %}
-  <div id="container" class="container mt-1">
-    <div class="page-title-container mt-3">
-      <h4 class="page-title">My Profile</h4>
-      <a href="{% url 'dashboard' %}" class="header-link">
-        {% if is_admin %}Admin {% else %}My {% endif %}Dashboard<i class="fas  fa-columns ms-2"></i>
-      </a>
+<div id="container" class="container mt-1" xmlns="http://www.w3.org/1999/html">
+  <div class="my-4">
+
+    <h3 class="mb-4">
+      <i class="fas fa-user-circle me-2"></i> Personal Data
+    </h3>
+
+    {% if needs_news_check %}
+    <div class="alert alert-warning">
+      Welcome, <b>{{ user.name }}</b>!
+      Your account has been created via ORCiD.
     </div>
-    <div class="row mt-4">
-      <div class="col-md-2"></div>
-      <div class="col-md-8">
-        <div class="profile-info text-center position-relative">
-          <p class="edit-button small position-absolute top-0 end-0" onclick="toggleEditForm()">
-            Edit <i class="fas fa-edit linky"></i></p>
-            {% if user.image_file %}
-                <img src="{{ user.image_file.url }}" class="profile-placeholder"
-                     alt="{{ user.name }}">
-            {% else %}
-                <div class="profile-placeholder">{{ user.name|first }}</div>
-            {% endif %}
-          <h5>{{ user.given_name }} {{ user.surname }}<small> ({{ user.username }})</small></h5>
-          <p class="mb-1">Affiliation: {% if user.affiliation %}{{ user.affiliation }}
-          {% else %} <i>none yet</i>{% endif %}</p>
-          <p>Web page: {% if user.web_page %}{{ user.web_page }}
-          {% else %} <i>none</i>{% endif %}
-          </p>
-          <p class="mt-3">
-            <a href="{% url 'accounts:password_change' %}">change password</a>
-          </p>
-          <!-- Edit form (initially hidden) -->
-          <form method="post" action="{% url 'profile-edit' %}" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div id="editForm" style="display:none;">
-              {% if form.errors %}
-                <div class="alert alert-danger">
-                  <ul>
-                    {% for field, errors in form.errors.items %}
-                      {% for error in errors %}
-                        <li>{{ field }}: {{ error }}</li>
-                      {% endfor %}
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-              <input type="hidden" name="username" value="{{ user.username }}">
-              <div class="mb-3">
-                <label for="name" class="form-label">Given name</label>
-                <input type="text" class="form-control" id="given_name" name="given_name" value="{{ user.given_name }}">
-              </div>
-              <div class="mb-3">
-                <label for="name" class="form-label">Surname</label>
-                <input type="text" class="form-control" id="surname" name="surname" value="{{ user.surname }}">
-              </div>
-              <div class="mb-3">
-                <label for="image" class="form-label">Profile image
-                </label>
-                <input type="file" class="form-control" id="image_file" name="image_file" value="{{ user.image_file }}">
-                {% if user.image_file %}
-                  <p>Current file: {{ user.image_file.name }}</p>
-                {% endif %}
-              </div>
-              <div class="mb-3">
-                <label for="name" class="form-label">Full Name</label>
-                <input type="text" class="form-control" id="name" name="name" value="{{ user.name }}">
-              </div>
-              <div class="mb-3">
-                <label for="affiliation" class="form-label">Email</label>
-                <input type="text" class="form-control" id="email" name="email" value="{{ user.email }}">
-              </div>
-              <div class="mb-3">
-                <label for="affiliation" class="form-label">Web page</label>
-                <input type="text" class="form-control" id="web_page" name="web_page"
-                       value="{{ user.web_page }}">
-              </div>
-              <div class="mb-3">
-                <label for="affiliation" class="form-label">Affiliation</label>
-                <input type="text" class="form-control" id="affiliation" name="affiliation"
-                       value="{{ user.affiliation }}">
-              </div>
-              <button type="submit" class="btn btn-primary">Save Changes</button>
-            </div>
-          </form>
-          </div>
+    {% endif %}
+
+    <!-- ORCiD Data Section -->
+    <section class="mb-4">
+      <h5 class="mb-3 fw-semibold d-flex align-items-center">
+        <i class="fab fa-orcid me-2" style="color:#A6CE39;"></i>
+        ORCiD Data
+        <a href="{% url 'accounts:profile-download' %}"
+           data-bs-toggle="tooltip"
+           data-bs-title="<i class='fas fa-download nocolour'></i> <strong>Download your personal data.</strong><br><br><i>This facility satisfies your <strong>right to access personal data</strong> in certain jurisdictions.</i>"
+           class="btn btn-outline-secondary btn-sm ms-3">
+          <i class="fa fa-download nocolour"></i> Download
+        </a>
+      </h5>
+      <p class="small fst-italic text-muted mb-3">
+        These details are maintained by ORCiD. If necessary, please edit them via your <a href="{{ ORCID_BASE }}/my-orcid" target="_blank" rel="noopener noreferrer">ORCiD profile</a>.
+      </p>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">ORCiD iD</div>
+        <div class="flex-grow-1 ps-3">
+          <a href="{{ ORCID_BASE }}/{{ user.orcid }}" target="_blank" rel="noopener noreferrer">{{ ORCID_BASE }}/{{ user.orcid }}</a>
         </div>
       </div>
-      <div class="col-md-2"></div>
-    </div>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Given Name</div>
+        <div class="flex-grow-1 ps-3">{{ given_name_display|safe }}</div>
+      </div>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Family Name</div>
+        <div class="flex-grow-1 ps-3">{{ surname_display|safe }}</div>
+      </div>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email</div>
+        <div class="flex-grow-1 ps-3">{{ email_display|safe }}</div>
+      </div>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Affiliation</div>
+        <div class="flex-grow-1 ps-3">{{ affiliation_display|safe }}</div>
+      </div>
+      <div class="d-flex mb-2">
+        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Web page</div>
+          <div class="flex-grow-1 ps-3">
+            {% if user.web_page %}
+              <a href="{{ user.web_page }}" target="_blank" rel="noopener noreferrer">{{ user.web_page }}</a>
+            {% else %}
+              {{ web_page_display|safe }}
+            {% endif %}
+          </div>
+      </div>
+    </section>
+
+{% if has_email %}
+    <hr>
+
+    <!-- Preferences Section -->
+    <section>
+      <h5 class="mb-3 fw-semibold"><i class="fas fa-cog me-2"></i> Preferences</h5>
+      {% if needs_news_check %}
+      <div class="alert alert-warning pulsing">
+        Please consider signing up for our occasional news and updates.
+        You can change your mind at any time by returning to this Profile page.
+      </div>
+      {% endif %}
+      <form id="news-form" method="post" action="{% url 'profile-edit' %}">
+        {% csrf_token %}
+        <div class="form-check d-flex align-items-center mb-2">
+          {{ form.news_permitted }}
+          <label class="form-check-label ms-2 mb-0" for="{{ form.news_permitted.id_for_label }}" style="margin-bottom: -5px !important;">
+            Receive News and Updates
+          </label>
+        </div>
+      </form>
+    </section>
+
+    <hr>
+
+    <!-- API Token Section -->
+    <section>
+      <h5 class="mb-3 fw-semibold d-flex align-items-baseline">
+        <i class="fas fa-key me-2"></i>
+        <span>API Token</span>
+        <a target="_blank"
+           href="https://docs.whgazetteer.org/content/400-Technical.html#api"
+           class="ms-2 smaller fw-normal lh-1">
+          see documentation <i class="fas fa-external-link-alt ms-1" aria-hidden="true"></i>
+        </a>
+      </h5>
+      <div id="api-token-section" class="mb-2 {% if user.api_token %}has-token{% endif %}">
+        <div id="has-token">
+          <p>
+            <strong>Your API Token:</strong>
+            <code id="api-token" class="clippable openrefine">{{ api_token_key }}</code>
+          </p>
+          <p>
+            <strong>Remaining Daily Quota:</strong>
+            <span id="api-token-quota">{{ api_token_quota_remaining|localize }}</span> requests
+            <i class="fas fa-info-circle text-muted smaller" data-bs-toggle="tooltip"
+               data-bs-title="The API token allows you to make up to {{ api_token_quota }} requests per day. This quota resets at midnight UTC. Refresh this page to update the remaining quota."></i>
+          </p>
+          <button class="generate-token btn btn-outline-primary btn-sm me-2">
+            <i class="fas fa-sync-alt me-1"></i> Regenerate Token
+          </button>
+          <button class="delete-token btn btn-outline-danger btn-sm">
+            <i class="fas fa-trash me-1"></i> Delete Token
+          </button>
+        </div>
+        <div id="no-token">
+          <button class="generate-token btn btn-primary btn-sm">
+            <i class="fas fa-plus me-1"></i> Generate API Token
+          </button>
+        </div>
+      </div>
+    </section>
+{% else %}
+    <hr>
+
+    <!-- Limited Functionality Notice -->
+    <section>
+      <h5 class="mb-3 fw-semibold text-danger">
+        <i class="fas fa-exclamation-triangle me-2"></i> Limited Account Functionality
+      </h5>
+      <div class="alert alert-info">
+        <p class="mb-2">
+          <strong>Your WHG account currently has very limited functionality</strong> because no email address is available from your ORCiD profile.
+        </p>
+        <p class="mb-2">
+          Without an email address, the following features are unavailable:
+        </p>
+        <ul class="mb-3">
+          <li>Receiving news and updates about WHG</li>
+          <li>Contributing data to WHG</li>
+          <li>Generating and using API tokens for programmatic access</li>
+          <li>Receiving important notifications about your datasets and account</li>
+        </ul>
+        <p class="mb-0">
+          <strong>Note:</strong> If you choose to add a verified email address to your <a href="{{ ORCID_BASE }}/my-orcid" target="_blank" rel="noopener noreferrer">ORCiD profile</a> and set its visibility to either "Trusted parties" or "Everyone", these features will become available the next time you log in to WHG. <em><b>THIS IS ENTIRELY OPTIONAL:</b> We respect your choice and control over your ORCiD data.</em>
+        </p>
+      </div>
+    </section>
+{% endif %}
+
+    <hr>
+
+    <!-- Account Deletion -->
+    <section>
+      <h5 class="mb-3 fw-semibold text-muted">
+        <i class="fas fa-trash me-2"></i> Account Deletion
+      </h5>
+
+      <form method="post"
+            action="{% url 'accounts:profile-delete' %}"
+            onsubmit="if(confirm('Please confirm once more that you wish to delete your account. This action cannot be undone.')) { $('body').spin(); return true; } else { return false; }"
+            class="d-inline-flex align-items-center gap-3">
+        {% csrf_token %}
+
+        <div class="form-check m-0">
+          <input class="form-check-input" type="checkbox" id="confirmDelete" name="confirmDelete" required
+              style="cursor:pointer;"
+              data-bs-toggle="tooltip"
+              data-bs-title="Checking this box confirms that you understand the consequences of deleting your account."
+          >
+          <label class="form-check-label mb-0" for="confirmDelete" style="cursor:pointer;">
+            I understand that deleting my WHG account is <strong>permanent</strong> and cannot be undone.
+          </label>
+        </div>
+
+        <button type="submit"
+                class="btn btn-danger btn-sm align-self-center"
+                style="line-height: normal;"
+                data-bs-toggle="tooltip"
+                data-bs-title="<i class='fas fa-triangle-exclamation'></i> This action is permanent and cannot be undone">
+          <i class="fa fa-trash"></i> Delete Account
+        </button>
+      </form>
+    </section>
+
   </div>
-  <script>
-    function toggleEditForm() {
-      var editForm = document.getElementById('editForm');
-      if (editForm.style.display === 'none') {
-        editForm.style.display = 'block';
-      } else {
-        editForm.style.display = 'none';
-      }
-    }
-  </script>
+</div>
+
+<script type="text/javascript">
+  window.profileConfig = {
+    apiTokenUrl: "{% url 'accounts:profile-api-token' %}",
+    newsToggleUrl: "{% url 'accounts:profile-news-toggle' %}",
+    csrfToken: "{{ csrf_token }}",
+    domain: "{{ request.get_host }}",
+  };
+</script>
 {% endblock %}
-{% endcomment %}
+
+{% block deferredScripts %}
+
+	var scripts = [
+	{
+	src: '{% static 'webpack/profile.bundle.js' %}',
+	type: 'module',
+	},
+	]
+
+{% endblock %}

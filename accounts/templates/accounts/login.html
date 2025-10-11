@@ -4,36 +4,212 @@
 
 {% block content %}
 {% load static %}
-  <div class="container">
-    <div class="d-flex justify-content-center mt-3">
-{#      <div class="w-50">#}
-      <div>
-        <h3>Login</h3>
-        {% if messages %}
-          {% for message in messages %}
+<div class="container mt-4 mb-2">
+
+    <div id="login-orcid-explainer" class="row mb-4 justify-content-center">
+        <div class="col-md-12 border-bottom pb-3">
+            <p class="lead">
+                <i class="fas fa-info-circle me-2"></i>
+                We now use
+                <a href="https://orcid.org" target="_blank" rel="noopener noreferrer"
+                   data-bs-toggle="tooltip" title="Click to read more on the ORCiD website">
+                    ORCiD
+                </a>
+                (Open Researcher and Contributor ID) for registration and login, making it easier for users to sign in
+                securely and link their WHG work to
+                their scholarly identity.
+            </p>
+
+            <div class="accordion" id="orcIDFaqAccordion">
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingOne">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseOne" aria-expanded="true" aria-controls="collapseOne">
+                            <i class="fas fa-user-check me-2"></i>
+                            Is registration required to use WHG?
+                            <span class="text-muted fst-italic ms-2">No!</span>
+                        </button>
+                    </h2>
+                    <div id="collapseOne" class="accordion-collapse collapse show" aria-labelledby="headingOne"
+                         data-bs-parent="#orcIDFaqAccordion">
+                        <div class="accordion-body">
+                            Registration is <strong>NOT</strong> required to search WHG's indexes or to view datasets or
+                            collections. Registration is required only for dataset
+                            contribution, the creation of collections, or use of our APIs. With your consent, it would also allow us
+                            to let you know about important updates and new features.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingTwo">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseTwo" aria-expanded="false" aria-controls="collapseTwo">
+                            <i class="fas fa-graduation-cap me-2"></i>
+                            Do I have to be an academic or active researcher to register?
+                            <span class="text-muted fst-italic ms-2">No!</span>
+                        </button>
+                    </h2>
+                    <div id="collapseTwo" class="accordion-collapse collapse" aria-labelledby="headingTwo"
+                         data-bs-parent="#orcIDFaqAccordion">
+                        <div class="accordion-body">
+                            No, registration is open to anyone who wishes to use our APIs, create collections, or contribute data to
+                            WHG. ORCiD is widely
+                            used by researchers, but anyone can obtain an ORCiD iD regardless of affiliation or
+                            professional status.
+                            This inclusive approach supports a broad community while maintaining trust through
+                            verifiable identities.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingThree">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseThree" aria-expanded="false" aria-controls="collapseThree">
+                            <i class="fas fa-file-signature me-2"></i>
+                            Is it easy to sign up with ORCiD?
+                            <span class="text-muted fst-italic ms-2">Yes!</span>
+                        </button>
+                    </h2>
+                    <div id="collapseThree" class="accordion-collapse collapse" aria-labelledby="headingThree"
+                         data-bs-parent="#orcIDFaqAccordion">
+                        <div class="accordion-body">
+                            Signing up for an ORCiD iD is free and straightforward. It requires minimal information and
+                            can be completed in just a few minutes. ORCiD helps you establish a persistent digital
+                            identity that is widely recognised in the research community.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="headingFour">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#collapseFour" aria-expanded="false" aria-controls="collapseFour">
+                            <i class="fas fa-shield-alt me-2"></i>
+                            How does ORCiD benefit WHG and its Community of users?
+                        </button>
+                    </h2>
+                    <div id="collapseFour" class="accordion-collapse collapse" aria-labelledby="headingFour"
+                         data-bs-parent="#orcIDFaqAccordion">
+                        <div class="accordion-body">
+                            ORCiD provides a persistent, unique identifier that links your contributions to your
+                            academic profile, ensuring proper attribution and enhancing transparency.
+                            It also improves platform security by allowing two-factor authentication and reduces
+                            fraudulent or automated sign-ups, protecting our computing resources and maintaining
+                            the integrity of the WHG Community.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            {% if messages %}
+            {% for message in messages %}
             {% if not message.tags == 'success' %}
-              <p class="red-head alert-{{ message.tags }}">
-                  {{ message }}
-              </p>
+            <div class="alert {{ message.tags }} padded mt-3 mb-0 pulsing">
+                {{ message|safe }}
+            </div>
             {% endif %}
-          {% endfor %}
-        {% endif %}
-        <form method="post" action="{% url 'accounts:login' %}">
-          {% csrf_token %}
-          Username:<br/>
-          <input type="text" name="username" size = 30 />
-          <br/>
-          Password:<br/>
-          <input type="password" name="password" size = 30/>
-          <br/><br/>
-          <input class="btn btn-primary" type="submit" value="Login" />
-        </form>
-        <p class="mt-2">Not a WHG user yet? <a href="{% url 'accounts:register' %}">Register first</a></p>
-        <p class="mt-2"><a href="{% url 'accounts:password_reset' %}">Forgot password?</a></p>
-        {% if error %}
-          <p style="color:red">{{ error }}</p>
-        {% endif %}
-      </div>
+            {% endfor %}
+            {% endif %}
+
+        </div>
     </div>
-  </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-7 pe-md-4 border-end">
+            <a id="signin-button" href="{{ orcid_auth_url }}"
+               class="btn btn-light rounded d-inline-flex align-items-center pe-4 py-2 shadow-sm mb-4"
+               style="border: 1px solid #ced4da; color: #333; font-size: 1.2rem; font-weight: 500;">
+                <i class="fab fa-orcid me-3" style="color: #a6ce39; font-size: 2.5rem;"></i>
+                Sign in with ORCiD
+            </a>
+            <p>
+                <strong>
+                    <i class="fas fa-info-circle text-primary me-1"></i>No ORCiD account? <i>No problem!</i>
+                </strong>
+                You can create one during sign-in. When you register (or the first time you sign in) with ORCiD, we will
+                ask for your permission to:
+            </p>
+            <div class="alert alert-info small mb-3" role="alert">
+                <ul class="mb-0 ps-3">
+                    <li>Access your public ORCiD record (name, ORCiD iD, and affiliation) — this information will
+                        already be visible on your ORCiD profile.
+                    </li>
+                    <li>
+                        Read any of your other information which has visibility set to "Trusted parties".
+                    </li>
+                    <li>Store this information securely-encrypted in your WHG profile.</li>
+                    <li>After your WHG account is created, we will ask separately for your consent to receive our
+                        optional newsletters.
+                    </li>
+                </ul>
+            </div>
+
+            <p>
+                <strong>
+                    <i class="fas fa-exclamation-circle text-danger me-1"></i>Warning:
+                </strong> If you already have a Legacy WHG account, you must use the <b>Legacy WHG Login</b> and <b>Link ORCiD</b>
+                button
+                so that your account and existing data can be linked. You will not be able to link your old account
+                later.
+            </p>
+        </div>
+
+        <div class="col-md-5 ps-md-4">
+            <h4 class="text-muted">
+                <i class="fas fa-sign-in-alt me-2"></i>Legacy WHG Login
+            </h4>
+            <form method="post" action="{% url 'accounts:login' %}">
+                {% csrf_token %}
+                <input type="hidden" name="orcid_auth_url" value="{{ orcid_auth_url }}">
+                <div class="mb-3">
+                    <input
+                            type="text"
+                            id="id_username"
+                            name="username"
+                            class="form-control"
+                            size="30"
+                            placeholder="Username"
+                            aria-label="Username"
+                            required
+                    >
+                </div>
+                <div class="mb-3">
+                    <input
+                            type="password"
+                            id="id_password"
+                            name="password"
+                            class="form-control"
+                            size="30"
+                            placeholder="Password"
+                            aria-label="Password"
+                            required
+                    >
+                </div>
+                <div class="d-flex align-items-center justify-content-between">
+                    <a href="{% url 'accounts:password_reset' %}" class="text-decoration-none">
+                        <i class="fas fa-key me-1"></i>Forgot password?
+                    </a>
+                    <button type="submit"
+                            class="btn btn-light rounded d-inline-flex align-items-center pe-4 py-2 shadow-sm my-4"
+                            style="border: 1px solid #ced4da; color: #333; font-size: 1.2rem; font-weight: 500;">
+                        <img src="/static/images/whg_logo.svg" alt="WHG" width="50" height="38">
+                        <i class="fas fa-link"></i>
+                        <i class="fab fa-orcid me-3" style="color: #a6ce39; font-size: 2.5rem;"></i>
+                        Link ORCiD
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% if request.GET.orcid_denied %}
+<!-- Link to be fired on loading: see whg-modal.js -->
+<a id="orcidDeniedTrigger" data-whg-modal="{% url 'accounts:orcid_denied_modal' %}" style="display:none;"></a>
+{% endif %}
+
 {% endblock %}

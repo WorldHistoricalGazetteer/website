@@ -25,7 +25,7 @@
 #input span.twitter-typeahead input {
 	border-radius: 0; /* Override typeahead default */
 }
-#input #clear_search, #spatial_selector .clearButton {
+#input #clear_search, #spatial_selector .clearButton, button#clear_chrononym {
 	background-color: #e6e5b69e;
 	border-color: #ced4da;
 }
@@ -226,4 +226,42 @@ span.select2-selection {
     left: 8px;
     top: 2px;
     position: relative;
+}
+
+#chrononym_selector .twitter-typeahead {
+    display: block;           /* full width instead of inline-block */
+    flex: 1 1 auto;           /* allow it to grow inside flex container */
+    position: relative;        /* keep Typeahead positioning intact */
+}
+
+#chrononym_input.tt-input {
+    border: 1px solid #ced4da !important;
+    border-radius: 0.375rem !important;
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+    height: calc(1.5em + 0.75rem + 2px) !important; /* match select2 height */
+    padding: 0.375rem 0.75rem !important; /* match select2 padding */
+    width: 100% !important;
+    box-sizing: border-box;
+}
+
+.tt-dataset-Chrononyms {
+    max-height: 500px;
+    overflow-y: auto;
+    width: 100% !important;
+}
+
+.tt-dataset-Chrononyms .tt-suggestion {
+    white-space: unset !important;
+}
+
+.tt-suggestion:hover {
+    cursor: pointer;
+    background-color: #c3f3c89e;
+}
+
+.tt-empty-message {
+  padding: 0.5rem 1rem;
+  color: #6c757d;      /* Bootstrap muted text */
+  font-style: italic;
 }

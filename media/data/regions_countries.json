@@ -2,6 +2,395 @@
     {
         "text": "Regions",
         "children": [
+            {
+                "id": 53,
+                "text": "Australia and New Zealand",
+                "ccodes": [
+                    "AU",
+                    "CC",
+                    "CX",
+                    "HM",
+                    "NF",
+                    "NZ"
+                ]
+            },
+            {
+                "id": 29,
+                "text": "Caribbean",
+                "ccodes": [
+                    "AG",
+                    "AI",
+                    "AW",
+                    "BB",
+                    "BL",
+                    "BQ",
+                    "BS",
+                    "CU",
+                    "CW",
+                    "DM",
+                    "DO",
+                    "GD",
+                    "GP",
+                    "HT",
+                    "JM",
+                    "KN",
+                    "KY",
+                    "LC",
+                    "MF",
+                    "MQ",
+                    "MS",
+                    "PR",
+                    "SX",
+                    "TC",
+                    "TT",
+                    "VC",
+                    "VG",
+                    "VI"
+                ]
+            },
+            {
+                "id": 13,
+                "text": "Central America",
+                "ccodes": [
+                    "BZ",
+                    "CR",
+                    "GT",
+                    "HN",
+                    "MX",
+                    "NI",
+                    "PA",
+                    "SV"
+                ]
+            },
+            {
+                "id": 143,
+                "text": "Central Asia",
+                "ccodes": [
+                    "KG",
+                    "KZ",
+                    "TJ",
+                    "TM",
+                    "UZ"
+                ]
+            },
+            {
+                "id": 14,
+                "text": "Eastern Africa",
+                "ccodes": [
+                    "BI",
+                    "DJ",
+                    "ER",
+                    "ET",
+                    "IO",
+                    "KE",
+                    "KM",
+                    "MG",
+                    "MU",
+                    "MW",
+                    "MZ",
+                    "RE",
+                    "RW",
+                    "SC",
+                    "SO",
+                    "SS",
+                    "TF",
+                    "TZ",
+                    "UG",
+                    "YT",
+                    "ZM",
+                    "ZW"
+                ]
+            },
+            {
+                "id": 30,
+                "text": "Eastern Asia",
+                "ccodes": [
+                    "CN",
+                    "HK",
+                    "JP",
+                    "KP",
+                    "KR",
+                    "MN",
+                    "MO"
+                ]
+            },
+            {
+                "id": 151,
+                "text": "Eastern Europe",
+                "ccodes": [
+                    "BG",
+                    "BY",
+                    "CZ",
+                    "HU",
+                    "MD",
+                    "PL",
+                    "RO",
+                    "RU",
+                    "SK",
+                    "UA"
+                ]
+            },
+            {
+                "id": 419,
+                "text": "Latin America and the Caribbean",
+                "ccodes": []
+            },
+            {
+                "id": 54,
+                "text": "Melanesia",
+                "ccodes": [
+                    "FJ",
+                    "NC",
+                    "PG",
+                    "SB",
+                    "VU"
+                ]
+            },
+            {
+                "id": 57,
+                "text": "Micronesia",
+                "ccodes": [
+                    "FM",
+                    "GU",
+                    "KI",
+                    "MH",
+                    "MP",
+                    "NR",
+                    "PW",
+                    "UM"
+                ]
+            },
+            {
+                "id": 17,
+                "text": "Middle Africa",
+                "ccodes": [
+                    "AO",
+                    "CD",
+                    "CF",
+                    "CG",
+                    "CM",
+                    "GA",
+                    "GQ",
+                    "ST",
+                    "TD"
+                ]
+            },
+            {
+                "id": 15,
+                "text": "Northern Africa",
+                "ccodes": [
+                    "DZ",
+                    "EG",
+                    "EH",
+                    "LY",
+                    "MA",
+                    "SD",
+                    "TN"
+                ]
+            },
+            {
+                "id": 21,
+                "text": "Northern America",
+                "ccodes": [
+                    "BM",
+                    "CA",
+                    "GL",
+                    "PM",
+                    "US"
+                ]
+            },
+            {
+                "id": 154,
+                "text": "Northern Europe",
+                "ccodes": [
+                    "AX",
+                    "DK",
+                    "EE",
+                    "FI",
+                    "FO",
+                    "GB",
+                    "GG",
+                    "IE",
+                    "IM",
+                    "IS",
+                    "JE",
+                    "LT",
+                    "LV",
+                    "NO",
+                    "SE",
+                    "SJ"
+                ]
+            },
+            {
+                "id": 61,
+                "text": "Polynesia",
+                "ccodes": [
+                    "AS",
+                    "CK",
+                    "NU",
+                    "PF",
+                    "PN",
+                    "TK",
+                    "TO",
+                    "TV",
+                    "WF",
+                    "WS"
+                ]
+            },
+            {
+                "id": 5,
+                "text": "South America",
+                "ccodes": [
+                    "AR",
+                    "BO",
+                    "BR",
+                    "BV",
+                    "CL",
+                    "CO",
+                    "EC",
+                    "FK",
+                    "GF",
+                    "GS",
+                    "GY",
+                    "PE",
+                    "PY",
+                    "SR",
+                    "UY",
+                    "VE"
+                ]
+            },
+            {
+                "id": 35,
+                "text": "South-eastern Asia",
+                "ccodes": [
+                    "BN",
+                    "ID",
+                    "KH",
+                    "LA",
+                    "MM",
+                    "MY",
+                    "PH",
+                    "SG",
+                    "TH",
+                    "TL",
+                    "VN"
+                ]
+            },
+            {
+                "id": 18,
+                "text": "Southern Africa",
+                "ccodes": [
+                    "BW",
+                    "LS",
+                    "NA",
+                    "SZ",
+                    "ZA"
+                ]
+            },
+            {
+                "id": 34,
+                "text": "Southern Asia",
+                "ccodes": [
+                    "AF",
+                    "BD",
+                    "BT",
+                    "IN",
+                    "IR",
+                    "LK",
+                    "MV",
+                    "NP",
+                    "PK"
+                ]
+            },
+            {
+                "id": 39,
+                "text": "Southern Europe",
+                "ccodes": [
+                    "AD",
+                    "AL",
+                    "BA",
+                    "ES",
+                    "GI",
+                    "GR",
+                    "HR",
+                    "IT",
+                    "ME",
+                    "MK",
+                    "MT",
+                    "PT",
+                    "RS",
+                    "SI",
+                    "SM",
+                    "VA"
+                ]
+            },
+            {
+                "id": 202,
+                "text": "Sub-Saharan Africa",
+                "ccodes": []
+            },
+            {
+                "id": 11,
+                "text": "Western Africa",
+                "ccodes": [
+                    "BF",
+                    "BJ",
+                    "CI",
+                    "CV",
+                    "GH",
+                    "GM",
+                    "GN",
+                    "GW",
+                    "LR",
+                    "ML",
+                    "MR",
+                    "NE",
+                    "NG",
+                    "SH",
+                    "SL",
+                    "SN",
+                    "TG"
+                ]
+            },
+            {
+                "id": 145,
+                "text": "Western Asia",
+                "ccodes": [
+                    "AE",
+                    "AM",
+                    "AZ",
+                    "BH",
+                    "CY",
+                    "GE",
+                    "IL",
+                    "IQ",
+                    "JO",
+                    "KW",
+                    "LB",
+                    "OM",
+                    "PS",
+                    "QA",
+                    "SA",
+                    "SY",
+                    "TR",
+                    "YE"
+                ]
+            },
+            {
+                "id": 155,
+                "text": "Western Europe",
+                "ccodes": [
+                    "AT",
+                    "BE",
+                    "CH",
+                    "DE",
+                    "FR",
+                    "LI",
+                    "LU",
+                    "MC",
+                    "NL"
+                ]
+            }
         ]
     },
     {
@@ -9,19 +398,15 @@
         "children": [
             {
                 "id": "AF",
-                "text": "Afghanistan (Afghānestān)"
-            },
-            {
-                "id": "AX",
-                "text": "Aland Islands"
+                "text": "Afghanistan"
             },
             {
                 "id": "AL",
-                "text": "Albania (Shqipëria)"
+                "text": "Albania"
             },
             {
                 "id": "DZ",
-                "text": "Algeria (Al-Jazā'ir)"
+                "text": "Algeria"
             },
             {
                 "id": "AS",
@@ -34,6 +419,10 @@
             {
                 "id": "AO",
                 "text": "Angola"
+            },
+            {
+                "id": "AI",
+                "text": "Anguilla"
             },
             {
                 "id": "AQ",
@@ -49,7 +438,11 @@
             },
             {
                 "id": "AM",
-                "text": "Armenia (Hayastan)"
+                "text": "Armenia"
+            },
+            {
+                "id": "AW",
+                "text": "Aruba"
             },
             {
                 "id": "AU",
@@ -57,11 +450,11 @@
             },
             {
                 "id": "AT",
-                "text": "Austria (Österreich)"
+                "text": "Austria"
             },
             {
                 "id": "AZ",
-                "text": "Azerbaijan (Azǝrbaycan)"
+                "text": "Azerbaijan"
             },
             {
                 "id": "BS",
@@ -69,11 +462,11 @@
             },
             {
                 "id": "BH",
-                "text": "Bahrain (Al Baḥrayn)"
+                "text": "Bahrain"
             },
             {
                 "id": "BD",
-                "text": "Bangladesh (Bāṁlādesh)"
+                "text": "Bangladesh"
             },
             {
                 "id": "BB",
@@ -81,11 +474,11 @@
             },
             {
                 "id": "BY",
-                "text": "Belarus (Bieloruś)"
+                "text": "Belarus"
             },
             {
                 "id": "BE",
-                "text": "Belgium (België)"
+                "text": "Belgium"
             },
             {
                 "id": "BZ",
@@ -93,31 +486,51 @@
             },
             {
                 "id": "BJ",
-                "text": "Benin (Bénin)"
+                "text": "Benin"
+            },
+            {
+                "id": "BM",
+                "text": "Bermuda"
             },
             {
                 "id": "BT",
-                "text": "Bhutan (Druk Yul)"
+                "text": "Bhutan"
             },
             {
                 "id": "BO",
-                "text": "Bolivia"
+                "text": "Bolivia (Plurinational State of)"
+            },
+            {
+                "id": "BQ",
+                "text": "Bonaire, Sint Eustatius and Saba"
             },
             {
                 "id": "BA",
-                "text": "Bosnia and Herzegovina (Bosna i Hercegovina)"
+                "text": "Bosnia and Herzegovina"
             },
             {
                 "id": "BW",
                 "text": "Botswana"
             },
             {
+                "id": "BV",
+                "text": "Bouvet Island"
+            },
+            {
                 "id": "BR",
-                "text": "Brazil (Brasil)"
+                "text": "Brazil"
+            },
+            {
+                "id": "IO",
+                "text": "British Indian Ocean Territory"
+            },
+            {
+                "id": "VG",
+                "text": "British Virgin Islands"
             },
             {
                 "id": "BN",
-                "text": "Brunei"
+                "text": "Brunei Darussalam"
             },
             {
                 "id": "BG",
@@ -125,27 +538,27 @@
             },
             {
                 "id": "BF",
-                "text": "Burkina Faso (Burkina)"
+                "text": "Burkina Faso"
             },
             {
                 "id": "BI",
                 "text": "Burundi"
             },
             {
+                "id": "CV",
+                "text": "Cabo Verde"
+            },
+            {
                 "id": "KH",
-                "text": "Cambodia (Kâmpŭchéa)"
+                "text": "Cambodia"
             },
             {
                 "id": "CM",
-                "text": "Cameroon (Cameroun)"
+                "text": "Cameroon"
             },
             {
                 "id": "CA",
                 "text": "Canada"
-            },
-            {
-                "id": "CV",
-                "text": "Cape Verde (Cabo Verde)"
             },
             {
                 "id": "KY",
@@ -153,11 +566,11 @@
             },
             {
                 "id": "CF",
-                "text": "Central African Republic (République centrafricaine)"
+                "text": "Central African Republic"
             },
             {
                 "id": "TD",
-                "text": "Chad (Tchād)"
+                "text": "Chad"
             },
             {
                 "id": "CL",
@@ -165,7 +578,23 @@
             },
             {
                 "id": "CN",
-                "text": "China (Zhongguo)"
+                "text": "China"
+            },
+            {
+                "id": "HK",
+                "text": "China, Hong Kong Special Administrative Region"
+            },
+            {
+                "id": "MO",
+                "text": "China, Macao Special Administrative Region"
+            },
+            {
+                "id": "CX",
+                "text": "Christmas Island"
+            },
+            {
+                "id": "CC",
+                "text": "Cocos (Keeling) Islands"
             },
             {
                 "id": "CO",
@@ -173,7 +602,15 @@
             },
             {
                 "id": "KM",
-                "text": "Comoros (Comores)"
+                "text": "Comoros"
+            },
+            {
+                "id": "CG",
+                "text": "Congo"
+            },
+            {
+                "id": "CK",
+                "text": "Cook Islands"
             },
             {
                 "id": "CR",
@@ -181,7 +618,7 @@
             },
             {
                 "id": "HR",
-                "text": "Croatia (Hrvatska)"
+                "text": "Croatia"
             },
             {
                 "id": "CU",
@@ -189,27 +626,35 @@
             },
             {
                 "id": "CW",
-                "text": "Curacao"
+                "text": "Curaçao"
             },
             {
                 "id": "CY",
-                "text": "Cyprus (Kypriakí Dimokratía)"
+                "text": "Cyprus"
             },
             {
                 "id": "CZ",
-                "text": "Czech Republic (Česko)"
+                "text": "Czechia"
+            },
+            {
+                "id": "CI",
+                "text": "Côte d’Ivoire"
+            },
+            {
+                "id": "KP",
+                "text": "Democratic People's Republic of Korea"
             },
             {
                 "id": "CD",
-                "text": "Democratic Republic of the Congo (Congo, République Démocratique du)"
+                "text": "Democratic Republic of the Congo"
             },
             {
                 "id": "DK",
-                "text": "Denmark (Danmark)"
+                "text": "Denmark"
             },
             {
                 "id": "DJ",
-                "text": "Djibouti (Jībūtī)"
+                "text": "Djibouti"
             },
             {
                 "id": "DM",
@@ -217,11 +662,7 @@
             },
             {
                 "id": "DO",
-                "text": "Dominican Republic (República Dominicana)"
-            },
-            {
-                "id": "TL",
-                "text": "East Timor (Timor-Leste)"
+                "text": "Dominican Republic"
             },
             {
                 "id": "EC",
@@ -229,7 +670,7 @@
             },
             {
                 "id": "EG",
-                "text": "Egypt (Miṣr)"
+                "text": "Egypt"
             },
             {
                 "id": "SV",
@@ -237,23 +678,27 @@
             },
             {
                 "id": "GQ",
-                "text": "Equatorial Guinea (Guinea Ecuatorial)"
+                "text": "Equatorial Guinea"
             },
             {
                 "id": "ER",
-                "text": "Eritrea (Iritriyā)"
+                "text": "Eritrea"
             },
             {
                 "id": "EE",
-                "text": "Estonia (Eesti)"
+                "text": "Estonia"
+            },
+            {
+                "id": "SZ",
+                "text": "Eswatini"
             },
             {
                 "id": "ET",
-                "text": "Ethiopia (Ityop'iya)"
+                "text": "Ethiopia"
             },
             {
                 "id": "FK",
-                "text": "Falkland Islands"
+                "text": "Falkland Islands (Malvinas)"
             },
             {
                 "id": "FO",
@@ -265,11 +710,15 @@
             },
             {
                 "id": "FI",
-                "text": "Finland (Suomi)"
+                "text": "Finland"
             },
             {
                 "id": "FR",
                 "text": "France"
+            },
+            {
+                "id": "GF",
+                "text": "French Guiana"
             },
             {
                 "id": "PF",
@@ -285,23 +734,27 @@
             },
             {
                 "id": "GM",
-                "text": "Gambia (Gambia, The)"
+                "text": "Gambia"
             },
             {
                 "id": "GE",
-                "text": "Georgia (Sakartvelo)"
+                "text": "Georgia"
             },
             {
                 "id": "DE",
-                "text": "Germany (Deutschland)"
+                "text": "Germany"
             },
             {
                 "id": "GH",
                 "text": "Ghana"
             },
             {
+                "id": "GI",
+                "text": "Gibraltar"
+            },
+            {
                 "id": "GR",
-                "text": "Greece (Ellás)"
+                "text": "Greece"
             },
             {
                 "id": "GL",
@@ -312,6 +765,10 @@
                 "text": "Grenada"
             },
             {
+                "id": "GP",
+                "text": "Guadeloupe"
+            },
+            {
                 "id": "GU",
                 "text": "Guam"
             },
@@ -320,12 +777,16 @@
                 "text": "Guatemala"
             },
             {
+                "id": "GG",
+                "text": "Guernsey"
+            },
+            {
                 "id": "GN",
-                "text": "Guinea (Guinée)"
+                "text": "Guinea"
             },
             {
                 "id": "GW",
-                "text": "Guinea-Bissau (Guiné-Bissau)"
+                "text": "Guinea-Bissau"
             },
             {
                 "id": "GY",
@@ -333,31 +794,31 @@
             },
             {
                 "id": "HT",
-                "text": "Haiti (Haïti)"
+                "text": "Haiti"
             },
             {
                 "id": "HM",
                 "text": "Heard Island and McDonald Islands"
             },
             {
+                "id": "VA",
+                "text": "Holy See"
+            },
+            {
                 "id": "HN",
                 "text": "Honduras"
             },
             {
-                "id": "HK",
-                "text": "Hong Kong"
-            },
-            {
                 "id": "HU",
-                "text": "Hungary (Magyarország)"
+                "text": "Hungary"
             },
             {
                 "id": "IS",
-                "text": "Iceland (Ísland)"
+                "text": "Iceland"
             },
             {
                 "id": "IN",
-                "text": "India (Bhārat)"
+                "text": "India"
             },
             {
                 "id": "ID",
@@ -365,11 +826,11 @@
             },
             {
                 "id": "IR",
-                "text": "Iran (Īrān)"
+                "text": "Iran (Islamic Republic of)"
             },
             {
                 "id": "IQ",
-                "text": "Iraq (Al-ʻIrāq)"
+                "text": "Iraq"
             },
             {
                 "id": "IE",
@@ -381,15 +842,11 @@
             },
             {
                 "id": "IL",
-                "text": "Israel (Yisra'el)"
+                "text": "Israel"
             },
             {
                 "id": "IT",
-                "text": "Italy (Italia)"
-            },
-            {
-                "id": "CI",
-                "text": "Ivory Coast (Côte d'Ivoire)"
+                "text": "Italy"
             },
             {
                 "id": "JM",
@@ -397,15 +854,19 @@
             },
             {
                 "id": "JP",
-                "text": "Japan (Nihon)"
+                "text": "Japan"
+            },
+            {
+                "id": "JE",
+                "text": "Jersey"
             },
             {
                 "id": "JO",
-                "text": "Jordan (Al Urdun)"
+                "text": "Jordan"
             },
             {
                 "id": "KZ",
-                "text": "Kazakhstan (Qazaqstan)"
+                "text": "Kazakhstan"
             },
             {
                 "id": "KE",
@@ -416,12 +877,8 @@
                 "text": "Kiribati"
             },
             {
-                "id": "XK",
-                "text": "Kosovo"
-            },
-            {
                 "id": "KW",
-                "text": "Kuwait (Al Kuwayt)"
+                "text": "Kuwait"
             },
             {
                 "id": "KG",
@@ -429,15 +886,15 @@
             },
             {
                 "id": "LA",
-                "text": "Laos (Sathalanalat Paxathipatai Paxaxôn Lao)"
+                "text": "Lao People's Democratic Republic"
             },
             {
                 "id": "LV",
-                "text": "Latvia (Latvija)"
+                "text": "Latvia"
             },
             {
                 "id": "LB",
-                "text": "Lebanon (Lubnān)"
+                "text": "Lebanon"
             },
             {
                 "id": "LS",
@@ -449,7 +906,7 @@
             },
             {
                 "id": "LY",
-                "text": "Libya (Lībiyā)"
+                "text": "Libya"
             },
             {
                 "id": "LI",
@@ -457,27 +914,27 @@
             },
             {
                 "id": "LT",
-                "text": "Lithuania (Lietuva)"
+                "text": "Lithuania"
             },
             {
                 "id": "LU",
                 "text": "Luxembourg"
             },
             {
-                "id": "MK",
-                "text": "Macedonia (Makedonija, Republika)"
-            },
-            {
                 "id": "MG",
-                "text": "Madagascar (Madagasikara)"
+                "text": "Madagascar"
             },
             {
                 "id": "MW",
-                "text": "Malawi (Malaŵi)"
+                "text": "Malawi"
             },
             {
                 "id": "MY",
                 "text": "Malaysia"
+            },
+            {
+                "id": "MV",
+                "text": "Maldives"
             },
             {
                 "id": "ML",
@@ -488,56 +945,76 @@
                 "text": "Malta"
             },
             {
+                "id": "MH",
+                "text": "Marshall Islands"
+            },
+            {
+                "id": "MQ",
+                "text": "Martinique"
+            },
+            {
                 "id": "MR",
-                "text": "Mauritania (Mūrītānīyā)"
+                "text": "Mauritania"
             },
             {
                 "id": "MU",
                 "text": "Mauritius"
             },
             {
+                "id": "YT",
+                "text": "Mayotte"
+            },
+            {
                 "id": "MX",
-                "text": "Mexico (México)"
+                "text": "Mexico"
             },
             {
                 "id": "FM",
-                "text": "Micronesia (Federated States of Micronesia)"
+                "text": "Micronesia (Federated States of)"
             },
             {
-                "id": "MD",
-                "text": "Moldova"
+                "id": "MC",
+                "text": "Monaco"
             },
             {
                 "id": "MN",
-                "text": "Mongolia (Mongol)"
+                "text": "Mongolia"
             },
             {
                 "id": "ME",
-                "text": "Montenegro (Crna Gora)"
+                "text": "Montenegro"
+            },
+            {
+                "id": "MS",
+                "text": "Montserrat"
             },
             {
                 "id": "MA",
-                "text": "Morocco (Al Maghrib)"
+                "text": "Morocco"
             },
             {
                 "id": "MZ",
-                "text": "Mozambique (Moçambique)"
+                "text": "Mozambique"
             },
             {
                 "id": "MM",
-                "text": "Myanmar (Myanma)"
+                "text": "Myanmar"
             },
             {
                 "id": "NA",
                 "text": "Namibia"
             },
             {
+                "id": "NR",
+                "text": "Nauru"
+            },
+            {
                 "id": "NP",
-                "text": "Nepal (Nepāl)"
+                "text": "Nepal"
             },
             {
                 "id": "NL",
-                "text": "Netherlands (Nederland)"
+                "text": "Netherlands (Kingdom of the)"
             },
             {
                 "id": "NC",
@@ -564,32 +1041,36 @@
                 "text": "Niue"
             },
             {
-                "id": "KP",
-                "text": "North Korea (Chosŏn)"
+                "id": "NF",
+                "text": "Norfolk Island"
+            },
+            {
+                "id": "MK",
+                "text": "North Macedonia"
+            },
+            {
+                "id": "MP",
+                "text": "Northern Mariana Islands"
             },
             {
                 "id": "NO",
-                "text": "Norway (Norge)"
+                "text": "Norway"
             },
             {
                 "id": "OM",
-                "text": "Oman (ʻUmān)"
+                "text": "Oman"
             },
             {
                 "id": "PK",
-                "text": "Pakistan (Pākistān)"
+                "text": "Pakistan"
             },
             {
                 "id": "PW",
-                "text": "Palau (Belau)"
-            },
-            {
-                "id": "PS",
-                "text": "Palestine"
+                "text": "Palau"
             },
             {
                 "id": "PA",
-                "text": "Panama (Panamá)"
+                "text": "Panama"
             },
             {
                 "id": "PG",
@@ -601,15 +1082,19 @@
             },
             {
                 "id": "PE",
-                "text": "Peru (Perú)"
+                "text": "Peru"
             },
             {
                 "id": "PH",
-                "text": "Philippines (Pilipinas)"
+                "text": "Philippines"
+            },
+            {
+                "id": "PN",
+                "text": "Pitcairn"
             },
             {
                 "id": "PL",
-                "text": "Poland (Polska)"
+                "text": "Poland"
             },
             {
                 "id": "PT",
@@ -621,23 +1106,39 @@
             },
             {
                 "id": "QA",
-                "text": "Qaṭar"
+                "text": "Qatar"
             },
             {
-                "id": "CG",
-                "text": "Republic of the Congo (Congo)"
+                "id": "KR",
+                "text": "Republic of Korea"
+            },
+            {
+                "id": "MD",
+                "text": "Republic of Moldova"
             },
             {
                 "id": "RO",
-                "text": "Romania (România)"
+                "text": "Romania"
             },
             {
                 "id": "RU",
-                "text": "Russia (Rossija)"
+                "text": "Russian Federation"
             },
             {
                 "id": "RW",
                 "text": "Rwanda"
+            },
+            {
+                "id": "RE",
+                "text": "Réunion"
+            },
+            {
+                "id": "BL",
+                "text": "Saint Barthélemy"
+            },
+            {
+                "id": "SH",
+                "text": "Saint Helena"
             },
             {
                 "id": "KN",
@@ -648,6 +1149,14 @@
                 "text": "Saint Lucia"
             },
             {
+                "id": "MF",
+                "text": "Saint Martin (French Part)"
+            },
+            {
+                "id": "PM",
+                "text": "Saint Pierre and Miquelon"
+            },
+            {
                 "id": "VC",
                 "text": "Saint Vincent and the Grenadines"
             },
@@ -656,20 +1165,28 @@
                 "text": "Samoa"
             },
             {
+                "id": "SM",
+                "text": "San Marino"
+            },
+            {
                 "id": "ST",
-                "text": "Sao Tome and Principe (São Tomé e Príncipe)"
+                "text": "Sao Tome and Principe"
             },
             {
                 "id": "SA",
-                "text": "Saudi Arabia (As Suʻūdīyyah)"
+                "text": "Saudi Arabia"
             },
             {
                 "id": "SN",
-                "text": "Senegal (Sénégal)"
+                "text": "Senegal"
             },
             {
                 "id": "RS",
-                "text": "Serbia (Srbija)"
+                "text": "Serbia"
+            },
+            {
+                "id": "SC",
+                "text": "Seychelles"
             },
             {
                 "id": "SL",
@@ -680,12 +1197,16 @@
                 "text": "Singapore"
             },
             {
+                "id": "SX",
+                "text": "Sint Maarten (Dutch part)"
+            },
+            {
                 "id": "SK",
-                "text": "Slovakia (Slovensko)"
+                "text": "Slovakia"
             },
             {
                 "id": "SI",
-                "text": "Slovenia (Slovenija)"
+                "text": "Slovenia"
             },
             {
                 "id": "SB",
@@ -693,7 +1214,7 @@
             },
             {
                 "id": "SO",
-                "text": "Somalia (Soomaaliya)"
+                "text": "Somalia"
             },
             {
                 "id": "ZA",
@@ -704,64 +1225,72 @@
                 "text": "South Georgia and the South Sandwich Islands"
             },
             {
-                "id": "KR",
-                "text": "South Korea (Han'guk)"
-            },
-            {
                 "id": "SS",
                 "text": "South Sudan"
             },
             {
                 "id": "ES",
-                "text": "Spain (España)"
+                "text": "Spain"
             },
             {
                 "id": "LK",
-                "text": "Sri Lanka (Shrī Laṁkā)"
+                "text": "Sri Lanka"
+            },
+            {
+                "id": "PS",
+                "text": "State of Palestine"
             },
             {
                 "id": "SD",
-                "text": "Sudan (As Sūdān)"
+                "text": "Sudan"
             },
             {
                 "id": "SR",
                 "text": "Suriname"
             },
             {
-                "id": "SZ",
-                "text": "Swaziland"
+                "id": "SJ",
+                "text": "Svalbard and Jan Mayen Islands"
             },
             {
                 "id": "SE",
-                "text": "Sweden (Sverige)"
+                "text": "Sweden"
             },
             {
                 "id": "CH",
-                "text": "Switzerland (Schweiz)"
+                "text": "Switzerland"
             },
             {
                 "id": "SY",
-                "text": "Syria (Sūrīyah)"
+                "text": "Syrian Arab Republic"
             },
             {
                 "id": "TW",
-                "text": "Taiwan (Chung-hua Min-kuo)"
+                "text": "Taiwan"
             },
             {
                 "id": "TJ",
-                "text": "Tajikistan (Tojikiston)"
-            },
-            {
-                "id": "TZ",
-                "text": "Tanzania"
+                "text": "Tajikistan"
             },
             {
                 "id": "TH",
-                "text": "Thailand (Prathet Thai)"
+                "text": "Thailand"
+            },
+            {
+                "id": "TL",
+                "text": "Timor-Leste"
             },
             {
                 "id": "TG",
                 "text": "Togo"
+            },
+            {
+                "id": "TK",
+                "text": "Tokelau"
+            },
+            {
+                "id": "TO",
+                "text": "Tonga"
             },
             {
                 "id": "TT",
@@ -769,19 +1298,23 @@
             },
             {
                 "id": "TN",
-                "text": "Tunisia (Tūnis)"
-            },
-            {
-                "id": "TR",
-                "text": "Turkey (Türkiye)"
+                "text": "Tunisia"
             },
             {
                 "id": "TM",
-                "text": "Turkmenistan (Türkmenistan)"
+                "text": "Turkmenistan"
             },
             {
-                "id": "VI",
-                "text": "U.S. Virgin Islands"
+                "id": "TC",
+                "text": "Turks and Caicos Islands"
+            },
+            {
+                "id": "TV",
+                "text": "Tuvalu"
+            },
+            {
+                "id": "TR",
+                "text": "Türkiye"
             },
             {
                 "id": "UG",
@@ -789,19 +1322,31 @@
             },
             {
                 "id": "UA",
-                "text": "Ukraine (Ukraina)"
+                "text": "Ukraine"
             },
             {
                 "id": "AE",
-                "text": "United Arab Emirates (Al Imārāt)"
+                "text": "United Arab Emirates"
             },
             {
                 "id": "GB",
-                "text": "United Kingdom"
+                "text": "United Kingdom of Great Britain and Northern Ireland"
+            },
+            {
+                "id": "TZ",
+                "text": "United Republic of Tanzania"
+            },
+            {
+                "id": "UM",
+                "text": "United States Minor Outlying Islands"
+            },
+            {
+                "id": "VI",
+                "text": "United States Virgin Islands"
             },
             {
                 "id": "US",
-                "text": "United States"
+                "text": "United States of America"
             },
             {
                 "id": "UY",
@@ -809,7 +1354,7 @@
             },
             {
                 "id": "UZ",
-                "text": "Uzbekistan (O'zbekiston)"
+                "text": "Uzbekistan"
             },
             {
                 "id": "VU",
@@ -817,11 +1362,15 @@
             },
             {
                 "id": "VE",
-                "text": "Venezuela"
+                "text": "Venezuela (Bolivarian Republic of)"
             },
             {
                 "id": "VN",
-                "text": "Vietnam (Việt Nam)"
+                "text": "Viet Nam"
+            },
+            {
+                "id": "WF",
+                "text": "Wallis and Futuna Islands"
             },
             {
                 "id": "EH",
@@ -829,7 +1378,7 @@
             },
             {
                 "id": "YE",
-                "text": "Yemen (Al Yaman)"
+                "text": "Yemen"
             },
             {
                 "id": "ZM",
@@ -838,6 +1387,10 @@
             {
                 "id": "ZW",
                 "text": "Zimbabwe"
+            },
+            {
+                "id": "AX",
+                "text": "Åland Islands"
             }
         ]
     }

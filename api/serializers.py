@@ -213,6 +213,7 @@ class PlaceGeomSerializer(serializers.ModelSerializer):
     # json: type, geowkt, coordinates, when{}
     # title = serializers.ReadOnlyField(source='title')
     ds = serializers.SerializerMethodField()
+    geom = serializers.ReadOnlyField(source="jsonb")  # pass through as-is
 
     def get_ds(self, obj):
         return obj.place.dataset.id
@@ -232,7 +233,7 @@ class PlaceGeomSerializer(serializers.ModelSerializer):
         model = PlaceGeom
         fields = ('place_id', 'src_id', 'type', 'geowkt', 'coordinates',
                   'geom_src', 'citation', 'when', 'title', 'ds',
-                  'certainty')
+                  'certainty', 'geom')
 
 
 # return list of normalized coordinates for a place
@@ -531,100 +532,6 @@ class SearchDatabaseSerializer(serializers.HyperlinkedModelSerializer):
         fields = ('url', 'type', 'properties', 'geometry', 'names', 'types', 'links'
                   , 'related', 'whens', 'descriptions', 'depictions', 'minmax'
                   )
-
-
-""" TEST TEST TEST TEST TEST TEST
-  used for nearby queries in SpatialAPIView() from /api/spatial? 
-  returns Place records via PlaceGeom
-"""
-# class PlaceGeomSerializer(serializers.ModelSerializer):
-#   names = serializers.SerializerMethodField('get_names')
-#   def get_names(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.names.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     print('name data', data)
-#     return data
-#
-#   types = serializers.SerializerMethodField('get_types')
-#   def get_types(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.types.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     return data
-#
-#   links = serializers.SerializerMethodField('get_links')
-#   def get_links(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.links.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     return data
-#
-#   whens = serializers.SerializerMethodField('get_whens')
-#   def get_whens(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.whens.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     return data
-#
-#   related = serializers.SerializerMethodField('get_related')
-#   def get_related(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.related.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     return data
-#
-#   descriptions = serializers.SerializerMethodField('get_descriptions')
-#   def get_descriptions(self, placegeom):
-#     full = json.loads(coreserializers.serialize(
-#         "json", placegeom.place.descriptions.all()))
-#     data = [n['fields']['jsonb'] for n in full]
-#     return data
-#
-#   # custom fields for LPF transform
-#   type = serializers.SerializerMethodField('get_type')
-#   def get_type(self, placegeom):
-#     return "Feature"
-#
-#   uri = serializers.SerializerMethodField('get_uri')
-#   def get_uri(self, placegeom):
-#     return "https://whgazetteer.org/api/place/" + str(placegeom.place.id)
-#
-#   properties = serializers.SerializerMethodField('get_properties')
-#   def get_properties(self, placegeom):
-#     props = {
-#       "place_id":placegeom.place.id,
-#       "dataset_label": placegeom.place.dataset.label,
-#       "src_id": placegeom.place.src_id,
-#       "title": placegeom.place.title,
-#       "ccodes": placegeom.place.ccodes,
-#       "fclasses": placegeom.place.fclasses,
-#       "minmax": placegeom.place.minmax,
-#       "timespans": placegeom.place.timespans
-#     }
-#     return props
-#
-#   geometry = serializers.SerializerMethodField('get_geometry')
-#   def get_geometry(self, placegeom):
-#     return placegeom.jsonb
-#     # gcoll = {"type":"GeometryCollection","geometries":[]}
-#     # geoms = [g.jsonb for g in placegeom.geoms.all()]
-#     # for g in geoms:
-#     #   gcoll["geometries"].append(g)
-#     # return gcoll
-#
-#   class Meta:
-#     model = PlaceGeom
-#     fields = ('uri', 'type', 'properties', 'geometry', 'place'
-#                 ,'names','types','links'
-#                 ,'related','whens', 'descriptions'
-#                 # 'depictions', 'minmax'
-#             )
-
-""" used by 
-    SearchAPIView() from /api/db? 
-    bbox queries in SpatialAPIView() from /api/spatial?
-"""
 
 
 class LPFSerializer(serializers.Serializer):
