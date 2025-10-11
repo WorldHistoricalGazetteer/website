@@ -20,6 +20,13 @@ except ImportError:
 
 ENV_CONTEXT = os.environ.get('ENV_CONTEXT', 'dev-whgazetteer-org')  # Default if ENV_CONTEXT is not set
 
+VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
+try:
+    with open(VERSION_FILE) as f:
+        APP_VERSION = f.read().strip()
+except FileNotFoundError:
+    APP_VERSION = "dev"
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -217,6 +224,7 @@ TEMPLATES = [
                 'django.template.context_processors.media',
                 'django.template.context_processors.request',
                 'whg.context_processors.environment',
+                'whg.context_processors.app_version',
             ],
             'builtins': [
                 'whg.builtins',
