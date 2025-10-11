@@ -9,20 +9,47 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Read version
         id: ver
-        run: echo "World%20Historical%20Gazetteer=$(cat VERSION)" >> $GITHUB_OUTPUT
-      - name: Update README badge
-        uses: emibcn/badge-action@v1
-        with:
-          label: version
-          status: "v${{ steps.ver.outputs.version }}"
-          color: blue
-          path: VERSION-BADGE.svg
+        run: |
+          VERSION=$(cat VERSION)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Generate VERSION-BADGE.svg
+        run: |
+          # Adjust widths to fit label and version text
+          LABEL="World Historical Gazetteer"
+          LABEL_WIDTH=200
+          VALUE_WIDTH=60
+          TOTAL_WIDTH=$((LABEL_WIDTH + VALUE_WIDTH))
+          COLOR="#4c1"   # green (success)
+
+          cat > VERSION-BADGE.svg <<EOF
+<svg xmlns="http://www.w3.org/2000/svg" width="$TOTAL_WIDTH" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <mask id="a">
+    <rect width="$TOTAL_WIDTH" height="20" rx="3" fill="#fff"/>
+  </mask>
+  <g mask="url(#a)">
+    <rect width="$LABEL_WIDTH" height="20" fill="#555"/>
+    <rect x="$LABEL_WIDTH" width="$VALUE_WIDTH" height="20" fill="$COLOR"/>
+    <rect width="$TOTAL_WIDTH" height="20" fill="url(#b)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <text x="$((LABEL_WIDTH/2))" y="14">$LABEL</text>
+    <text x="$((LABEL_WIDTH + VALUE_WIDTH/2))" y="14">v${VERSION}</text>
+  </g>
+</svg>
+EOF
+
       - name: Commit badge
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add VERSION-BADGE.svg
-          git commit -m "Update version badge"
+          git commit -m "Update version badge" || echo "No changes to commit"
           git push
