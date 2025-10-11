@@ -1,0 +1,27 @@
+name: Update version badge
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  badge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version
+        id: ver
+        run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+      - name: Update README badge
+        uses: emibcn/badge-action@v1
+        with:
+          label: version
+          status: "v${{ steps.ver.outputs.version }}"
+          color: blue
+          path: VERSION-BADGE.svg
+      - name: Commit badge
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add VERSION-BADGE.svg
+          git commit -m "Update version badge"
+          git push
