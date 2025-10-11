@@ -1,89 +1,65 @@
-## World Historical Gazetteer v3.0b
+<p align="center">
+  <img src="https://whgazetteer.org/static/images/whg_logo.svg" alt="WHG Logo" height="100px"/>
+</p>
 
-This is the repository for Version 3.0b (beta) of the World Historical Gazetteer (WHG) web platform and API. Its replaces Version 2.1 on 19 June 2024.
+<h1 align="center">World Historical Gazetteer</h1>
+<p align="center">Web Platform & API</p>
 
-### Contributing to software and data development
+<p align="center">
+  <a href="https://whgazetteer.org"><img src="VERSION-BADGE.svg" alt="Version"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/WorldHistoricalGazetteer/website?color=blue" alt="License: BSD 3-Clause"></a>
+  <a href="https://github.com/WorldHistoricalGazetteer/website/releases"><img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?display_name=tag" alt="Latest Release"></a>
+  <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/Django-4.1.7-green?logo=django&logoColor=white" alt="Django 4.1.7"></a>
+  <a href="https://docs.whgazetteer.org"><img src="https://img.shields.io/badge/docs-online-informational" alt="Documentation"></a>
+</p>
 
-WHG is an open-source project and welcomes contributions of content and code. Please see [this document](docs/developer_docs.md) for an overview of how to participate in the several aspects of WHG development. Specific tasks in our long TODO queue will be added as GitHub issues soon. This repository can be forked and cloned as a Docker project with [the procedure outlined here](developer/docker-local-setup.md).
+---
 
-### Change log
+## 📍 About
 
-#### v3.0b (19 June 2024)
+The World Historical Gazetteer is an open-source platform for **linking, visualizing, and sharing data about historical places**. Built with **Python/Django** and **PostgreSQL/PostGIS**, WHG provides researchers and institutions with powerful tools for managing spatial-temporal historical data.
 
-- [Numerous enhancements, new features, and bug fixes.](https://whgazetteer.org/v3_new/). 
+### Key Features
 
-#### v2.1-beta (27 April 2022)
+- **Data Integration** – Upload and reconcile historical place data against global authorities
+- **Collaborative Curation** – Built-in provenance tracking and multi-user workflows  
+- **Advanced Visualization** – Interactive maps and timelines for spatial-temporal analysis
+- **REST API** – Programmatic access to the full WHG dataset and services
 
-- New "Place Collection" feature, added to existing "Dataset Collection" capability. Place Collections can be composed of individual place records from one or more datasets (or entire datasets) related to each other in some way. Each record can be annotated to explain its inclusion, and the collection itself can include images, links, and an uploaded file.
+## 📚 Documentation
 
-#### v2.0.1 (1 Feb 2022)
+Complete documentation is available at **[docs.whgazetteer.org](https://docs.whgazetteer.org)**, including:
 
-- Added 'Teaching' section of the site. Eight lesson plans included to start, primarily high school level
-#### v2.0 (4 Aug 2021)
+- API reference and authentication guides
+- Data models and schemas
+- Developer setup instructions
+- User tutorials and best practices
 
-- New "Collection" feature added, with two early examples: "Dutch History" and "HGIS de las Indias"
-- Revamped search functionality: option to search database as well as index; filter results by type, country, map bounding box; return to results from place pages
-- Public views for datasets, collections, and individual records
-- Dataset and Collection maps now using MapLibreGL, for fast rendering of large datasets
-- Reliablity and error reporting for upload functions improved
-- Rewritten documentation; new tutorial on LP-TSV creation and new sample lesson plan
-- SSL (https) enabled
-- Formation of an editorial team has begun
-- Redesigned home page
-- Code refactoring and cleanup
+## 🤝 Contributing
 
-#### v1.21 (11 May 2021)
+We welcome contributions from the community! Whether you're fixing bugs, adding features, or improving documentation, your help is appreciated.
 
-- New 'deferred' queue for reconciliation tasks
-- Reconciliation review status per-record and per-task now tracked on Dataset > Browse screen
-- Reconcile-to-WHG (accessioning) now finds candidate _sets_ within WHG index, not individual records
-- Collections feature enabled for beta testers
+**Before contributing:**
+- Check existing [issues](https://github.com/WorldHistoricalGazetteer/website/issues) or open a new one to discuss your idea
+- Review our contribution guidelines (if available)
+- Follow PEP 8 and Django conventions for code style
 
-#### v1.2 (5 Mar 2021)
+**Ways to contribute:**
+- 🐛 Report bugs and suggest features via [GitHub Issues](https://github.com/WorldHistoricalGazetteer/website/issues)
+- 💻 Submit pull requests with bug fixes or new features
+- 📖 Improve documentation and examples
+- 📊 Contribute historical place datasets
 
-- New local 3.5m record Wikidata index for reconciliation 
-- New and improved authorization functions (register, login, password recovery)
-- Add dataset collaborators in 'member' or 'co-owner' roles
-- Reconciliation task progress tracking and status feedback improved
+## 📋 Version History
 
-#### v1.1a (11 Jan 2021)
+See [CHANGELOG.md](./CHANGELOG.md) for detailed release notes and version history.
 
-- Support for uploading & validating .csv, .xlsx, and .ods formats added
-- Compute country codes if absent & geometry present
-- Fixes: wikidata links; reporting upload errors; temporal data parsing 
+## 📄 License
 
-#### v1.1 (10 Dec 2020)
+This project is licensed under the BSD 3-Clause License. See [LICENSE](./LICENSE) for details.
 
-- Reconciliation tasks now queued, and dataset owner notified by email upon completion.
-- Base map replaced w/Natural Earth tiles
-- Numerous minor bug fixes
+---
 
-#### v1.0 (27 July 2020)
-- _Additional data accessioned:_ 28,000 historical records from Pleiades, Euratlas, and OWTRAD datasets.
-- _APIs for access to the database and the Elasticsearch index._ Site search is against accessioned and conflated records in the index, but data uploaded to the database is discoverable as well, if flagged 'public'
-- _Additional trace data added._ 70 new sets of annotations
-- _Search function significantly updated._ Filters for feature class/category, spatial, temporal constraints.
-- _Comprehensive Site Guide added._
-- _Download datasets, before and after augmenting via reconciliation._
-- _Recover password functionality._
-- _Numerous GUI improvements and fixes._ Including redesign of home page.
-
-
-#### beta v0.4 (2 May 2020)
-- _Dataset downloads._ Options from dataset detail panel to download a) latest uploaded data file as is, b) augmented dataset (includes any geometries and/or concordance 'links' added during reconciliation review step).
-
-- _Draft public API._ Parameters include q=, dataset=, ccodes=. E.g. `/api/?q=abydos&dataset=black&ccodes=eg`
-
-- _Misc minor UI fixes_.
-
-#### beta v0.3 (25 Feb 2020)
-- _Core data significantly expanded._ Added ~1.5 million place records from Getty Thesaurus of Geographic Names (TGN), and ~1,000 large cities from GeoNames to WHG index. Contributions from historical sources will, in addition to adding novel entries, add "temporal depth" to these ahistorical data.
-
-- _Dataset updates._ Dataset owners are now able to perform updates by uploading new data files. Analysis of the changes to be made (add, remove, replace) is performed automatically, and presented for review before performing them. _NOTE: available only for LP-TSV format currently. Linked Places format will follow soon, as will enhancements to file management._
-
-
-- _"Collaborator" role._ Dataset owners can specify any number of registered users as collaborators, able to view non-public data and assist in review of reconciliation results; effectively, dataset project teams.
-
-- _Undo last reconciliation match._ When moving quickly through prospective matches in the reconciliation review task, it is possible to inadvertently save a match; we've added a single step undo of the last action.
-
-- _Dataset management functions consolidated._ Single page with tabs for Metadata, Browse, Reconciliation, Collaboration functionality.
+<p align="center">
+  <strong>World Historical Gazetteer</strong> | <a href="https://whgazetteer.org">Website</a> | <a href="https://docs.whgazetteer.org">Documentation</a> | <a href="https://github.com/WorldHistoricalGazetteer/website/issues">Issues</a>
+</p>
