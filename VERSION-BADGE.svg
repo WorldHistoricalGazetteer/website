@@ -1,20 +1,18 @@
-<svg width="66.7" height="20" viewBox="0 0 667 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="version: v">
-  <title>version: v</title>
-  <linearGradient id="a" x2="0" y2="100%">
-    <stop offset="0" stop-opacity=".1" stop-color="#EEE"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="20">
+  <linearGradient id="b" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
     <stop offset="1" stop-opacity=".1"/>
   </linearGradient>
-  <mask id="m"><rect width="667" height="200" rx="30" fill="#FFF"/></mask>
-  <g mask="url(#m)">
-    <rect width="502" height="200" fill="#555"/>
-    <rect width="165" height="200" fill="#08C" x="502"/>
-    <rect width="667" height="200" fill="url(#a)"/>
+  <mask id="a">
+    <rect width="260" height="20" rx="3" fill="#fff"/>
+  </mask>
+  <g mask="url(#a)">
+    <rect width="200" height="20" fill="#555"/>
+    <rect x="200" width="60" height="20" fill="#4c1"/>
+    <rect width="260" height="20" fill="url(#b)"/>
   </g>
-  <g aria-hidden="true" fill="#fff" text-anchor="start" font-family="Verdana,DejaVu Sans,sans-serif" font-size="110">
-    <text x="60" y="148" textLength="402" fill="#000" opacity="0.25">version</text>
-    <text x="50" y="138" textLength="402">version</text>
-    <text x="557" y="148" textLength="65" fill="#000" opacity="0.25">v</text>
-    <text x="547" y="138" textLength="65">v</text>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" font-size="11">
+    <text x="100" y="14">World Historical Gazetteer</text>
+    <text x="230" y="14">v3.0b</text>
   </g>
-  
 </svg>
