@@ -6,57 +6,14 @@
 <p align="center">Web Platform & API</p>
 
 <p align="center">
-  <a href="https://whgazetteer.org"><img src="VERSION-BADGE.svg" alt="Version"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/WorldHistoricalGazetteer/website?color=blue" alt="License: BSD 3-Clause"></a>
-  <a href="https://github.com/WorldHistoricalGazetteer/website/releases"><img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?display_name=tag" alt="Latest Release"></a>
-  <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/Django-4.1.7-green?logo=django&logoColor=white" alt="Django 4.1.7"></a>
-  <a href="https://docs.whgazetteer.org"><img src="https://img.shields.io/badge/docs-online-informational" alt="Documentation"></a>
+  <a href="https://github.com/WorldHistoricalGazetteer/website/releases"><img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?display_name=tag&color=success" alt="Latest Release"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSD%203--Clause-informational" alt="License: BSD 3-Clause"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-informational?logo=python&logoColor=white" alt="Python 3.10+"></a>
+  <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/Django-4.1.7-informational?logo=django&logoColor=white" alt="Django 4.1.7"></a>
+  <a href="https://postgis.net/"><img src="https://img.shields.io/badge/PostgreSQL%2FPostGIS-15%2F3.4-informational?logo=postgresql&logoColor=white" alt="PostgreSQL 15 / PostGIS 3.4"></a>
+  <a href="https://docs.celeryq.dev/"><img src="https://img.shields.io/badge/Celery-5.3+-informational?logo=celery&logoColor=white" alt="Celery 5.3+"></a>
+  <a href="https://docs.whgazetteer.org"><img src="https://img.shields.io/badge/docs-online-success" alt="Documentation"></a>
 </p>
-
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 800 120">
-  <defs>
-    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" style="stop-color:#2c5282;stop-opacity:1" />
-      <stop offset="1%" style="stop-color:#3182ce;stop-opacity:1" />
-    </linearGradient>
-  </defs>
-  
-  <!-- Background -->
-  <rect width="800" height="120" fill="url(#grad)"/>
-  
-  <!-- Logo placeholder - replace this group with your actual logo SVG content -->
-  <g transform="translate(200, 25)">
-    <!-- Paste your logo SVG elements here, scaled to fit 70x70 -->
-    <circle cx="35" cy="35" r="35" fill="#ffffff" opacity="0.2"/>
-    <text x="35" y="45" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#ffffff" text-anchor="middle">WHG</text>
-  </g>
-  
-  <!-- Main Title with embedded font fallback -->
-  <text x="470" y="55" 
-        font-family="'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif" 
-        font-size="42" 
-        font-weight="700" 
-        fill="#ffffff" 
-        text-anchor="middle"
-        letter-spacing="0.5">
-    World Historical Gazetteer
-  </text>
-  
-  <!-- Subtitle -->
-  <text x="470" y="85" 
-        font-family="'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif" 
-        font-size="18" 
-        font-weight="300" 
-        fill="#e6f2ff" 
-        text-anchor="middle"
-        letter-spacing="1">
-    Web Platform &amp; API
-  </text>
-  
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;700&amp;display=swap');
-  </style>
-</svg>
 
 ---
 
