@@ -366,14 +366,11 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="welcomeModalLabel">
-                        <span><img height="35" src="{% static 'images/whg_logo.svg' %}"/></span> Welcome to WHG v3!
+                        <span><img height="35" src="{% static 'images/whg_logo.svg' %}"/></span> Welcome to WHG v{{ APP_VERSION }}!
                     </h5>
                     <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button"></button>
                 </div>
                 <div class="modal-body">
-                    {# <p>Welcome to World Historical Gazetteer, Version 3!</p>#}
-                    <p>This beta release of Version 3 includes many enhancements and new features!</p>
-                    <p><a class="btn btn-link ps-0" href="{% url 'v3-new' %}">See what's new</a></p>
                     <p>Registered users will be prompted to reset their password when logging in. All existing data and
                         user accounts have been migrated, but normal security practice prevented transfer of
                         passwords.</p>
