@@ -13,6 +13,51 @@
   <a href="https://docs.whgazetteer.org"><img src="https://img.shields.io/badge/docs-online-informational" alt="Documentation"></a>
 </p>
 
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 800 120">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#2c5282;stop-opacity:1" />
+      <stop offset="1%" style="stop-color:#3182ce;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="800" height="120" fill="url(#grad)"/>
+  
+  <!-- Logo placeholder - replace this group with your actual logo SVG content -->
+  <g transform="translate(200, 25)">
+    <!-- Paste your logo SVG elements here, scaled to fit 70x70 -->
+    <circle cx="35" cy="35" r="35" fill="#ffffff" opacity="0.2"/>
+    <text x="35" y="45" font-family="Arial, sans-serif" font-size="24" font-weight="bold" fill="#ffffff" text-anchor="middle">WHG</text>
+  </g>
+  
+  <!-- Main Title with embedded font fallback -->
+  <text x="470" y="55" 
+        font-family="'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif" 
+        font-size="42" 
+        font-weight="700" 
+        fill="#ffffff" 
+        text-anchor="middle"
+        letter-spacing="0.5">
+    World Historical Gazetteer
+  </text>
+  
+  <!-- Subtitle -->
+  <text x="470" y="85" 
+        font-family="'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif" 
+        font-size="18" 
+        font-weight="300" 
+        fill="#e6f2ff" 
+        text-anchor="middle"
+        letter-spacing="1">
+    Web Platform &amp; API
+  </text>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Raleway:wght@300;700&amp;display=swap');
+  </style>
+</svg>
+
 ---
 
 ## 📍 About
