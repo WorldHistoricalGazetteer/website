@@ -1,4 +1,5 @@
 name: Update version badge
+
 on:
   push:
     branches: [ main ]
@@ -9,22 +10,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
+      
+      # 1. Read version and set as output
       - name: Read version
         id: ver
         run: |
-          VERSION=$(cat VERSION)
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
+          # Read version from file
+          VERSION_VAL=$(cat VERSION)
+          # Set as step output (for use later)
+          echo "version=$VERSION_VAL" >> $GITHUB_OUTPUT
+      
+      # 2. Generate VERSION-BADGE.svg
       - name: Generate VERSION-BADGE.svg
+        env:
+          # Expose the version output from step 'ver' as an environment variable
+          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           LABEL="World Historical Gazetteer"
           LABEL_WIDTH=200
           VALUE_WIDTH=60
           TOTAL_WIDTH=$((LABEL_WIDTH + VALUE_WIDTH))
           COLOR="#4c1"   # green (success)
-          VERSION=${VERSION}
-
+          
+          # Use the environment variable $VERSION inside the heredoc
           cat > VERSION-BADGE.svg <<EOF
             <svg xmlns="http://www.w3.org/2000/svg" width="${TOTAL_WIDTH}" height="20">
               <linearGradient id="b" x2="0" y2="100%">
@@ -45,7 +53,8 @@ jobs:
               </g>
             </svg>
 EOF
-
+      
+      # 3. Commit badge (Starts cleanly after the EOF marker)
       - name: Commit badge
         run: |
           git config user.name "github-actions"
