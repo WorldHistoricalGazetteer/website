@@ -10,6 +10,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Full release** marking the conclusion of the 2023 Digital Humanities Advancement Grant from the National Endowment for the Humanities. This release represents continuous refinements and improvements to the platform throughout the grant period.
 
+### Added
+- Persistent identifiers (DOIs) for published dataset and collection contributions, issued via DataCite to ensure long-term citability and scholarly traceability
+- Citation support with CSL (Citation Style Language), enabling formatted citation exports (e.g. APA, MLA, Chicago) directly from contribution pages
+- Search engine optimisation (SEO) improvements through inclusion of schema.org structured metadata in page headers to enhance discoverability and indexing of WHG resources
+
 ### Changed
 - Ongoing refinements and optimizations to all v3.0 features based on user feedback
 - Performance improvements and bug fixes across the platform
