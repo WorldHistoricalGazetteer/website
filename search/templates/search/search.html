@@ -123,11 +123,19 @@
 					{% endfor %}
 				</div>
                 <div class="mt-3 mx-0">
-                  <p class="mb-0">
-                    <span class="categories ms-1">period filter</span> <em class="smaller">(temporal + spatial)</em>
-                  </p>
+                    <p class="mb-0">
+                      <span class="categories ms-1">period filter</span>
+                      <em class="smaller">(temporal + spatial)</em>
+                    </p>
                   <div id="chrononym_selector" class="input-group">
                     <input id="chrononym_input"
+                           data-bs-toggle="popover"
+                           data-bs-html="true"
+                           data-bs-title="What is PeriodO?"
+                           data-bs-content='
+                             <p class="mb-1">
+                               <strong>PeriodO</strong> is a gazetteer of scholarly definitions of historical periods, linking time and place for use in digital humanities research.
+                             </p>'
                            class="form-control typeahead"
                            type="text"
                            placeholder="Enter chrononym (PeriodO name)"
