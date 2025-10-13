@@ -524,7 +524,7 @@ SPECTACULAR_SETTINGS = {
         "feature classes, geometries, and temporal ranges).\n\n"
         "Most endpoints require a valid API token for authentication, which can be submitted either "
         "as a URL query parameter or in an Authorization header. "
-        "See the [documentation](https://docs.whgazetteer.org/content/400-Technical.html#api-tokens) for details."
+        "See the [documentation](https://docs.whgazetteer.org/content/technical/apis.html#api-tokens) for details."
     ),
     'TAGS': [
         {"name": "Schema", "description": "API schema and documentation"},

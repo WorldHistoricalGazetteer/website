@@ -10,7 +10,7 @@ Also includes /reconcile/extend/propose for suggesting additional properties and
 property values. Authentication is via API token or session/CSRF.
 Batch requests are supported.
 
-See documentation: https://docs.whgazetteer.org/content/400-Technical.html#reconciliation-api
+See documentation: https://docs.whgazetteer.org/content/technical/apis.html#reconciliation-service-api
 """
 
 import json
@@ -42,7 +42,7 @@ from .serializers_api import PeriodPreviewSerializer
 logger = logging.getLogger('reconciliation')
 
 DOMAIN = os.environ.get('URL_FRONT', 'https://whgazetteer.org').rstrip('/')
-DOCS_URL = "https://docs.whgazetteer.org/content/400-Technical.html#reconciliation-api"
+DOCS_URL = "https://docs.whgazetteer.org/content/technical/apis.html#reconciliation-service-api"
 TILESERVER_URL = os.environ.get('TILEBOSS', 'https://tiles.whgazetteer.org').rstrip('/')
 MAX_EARTH_RADIUS_KM = math.pi * 6371  # ~20015 km
 SCHEMA_FILE = "/static/whg_schema.jsonld"
