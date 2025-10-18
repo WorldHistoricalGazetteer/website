@@ -12,11 +12,11 @@
 {% endblock %}
 
 {% block content %}
-<div id="container" class="container mt-1" xmlns="http://www.w3.org/1999/html">
+<div id="container" class="container mt-1">
   <div class="my-4">
 
     <h3 class="mb-4">
-      <i class="fas fa-user-circle me-2"></i> Personal Data
+      <i class="fas fa-user-circle me-2"></i> Profile
     </h3>
 
     {% if needs_news_check %}
@@ -39,12 +39,15 @@
         </a>
       </h5>
       <p class="small fst-italic text-muted mb-3">
-        These details are maintained by ORCiD. If necessary, please edit them via your <a href="{{ ORCID_BASE }}/my-orcid" target="_blank" rel="noopener noreferrer">ORCiD profile</a>.
+        These details are maintained by ORCiD. If necessary, please edit them via your
+        <a href="{{ ORCID_BASE }}/my-orcid" target="_blank" rel="noopener noreferrer">ORCiD profile</a>.
       </p>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">ORCiD iD</div>
         <div class="flex-grow-1 ps-3">
-          <a href="{{ ORCID_BASE }}/{{ user.orcid }}" target="_blank" rel="noopener noreferrer">{{ ORCID_BASE }}/{{ user.orcid }}</a>
+          <a href="{{ ORCID_BASE }}/{{ user.orcid }}" target="_blank" rel="noopener noreferrer">
+            {{ ORCID_BASE }}/{{ user.orcid }}
+          </a>
         </div>
       </div>
       <div class="d-flex mb-2">
@@ -56,26 +59,137 @@
         <div class="flex-grow-1 ps-3">{{ surname_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
-        <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email</div>
-        <div class="flex-grow-1 ps-3">{{ email_display|safe }}</div>
-      </div>
-      <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Affiliation</div>
         <div class="flex-grow-1 ps-3">{{ affiliation_display|safe }}</div>
       </div>
       <div class="d-flex mb-2">
         <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Web page</div>
-          <div class="flex-grow-1 ps-3">
-            {% if user.web_page %}
-              <a href="{{ user.web_page }}" target="_blank" rel="noopener noreferrer">{{ user.web_page }}</a>
-            {% else %}
-              {{ web_page_display|safe }}
-            {% endif %}
-          </div>
+        <div class="flex-grow-1 ps-3">
+          {% if user.web_page %}
+            <a href="{{ user.web_page }}" target="_blank" rel="noopener noreferrer">{{ user.web_page }}</a>
+          {% else %}
+            {{ web_page_display|safe }}
+          {% endif %}
+        </div>
       </div>
     </section>
 
-{% if has_email %}
+    <hr>
+
+    <!-- WHG Data Section -->
+    <section class="mb-4">
+      <h5 class="mb-3 fw-semibold">
+        <i class="fas fa-database me-2"></i> WHG Data
+      </h5>
+
+      {% if user.email %}
+        <div class="d-flex mb-3 align-items-start">
+          <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email Address</div>
+          <div class="flex-grow-1 ps-3">
+            <div class="d-flex align-items-center gap-2">
+              <span>{{ user.email }}</span>
+              {% if user.email_confirmed %}
+                <span class="badge bg-success">
+                  <i class="fas fa-check-circle"></i> Verified
+                </span>
+              {% else %}
+                <span class="badge bg-warning text-dark">
+                  <i class="fas fa-exclamation-triangle"></i> Unverified
+                </span>
+              {% endif %}
+            </div>
+
+            {% if not user.email_confirmed %}
+              <form method="post" action="{% url 'profile-edit' %}" class="mt-2">
+                {% csrf_token %}
+                <button type="submit" name="resend_verification" class="btn btn-sm btn-outline-primary">
+                  <i class="fas fa-paper-plane me-1"></i> Resend Verification Email
+                </button>
+              </form>
+            {% endif %}
+
+            <button type="button" class="btn btn-sm btn-outline-secondary mt-2"
+                    data-bs-toggle="collapse" data-bs-target="#emailUpdateForm">
+              <i class="fas fa-edit me-1"></i> Update Email
+            </button>
+          </div>
+        </div>
+
+        <div class="collapse" id="emailUpdateForm">
+          <div class="card card-body">
+            <form method="post" action="{% url 'profile-edit' %}">
+              {% csrf_token %}
+              <input type="hidden" name="email_action" value="update">
+              <div class="mb-3">
+                {{ email_form.email.label_tag }}
+                {{ email_form.email }}
+                {% if email_form.email.help_text %}
+                  <div class="form-text">{{ email_form.email.help_text }}</div>
+                {% endif %}
+                {% if email_form.email.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ email_form.email.errors }}
+                  </div>
+                {% endif %}
+              </div>
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save me-1"></i> Update and Verify
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-toggle="collapse"
+                      data-bs-target="#emailUpdateForm">
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      {% else %}
+        <!-- No email at all - prompt to add one -->
+        <div class="alert alert-info">
+          <p class="mb-2">
+            <strong><i class="fas fa-envelope me-2"></i>No email address on file</strong>
+          </p>
+          <p class="mb-3">
+            To unlock full WHG functionality (newsletters, API access, notifications),
+            please provide and verify an email address.
+          </p>
+
+          <button type="button" class="btn btn-primary" data-bs-toggle="collapse"
+                  data-bs-target="#emailAddForm">
+            <i class="fas fa-plus me-1"></i> Add Email Address
+          </button>
+        </div>
+
+        <div class="collapse" id="emailAddForm">
+          <div class="card card-body">
+            <form method="post" action="{% url 'profile-edit' %}">
+              {% csrf_token %}
+              <input type="hidden" name="email_action" value="update">
+              <div class="mb-3">
+                {{ email_form.email.label_tag }}
+                {{ email_form.email }}
+                {% if email_form.email.help_text %}
+                  <div class="form-text">{{ email_form.email.help_text }}</div>
+                {% endif %}
+                {% if email_form.email.errors %}
+                  <div class="invalid-feedback d-block">
+                    {{ email_form.email.errors }}
+                  </div>
+                {% endif %}
+              </div>
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-paper-plane me-1"></i> Add and Verify
+              </button>
+              <button type="button" class="btn btn-secondary" data-bs-toggle="collapse"
+                      data-bs-target="#emailAddForm">
+                Cancel
+              </button>
+            </form>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+
+{% if has_verified_email %}
     <hr>
 
     <!-- Preferences Section -->
@@ -91,7 +205,8 @@
         {% csrf_token %}
         <div class="form-check d-flex align-items-center mb-2">
           {{ form.news_permitted }}
-          <label class="form-check-label ms-2 mb-0" for="{{ form.news_permitted.id_for_label }}" style="margin-bottom: -5px !important;">
+          <label class="form-check-label ms-2 mb-0" for="{{ form.news_permitted.id_for_label }}"
+                 style="margin-bottom: -5px !important;">
             Receive News and Updates
           </label>
         </div>
@@ -142,15 +257,16 @@
 
     <!-- Limited Functionality Notice -->
     <section>
-      <h5 class="mb-3 fw-semibold text-danger">
+      <h5 class="mb-3 fw-semibold text-warning">
         <i class="fas fa-exclamation-triangle me-2"></i> Limited Account Functionality
       </h5>
-      <div class="alert alert-info">
+      <div class="alert alert-warning">
         <p class="mb-2">
-          <strong>Your WHG account currently has very limited functionality</strong> because no email address is available from your ORCiD profile.
+          <strong>Your WHG account currently has limited functionality</strong> because you have not
+          yet provided and verified an email address.
         </p>
         <p class="mb-2">
-          Without an email address, the following features are unavailable:
+          Without a verified email address, the following features are unavailable:
         </p>
         <ul class="mb-3">
           <li>Receiving news and updates about WHG</li>
@@ -159,7 +275,8 @@
           <li>Receiving important notifications about your datasets and account</li>
         </ul>
         <p class="mb-0">
-          <strong>Note:</strong> If you choose to add a verified email address to your <a href="{{ ORCID_BASE }}/my-orcid" target="_blank" rel="noopener noreferrer">ORCiD profile</a> and set its visibility to either "Trusted parties" or "Everyone", these features will become available the next time you log in to WHG. <em><b>THIS IS ENTIRELY OPTIONAL:</b> We respect your choice and control over your ORCiD data.</em>
+          <strong>To unlock these features:</strong> Please add and verify an email address
+          using the form above in the WHG Data section.
         </p>
       </div>
     </section>

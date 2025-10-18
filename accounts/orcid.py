@@ -165,7 +165,12 @@ class OIDCBackend(BaseBackend):
             user = request.user
             user.orcid = orcid_id
             user.username = new_username
-            user.email = email
+
+            # Only update email if user doesn't have a verified one
+            if not user.has_verified_email and email:
+                user.email = email
+                user.email_confirmed = True  # Trust ORCID-verified emails
+
             user.given_name = given_name
             user.surname = family_name
             user.affiliation = get_affiliation(record) or ""
@@ -182,27 +187,40 @@ class OIDCBackend(BaseBackend):
         else:
             # Lookup or create by ORCiD
             expires_in = token_json.get("expires_in")
+
+            # Prepare defaults for new user
+            defaults = {
+                "username": new_username,
+                "given_name": given_name,
+                "surname": family_name,
+                "affiliation": get_affiliation(record) or "",
+                "web_page": get_web_page(record) or "",
+                "orcid_refresh_token": token_json.get("refresh_token"),
+                "orcid_token_expires_at": (
+                    now() + timedelta(seconds=expires_in) if expires_in else None
+                ),
+            }
+
+            # Only include email if available from ORCID (opportunistic)
+            if email:
+                defaults["email"] = email
+                defaults["email_confirmed"] = True  # Trust ORCID-verified emails
+
             user, created = User.objects.get_or_create(
                 orcid=orcid_id,
-                defaults={
-                    "username": new_username,
-                    "email": email,
-                    "given_name": given_name,
-                    "surname": family_name,
-                    "affiliation": get_affiliation(record) or "",
-                    "web_page": get_web_page(record) or "",
-                    "orcid_refresh_token": token_json.get("refresh_token"),
-                    "orcid_token_expires_at": (
-                        now() + timedelta(seconds=expires_in) if expires_in else None
-                    ),
-                },
+                defaults=defaults,
             )
             if created:
                 user._needs_news_check = True
             else:
-                # Update existing user’s fields
+                # Update existing user's fields (but not email if they have a verified one)
                 user.username = new_username
-                user.email = email
+
+                # Only update email if user doesn't have a verified one
+                if not user.has_verified_email and email:
+                    user.email = email
+                    user.email_confirmed = True
+
                 user.given_name = given_name
                 user.surname = family_name
                 user.affiliation = get_affiliation(record) or ""

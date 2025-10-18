@@ -58,18 +58,19 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractUser, PermissionsMixin):
-
     orcid = models.URLField(max_length=255, unique=True, null=True, blank=True)
     orcid_refresh_token = EncryptedTextField(null=True, blank=True)
     orcid_token_expires_at = models.DateTimeField(null=True, blank=True)
 
-    # TODO: Repopulate these existing fields from ORCiD data
-    email = EncryptedTextField(validators=[EmailValidator()], null=True, blank=True)  # 🔐 encrypted email address
+    # Email can come from ORCID (opportunistically) or user input (mandatory for full functionality)
+    email = EncryptedTextField(validators=[EmailValidator()], null=True, blank=True)
+    email_confirmed = models.BooleanField(default=False)
+
     given_name = models.CharField(max_length=255, null=True)
     surname = models.CharField(max_length=255, null=True)
     affiliation = models.CharField(max_length=255, null=True)
     web_page = models.URLField(max_length=255, null=True, blank=True)
-    name = models.CharField(max_length=255)  # TODO: Currently generated from given_name + surname; could use `Publication Name` from ORCiD
+    name = models.CharField(max_length=255)
 
     # For new users, the unique username is f"{given_name}-{family_name}-{user.id}"
     username = models.CharField(max_length=100, unique=True)
@@ -79,11 +80,10 @@ class User(AbstractUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     news_permitted = models.BooleanField(default=False)
 
-    # TODO: Remove following migration to ORCiD authentication
-    email_confirmed = models.BooleanField(default=False)
+    # Legacy fields - keep for migration period
     must_reset_password = models.BooleanField(default=False)
 
-    # Keep these lines, which nullify the default fields from AbstractUser
+    # Keep these fields, which nullify the default fields from AbstractUser
     first_name = None
     last_name = None
 
@@ -101,3 +101,8 @@ class User(AbstractUser, PermissionsMixin):
 
     def __str__(self):
         return self.username
+
+    @property
+    def has_verified_email(self):
+        """Check if user has a verified email address."""
+        return bool(self.email and self.email_confirmed)

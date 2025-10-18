@@ -1,0 +1,18 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>Please verify your email address for World Historical Gazetteer by clicking the link below:</p>
+
+    <p>
+      <a href="{{ verification_url }}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Verify Email Address
+      </a>
+    </p>
+
+    <p>Or copy and paste this link into your browser:</p>
+    <p>{{ verification_url }}</p>
+
+    <p>This link will expire in 24 hours.</p>
+
+    <p>If you didn't request this verification, you can safely ignore this email.</p>
+{% endblock %}

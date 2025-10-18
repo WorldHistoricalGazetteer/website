@@ -23,6 +23,15 @@ import logging
 logger = logging.getLogger('authentication')
 from urllib.parse import urlencode
 
+from django.contrib.sites.shortcuts import get_current_site
+from django.core.signing import TimestampSigner, SignatureExpired, BadSignature
+from django.http import HttpResponse
+from django.template.loader import render_to_string
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+from whgmail.messaging import WHGmail
+from accounts.forms import EmailForm
+
 
 def orcid_denied_modal(request):
     return render(request, "accounts/orcid_denied_modal.html", {})
@@ -189,12 +198,40 @@ def add_to_group(cg, member):
 
 @login_required
 def profile_edit(request):
-    form = UserModelForm(instance=request.user)
-    api_token = getattr(request.user, "api_token", None)
+    user = request.user
+    form = UserModelForm(instance=user)
+    email_form = EmailForm(user=user)
+    api_token = getattr(user, "api_token", None)
+
+    # Handle email update/verification request
+    if request.method == 'POST' and 'email_action' in request.POST:
+        email_form = EmailForm(request.POST, user=user)
+        if email_form.is_valid():
+            new_email = email_form.cleaned_data['email']
+
+            # Update email and mark as unconfirmed
+            user.email = new_email
+            user.email_confirmed = False
+            user.save()
+
+            # Send verification email
+            send_verification_email(request, user)
+
+            messages.success(
+                request,
+                f'Verification email sent to {new_email}. Please check your inbox and spam folder.'
+            )
+            return redirect('profile-edit')
+
+    # Handle resend verification
+    if request.method == 'POST' and 'resend_verification' in request.POST:
+        if user.email and not user.email_confirmed:
+            send_verification_email(request, user)
+            messages.success(request, 'Verification email resent. Please check your inbox.')
+        return redirect('profile-edit')
 
     # Ensure profile exists
-    api_profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
-
+    api_profile, _ = UserAPIProfile.objects.get_or_create(user=user)
     remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
     total_quota = api_profile.daily_limit
 
@@ -212,13 +249,13 @@ def profile_edit(request):
         )
 
     context = {
-        'has_email': bool(request.user.email),
-        'email_display': request.user.email or not_available_html('email'),
-        'given_name_display': request.user.given_name or not_available_html('given name'),
-        'surname_display': request.user.surname or not_available_html('family name'),
-        'affiliation_display': request.user.affiliation or not_available_html('affiliation'),
-        'web_page_display': request.user.web_page or not_available_html('web page'),
-        'is_admin': request.user.groups.filter(name='whg_admins').exists(),
+        'has_verified_email': user.has_verified_email,
+        'email_form': email_form,
+        'given_name_display': user.given_name or not_available_html('given name'),
+        'surname_display': user.surname or not_available_html('family name'),
+        'affiliation_display': user.affiliation or not_available_html('affiliation'),
+        'web_page_display': user.web_page or not_available_html('web page'),
+        'is_admin': user.groups.filter(name='whg_admins').exists(),
         'needs_news_check': request.session.pop("_needs_news_check", False),
         'form': form,
         'ORCID_BASE': settings.ORCID_BASE,
@@ -227,9 +264,59 @@ def profile_edit(request):
         "api_token_quota": total_quota,
     }
 
-    # logger.debug(context)
-
     return render(request, 'accounts/profile.html', context=context)
+
+
+def send_verification_email(request, user):
+    """Send email verification link to user."""
+    signer = TimestampSigner()
+    token = signer.sign(user.pk)
+
+    current_site = get_current_site(request)
+    verification_url = request.build_absolute_uri(
+        reverse('accounts:verify-email', kwargs={'token': token})
+    )
+
+    WHGmail(context={
+        'template': 'email_verification',
+        'subject': 'Verify your WHG email address',
+        'to_email': user.email,
+        'greeting_name': user.name,
+        'verification_url': verification_url,
+        'site_name': current_site.name,
+    })
+
+
+def verify_email(request, token):
+    """Handle email verification from link."""
+    signer = TimestampSigner()
+
+    try:
+        # Verify token (expires after 24 hours = 86400 seconds)
+        user_pk = signer.unsign(token, max_age=86400)
+        user = User.objects.get(pk=user_pk)
+
+        if user.email_confirmed:
+            messages.info(request, 'Your email address was already verified.')
+        else:
+            user.email_confirmed = True
+            user.save()
+            messages.success(request, 'Email address verified successfully! You now have full access to WHG features.')
+
+        if request.user.is_authenticated:
+            return redirect('profile-edit')
+        else:
+            return redirect('accounts:login')
+
+    except SignatureExpired:
+        messages.error(
+            request,
+            'The verification link has expired. Please request a new one from your profile page.'
+        )
+        return redirect('accounts:login' if not request.user.is_authenticated else 'profile-edit')
+    except (BadSignature, User.DoesNotExist):
+        messages.error(request, 'Invalid verification link.')
+        return redirect('accounts:login' if not request.user.is_authenticated else 'profile-edit')
 
 
 @login_required

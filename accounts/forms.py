@@ -60,3 +60,31 @@ class UserModelForm(forms.ModelForm):
                 ),
             }),
         }
+
+
+class EmailForm(forms.Form):
+    email = forms.EmailField(
+        max_length=255,
+        required=True,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'your.email@example.com',
+            'aria-label': 'Email address'
+        }),
+        help_text='We will send a verification link to this address.'
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+
+    def clean_email(self):
+        email = self.cleaned_data.get('email')
+        # Check if email is already in use by another verified user
+        if email and User.objects.filter(email=email, email_confirmed=True).exclude(
+                pk=self.user.pk if self.user else None
+        ).exists():
+            raise ValidationError(
+                'This email address is already registered to another verified account.'
+            )
+        return email
