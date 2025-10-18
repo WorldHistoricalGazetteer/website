@@ -83,7 +83,7 @@
       </h5>
 
       {% if user.email %}
-        <div class="d-flex mb-3 align-items-start">
+        <div class="d-flex mb-2">
           <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email Address</div>
           <div class="flex-grow-1 ps-3">
             <div class="d-flex align-items-center gap-2">
@@ -98,24 +98,27 @@
                 </span>
               {% endif %}
             </div>
-
-            {% if not user.email_confirmed %}
-              <form method="post" action="{% url 'profile-edit' %}" class="mt-2">
-                {% csrf_token %}
-                <button type="submit" name="resend_verification" class="btn btn-sm btn-outline-primary">
-                  <i class="fas fa-paper-plane me-1"></i> Resend Verification Email
-                </button>
-              </form>
-            {% endif %}
-
-            <button type="button" class="btn btn-sm btn-outline-secondary mt-2"
-                    data-bs-toggle="collapse" data-bs-target="#emailUpdateForm">
-              <i class="fas fa-edit me-1"></i> Update Email
-            </button>
           </div>
         </div>
 
-        <div class="collapse" id="emailUpdateForm">
+        <!-- Action buttons -->
+        <div class="mt-3">
+          {% if not user.email_confirmed %}
+            <form method="post" action="{% url 'profile-edit' %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" name="resend_verification" class="btn btn-sm btn-outline-primary me-2">
+                <i class="fas fa-paper-plane me-1"></i> Resend Verification Email
+              </button>
+            </form>
+          {% endif %}
+
+          <button type="button" class="btn btn-sm btn-outline-secondary"
+                  data-bs-toggle="collapse" data-bs-target="#emailUpdateForm">
+            <i class="fas fa-edit me-1"></i> Update Email
+          </button>
+        </div>
+
+        <div class="collapse mt-3" id="emailUpdateForm">
           <div class="card card-body">
             <form method="post" action="{% url 'profile-edit' %}">
               {% csrf_token %}
@@ -144,22 +147,22 @@
         </div>
       {% else %}
         <!-- No email at all - prompt to add one -->
-        <div class="alert alert-info">
+        <div class="alert alert-info mb-3">
           <p class="mb-2">
             <strong><i class="fas fa-envelope me-2"></i>No email address on file</strong>
           </p>
-          <p class="mb-3">
+          <p class="mb-0">
             To unlock full WHG functionality (newsletters, API access, notifications),
             please provide and verify an email address.
           </p>
-
-          <button type="button" class="btn btn-primary" data-bs-toggle="collapse"
-                  data-bs-target="#emailAddForm">
-            <i class="fas fa-plus me-1"></i> Add Email Address
-          </button>
         </div>
 
-        <div class="collapse" id="emailAddForm">
+        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse"
+                data-bs-target="#emailAddForm">
+          <i class="fas fa-plus me-1"></i> Add Email Address
+        </button>
+
+        <div class="collapse mt-3" id="emailAddForm">
           <div class="card card-body">
             <form method="post" action="{% url 'profile-edit' %}">
               {% csrf_token %}
