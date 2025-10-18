@@ -57,6 +57,10 @@ function loadMapParameters() {
         fullscreenControl: true,
         globeControl: true,
         globeMode: meta.globeMode,
+        style: [
+            'WHG',
+            'Satellite'
+        ],
     }
 
     if (
