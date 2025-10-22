@@ -2,7 +2,7 @@
 
 import Layerset from './layerset';
 import { attributionString } from './utilities';
-import languages from './languages.js';
+import languages, {getPreferredLanguage} from './languages.js';
 
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css'
@@ -207,19 +207,31 @@ class acmeStyleControl {
 	                if (groupName == 'Labels') {
 					    const languageSelect = document.createElement('select');
 					    languageSelect.id = 'lang';
-					    languageSelect.addEventListener('change', (event) => {
-						    styleJSON.layers.forEach(layer => {
-						        const metadata = layer.metadata;
-							    if (metadata && metadata['whg:group'] === 'Labels' && layer.source === 'openmaptiles') {
-					                this._map.setLayoutProperty(layer.id, 'text-field', ['coalesce', ['get', `name:${event.target.value}`], ['get', 'name'], ['get', 'name:en']]);
-							    }
-						    });
-		                });
+
+						// Set to the map's preferred language
+						const currentLang = this._map.preferredLanguage || 'local';
+
+						languageSelect.addEventListener('change', (event) => {
+							// Update the stored preference when changed
+							this._map.preferredLanguage = event.target.value;
+							styleJSON.layers.forEach(layer => {
+								const metadata = layer.metadata;
+								if (metadata && metadata['whg:group'] === 'Labels' && layer.source === 'openmaptiles') {
+									const textField = event.target.value === 'local'
+										? ['coalesce', ['get', 'name:local'], ['get', 'name'], ['get', 'name:en']]
+										: ['coalesce', ['get', `name:${event.target.value}`], ['get', 'name'], ['get', 'name:en']];
+									this._map.setLayoutProperty(layer.id, 'text-field', textField);
+								}
+							});
+						});
 					    
 					    Object.entries(languages).forEach(([code, lang]) => {
 					        const option = document.createElement('option');
 					        option.value = code;
 					        option.textContent = lang.local;
+							if (code === currentLang) {
+								option.selected = true;
+							}
 					        languageSelect.appendChild(option);
 					    });
 					
@@ -283,10 +295,14 @@ class acmeStyleControl {
 	            }
 		    	this._map.setLayoutProperty(layer.id, 'visibility', checkbox.checked ? 'visible' : 'none');
 	        }
-		    if (metadata && metadata['whg:group'] === 'Labels' && layer.source === 'openmaptiles') {
-	            // Update the text-field property to display local names if available
-                this._map.setLayoutProperty(layer.id, 'text-field', ['coalesce', ['get', 'name:local'], ['get', 'name'], ['get', 'name:en']]);
-		    }
+			if (metadata && metadata['whg:group'] === 'Labels' && layer.source === 'openmaptiles') {
+				// Use the stored preferred language instead of hardcoding 'local'
+				const lang = this._map.preferredLanguage || 'local';
+				const textField = lang === 'local'
+					? ['coalesce', ['get', 'name:local'], ['get', 'name'], ['get', 'name:en']]
+					: ['coalesce', ['get', `name:${lang}`], ['get', 'name'], ['get', 'name:en']];
+				this._map.setLayoutProperty(layer.id, 'text-field', textField);
+			}
 	    });
 	
 	    const existingSwitches = document.getElementById('layerSwitches');
@@ -1145,6 +1161,20 @@ maplibregl.Map = function (options = {}) {
 			console.debug('Ignoring map background colour requested by style', backgroundColor);
         }
 		mapInstance.getContainer().style.backgroundColor = '#daecf1';
+
+		// Store preferred language on map instance
+		mapInstance.preferredLanguage = getPreferredLanguage();
+		console.info('Setting map labels to language:', mapInstance.preferredLanguage);
+
+		currentStyle.layers.forEach(layer => {
+			if (layer.layout && layer.layout['text-field'] && layer.source === 'openmaptiles') {
+				const textField = mapInstance.preferredLanguage === 'local'
+					? ['coalesce', ['get', 'name:local'], ['get', 'name'], ['get', 'name:en']]
+					: ['coalesce', ['get', `name:${mapInstance.preferredLanguage}`], ['get', 'name'], ['get', 'name:en']];
+
+				mapInstance.setLayoutProperty(layer.id, 'text-field', textField);
+			}
+		});
 
 		if (chosenOptions.scaleControl) mapInstance.addControl(new maplibregl.ScaleControl({maxWidth: 150, unit: 'metric'}), 'bottom-left');
 		

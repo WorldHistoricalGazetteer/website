@@ -1,3 +1,18 @@
+function getPreferredLanguage() {
+    // First check for a URL override
+    const urlParams = new URLSearchParams(window.location.search);
+    const langParam = urlParams.get('lang');
+    if (langParam && languages[langParam]) {
+        console.info(`Overriding language to ${langParam} from URL parameter`);
+        return langParam;
+    }
+    // Get the browser's language setting by splitting at the hyphen to get the language code
+    const browserLang = navigator.language || navigator.userLanguage;
+    const langCode = browserLang.split('-')[0];
+    console.info(`Detected browser language: ${browserLang}, using code: ${langCode}`);
+    return languages[langCode] ? langCode : 'local'; // Default to 'local' if not found
+}
+
 const languages = {
   "local": {
     "en": "Local",
@@ -238,3 +253,4 @@ const languages = {
 }
 
 export default languages;
+export { getPreferredLanguage };
