@@ -7,22 +7,27 @@ import { table } from './tableFunctions';
 import { scrollToRowByProperty } from './tableFunctions-extended';
 
 class sequencerControl {
-	onAdd() {
-		this.minSeq = 0; //window.datacollection.metadata.seqmin;
-        this.maxSeq = window.datacollection.metadata.num_places - 1; //window.datacollection.metadata.seqmax;
-		console.log(`Sequence range (${this.minSeq}-${this.maxSeq}).`);
-        if (this.minSeq == this.maxSeq) {
-			return;
-		}
+	onAdd(map) {
+        this._map = map;
+        this.minSeq = 0;
+        this.maxSeq = window.datacollection.metadata.num_places - 1;
+        console.log(`Sequence range (${this.minSeq}-${this.maxSeq}).`);
 
-		this._map = map;
-		this._container = document.createElement('div');
-		this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group sequencer';
-		this._container.textContent = 'Explore sequence';
-		this._container.innerHTML = '';
-		this.currentSeq = this.minSeq;
-		this.playing = false;
-		this.stepdelay = 3;
+        // Always create a container
+        this._container = document.createElement('div');
+        this._container.className = 'maplibregl-ctrl maplibregl-ctrl-group sequencer';
+
+        // If no sequence possible, just hide control and return container
+        if (this.minSeq === this.maxSeq) {
+            this._container.style.display = 'none';
+            return this._container; // ✅ must still return a Node
+        }
+
+        this._container.textContent = 'Explore sequence';
+        this._container.innerHTML = '';
+        this.currentSeq = this.minSeq;
+        this.playing = false;
+        this.stepdelay = 3;
         this.playInterval = null;
         this.sortedPIDs = [];
 
