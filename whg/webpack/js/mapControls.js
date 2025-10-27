@@ -29,7 +29,7 @@ class sequencerControl {
         this.playing = false;
         this.stepdelay = 3;
         this.playInterval = null;
-        this.sortedPIDs = [];
+        this.sortedPIDs = table ? table.rows({ order: 'current' }).data().map(r => r.properties.pid) : [];
 
         this.buttons = [
 			['skip-first','First waypoint','Already at first waypoint','Disabled during play'],
@@ -142,6 +142,10 @@ class sequencerControl {
 		const sequencer = $('.sequencer');
 		
 		const highlightedPid = $('#placetable tr.highlight-row').attr('pid');
+
+        // Guard against undefined sortedPIDs
+        if (!Array.isArray(this.sortedPIDs) || this.sortedPIDs.length === 0) return;
+
 		this.currentSeq = this.sortedPIDs.indexOf(parseInt(highlightedPid));
 		
         if (!this.playing) {
