@@ -189,6 +189,102 @@ def add_to_group(cg, member):
 
 @login_required
 def profile_edit(request):
+    from django.core.signing import Signer
+    from urllib.parse import urljoin
+    from whgmail.messaging import WHGmail
+
+    if request.method == 'POST':
+        email_action = request.POST.get('email_action')
+
+        # Handle email update/verification
+        if email_action == 'update':
+            email_form = EmailForm(request.POST, user=request.user)
+            if email_form.is_valid():
+                new_email = email_form.cleaned_data['email']
+
+                # Update user's email and mark as unconfirmed
+                request.user.email = new_email
+                request.user.email_confirmed = False
+                request.user.save()
+
+                # Generate verification token
+                signer = Signer()
+                token = signer.sign(request.user.pk)
+
+                # Send verification email
+                try:
+                    WHGmail(request, {
+                        'template': 'email_verification',
+                        'subject': 'Verify your email address for World Historical Gazetteer',
+                        'confirm_url': urljoin(settings.URL_FRONT, reverse('accounts:confirm-email', args=[token])),
+                        'user': request.user,
+                    })
+                    messages.success(request, 'Email updated! Please check your inbox for a verification link.')
+                except Exception as e:
+                    logger.error(f"Failed to send verification email: {str(e)}")
+                    messages.warning(request, 'Email updated, but we encountered an issue sending the verification email. Please contact us.')
+
+                return redirect('profile-edit')
+            else:
+                # Form has errors - will be displayed in template
+                form = UserModelForm(instance=request.user)
+                api_token = getattr(request.user, "api_token", None)
+                api_profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
+                remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
+                total_quota = api_profile.daily_limit
+
+                def not_available_html(field_name):
+                    return format_html(
+                        '<span class="text-muted fst-italic">Not available</span> '
+                        '<i class="fas fa-circle-exclamation text-muted ms-1" '
+                        'data-bs-toggle="tooltip" '
+                        'data-bs-title="This information could be made available to WHG by updating your '
+                        'ORCiD profile '
+                        'and ensuring the {} field has visibility set to \'Trusted parties\' or \'Everyone\'." '
+                        'style="cursor: help; font-size: 0.75em; vertical-align: super;"></i>',
+                        field_name
+                    )
+
+                context = {
+                    'has_email': bool(request.user.email),
+                    'has_verified_email': bool(request.user.email_confirmed),
+                    'email_display': request.user.email or not_available_html('email'),
+                    'given_name_display': request.user.given_name or not_available_html('given name'),
+                    'surname_display': request.user.surname or not_available_html('family name'),
+                    'affiliation_display': request.user.affiliation or not_available_html('affiliation'),
+                    'web_page_display': request.user.web_page or not_available_html('web page'),
+                    'is_admin': request.user.groups.filter(name='whg_admins').exists(),
+                    'needs_news_check': request.session.pop("_needs_news_check", False),
+                    'form': form,
+                    'email_form': email_form,
+                    'ORCID_BASE': settings.ORCID_BASE,
+                    "api_token_key": getattr(api_token, "key", ""),
+                    "api_token_quota_remaining": remaining_quota,
+                    "api_token_quota": total_quota,
+                }
+                return render(request, 'accounts/profile.html', context=context)
+
+        # Handle resend verification email
+        elif request.POST.get('resend_verification'):
+            if request.user.email and not request.user.email_confirmed:
+                signer = Signer()
+                token = signer.sign(request.user.pk)
+
+                try:
+                    WHGmail(request, {
+                        'template': 'email_verification',
+                        'subject': 'Verify your email address at World Historical Gazetteer',
+                        'confirm_url': urljoin(settings.URL_FRONT, reverse('accounts:confirm-email', args=[token])),
+                        'user': request.user,
+                    })
+                    messages.success(request, 'Verification email sent! Please check your inbox.')
+                except Exception as e:
+                    logger.error(f"Failed to resend verification email: {str(e)}")
+                    messages.error(request, 'Failed to send verification email. Please try again later.')
+
+            return redirect('profile-edit')
+
+    # GET request - display the profile page
     form = UserModelForm(instance=request.user)
     email_form = EmailForm(user=request.user)
     api_token = getattr(request.user, "api_token", None)
@@ -223,7 +319,7 @@ def profile_edit(request):
         'is_admin': request.user.groups.filter(name='whg_admins').exists(),
         'needs_news_check': request.session.pop("_needs_news_check", False),
         'form': form,
-        'email_form': email_form,
+        'email_form': email_form,  # Added this line
         'ORCID_BASE': settings.ORCID_BASE,
         "api_token_key": getattr(api_token, "key", ""),
         "api_token_quota_remaining": remaining_quota,
