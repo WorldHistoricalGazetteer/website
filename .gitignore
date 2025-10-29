@@ -118,16 +118,8 @@ docker-compose-autocontext.yml
 compose/pg_hba.conf
 whg/local_settings.py.bak
 whg_credentials.zip
-
-datasets/static/files/lugares_13k.jsonld
-datasets/static/files/lugares_20.jsonld
-datasets/static/files/nativelands2031.jsonld
-datasets/static/files/newLibyaData3.csv
-datasets/static/files/provinces_1911.tsv
-
-/validation/test_data
-validation/test_data/Cyprus Settlements.xlsx
-.idea/misc.xml
+/whg/static/webpack
+/datasets/static/files
 package-lock.json
 .idea/misc.xml
 /remote_datasets_cache
