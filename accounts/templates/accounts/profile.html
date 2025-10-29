@@ -110,7 +110,7 @@
             {{ message|safe }}
           </div>
         {% else %}
-          <div class="alert alert-{{ message.tags|default:'info' }} mb-3" role="alert" style="border-left: 4px solid; font-weight: 500;">
+          <div class="alert {{ message.tags|default:'info' }} mb-3" role="alert" style="border-left: 4px solid; font-weight: 500;">
             {{ message|safe }}
           </div>
         {% endif %}
