@@ -62,33 +62,25 @@ def login(request):
             return redirect("accounts:login")
 
         try:
-            # Check if user exists
-            user = User.objects.get(username=username)
-            if user.must_reset_password:
-                # User must reset their password; store username in session
-                request.session['username_for_reset'] = username
-                return redirect('accounts:password_reset')
-            else:
-                # Attempt to authenticate using legacy backend only if no password reset is required
-                user = auth.authenticate(request, username=username, password=password,
-                                         backend='django.contrib.auth.backends.ModelBackend')
-                if user is not None:
-                    auth.login(request, user)
-                    # Redirect to the ORCiD authorisation URL if provided
-                    if orcid_auth_url:
-                        # Ensure the ORCiD URL is valid
-                        if orcid_auth_url.startswith(settings.ORCID_BASE):
-                            return redirect(orcid_auth_url)
-                        else:
-                            logger.error("Invalid ORCiD authorisation URL.")
-                            return redirect('accounts:login')
+            user = auth.authenticate(request, username=username, password=password,
+                                     backend='django.contrib.auth.backends.ModelBackend')
+            if user is not None:
+                auth.login(request, user)
+                # Redirect to the ORCiD authorisation URL if provided
+                if orcid_auth_url:
+                    # Ensure the ORCiD URL is valid
+                    if orcid_auth_url.startswith(settings.ORCID_BASE):
+                        return redirect(orcid_auth_url)
                     else:
-                        # No ORCiD URL provided, redirect to home
-                        return redirect('home')
+                        logger.error("Invalid ORCiD authorisation URL.")
+                        return redirect('accounts:login')
                 else:
-                    # Authentication fails
-                    messages.error(request, "Invalid password.")
-                    return redirect('accounts:login')
+                    # No ORCiD URL provided, redirect to home
+                    return redirect('home')
+            else:
+                # Authentication fails
+                messages.error(request, "Invalid password.")
+                return redirect('accounts:login')
         except User.DoesNotExist:
             # User not found
             messages.error(request,
