@@ -16,7 +16,7 @@ from django.conf import settings
 from django.contrib import auth, messages
 from django.shortcuts import render, redirect, reverse
 
-from accounts.forms import UserModelForm
+from accounts.forms import UserModelForm, EmailForm
 from collection.models import CollectionGroupUser  # CollectionGroup,
 import logging
 
@@ -190,6 +190,7 @@ def add_to_group(cg, member):
 @login_required
 def profile_edit(request):
     form = UserModelForm(instance=request.user)
+    email_form = EmailForm(user=request.user)
     api_token = getattr(request.user, "api_token", None)
 
     # Ensure profile exists
@@ -222,6 +223,7 @@ def profile_edit(request):
         'is_admin': request.user.groups.filter(name='whg_admins').exists(),
         'needs_news_check': request.session.pop("_needs_news_check", False),
         'form': form,
+        'email_form': email_form,
         'ORCID_BASE': settings.ORCID_BASE,
         "api_token_key": getattr(api_token, "key", ""),
         "api_token_quota_remaining": remaining_quota,
