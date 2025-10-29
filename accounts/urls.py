@@ -16,8 +16,6 @@ urlpatterns = [
     path('profile/download/', views.profile_download, name='profile-download'),
     path('profile/delete/', views.profile_delete, name='profile-delete'),
 
-    path('verify-email/<str:token>/', views.verify_email, name='verify-email'),
-
     path('password_reset/',
          views.CustomPasswordResetView.as_view(email_template_name='accounts/password_reset_email.html'),
          name='password_reset'),
