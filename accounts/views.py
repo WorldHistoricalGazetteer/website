@@ -57,33 +57,28 @@ def login(request):
             return render(request, 'accounts/login.html')
 
         try:
-            # Check if user exists
-            user = User.objects.get(username=username)
-            if user.must_reset_password:
-                # User must reset their password; store username in session
-                request.session['username_for_reset'] = username
-                return redirect('accounts:password_reset')
+            # Attempt to authenticate
+            user = auth.authenticate(request, username=username, password=password)
+            if user is not None:
+                auth.login(request, user)
+                return redirect('home')
             else:
-                # Attempt to authenticate only if no password reset is required
-                user = auth.authenticate(request, username=username, password=password)
-                if user is not None:
-                    auth.login(request, user)
-                    return redirect('home')
-                else:
-                    # Authentication fails
-                    messages.error(request, "Invalid password.")
-                    return redirect('accounts:login')
-        except User.DoesNotExist:
-            # User not found
-            messages.error(request, "Invalid username.")
-            return redirect('accounts:login')  # Or render with an error message
+                # Authentication fails (invalid username or password)
+                messages.error(request, "Invalid username or password.")
+                return redirect('accounts:login')
+        except Exception as e:
+            # Handle any unexpected errors during authentication
+            logger.error(f"Error during login for username {username}: {str(e)}")
+            traceback.print_exc()
+            messages.error(request, "An error occurred during login. Please try again.")
+            return redirect('accounts:login')
     else:
         return render(request, 'accounts/login.html')
 
 
 def logout(request):
     if request.method == 'POST':
-        request.session.pop('username_for_reset', None)
+        request.session.pop('username_for_reset', None)  # May be removed following switch to ORCiD
         auth.logout(request)
         return redirect('home')
 
@@ -131,7 +126,7 @@ class CustomPasswordResetView(auth_views.PasswordResetView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        username = self.request.session.get('username_for_reset')
+        username = self.request.session.get('username_for_reset')  # May be removed following switch to ORCiD
         context['user'] = username
         return context
 
@@ -168,7 +163,7 @@ class CustomPasswordResetCompleteView(auth_views.PasswordResetCompleteView):
 
     def get(self, request, *args, **kwargs):
         # clear the username from the session, set for v3 password reset
-        request.session.pop('username_for_reset', None)
+        request.session.pop('username_for_reset', None)  # May be removed following switch to ORCiD
         # Call the original get method to continue normal processing
         return super().get(request, *args, **kwargs)
 
@@ -185,7 +180,7 @@ class CustomPasswordChangeDoneView(auth_views.PasswordChangeDoneView):
 
     def get(self, request, *args, **kwargs):
         # clear the username from the session, set for v3 password reset
-        request.session.pop('username_for_reset', None)
+        request.session.pop('username_for_reset', None)  # May be removed following switch to ORCiD
         # Call the original get method to continue normal processing
         return super().get(request, *args, **kwargs)
 
