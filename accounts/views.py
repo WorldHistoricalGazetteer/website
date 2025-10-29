@@ -1,15 +1,18 @@
 import secrets
+import traceback
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.signing import Signer, BadSignature
 from django.http import JsonResponse
 from django.utils.html import format_html
 from django.views import View
 from django.views.decorators.http import require_POST
 
 from api.models import UserAPIProfile, APIToken
+from whgmail.messaging import WHGmail
 
 User = get_user_model()
 from django.conf import settings
@@ -189,9 +192,28 @@ def add_to_group(cg, member):
 
 @login_required
 def profile_edit(request):
-    from django.core.signing import Signer
-    from urllib.parse import urljoin
-    from whgmail.messaging import WHGmail
+    # Check if this is an email confirmation request
+    confirmation_token = request.GET.get('confirm_email')
+    if confirmation_token:
+        signer = Signer()
+        try:
+            user_id = signer.unsign(confirmation_token)
+            if str(request.user.pk) == str(user_id):
+                request.user.email_confirmed = True
+                request.user.save()
+                messages.success(request, '✓ Email address verified successfully!')
+            else:
+                messages.error(request, 'Invalid verification link.')
+        except BadSignature:
+            logger.error(f"Invalid email confirmation token: {confirmation_token}")
+            messages.error(request, 'Invalid or expired verification link.')
+        except Exception as e:
+            logger.error(f"Error confirming email: {str(e)}")
+            traceback.print_exc()
+            messages.error(request, 'An error occurred while verifying your email.')
+
+        # Redirect to clean URL without the token
+        return redirect('profile-edit')
 
     if request.method == 'POST':
         email_action = request.POST.get('email_action')
@@ -211,18 +233,24 @@ def profile_edit(request):
                 signer = Signer()
                 token = signer.sign(request.user.pk)
 
+                # Build confirmation URL that goes back to this profile page
+                confirm_url = request.build_absolute_uri(
+                    reverse('profile-edit') + f'?confirm_email={token}'
+                )
+
                 # Send verification email
                 try:
                     WHGmail(request, {
                         'template': 'email_verification',
-                        'subject': 'Verify your email address for World Historical Gazetteer',
-                        'confirm_url': urljoin(settings.URL_FRONT, reverse('accounts:confirm-email', args=[token])),
+                        'subject': 'Verify your email address at World Historical Gazetteer',
+                        'confirm_url': confirm_url,
                         'user': request.user,
                     })
-                    messages.success(request, 'Email updated! Please check your inbox for a verification link.')
+                    messages.success(request, '✓ Email updated! Please check your inbox for a verification link.')
                 except Exception as e:
                     logger.error(f"Failed to send verification email: {str(e)}")
-                    messages.warning(request, 'Email updated, but we encountered an issue sending the verification email. Please contact us.')
+                    traceback.print_exc()
+                    messages.warning(request, 'Email updated, but we encountered an issue sending the verification email. Please contact support.')
 
                 return redirect('profile-edit')
             else:
@@ -270,16 +298,22 @@ def profile_edit(request):
                 signer = Signer()
                 token = signer.sign(request.user.pk)
 
+                # Build confirmation URL
+                confirm_url = request.build_absolute_uri(
+                    reverse('profile-edit') + f'?confirm_email={token}'
+                )
+
                 try:
                     WHGmail(request, {
                         'template': 'email_verification',
                         'subject': 'Verify your email address at World Historical Gazetteer',
-                        'confirm_url': urljoin(settings.URL_FRONT, reverse('accounts:confirm-email', args=[token])),
+                        'confirm_url': confirm_url,
                         'user': request.user,
                     })
-                    messages.success(request, 'Verification email sent! Please check your inbox.')
+                    messages.success(request, '✓ Verification email sent! Please check your inbox.')
                 except Exception as e:
                     logger.error(f"Failed to resend verification email: {str(e)}")
+                    traceback.print_exc()
                     messages.error(request, 'Failed to send verification email. Please try again later.')
 
             return redirect('profile-edit')
@@ -319,7 +353,7 @@ def profile_edit(request):
         'is_admin': request.user.groups.filter(name='whg_admins').exists(),
         'needs_news_check': request.session.pop("_needs_news_check", False),
         'form': form,
-        'email_form': email_form,  # Added this line
+        'email_form': email_form,
         'ORCID_BASE': settings.ORCID_BASE,
         "api_token_key": getattr(api_token, "key", ""),
         "api_token_quota_remaining": remaining_quota,
