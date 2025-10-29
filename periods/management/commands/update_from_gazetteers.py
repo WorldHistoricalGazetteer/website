@@ -57,34 +57,34 @@ class Command(BaseCommand):
         self.BATCH_SIZE = options['batch_size']
         self.stdout.write("Starting spatial entities update...")
 
-        # # Load country geometries
-        # self.stdout.write("Loading country geometries...")
-        # if not self.load_country_geometries():
-        #     self.stderr.write(self.style.ERROR("Failed to load country geometries. Continuing without ccodes."))
-        #     pass
-        #
-        # # Get list of gazetteer files
-        # gazetteer_files = self.get_gazetteer_files()
-        # if not gazetteer_files:
-        #     self.stderr.write("No gazetteer files found.")
-        #     return
-        #
-        # # Filter files if specific ones requested
-        # if options['files']:
-        #     gazetteer_files = [f for f in gazetteer_files if f['name'] in options['files']]
-        #
-        # self.stdout.write(f"Found {len(gazetteer_files)} gazetteer files.")
-        #
-        # # Process each gazetteer file
-        # total_updated = 0
-        # for i, file_info in enumerate(gazetteer_files, 1):
-        #     self.stdout.write(f"Processing file {i}/{len(gazetteer_files)}: {file_info['name']}")
-        #     updated = self.process_gazetteer_file(file_info, options['force'])
-        #     total_updated += updated
-        #
-        # self.stdout.write(
-        #     self.style.SUCCESS(f"Successfully updated {total_updated} spatial entities.")
-        # )
+        # Load country geometries
+        self.stdout.write("Loading country geometries...")
+        if not self.load_country_geometries():
+            self.stderr.write(self.style.ERROR("Failed to load country geometries. Continuing without ccodes."))
+            pass
+
+        # Get list of gazetteer files
+        gazetteer_files = self.get_gazetteer_files()
+        if not gazetteer_files:
+            self.stderr.write("No gazetteer files found.")
+            return
+
+        # Filter files if specific ones requested
+        if options['files']:
+            gazetteer_files = [f for f in gazetteer_files if f['name'] in options['files']]
+
+        self.stdout.write(f"Found {len(gazetteer_files)} gazetteer files.")
+
+        # Process each gazetteer file
+        total_updated = 0
+        for i, file_info in enumerate(gazetteer_files, 1):
+            self.stdout.write(f"Processing file {i}/{len(gazetteer_files)}: {file_info['name']}")
+            updated = self.process_gazetteer_file(file_info, options['force'])
+            total_updated += updated
+
+        self.stdout.write(
+            self.style.SUCCESS(f"Successfully updated {total_updated} spatial entities.")
+        )
 
         # Now compute bounding boxes for periods
         self.compute_period_bboxes()
