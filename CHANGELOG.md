@@ -18,8 +18,10 @@ Linked Open Data service for historical place research.
   provenance tracking, and integration with scholarly research profiles
 - Reconciliation Service API, enabling external applications to match their place data programmatically against the WHG
   index, supporting large-scale alignment of historical datasets and Linked Open Data interoperability
-- PeriodO temporal and spatial filters, allowing users to constrain searches and visualisations by historical periods
+- PeriodO temporal and spatial filters, allowing users to constrain searches and visualizations by historical periods
   and regions defined in the PeriodO authority for precise chronogeographic exploration
+- Sphinx-based documentation platform with markdown source files deployed via GitHub Pages, facilitating collaborative
+  documentation improvements
 
 ### Changed
 
