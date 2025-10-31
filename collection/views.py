@@ -946,8 +946,19 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         # context['links'] = CollectionLink.objects.filter(collection=self.object.id)
 
         context['form_anno'] = form_anno
+        # context['seq_places'] = [
+        #     {'id': cp.id, 'p': cp.place, 'seq': cp.sequence}
+        #     for cp in CollPlace.objects.filter(collection=_id).order_by('sequence')
+        # ]
         context['seq_places'] = [
-            {'id': cp.id, 'p': cp.place, 'seq': cp.sequence}
+            {
+                'id': cp.id,
+                'p': {
+                    'id': cp.place.id,
+                    'title': cp.place.title
+                },
+                'seq': cp.sequence
+            }
             for cp in CollPlace.objects.filter(collection=_id).order_by('sequence')
         ]
         context['created'] = self.object.create_date.strftime("%Y-%m-%d")
