@@ -911,6 +911,20 @@ def contact_modal_view(request):
 
             sent_on = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
 
+            # Prepare reply mailto link
+            reply_subject = f"Re: {user_subject}"
+            reply_body = (
+                f"\n\n\n--- Original message ---\n"
+                f"From: {name} ({username or 'Unauthenticated User'})\n"
+                f"Email: {user_email}\n"
+                f"Sent on: {sent_on}\n"
+                f"Page URL: {'Home Page' if page_url == '/' else page_url}\n\n"
+                f"{user_message}"
+            )
+            encoded_subject = urllib.parse.quote(reply_subject)
+            encoded_body = urllib.parse.quote(reply_body)
+            reply_link = f"mailto:{user_email}?subject={encoded_subject}&body={encoded_body}"
+
             message = (
                 f"*Subject:* {user_subject}\n"
                 f"*From:* {name} (username: {username or 'N/A - Unauthenticated User'})\n"
@@ -918,6 +932,7 @@ def contact_modal_view(request):
                 f"*Sent on:* {sent_on}\n"
                 f"*Message:* ```{user_message}```\n"
                 f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
+                f"[**Reply**]({reply_link})\n"
                 f"----------------------------------------"
             )
 
