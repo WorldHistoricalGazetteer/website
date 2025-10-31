@@ -5,13 +5,9 @@ import os
 import logging
 from celery import Celery
 from celery.schedules import crontab
-from django.conf import settings
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whg.settings")
-
-import django
-django.setup()  # Ensure Django is fully set up before importing anything else
 
 app = Celery('whg')
 
@@ -34,9 +30,16 @@ app.conf.beat_schedule = {
 # Load task modules from all registered Django app configs.
 app.autodiscover_tasks()
 
-# Ensure Celery uses Django's logging configuration
-from logging.config import dictConfig
-dictConfig(settings.LOGGING)
+# Configure logging after Django settings are loaded
+def setup_logging():
+    from django.conf import settings
+    from logging.config import dictConfig
+    dictConfig(settings.LOGGING)
+
+# Only setup logging when running as a Celery worker (not during Django setup)
+import sys
+if 'celery' in sys.argv[0] or 'worker' in sys.argv:
+    setup_logging()
 
 @app.task(bind=True)
 def debug_task(self):

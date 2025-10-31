@@ -10,7 +10,6 @@ from django.db.models.signals import pre_delete, pre_save, post_save
 from django.dispatch import receiver
 
 from utils.doi import doi
-from whgmail.messaging import WHGmail
 from .models import Dataset, DatasetFile
 from .utils import compute_dataset_bbox
 
@@ -26,17 +25,21 @@ def send_new_dataset_email(sender, instance, **kwargs):
         owner_name = instance.owner.name if instance.owner.name else instance.owner.username
         if old_instance.ds_status is None and instance.ds_status == 'uploaded' and not instance.owner.groups.filter(
                 name='whg_team').exists():
+            notification = (
+                f"*Subject:* New Dataset Created\n"
+                f"*Owner Name:* {owner_name}\n"
+                f"*Username:* {instance.owner.username}\n"
+                f"*Dataset Title:* {instance.title}\n"
+                f"*Dataset Label:* {instance.label}\n"
+                f"*Dataset ID:* {instance.id}\n"
+                f"----------------------------------------"
+            )
+
+            from whgmail.messaging import zulip_notification
+            zulip_notification(notification, topic="New Dataset Created")
+
             try:
-                slack_message = (
-                    f"*Subject:* New Dataset Created\n"
-                    f"*Owner Name:* {owner_name}\n"
-                    f"*Username:* {instance.owner.username}\n"
-                    f"*Dataset Title:* {instance.title}\n"
-                    f"*Dataset Label:* {instance.label}\n"
-                    f"*Dataset ID:* {instance.id}\n"
-                    f"----------------------------------------"
-                )
-                response = requests.post(settings.SLACK_NOTIFICATION_WEBHOOK, json={"text": slack_message})
+                response = requests.post(settings.SLACK_NOTIFICATION_WEBHOOK, json={"text": notification})
                 if not response.status_code == 200:
                     logger.debug(f"Failed to send message to Slack: {response.status_code}, {response.text}")
             except Exception as e:
@@ -78,6 +81,7 @@ def handle_public_flag(sender, instance, **kwargs):
         old_instance = sender.objects.get(pk=instance.pk)
         if old_instance.public != instance.public:  # There's a change in 'public' status
             owner = instance.owner
+            from whgmail.messaging import WHGmail
             if instance.public:
                 WHGmail(context={
                     'template': 'dataset_published',
@@ -128,6 +132,7 @@ def handle_status_change(sender, instance, **kwargs):
     setattr(instance, '_updating', True)
     try:
         if instance.pk is not None:  # Check if it's an existing instance, not new
+            from whgmail.messaging import WHGmail
             old_instance = sender.objects.get(pk=instance.pk)
             # Check whether 'ds_status' has been changed to 'wd-complete'
             # and notify the owner, bcc to editorial

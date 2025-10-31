@@ -29,7 +29,7 @@ from datasets.tasks import testAdd
 from .models import Announcement, Link, DownloadFile, Comment
 from places.models import Place
 from resources.models import Resource
-from whgmail.messaging import WHGmail
+from whgmail.messaging import WHGmail, zulip_notification
 
 from bootstrap_modal_forms.generic import BSModalCreateView
 import json
@@ -613,6 +613,23 @@ def server_error_view(request):
         exc_message = str(exc_value) if exc_value else 'N/A'
         tb = ''.join(traceback.format_exception(exc_type, exc_value, exc_traceback)) if exc_traceback else 'N/A'
 
+        # Prepare Zulip message
+        message = (
+            f"**{exc_type.upper()}: {exc_message.upper()}**\n\n"
+            f"**URL:** {url}\n"
+            f"**Method:** {method}\n"
+            f"**Authenticated User:** {authenticated_user}\n\n"
+            f"**Headers:**\n```json\n{headers_pretty}\n```\n\n"
+            f"**Body:** {body_formatted}\n\n"
+            f"**Traceback:**\n```python\n{tb}\n```"
+        )
+
+        zulip_notification(
+            message,
+            stream="website-errors",
+            topic=f"{exc_type}: {url[:50]}"
+        )
+
         # Prepare the Slack message
         message = (
             f"*{exc_type.upper()}: {exc_message.upper()}*\n"
@@ -892,22 +909,22 @@ def contact_modal_view(request):
             user_message = form.cleaned_data['message']
             page_url = request.POST.get('page_url', 'No page URL provided')
 
-            encoded_subject = urllib.parse.quote(user_subject)
-            encoded_body = urllib.parse.quote(
-                f"\n\n\nOriginal message:\nSent on: {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n{user_message}"
+            sent_on = timezone.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            message = (
+                f"*Subject:* {user_subject}\n"
+                f"*From:* {name} (username: {username or 'N/A - Unauthenticated User'})\n"
+                f"*Email Address:* {user_email}\n"
+                f"*Sent on:* {sent_on}\n"
+                f"*Message:* ```{user_message}```\n"
+                f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
+                f"----------------------------------------"
             )
-            mailto_link = f"mailto:{user_email}?subject={encoded_subject}&body={encoded_body}"
+
+            zulip_notification(message, stream="website-contact", topic=user_subject)
 
             try:
-                slack_message = (
-                    f"*Subject:* {user_subject}\n"
-                    f"*From:* {name} (username: {username or 'N/A - Unauthenticated User'})\n"
-                    f"*Email Address:* <{mailto_link}|{user_email}>\n"
-                    f"*Message:* ```{user_message}```\n"
-                    f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
-                    f"----------------------------------------"
-                )
-                response = requests.post(settings.SLACK_CONTACT_WEBHOOK, json={"text": slack_message})
+                response = requests.post(settings.SLACK_CONTACT_WEBHOOK, json={"text": message})
                 if response.status_code != 200:
                     logger.debug(f"Failed to send message to Slack: {response.status_code}, {response.text}")
 

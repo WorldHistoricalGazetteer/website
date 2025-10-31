@@ -21,7 +21,6 @@ from datasets.utils import aliasIt, ccodesFromGeom
 from main.models import Log
 from places.models import PlaceGeom, PlaceWhen, PlaceLink, PlaceRelated, PlaceDescription, PlaceDepiction, PlaceName, \
     PlaceType, Place, Type
-from whgmail.messaging import slack_notification
 
 logger = logging.getLogger('validation')
 
@@ -235,7 +234,7 @@ def save_dataset(task_id):
         redis_client.hset(task_id, 'dataset_places_url', dataset_places_url)
         logger.debug(f"DatasetPlacesView URL: {dataset_places_url}")
 
-        slack_notification((
+        notification = (
             f"*Subject:* New Dataset Created (platform: {settings.ENV_CONTEXT})\n"
             f"*Owner Name:* {dataset.owner.name if dataset.owner.name else dataset.owner.username}\n"
             f"*Username:* {dataset.owner.username}\n"
@@ -244,7 +243,13 @@ def save_dataset(task_id):
             f"*Dataset ID:* {dataset.id}\n"
             f"*Dataset Feature Count:* {dataset.numrows}\n"
             f"----------------------------------------"
-        ))
+        )
+
+        from whgmail.messaging import zulip_notification
+        zulip_notification(notification, topic="New Dataset Created")
+
+        from whgmail.messaging import slack_notification
+        slack_notification(notification)
 
         return
 

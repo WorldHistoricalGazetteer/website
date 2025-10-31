@@ -14,6 +14,42 @@ from slack_sdk.errors import SlackApiError
 
 logger = logging.getLogger('messaging')
 
+
+def zulip_notification(notification, stream="website-notifications", topic="WHG Website Notification"):
+    """
+    Sends a notification to a specified Zulip stream using an incoming webhook bot.
+    """
+    try:
+        # For incoming webhook bots, use the messages endpoint
+        url = "https://chat.whgazetteer.org/api/v1/messages"
+
+        # Message payload
+        data = {
+            "type": "stream",
+            "to": stream,
+            "topic": topic,
+            "content": notification
+        }
+
+        # Use HTTP Basic Auth with bot email and API key
+        response = requests.post(
+            url,
+            auth=("django-bot@chat.whgazetteer.org", settings.ZULIP_API_KEY),
+            data=data
+        )
+
+        if response.status_code == 200:
+            logger.info("Message sent to Zulip.")
+            return True
+        else:
+            logger.error(f"Failed to send message to Zulip: {response.text}")
+            return False
+
+    except Exception as e:
+        logger.exception("Error occurred while sending notification to Zulip")
+        return False
+
+
 def slack_notification(slack_message, channel="site-notifications"):
     """
     Sends a notification to a specified Slack channel.
@@ -147,17 +183,20 @@ def WHGmail(request=None, context={}):
     
         email.attach_alternative(html_content, "text/html")
         email.send(fail_silently=False)
+
+        notification = (
+            f"*Copy of email sent to:* {context.get('greeting_name')} (email: {to_email})\n"
+            f"*Subject:* {context.get('subject')}\n"
+            f"*Message:* {text_content}\n"
+        )
+
+        zulip_notification(notification, topic="Email Sent")
         
         logger.debug(f"slack_notify context value: {context.get('slack_notify')}")
         if context.get('slack_notify') is not False:
             logger.debug(f'Slack notification requested: {context.get("slack_notify")}')
             channel = context['slack_notify'] if isinstance(context['slack_notify'], str) else "site-notifications"
-            slack_message = (
-                f"*Copy of email sent to:* {context.get('greeting_name')} (email: {to_email})\n"
-                f"*Subject:* {context.get('subject')}\n"
-                f"*Message:* {text_content}\n"
-            )
-            slack_success = slack_notification(slack_message, channel)    
+            slack_success = slack_notification(notification, channel)
             return slack_success
         
         return True
