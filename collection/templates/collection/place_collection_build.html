@@ -248,7 +248,7 @@
             <form action="#" method="post">
               {% csrf_token %}
               {{ links_form }}
-              <input type="hidden" name="collection" value="{{ object.id }}">
+              <input type="hidden" name="collection" value="{{ object.id|unlocalize }}">
               <table id="linkform_table" class="mb-2 small">
                 <tr>
                   <td>URI*:</td>
@@ -317,7 +317,7 @@
                   <option disabled>___________</option>
                     {% for ds in ds_select %}
                       {% if ds not in coll_dsset %}
-                        <option value="{{ ds.id }}">{{ ds.title }}</option>
+                        <option value="{{ ds.id|unlocalize }}">{{ ds.title }}</option>
                       {% endif %}
                     {% endfor %}
                   </select>
@@ -364,20 +364,20 @@
                       <div class="col-place-card" id="{{ cp.p.id|unlocalize }}" data-id="{{ cp.p.id|unlocalize }}" data-idx="{{ cp.seq }}">
                         <p><b>{{ cp.p.title }}</b> {{ cp.p.ccodes }}
                           <i>pid: (<a class="coll-place"
-                                      data-pid={{ cp.p.id }} href="#">{{ cp.p.id }}</a>)</i>
+                                      data-pid={{ cp.p.id|unlocalize }} href="#">{{ cp.p.id }}</a>)</i>
                           {# huge kluge: tooltip breaks for single place!? #}
                           {% if seq_places|length > 1 %}
                             <span class="float-end me-3"> <span
                               class="seq-visible">id: {{ cp.p.id }}; seq:{{ cp.seq }}</span>
                               <a class="mark-place" href="#" title="Remove from collection" rel="tooltip"
-                                 data-pid="{{ cp.p.id }}" data-col="{{ object.id }}">
+                                 data-pid="{{ cp.p.id|unlocalize }}" data-col="{{ object.id|unlocalize }}">
                                 <i class="fas fa-minus-square" style="color:#ff8080"></i></a>
                             </span>
                           {% else %}
                             <span class="float-end me-1">
                               <a class="mark-place" href="#" title="Remove from collection"
-                                 data-pid="{{ cp.p.id }}"
-                                 data-col="{{ object.id }}">
+                                 data-pid="{{ cp.p.id|unlocalize }}"
+                                 data-col="{{ object.id|unlocalize }}">
                                 <i class="fas fa-minus-square" style="color:#ff8080"></i></a>
                             </span>
                           {% endif %}
@@ -534,7 +534,7 @@
 </div> <!-- container -->
 
 <script type="text/javascript">
-  const object_id = "{{ object.id }}";
+  const object_id = "{{ object.id|unlocalize }}";
   const place_list = "{{ place_list }}";
   const csrf_token = "{{ csrf_token }}";
   const create_link_url = "{% url 'create-link' %}";
