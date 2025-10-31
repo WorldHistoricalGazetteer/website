@@ -932,7 +932,7 @@ def contact_modal_view(request):
                 f"*Sent on:* {sent_on}\n"
                 f"*Message:* ```{user_message}```\n"
                 f"*Page URL:* {'Home Page' if page_url == '/' else page_url}\n"
-                f"[**Reply**]({reply_link})\n"
+                f"[🟩 Reply via Email]({reply_link})"
                 f"----------------------------------------"
             )
 
