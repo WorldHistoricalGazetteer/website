@@ -360,8 +360,7 @@
                      aria-labelledby="coll_placelist-tab">
                   {% if seq_places|length > 0 %}
                     {% for cp in seq_places %}
-                      <div class="col-place-card" id="{{ cp.p.id }}" data-id="{{ cp.p.id }}"
-                           data-idx="{{ cp.seq }}">
+                      <div class="col-place-card" id="{{ cp.p.id|add:'0' }}" data-id="{{ cp.p.id|add:'0' }}" data-idx="{{ cp.seq }}">
                         <p><b>{{ cp.p.title }}</b> {{ cp.p.ccodes }}
                           <i>pid: (<a class="coll-place"
                                       data-pid={{ cp.p.id }} href="#">{{ cp.p.id }}</a>)</i>
