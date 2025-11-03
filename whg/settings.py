@@ -4,7 +4,10 @@ import base64
 import os
 import sys
 
+import sentry_sdk
 from django.contrib.messages import constants as messages
+from django.urls import path
+from sentry_sdk.integrations.django import DjangoIntegration
 
 try:
     from .local_settings_autocontext import *
@@ -19,6 +22,17 @@ except ImportError:
     pass
 
 ENV_CONTEXT = os.environ.get('ENV_CONTEXT', 'dev-whgazetteer-org')  # Default if ENV_CONTEXT is not set
+
+sentry_sdk.init(
+    dsn="https://3e76c8ff5cb9409181fc2ac916b6e0af@errors.whgazetteer.org/1",
+    integrations=[DjangoIntegration()],
+    auto_session_tracking=False,
+    traces_sample_rate=0
+    # traces_sample_rate=0.01,
+    # release="1.0.0",
+    # environment=ENV_CONTEXT,
+    # debug=True,
+)
 
 VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
 try:
@@ -451,8 +465,10 @@ LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 
 USE_I18N = True
-USE_L10N = True
-USE_THOUSAND_SEPARATOR = True
+# USE_L10N = True
+# USE_THOUSAND_SEPARATOR = True
+USE_L10N = False
+USE_THOUSAND_SEPARATOR = False
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 MEDIA_URL = '/media/'

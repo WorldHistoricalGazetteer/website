@@ -44,7 +44,17 @@ def serve_cdnfallbacks(request, path):
         return HttpResponseForbidden(f"Access forbidden: {referer}")
 
 
+def trigger_error(request):
+    from sentry_sdk import Hub
+    client = Hub.current.client
+    print(f"Sentry client active: {client is not None}")
+    print(f"Sentry DSN: {client.dsn if client else 'None'}")
+    raise ValueError("Test error for Zulip alerts")
+
+
 urlpatterns = [
+                  path('glitchtip-debug/', trigger_error),
+
                   # home page
                   path('', views.Home30a.as_view(), name="home"),
 
@@ -70,10 +80,6 @@ urlpatterns = [
                       name="django.contrib.sitemaps.views.sitemap",
                   ),
                   path('whgmail/', include('whgmail.urls')),
-
-
-
-
 
                   path('teaching/', TeachingPortalView.as_view(), name="teaching"),
                   path("api/teaching/", resources.views.teaching_json, name="teaching_json"),
