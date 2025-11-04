@@ -293,25 +293,13 @@
                 </div>
               {% endfor %}
             </div>
-            <div id="ds_downloads" class="pt-0 px-0 ds-card">
-              <p class="ds-card-header pt-1"> Augmented Dataset Downloads</p>
-              {# TODO: review download size cases #}
-	            <!-- if length <= 20k -->
-              {% if ds.places.count <= 25000 %}
-                {% if links_added > 0 or geoms_added > 0 %}
-                  <!-- offer dl if augmented -->
-                  <p><a data-bs-toggle="tooltip" data-bs-title="Generate dataset augmented with links and geometries. <b>This task will be queued, and when ready the dataset will appear in your 'My Data' download section.</b>" class="a-dl-celery cursor-pointer" href="#" data-format="lpf" ref="lpf">Linked Places format <i class="fas fa-download linky"></i></a> <span id="file_lpf" class="ms-1"></span></p>
-                {% else %}
-                  <!-- originally lpf, not yet augmented -->
-                  <p><i>Dataset is not yet augmented</i></p>
-                {% endif %}
-              <!-- more than 20k rows -->
-              {% else %} 
-                <span class="red-head"><br/>Download of augmented datasets larger than 25,000 rows is not supported right now. <a data-whg-modal="/contact_modal/">Contact WHG staff</a></span>
-              {% endif %}  
-              <div id="progress-bar-message" class="hidden">Waiting for progress to start...</div>
-              <div id="celery-result"></div>
-            </div> <!-- ds_downloads_ajax -->
+            <span data-bs-toggle="tooltip" data-bs-title="Show download options">
+              <a href="#" id="a_download_modal" class="me-2" data-collid="{{ ds.id }}" data-bs-toggle="modal" data-bs-target="#downloadModal">
+                Download options <i class="fas fa-download linky"></i>
+              </a>
+            </span>
+
+            {% include 'main/download_modal.html' with object=ds entity_type='dataset' entity_prefix='dataset' %}
 {#          {% endif %} <!-- owner or superuser -->#}
         </div> <!-- ds_info -->
       </div> <!-- ds_details -->

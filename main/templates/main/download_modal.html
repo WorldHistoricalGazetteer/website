@@ -1,0 +1,66 @@
+<div id="downloadModal" class="modal fade" tabindex="-1"
+     aria-labelledby="downloadModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" style="height: fit-content;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="downloadModalLabel">
+                    <i class="fas fa-download linky"></i>
+                    Download options for the <span class="text-danger">{{ object.title }}</span> {{ entity_type|default:"dataset" }}
+                </h5>
+            </div>
+            <div class="modal-body container">
+                <div class="dl-blurb">
+                    {% include 'main/licensing_info.html' %}
+                </div>
+                <div class="row">
+                    <div class="col-12">
+                        <h4 class="mb-3">
+                            {{ object.title }}
+                            <span class="small text-muted">({{ object.numrows }} features)</span>
+
+                            <a id="cite_{{ object.id }}" class="clippy ms-2"
+                               aria-label="{% if object.citation %}{{ object.citation }}{% else %}{{ object.title }}. [Data file, last modified {{ object.last_modified_text }}]. Retrieved from http://whgazetteer.org/{{ entity_prefix|default:'datasets' }}/{{ object.id }}/places/, {% now 'd M Y' %}{% endif %}"
+                               data-bs-toggle="tooltip" data-bs-placement="top" title="copy citation to clipboard">
+                                <i class="fas fa-clipboard linky"></i>
+                            </a>
+                        </h4>
+
+                        <div class="d-flex align-items-center mb-3">
+                            <span class="text-muted me-3">Choose Format:</span>
+
+                            <a href="/entity/{{ entity_prefix|default:'dataset' }}:{{ object.id }}/api"
+                               class="btn btn-sm btn-outline-primary me-2" data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="Linked Places format (LPF): JSON-based, valid GeoJSON and JSON-LD with temporal extensions.">
+                                <i class="fa fa-download me-1 nocolour"></i> Download LPF
+                            </a>
+
+                            <a href="/entity/{{ entity_prefix|default:'dataset' }}:{{ object.id }}/api?filetype=tsv"
+                               class="btn btn-sm btn-outline-warning tsv-btn" data-bs-toggle="tooltip"
+                               data-bs-placement="top"
+                               title="LP-TSV: Tab-separated text file for easy import into spreadsheets or databases. <em>NOTE: Conversion to TSV results in significant loss of detail in the data.</em>">
+                                <i class="fa fa-download me-1 nocolour"></i> Download TSV
+                            </a>
+                        </div>
+                    </div>
+
+                    {% if ds_list %}
+                        <p class="modal-col-head p-1 mb-2">Datasets represented <small>w/citations</small></p>
+                        {% for d in ds_list %}
+                            <p class="my-1">{{ d.title }}&nbsp;
+                                <a id="cite_{{ d.id }}" class="clippy"
+                                   aria-label="{% if d.citation %}{{ d.citation }}{% else %}{{ d.title }}. [Data file (partial), Retrieved from {{ url_front }}collections/{{ object.id }}/browse_pl, {% now 'd M Y' %}{% endif %}"
+                                   rel="tooltip" title="copy to clipboard">
+                                    citation: <i class="fas fa-clipboard linky"></i>
+                                </a>
+                            </p>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div> <!-- .modal-body -->
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-secondary btn-cancel" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

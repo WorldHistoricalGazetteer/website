@@ -7,7 +7,7 @@ from typing import Optional
 import requests
 from django.conf import settings
 from django.contrib import auth, messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.backends import BaseBackend
 from django.db import transaction
 from django.shortcuts import redirect
@@ -131,10 +131,10 @@ class OIDCBackend(BaseBackend):
         """
         Authenticate or create user based on ORCiD record.
         """
+        from django.contrib import messages
         if not orcid_id or not record:
             logger.warning("Missing ORCiD ID or record during authentication.")
             if request:
-                from django.contrib import messages
                 messages.error(request, "ORCiD login failed: no identifier or record received.")
             return None
 
@@ -248,6 +248,13 @@ class OIDCBackend(BaseBackend):
 
 
 def orcid_callback(request):
+
+    # Local development short-circuit
+    if settings.ENV_CONTEXT == "local":
+        user = User.objects.get(pk=2)
+        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        return redirect("home")
+
     # Handle denial
     if request.GET.get("error") == "access_denied":
         # Pass a flag to trigger the modal on the login page

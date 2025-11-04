@@ -1129,9 +1129,36 @@ class PlacesDetailAPIView(View):
         elif pk is not None:
             ids = [str(pk)]
         else:
-            pass
+            return JsonResponse(
+                {"error": "No place ID(s) provided"},
+                status=400
+            )
+
+        # Validate IDs - all must be valid integers
+        try:
+            ids = [int(id_val) for id_val in ids]
+        except ValueError as e:
+            return JsonResponse(
+                {
+                    "error": "Invalid place ID format",
+                    "invalid_ids": ids,
+                    "message": "Place IDs must be integers"
+                },
+                status=400
+            )
 
         places = Place.objects.filter(id__in=ids)
+
+        # Check if any places were found
+        if not places.exists():
+            return JsonResponse(
+                {
+                    "error": "No places found",
+                    "requested_ids": ids,
+                    "message": f"No places found with ID(s): {', '.join(map(str, ids))}"
+                },
+                status=404
+            )
 
         def sort_unique(arr, key=None, sort_key=None):
             unique_items = []

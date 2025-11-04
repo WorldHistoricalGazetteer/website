@@ -7,6 +7,7 @@ const tokenSection = document.getElementById('api-token-section');
 const tokenCode = document.getElementById('api-token');
 
 function setState(hasToken, tokenValue = null) {
+    if (!tokenSection) return;
     tokenSection.classList.toggle('has-token', hasToken);
     if (hasToken && tokenValue) {
         tokenCode.textContent = tokenValue;
@@ -90,10 +91,12 @@ clipboard.on("error", function () {
 
 initClipboard();
 
-tokenSection.querySelectorAll('#has-token button').forEach(button => {
-    button.setAttribute('data-bs-title', 'This will immediately invalidate the existing token');
-    button.setAttribute('data-bs-toggle', 'tooltip');
-});
+if (tokenSection) {
+    tokenSection.querySelectorAll('#has-token button').forEach(button => {
+        button.setAttribute('data-bs-title', 'This will immediately invalidate the existing token');
+        button.setAttribute('data-bs-toggle', 'tooltip');
+    });
+}
 
 document.body.addEventListener('click', function (e) {
     if (e.target.closest('.generate-token')) {
