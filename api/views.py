@@ -1243,7 +1243,7 @@ class PlacesDetailAPIView(View):
 
         # Aggregate places into a single object
         aggregated_place = {
-            "id": "-".join(ids),  # Concatenate the IDs,
+            "id": "-".join(map(str, ids)),  # Concatenate the IDs as strings
             "traces": [trace for place in serialized_places for trace in place["traces"]],
             "datasets": sort_unique(list(Dataset.objects.filter(id__in=dataset_ids).values("id", "title")), 'title'),
             "title": "|".join(set(place["title"] for place in serialized_places)),
