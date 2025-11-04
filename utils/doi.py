@@ -195,15 +195,50 @@ def doi(type, id, event='publish'):
 
     # Check the response status
     if response.status_code in [200, 201]:
-        logger.info(f"DOI {'updated' if doi_exists else 'created'} successfully: {response.json()['data']['id']}")  # Log success
+        logger.info(f"DOI {'updated' if doi_exists else 'created'} successfully: {response.json()['data']['id']}")
         if not doi_exists:
             # Set `doi` field to True in the object
             obj.doi = True
             obj.save()
-        return response.json()  # DOI created successfully
+        return response.json()  # DOI created/updated successfully
+    elif response.status_code == 422:
+        # Handle the case where DOI already exists
+        response_data = response.json()
+        errors = response_data.get('errors', [])
+
+        # Check if the error is specifically about DOI already being taken
+        if any('already been taken' in error.get('title', '') for error in errors):
+            logger.warning(f"DOI {attributes['doi']} already exists in DataCite, treating as update")
+
+            # Update local database to reflect DOI exists
+            if not doi_exists:
+                obj.doi = True
+                obj.save()
+
+            # Try updating instead with a PUT request
+            response = requests.put(
+                f"{settings.DOI_API_URL}/{attributes['doi']}",
+                json={
+                    "data": {
+                        "type": "dois",
+                        "attributes": attributes,
+                    }
+                },
+                headers=headers,
+            )
+
+            if response.status_code in [200, 201]:
+                logger.info(f"DOI updated successfully after finding it already exists: {response.json()['data']['id']}")
+                return response.json()
+            else:
+                logger.error(f"Failed to update existing DOI: {response.json()}")
+                raise Exception(f"Failed to update existing DOI: {response.json()}")
+        else:
+            logger.error(f"Failed to create DOI (422 error): {response_data}")
+            raise Exception(f"Failed to create DOI: {response_data}")
     else:
-        logger.error(f"Failed to create DOI: {response.json()}")  # Log error
-        return response.json()  # Handle errors (like invalid metadata)
+        logger.error(f"Failed to create/update DOI: {response.json()}")
+        raise Exception(f"Failed to create/update DOI: {response.json()}")
 
 
 def get_doi_state(type, id):
