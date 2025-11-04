@@ -194,7 +194,7 @@ def doi(type, id, event='publish'):
     )
 
     # Check the response status
-    if response.status_code == 201:
+    if response.status_code in [200, 201]:
         logger.info(f"DOI {'updated' if doi_exists else 'created'} successfully: {response.json()['data']['id']}")  # Log success
         if not doi_exists:
             # Set `doi` field to True in the object
