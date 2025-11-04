@@ -921,21 +921,21 @@ function initiateSearch() {
                 localStorageJSON = JSON.stringify(data);
                 localStorage.setItem('last_search', localStorageJSON); // Includes both `.parameters` and `.suggestions` objects
             } catch (error) {
-                if (error.code === DOMException.QUOTA_EXCEEDED_ERR) {
+                if (error.name === 'QuotaExceededError') {  // Changed from error.code
                     console.error('LocalStorage quota exceeded. Clearing space.');
                     try {
-                        deletionPrefixes = ['dataset', 'collection'];
+                        const deletionPrefixes = ['dataset', 'collection'];  // Added const
                         for (let prefix of deletionPrefixes) {
                             for (let i = localStorage.length - 1; i >= 0; i--) {
                                 let key = localStorage.key(i);
-                                if (key.startsWith(prefix)) {
+                                if (key && key.startsWith(prefix)) {  // Added null check
                                     localStorage.removeItem(key);
                                 }
                             }
                         }
                         localStorage.setItem('last_search', localStorageJSON);
-                    } catch {
-                        console.error('Failed to clear sufficient space in LocalStorage. Error:', error.message);
+                    } catch (retryError) {  // Named the catch variable
+                        console.error('Failed to clear sufficient space in LocalStorage. Error:', retryError.message);
                     }
                 } else {
                     // Handle other errors

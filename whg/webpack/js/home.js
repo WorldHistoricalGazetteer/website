@@ -148,7 +148,26 @@ Promise.all([
 			headers: {'X-CSRFToken': csrfToken}, // Include CSRF token in headers for Django POST requests
 			success: function(data) {
 				console.log('...search completed.', data);
-				localStorage.setItem('last_search', JSON.stringify(data)); // Includes both `.parameters` and `.suggestions` objects
+                try {
+                    localStorage.setItem('last_search', JSON.stringify(data));
+                } catch (error) {
+                    if (error.name === 'QuotaExceededError') {
+                        console.error('LocalStorage quota exceeded. Clearing old searches.');
+                        // Clear old dataset/collection data
+                        for (let i = localStorage.length - 1; i >= 0; i--) {
+                            let key = localStorage.key(i);
+                            if (key && (key.startsWith('dataset') || key.startsWith('collection'))) {
+                                localStorage.removeItem(key);
+                            }
+                        }
+                        // Try again
+                        try {
+                            localStorage.setItem('last_search', JSON.stringify(data));
+                        } catch (e) {
+                            console.error('Failed to save search even after clearing:', e);
+                        }
+                    }
+                }
 				window.location.href = '/search';				
 			},
 			error: function(error) {
