@@ -202,397 +202,195 @@
 
 {% block inlineScripts %}
     <script type="text/javascript">
+        Promise.all([Promise.all(datatables_CDN_fallbacks.map(loadResource))]).then(() => {
 
+            // Image modal
+            $('.pop').on('click', function () {
+                const url = $(this).find('img').attr('src');
+                const txt = $(this).find('img').attr('alt');
+                $("#header_text").html(txt);
+                $('.imagepreview').attr('src', url);
+                $('#imageModal').modal('show');
+            });
 
-        Promise.all([Promise.all(datatables_CDN_fallbacks.map(loadResource))])
-            .then(() => {
+            function showMore() {
+                const clicked = $(this);
+                $(".more").show();
+                $(".a_more").hide();
+                $("#dots").hide();
+                clicked.next().show();
+                $(".a_less").show();
+            }
 
-                // image modal
-                $('.pop').on('click', function () {
-                    url = $(this).find('img').attr('src')
-                    txt = $(this).find('img').attr('alt')
-                    re = /(.png|.jpg|.jpeg|.gif|.tif)/g
-                    {#ext=url.match(re)[0]#}
-                    {#url = url.replace(ext,'_full'+ext)#}
-                    console.log('url', url)
-                    $("#header_text").html(txt)
-                    $('.imagepreview').attr('src', url);
-                    $('#imageModal').modal('show');
+            function showLess() {
+                const clicked = $(this);
+                clicked.hide();
+                $(".more").hide();
+                $("#dots").show();
+                $(".a_more").show();
+            }
+
+            function readMore(text, numchars, innerlink = '') {
+                const dots = '<span id="dots">...</span>';
+                const link = '<a href="#" class="a_more" onclick="showMore()">more</a><span class="more hidden">';
+                if (text.length < numchars) {
+                    return innerlink !== '' ? text + innerlink : text;
+                } else {
+                    return text.slice(0, numchars) + dots + link + text.slice(numchars) + innerlink +
+                        ' <a href="#" class="ms-2 a_less hidden" onclick="showLess()">less</a></span>';
+                }
+            }
+
+            const clip_cite = new ClipboardJS('.clippy', {
+                text: trigger => trigger.getAttribute('aria-label'),
+                container: document.getElementById('downloadModal')
+            });
+
+            clip_cite.on('success', function (e) {
+                const el = $("#" + e.trigger.getAttribute("id"));
+                e.clearSelection();
+                el.tooltip('hide').attr('data-original-title', 'copied!').tooltip('show');
+            });
+
+            function setRowEvents() {
+                $("#placetable tbody tr").click(function () {
+                    const pid = $(this)[0].cells[0].textContent;
+                    const ds_src = table.row($(this).index()).data().dataset.label;
+
+                    const geom = all_feats.find(f => f.properties.pid == pid).geometry;
+                    const coords = geom.coordinates;
+
+                    getPlace(pid, 'clicked');
+
+                    const selected = $(this).hasClass("highlight-row");
+                    $("#placetable tr").removeClass("highlight-row");
+
+                    if (!selected) $(this).removeClass("rowhover");
+                    $(this).addClass("highlight-row");
+
+                    highlightFeatureGL(pid, geom, coords, 'all');
                 });
 
-                function showMore() {
-                    clicked = $(this)
-                    $(".more").show()
-                    console.log('clicked $this', clicked)
-                    {#clicked.hide()#}
-                    $(".a_more").hide()
-                    {#clicked.parent().find("#dots").hide()#}
-                    $("#dots").hide()
-                    clicked.next().show()
-                    $(".a_less").show()
+                const row = $("#drftable_list table tbody")[0].rows[0];
+                const pid = parseInt(row.cells[0].textContent);
+                $("#placetable tbody").find('tr').eq(0).addClass('highlight-row');
+                getPlace(pid, 'row0');
+            }
+
+            $(function () {
+                $(".btn-cancel").click(() => $("#downloadModal").modal('hide'));
+
+                const clearEl = el => {
+                    $("#progress-bar").fadeOut();
+                    el.html('');
+                };
+
+                const dater = () => new Date(Date.now()).toISOString().substring(0, 10);
+
+                function customResult(resultElement, result) {
+                    $(".dl-table").stopSpin();
+                    const fn = result.filename;
+                    const link = '[ <span class="dl-save"><a href="/' + fn + '" title="downloaded: ' + dater() +
+                        '" download>save</a></span> ]';
+                    $(resultElement).append($('<p>').html(link));
+                    $(".dl-save a")[0].click();
+                    setTimeout(() => clearEl($("#celery-result")), 1000);
                 }
 
-                function showLess() {
-                    clicked = $(this)
-                    console.log('clicked less', clicked)
-                    clicked.hide() // hide 'less' link
-                    $(".more").hide() // hide the extra text again
-                    $("#dots").show() // show dots again
-                    $(".a_more").show() // show more link again
-                }
-
-                // TODO: this is a mess, refactor or add 1-to-many annotation link field
-                // truncate anno note, looking for embedded links
-                function readMore(text, numchars, innerlink = '') {
-                    dots = '<span id="dots">...</span>'
-                    link = '<a href="#" class="a_more" onclick="showMore()">more</a><span class="more hidden">'
-                    if (text.length < numchars) {
-                        {#return text + innerlink != ''?innerlink:''#}
-                        return innerlink != '' ? text + innerlink : text
-                    } else {
-                        return text.slice(0, numchars) + dots + link + text.slice(numchars,) + innerlink +
-                            ' <a href="#" class="ms-2 a_less hidden" onclick="showLess()">less</a></span>'
-                    }
-                }
-
-                var clip_cite = new ClipboardJS('.clippy', {
-                    text: function (trigger) {
-                        return trigger.getAttribute('aria-label');
-                    },
-                    container: document.getElementById('downloadModal')
+                $(".a-dl").click(function (e) {
+                    e.preventDefault();
+                    const dsid = $(this).data('id');
+                    const collid = $(this).data('collid');
+                    const urly = '/dlcelery/';
+                    $.ajax({
+                        type: 'POST',
+                        url: urly,
+                        data: {
+                            "format": 'lpf',
+                            "dsid": dsid,
+                            "collid": collid,
+                            "csrfmiddlewaretoken": "{{ csrf_token }}"
+                        },
+                        datatype: 'json',
+                        success: function (response) {
+                            $(".dl-table").spin();
+                            const task_id = response.task_id;
+                            const progressUrl = "/celery-progress/" + task_id + "/";
+                            CeleryProgressBar.initProgressBar(progressUrl, {
+                                pollingInterval: 500,
+                                onResult: customResult,
+                            });
+                        }
+                    });
                 });
 
-                clip_cite.on('success', function (e) {
-                    eobj = e
-                    el = $("#" + e.trigger.getAttribute("id"))
-                    {#console.log('el',el)#}
-                    e.clearSelection();
-                    el.tooltip('hide')
-                        .attr('data-original-title', 'copied!')
-                        .tooltip('show');
+                // Initialize DataTable
+                table = $('#placetable').DataTable({
+                    dom: "<'row'<'ps-3'f>>" +
+                        "<'row'<'col-sm-12'tr>>" +
+                        "<'row mt-1'<'col-sm-12 col-md-5'l><'col-sm-12 col-md-7'p>>",
+                    serverSide: true,
+                    ajax: { url: "/api/placetable_coll/?format=datatables&id={{ object.id }}" },
+                    scrollY: 430,
+                    select: true,
+                    order: [[1, 'asc']],
+                    LengthMenu: [10, 25, 50, 100],
+                    columns: [
+                        { "data": "id" },
+                        { "data": "title" },
+                        { "data": "ccodes" },
+                        { "data": "dataset.title" }
+                    ],
+                    columnDefs: [{ searchable: false, targets: [2, 3] }]
                 });
 
-                // table events
-                // TODO: use datatables methods?
-                function setRowEvents() {
-                    $("#placetable tbody tr").click(function () {
-                        thisy = $(this)
-                        // get id
-                        pid = $(this)[0].cells[0].textContent
-                        ds_src = table.row(thisy.index()).data().dataset.label
-                        {#console.log('clicked row pid', pid, ds_src)#}
+                table.on('draw', setRowEvents);
 
-                        geom = all_feats.find(function (f) {
-                            return f.properties.pid == pid
-                        }).geometry
-                        coords = geom.coordinates
-                        {#console.log('pid, geom, coords', pid, geom, coords)#}
+                // Show/hide description links
+                $(".a_more_descrip").click(function () {
+                    const clicked = $(this);
+                    clicked.hide();
+                    clicked.parent().find("#dots_descrip").hide();
+                    clicked.next().show();
+                    $(".a_less_descrip").show();
+                });
 
-                        // fetch its detail
-                        getPlace(pid, 'clicked')
+                $(".a_less_descrip").click(function () {
+                    const clicked = $(this);
+                    clicked.hide();
+                    $(".more_descrip").hide();
+                    $("#dots_descrip").show();
+                    $(".a_more_descrip").show();
+                });
+            });
 
-                        // highlight this row, clear others
-                        var selected = $(this).hasClass("highlight-row");
-                        $("#placetable tr").removeClass("highlight-row");
-
-                        if (!selected)
-                            $(this).removeClass("rowhover");
-                        $(this).addClass("highlight-row");
-
-                        // only one source for this map: all collection features
-                        highlightFeatureGL(pid, geom, coords, 'all')
-
-                    })
-
-                    row = $("#drftable_list table tbody")[0].rows[0]
-                    pid = parseInt(row.cells[0].textContent)
-                    // highlight first row, fetch detail, but don't zoomTo() it
-                    $("#placetable tbody").find('tr').eq(0).addClass('highlight-row')
-                    // fetch place details for 1st row
-                    getPlace(pid, 'row0')
+            // Builds external place record link
+            function url_extplace(identifier) {
+                if (identifier.startsWith('http')) {
+                    const tag = identifier.replace(/.+\/\/|www.|\..+/g, '');
+                    return '<a href="' + identifier + '" target="_blank">' + tag + '<i class="fas fa-external-link-alt linky"></i>,  </a>';
+                } else {
+                    return '<a href="" class="ext" data-target="#ext_site">' + identifier + '&nbsp;<i class="fas fa-external-link-alt linky"></i></a>, ';
                 }
+            }
 
-                $(function () {
-                    $(".btn-cancel").click(function () {
-                        $("#downloadModal").modal('hide')
-                    })
+            // Builds external placetype link
+            function url_exttype(type) {
+                return ' <a href="#" class="exttab" data-id=' + type.identifier +
+                    '>(' + type.label + ' <i class="fas fa-external-link-alt linky"></i>)</a>';
+            }
 
-                    clearEl = function (el) {
-                        $("#progress-bar").fadeOut()
-                        el.html('')
-                    }
-
-                    dater = function () {
-                        const date = new Date(Date.now());
-                        return date.toISOString().substring(0, 10)
-                    }
-
-                    // called from a-dl click()
-                    function customResult(resultElement, result) {
-                        {#console.log('celery result',result)#}
-                        {#console.log('celery resultElement',resultElement)#}
-                        $(".dl-table").stopSpin();
-                        fn = result.filename
-                        link = '[ <span class="dl-save"><a href="/' + fn + '" title="downloaded: ' + dater() +
-                            '" download>save</a></span> ]'
-                        $(resultElement).append(
-                            $('<p>').html(link)
-                        );
-                        $(".dl-save a")[0].click()
-                        setTimeout(clearEl($("#celery-result")), 1000)
-                    }
-
-                    // celery task for downloads; helper functions above
-                    // TODO: tune this for place collections
-                    function toggleNames() {
-                        $("#more_names").toggle()
-                    }
-
-                    $(".a-dl").click(function (e) {
-                        e.preventDefault()
-                        dsid = $(this).data('id')
-                        collid = $(this).data('collid')
-                        {#console.log('collid, dsid', collid, dsid)#}
-                        urly = '/dlcelery/'
-                        $.ajax({
-                            type: 'POST',
-                            url: urly,
-                            data: {
-                                "format": 'lpf',
-                                "dsid": dsid,
-                                "collid": collid,
-                                "csrfmiddlewaretoken": "{{ csrf_token }}"
-                            },
-                            datatype: 'json',
-                            success: function (response) {
-                                $(".dl-table").spin();
-                                task_id = response.task_id
-                                var progressUrl = "/celery-progress/" + task_id + "/";
-                                CeleryProgressBar.initProgressBar(progressUrl,
-                                    {
-                                        pollingInterval: 500,
-                                        onResult: customResult,
-                                    }
-                                )
-                            }
-                        })
-                    })
-
-                    var token_whg = '{{ mbtoken }}', token_mb = '{{ mbtoken }}';
-                    {#window.ds_list = JSON.parse(document.getElementById('ds_list').textContent);#}
-                    {#source_list = ds_list.map(function(d){ return d.label})#}
-                    {#window.layer_list = getLoadedLayers()#}
-
-                    // window.filter = "{{ filter }}"
-                    // initialize table
-                    // task columns are inoperable in this public view
-                    table = $('#placetable').DataTable({
-                        dom: "<'row'<'ps-3'f>>" +
-                            "<'row'<'col-sm-12'tr>>" +
-                            "<'row mt-1'<'col-sm-12 col-md-5'l><'col-sm-12 col-md-7'p>>"
-                        , serverSide: true
-                        , ajax: {
-                            url: "/api/placetable_coll/?format=datatables&id={{ object.id }}"
-                        }
-                        , scrollY: 430
-                        , select: true
-                        , order: [[1, 'asc']]
-                        , LengthMenu: [10, 25, 50, 100]
-                        , columns:
-                            [
-                                {"data": "id"},
-                                {"data": "title"},
-                                {"data": "ccodes"},
-                                {"data": "dataset.title"},
-                                {#{"data": "dataset.label", "name":"dataset.label"},#}
-                            ]
-                        , columnDefs: [
-                            {#{ orderable: false, "targets": [4,5,6,7]},#}
-                            {#,{ visible: false, "targets": [1,4,5,6,7,11]}#}
-                            {searchable: false, "targets": [2, 3]}
-                        ]
-                    })
-
-                    table.on('draw', function () {
-                        setRowEvents();
-                        {#$("#drftable_list table tbody")[0].rows[0].click()#}
-                    })
-
-                    // for collection description only
-                    $(".a_more_descrip").click(function () {
-                        clicked = $(this)
-                        clicked.hide()
-                        clicked.parent().find("#dots_descrip").hide()
-                        clicked.next().show()
-                        $(".a_less_descrip").show()
-                    })
-                    $(".a_less_descrip").click(function () {
-                        clicked = $(this)
-                        clicked.hide() // hide 'less' link
-                        $(".more_descrip").hide() // hide the extra text again
-                        $("#dots_descrip").show() // show dots again
-                        $(".a_more_descrip").show() // show more link again
-                    })
-
-                })  // jquery onload()
-
-                // gl map
-                {#whg_map = new maplibregl.Map({#}
-                {#  container: 'map', // container id#}
-                {#  style:'mapbox://styles/mapbox/light-v10',#}
-                {#  accessToken: '{{ mbtoken }}',#}
-                {#  center: [9.2, 33],#}
-                {#  zoom: 0.2, // starting zoom#}
-                {#  minZoom: 0.1,#}
-                {#  maxZoom: 11,#}
-                {# });#}
-                {##}
-                {#//#}
-                {#whg_map.on('load', function(){#}
-                {#  hilited = null#}
-                {#  // initiate layers for z-index#}
-                {#  whg_map.addSource('empty', {#}
-                {#    type: 'geojson',#}
-                {#    data: { type: 'FeatureCollection', features: [] }#}
-                {#  });#}
-                {##}
-                {#	const zIndex4 = whg_map.addLayer({#}
-                {#    id: 'z-index-4',#}
-                {#    type: 'symbol',#}
-                {#    source: 'empty'#}
-                {#  }); //top#}
-                {##}
-                {#  const zIndex3 = whg_map.addLayer({#}
-                {#    id: 'z-index-3',#}
-                {#    type: 'symbol',#}
-                {#    source: 'empty'#}
-                {#  }, 'z-index-4'); // below zIndex4#}
-                {##}
-                {#  const zIndex2 = whg_map.addLayer({#}
-                {#    id: 'z-index-2',#}
-                {#    type: 'symbol',#}
-                {#    source: 'empty'#}
-                {#  }, 'z-index-3');#}
-                {#  #}
-                {#  const zIndex1 = whg_map.addLayer({#}
-                {#    id: 'z-index-1',#}
-                {#    type: 'symbol',#}
-                {#    source: 'empty'#}
-                {#  }, 'z-index-2'); // place this layer below zIndex2#}
-                {##}
-                {#  // fetch geodata#}
-                {#renderData("{{ coll.id }}")#}
-                {#  addPlaces()#}
-                {#addSources(ds_list)#}
-                {##}
-                {#layer_list = getLoadedLayers(ds_list)#}
-                {#  layer_list=['outline','gl_active_point','gl_active_line','gl_active_poly']#}
-                {#  // popup generating events per layer#}
-                {#  for (l in layer_list){#}
-                {#  // TODO: allow clicking on polygons, denied here#}
-                {#  if(layer_list[l].indexOf('point') != -1){#}
-                {#      whg_map.on('mouseenter', layer_list[l], function () {#}
-                {#        whg_map.getCanvas().style.cursor = 'pointer';#}
-                {#      });#}
-                {##}
-                {#      // Change it back to a pointer when it leaves.#}
-                {#      whg_map.on('mouseleave', layer_list[l], function () {#}
-                {#        whg_map.getCanvas().style.cursor = '';#}
-                {#      });#}
-                {##}
-                {#      whg_map.on('click', layer_list[l], function (e) {#}
-                {#        clicked=e.features#}
-                {#        console.log('e features', clicked)#}
-                {#				ftype = e.features[0].layer.type#}
-                {#        gtype = e.features[0].geometry.type#}
-                {#        geom = e.features[0].geometry#}
-                {#        coords = e.features[0].geometry.coordinates#}
-                {#        place=e.features[0]#}
-                {#console.log('geom, coords', geom, coords)#}
-                {#        if(ftype == 'point'){#}
-                {#          var coordinates = geom.coordinates.slice();#}
-                {#         } else if (ftype == 'line'){#}
-                {#          // could be simple linestring#}
-                {#	        if(gtype=='LineString'){#}
-                {#            len = Math.round(geom.coordinates.length/2)#}
-                {#		        var coordinates = geom.coordinates[len]#}
-                {#	        } else {#}
-                {#            // MultiLineString#}
-                {#            segment=turf.lineString(coords[Math.round(coords.length/2)])#}
-                {#            len = turf.length(segment)#}
-                {#						var coordinates = turf.along(segment, len/2).geometry.coordinates#}
-                {#	        }#}
-                {#         } else {#}
-                {#          var coordinates = turf.centroid(geom).geometry.coordinates#}
-                {#        }#}
-                {#        var pid = e.features[0].properties.pid;#}
-                {#        var title = e.features[0].properties.title;#}
-                {#        var src_id = e.features[0].properties.src_id;#}
-                {#        var minmax = e.features[0].properties.minmax;#}
-                {#        var fc = e.features[0].properties.fclasses;#}
-                {##}
-                {#        while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {#}
-                {#          coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;#}
-                {#        }#}
-                {#				// highlight#}
-                {#        highlightFeatureGL(pid, geom, coords, 'places')#}
-                {##}
-                {#        // popup#}
-                {#        new maplibregl.Popup()#}
-                {#          .setLngLat(coordinates)#}
-                {#          .setHTML('<b>'+title+'</b><br/>'+#}
-                {#            '<a href="javascript:getPlace('+pid+',\'popup\')">fetch info</a><br/>'+#}
-                {#            'start, end: '+minmax)#}
-                {#          .on('close', function(){#}
-                {#            $("#placetable_filter input").val('').keyup()#}
-                {#	          whg_map.fitBounds(turf.bbox(fcoll), { padding: 20 });#}
-                {#          })#}
-                {#          .addTo(whg_map);#}
-                {##}
-                {#				// TODO: fit bounds if not point#}
-                {#bbox=turf.envelope(geom).bbox#}
-                {#whg_map.fitBounds(bbox, { padding: 30})#}
-                {#        whg_map.setCenter(coordinates)#}
-                {#      })#}
-                {#    }#}
-                {##}
-                {#})
-                    ;
-                    #}
-
-                    // builds link for external place record
-                    function url_extplace(identifier) {
-                        // abbreviate links not in aliases.base_urls (loaded in `base.js`)
-                        if (identifier.startsWith('http')) {
-                            let tag = identifier.replace(/.+\/\/|www.|\..+/g, '')
-                            link = '<a href="' + identifier + '" target="_blank">' + tag + '<i class="fas fa-external-link-alt linky"></i>,  </a>'
-                        } else {
-                            link = '<a href="" class="ext" data-target="#ext_site">' + identifier + '&nbsp;<i class="fas fa-external-link-alt linky"></i></a>, '
-                        }
-                        return link
-                    }
-
-                    // builds link for external placetype record
-                    function url_exttype(type) {
-                        link = ' <a href="#" class="exttab" data-id=' + type.identifier +
-                            '>(' + type.label + ' <i class="fas fa-external-link-alt linky"></i>)</a>'
-                        return link
-                    }
-
-                    function minmaxer(timespans) {
-                        starts = [];
-                        ends = []
-                        for (t in timespans) {
-                            // gets 'in', 'earliest' or 'latest'
-                            starts.push(Object.values(timespans[t].start)[0])
-                            ends.push(!!timespans[t].end ? Object.values(timespans[t].end)[0] : -1)
-                        }
-                        minmax = [Math.max.apply(null, starts), Math.max.apply(null, ends)]
-                        return minmax
-                    }
-
+            // Compute min/max for timespans
+            function minmaxer(timespans) {
+                const starts = [];
+                const ends = [];
+                for (const t of timespans) {
+                    starts.push(Object.values(t.start)[0]);
+                    ends.push(t.end ? Object.values(t.end)[0] : -1);
                 }
-            )
-                ;
+                return [Math.max(...starts), Math.max(...ends)];
+            }
+
+        });
     </script>
 {% endblock %}

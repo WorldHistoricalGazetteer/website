@@ -71,40 +71,66 @@ function toggleMapLayers(whg_map, val) {
 }
 
 export function highlightFeature(ds_pid, features, whg_map, extent = false) {
+    if (!Array.isArray(features) || features.length === 0) {
+        console.warn('No features provided to highlightFeature.');
+        return;
+    }
 
-	features = features.filter(f => f.properties.dsid === ds_pid.ds);
+    // Filter features belonging to the dataset
+    features = features.filter(f => f.properties?.dsid === ds_pid.ds);
+    if (features.length === 0) {
+        console.warn(`No features found for dataset ${ds_pid.ds}.`);
+        return;
+    }
 
-	var featureIndex = features.findIndex(
-		f => String(f.properties.pid) === String(ds_pid.pid)); /* Usually an integer, but not in the case of aggregated places in Dataset Collections */
-	if (featureIndex !== -1) {
-		if (window.highlightedFeatureIndex !== undefined) whg_map.setFeatureState(
-			window.highlightedFeatureIndex, {
-				highlight: false,
-			});
-		var feature = features[featureIndex];
-		const geom = feature.geometry;
-		if (geom) {
-			// zoom to feature
-			whg_map.fitViewport(extent || bbox(geom), defaultZoom);
+    // Find the feature by pid
+    const featureIndex = features.findIndex(
+        f => String(f.properties?.pid) === String(ds_pid.pid)
+    );
 
-			// highlight feature in multiple sources & layers
-			window.datacollection.metadata.layers.forEach(layerName => {
-				window.highlightedFeatureIndex = {
-					source: `${ds_pid.ds_id}_${layerName}`,
-					id: featureIndex,
-				};
-				whg_map.setFeatureState(window.highlightedFeatureIndex, {
-					highlight: true,
-				});
-			});
+    if (featureIndex === -1) {
+        console.warn(`Feature ${ds_pid.pid} not found in dataset ${ds_pid.ds}.`);
+        return;
+    }
 
-		} else {
-			console.warn('Feature in clicked row has no geometry.');
-		}
-	} else {
-		console.warn(`Feature ${ds_pid.pid} not found.`);
-	}
+    // Remove highlight from previously highlighted feature
+    if (window.highlightedFeatureIndex !== undefined) {
+        whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: false });
+    }
 
+    const feature = features[featureIndex];
+    const geom = feature.geometry;
+
+    // Check for valid geometry
+    if (!geom || !geom.type || !Array.isArray(geom.coordinates)) {
+        console.warn('Feature has invalid or missing geometry:', feature);
+        return;
+    }
+
+    // Zoom to feature (using extent if provided, otherwise compute bbox)
+    try {
+        const targetExtent = extent || bbox(feature);
+        whg_map.fitViewport(targetExtent, defaultZoom);
+    } catch (err) {
+        console.error('Failed to fit viewport for feature geometry:', err, feature);
+        return;
+    }
+
+    // Highlight feature in all relevant layers
+    if (!window.datacollection?.metadata?.layers?.length) {
+        console.warn('No layers defined in datacollection metadata.');
+        return;
+    }
+
+    window.datacollection.metadata.layers.forEach(layerName => {
+        const sourceId = `${ds_pid.ds_id}_${layerName}`;
+        if (!whg_map.getSource(sourceId)) {
+            console.warn(`Source ${sourceId} not found in current map style.`);
+            return;
+        }
+        window.highlightedFeatureIndex = { source: sourceId, id: featureIndex };
+        whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+    });
 }
 
 export function initialiseTable(

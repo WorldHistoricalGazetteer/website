@@ -334,8 +334,12 @@ def generate_mapdata(category, id, refresh=False):
         "seqmin": mapdata.get("seqmin", None),
         "seqmax": mapdata.get("seqmax", None),
         "num_places": len(mapdata["features"]),
-        "bounds": json.loads(mapdata["bounds"].geojson),
-        "extent": mapdata["extent"],  # Buffered bounds
+        "bounds": (
+            json.loads(mapdata["bounds"].geojson)
+            if mapdata.get("bounds") is not None
+            else None
+        ),
+        "extent": mapdata.get("extent") or None,  # Buffered bounds, may be None
         "globeMode": globeMode,
         "coordinate_density": mapdata.get("coordinate_density", None),
         "datasets": mapdata.get("datasets", None),

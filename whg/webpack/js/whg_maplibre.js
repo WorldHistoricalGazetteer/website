@@ -844,6 +844,17 @@ maplibregl.Map.prototype.reset = function (fly = true) {
 };
 
 maplibregl.Map.prototype.fitViewport = function (bbox, maxZoom) {
+	// Validate bbox: must be an array of four finite numbers
+	if (
+		!Array.isArray(bbox) ||
+		bbox.length !== 4 ||
+		bbox.some(v => typeof v !== "number" || !isFinite(v)) ||
+		bbox[1] < -90 || bbox[3] > 90
+	) {
+		console.warn("fitViewport(): invalid bbox supplied", bbox);
+		return this; // Do nothing instead of throwing
+	}
+
 	// This function addresses an apparent bug with flyTo and fitBounds in MapLibre/Maptiler,
 	// which crash and/or fail to center correctly with large mapPadding values.
 	const mapContainer = this.getContainer();
