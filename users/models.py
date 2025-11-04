@@ -65,6 +65,7 @@ class User(AbstractUser, PermissionsMixin):
     # Email can come from ORCID (opportunistically) or user input (mandatory for full functionality)
     email = EncryptedTextField(validators=[EmailValidator()], null=True, blank=True)
     email_confirmed = models.BooleanField(default=False)
+    welcome_email_sent = models.BooleanField(default=False)
 
     given_name = models.CharField(max_length=255, null=True)
     surname = models.CharField(max_length=255, null=True)

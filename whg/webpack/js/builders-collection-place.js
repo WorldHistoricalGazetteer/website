@@ -90,50 +90,50 @@ $(function() {
 	$('#image_selector .thumbnail').enlarge();
 	
 	// ******************* LISTENERS *******************
+    $(document).on('click', '#b_anno_submit', function(event) {
+        event.preventDefault();
+        const button = $(this);
+        const formData = new FormData($('#anno_form')[0]);
 
-	$(document).on('click', '#b_anno_submit', function(event) {
-		event.preventDefault();
-		const formData = new FormData($('#anno_form')[0]);
-
-		// Function to show success/failure tooltip
-		function showTooltip(message, type) {
-            const button = $('#b_anno_submit');
-            button.attr('data-bs-original-title', '');
-            button.attr('data-bs-title', message);
-
+        // Function to show success/failure tooltip
+        function showTooltip(message) {
+            // Dispose any existing tooltip
             let tooltip = bootstrap.Tooltip.getInstance(button[0]);
-            if (!tooltip) {
-                tooltip = new bootstrap.Tooltip(button[0]);
-            }
+            if (tooltip) tooltip.dispose();
 
+            // Set message and initialize tooltip
+            button.attr('data-bs-title', message);
+            tooltip = new bootstrap.Tooltip(button[0], { trigger: 'manual' });
             tooltip.show();
 
-            setTimeout(function() {
+            // Automatically hide and dispose after 3s
+            setTimeout(() => {
                 tooltip.dispose();
-            	button.attr('data-bs-original-title', '');
-            	button.attr('data-bs-title', '');
+                button.removeAttr('data-bs-title');
             }, 3000);
-		}
+        }
 
-		$.ajax({
-			url: $('#anno_form').data('action'),
-			type: 'POST',
-			data: formData,
-			processData: false,
-			contentType: false,
-			success: function(response) {
-				showTooltip('Annotation saved successfully!', 'success');
-				const placeId = $('#anno_form').find('input[name="place"]').val();
-				const placeCard = $(`.col-place-card#${placeId}`);
-				if (placeCard.length && !placeCard.find('p i.red-head').length) {
+        $.ajax({
+            url: $('#anno_form').data('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                showTooltip('Annotation saved successfully!');
+
+                const placeId = $('#anno_form').find('input[name="place"]').val();
+                const placeCard = $(`.col-place-card#${placeId}`);
+
+                if (placeCard.length && !placeCard.find('p i.red-head').length) {
                     placeCard.find('p').append('<i class="red-head ms-3">annotated</i>');
                 }
-			},
-			error: function(xhr) {
-				showTooltip('An error occurred: ' + xhr.responseText, 'danger');
-			}
-		});
-	});
+            },
+            error: function(xhr) {
+                showTooltip('An error occurred: ' + xhr.responseText);
+            }
+        });
+    });
 
 	$('#sharing_form').submit(function(event) {
 		// Stop form from submitting normally

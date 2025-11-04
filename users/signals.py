@@ -17,51 +17,67 @@ User = get_user_model()
 
 @receiver(post_save, sender=User)
 def welcome_email(sender, instance, created, **kwargs):
-    """Send welcome email to new user on registration w/reply-to editorial;
-       separate message to admins via Slack"""
-    if not created:
-        return  # only act on first save (registration)
+    """
+    Send welcome email to new user once they have a verified email.
+    Notify admins via Slack and Zulip.
+    """
+    # Only send once
+    if instance.welcome_email_sent:
+        return
 
-    logger.debug(
-        f"New user created: {instance.id} | {instance.username} | {instance.name}, sending welcome email to {instance.email}")
+    # We need a verified email to send
+    if not instance.has_verified_email:
+        return
 
-    from whgmail.messaging import WHGmail
-    WHGmail(context={
-        'template': 'welcome',
-        'subject': 'Welcome to WHG',
-        'to_email': instance.email,
-        'greeting_name': instance.name,
-        'username': instance.username,
-        'name': instance.name,
-    })
+    # Send welcome email
+    try:
+        logger.debug(
+            f"Sending welcome email to user {instance.id} | {instance.username} | {instance.name} | {instance.email}"
+        )
 
-    notification = (
+        from whgmail.messaging import WHGmail
+        WHGmail(context={
+            'template': 'welcome',
+            'subject': 'Welcome to WHG',
+            'to_email': instance.email,
+            'greeting_name': instance.name,
+            'username': instance.username,
+            'name': instance.name,
+        })
+
+        # Notify admins via Zulip
+        notification = (
             f"*Subject:* New User Registered\n"
             f"*Username:* {instance.username}\n"
             f"*Name:* {instance.name}\n"
             f"*User ID:* {instance.id}\n"
             f"----------------------------------------"
         )
+        from whgmail.messaging import zulip_notification
+        zulip_notification(notification, topic="New User Registered")
 
-    from whgmail.messaging import zulip_notification
-    zulip_notification(notification, topic="New User Registered")
+        # Notify admins via Slack
+        try:
+            client = WebClient(token=settings.SLACK_BOT_OAUTH)
+            response = client.chat_postMessage(
+                channel='site-notifications',
+                text=notification
+            )
+            if response["ok"]:
+                logger.info("Message sent to Slack.")
+            else:
+                logger.error(f"Failed to send Slack message: {response['error']}")
+        except SlackApiError as e:
+            logger.error(f"Slack API error: {e.response['error']}")
+        except Exception:
+            logger.exception("Error sending Slack notification")
 
-    try:
-        client = WebClient(token=settings.SLACK_BOT_OAUTH)
-        response = client.chat_postMessage(
-            channel='site-notifications',
-            text=notification
-        )
+        # Mark email as sent
+        instance.welcome_email_sent = True
+        instance.save(update_fields=["welcome_email_sent"])
 
-        if response["ok"]:
-            logger.info("Message sent to Slack.")
-        else:
-            logger.error(f"Failed to send message to Slack: {response['error']}")
-
-    except SlackApiError as e:
-        logger.error(f"Slack API error: {e.response['error']}")
-    except Exception as e:
-        logger.exception("Error occurred while sending Slack notification for new user registration")
+    except Exception:
+        logger.exception(f"Failed to send welcome email to user {instance.id} | {instance.username}")
 
 
 @receiver(post_delete, sender=User)

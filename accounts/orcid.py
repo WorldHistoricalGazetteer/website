@@ -1,3 +1,5 @@
+# accounts/orcid.py
+
 import logging
 from datetime import timedelta
 from typing import Optional
@@ -130,7 +132,10 @@ class OIDCBackend(BaseBackend):
         Authenticate or create user based on ORCiD record.
         """
         if not orcid_id or not record:
-            logger.error("Missing ORCiD ID or record during authentication.")
+            logger.warning("Missing ORCiD ID or record during authentication.")
+            if request:
+                from django.contrib import messages
+                messages.error(request, "ORCiD login failed: no identifier or record received.")
             return None
 
         logger.debug(f"Authenticating ORCiD user: {orcid_id}")
@@ -252,7 +257,7 @@ def orcid_callback(request):
     session_state = request.session.get("oidc_state")
     state = request.GET.get("state")
     if not state or state != session_state:
-        logger.error(
+        logger.warning(
             "State mismatch or missing state. "
             f"Session: {session_state}, Callback: {state}"
         )
@@ -263,7 +268,7 @@ def orcid_callback(request):
 
     code = request.GET.get("code")
     if not code:
-        logger.error("No authorization code provided by ORCID.")
+        logger.warning("No authorization code provided by ORCID.")
         return redirect("accounts:login")
 
     # --- Exchange code for token ---
@@ -288,7 +293,8 @@ def orcid_callback(request):
     access_token = token_json.get("access_token")
     orcid_id = token_json.get("orcid")
     if not access_token or not orcid_id:
-        logger.error(f"ORCID did not return the required token.")
+        logger.warning(f"ORCID did not return the required token.")
+        messages.error(request, "ORCiD login failed: no access token or ID returned.")
         return redirect("accounts:login")
 
     # --- Fetch full ORCID record ---
@@ -305,6 +311,7 @@ def orcid_callback(request):
         record = record_response.json()
     except requests.RequestException as e:
         logger.warning(f"Failed to fetch ORCID record: {e}")
+        messages.warning(request, "Could not retrieve full ORCiD record; some fields may be missing.")
 
     # --- Authenticate user in Django ---
     user = auth.authenticate(request, orcid_id=orcid_id, record=record, token_json=token_json, backend=OIDCBackend)
@@ -315,7 +322,7 @@ def orcid_callback(request):
             return redirect("profile-edit")
         return redirect("home")
 
-    logger.error("ORCID authentication failed.")
+    logger.warning("ORCID authentication failed.")
     return redirect("accounts:login")
 
 
@@ -336,5 +343,5 @@ def revoke_orcid_token(refresh_token: str) -> bool:
         logger.info("Revoked ORCID token successfully")
         return True
     except requests.RequestException as e:
-        logger.error(f"Failed to revoke ORCID token: {e}")
+        logger.warning(f"Failed to revoke ORCID token: {e}")
         return False
