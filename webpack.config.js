@@ -7,7 +7,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const sentryWebpackPlugin = require("@sentry/webpack-plugin").default;
+const { sentryWebpackPlugin } = require("@sentry/webpack-plugin");
 const { execSync } = require('child_process');
 
 // Function to get the current Git commit hash
