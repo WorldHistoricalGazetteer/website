@@ -39,6 +39,10 @@ def get_creators(obj):
         logger.error("Error decoding citation_csl JSON.")
         return []
 
+    # Ensure this is a list before getting 'author'
+    if not isinstance(citation_data, dict):
+        return []
+
     creators = citation_data.get('author', [])
     return [
         {
@@ -96,10 +100,16 @@ def get_doi_metadata(type, id):
     if not obj:
         return None, None
 
+    # Check for core metadata requirements before building the API payload
+    creators_list = get_creators(obj)
+    if not creators_list:
+        logger.error(f"DOI Failed: Object {type}:{id} has no valid creators (author field missing/empty in citation_csl).")
+        return obj, None
+
     metadata = {
         'doi': format_doi(type, id),
         'url': format_url(type, id, obj),
-        "creators": get_creators(obj),
+        "creators": creators_list,
         "titles": [{"title": obj.title or "No title"}],
         "publicationYear": obj.create_date.year if obj.create_date else None,
         "descriptions": [{"description": obj.description or "", "descriptionType": "Abstract"}],

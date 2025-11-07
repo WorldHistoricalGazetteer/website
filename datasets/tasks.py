@@ -41,7 +41,7 @@ from whgmail.messaging import WHGmail
 
 import logging
 import ssl
-from elasticsearch8 import Elasticsearch, exceptions
+from elasticsearch8 import Elasticsearch, exceptions, NotFoundError
 from django.conf import settings
 
 CALLS_PER_SECOND = 30
@@ -117,21 +117,38 @@ def unindex_from_pub(dataset_id=None, place_id=None):
     idx = settings.ES_PUB
     if place_id:
         try:
-            # Check if the place exists and is indexed in 'pub'
+            # Check if the place exists in PostgreSQL and is indexed in 'pub'
             place = Place.objects.get(pk=place_id, idx_pub=True)
-            # Perform the delete operation for the specific place
-            response = es.delete(index=idx, id=str(place_id), refresh=True)
-            # Check if delete operation was successful
-            if response.get('result') != 'deleted':
-                raise Exception("Elasticsearch delete operation failed")
-            # Update the idx_pub flag for this Place object
+
+            # --- FIX: Perform the delete operation ---
+            # The Elasticsearch client will raise NotFoundError if the document is missing.
+            es.delete(index=idx, id=str(place_id), refresh=True)
+
+            # If the delete succeeds, update the idx_pub flag
             place.idx_pub = False
             place.save()
+
+        except NotFoundError:
+            # FIX APPLIED: Catch the 404 (Not Found) from Elasticsearch/OpenSearch.
+            # This means the document is already absent, so the goal is achieved.
+            logger.info(f"Place ID {place_id} was not found in index '{idx}'. Unindex confirmed.")
+
+            # Update the Django flag defensively, as the database believes it's indexed
+            try:
+                place = Place.objects.get(pk=place_id)
+                place.idx_pub = False
+                place.save()
+            except Place.DoesNotExist:
+                logger.warning(f"Place ID {place_id} not found in DB after unindex check.")
+
         except Place.DoesNotExist:
-            logger.error(f"Place with ID {place_id} does not exist or is not indexed to 'pub'.")
+            logger.error(f"Place with ID {place_id} does not exist or is not indexed in 'pub' (DB status).")
+
         except Exception as e:
-            logger.error(f"An error occurred while attempting to unindex place with ID {place_id}: {e}")
-            raise  # Re-raise exception to ensure it's caught by Celery
+            # Catch other critical errors (e.g., connection errors, permission errors)
+            logger.error(f"An unexpected error occurred while unindexing {place_id}: {e}")
+            raise  # Re-raise to signal Celery failure
+
         return {'place_id': place_id}
 
     elif dataset_id:

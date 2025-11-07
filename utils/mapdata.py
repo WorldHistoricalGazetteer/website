@@ -11,6 +11,7 @@ from django.contrib.gis.db.models.aggregates import Union
 from django.contrib.gis.geos import GeometryCollection, Polygon
 from django.core.cache import cache
 from django.core.cache.backends.filebased import FileBasedCache
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q, Prefetch
 from django.db.models.signals import post_save, post_delete
 from django.http import JsonResponse
@@ -70,8 +71,18 @@ def refresh_mapdata_cache(category, id):
         cache_key = f"{category}_{id}"
         refresh_was_scheduled = redis_client.srem(PENDING_REFRESH_KEY, cache_key)
         if refresh_was_scheduled:
-            generate_mapdata(category, id, refresh=True)
-            logger.info(f"Regenerated mapdata for {category}:{id}, and removed from queue")
+            try:
+                generate_mapdata(category, id, refresh=True)
+                logger.info(f"Regenerated mapdata for {category}:{id}, and removed from queue")
+
+            except ObjectDoesNotExist: # Catches Dataset.DoesNotExist, Collection.DoesNotExist, etc.
+                logger.warning(
+                    f"Orphaned task detected: {category} ID {id} does not exist in DB. Removed from Redis queue."
+                )
+                return {"status": "orphaned", "category": category, "id": id}
+
+            # If successful (no exception raised):
+            return {"status": "success", "category": category, "id": id}
         else:
             logger.info(f"Mapdata refresh for {category}:{id} was already processed or not scheduled.")
         return {"status": "success", "category": category, "id": id}

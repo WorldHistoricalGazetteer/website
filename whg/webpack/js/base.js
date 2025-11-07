@@ -342,6 +342,12 @@ Promise.all([
         } else {
             $("[href='" + clicked + "']").addClass('navactive');
         }
+
+        $(document).on('click', '.toggle-truncate-link', function (e) {
+            e.preventDefault();
+            const $wrapper = $(this).closest('.toggle-truncate-wrapper');
+            $wrapper.toggleClass('toggle-truncate-more');
+        });
     })
     .catch(function (error) {
         console.error('Error loading resources:', error);

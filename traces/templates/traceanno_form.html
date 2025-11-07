@@ -48,7 +48,7 @@
 				{% if form.image_file.value %}
 					<a href="/media/{{ form.image_file.value }}">
 						{{ form.image_file.value }}
-					</a> (<a href="javascript:showChooser('anno_img')">change</a>)
+					</a> (<a href="#" class="js-show-chooser-trigger" data-chooser-target="anno_img">change</a>)
 				{% else %}
 					{{ form.image_file }}
 				{% endif %}

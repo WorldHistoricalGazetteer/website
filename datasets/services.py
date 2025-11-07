@@ -662,6 +662,15 @@ def update_close_matches(new_child_id, parent_place_id, user, task):
         assert isinstance(user, User), f'user is not a User instance: {type(user)}'
         assert isinstance(task, TaskResult), f'task is not a TaskResult instance: {type(task)}'
 
+        # Check that both place IDs exist in the Place model before linking
+        if not Place.objects.filter(id__in=[place_a_id, place_b_id]).count() == 2:
+            logger.error(
+                f'Link attempt failed: One or both Place records are missing. '
+                f'IDs checked: {place_a_id}, {place_b_id}'
+            )
+            # Prevent proceeding with database operation
+            return
+
         # Check if a CloseMatch record already exists
         if not CloseMatch.objects.filter(
                 Q(place_a_id=place_a_id) & Q(place_b_id=place_b_id)

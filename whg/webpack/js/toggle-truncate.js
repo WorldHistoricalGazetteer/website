@@ -114,9 +114,10 @@ $.fn.toggleTruncate = function(arg1, arg2 = {}) {
         }).join('');
 
         el.html(`<span class="${options.toggleTruncate}-wrapper ${options.toggleTruncate}-more">${wrappedContent}<span class="${options.toggleTruncate}-ellipsis">${options.ellipsis}</span><span class="${options.toggleTruncate}-link"><span>${options.moreText}</span><span class="${options.toggleTruncate}">${options.lessText}</span></span></span>`);
-        
-        el.find(`.${options.toggleTruncate}-link`).click(function() {
-            el.find(`.${options.toggleTruncate}-wrapper`).toggleClass(`${options.toggleTruncate}-more`);
-        });
+
+        // Now managed by delegation handler in base.js
+        // el.find(`.${options.toggleTruncate}-link`).click(function() {
+        //     el.find(`.${options.toggleTruncate}-wrapper`).toggleClass(`${options.toggleTruncate}-more`);
+        // });
     });
 };
