@@ -7,11 +7,24 @@ const TerserPlugin = require('terser-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const { sentryWebpackPlugin } = require("@sentry/webpack-plugin");
+const { execSync } = require('child_process');
+
+// Function to get the current Git commit hash
+const getGitHash = () => {
+  try {
+    return execSync('git rev-parse HEAD').toString().trim();
+  } catch (e) {
+    console.warn('Warning: Could not get git hash. Using a fallback release name.');
+    return 'fallback-release';
+  }
+};
 
 const isProduction = process.env.ENV_CONTEXT === 'whgazetteer-org';
 
 module.exports = {
 	mode: isProduction ? 'production' : 'development', // Use production mode for staging
+    devtool: isProduction ? 'source-map' : 'eval-source-map',
 	watch: true,
 	watchOptions: {
 		poll: 1000, // Check for changes every second
@@ -130,7 +143,18 @@ module.exports = {
 		          to: '/app/CDNfallbacks/',
 		        },
 	      	],
-	    }),
+	    }),...(isProduction ? [
+           new sentryWebpackPlugin({
+               url: 'https://errors.whgazetteer.org',  // Using GlitchTip rather than Sentry
+               authToken: process.env.GLITCHTIP_AUTH_TOKEN,  // Needs 'project:releases' and 'org:read' scopes
+               include: path.resolve(__dirname, 'static/webpack'),  // Location of final bundled files and source maps
+               thirdPartyErrorFilter: true,  // Crucial for ignoring browser extension errors
+               silent: true, // Suppress verbose logs
+               org: process.env.GLITCHTIP_ORG || "whgazetteer",
+               project: process.env.GLITCHTIP_PROJECT || "website",
+               release: getGitHash(),
+           }),
+       ] : []),
 	],
 	resolve: {
     	extensions: ['.js', '.xml', '.csl'],

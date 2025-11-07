@@ -287,19 +287,30 @@
     <!-- | Sponsors | Disclaimer -->
 </footer>
 
-<script src="{% static 'js/bundle.tracing.min.js' %}"></script>
 <script>
-  Sentry.init({
-    dsn: "https://3e76c8ff5cb9409181fc2ac916b6e0af@errors.whgazetteer.org/1",
-    integrations: [Sentry.browserTracingIntegration()],
-    tracesSampleRate: 0.01,
-    environment: "",
-  });
-  {% if user.is_authenticated %}
-  Sentry.setUser({
-    id: "user_{{ user.id }}"  // Just an ID, no personal info
-  });
-  {% endif %}
+  const GLITCHTIP_DSN = "{{ GLITCHTIP_DSN }}";
+  if (GLITCHTIP_DSN) {
+    Sentry.init({
+      dsn: GLITCHTIP_DSN,
+      integrations: [
+        Sentry.browserTracingIntegration(),
+        Sentry.thirdPartyErrorFilterIntegration(),
+        Sentry.captureConsoleIntegration({
+            levels: ['warn', 'error']
+        }),
+      ],
+      tracesSampleRate: 0.01,
+      // Use the variables passed from settings
+      environment: "{{ ENV_CONTEXT }}",
+      release: "{{ GLITCHTIP_RELEASE }}",
+    });
+
+    {% if user.is_authenticated %}
+    Sentry.setUser({
+      id: "user_{{ user.id }}"
+    });
+    {% endif %}
+  }
 </script>
 
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
