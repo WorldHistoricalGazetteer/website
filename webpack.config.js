@@ -88,59 +88,59 @@ module.exports = {
 	      	patterns: [
 		        {
 		          from: 'node_modules/jquery/dist/jquery.min.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/bootstrap/dist/js/bootstrap.bundle.min.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/bootstrap/dist/css/bootstrap.min.css',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/jquery-ui/dist/jquery-ui.min.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/jquery-ui/dist/themes/base/jquery-ui.min.css',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/clipboard/dist/clipboard.min.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/@fortawesome/fontawesome-free/css/all.min.css',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/twitter-typeahead-components-bundle/main.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/@turf/turf/turf.min.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
-		          from: 'node_modules/d3/build/d3.min.js',
-		          to: '/app/CDNfallbacks/',
+		          from: 'node_modules/d3/dist/d3.min.js',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/select2/dist/js/select2.full.js',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 		        {
 		          from: 'node_modules/select2/dist/css/select2.css',
-		          to: '/app/CDNfallbacks/',
+		          to: 'CDNfallbacks/',
 		        },
 	      	],
 	    }),...(isProduction ? [
