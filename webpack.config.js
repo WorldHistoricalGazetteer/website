@@ -7,7 +7,7 @@ const TerserPlugin = require('terser-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 const CopyWebpackPlugin = require('copy-webpack-plugin');
-const { sentryWebpackPlugin } = require("@sentry/webpack-plugin");
+const SentryWebpackPlugin = require("@sentry/webpack-plugin");
 const { execSync } = require('child_process');
 
 // Function to get the current Git commit hash
@@ -144,7 +144,7 @@ module.exports = {
 		        },
 	      	],
 	    }),...(isProduction ? [
-           new sentryWebpackPlugin({
+           new SentryWebpackPlugin({
                url: 'https://errors.whgazetteer.org',  // Using GlitchTip rather than Sentry
                authToken: process.env.GLITCHTIP_AUTH_TOKEN,  // Needs 'project:releases' and 'org:read' scopes
                include: path.resolve(__dirname, 'static/webpack'),  // Location of final bundled files and source maps
