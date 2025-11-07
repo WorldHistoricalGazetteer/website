@@ -32,7 +32,7 @@ services:
     depends_on:
       - redis
       - {{ DB_HOST }}
-{% if ENV_CONTEXT != 'whgazetteer.org' %}
+{% if ENV_CONTEXT != 'whgazetteer-org' %}
       - webpack
 {% endif %}
     restart: unless-stopped
