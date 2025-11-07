@@ -43,7 +43,7 @@ services:
       start_period: 60s
       timeout: 15s
 
-{% if ENV_CONTEXT != 'whgazetteer-org-TEMPORARY-WEBPACK-ENABLING-ON-PRODUCTION-SERVER' %}
+{% if ENV_CONTEXT != 'whgazetteer-org' %}
   webpack:
     networks:
       - {{ ENV_CONTEXT }}

@@ -25,7 +25,7 @@ const isProduction = process.env.ENV_CONTEXT === 'whgazetteer-org';
 module.exports = {
 	mode: isProduction ? 'production' : 'development', // Use production mode for staging
     devtool: isProduction ? 'source-map' : 'eval-source-map',
-	watch: true,
+	watch: !isProduction,
 	watchOptions: {
 		poll: 1000, // Check for changes every second
 	},
