@@ -1,6 +1,6 @@
 // base.js
 import * as Sentry from '@sentry/browser';
-import { browserTracingIntegration, thirdPartyErrorFilterIntegration, captureConsoleIntegration } from '@sentry/integrations';
+const { browserTracingIntegration, thirdPartyErrorFilterIntegration, captureConsoleIntegration } = Sentry;
 import { Spinner } from './spin.js';
 import { initWHGModal } from './whg-modal.js';
 import { initializeCitationFormatters } from './citationFormatter';
