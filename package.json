@@ -5,7 +5,8 @@
   "main": "webpack.config.js",
   "scripts": {
     "build": "webpack",
-    "watch": "webpack --watch"
+    "watch": "webpack --watch",
+    "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",
