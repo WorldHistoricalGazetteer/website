@@ -1107,9 +1107,90 @@ class CustomDrawingControl {
     }
 }
 
+
+function handleMapCreationFailure(options, errorMessage, existingMapInstance) {
+    const containerId = options.container || 'map';
+    const container = typeof containerId === 'string'
+        ? document.getElementById(containerId)
+        : containerId;
+
+    if (!container) return;
+
+    // If map instance exists (runtime error), show overlay
+    if (existingMapInstance) {
+        // Don't show multiple overlays
+        if (document.getElementById('map-error-overlay')) return existingMapInstance;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'map-error-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 243, 205, 0.95);
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px solid #ffc107;
+            z-index: 1000;
+            max-width: 400px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        `;
+        overlay.innerHTML = `
+            <div style="text-align: center;">
+                <h4 style="margin: 0 0 10px 0; color: #856404;">⚠️ Map Error</h4>
+                <p style="margin: 0 0 15px 0;">The map encountered an error and may not display correctly.</p>
+                <button onclick="location.reload()" class="btn btn-sm btn-warning">Refresh Page</button>
+                <button onclick="this.parentElement.parentElement.remove()" class="btn btn-sm btn-secondary">Dismiss</button>
+            </div>
+        `;
+
+        container.appendChild(overlay);
+        return existingMapInstance;
+    }
+
+    // If no map instance (initial load failure), replace container content
+    container.innerHTML = `
+        <div style="padding: 20px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin: 20px;">
+            <h4 style="color: #856404; margin-top: 0;">⚠️ Map Display Issue</h4>
+            <p>We're unable to display the map in your browser. This usually happens when:</p>
+            <ul>
+                <li>WebGL is disabled or unavailable</li>
+                <li>Too many browser tabs are using graphics acceleration</li>
+                <li>Your graphics drivers need updating</li>
+            </ul>
+            <p><strong>Try:</strong></p>
+            <ul>
+                <li>Refreshing the page</li>
+                <li>Closing some browser tabs</li>
+                <li>Enabling WebGL in browser settings</li>
+                <li>Using a different browser</li>
+            </ul>
+            <details style="margin-top: 10px; font-size: 0.85em; color: #6c757d;">
+                <summary style="cursor: pointer;">Technical details</summary>
+                <p style="margin: 5px 0 0 0; font-family: monospace;">${errorMessage}</p>
+            </details>
+        </div>
+    `;
+
+    // Return a stub object to prevent further errors
+    return {
+        on: () => {},
+        addControl: () => {},
+        remove: () => {},
+        getContainer: () => container,
+    };
+}
+
 const originalMapConstructor = maplibregl.Map;
 maplibregl.Map.prototype.baseStyle = {}; // Updated by style control, and used for identifying layers that should be ignored when the map is clicked
 maplibregl.Map = function (options = {}) {
+
+    // Check basic WebGL support
+    if (!maplibregl.supported()) {
+        console.error('MapLibre GL is not supported in this browser');
+        return handleMapCreationFailure(options, 'WebGL not supported', null);
+    }
 
     const defaultOptions = {
         container: 'map',
@@ -1155,9 +1236,28 @@ maplibregl.Map = function (options = {}) {
 		chosenOptions.style = getStyleURL(chosenOptions.styles[0]);
 	}
 
-    const mapInstance = new originalMapConstructor(chosenOptions);
+    // Try to create the map with error handling
+    let mapInstance;
+    try {
+        mapInstance = new originalMapConstructor(chosenOptions);
+    } catch (error) {
+        console.error('Failed to create map:', error);
+        return handleMapCreationFailure(chosenOptions, error.message, null);
+    }
 
     mapInstance.initOptions = chosenOptions;
+
+    mapInstance.on('error', (e) => {
+        console.error('MapLibre runtime error:', e);
+        // Check if it's a critical WebGL error
+        if (e.error && (
+            e.error.message?.includes('WebGL') ||
+            e.error.message?.includes('context') ||
+            e.error.message?.includes('CONTEXT_LOST')
+        )) {
+            handleMapCreationFailure(chosenOptions, 'Runtime WebGL error', mapInstance);
+        }
+    });
 
     mapInstance.on('load', () => { // Add chosen controls
 

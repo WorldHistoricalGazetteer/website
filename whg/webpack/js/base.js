@@ -217,7 +217,7 @@ Promise.all([
                     Sentry.browserTracingIntegration(),
                     Sentry.thirdPartyErrorFilterIntegration(),
                     Sentry.captureConsoleIntegration({
-                        levels: ['warn', 'error']
+                        levels: ['error']  // Could include 'warn' for more verbose reporting
                     }),
                 ],
                 tracesSampleRate: 0.01,
@@ -238,7 +238,13 @@ Promise.all([
         $.extend(true, $.fn.tooltip.Constructor.Default, {
             selector: '[data-bs-toggle="tooltip"]:not([disabled]), [rel="tooltip"]:not([disabled])',
             html: true,
-            trigger: 'hover'
+            trigger: 'hover',
+            title: function () {
+                const titleAttribute = this.getAttribute('title');
+                const dataBsTitle = this.getAttribute('data-bs-title');
+                // If both defaults are missing or null, return an empty string ('') instead of null/undefined.
+                return dataBsTitle || titleAttribute || '';
+            }
         });
         $('body').tooltip(); // Initialize Bootstrap tooltips with delegation to any dynamic content
 
