@@ -15,6 +15,12 @@
     <meta property="og:type" content="website">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token }}">
+    <meta name="glitchtip-dsn" content="{{ GLITCHTIP_DSN }}">
+    <meta name="env-context" content="{{ ENV_CONTEXT }}">
+    <meta name="glitchtip-release" content="{{ GLITCHTIP_RELEASE }}">
+    {% if user.is_authenticated %}
+    <meta name="user-id" content="user_{{ user.id }}">
+    {% endif %}
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>
     {% block schema_org %}
     <script type="application/ld+json">
@@ -286,32 +292,6 @@
     <a href="https://github.com/WorldHistoricalGazetteer/website/issues" target="_blank">Issues</a>
     <!-- | Sponsors | Disclaimer -->
 </footer>
-
-<script>
-  const GLITCHTIP_DSN = "{{ GLITCHTIP_DSN }}";
-  if (GLITCHTIP_DSN) {
-    Sentry.init({
-      dsn: GLITCHTIP_DSN,
-      integrations: [
-        Sentry.browserTracingIntegration(),
-        Sentry.thirdPartyErrorFilterIntegration(),
-        Sentry.captureConsoleIntegration({
-            levels: ['warn', 'error']
-        }),
-      ],
-      tracesSampleRate: 0.01,
-      // Use the variables passed from settings
-      environment: "{{ ENV_CONTEXT }}",
-      release: "{{ GLITCHTIP_RELEASE }}",
-    });
-
-    {% if user.is_authenticated %}
-    Sentry.setUser({
-      id: "user_{{ user.id }}"
-    });
-    {% endif %}
-  }
-</script>
 
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </body>
