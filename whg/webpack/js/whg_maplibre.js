@@ -1186,12 +1186,6 @@ const originalMapConstructor = maplibregl.Map;
 maplibregl.Map.prototype.baseStyle = {}; // Updated by style control, and used for identifying layers that should be ignored when the map is clicked
 maplibregl.Map = function (options = {}) {
 
-    // Check basic WebGL support
-    if (!maplibregl.supported()) {
-        console.error('MapLibre GL is not supported in this browser');
-        return handleMapCreationFailure(options, 'WebGL not supported', null);
-    }
-
     const defaultOptions = {
         container: 'map',
         style: ['WHG'/*, whg-basic-light'*//*, 'whg-basic-dark'*/],
