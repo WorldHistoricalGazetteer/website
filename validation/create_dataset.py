@@ -248,9 +248,6 @@ def save_dataset(task_id):
         from whgmail.messaging import zulip_notification
         zulip_notification(notification, topic="New Dataset Created")
 
-        from whgmail.messaging import slack_notification
-        slack_notification(notification)
-
         return
 
     except ObjectDoesNotExist as e:

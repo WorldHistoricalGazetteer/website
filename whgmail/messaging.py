@@ -9,9 +9,6 @@ from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
 
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
-
 logger = logging.getLogger('messaging')
 
 
@@ -50,45 +47,9 @@ def zulip_notification(notification, stream="website-notifications", topic="WHG 
         return False
 
 
-def slack_notification(slack_message, channel="site-notifications"):
-    """
-    Sends a notification to a specified Slack channel.
-
-    Parameters:
-    -----------
-    - channel: The Slack channel to send the notification to.
-        Example: '#notifications' or 'site-notifications'
-        
-    - slack_message: The message text to send.
-        Example: 'This is a test notification.'
-
-    Returns:
-    --------
-    - bool: True if the notification was sent successfully, False otherwise.
-    """
-    try:
-        client = WebClient(token=settings.SLACK_BOT_OAUTH)
-        response = client.chat_postMessage(
-            channel=channel,
-            text=slack_message
-        )
-
-        if response["ok"]:
-            logger.info("Message sent to Slack.")
-            return True
-        else:
-            logger.error(f"Failed to send message to Slack: {response['error']}")
-            return False
-    except SlackApiError as e:
-        logger.error(f"Slack API error: {e.response['error']}")
-        return False
-    except Exception as e:
-        logger.exception("Error occurred while sending notification to Slack")
-        return False
-
 def WHGmail(request=None, context={}):
     """
-    Sends an email using the provided context and optionally posts a notification to Slack.
+    Sends an email using the provided context.
 
     Context Parameters:
     -------------------
@@ -115,13 +76,10 @@ def WHGmail(request=None, context={}):
 
     - reply_to (optional): The email address used in the reply-to field. Defaults to settings.DEFAULT_FROM_EDITORIAL.
         Example: context['reply_to'] = 'support@whg.com'
-
-    - slack_notify (optional): If set to a string, it specifies the Slack channel for the notification. If True, it defaults to "site-notifications". Defaults to False.
-        Example: context['slack_notify'] = 'channel-name' or context['slack_notify'] = True
     
     Returns:
     --------
-    - bool: True if the email was sent successfully and Slack notification (if applicable) was successful, False otherwise.
+    - bool: True if the email was sent successfully, False otherwise.
     
     Example usage:
     --------------
@@ -134,7 +92,6 @@ def WHGmail(request=None, context={}):
         'from_name': 'WHG Support Team',
         'editor_email': 'editorial@whg.com',
         'reply_to': 'support@whg.com',
-        'slack_notify': 'channel-name'
     })
     """
     logger.info("WHGmail function has been called.")
@@ -159,7 +116,6 @@ def WHGmail(request=None, context={}):
         context.setdefault('from_name', "The WHG Project Team")
         context.setdefault('editor_email', settings.DEFAULT_FROM_EDITORIAL)
         context.setdefault('reply_to', settings.DEFAULT_FROM_EDITORIAL)
-        context.setdefault('slack_notify', False)
             
         html_content = render_to_string(f'{template}.html', context)
         
@@ -192,13 +148,6 @@ def WHGmail(request=None, context={}):
 
         zulip_notification(notification, topic="Email Sent")
         
-        logger.debug(f"slack_notify context value: {context.get('slack_notify')}")
-        if context.get('slack_notify') is not False:
-            logger.debug(f'Slack notification requested: {context.get("slack_notify")}')
-            channel = context['slack_notify'] if isinstance(context['slack_notify'], str) else "site-notifications"
-            slack_success = slack_notification(notification, channel)
-            return slack_success
-        
         return True
         
     except Exception as e:
@@ -208,7 +157,6 @@ def WHGmail(request=None, context={}):
 def testWHGmail(request):    
     success = WHGmail(request, {
         'template': 'wikidata_review_complete',
-        'slack_notify': True,
         'to_email': 'stephen@docuracy.co.uk',
     })
     return HttpResponse("Test message(s) sent!" if success else "Failed to send messages(s).")

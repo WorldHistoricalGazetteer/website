@@ -888,7 +888,6 @@ def align_wdlocal(*args, **kwargs):
         'dataset_id': ds.id if ds else 'N/A',
         'counthit': count_hit,
         'totalhits': total_hits,
-        'slack_notify': True,
     })
 
     return hit_parade['summary']
@@ -1495,7 +1494,6 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
             'dataset_id': dataset.id,
             'counthit': hit_summary['summary']['got_hits'],
             'totalhits': hit_summary['summary']['total_hits'],
-            'slack_notify': True,
         })
     except Exception as e:
         logger.error(f"Error in finalizing task for dataset {dataset.id}: {e}", exc_info=True)

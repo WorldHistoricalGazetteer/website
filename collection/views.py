@@ -185,7 +185,7 @@ def nominator(request, *args, **kwargs):
             'nominated_url': f'{settings.URL_FRONT}collections/{str(coll.id)}',
         })
 
-        # Notify WHG Editorial Staff (both Email and Slack)
+        # Notify WHG Editorial Staff
         WHGmail(request, {
             'to_email': f'{settings.DEFAULT_FROM_EDITORIAL}',
             'template': 'nomination_recd',
@@ -196,7 +196,6 @@ def nominator(request, *args, **kwargs):
             'leader_email': request.user.email,
             'owner_name': coll.owner,
             'nominated_url': f'{settings.URL_FRONT}collections/{str(coll.id)}',
-            'slack_notify': True,
         })
 
         # else:

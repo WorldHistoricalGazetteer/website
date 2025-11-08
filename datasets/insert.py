@@ -647,7 +647,7 @@ def ds_insert_delim(df, pk):
 
 
 def failed_insert_notification(user, fn, ds=None):
-    """Send email to user and Slack notification when insert fails"""
+    """Send email to user when insert fails"""
 
     WHGmail(context={
         'template': 'failed_insert',
@@ -657,7 +657,6 @@ def failed_insert_notification(user, fn, ds=None):
         'dataset_title': ds.title if ds else 'N/A',
         'dataset_label': ds.label if ds else 'N/A',
         'dataset_id': ds.id if ds else 'N/A',
-        'slack_notify': True,
     })
 
 

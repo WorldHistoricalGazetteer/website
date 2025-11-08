@@ -6,8 +6,6 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from slack_sdk import WebClient
-from slack_sdk.errors import SlackApiError
 
 from accounts.orcid import revoke_orcid_token
 
@@ -19,7 +17,7 @@ User = get_user_model()
 def welcome_email(sender, instance, created, **kwargs):
     """
     Send welcome email to new user once they have a verified email.
-    Notify admins via Slack and Zulip.
+    Notify admins via Zulip.
     """
     # Only send once
     if instance.welcome_email_sent:
@@ -55,22 +53,6 @@ def welcome_email(sender, instance, created, **kwargs):
         )
         from whgmail.messaging import zulip_notification
         zulip_notification(notification, topic="New User Registered")
-
-        # Notify admins via Slack
-        try:
-            client = WebClient(token=settings.SLACK_BOT_OAUTH)
-            response = client.chat_postMessage(
-                channel='site-notifications',
-                text=notification
-            )
-            if response["ok"]:
-                logger.info("Message sent to Slack.")
-            else:
-                logger.error(f"Failed to send Slack message: {response['error']}")
-        except SlackApiError as e:
-            logger.error(f"Slack API error: {e.response['error']}")
-        except Exception:
-            logger.exception("Error sending Slack notification")
 
         # Mark email as sent
         instance.welcome_email_sent = True

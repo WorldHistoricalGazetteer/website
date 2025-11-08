@@ -38,13 +38,6 @@ def send_new_dataset_email(sender, instance, **kwargs):
             from whgmail.messaging import zulip_notification
             zulip_notification(notification, topic="New Dataset Created")
 
-            try:
-                response = requests.post(settings.SLACK_NOTIFICATION_WEBHOOK, json={"text": notification})
-                if not response.status_code == 200:
-                    logger.debug(f"Failed to send message to Slack: {response.status_code}, {response.text}")
-            except Exception as e:
-                logger.exception(f"Error occurred while sending Slack notification for new dataset: {e}")
-
 
 def format_time(seconds):
     minutes, seconds = divmod(seconds, 60)
@@ -147,7 +140,6 @@ def handle_status_change(sender, instance, **kwargs):
                     'dataset_title': instance.title if instance else 'N/A',
                     'dataset_label': instance.label if instance else 'N/A',
                     'dataset_id': instance.id if instance else 'N/A',
-                    'slack_notify': True,
                 })
                 # print('handle_status_change: wd-complete')
                 # remove from volunteers needed page
@@ -167,7 +159,6 @@ def handle_status_change(sender, instance, **kwargs):
                     'dataset_title': instance.title if instance else 'N/A',
                     'dataset_label': instance.label if instance else 'N/A',
                     'dataset_id': instance.id if instance else 'N/A',
-                    'slack_notify': True,
                 })
                 # remove from volunteers needed page
                 instance.volunteers = False
