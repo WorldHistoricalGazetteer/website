@@ -369,7 +369,6 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
         elif len(matched_for_idx) == 1:
             parent_id = matched_for_idx[0]["pid"]
             indexMatch(str(place.id), hit_pid=parent_id, user=request.user, task=task)
-            update_close_matches(place.id, parent_id, request.user, task)
             place.indexed = True
             update_fields.append('indexed')
         elif len(matched_for_idx) > 1:
@@ -481,6 +480,11 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
 
             es.index(index=idx, id=place.id, body=json.dumps(new_doc))
             logger.info(f"Place {pid} added as child of parent {parent_whgid}.")
+
+            if user and task:
+                update_close_matches(int(pid), int(hit_pid), user, task)
+            else:
+                logger.warning(f"Cannot create CloseMatch for {pid} and {hit_pid}: missing user or task")
         else:
             logger.debug(f"No hit_pid provided for Place {pid}. No child-parent relationship created.")
     except Exception as e:
