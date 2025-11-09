@@ -18,6 +18,13 @@ def get_git_branch():
     except subprocess.CalledProcessError:
         return None
 
+def get_git_release():
+    """Return a short Git commit hash for tagging the current release."""
+    try:
+        return subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).strip().decode('utf-8')
+    except subprocess.CalledProcessError:
+        return 'unknown'
+
 def update_entrypoints(entrypoints_path):
 
     for file in os.listdir(entrypoints_path):
@@ -62,6 +69,8 @@ def apply_context_overrides(template_vars, context):
     context_vars['POSTGRES_PASSWORD'] = context_vars['DB_PASSWORD']
     context_vars['POSTGRES_DB'] = context_vars['DB_NAME']
     context_vars['CELERY_BROKER_URL'] = f"redis://redis:6379/0"
+    context_vars['GLITCHTIP_RELEASE'] = get_git_release()
+
     return OrderedDict(sorted(context_vars.items()))
 
 def write_env_file(env_vars, output_path):

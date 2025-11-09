@@ -1064,13 +1064,12 @@ def es_lookup_idx(qobj, *, bounds=None):
         "query": {
             "bool": {
                 "must": [
-                    {"terms": {"links.identifier.keyword": links}},
-                    {"term": {"authority.keyword": qobj["authority"]}},
+                    {"terms": {"links.identifier.keyword": links}}
                 ]
             }
         }
-    }
-    hits0 = _safe_es_search(indices, q0, pass_label="pass0")
+    } if links else None
+    hits0 = _safe_es_search(indices, q0, pass_label="pass0") if q0 else []
 
     # ---------- pass 1 : lexical + spatial ----------
     q1 = {
