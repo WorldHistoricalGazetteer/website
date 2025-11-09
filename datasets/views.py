@@ -2070,10 +2070,15 @@ class DatasetAddTaskView(LoginRequiredMixin, DetailView):
         context['userarea'] = self.request.GET.get('userarea', None)
         context['ds'] = ds
         context['numrows'] = ds.places.count()
+        self.logger.debug("numrows computed in %.3fs", time.perf_counter() - t0)
         context['collaborators'] = ds.collabs.all()
+        self.logger.debug("collaborators fetched in %.3fs", time.perf_counter() - t0)
         context['owners'] = ds.owners
+        self.logger.debug("owners fetched in %.3fs", time.perf_counter() - t0)
         context['remain_to_review'] = {k[6:]: v[0]['total'] for k, v in ds.taskstats.items() if len(v) > 0}
+        self.logger.debug("remain_to_review computed in %.3fs", time.perf_counter() - t0)
         context['missing_geoms'] = ds.missing_geoms
+        self.logger.debug("missing_geoms computed in %.3fs", time.perf_counter() - t0)
         context['is_admin'] = is_admin
         self.logger.debug("Filled remaining context in %.3fs", time.perf_counter() - t0)
 
