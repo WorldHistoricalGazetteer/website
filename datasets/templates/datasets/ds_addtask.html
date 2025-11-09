@@ -82,11 +82,9 @@
                     </div>
                     {% for message in messages %}
                       <div class="container-fluid p-0">
-                        <div class="alert {{ message.tags }} alert-dismissible" role="alert">
-                          <button type="button" id="error_closer" class="close" data-dismiss="alert" aria-label="Close">
-                            <span aria-hidden="True">&times;</span>
-                          </button>
+                        <div class="alert {{ message.tags }} alert-dismissible fade show" role="alert">
                           {{ message }}
+                          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                       </div>
                     {% endfor %}

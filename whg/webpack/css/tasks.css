@@ -4,7 +4,3 @@
 .maplibregl-map {
     min-height: 300px;
 }
-
-#error_closer {
-	padding: 0 .75rem !important;
-}
