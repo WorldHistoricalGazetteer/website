@@ -1060,40 +1060,45 @@ def es_lookup_idx(qobj, *, bounds=None):
         filters.append(get_bounds_filter(bounds, "whg"))
 
     # ---------- pass 0 : identifier matches ----------
-    q0 = {
-        "query": {
-            "bool": {
-                "must": [
-                    {"terms": {"links.identifier.keyword": links}}
-                ]
+    hits0 = []
+    if links:  # Only run if we have links
+        q0 = {
+            "query": {
+                "bool": {
+                    "must": [
+                        {"terms": {"links.identifier.keyword": links}}
+                    ]
+                }
             }
         }
-    } if links else None
-    hits0 = _safe_es_search(indices, q0, pass_label="pass0") if q0 else []
+        hits0 = _safe_es_search(indices, q0, pass_label="pass0")
 
     # ---------- pass 1 : lexical + spatial ----------
-    q1 = {
-        "size": 100,
-        "query": {
-            "bool": {
-                "must": [
-                    {"exists": {"field": "whg_id"}},
-                    {"bool": {
-                        "should": [
-                            {"terms": {"names.toponym": variants}},
-                            {"terms": {"title": variants}},
-                            {"terms": {"searchy": variants}},
-                        ]
-                    }},
-                ],
-                "should": [
-                    {"terms": {"types.identifier": qobj.get("placetypes", [])}},
-                ],
-                "filter": filters,
-            }
-        },
-    }
-    hits1 = _safe_es_search(indices, q1, pass_label="pass1")
+    hits1 = []
+    if variants:  # Only run if we have variants
+        q1 = {
+            "size": 100,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"exists": {"field": "whg_id"}},
+                        {"bool": {
+                            "should": [
+                                {"terms": {"names.toponym": variants}},
+                                {"terms": {"title": variants}},
+                                {"terms": {"searchy": variants}},
+                            ],
+                            "minimum_should_match": 1  # ADD THIS
+                        }},
+                    ],
+                    "should": [
+                        {"terms": {"types.identifier": qobj.get("placetypes", [])}},
+                    ],
+                    "filter": filters,
+                }
+            },
+        }
+        hits1 = _safe_es_search(indices, q1, pass_label="pass1")
 
     # ---------- consolidate and label ----------
     seen_ids = set()
@@ -1164,7 +1169,7 @@ def align_idx(*args, **kwargs):
         task_id = align_idx.request.id
         ds = get_object_or_404(Dataset, id=kwargs['ds'])
         user = get_object_or_404(User, id=kwargs['user'])
-        test_mode = kwargs.get('test', 'on') # always 'on' for dev - no writing to the production index!
+        test_mode = kwargs.get('test', 'on')  # always 'on' for dev - no writing to the production index!
 
         es = settings.ES_CONN
         whg_id = maxID(es, settings.ES_WHG)  # get max whg_id for new parent docs
@@ -1337,7 +1342,8 @@ def batch_new_seeds(new_seeds, test_mode, start_id):
                                     f"{action_info.get('error', {}).get('reason')}"
                                 )
 
-                        Place.objects.filter(pk__in=[p.id for p in places_to_update]).update(indexed=True, idx_pub=False)
+                        Place.objects.filter(pk__in=[p.id for p in places_to_update]).update(indexed=True,
+                                                                                             idx_pub=False)
 
                     logger.info(f"Batch bulk indexing complete: {success_count} succeeded, {failure_count} failed.")
 
@@ -1389,6 +1395,7 @@ def classify_hits(hits):
 
 def merge_parent_child(parent, children):
     """Merges parent and child records into a single hit object, safely handling missing fields."""
+
     def safe_list(val):
         return val if isinstance(val, list) else []
 
@@ -1432,7 +1439,8 @@ def build_sources(parent, children):
     """Builds the sources field for the hit object."""
     sources = [
         {'dslabel': parent['dataset'], 'pid': parent['pid'], 'variants': parent['variants'], 'types': parent['types'],
-         'related': parent['related'], 'children': parent['children'], 'minmax': parent['minmax'], 'pass': parent['pass'][:5]}
+         'related': parent['related'], 'children': parent['children'], 'minmax': parent['minmax'],
+         'pass': parent['pass'][:5]}
     ]
     sources.extend(
         {'dslabel': c['dataset'], 'pid': c['pid'], 'variants': c['variants'], 'types': c['types'],
