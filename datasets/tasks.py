@@ -2,6 +2,7 @@
 # align_tgn(), align_wdlocal(), align_idx(), align_whg, make_download
 from __future__ import absolute_import, unicode_literals
 
+import ast
 import time
 
 from django_celery_results.models import TaskResult
@@ -32,11 +33,11 @@ from collection.models import Collection
 from datasets.models import Dataset, Hit
 from datasets.static.hashes.parents import ccodes as cchash
 from datasets.static.hashes.qtypes import qtypes
-from elastic.es_utils import makeDoc, build_qobj, profileHit
+from elastic.es_utils import makeDoc, build_qobj, profileHit, removeDatasetFromIndex
 from datasets.utils import elapsed, getQ, \
     HitRecord, hully, parse_wkt, post_recon_update  # bestParent, makeNow,
 from main.models import Log, DownloadFile
-from places.models import Place
+from places.models import Place, PlaceGeom, PlaceLink, PlaceName
 from whgmail.messaging import WHGmail
 
 import logging
@@ -49,6 +50,85 @@ CALLS_PER_SECOND = 30
 logger = get_task_logger(__name__)
 es = settings.ES_CONN
 User = get_user_model()
+
+
+@shared_task(name="delete_reconciliation_task")
+def delete_reconciliation_task(tid, scope, dsid, user_id):
+    """
+    Background task to delete reconciliation task results
+    """
+    logger = logging.getLogger('dataset')
+    logger.info(f'Starting deletion of task {tid} with scope {scope}')
+
+    try:
+        tr = TaskResult.objects.get(task_id=tid)
+    except TaskResult.DoesNotExist:
+        logger.error(f"Task with ID {tid} does not exist.")
+        return {'status': 'error', 'message': f'Task {tid} not found'}
+
+    auth = tr.task_name[6:]  # extracts 'wdlocal' or 'idx'
+    kwargs = ast.literal_eval(tr.task_kwargs.strip('"'))
+    test = kwargs.get("test", "off")
+
+    try:
+        ds = Dataset.objects.get(pk=dsid)
+
+        # Get related objects for deletion
+        hits = Hit.objects.filter(task_id=tid)
+        places = Place.objects.filter(id__in=[h.place_id for h in hits])
+
+        # Reset the review status for places
+        for p in places:
+            if auth in ['whg', 'idx']:
+                p.review_whg = None
+            elif auth.startswith('wd'):
+                p.review_wd = None
+            else:
+                p.review_tgn = None
+            p.defer_comments.all().delete()
+            p.save()
+
+        # Handle deletion based on scope
+        if scope == 'task':
+            placelinks = PlaceLink.objects.filter(task_id=tid)
+            placegeoms = PlaceGeom.objects.filter(task_id=tid)
+            placenames = PlaceName.objects.filter(task_id=tid)
+
+            hits_count = hits.count()
+            placelinks.delete()
+            placegeoms.delete()
+            placenames.delete()
+            hits.delete()
+            tr.delete()
+
+            logger.info(f'Deleted task {tid}: {hits_count} hits and related objects')
+
+        elif scope == 'geoms':
+            placegeoms = PlaceGeom.objects.filter(task_id=tid)
+            geom_count = placegeoms.count()
+            placegeoms.delete()
+            logger.info(f'Deleted {geom_count} geometries for task {tid}')
+
+        # Remove dataset from index if not in test mode
+        if auth in ['whg', 'idx'] and test == 'off':
+            removeDatasetFromIndex('whg', dsid)
+
+        # Update the dataset status
+        if ds.tasks.filter(status='SUCCESS').count() == 0:
+            ds.ds_status = 'remote' if ds.file.file.name.startswith('dummy') else 'uploaded'
+        ds.save()
+
+        return {
+            'status': 'success',
+            'task_id': tid,
+            'scope': scope,
+            'dataset_id': dsid
+        }
+
+    except Exception as e:
+        logger.error(f'Error deleting task {tid}: {e}', exc_info=True)
+        return {'status': 'error', 'message': str(e)}
+
 
 """
   adds newly public dataset to 'pub' index
@@ -893,229 +973,166 @@ def align_wdlocal(*args, **kwargs):
     return hit_parade['summary']
 
 
-"""
-# performs elasticsearch > whg index queries
-# from align_idx(), returns result_obj
+def _safe_es_search(indices, body, pass_label, size=100):
+    """
+    Executes an ES search against one or more indices.
+    Returns combined, deduplicated hits with index origin annotated and score adjusted.
+    """
+    if isinstance(indices, str):
+        indices = [indices]
 
-"""
-def es_lookup_idx(qobj, *args, **kwargs):
-    # print('kwargs from es_lookup_idx',kwargs)
-    global whg_id
-    # idx = 'whg'
-    idx = settings.ES_WHG
-    bounds = kwargs['bounds']  # e.g. {'type': ['userarea'], 'id': ['0']}
-    [hitobjlist, _ids] = [[], []]
+    all_hits = []
+    for idx in indices:
+        start = time.perf_counter()
+        try:
+            # ES8: Don't pass size separately, ensure it's in the body
+            if "size" not in body:
+                body["size"] = size
 
-    # empty result object
-    result_obj = {
-        'place_id': qobj['place_id'],
-        'title': qobj['title'],
-        'hits': [], 'missed': -1, 'total_hits': 0,
-        'hit_count': 0
+            res = es.search(index=idx, body=body)  # Remove size parameter here
+            hits = res.get("hits", {}).get("hits", [])
+            for h in hits:
+                h["_index"] = idx
+                from_pub = (idx == settings.ES_PUB)
+                h["_source"]["from_pub"] = from_pub
+
+                # Apply a mild boost for published hits
+                if from_pub:
+                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 1.25
+
+            all_hits.extend(hits)
+            logger.debug(
+                f"ES search ({pass_label}) on {idx}: {len(hits)} hits "
+                f"in {time.perf_counter() - start:.3f}s"
+            )
+        except Exception as e:
+            logger.warning(
+                f"ES error in {pass_label} for {idx}: {e}", exc_info=True
+            )
+
+    # Deduplicate by ES _id across all indices (keep higher score)
+    unique_hits = {}
+    for h in all_hits:
+        _id = h["_id"]
+        if _id not in unique_hits or h["_score"] > unique_hits[_id]["_score"]:
+            unique_hits[_id] = h
+
+    return list(unique_hits.values())
+
+
+def es_lookup_idx(qobj, *, bounds=None):
+    """
+    ElasticSearch lookup for index alignment.
+    Searches both dataset (settings.ES_WHG) and published (settings.ES_PUB) indices.
+    Pass0: identifier matches.
+    Pass1: lexical + spatial matches.
+    """
+    start_total = time.perf_counter()
+
+    indices = [settings.ES_WHG]
+    if getattr(settings, "ES_PUB", None):
+        indices.append(settings.ES_PUB)
+
+    result = {
+        "place_id": qobj["place_id"],
+        "title": qobj["title"],
+        "hits": [],
+        "hit_count": 0,
+        "total_hits": 0,
+        "missed": -1,
     }
-    # de-dupe
-    variants = list(set(qobj["variants"]))
-    links = list(set(qobj["links"]))
-    # copy for appends
-    linklist = deepcopy(links)
-    has_fclasses = len(qobj["fclasses"]) > 0
 
-    # prep spatial constraints
-    has_bounds = bounds["id"] != ["0"]
-    has_geom = "geom" in qobj.keys()
-    has_countries = len(qobj["countries"]) > 0
+    variants = list(set(qobj.get("variants", [])))
+    links = list(set(qobj.get("links", [])))
+    has_geom = "geom" in qobj
+    has_countries = bool(qobj.get("countries"))
+    has_bounds = bounds and bounds.get("id") != ["0"]
 
-    if has_bounds:
-        area_filter = get_bounds_filter(bounds, "whg")
-        # print("area_filter", area_filter)
+    filters = []
     if has_geom:
-        # qobj["geom"] is always a polygon hull
-        shape_filter = {"geo_shape": {
-            "geoms.location": {
-                "shape": {
-                    "type": qobj["geom"]["type"],
-                    "coordinates": qobj["geom"]["coordinates"]},
-                "relation": "intersects"}
-        }}
-        # print("shape_filter", shape_filter)
-    if has_countries:
-        countries_match = {"terms": {"ccodes": qobj["countries"]}}
-        # print("countries_match", countries_match)
+        filters.append({
+            "geo_shape": {
+                "geoms.location": {
+                    "shape": qobj["geom"],
+                    "relation": "intersects",
+                }
+            }
+        })
+    elif has_countries:
+        filters.append({"terms": {"ccodes": qobj["countries"]}})
+    elif has_bounds:
+        filters.append(get_bounds_filter(bounds, "whg"))
 
-    """
-    prepare queries from qobj
-    """
-    # q0 is matching concordance identifiers
-    q0 = {
-        "query": {"bool": {"must": [
-            {"terms": {"links.identifier": linklist}}
-        ]
-        }}}
-
-    # build q1 from qbase + spatial context, fclasses if any
-    qbase = {"size": 100, "query": {
-        "bool": {
-            "must": [
-                {"exists": {"field": "whg_id"}},
-                # must match one of these (exact)
-                {"bool": {
-                    "should": [
-                        {"terms": {"names.toponym": variants}},
-                        {"terms": {"title": variants}},
-                        {"terms": {"searchy": variants}}
+    # ---------- pass 0 : identifier matches ----------
+    hits0 = []
+    if links:  # Only run if we have links
+        q0 = {
+            "size": 100,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"terms": {"links.identifier.keyword": links}}
                     ]
                 }
-                }
-            ],
-            "should": [
-                # bool::"should" outside of "must" boosts score
-                # {"terms": {"links.identifier": qobj["links"] }},
-                {"terms": {"types.identifier": qobj["placetypes"]}}
-            ],
-            # spatial filters added according to what"s available
-            "filter": []
+            }
         }
-    }}
+        hits0 = _safe_es_search(indices, q0, pass_label="pass0")
 
-    # ADD SPATIAL
-    if has_geom:
-        qbase["query"]["bool"]["filter"].append(shape_filter)
+    # ---------- pass 1 : lexical + spatial ----------
+    hits1 = []
+    if variants:  # Only run if we have variants
+        q1 = {
+            "size": 100,
+            "query": {
+                "bool": {
+                    "must": [
+                        {"exists": {"field": "whg_id"}},
+                        {"bool": {
+                            "should": [
+                                {"terms": {"names.toponym": variants}},
+                                {"terms": {"title": variants}},
+                                {"terms": {"searchy": variants}},
+                            ],
+                            "minimum_should_match": 1  # ADD THIS
+                        }},
+                    ],
+                    "should": [
+                        {"terms": {"types.identifier": qobj.get("placetypes", [])}},
+                    ],
+                    "filter": filters,
+                }
+            },
+        }
+        hits1 = _safe_es_search(indices, q1, pass_label="pass1")
 
-    # no geom, use country codes if there
-    if not has_geom and has_countries:
-        qbase["query"]["bool"]["must"].append(countries_match)
+    # ---------- consolidate and label ----------
+    seen_ids = set()
+    for src_hits, label in [(hits0, "pass0"), (hits1, "pass1")]:
+        for h in src_hits:
+            if h["_id"] in seen_ids:
+                continue
+            seen_ids.add(h["_id"])
+            _mark_hit(h, label)
+            result["hits"].append(h)
 
-    # has no geom but has bounds (region or user study area)
-    if not has_geom and has_bounds:
-        # area_filter (predefined region or study area)
-        qbase["query"]["bool"]["filter"].append(area_filter)
-        if has_countries:
-            # add weight for country match
-            qbase["query"]["bool"]["should"].append(countries_match)
+    # Sort by adjusted score (desc)
+    result["hits"].sort(key=lambda h: h.get("_score", 0), reverse=True)
 
-    # ADD fclasses IF ANY
-    # if has_fclasses:
-    #   qbase["query"]["bool"]["must"].append(
-    #   {"terms": {"fclasses": qobj["fclasses"]}})
+    result["hit_count"] = len(result["hits"])
+    result["total_hits"] = result["hit_count"]
 
-    # grab a copy
-    q1 = qbase
+    logger.info(
+        f"es_lookup_idx(): {result['hit_count']} unique hits for "
+        f"{qobj.get('title')} [{', '.join(indices)}] "
+        f"in {time.perf_counter() - start_total:.3f}s"
+    )
 
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    # pass0a, pass0b (identifiers)
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    try:
-        result0a = es.search(index=idx, body=q0)
-        hits0a = result0a["hits"]["hits"]
-        # print('len(hits0)',len(hits0a))
-    except:
-        logger.exception(f'Error in es.search(q0a): {q0}', sys.exc_info())
-    if len(hits0a) > 0:
-        # >=1 matching identifier
-        result_obj['hit_count'] += len(hits0a)
-        for h in hits0a:
-            # add full hit to result
-            result_obj["hits"].append(h)
-            # pull some fields for analysis
-            h["pass"] = "pass0a"
-            relation = h["_source"]["relation"]
-            hitobj = {
-                "_id": h['_id'],
-                "pid": h["_source"]['place_id'],
-                "title": h["_source"]['title'],
-                "dataset": h["_source"]['dataset'],
-                "pass": "pass0",
-                "links": [l["identifier"] \
-                          for l in h["_source"]["links"]],
-                "role": relation["name"],
-                "children": h["_source"]["children"]
-            }
-            if "parent" in relation.keys():
-                hitobj["parent"] = relation["parent"]
-            # add profile to hitlist
-            hitobjlist.append(hitobj)
-        _ids = [h['_id'] for h in hitobjlist]
-        for hobj in hitobjlist:
-            for l in hobj['links']:
-                linklist.append(l) if l not in linklist else linklist
+    return result
 
-        # if new links, crawl again
-        if len(set(linklist) - set(links)) > 0:
-            try:
-                result0b = es.search(index=idx, body=q0)
-                hits0b = result0b["hits"]["hits"]
-            except:
-                logger.exception(f'Error in es.search(q0b): {q0}', sys.exc_info())
-            # add new results if any to hitobjlist and result_obj["hits"]
-            result_obj['hit_count'] += len(hits0b)
-            for h in hits0b:
-                if h['_id'] not in _ids:
-                    _ids.append(h['_id'])
-                    relation = h["_source"]["relation"]
-                    h["pass"] = "pass0b"
-                    hitobj = {
-                        "_id": h['_id'],
-                        "pid": h["_source"]['place_id'],
-                        "title": h["_source"]['title'],
-                        "dataset": h["_source"]['dataset'],
-                        "pass": "pass0b",
-                        "links": [l["identifier"] \
-                                  for l in h["_source"]["links"]],
-                        "role": relation["name"],
-                        "children": h["_source"]["children"]
-                    }
-                    if "parent" in relation.keys():
-                        hitobj["parent"] = relation["parent"]
-                    if hitobj['_id'] not in [h['_id'] for h in hitobjlist]:
-                        result_obj["hits"].append(h)
-                        hitobjlist.append(hitobj)
-                    result_obj['total_hits'] = len((result_obj["hits"]))
 
-    #
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    # run pass1 whether pass0 had hits or not
-    # q0 only found identifier matches
-    # now get other potential hits in normal manner
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    try:
-        result1 = es.search(index=idx, body=q1)
-        hits1 = result1["hits"]["hits"]
-    except:
-        logger.exception(f'Error in es.search(q1): {q1}', sys.exc_info())
-        h["pass"] = "pass1"
-
-    result_obj['hit_count'] += len(hits1)
-
-    for h in hits1:
-        # filter out _ids found in pass0
-        # any hit on identifiers will also turn up here based on context
-        if h['_id'] not in _ids:
-            _ids.append(h['_id'])
-            relation = h["_source"]["relation"]
-            h["pass"] = "pass1"
-            hitobj = {
-                "_id": h['_id'],
-                "pid": h["_source"]['place_id'],
-                "title": h["_source"]['title'],
-                "dataset": h["_source"]['dataset'],
-                "pass": "pass1",
-                "links": [l["identifier"] \
-                          for l in h["_source"]["links"]],
-                "role": relation["name"],
-                "children": h["_source"]["children"]
-            }
-            if "parent" in relation.keys():
-                hitobj["parent"] = relation["parent"]
-            if hitobj['_id'] not in [h['_id'] for h in hitobjlist]:
-                # result_obj["hits"].append(hitobj)
-                result_obj["hits"].append(h)
-                hitobjlist.append(hitobj)
-            result_obj['total_hits'] = len(result_obj["hits"])
-    # ds_hits[p.id] = hitobjlist
-    # no more need for hitobjlist
-
-    # return index docs to align_idx() for Hit writing
-    return result_obj
+def _mark_hit(hit, label):
+    """Annotate ES hit with minimal extra info for caller."""
+    hit["pass"] = label
 
 
 @sleep_and_retry
@@ -1157,7 +1174,7 @@ def align_idx(*args, **kwargs):
         task_id = align_idx.request.id
         ds = get_object_or_404(Dataset, id=kwargs['ds'])
         user = get_object_or_404(User, id=kwargs['user'])
-        test_mode = kwargs.get('test', 'on') # always 'on' for dev - no writing to the production index!
+        test_mode = kwargs.get('test', 'on')  # always 'on' for dev - no writing to the production index!
 
         es = settings.ES_CONN
         whg_id = maxID(es, settings.ES_WHG)  # get max whg_id for new parent docs
@@ -1330,7 +1347,8 @@ def batch_new_seeds(new_seeds, test_mode, start_id):
                                     f"{action_info.get('error', {}).get('reason')}"
                                 )
 
-                        Place.objects.filter(pk__in=[p.id for p in places_to_update]).update(indexed=True, idx_pub=False)
+                        Place.objects.filter(pk__in=[p.id for p in places_to_update]).update(indexed=True,
+                                                                                             idx_pub=False)
 
                     logger.info(f"Batch bulk indexing complete: {success_count} succeeded, {failure_count} failed.")
 
@@ -1382,6 +1400,7 @@ def classify_hits(hits):
 
 def merge_parent_child(parent, children):
     """Merges parent and child records into a single hit object, safely handling missing fields."""
+
     def safe_list(val):
         return val if isinstance(val, list) else []
 
@@ -1425,7 +1444,8 @@ def build_sources(parent, children):
     """Builds the sources field for the hit object."""
     sources = [
         {'dslabel': parent['dataset'], 'pid': parent['pid'], 'variants': parent['variants'], 'types': parent['types'],
-         'related': parent['related'], 'children': parent['children'], 'minmax': parent['minmax'], 'pass': parent['pass'][:5]}
+         'related': parent['related'], 'children': parent['children'], 'minmax': parent['minmax'],
+         'pass': parent['pass'][:5]}
     ]
     sources.extend(
         {'dslabel': c['dataset'], 'pid': c['pid'], 'variants': c['variants'], 'types': c['types'],

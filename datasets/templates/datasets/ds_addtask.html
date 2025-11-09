@@ -74,7 +74,7 @@
                     <div class="form-check mt-2">
                       <label class="form-check-label text-danger" for="r_idx">
                         <input type="radio" class="form-check-input r_recon" id="r_idx"
-                               name="recon" value="idx">WHG accession TO DEV (reconcile, index)
+                               name="recon" value="idx">WHG accession (reconcile, index)
                       </label>
                       {#	test reconcile against whg index; no writes #}
                       <span class="float-end">test only? <input type="checkbox" name="test"></span>
@@ -82,11 +82,9 @@
                     </div>
                     {% for message in messages %}
                       <div class="container-fluid p-0">
-                        <div class="alert {{ message.tags }} alert-dismissible" role="alert">
-                          <button type="button" id="error_closer" class="close" data-dismiss="alert" aria-label="Close">
-                            <span aria-hidden="True">&times;</span>
-                          </button>
+                        <div class="alert {{ message.tags }} alert-dismissible fade show" role="alert">
                           {{ message }}
+                          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                         </div>
                       </div>
                     {% endfor %}
