@@ -985,7 +985,11 @@ def _safe_es_search(indices, body, pass_label, size=100):
     for idx in indices:
         start = time.perf_counter()
         try:
-            res = es.search(index=idx, body=body, size=size)
+            # ES8: Don't pass size separately, ensure it's in the body
+            if "size" not in body:
+                body["size"] = size
+
+            res = es.search(index=idx, body=body)  # Remove size parameter here
             hits = res.get("hits", {}).get("hits", [])
             for h in hits:
                 h["_index"] = idx
@@ -1063,6 +1067,7 @@ def es_lookup_idx(qobj, *, bounds=None):
     hits0 = []
     if links:  # Only run if we have links
         q0 = {
+            "size": 100,
             "query": {
                 "bool": {
                     "must": [
