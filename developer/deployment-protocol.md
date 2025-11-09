@@ -7,6 +7,17 @@ cat ~/sites/env_template.py
 
 ## Deploy directly from `main`
 
+### Without WebPack Build
+
+```bash
+cd ~/sites/whgazetteer-org
+git pull origin main && sudo python3 ./server-admin/load_env.py && \
+docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
+docker ps
+```
+
+### With WebPack Build
+
 ```bash
 cd ~/sites/whgazetteer-org
 git pull origin main && sudo python3 ./server-admin/load_env.py && \
