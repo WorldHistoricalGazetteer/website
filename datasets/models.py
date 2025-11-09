@@ -379,7 +379,10 @@ class Dataset(models.Model):
 
     @property
     def missing_geoms(self):
-        return self.places.exclude(id__in=PlaceGeom.objects.values('place_id')).exists()
+        places_without_geom = self.places.annotate(
+            has_geom=Exists(PlaceGeom.objects.filter(place=OuterRef('pk')))
+        ).filter(has_geom=False).exists()
+        return places_without_geom
 
     @property
     def num_places(self):
