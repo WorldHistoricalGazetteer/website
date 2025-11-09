@@ -369,6 +369,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
         elif len(matched_for_idx) == 1:
             parent_id = matched_for_idx[0]["pid"]
             indexMatch(str(place.id), hit_pid=parent_id, user=request.user, task=task)
+            update_close_matches(place.id, parent_id, request.user, task)
             place.indexed = True
             update_fields.append('indexed')
         elif len(matched_for_idx) > 1:
