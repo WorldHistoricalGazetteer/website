@@ -410,7 +410,8 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
 def indexMatch(pid, hit_pid=None, user=None, task=None):
     """
     Indexes a db record upon a single hit match in align_idx review.
-    If the place is already indexed, it is related as a child to an existing parent.
+    If hit_pid is provided, creates as child of that parent.
+    Otherwise, creates as new parent.
     """
     logger = logging.getLogger('accession')
 
@@ -441,54 +442,62 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
 
     is_already_indexed = res['hits']['total']['value'] > 0
 
-    if not is_already_indexed:
-        # If the place is not indexed, create it as a new parent
+    if is_already_indexed:
+        # Place already indexed - shouldn't happen in normal accession flow
+        logger.warning(f'Place {pid} already indexed. Skipping.')
+        return
+
+    # Place is not yet indexed - need to index it
+    if hit_pid:
+        # ✅ LINK TO EXISTING PARENT
+        try:
+            # Find the parent place in ES
+            q_hit = {"query": {"bool": {"must": [{"match": {"place_id": hit_pid}}]}}}
+            res_hit = es.search(index=idx, body=q_hit)
+
+            if not res_hit['hits']['hits']:
+                logger.error(f"No index entry found for hit_pid={hit_pid}. Cannot create child.")
+                return
+
+            hit = res_hit['hits']['hits'][0]
+            # Get the whg_id of the parent (may itself be a child, so get its parent)
+            if hit['_source']['relation']['name'] == 'parent':
+                parent_whgid = hit['_id']
+            else:
+                parent_whgid = hit['_source']['relation']['parent']
+
+            # Create new doc as child
+            new_doc = makeDoc(place)
+            new_doc['relation'] = {"name": "child", "parent": parent_whgid}
+
+            # Index with place.id as the ES document id
+            es.index(index=idx, id=str(pid), routing=1, body=json.dumps(new_doc))
+            logger.info(f"Place {pid} indexed as child of parent {parent_whgid}.")
+
+            # ✅ Create CloseMatch record in database
+            if user and task:
+                update_close_matches(int(pid), int(hit_pid), user, task)
+                logger.info(f"Created CloseMatch between {pid} and {hit_pid}")
+            else:
+                logger.warning(f"Cannot create CloseMatch for {pid} and {hit_pid}: missing user or task")
+
+        except Exception as e:
+            logger.error(f"Error linking Place {pid} to parent {hit_pid}: {e}")
+    else:
+        # ✅ CREATE NEW PARENT
         logger.debug(f'Place {pid} not found in index. Creating as parent.')
         try:
             new_doc = makeDoc(place)
             new_doc['relation'] = {"name": "parent"}
             new_doc['whg_id'] = maxID(es, idx) + 1
+            new_doc['children'] = []
 
             es.index(index=idx, id=str(new_doc['whg_id']), body=json.dumps(new_doc))
             place.indexed = True
             place.save()
-            logger.info(f'Place {pid} indexed as new parent.')
+            logger.info(f'Place {pid} indexed as new parent with whg_id {new_doc["whg_id"]}.')
         except Exception as e:
             logger.error(f"Failed to index Place {pid} as parent: {e}")
-        return
-
-    # If already indexed, handle relationship logic
-    try:
-        parent_record = res['hits']['hits'][0]
-        parent_id = parent_record['_id']
-        logger.debug(f'Place {pid} found in index. Parent ID: {parent_id}')
-
-        # Handle hit_pid logic
-        if hit_pid:
-            q_hit = {"query": {"bool": {"must": [{"match": {"place_id": hit_pid}}]}}}
-            res_hit = es.search(index=idx, body=q_hit)
-            if not res_hit['hits']['hits']:
-                logger.warning(f"No hits found for hit_pid={hit_pid}.")
-                return
-
-            hit = res_hit['hits']['hits'][0]
-            parent_whgid = hit['_id'] if hit['_source']['relation']['name'] != 'child' else hit['_source']['relation'][
-                'parent']
-
-            new_doc = makeDoc(place)
-            new_doc['relation'] = {"name": "child", "parent": parent_whgid}
-
-            es.index(index=idx, id=place.id, body=json.dumps(new_doc))
-            logger.info(f"Place {pid} added as child of parent {parent_whgid}.")
-
-            if user and task:
-                update_close_matches(int(pid), int(hit_pid), user, task)
-            else:
-                logger.warning(f"Cannot create CloseMatch for {pid} and {hit_pid}: missing user or task")
-        else:
-            logger.debug(f"No hit_pid provided for Place {pid}. No child-parent relationship created.")
-    except Exception as e:
-        logger.error(f"Error processing relationship for Place {pid}: {e}")
 
 
 def indexMultiMatch(pid, matchlist, user, task):
