@@ -346,83 +346,96 @@ def review(request, dsid, tid, passnum):
     except IndexError:
         return render(request, f"datasets/{review_page}", context=nohit_context)
 
-    if request.method == "POST":
-        # Lock the row during POST (inside transaction)
-        place = Place.objects.select_for_update().prefetch_related(
-            Prefetch('geoms', queryset=PlaceGeom.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_geoms'),
-            Prefetch('names', queryset=PlaceName.objects.only('id', 'task_id', 'toponym'), to_attr='prefetched_names'),
-            Prefetch('links', queryset=PlaceLink.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_links')
-        ).get(id=place.id)
-    else:
-        # No locking on GET requests
+    # GET request - no transaction needed
+    if request.method == "GET":
         place = Place.objects.prefetch_related(
             Prefetch('geoms', queryset=PlaceGeom.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_geoms'),
             Prefetch('names', queryset=PlaceName.objects.only('id', 'task_id', 'toponym'), to_attr='prefetched_names'),
             Prefetch('links', queryset=PlaceLink.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_links')
         ).get(id=place.id)
 
-    _, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
-    logger.debug(f"Raw hits 1: {raw_hits}")
-    dataset_details = _build_dataset_details(raw_hits)
-    passes = _extract_passes(raw_hits, auth)
-    countries = _get_country_names(place)
-    feature_collection = _build_feature_collection(place, raw_hits)
+        _, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
+        dataset_details = _build_dataset_details(raw_hits)
+        passes = _extract_passes(raw_hits, auth)
+        countries = _get_country_names(place)
+        feature_collection = _build_feature_collection(place, raw_hits)
 
-    HitFormset = modelformset_factory(
-        Hit,
-        fields=("id", "authority", "authrecord_id", "query_pass", "score", "json", "match"),
-        form=HitModelForm,
-        extra=0,
-    )
-    formset = HitFormset(request.POST or None, queryset=raw_hits)
+        HitFormset = modelformset_factory(
+            Hit,
+            fields=("id", "authority", "authrecord_id", "query_pass", "score", "json", "match"),
+            form=HitModelForm,
+            extra=0,
+        )
+        formset = HitFormset(request.POST or None, queryset=raw_hits)
 
-    context = {
-        "ds_id": dsid,
-        "ds_label": ds.label,
-        "task_id": tid,
-        "hit_list": raw_hits,
-        "dataset_details": dataset_details,
-        "passes": passes,
-        "authority": task.task_name[6:8] if auth == "wdlocal" else task.task_name[6:],
-        "records": records,
-        "countries": countries,
-        "passnum": passnum,
-        "page": page if request.method == "GET" else str(int(page) - 1),
-        "aug_geoms": kwargs["aug_geoms"],
-        "count_pass0": cnt_pass0,
-        "count_pass1": cnt_pass1,
-        "count_pass2": cnt_pass2,
-        "count_pass3": cnt_pass3,
-        "deferred": True if passnum == "def" else False,
-        "test": test,
-        "formset": formset,
-        "feature_collection": feature_collection,
-        "already": False,
-        "mbtoken": False,
-        "nohits": False,
-    }
+        context = {
+            "ds_id": dsid,
+            "ds_label": ds.label,
+            "task_id": tid,
+            "hit_list": raw_hits,
+            "dataset_details": dataset_details,
+            "passes": passes,
+            "authority": task.task_name[6:8] if auth == "wdlocal" else task.task_name[6:],
+            "records": records,
+            "countries": countries,
+            "passnum": passnum,
+            "page": page,
+            "aug_geoms": kwargs["aug_geoms"],
+            "count_pass0": cnt_pass0,
+            "count_pass1": cnt_pass1,
+            "count_pass2": cnt_pass2,
+            "count_pass3": cnt_pass3,
+            "deferred": True if passnum == "def" else False,
+            "test": test,
+            "formset": formset,
+            "feature_collection": feature_collection,
+            "already": False,
+            "mbtoken": False,
+            "nohits": False,
+        }
+        return render(request, "datasets/" + review_page, context=context)
 
-    if request.method == "POST":
-        place_post = get_object_or_404(Place, pk=place.id)
-        review_status = getattr(place_post, review_field)
+    # POST request - wrap in transaction for select_for_update
+    with transaction.atomic():
+        # Lock the row during POST
+        place = Place.objects.select_for_update().prefetch_related(
+            Prefetch('geoms', queryset=PlaceGeom.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_geoms'),
+            Prefetch('names', queryset=PlaceName.objects.only('id', 'task_id', 'toponym'), to_attr='prefetched_names'),
+            Prefetch('links', queryset=PlaceLink.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_links')
+        ).get(id=place.id)
+
+        review_status = getattr(place, review_field)
 
         if review_status == 1:
-            context["already"] = True
             messages.success(
-                request, ("Last record (" + place_post.title + ") reviewed by another")
+                request, ("Last record (" + place.title + ") reviewed by another")
             )
             return redirect(
                 "/datasets/" + str(dsid) + "/review/" + task.task_id + "/" + passnum
             )
-        elif formset.is_valid():
-            _process_matching_decisions(request, place_post, formset, task, auth, authname, kwargs, review_field, ds)
+
+        _, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
+
+        HitFormset = modelformset_factory(
+            Hit,
+            fields=("id", "authority", "authrecord_id", "query_pass", "score", "json", "match"),
+            form=HitModelForm,
+            extra=0,
+        )
+        formset = HitFormset(request.POST, queryset=raw_hits)
+
+        if formset.is_valid():
+            _process_matching_decisions(request, place, formset, task, auth, authname, kwargs, review_field, ds)
             return redirect(
                 f"/datasets/{dsid}/review/{tid}/{current_passnum}?page={int(page)}"
             )
         else:
             logger.debug(f'formset is NOT valid. errors: {formset.errors} data: {formset.data}')
+            # If formset is invalid, we still need to render the page
+            # Fall through to render with errors
 
-    return render(request, "datasets/" + review_page, context=context)
+    # This should rarely be reached (only if POST formset is invalid)
+    return redirect(f"/datasets/{dsid}/review/{tid}/{current_passnum}?page={int(page)}")
 
 
 def ds_recon(request, pk):
