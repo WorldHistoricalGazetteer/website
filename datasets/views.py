@@ -346,18 +346,27 @@ def review(request, dsid, tid, passnum):
     except IndexError:
         return render(request, f"datasets/{review_page}", context=nohit_context)
 
-    place = Place.objects.prefetch_related(
-        Prefetch('geoms', to_attr='prefetched_geoms'),
-        Prefetch('names', to_attr='prefetched_names'),
-        Prefetch('links', to_attr='prefetched_links')
-    ).get(id=place.id)
+    if request.method == "POST":
+        # Lock the row during POST (inside transaction)
+        place = Place.objects.select_for_update().prefetch_related(
+            Prefetch('geoms', queryset=PlaceGeom.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_geoms'),
+            Prefetch('names', queryset=PlaceName.objects.only('id', 'task_id', 'toponym'), to_attr='prefetched_names'),
+            Prefetch('links', queryset=PlaceLink.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_links')
+        ).get(id=place.id)
+    else:
+        # No locking on GET requests
+        place = Place.objects.prefetch_related(
+            Prefetch('geoms', queryset=PlaceGeom.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_geoms'),
+            Prefetch('names', queryset=PlaceName.objects.only('id', 'task_id', 'toponym'), to_attr='prefetched_names'),
+            Prefetch('links', queryset=PlaceLink.objects.only('id', 'task_id', 'jsonb'), to_attr='prefetched_links')
+        ).get(id=place.id)
 
     _, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
     logger.debug(f"Raw hits 1: {raw_hits}")
     dataset_details = _build_dataset_details(raw_hits)
     passes = _extract_passes(raw_hits, auth)
     countries = _get_country_names(place)
-    feature_collection = _build_feature_collection(records, raw_hits)
+    feature_collection = _build_feature_collection(place, raw_hits)
 
     HitFormset = modelformset_factory(
         Hit,

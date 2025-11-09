@@ -157,47 +157,46 @@ def _get_country_names(place):
     return countries
 
 
-def _build_feature_collection(records, raw_hits):
+def _build_feature_collection(place, raw_hits):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
 
-    # These (green) are the geometries from the submitted dataset and reconciled places
-    for idx, record in enumerate(records):
-        geometries = [geom['jsonb'] for geom in record.geoms.all().values('jsonb')]
-        if geometries:
-            features.append({
-                "type": "Feature",
-                "properties": {"record_id": record.id, "ds": "dataset"},
-                "geometry": {"type": "GeometryCollection", "geometries": geometries},
-                "id": len(features)
-            })
+    # Use prefetched geoms (only one place in review)
+    geometries = [geom.jsonb for geom in place.prefetched_geoms]
+    if geometries:
+        features.append({
+            "type": "Feature",
+            "properties": {"record_id": place.id, "ds": "dataset"},
+            "geometry": {"type": "GeometryCollection", "geometries": geometries},
+            "id": 0
+        })
 
-    # These (orange) are the geometries from the reconciliation or accession suggestions
+    # Rest of your code for hits...
     for idx, hit in enumerate(raw_hits):
-        # Fetch full geometries for each source in the hit
-        # logger.debug(f"🚨 Raw hits JSON: {hit.json}")
-
-        # Reconciliation: hits have `geoms` in the JSON
         for geom in hit.json.get('geoms', []):
             features.append({
                 "type": "Feature",
                 "properties": {
                     **{key: value for key, value in geom.items() if key not in ["coordinates", "type"]},
-                    # "green": False,  # Set to True for green markers - following 2 lines are redundant v2 code
-                    # (review_page=="accession.html" and geom["ds"]==ds.label) or
-                    # (review_page=="review.html" and not geom["ds"] in ['tgn', 'wd', 'whg'])
                 },
                 "geometry": {"type": geom["type"], "coordinates": geom.get("coordinates")},
                 "id": len(features)
             })
 
-        # Accession: hits have `sources` in the JSON
-        for source in hit.json.get('sources', []):
-            source_pid = source.get('pid')
-            if source_pid:
-                try:
-                    source_place = Place.objects.get(id=source_pid)
-                    source_place_geometries = [geom['jsonb'] for geom in source_place.geoms.all().values('jsonb')]
+        # Batch fetch source places instead of one at a time
+        source_pids = [s.get('pid') for s in hit.json.get('sources', []) if s.get('pid')]
+
+    # Fetch all source places at once
+    if source_pids:
+        source_places = Place.objects.filter(id__in=source_pids).prefetch_related('geoms')
+        source_places_dict = {p.id: p for p in source_places}
+
+        for hit in raw_hits:
+            for source in hit.json.get('sources', []):
+                source_pid = source.get('pid')
+                if source_pid and source_pid in source_places_dict:
+                    source_place = source_places_dict[source_pid]
+                    source_place_geometries = [geom.jsonb for geom in source_place.geoms.all()]
                     if source_place_geometries:
                         features.append({
                             "type": "Feature",
@@ -205,10 +204,6 @@ def _build_feature_collection(records, raw_hits):
                             "geometry": {"type": "GeometryCollection", "geometries": source_place_geometries},
                             "id": len(features)
                         })
-                except Place.DoesNotExist:
-                    logger.warning(f"Source Place with pid {source_pid} not found for hit {hit.id}")
-                except Exception as e:
-                    logger.error(f"Error fetching full geometry for pid {source_pid}: {e}")
 
     return json.dumps({"type": "FeatureCollection", "features": features})
 
@@ -383,14 +378,18 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
 
     # --- Update place review status (single save) ---
     setattr(place, review_field, 1)
+    if 'indexed' in update_fields:
+        place.indexed = True
     place.save(update_fields=update_fields)
 
     # --- Update dataset totals ---
     if total_new_links > 0:
+        from django.db.models import F
         unique_place_ids = len({l.place_id for l in links_to_create})
-        ds.numlinked = (ds.numlinked or 0) + unique_place_ids
-        ds.total_links = (ds.total_links or 0) + total_new_links
-        ds.save(update_fields=['numlinked', 'total_links'])
+        Dataset.objects.filter(pk=ds.pk).update(
+            numlinked=F('numlinked') + unique_place_ids,
+            total_links=F('total_links') + total_new_links
+        )
 
     # --- Update dataset status ---
     status_changed = False
@@ -735,40 +734,42 @@ def write_wd_pass0(request, tid):
 
 
 @transaction.atomic
-# ensuring unique CloseMatch records
 def update_close_matches(new_child_id, parent_place_id, user, task):
+    """
+    Optimized version: Uses get_or_create which does everything in one query
+    """
     # Normalize the tuple
     place_a_id, place_b_id = sorted([new_child_id, parent_place_id])
+
     try:
-        # Ensure that the user and task are valid instances
+        # Ensure valid instances (no DB query needed for these checks)
         assert isinstance(user, User), f'user is not a User instance: {type(user)}'
         assert isinstance(task, TaskResult), f'task is not a TaskResult instance: {type(task)}'
 
-        # Check that both place IDs exist in the Place model before linking
-        if not Place.objects.filter(id__in=[place_a_id, place_b_id]).count() == 2:
-            logger.error(
-                f'Link attempt failed: One or both Place records are missing. '
-                f'IDs checked: {place_a_id}, {place_b_id}'
-            )
-            # Prevent proceeding with database operation
-            return
+        # Use get_or_create - single query that creates only if doesn't exist
+        close_match, created = CloseMatch.objects.get_or_create(
+            place_a_id=place_a_id,
+            place_b_id=place_b_id,
+            defaults={
+                'created_by': user,
+                'task': task,
+                'basis': 'reviewed'
+            }
+        )
 
-        # Check if a CloseMatch record already exists
-        if not CloseMatch.objects.filter(
-                Q(place_a_id=place_a_id) & Q(place_b_id=place_b_id)
-        ).exists():
-            logger.debug(f'User: {user} (ID: {user.id}), Task: {task} (ID: {task.id})')
-
-            # Create the CloseMatch record
-            CloseMatch.objects.create(
-                place_a_id=place_a_id,
-                place_b_id=place_b_id,
-                created_by=user,
-                task=task,
-                basis='reviewed'
-            )
+        if created:
+            logger.debug(f'Created CloseMatch: {place_a_id} <-> {place_b_id}')
         else:
-            logger.debug(f'CloseMatch record already exists for {parent_place_id} and {new_child_id}')
+            logger.debug(f'CloseMatch already exists for {place_a_id} <-> {place_b_id}')
+
+    except Place.DoesNotExist as e:
+        logger.error(
+            f'Link attempt failed: One or both Place records are missing. '
+            f'IDs: {place_a_id}, {place_b_id}. Error: {e}'
+        )
     except Exception as e:
         logger.exception(
-            f'Error creating CloseMatch record: {e}; new_child_id={new_child_id}, parent_place_id={parent_place_id}, user={user}, task={task}')
+            f'Error creating CloseMatch: {e}; '
+            f'new_child_id={new_child_id}, parent_place_id={parent_place_id}, '
+            f'user={user}, task={task}'
+        )
