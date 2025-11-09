@@ -973,229 +973,99 @@ def align_wdlocal(*args, **kwargs):
     return hit_parade['summary']
 
 
-"""
-# performs elasticsearch > whg index queries
-# from align_idx(), returns result_obj
-
-"""
-def es_lookup_idx(qobj, *args, **kwargs):
-    # print('kwargs from es_lookup_idx',kwargs)
-    global whg_id
-    # idx = 'whg'
+def es_lookup_idx(qobj, *, bounds=None):
+    """
+    ElasticSearch lookup for index alignment.
+    Pass0: match on identifiers from the query record only.
+    Pass1: match on lexical + spatial criteria.
+    """
     idx = settings.ES_WHG
-    bounds = kwargs['bounds']  # e.g. {'type': ['userarea'], 'id': ['0']}
-    [hitobjlist, _ids] = [[], []]
-
-    # empty result object
-    result_obj = {
-        'place_id': qobj['place_id'],
-        'title': qobj['title'],
-        'hits': [], 'missed': -1, 'total_hits': 0,
-        'hit_count': 0
+    result = {
+        "place_id": qobj["place_id"],
+        "title": qobj["title"],
+        "hits": [],
+        "hit_count": 0,
+        "total_hits": 0,
+        "missed": -1,
     }
-    # de-dupe
-    variants = list(set(qobj["variants"]))
-    links = list(set(qobj["links"]))
-    # copy for appends
-    linklist = deepcopy(links)
-    has_fclasses = len(qobj["fclasses"]) > 0
 
-    # prep spatial constraints
-    has_bounds = bounds["id"] != ["0"]
-    has_geom = "geom" in qobj.keys()
-    has_countries = len(qobj["countries"]) > 0
+    variants = list(set(qobj.get("variants", [])))
+    links = list(set(qobj.get("links", [])))
+    has_geom = "geom" in qobj
+    has_countries = bool(qobj.get("countries"))
+    has_bounds = bounds and bounds.get("id") != ["0"]
 
-    if has_bounds:
-        area_filter = get_bounds_filter(bounds, "whg")
-        # print("area_filter", area_filter)
+    filters = []
     if has_geom:
-        # qobj["geom"] is always a polygon hull
-        shape_filter = {"geo_shape": {
-            "geoms.location": {
-                "shape": {
-                    "type": qobj["geom"]["type"],
-                    "coordinates": qobj["geom"]["coordinates"]},
-                "relation": "intersects"}
-        }}
-        # print("shape_filter", shape_filter)
-    if has_countries:
-        countries_match = {"terms": {"ccodes": qobj["countries"]}}
-        # print("countries_match", countries_match)
+        filters.append({
+            "geo_shape": {
+                "geoms.location": {
+                    "shape": qobj["geom"],
+                    "relation": "intersects",
+                }
+            }
+        })
+    elif has_countries:
+        filters.append({"terms": {"ccodes": qobj["countries"]}})
+    elif has_bounds:
+        filters.append(get_bounds_filter(bounds, "whg"))
 
-    """
-    prepare queries from qobj
-    """
-    # q0 is matching concordance identifiers
+    # ---------- pass 0 : identifier matches ----------
     q0 = {
-        "query": {"bool": {"must": [
-            {"terms": {"links.identifier": linklist}}
-        ]
-        }}}
+        "query": {"bool": {"must": [{"terms": {"links.identifier": links}}]}}
+    }
+    hits0 = _safe_es_search(idx, q0, pass_label="pass0")
 
-    # build q1 from qbase + spatial context, fclasses if any
-    qbase = {"size": 100, "query": {
-        "bool": {
-            "must": [
-                {"exists": {"field": "whg_id"}},
-                # must match one of these (exact)
-                {"bool": {
-                    "should": [
-                        {"terms": {"names.toponym": variants}},
-                        {"terms": {"title": variants}},
-                        {"terms": {"searchy": variants}}
-                    ]
-                }
-                }
-            ],
-            "should": [
-                # bool::"should" outside of "must" boosts score
-                # {"terms": {"links.identifier": qobj["links"] }},
-                {"terms": {"types.identifier": qobj["placetypes"]}}
-            ],
-            # spatial filters added according to what"s available
-            "filter": []
-        }
-    }}
-
-    # ADD SPATIAL
-    if has_geom:
-        qbase["query"]["bool"]["filter"].append(shape_filter)
-
-    # no geom, use country codes if there
-    if not has_geom and has_countries:
-        qbase["query"]["bool"]["must"].append(countries_match)
-
-    # has no geom but has bounds (region or user study area)
-    if not has_geom and has_bounds:
-        # area_filter (predefined region or study area)
-        qbase["query"]["bool"]["filter"].append(area_filter)
-        if has_countries:
-            # add weight for country match
-            qbase["query"]["bool"]["should"].append(countries_match)
-
-    # ADD fclasses IF ANY
-    # if has_fclasses:
-    #   qbase["query"]["bool"]["must"].append(
-    #   {"terms": {"fclasses": qobj["fclasses"]}})
-
-    # grab a copy
-    q1 = qbase
-
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    # pass0a, pass0b (identifiers)
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    try:
-        result0a = es.search(index=idx, body=q0)
-        hits0a = result0a["hits"]["hits"]
-        # print('len(hits0)',len(hits0a))
-    except:
-        logger.exception(f'Error in es.search(q0a): {q0}', sys.exc_info())
-    if len(hits0a) > 0:
-        # >=1 matching identifier
-        result_obj['hit_count'] += len(hits0a)
-        for h in hits0a:
-            # add full hit to result
-            result_obj["hits"].append(h)
-            # pull some fields for analysis
-            h["pass"] = "pass0a"
-            relation = h["_source"]["relation"]
-            hitobj = {
-                "_id": h['_id'],
-                "pid": h["_source"]['place_id'],
-                "title": h["_source"]['title'],
-                "dataset": h["_source"]['dataset'],
-                "pass": "pass0",
-                "links": [l["identifier"] \
-                          for l in h["_source"]["links"]],
-                "role": relation["name"],
-                "children": h["_source"]["children"]
+    # ---------- pass 1 : lexical + spatial ----------
+    q1 = {
+        "size": 100,
+        "query": {
+            "bool": {
+                "must": [
+                    {"exists": {"field": "whg_id"}},
+                    {"bool": {
+                        "should": [
+                            {"terms": {"names.toponym": variants}},
+                            {"terms": {"title": variants}},
+                            {"terms": {"searchy": variants}},
+                        ]
+                    }},
+                ],
+                "should": [
+                    {"terms": {"types.identifier": qobj.get("placetypes", [])}},
+                ],
+                "filter": filters,
             }
-            if "parent" in relation.keys():
-                hitobj["parent"] = relation["parent"]
-            # add profile to hitlist
-            hitobjlist.append(hitobj)
-        _ids = [h['_id'] for h in hitobjlist]
-        for hobj in hitobjlist:
-            for l in hobj['links']:
-                linklist.append(l) if l not in linklist else linklist
+        },
+    }
+    hits1 = _safe_es_search(idx, q1, pass_label="pass1")
 
-        # if new links, crawl again
-        if len(set(linklist) - set(links)) > 0:
-            try:
-                result0b = es.search(index=idx, body=q0)
-                hits0b = result0b["hits"]["hits"]
-            except:
-                logger.exception(f'Error in es.search(q0b): {q0}', sys.exc_info())
-            # add new results if any to hitobjlist and result_obj["hits"]
-            result_obj['hit_count'] += len(hits0b)
-            for h in hits0b:
-                if h['_id'] not in _ids:
-                    _ids.append(h['_id'])
-                    relation = h["_source"]["relation"]
-                    h["pass"] = "pass0b"
-                    hitobj = {
-                        "_id": h['_id'],
-                        "pid": h["_source"]['place_id'],
-                        "title": h["_source"]['title'],
-                        "dataset": h["_source"]['dataset'],
-                        "pass": "pass0b",
-                        "links": [l["identifier"] \
-                                  for l in h["_source"]["links"]],
-                        "role": relation["name"],
-                        "children": h["_source"]["children"]
-                    }
-                    if "parent" in relation.keys():
-                        hitobj["parent"] = relation["parent"]
-                    if hitobj['_id'] not in [h['_id'] for h in hitobjlist]:
-                        result_obj["hits"].append(h)
-                        hitobjlist.append(hitobj)
-                    result_obj['total_hits'] = len((result_obj["hits"]))
+    # ---------- consolidate ----------
+    seen_ids = set()
+    for src_hits, label in [(hits0, "pass0"), (hits1, "pass1")]:
+        for h in src_hits:
+            if h["_id"] in seen_ids:
+                continue
+            seen_ids.add(h["_id"])
+            _mark_hit(h, label)
+            result["hits"].append(h)
+    result["hit_count"] = len(result["hits"])
+    result["total_hits"] = result["hit_count"]
+    return result
 
-    #
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
-    # run pass1 whether pass0 had hits or not
-    # q0 only found identifier matches
-    # now get other potential hits in normal manner
-    # /\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\
+
+def _safe_es_search(index, body, pass_label):
     try:
-        result1 = es.search(index=idx, body=q1)
-        hits1 = result1["hits"]["hits"]
-    except:
-        logger.exception(f'Error in es.search(q1): {q1}', sys.exc_info())
-        h["pass"] = "pass1"
+        res = es.search(index=index, body=body)
+        return res.get("hits", {}).get("hits", [])
+    except Exception:
+        logger.exception(f"ES error in {pass_label} query", exc_info=True)
+        return []
 
-    result_obj['hit_count'] += len(hits1)
 
-    for h in hits1:
-        # filter out _ids found in pass0
-        # any hit on identifiers will also turn up here based on context
-        if h['_id'] not in _ids:
-            _ids.append(h['_id'])
-            relation = h["_source"]["relation"]
-            h["pass"] = "pass1"
-            hitobj = {
-                "_id": h['_id'],
-                "pid": h["_source"]['place_id'],
-                "title": h["_source"]['title'],
-                "dataset": h["_source"]['dataset'],
-                "pass": "pass1",
-                "links": [l["identifier"] \
-                          for l in h["_source"]["links"]],
-                "role": relation["name"],
-                "children": h["_source"]["children"]
-            }
-            if "parent" in relation.keys():
-                hitobj["parent"] = relation["parent"]
-            if hitobj['_id'] not in [h['_id'] for h in hitobjlist]:
-                # result_obj["hits"].append(hitobj)
-                result_obj["hits"].append(h)
-                hitobjlist.append(hitobj)
-            result_obj['total_hits'] = len(result_obj["hits"])
-    # ds_hits[p.id] = hitobjlist
-    # no more need for hitobjlist
-
-    # return index docs to align_idx() for Hit writing
-    return result_obj
+def _mark_hit(hit, label):
+    """Annotate ES hit with minimal extra info for caller."""
+    hit["pass"] = label
 
 
 @sleep_and_retry
