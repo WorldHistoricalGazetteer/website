@@ -469,13 +469,18 @@ def ds_recon(request, pk):
         # which task? wdlocal, idx, builder. wdgn
         func = eval('align_' + auth)
 
-        # TODO: let this vary per task?
-        region = request.POST['region']  # pre-defined UN regions
-        userarea = request.POST['userarea']  # from ccodes, or drawn
-        # aug_geom = request.POST['geom'] if 'geom' in request.POST else ''  # on == write geom if matched
+        # Get bounds with proper defaults
+        region = request.POST.get('region', '0')  # Use .get() with default
+        userarea = request.POST.get('userarea', '0')
+
+        # Ensure empty strings are treated as '0'
+        region = region if region else '0'
+        userarea = userarea if userarea else '0'
+
         bounds = {
             "type": ["region" if region != "0" else "userarea"],
-            "id": [region if region != "0" else userarea]}
+            "id": [region if region != "0" else userarea]
+        }
 
         # check Celery service
         # if not celeryUp():
