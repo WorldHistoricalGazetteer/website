@@ -2013,48 +2013,58 @@ class DatasetAddTaskView(LoginRequiredMixin, DetailView):
         information for the dataset, handling errors gracefully and logging useful
         information for debugging.
         """
+        context_start = time.perf_counter()
         context = super().get_context_data(*args, **kwargs)
+
+        total_t0 = time.perf_counter()
+        ds_t0 = total_t0
         ds = self.get_object()
+        self.logger.debug("Fetched dataset object in %.3fs", time.perf_counter() - ds_t0)
 
         # Prepare context variables
         me = self.request.user
         area_types = ['ccodes', 'copied', 'drawn']
         is_admin = self.request.user.groups.filter(name__in=['whg_admins']).exists()
 
-        # Retrieve user areas based on permissions
+        # --- user areas ---
+        t0 = time.perf_counter()
         try:
             userareas = Area.objects.filter(
                 type__in=area_types,
                 **({} if is_admin else {'owner_id': me.id})
             ).values('id', 'title').order_by('-created')
-            self.logger.debug('Retrieved user areas: %s', userareas)
         except Exception as e:
             self.logger.error('Error retrieving user areas: %s', e)
             userareas = []
+        self.logger.debug("Retrieved user areas in %.3fs", time.perf_counter() - t0)
 
-        # Retrieve predefined UN regions
+        # --- predefined areas ---
+        t0 = time.perf_counter()
         try:
             predefined = Area.objects.filter(type='predefined').values('id', 'title')
-            self.logger.debug('Retrieved predefined areas: %s', predefined)
         except Exception as e:
             self.logger.error('Error retrieving predefined areas: %s', e)
             predefined = []
+        self.logger.debug("Retrieved predefined areas in %.3fs", time.perf_counter() - t0)
 
-        # Initialize dictionary for task statistics
+        # --- task + got_hits section ---
+        t0 = time.perf_counter()
         gothits = {}
         for t in ds.tasks.filter(status='SUCCESS', task_name__startswith='align_'):
             try:
                 result_data = json.loads(t.result)
                 gothits[t.task_id] = int(result_data.get('got_hits', 0))
-                self.logger.debug('Task %s got hits: %s', t.task_id, gothits[t.task_id])
             except json.JSONDecodeError:
-                self.logger.error("Failed to decode JSON result for task %s: %s", t.task_id, t.result)
                 gothits[t.task_id] = 0
+        self.logger.debug("Processed %d tasks in %.3fs", len(gothits), time.perf_counter() - t0)
 
-        # Prepare status messages based on task statistics
+        # --- prepare status messages ---
+        t0 = time.perf_counter()
         self._prepare_status_messages(context, ds, gothits)
+        self.logger.debug("Prepared status messages in %.3fs", time.perf_counter() - t0)
 
-        # Additional context variables
+        # --- gather remaining context fields ---
+        t0 = time.perf_counter()
         context['region_list'] = predefined
         context['area_list'] = userareas
         context['userarea'] = self.request.GET.get('userarea', None)
@@ -2065,7 +2075,9 @@ class DatasetAddTaskView(LoginRequiredMixin, DetailView):
         context['remain_to_review'] = {k[6:]: v[0]['total'] for k, v in ds.taskstats.items() if len(v) > 0}
         context['missing_geoms'] = ds.missing_geoms
         context['is_admin'] = is_admin
+        self.logger.debug("Filled remaining context in %.3fs", time.perf_counter() - t0)
 
+        self.logger.debug("Total get_context_data() time: %.3fs", time.perf_counter() - context_start)
         return context
 
     def _prepare_status_messages(self, context, ds, gothits):
