@@ -471,42 +471,53 @@ class Dataset(models.Model):
     # tasks stats
     @property
     def taskstats(self):
-        tasks = (
-            Task.objects.filter(dataset=self, status="SUCCESS")
-            .values("id", "task_name", "date_done")
+        """
+        Returns per-task counts of distinct unreviewed places grouped by query_pass,
+        along with task metadata (name and date_done).
+
+        This implementation performs:
+          • 1 query on Hit (aggregated counts)
+          • 1 small query on ds.tasks (for metadata)
+        and avoids any per-task subqueries.
+        """
+        # --- Step 1: aggregate unreviewed Hit counts per task_id ---
+        hit_stats = (
+            Hit.objects.filter(dataset=self, reviewed=False)
+            .values("task_id")
+            .annotate(
+                pass0=Count("place_id", filter=Q(query_pass="pass0"), distinct=True),
+                pass1=Count("place_id", filter=Q(query_pass="pass1"), distinct=True),
+                pass2=Count("place_id", filter=Q(query_pass="pass2"), distinct=True),
+                pass3=Count("place_id", filter=Q(query_pass="pass3"), distinct=True),
+            )
         )
-        if not tasks:
-            return {tt: [] for tt in ["align_wdlocal", "align_tgn", "align_idx", "align_whg", "align_wd"]}
 
-        task_meta = {t["id"]: t for t in tasks}
+        # --- Step 2: build a lookup of successful tasks for metadata ---
+        tasks = self.tasks.filter(status="SUCCESS").values("task_id", "task_name", "date_done")
+        task_meta = {t["task_id"]: t for t in tasks}
 
-        # Aggregate distinct counts for all passes and tasks in one query
-        hit_counts = (
-            Hit.objects.filter(task_id__in=task_meta.keys(), reviewed=False)
-            .values("task_id", "query_pass")
-            .annotate(place_count=Count("place_id", distinct=True))
-        )
+        # --- Step 3: merge aggregated counts with metadata ---
+        result = {tt: [] for tt in [
+            "align_wdlocal", "align_tgn", "align_idx", "align_whg", "align_wd"
+        ]}
 
-        # Index by task_id for O(1) lookups
-        pass_counts_by_task = {}
-        for row in hit_counts:
-            t_id = row["task_id"]
-            if t_id not in pass_counts_by_task:
-                pass_counts_by_task[t_id] = {"pass0": 0, "pass1": 0, "pass2": 0, "pass3": 0}
-            if row["query_pass"] in pass_counts_by_task[t_id]:
-                pass_counts_by_task[t_id][row["query_pass"]] = row["place_count"]
+        for row in hit_stats:
+            tid = row["task_id"]
+            meta = task_meta.get(tid)
+            if not meta:
+                continue  # skip stray hits not linked to a known task
 
-        # Assemble final structure
-        result = {tt: [] for tt in ["align_wdlocal", "align_tgn", "align_idx", "align_whg", "align_wd"]}
-        for t_id, meta in task_meta.items():
-            passes = pass_counts_by_task.get(t_id, {"pass0": 0, "pass1": 0, "pass2": 0, "pass3": 0})
-            total = sum(passes.values())
-            tt = meta["task_name"]
-            result[tt].append({
-                "tid": t_id,
+            task_name = meta["task_name"]
+            total = row["pass0"] + row["pass1"] + row["pass2"] + row["pass3"]
+
+            result[task_name].append({
+                "tid": tid,
                 "date": meta["date_done"].strftime("%Y-%m-%d") if meta["date_done"] else None,
                 "total": total,
-                **passes,
+                "pass0": row["pass0"],
+                "pass1": row["pass1"],
+                "pass2": row["pass2"],
+                "pass3": row["pass3"],
             })
 
         return result
