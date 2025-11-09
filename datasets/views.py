@@ -525,68 +525,37 @@ def ds_recon(request, pk):
             return redirect('/datasets/' + str(ds.id) + '/reconcile')
 
 
-# TODO: needs overhaul to account for ds.ds_status
-def task_delete(request, tid, scope="foo"):
+def task_delete(request, tid, scope="task"):
     """
-      task_delete(tid, scope)
-      delete results of a reconciliation task:
-      hits + any geoms and links added by review
-      reset Place.review_{auth} to null
+    Initiate background deletion of reconciliation task results
+    Returns immediately with task ID for status polling
     """
     try:
         tr = TaskResult.objects.get(task_id=tid)
     except TaskResult.DoesNotExist:
-        return HttpResponseNotFound(f"Task with ID {tid} does not exist.")
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Task with ID {tid} does not exist'
+        }, status=404)
 
-    auth = tr.task_name[6:]  # extracts 'wdlocal' or 'idx'
+    # Extract dataset ID
     dsid = int(tr.task_args[2:-3])
-    kwargs = ast.literal_eval(tr.task_kwargs.strip('"'))
-    test = kwargs.get("test", "off")
 
-    # Get the associated dataset
-    ds = get_object_or_404(Dataset, pk=dsid)
-    ds_status = ds.ds_status
+    # Start background deletion task
+    from datasets.tasks import delete_reconciliation_task
+    deletion_task = delete_reconciliation_task.delay(
+        tid=tid,
+        scope=scope,
+        dsid=dsid,
+        user_id=request.user.id
+    )
 
-    # Get related objects for deletion
-    hits = Hit.objects.filter(task_id=tid)
-    places = Place.objects.filter(id__in=[h.place_id for h in hits])
-    placelinks = PlaceLink.objects.filter(task_id=tid)
-    placegeoms = PlaceGeom.objects.filter(task_id=tid)
-    placenames = PlaceName.objects.filter(task_id=tid)
-
-    # Reset the review status for places
-    for p in places:
-        if auth in ['whg', 'idx']:
-            p.review_whg = None
-        elif auth.startswith('wd'):
-            p.review_wd = None
-        else:
-            p.review_tgn = None
-        p.defer_comments.delete()  # Assuming defer_comments is a related model to delete
-        p.save()
-
-    # Handle deletion based on scope
-    if scope == 'task':
-        tr.delete()
-        hits.delete()
-        placelinks.delete()
-        placegeoms.delete()
-        placenames.delete()
-    elif scope == 'geoms':
-        placegeoms.delete()
-    else:
-        logger.debug(f"Unsupported scope: {scope}")
-
-    # Remove dataset from index if not in test mode
-    if auth in ['whg', 'idx'] and test == 'off':
-        removeDatasetFromIndex('whg', dsid)
-
-    # Update the dataset status
-    if ds.tasks.filter(status='SUCCESS').count() == 0:
-        ds.ds_status = 'remote' if ds.file.file.name.startswith('dummy') else 'uploaded'
-    ds.save()
-
-    return redirect(f'/datasets/{dsid}/status')
+    return JsonResponse({
+        'status': 'started',
+        'deletion_task_id': deletion_task.id,
+        'message': 'Task deletion started in background',
+        'redirect_url': f'/datasets/{dsid}/reconcile'
+    })
 
 
 def task_archive(tid, prior):

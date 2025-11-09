@@ -254,9 +254,60 @@
             return confirm('DANGER! Deletes all place_geom records created so far in Review step');
         });
 
-        $('.confirm-del-all').click(function () {
-            const id = $(this).data('id');
-            return confirm(`DANGER! Destroys task, its hits, and clears matches confirmed in Review step... ${id}`);
+        $('.confirm-del-all').click(function(e) {
+            e.preventDefault();
+            const taskId = $(this).data('id');
+            const deleteUrl = $(this).attr('href');
+
+            if (!confirm(`DANGER! Destroys task, its hits, and clears matches confirmed in Review step... ${taskId}`)) {
+                return false;
+            }
+
+            // Show loading indicator
+            const $button = $(this);
+            const originalText = $button.html();
+            $button.html('<i class="fas fa-spinner fa-spin"></i> Deleting...')
+                   .addClass('disabled')
+                   .css('pointer-events', 'none');
+
+            $.ajax({
+                url: deleteUrl,
+                type: 'GET',
+                success: function(response) {
+                    if (response.status === 'started') {
+                        // Show success message
+                        $button.closest('.task-box, .task-box-test')
+                               .fadeOut(400, function() {
+                                   $(this).remove();
+                                   // Check if there are any tasks left
+                                   if ($('.task-box, .task-box-test').length === 0) {
+                                       $('#none_yet').show();
+                                   }
+                               });
+
+                        // Optionally redirect after a delay
+                        setTimeout(function() {
+                            if (response.redirect_url) {
+                                window.location.href = response.redirect_url;
+                            }
+                        }, 500);
+                    } else {
+                        alert('Error: ' + (response.message || 'Unknown error occurred'));
+                        $button.html(originalText)
+                               .removeClass('disabled')
+                               .css('pointer-events', 'auto');
+                    }
+                },
+                error: function(xhr) {
+                    const response = xhr.responseJSON || {};
+                    alert('Error deleting task: ' + (response.message || xhr.statusText));
+                    $button.html(originalText)
+                           .removeClass('disabled')
+                           .css('pointer-events', 'auto');
+                }
+            });
+
+            return false;
         });
     });
     </script>

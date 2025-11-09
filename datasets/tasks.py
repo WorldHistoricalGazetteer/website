@@ -2,6 +2,7 @@
 # align_tgn(), align_wdlocal(), align_idx(), align_whg, make_download
 from __future__ import absolute_import, unicode_literals
 
+import ast
 import time
 
 from django_celery_results.models import TaskResult
@@ -32,11 +33,11 @@ from collection.models import Collection
 from datasets.models import Dataset, Hit
 from datasets.static.hashes.parents import ccodes as cchash
 from datasets.static.hashes.qtypes import qtypes
-from elastic.es_utils import makeDoc, build_qobj, profileHit
+from elastic.es_utils import makeDoc, build_qobj, profileHit, removeDatasetFromIndex
 from datasets.utils import elapsed, getQ, \
     HitRecord, hully, parse_wkt, post_recon_update  # bestParent, makeNow,
 from main.models import Log, DownloadFile
-from places.models import Place
+from places.models import Place, PlaceGeom, PlaceLink, PlaceName
 from whgmail.messaging import WHGmail
 
 import logging
@@ -49,6 +50,85 @@ CALLS_PER_SECOND = 30
 logger = get_task_logger(__name__)
 es = settings.ES_CONN
 User = get_user_model()
+
+
+@shared_task(name="delete_reconciliation_task")
+def delete_reconciliation_task(tid, scope, dsid, user_id):
+    """
+    Background task to delete reconciliation task results
+    """
+    logger = logging.getLogger('dataset')
+    logger.info(f'Starting deletion of task {tid} with scope {scope}')
+
+    try:
+        tr = TaskResult.objects.get(task_id=tid)
+    except TaskResult.DoesNotExist:
+        logger.error(f"Task with ID {tid} does not exist.")
+        return {'status': 'error', 'message': f'Task {tid} not found'}
+
+    auth = tr.task_name[6:]  # extracts 'wdlocal' or 'idx'
+    kwargs = ast.literal_eval(tr.task_kwargs.strip('"'))
+    test = kwargs.get("test", "off")
+
+    try:
+        ds = Dataset.objects.get(pk=dsid)
+
+        # Get related objects for deletion
+        hits = Hit.objects.filter(task_id=tid)
+        places = Place.objects.filter(id__in=[h.place_id for h in hits])
+
+        # Reset the review status for places
+        for p in places:
+            if auth in ['whg', 'idx']:
+                p.review_whg = None
+            elif auth.startswith('wd'):
+                p.review_wd = None
+            else:
+                p.review_tgn = None
+            p.defer_comments.all().delete()
+            p.save()
+
+        # Handle deletion based on scope
+        if scope == 'task':
+            placelinks = PlaceLink.objects.filter(task_id=tid)
+            placegeoms = PlaceGeom.objects.filter(task_id=tid)
+            placenames = PlaceName.objects.filter(task_id=tid)
+
+            hits_count = hits.count()
+            placelinks.delete()
+            placegeoms.delete()
+            placenames.delete()
+            hits.delete()
+            tr.delete()
+
+            logger.info(f'Deleted task {tid}: {hits_count} hits and related objects')
+
+        elif scope == 'geoms':
+            placegeoms = PlaceGeom.objects.filter(task_id=tid)
+            geom_count = placegeoms.count()
+            placegeoms.delete()
+            logger.info(f'Deleted {geom_count} geometries for task {tid}')
+
+        # Remove dataset from index if not in test mode
+        if auth in ['whg', 'idx'] and test == 'off':
+            removeDatasetFromIndex('whg', dsid)
+
+        # Update the dataset status
+        if ds.tasks.filter(status='SUCCESS').count() == 0:
+            ds.ds_status = 'remote' if ds.file.file.name.startswith('dummy') else 'uploaded'
+        ds.save()
+
+        return {
+            'status': 'success',
+            'task_id': tid,
+            'scope': scope,
+            'dataset_id': dsid
+        }
+
+    except Exception as e:
+        logger.error(f'Error deleting task {tid}: {e}', exc_info=True)
+        return {'status': 'error', 'message': str(e)}
+
 
 """
   adds newly public dataset to 'pub' index
