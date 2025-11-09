@@ -415,7 +415,7 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
     """
     logger = logging.getLogger('accession')
 
-    logger.debug(f'indexMatch(): user: {user}; task: {str(hit_pid)}')
+    logger.debug(f'indexMatch(): user: {user}; task: {str(task)}')
     logger.debug(f'indexMatch(): pid {str(pid)}; hit_pid: {str(hit_pid)}')
 
     es = settings.ES_CONN
@@ -460,19 +460,39 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
                 return
 
             hit = res_hit['hits']['hits'][0]
+            hit_source = hit['_source']
+
             # Get the whg_id of the parent (may itself be a child, so get its parent)
-            if hit['_source']['relation']['name'] == 'parent':
+            if hit_source['relation']['name'] == 'parent':
                 parent_whgid = hit['_id']
             else:
-                parent_whgid = hit['_source']['relation']['parent']
+                parent_whgid = hit_source['relation']['parent']
+
+            logger.debug(f"Parent WHG ID: {parent_whgid}")
 
             # Create new doc as child
             new_doc = makeDoc(place)
             new_doc['relation'] = {"name": "child", "parent": parent_whgid}
 
-            # Index with place.id as the ES document id
+            # Index the child with place.id as the ES document id
             es.index(index=idx, id=str(pid), routing=1, body=json.dumps(new_doc))
             logger.info(f"Place {pid} indexed as child of parent {parent_whgid}.")
+
+            # ✅ Update parent's children array
+            try:
+                update_parent_script = {
+                    "script": {
+                        "source": "if (!ctx._source.children.contains(params.child_id)) { ctx._source.children.add(params.child_id) }",
+                        "lang": "painless",
+                        "params": {
+                            "child_id": str(pid)
+                        }
+                    }
+                }
+                es.update(index=idx, id=parent_whgid, body=update_parent_script)
+                logger.info(f"Added {pid} to parent {parent_whgid}'s children array")
+            except Exception as e:
+                logger.error(f"Error updating parent {parent_whgid} children array: {e}")
 
             # ✅ Create CloseMatch record in database
             if user and task:
@@ -481,11 +501,15 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
             else:
                 logger.warning(f"Cannot create CloseMatch for {pid} and {hit_pid}: missing user or task")
 
+            # ✅ Mark place as indexed
+            place.indexed = True
+            place.save()
+
         except Exception as e:
-            logger.error(f"Error linking Place {pid} to parent {hit_pid}: {e}")
+            logger.error(f"Error linking Place {pid} to parent {hit_pid}: {e}", exc_info=True)
     else:
         # ✅ CREATE NEW PARENT
-        logger.debug(f'Place {pid} not found in index. Creating as parent.')
+        logger.debug(f'Place {pid} - no hit_pid. Creating as new parent.')
         try:
             new_doc = makeDoc(place)
             new_doc['relation'] = {"name": "parent"}
@@ -497,7 +521,7 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
             place.save()
             logger.info(f'Place {pid} indexed as new parent with whg_id {new_doc["whg_id"]}.')
         except Exception as e:
-            logger.error(f"Failed to index Place {pid} as parent: {e}")
+            logger.error(f"Failed to index Place {pid} as parent: {e}", exc_info=True)
 
 
 def indexMultiMatch(pid, matchlist, user, task):
