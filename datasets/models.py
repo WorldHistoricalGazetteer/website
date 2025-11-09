@@ -379,16 +379,7 @@ class Dataset(models.Model):
 
     @property
     def missing_geoms(self):
-        # Get all Place instances related to this Dataset
-        places = self.places.all()
-
-        # Check if any of these Place instances do not have a corresponding PlaceGeom
-        for place in places:
-            if not place.geoms.exists():
-                return True
-
-        # If we've gone through all Place instances and none are missing a PlaceGeom, return False
-        return False
+        return self.places.exclude(id__in=PlaceGeom.objects.values('place_id')).exists()
 
     @property
     def num_places(self):
