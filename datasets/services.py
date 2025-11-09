@@ -215,115 +215,197 @@ def _build_feature_collection(records, raw_hits):
 
 @transaction.atomic
 def _process_matching_decisions(request, place, formset, task, auth, authname, kwargs, review_field, ds):
-    """Processes user's matching decisions from the formset."""
+    """
+    Optimized: Processes user's matching decisions from the formset.
+    - Uses preloaded related objects to avoid N+1 queries.
+    - Collects all DB changes and performs bulk operations.
+    """
     matches = 0
     matched_for_idx = []
     tid = task.task_id
 
+    # --- Preload related objects into memory ---
+    # NOTE: These attributes must be created via prefetch_related() in the calling view
+    prefetched_geoms = getattr(place, 'prefetched_geoms', place.geoms.all())
+    prefetched_names = getattr(place, 'prefetched_names', place.names.all())
+    prefetched_links = getattr(place, 'prefetched_links', place.links.all())
+
+    geoms_task_ids = {g.task_id for g in prefetched_geoms}
+    names_task_ids = {n.task_id for n in prefetched_names}
+    existing_toponyms = {n.toponym for n in prefetched_names}
+    links_task_ids = {l.task_id for l in prefetched_links}
+    existing_authids = {l.jsonb.get('identifier') for l in prefetched_links if l.jsonb.get('identifier')}
+
+    # --- Collect changes ---
+    hits_to_update = []
+    geoms_to_create = []
+    names_to_create = []
+    links_to_create = []
+    total_new_links = 0
+
     for form in formset:
-        if form.is_valid():
-            cleaned_data = form.cleaned_data
-            hit_id = form.instance.id
-            match_type = cleaned_data.get("match")
-            hit_json = cleaned_data.get("json", {})
+        if not form.is_valid():
+            continue
 
-            if hit_id and match_type not in ["none"]:
-                matches += 1
-                if auth in ["wdlocal", "wd", "tgn"]:
-                    has_geom = "geoms" in hit_json and hit_json["geoms"]
-                    has_names = ("variants" in hit_json and hit_json["variants"]) or (
-                            "names" in hit_json and hit_json["names"])
+        cleaned_data = form.cleaned_data
+        hit_id = form.instance.id
+        match_type = cleaned_data.get("match")
+        hit_json = cleaned_data.get("json", {})
 
-                    if (kwargs.get("aug_geoms") == 'on' and has_geom and
-                            tid not in place.geoms.all().values_list("task_id", flat=True)):
-                        geom_data = hit_json["geoms"][0]
-                        gobj = GEOSGeometry(json.dumps(geom_data))
-                        PlaceGeom.objects.create(
-                            place=place, task_id=tid, src_id=place.src_id, geom=gobj, reviewer=request.user,
-                            jsonb={"type": geom_data["type"],
-                                   "citation": {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname},
-                                   "coordinates": geom_data["coordinates"]}
-                        )
+        if hit_id and match_type not in ["none"]:
+            matches += 1
 
-                    if (kwargs.get('aug_names') == 'on' and has_names and
-                            tid not in place.names.all().values_list('task_id', flat=True)):
-                        names_to_add = []
-                        if hit_json.get('dataset') == 'wikidata':
-                            names_to_add.extend([n.split('@')[0] for n in hit_json.get('variants', [])])
-                        elif hit_json.get('dataset') == 'geonames':
-                            names_to_add.extend(hit_json.get('variants', []))
-                        elif hit_json.get('names'):
-                            names_to_add.extend(hit_json.get('names'))
+            # --- Handle authority-specific logic ---
+            if auth in ["wdlocal", "wd", "tgn"]:
+                has_geom = "geoms" in hit_json and hit_json["geoms"]
+                has_names = ("variants" in hit_json and hit_json["variants"]) or (
+                    "names" in hit_json and hit_json["names"]
+                )
 
-                        for name in set(names_to_add):
-                            if name not in place.names.all().values_list("toponym", flat=True):
-                                PlaceName.objects.create(
-                                    place=place, task_id=tid, src_id=place.src_id, toponym=name,
-                                    jsonb={"toponym": name, "citations": [
-                                        {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]}
-                                )
+                # --- Geometries ---
+                if kwargs.get("aug_geoms") == 'on' and has_geom and tid not in geoms_task_ids:
+                    geom_data = hit_json["geoms"][0]
+                    gobj = GEOSGeometry(json.dumps(geom_data))
+                    geoms_to_create.append(PlaceGeom(
+                        place=place,
+                        task_id=tid,
+                        src_id=place.src_id,
+                        geom=gobj,
+                        reviewer=request.user,
+                        jsonb={
+                            "type": geom_data["type"],
+                            "citation": {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname},
+                            "coordinates": geom_data["coordinates"]
+                        }
+                    ))
+                    geoms_task_ids.add(tid)  # Prevent duplicates in same batch
 
-                    if tid not in place.links.all().values_list("task_id", flat=True):
-                        PlaceLink.objects.create(
-                            place=place, task_id=tid, src_id=place.src_id, reviewer=request.user,
-                            jsonb={"type": match_type, "identifier": link_uri(task.task_name, hit_json.get(
-                                'authrecord_id') if auth != "whg" else hit_json.get("place_id"))}
-                        )
+                # --- Names ---
+                if kwargs.get("aug_names") == 'on' and has_names and tid not in names_task_ids:
+                    names_to_add = []
+                    if hit_json.get('dataset') == 'wikidata':
+                        names_to_add.extend([n.split('@')[0] for n in hit_json.get('variants', [])])
+                    elif hit_json.get('dataset') == 'geonames':
+                        names_to_add.extend(hit_json.get('variants', []))
+                    elif hit_json.get('names'):
+                        names_to_add.extend(hit_json.get('names'))
 
-                    for l in hit_json.get("links", []):
-                        authid_match = re.search(r": ?(.*?)$", l)
-                        authid = authid_match.group(1) if authid_match else None
-                        if authid and l not in place.authids:
-                            PlaceLink.objects.create(
-                                place=place, task_id=tid, src_id=place.src_id, reviewer=request.user,
-                                jsonb={"type": match_type, "identifier": l.strip()}
-                            )
-                            ds.numlinked = (ds.numlinked or 0) + 1
-                            ds.total_links = (ds.total_links or 0) + 1
-                            ds.save()
+                    for name in set(names_to_add):
+                        if name not in existing_toponyms:
+                            names_to_create.append(PlaceName(
+                                place=place,
+                                task_id=tid,
+                                src_id=place.src_id,
+                                toponym=name,
+                                jsonb={
+                                    "toponym": name,
+                                    "citations": [{"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
+                                }
+                            ))
+                            existing_toponyms.add(name)  # Prevent duplicates in same batch
+                    names_task_ids.add(tid)  # Mark this task as processed
 
-                elif task.task_name == "align_idx":
-                    links_count = len(hit_json.get("links", [])) if "links" in hit_json else 0
-                    matched_for_idx.append({
-                        "whg_id": hit_json.get("whg_id"),
-                        "pid": hit_json.get("pid"),
-                        "score": hit_json.get("score"),
-                        "links": links_count,
-                    })
+                # --- Primary link ---
+                if tid not in links_task_ids:
+                    link_identifier = link_uri(
+                        task.task_name,
+                        hit_json.get('authrecord_id') if auth != "whg" else hit_json.get("place_id")
+                    )
+                    links_to_create.append(PlaceLink(
+                        place=place,
+                        task_id=tid,
+                        src_id=place.src_id,
+                        reviewer=request.user,
+                        jsonb={"type": match_type, "identifier": link_identifier}
+                    ))
+                    links_task_ids.add(tid)
+                    existing_authids.add(link_identifier)
+                    total_new_links += 1
 
-            if hit_id:
-                try:
-                    hit_obj = Hit.objects.get(id=hit_id)
-                    hit_obj.reviewed = True
-                    hit_obj.save()
-                except Hit.DoesNotExist:
-                    logger.error(f"Hit with ID {hit_id} not found.")
+                # --- Additional links ---
+                for l in hit_json.get("links", []):
+                    authid_match = re.search(r": ?(.*?)$", l)
+                    authid = authid_match.group(1) if authid_match else None
+                    link_clean = l.strip()
+                    if authid and link_clean not in existing_authids:
+                        links_to_create.append(PlaceLink(
+                            place=place,
+                            task_id=tid,
+                            src_id=place.src_id,
+                            reviewer=request.user,
+                            jsonb={"type": match_type, "identifier": link_clean}
+                        ))
+                        existing_authids.add(link_clean)
+                        total_new_links += 1
 
+            # --- align_idx logic ---
+            elif task.task_name == "align_idx":
+                links_count = len(hit_json.get("links", [])) if "links" in hit_json else 0
+                matched_for_idx.append({
+                    "whg_id": hit_json.get("whg_id"),
+                    "pid": hit_json.get("pid"),
+                    "score": hit_json.get("score"),
+                    "links": links_count,
+                })
+
+        # --- Collect hits to mark as reviewed (use formset instance, not a new query) ---
+        if hit_id and form.instance:
+            form.instance.reviewed = True
+            hits_to_update.append(form.instance)
+
+    # --- Bulk operations ---
+    if geoms_to_create:
+        PlaceGeom.objects.bulk_create(geoms_to_create, batch_size=100)
+    if names_to_create:
+        PlaceName.objects.bulk_create(names_to_create, batch_size=100)
+    if links_to_create:
+        PlaceLink.objects.bulk_create(links_to_create, batch_size=100)
+    if hits_to_update:
+        Hit.objects.bulk_update(hits_to_update, ['reviewed'], batch_size=100)
+
+    # --- Handle indexing for align_idx ---
+    update_fields = [review_field]
     if task.task_name == "align_idx":
         if not matched_for_idx:
             logger.debug(f'review()->parent. user: {request.user}, place_post: {place.id}, task: {task}')
             indexMatch(str(place.id), user=request.user, task=task)
             place.indexed = True
-            place.save()
+            update_fields.append('indexed')
         elif len(matched_for_idx) == 1:
             parent_id = matched_for_idx[0]["pid"]
             indexMatch(str(place.id), hit_pid=parent_id, user=request.user, task=task)
             place.indexed = True
-            place.save()
+            update_fields.append('indexed')
         elif len(matched_for_idx) > 1:
             indexMultiMatch(place.id, matched_for_idx, user=request.user, task=task)
             place.indexed = True
-            place.save()
+            update_fields.append('indexed')
 
-    if ds.unindexed == 0:
-        ds.ds_status = "indexed"
-        ds.save()
-
-    if auth == "wd" and ds.recon_status.get("wdlocal") == 0:
-        recon_complete(ds)
-
+    # --- Update place review status (single save) ---
     setattr(place, review_field, 1)
-    place.save()
+    place.save(update_fields=update_fields)
+
+    # --- Update dataset totals ---
+    if total_new_links > 0:
+        unique_place_ids = len({l.place_id for l in links_to_create})
+        ds.numlinked = (ds.numlinked or 0) + unique_place_ids
+        ds.total_links = (ds.total_links or 0) + total_new_links
+        ds.save(update_fields=['numlinked', 'total_links'])
+
+    # --- Update dataset status ---
+    status_changed = False
+    new_status = None
+
+    if ds.unindexed == 0 and ds.ds_status != "indexed":
+        new_status = "indexed"
+        status_changed = True
+    elif auth == "wd" and ds.recon_status.get("wdlocal") == 0 and ds.ds_status != "wd-complete":
+        new_status = "wd-complete"
+        status_changed = True
+
+    if status_changed:
+        ds.ds_status = new_status
+        ds.save(update_fields=['ds_status'])
 
 
 def indexMatch(pid, hit_pid=None, user=None, task=None):

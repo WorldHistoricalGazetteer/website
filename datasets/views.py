@@ -17,7 +17,7 @@ from celery import current_app as celapp
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.forms import modelformset_factory
 from django.http import (
     HttpResponseRedirect,
@@ -346,7 +346,13 @@ def review(request, dsid, tid, passnum):
     except IndexError:
         return render(request, f"datasets/{review_page}", context=nohit_context)
 
-    place_for_hits, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
+    place = Place.objects.prefetch_related(
+        Prefetch('geoms', to_attr='prefetched_geoms'),
+        Prefetch('names', to_attr='prefetched_names'),
+        Prefetch('links', to_attr='prefetched_links')
+    ).get(id=place.id)
+
+    _, raw_hits = _get_place_and_hits(place.id, tid, auth, current_passnum)
     logger.debug(f"Raw hits 1: {raw_hits}")
     dataset_details = _build_dataset_details(raw_hits)
     passes = _extract_passes(raw_hits, auth)
