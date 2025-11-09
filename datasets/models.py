@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.cache import caches
 from django.db import models
-from django.db.models import JSONField, Exists, OuterRef, Q, Func, CharField, Min, Max
+from django.db.models import JSONField, Exists, OuterRef, Q, Func, CharField, Min, Max, Count
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.urls import reverse
@@ -190,8 +190,8 @@ class Dataset(models.Model):
             combined_geom = geom_list[0].convex_hull
 
             for geom in geom_list[
-                        1:
-                        ]:  # Union of convex hulls is much faster than union of full geometries
+                1:
+            ]:  # Union of convex hulls is much faster than union of full geometries
                 combined_geom = combined_geom.union(geom.convex_hull)
 
             geometry = json.loads(combined_geom.convex_hull.geojson)
@@ -471,69 +471,44 @@ class Dataset(models.Model):
     # tasks stats
     @property
     def taskstats(self):
-        def distinctPlaces(task):
-            # counts of distinct place records remaining to review fo reach pass
-            p_hits0 = (
-                Hit.objects.filter(
-                    task_id=t.task_id, query_pass="pass0", reviewed=False
-                )
-                .values("place_id")
-                .distinct()
-                .count()
-            )
-            p_hits1 = (
-                Hit.objects.filter(
-                    task_id=t.task_id, query_pass="pass1", reviewed=False
-                )
-                .values("place_id")
-                .distinct()
-                .count()
-            )
-            p_hits2 = (
-                Hit.objects.filter(
-                    task_id=t.task_id, query_pass="pass2", reviewed=False
-                )
-                .values("place_id")
-                .distinct()
-                .count()
-            )
-            p_hits3 = (
-                Hit.objects.filter(
-                    task_id=t.task_id, query_pass="pass3", reviewed=False
-                )
-                .values("place_id")
-                .distinct()
-                .count()
-            )
-            p_sum = p_hits0 + p_hits1 + p_hits2 + p_hits3
+        tasks = (
+            Task.objects.filter(dataset=self, status="SUCCESS")
+            .values("id", "task_name", "date_done")
+        )
+        if not tasks:
+            return {tt: [] for tt in ["align_wdlocal", "align_tgn", "align_idx", "align_whg", "align_wd"]}
 
-            return {
-                "tid": t.task_id,
-                # "task":t.task_name,
-                "date": t.date_done.strftime("%Y-%m-%d"),
-                "total": p_sum,
-                "pass0": p_hits0,
-                "pass1": p_hits1,
-                "pass2": p_hits2,
-                "pass3": p_hits3,
-            }
+        task_meta = {t["id"]: t for t in tasks}
 
-        result = {}
-        # array for each kind of task
-        # task_types = self.tasks.all().values_list("task_name", flat=True)
-        task_types = [
-            "align_wdlocal",
-            "align_tgn",
-            "align_idx",
-            "align_whg",
-            "align_wd",
-        ]
-        for tt in task_types:
-            result[tt] = []
-            for t in self.tasks.filter(task_name=tt, status="SUCCESS"):
-                result[tt].append(distinctPlaces(t))
+        # Aggregate distinct counts for all passes and tasks in one query
+        hit_counts = (
+            Hit.objects.filter(task_id__in=task_meta.keys(), reviewed=False)
+            .values("task_id", "query_pass")
+            .annotate(place_count=Count("place_id", distinct=True))
+        )
 
-        # print(result)
+        # Index by task_id for O(1) lookups
+        pass_counts_by_task = {}
+        for row in hit_counts:
+            t_id = row["task_id"]
+            if t_id not in pass_counts_by_task:
+                pass_counts_by_task[t_id] = {"pass0": 0, "pass1": 0, "pass2": 0, "pass3": 0}
+            if row["query_pass"] in pass_counts_by_task[t_id]:
+                pass_counts_by_task[t_id][row["query_pass"]] = row["place_count"]
+
+        # Assemble final structure
+        result = {tt: [] for tt in ["align_wdlocal", "align_tgn", "align_idx", "align_whg", "align_wd"]}
+        for t_id, meta in task_meta.items():
+            passes = pass_counts_by_task.get(t_id, {"pass0": 0, "pass1": 0, "pass2": 0, "pass3": 0})
+            total = sum(passes.values())
+            tt = meta["task_name"]
+            result[tt].append({
+                "tid": t_id,
+                "date": meta["date_done"].strftime("%Y-%m-%d") if meta["date_done"] else None,
+                "total": total,
+                **passes,
+            })
+
         return result
 
     @property
