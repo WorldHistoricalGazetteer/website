@@ -973,13 +973,62 @@ def align_wdlocal(*args, **kwargs):
     return hit_parade['summary']
 
 
+def _safe_es_search(indices, body, pass_label, size=100):
+    """
+    Executes an ES search against one or more indices.
+    Returns combined, deduplicated hits with index origin annotated and score adjusted.
+    """
+    if isinstance(indices, str):
+        indices = [indices]
+
+    all_hits = []
+    for idx in indices:
+        start = time.perf_counter()
+        try:
+            res = es.search(index=idx, body=body, size=size)
+            hits = res.get("hits", {}).get("hits", [])
+            for h in hits:
+                h["_index"] = idx
+                from_pub = (idx == settings.ES_PUB)
+                h["_source"]["from_pub"] = from_pub
+
+                # Apply a mild boost for published hits
+                if from_pub:
+                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 1.25
+
+            all_hits.extend(hits)
+            logger.debug(
+                f"ES search ({pass_label}) on {idx}: {len(hits)} hits "
+                f"in {time.perf_counter() - start:.3f}s"
+            )
+        except Exception as e:
+            logger.warning(
+                f"ES error in {pass_label} for {idx}: {e}", exc_info=True
+            )
+
+    # Deduplicate by ES _id across all indices (keep higher score)
+    unique_hits = {}
+    for h in all_hits:
+        _id = h["_id"]
+        if _id not in unique_hits or h["_score"] > unique_hits[_id]["_score"]:
+            unique_hits[_id] = h
+
+    return list(unique_hits.values())
+
+
 def es_lookup_idx(qobj, *, bounds=None):
     """
     ElasticSearch lookup for index alignment.
-    Pass0: match on identifiers from the query record only.
-    Pass1: match on lexical + spatial criteria.
+    Searches both dataset (settings.ES_WHG) and published (settings.ES_PUB) indices.
+    Pass0: identifier matches.
+    Pass1: lexical + spatial matches.
     """
-    idx = settings.ES_WHG
+    start_total = time.perf_counter()
+
+    indices = [settings.ES_WHG]
+    if getattr(settings, "ES_PUB", None):
+        indices.append(settings.ES_PUB)
+
     result = {
         "place_id": qobj["place_id"],
         "title": qobj["title"],
@@ -1012,9 +1061,16 @@ def es_lookup_idx(qobj, *, bounds=None):
 
     # ---------- pass 0 : identifier matches ----------
     q0 = {
-        "query": {"bool": {"must": [{"terms": {"links.identifier": links}}]}}
+        "query": {
+            "bool": {
+                "must": [
+                    {"terms": {"links.identifier.keyword": links}},
+                    {"term": {"authority.keyword": qobj["authority"]}},
+                ]
+            }
+        }
     }
-    hits0 = _safe_es_search(idx, q0, pass_label="pass0")
+    hits0 = _safe_es_search(indices, q0, pass_label="pass0")
 
     # ---------- pass 1 : lexical + spatial ----------
     q1 = {
@@ -1038,9 +1094,9 @@ def es_lookup_idx(qobj, *, bounds=None):
             }
         },
     }
-    hits1 = _safe_es_search(idx, q1, pass_label="pass1")
+    hits1 = _safe_es_search(indices, q1, pass_label="pass1")
 
-    # ---------- consolidate ----------
+    # ---------- consolidate and label ----------
     seen_ids = set()
     for src_hits, label in [(hits0, "pass0"), (hits1, "pass1")]:
         for h in src_hits:
@@ -1049,18 +1105,20 @@ def es_lookup_idx(qobj, *, bounds=None):
             seen_ids.add(h["_id"])
             _mark_hit(h, label)
             result["hits"].append(h)
+
+    # Sort by adjusted score (desc)
+    result["hits"].sort(key=lambda h: h.get("_score", 0), reverse=True)
+
     result["hit_count"] = len(result["hits"])
     result["total_hits"] = result["hit_count"]
+
+    logger.info(
+        f"es_lookup_idx(): {result['hit_count']} unique hits for "
+        f"{qobj.get('title')} [{', '.join(indices)}] "
+        f"in {time.perf_counter() - start_total:.3f}s"
+    )
+
     return result
-
-
-def _safe_es_search(index, body, pass_label):
-    try:
-        res = es.search(index=index, body=body)
-        return res.get("hits", {}).get("hits", [])
-    except Exception:
-        logger.exception(f"ES error in {pass_label} query", exc_info=True)
-        return []
 
 
 def _mark_hit(hit, label):
