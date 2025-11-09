@@ -538,19 +538,13 @@ def task_delete(request, tid, scope="task"):
             'message': f'Task with ID {tid} does not exist'
         }, status=404)
 
-    # Extract dataset ID and auth type
-    auth = tr.task_name[6:]  # extracts 'wdlocal' or 'idx'
+    # Extract dataset ID
     dsid = int(tr.task_args[2:-3])
-    ds = get_object_or_404(Dataset, pk=dsid)
 
-    # Clear the recon_status flag so UI updates right away
-    if auth == 'idx' or auth == 'whg':
-        # Clear the idx flag from recon_status
-        recon_status = ds.recon_status or {}
-        if 'idx' in recon_status:
-            del recon_status['idx']
-        ds.recon_status = recon_status
-        ds.save()
+    # Mark task as ARCHIVED so recon_status no longer includes it
+    if scope == 'task':
+        tr.status = 'ARCHIVED'
+        tr.save()
 
     # Start background deletion task
     from datasets.tasks import delete_reconciliation_task
