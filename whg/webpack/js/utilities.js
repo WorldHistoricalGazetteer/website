@@ -114,21 +114,37 @@ export function representativePoint(geometry) {
     return null; // If the geometry type is not recognized or if it's empty, return null.
 }
 
-export function equidistantLCHColors(numColors) {
-    const colors = [];
-    const hue_default = 60; // Default red-orange
-    const hue_avoid = 150; // Avoid greens (150) or reds (30) for colourblindness
-    const hue_avoid_tolerance = 40; // Either side of hue-avoid value
-    const hueStep = (360 - hue_avoid_tolerance * 2) / numColors;
-    for (let i = 0; i < numColors; i++) {
-        const hueValue_raw = hue_default + i * hueStep;
-        const hueValue_adjust = hueValue_raw > hue_avoid - hue_avoid_tolerance;
-        const hueValue_adjusted = hueValue_adjust ?
-            hueValue_raw + hue_avoid_tolerance * 2 :
-            hueValue_raw;
-        const lchColor = lch(50, 70, hueValue_adjusted % 360);
-        colors.push(lchColor.formatRgb());
+export function getDistinctColours(numColors) {
+    // For small sets, use proven palette
+    const baseColors = [
+        '#4477AA', '#EE6677', '#228833', '#CCBB44',
+        '#66CCEE', '#AA3377', '#EE7733', '#BBBBBB'
+    ];
+
+    if (numColors <= baseColors.length) {
+        return baseColors.slice(0, numColors);
     }
+
+    // For larger sets, vary lightness/chroma of base hues
+    const colors = [];
+    const lightnessVariations = [50, 65, 40, 75];
+    const chromaVariations = [60, 75, 50];
+
+    for (let i = 0; i < numColors; i++) {
+        const baseColor = lch(baseColors[i % baseColors.length]);
+        const lVar = lightnessVariations[Math.floor(i / baseColors.length) % lightnessVariations.length];
+        const cVar = chromaVariations[Math.floor(i / baseColors.length) % chromaVariations.length];
+
+        // Adjust lightness and chroma while keeping safe hue
+        const adjustedColor = lch(
+            baseColor.l * (lVar / 60),  // Scale lightness
+            baseColor.c * (cVar / 60),   // Scale chroma
+            baseColor.h                  // Keep safe hue
+        );
+
+        colors.push(adjustedColor.formatRgb());
+    }
+
     return colors;
 }
 
@@ -136,7 +152,7 @@ export function arrayColors(strings) {
     if (!Array.isArray(strings)) strings = [];
     strings.reverse().unshift('');
     const numColors = strings.length;
-    const colors = equidistantLCHColors(numColors);
+    const colors = getDistinctColours(numColors);
     let result = [];
     for (let i = 0; i < numColors; i++) {
         result.push(colors[i]);
