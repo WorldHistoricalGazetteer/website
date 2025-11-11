@@ -3,7 +3,7 @@
 {% block content %}
     <p>Your WHG index alignment task for the {{ dataset_title }} dataset ({{ dataset_label }}) has completed.</p>
 
-    <p><strong>Result:</strong> {{ counthit }} of the {{ total_count }} records sent got {{ totalhits }} hits in total.{% if seeds > 0 %} {{ seeds }} were indexed automatically.{% endif %}</p>
+    <p><strong>Result:</strong> {{ counthit }} of the {{ total_count }} records sent got {{ totalhits }} hits in total.{% if seeds > 0 %} {{ seeds }} without hits were indexed automatically.{% endif %}</p>
 
     <p>View results on the "Linking" tab of your dataset page (you may have to refresh it).</p>
 {% endblock %}

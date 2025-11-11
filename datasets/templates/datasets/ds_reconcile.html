@@ -138,8 +138,7 @@
                                                 {% if t.task_name == 'align_idx' %}
                                                     {% with gothits=t.result|get:"got_hits" %}
                                                         {% if test != 'on' %}
-                                                            {{ t.result|get:"count"|subtract:gothits }} were indexed
-                                                            automatically
+                                                            {{ t.result|get:"count"|subtract:gothits }} without hits were indexed automatically
                                                         {% else %}
                                                             <br/>
                                                             <span class="text-danger italic">
