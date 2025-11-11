@@ -1011,6 +1011,8 @@ def review(request, dsid, tid, passnum):
     record_list, current_passnum = _filter_unreviewed_places(ds, tid, passnum, auth)
     review_page, review_field = _get_review_page_and_field(auth)
 
+    is_reconciliation = auth == "wdlocal"
+
     # Base context for no hits
     nohit_context = {
         "nohits": True,
@@ -1018,7 +1020,7 @@ def review(request, dsid, tid, passnum):
         "ds_label": ds.label,
         "dataset_details": {},
         "task_id": tid,
-        "authority": task.task_name[6:8] if auth == "wdlocal" else task.task_name[6:],
+        "authority": task.task_name[6:8] if is_reconciliation else task.task_name[6:],
         "deferred": current_passnum == "def",
         "passnum": current_passnum,
         "test": test,
@@ -1064,7 +1066,7 @@ def review(request, dsid, tid, passnum):
     dataset_details = _build_dataset_details(raw_hits)
     passes = _extract_passes(raw_hits, auth)
     countries = _get_country_names(place)
-    feature_collection = _build_feature_collection(records, raw_hits)
+    feature_collection = _build_feature_collection(records, raw_hits, is_reconciliation)
 
     # Formset
     HitFormset = modelformset_factory(

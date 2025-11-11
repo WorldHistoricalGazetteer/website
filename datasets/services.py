@@ -158,7 +158,7 @@ def _get_country_names(place):
     return countries
 
 
-def _build_feature_collection(records, raw_hits):
+def _build_feature_collection(records, raw_hits, is_reconciliation):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
 
@@ -168,14 +168,16 @@ def _build_feature_collection(records, raw_hits):
             return None
         types = {g.get("type") for g in geoms}
         if len(types) == 1:
-            # Single type, merge coordinates if possible
-            geom = geoms[0]
-            return _simplify_geometry(geom)
+            # Single type, simplify individually or merge as appropriate
+            return [_simplify_geometry(g) for g in geoms][0] if len(geoms) == 1 else {
+                "type": f"Multi{list(types)[0].title()}",
+                "coordinates": [g["coordinates"] for g in geoms]
+            }
         return {"type": "GeometryCollection", "geometries": geoms}
 
     # Green: geometries from submitted dataset and reconciled places
     for record in records:
-        geoms = [g['jsonb'] for g in record.geoms.all().values('jsonb')]
+        geoms = [geom['jsonb'] for geom in record.geoms.all().values('jsonb')]
         geometry = combine_and_simplify(geoms)
         if geometry:
             features.append({
@@ -185,58 +187,51 @@ def _build_feature_collection(records, raw_hits):
                 "id": len(features)
             })
 
-    # Collect all accession pids
-    all_pids = [
-        s.get('pid')
-        for hit in raw_hits
-        for s in hit.json.get('sources', [])
-        if s.get('pid')
-    ]
-
-    # Bulk load places and prefetch geometries
-    place_map = {
-        p.id: p for p in Place.objects.filter(id__in=all_pids).prefetch_related('geoms')
-    }
-
-    for hit in raw_hits:
-        # Reconciliation geometries
-        for geom in hit.json.get('geoms', []):
-            simplified = _simplify_geometry({
-                "type": geom["type"],
-                "coordinates": geom.get("coordinates")
-            })
-            features.append({
-                "type": "Feature",
-                "properties": {
-                    **{k: v for k, v in geom.items() if k not in ["coordinates", "type"]}
-                },
-                "geometry": simplified,
-                "id": len(features)
-            })
-
-        # Accession geometries
-        for source in hit.json.get('sources', []):
-            pid = source.get('pid')
-            if not pid:
-                continue
-            place = place_map.get(pid)
-            if not place:
-                logger.warning(f"Source Place with pid {pid} not found for hit {hit.id}")
-                continue
-
-            geoms = [g['jsonb'] for g in place.geoms.all().values('jsonb')]
-            geometry = combine_and_simplify(geoms)
-            if geometry:
+    # These (orange) are the geometries from the reconciliation or accession suggestions
+    if is_reconciliation:
+        for hit in raw_hits:
+            for geom in hit.json.get('geoms', []):
+                simplified = _simplify_geometry({
+                    "type": geom["type"],
+                    "coordinates": geom.get("coordinates")
+                })
                 features.append({
                     "type": "Feature",
-                    "properties": {
-                        "record_id": pid,
-                        "hit_id": hit.id,
-                        "dslabel": source.get('dslabel')
-                    },
-                    "geometry": geometry,
+                    "properties": {k: v for k, v in geom.items() if k not in ["coordinates", "type"]},
+                    "geometry": simplified,
                     "id": len(features)
                 })
+    else:
+        # Accession: bulk-fetch all source Places
+        all_pids = [
+            s.get('pid')
+            for hit in raw_hits
+            for s in hit.json.get('sources', [])
+            if s.get('pid')
+        ]
+        place_map = {
+            p.id: p for p in Place.objects.filter(id__in=all_pids).prefetch_related('geoms')
+        }
+
+        for hit in raw_hits:
+            for source in hit.json.get('sources', []):
+                pid = source.get('pid')
+                if not pid:
+                    continue
+                place = place_map.get(pid)
+                if not place:
+                    logger.warning(f"Source Place with pid {pid} not found for hit {hit.id}")
+                    continue
+
+                geoms = [geom['jsonb'] for geom in place.geoms.all().values('jsonb')]
+                geometry = combine_and_simplify(geoms)
+                if geometry:
+                    features.append({
+                        "type": "Feature",
+                        "properties": {"record_id": pid, "hit_id": hit.id, "dslabel": source.get('dslabel')},
+                        "geometry": geometry,
+                        "id": len(features)
+                    })
 
     return json.dumps({"type": "FeatureCollection", "features": features})
 
