@@ -34,8 +34,14 @@ from datasets.models import Dataset, Hit
 from datasets.static.hashes.parents import ccodes as cchash
 from datasets.static.hashes.qtypes import qtypes
 from elastic.es_utils import makeDoc, build_qobj, profileHit, removeDatasetFromIndex
-from datasets.utils import elapsed, getQ, \
-    HitRecord, hully, parse_wkt, post_recon_update  # bestParent, makeNow,
+from datasets.utils import (
+    elapsed,
+    getQ,
+    HitRecord,
+    hullify,
+    parse_wkt,
+    post_recon_update
+)
 from main.models import Log, DownloadFile
 from places.models import Place, PlaceGeom, PlaceLink, PlaceName
 from whgmail.messaging import WHGmail
@@ -865,7 +871,7 @@ def align_wdlocal(*args, **kwargs):
         if len(place.geoms.all()) > 0:
             g_list = [g.jsonb for g in place.geoms.all()]
             # make simple polygon hull for ES shape filter
-            qobj['geom'] = hully(g_list)
+            qobj['geom'] = hullify(g_list)
             # make a representative_point
             # qobj['repr_point'] = pointy(g_list)
 

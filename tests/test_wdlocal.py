@@ -10,7 +10,7 @@ import simplejson as json
 
 from datasets.models import Dataset, Hit
 from datasets.tasks import align_wdlocal, es_lookup_wdlocal, normalize
-from datasets.utils import hully
+from datasets.utils import hullify
 from datasets.views import ds_recon
 from places.models import Place
 
@@ -64,7 +64,7 @@ class ReconWD(SimpleTestCase):
       # geoms
       if len(place.geoms.all()) > 0:
         g_list =[g.jsonb for g in place.geoms.all()]
-        qobj['geom'] = hully(g_list)  
+        qobj['geom'] = hullify(g_list)
       # links
       if len(place.links.all()) > 0:
         l_list = [l.jsonb['identifier'] for l in place.links.all()]

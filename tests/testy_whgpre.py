@@ -87,7 +87,7 @@ def whgpre(dsids):
         # any geoms at all...
         g_list =[g.jsonb for g in place.geoms.all()]
         # make everything a simple polygon hull for spatial filter purposes
-        qobj['geom'] = hully(g_list)
+        qobj['geom'] = hullify(g_list)
           
         
       # ***
