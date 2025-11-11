@@ -69,10 +69,6 @@ footer {
     user-select: none;
 }
 
-svg[aria-label="Unable to select next GitHub token from pool"] {
-    display: none;
-}
-
 .btn-primary {
     background-color: #daebf1 !important;
     border-color: #ced4da !important;
