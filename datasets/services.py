@@ -15,6 +15,7 @@ from datasets.models import Hit, Dataset
 from elastic.es_utils import makeDoc
 from places.models import Place, PlaceGeom, PlaceName, PlaceLink, CloseMatch
 from whg import settings
+from .geometry_utils import _simplify_geometry
 from .helpers import link_uri
 from .static.hashes.parents import ccodes as cchash
 from .tasks import maxID
@@ -157,53 +158,78 @@ def _get_country_names(place):
     return countries
 
 
-def _build_feature_collection(place, raw_hits):
+def _build_feature_collection(records, raw_hits):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
 
-    # Use prefetched geoms (only one place in review)
-    geometries = [geom.jsonb for geom in place.prefetched_geoms]
-    if geometries:
-        features.append({
-            "type": "Feature",
-            "properties": {"record_id": place.id, "ds": "dataset"},
-            "geometry": {"type": "GeometryCollection", "geometries": geometries},
-            "id": 0
-        })
-
-    # Rest of your code for hits...
-    for idx, hit in enumerate(raw_hits):
-        for geom in hit.json.get('geoms', []):
+    # Green: geometries from submitted dataset and reconciled places
+    for record in records:
+        geometries = [
+            _simplify_geometry(g['jsonb'])
+            for g in record.geoms.all().values('jsonb')
+        ]
+        if geometries:
             features.append({
                 "type": "Feature",
-                "properties": {
-                    **{key: value for key, value in geom.items() if key not in ["coordinates", "type"]},
-                },
-                "geometry": {"type": geom["type"], "coordinates": geom.get("coordinates")},
+                "properties": {"record_id": record.id, "ds": "dataset"},
+                "geometry": {"type": "GeometryCollection", "geometries": geometries},
                 "id": len(features)
             })
 
-        # Batch fetch source places instead of one at a time
-        source_pids = [s.get('pid') for s in hit.json.get('sources', []) if s.get('pid')]
+    # Collect all accession pids
+    all_pids = [
+        s.get('pid')
+        for hit in raw_hits
+        for s in hit.json.get('sources', [])
+        if s.get('pid')
+    ]
 
-    # Fetch all source places at once
-    if source_pids:
-        source_places = Place.objects.filter(id__in=source_pids).prefetch_related('geoms')
-        source_places_dict = {p.id: p for p in source_places}
+    # Bulk load places and prefetch geometries
+    place_map = {
+        p.id: p for p in Place.objects.filter(id__in=all_pids).prefetch_related('geoms')
+    }
 
-        for hit in raw_hits:
-            for source in hit.json.get('sources', []):
-                source_pid = source.get('pid')
-                if source_pid and source_pid in source_places_dict:
-                    source_place = source_places_dict[source_pid]
-                    source_place_geometries = [geom.jsonb for geom in source_place.geoms.all()]
-                    if source_place_geometries:
-                        features.append({
-                            "type": "Feature",
-                            "properties": {"record_id": source_pid, "hit_id": hit.id, "dslabel": source.get('dslabel')},
-                            "geometry": {"type": "GeometryCollection", "geometries": source_place_geometries},
-                            "id": len(features)
-                        })
+    for hit in raw_hits:
+        # Reconciliation geometries
+        for geom in hit.json.get('geoms', []):
+            simplified_geom = _simplify_geometry({
+                "type": geom["type"],
+                "coordinates": geom.get("coordinates")
+            })
+            features.append({
+                "type": "Feature",
+                "properties": {
+                    **{k: v for k, v in geom.items() if k not in ["coordinates", "type"]}
+                },
+                "geometry": simplified_geom,
+                "id": len(features)
+            })
+
+        # Accession geometries
+        for source in hit.json.get('sources', []):
+            pid = source.get('pid')
+            if not pid:
+                continue
+            place = place_map.get(pid)
+            if not place:
+                logger.warning(f"Source Place with pid {pid} not found for hit {hit.id}")
+                continue
+
+            geometries = [
+                _simplify_geometry(g['jsonb'])
+                for g in place.geoms.all().values('jsonb')
+            ]
+            if geometries:
+                features.append({
+                    "type": "Feature",
+                    "properties": {
+                        "record_id": pid,
+                        "hit_id": hit.id,
+                        "dslabel": source.get('dslabel')
+                    },
+                    "geometry": {"type": "GeometryCollection", "geometries": geometries},
+                    "id": len(features)
+                })
 
     return json.dumps({"type": "FeatureCollection", "features": features})
 
@@ -254,7 +280,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
             if auth in ["wdlocal", "wd", "tgn"]:
                 has_geom = "geoms" in hit_json and hit_json["geoms"]
                 has_names = ("variants" in hit_json and hit_json["variants"]) or (
-                    "names" in hit_json and hit_json["names"]
+                        "names" in hit_json and hit_json["names"]
                 )
 
                 # --- Geometries ---
@@ -294,7 +320,8 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                                 toponym=name,
                                 jsonb={
                                     "toponym": name,
-                                    "citations": [{"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
+                                    "citations": [
+                                        {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
                                 }
                             ))
                             existing_toponyms.add(name)  # Prevent duplicates in same batch

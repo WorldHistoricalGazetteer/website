@@ -12,6 +12,64 @@ from .core_utils import flatten
 logger = logging.getLogger(__name__)
 
 
+def _simplify_geometry(geom):
+    """
+    Reduce a GeoJSON geometry to its simplest valid form.
+
+    Rules:
+    - If the input is not a GeometryCollection, return it unchanged.
+    - If a GeometryCollection contains a single geometry, unwrap and return that geometry.
+    - If a GeometryCollection contains multiple geometries and they are all the same type,
+      convert to the corresponding Multi* geometry (e.g., MultiPoint, MultiLineString,
+      MultiPolygon) and return its GeoJSON.
+    - If mixed geometry types are present, return the original GeometryCollection.
+    - On any error, log and return the original geometry to avoid losing data.
+    """
+    # Quick guard for non-collection inputs
+    if not isinstance(geom, dict) or geom.get("type") != "GeometryCollection":
+        return geom
+
+    geoms = geom.get("geometries", [])
+    if not geoms:
+        return geom
+
+    try:
+        # Convert subgeometries to GEOSGeometry objects for type inspection and unioning
+        geos_list = [GEOSGeometry(json.dumps(g)) for g in geoms]
+    except Exception as e:
+        logger.exception("Failed to parse subgeometries in _simplify_geometry: %s", e)
+        return geom
+
+    # If only one geometry present, unwrap it
+    if len(geos_list) == 1:
+        try:
+            return json.loads(geos_list[0].geojson)
+        except Exception:
+            return geom
+
+    # Inspect geometry types
+    types = {g.geom_type for g in geos_list}
+
+    # If all geometries are the same type, attempt to create a Multi* geometry
+    if len(types) == 1:
+        geom_type = next(iter(types))
+        try:
+            # Make a GeometryCollection and then use unary_union or appropriate combine
+            coll = GeometryCollection(geos_list)
+            unioned = coll.union if hasattr(coll, "union") else coll.unary_union
+            # unioned may be a single geometry or a Multi* geometry depending on inputs
+            if unioned is None:
+                # fallback: return the original collection
+                return geom
+            return json.loads(unioned.geojson)
+        except Exception as e:
+            logger.exception("Failed to create Multi geometry in _simplify_geometry: %s", e)
+            return geom
+
+    # Mixed types remain a GeometryCollection
+    return geom
+
+
 def patch_geos_signatures():
     """
     Patch GEOS to function on macOS arm64 and presumably
