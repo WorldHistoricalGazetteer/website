@@ -1064,7 +1064,7 @@ def review(request, dsid, tid, passnum):
     dataset_details = _build_dataset_details(raw_hits)
     passes = _extract_passes(raw_hits, auth)
     countries = _get_country_names(place)
-    feature_collection = _build_feature_collection(place, raw_hits)
+    feature_collection = _build_feature_collection(records, raw_hits)
 
     # Formset
     HitFormset = modelformset_factory(
