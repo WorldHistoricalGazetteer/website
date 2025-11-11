@@ -162,17 +162,26 @@ def _build_feature_collection(records, raw_hits):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
 
+    def combine_and_simplify(geoms):
+        """Simplify geometries or wrap in a GeometryCollection if mixed types."""
+        if not geoms:
+            return None
+        types = {g.get("type") for g in geoms}
+        if len(types) == 1:
+            # Single type, merge coordinates if possible
+            geom = geoms[0]
+            return _simplify_geometry(geom)
+        return {"type": "GeometryCollection", "geometries": geoms}
+
     # Green: geometries from submitted dataset and reconciled places
     for record in records:
-        geometries = [
-            _simplify_geometry(g['jsonb'])
-            for g in record.geoms.all().values('jsonb')
-        ]
-        if geometries:
+        geoms = [g['jsonb'] for g in record.geoms.all().values('jsonb')]
+        geometry = combine_and_simplify(geoms)
+        if geometry:
             features.append({
                 "type": "Feature",
                 "properties": {"record_id": record.id, "ds": "dataset"},
-                "geometry": {"type": "GeometryCollection", "geometries": geometries},
+                "geometry": geometry,
                 "id": len(features)
             })
 
@@ -192,7 +201,7 @@ def _build_feature_collection(records, raw_hits):
     for hit in raw_hits:
         # Reconciliation geometries
         for geom in hit.json.get('geoms', []):
-            simplified_geom = _simplify_geometry({
+            simplified = _simplify_geometry({
                 "type": geom["type"],
                 "coordinates": geom.get("coordinates")
             })
@@ -201,7 +210,7 @@ def _build_feature_collection(records, raw_hits):
                 "properties": {
                     **{k: v for k, v in geom.items() if k not in ["coordinates", "type"]}
                 },
-                "geometry": simplified_geom,
+                "geometry": simplified,
                 "id": len(features)
             })
 
@@ -215,11 +224,9 @@ def _build_feature_collection(records, raw_hits):
                 logger.warning(f"Source Place with pid {pid} not found for hit {hit.id}")
                 continue
 
-            geometries = [
-                _simplify_geometry(g['jsonb'])
-                for g in place.geoms.all().values('jsonb')
-            ]
-            if geometries:
+            geoms = [g['jsonb'] for g in place.geoms.all().values('jsonb')]
+            geometry = combine_and_simplify(geoms)
+            if geometry:
                 features.append({
                     "type": "Feature",
                     "properties": {
@@ -227,7 +234,7 @@ def _build_feature_collection(records, raw_hits):
                         "hit_id": hit.id,
                         "dslabel": source.get('dslabel')
                     },
-                    "geometry": {"type": "GeometryCollection", "geometries": geometries},
+                    "geometry": geometry,
                     "id": len(features)
                 })
 
