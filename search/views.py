@@ -239,7 +239,13 @@ class SearchViewV3(View):
     @staticmethod
     def build_search_query(params):
         qstr = params["qstr"]
-        fields = ["title^3", "names.toponym", "searchy"]
+        fields = [
+            "title^3",
+            "names.toponym",
+            "names.toponym.edge_ngram",
+            "names.toponym.text",
+            "searchy"
+        ]
 
         search_mode = params.get("mode", "default")  # Default to "default" if "mode" is not present
         if search_mode == "starts":
