@@ -196,7 +196,8 @@ def _build_feature_collection(records, raw_hits, is_reconciliation):
                     "coordinates": geom.get("coordinates")
                 })
                 geom_props = {k: v for k, v in geom.items() if k not in ["coordinates", "type"]}
-                geom_props['dslabel'] = hit.json.get('dataset', 'unknown')  # Add dslabel
+                geom_props['dslabel'] = hit.json.get('dataset', 'unknown')
+                geom_props['record_id'] = hit.authrecord_id
                 features.append({
                     "type": "Feature",
                     "properties": geom_props,
