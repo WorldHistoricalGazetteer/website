@@ -316,20 +316,6 @@ class Collection(CollectionGeospatialMixin, models.Model):
         return self.num_places
 
     @property
-    def dl_est(self):
-        """Estimated download time based on number of place records (20 seconds per 1000 records)."""
-        num_records = self.places_all.count()
-        est_time_in_sec = (num_records / 1000) * 20
-        minutes, seconds = divmod(est_time_in_sec, 60)
-
-        if minutes < 1:
-            return f"{seconds:02.0f} sec"
-        elif seconds >= 10:
-            return f"{minutes:02.0f} min {seconds:02.0f} sec"
-        else:
-            return f"{minutes:02.0f} min"
-
-    @property
     def ds_counter(self):
         """Count of places by dataset."""
         dc = self.datasets.all().values_list('label', flat=True)
@@ -342,7 +328,7 @@ class Collection(CollectionGeospatialMixin, models.Model):
         """List of datasets with metadata, varies by collection_class."""
         if self.collection_class == 'dataset':
             dsc = [{"id": d.id, "label": d.label, "extent": d.extent, "bounds": d.bounds, "title": d.title,
-                    "dl_est": d.dl_est, "numrows": d.numrows, "modified": d.last_modified_text}
+                    "numrows": d.numrows, "modified": d.last_modified_text}
                    for d in self.datasets.all()]
             return list({item['id']: item for item in dsc}.values())
         elif self.collection_class == 'place':

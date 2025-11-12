@@ -164,23 +164,6 @@ class Dataset(models.Model):
 
         return result
 
-    # @property
-    # def builder_hastask(self):
-    #   hastask = False
-    #   if self.tasks.filter(task_name='align_collection').count() > 0:
-    #     hastask = True
-    #   return hastask
-
-    # @property
-    # def builder_remaining(self):
-    #   remaining = 0
-    #   if self.tasks.filter(task_name='align_collection').count() > 0:
-    #       remaining = Hit.objects.filter(
-    #           task_id=self.tasks.filter(task_name='align_collection')[0].task_id,
-    #           reviewed=False
-    #       ).values("place_id").distinct().count()
-    #   return remaining
-
     @property
     def convex_hull(self):
         dsgeoms = PlaceGeom.objects.filter(place__dataset=self.label)
@@ -224,10 +207,6 @@ class Dataset(models.Model):
         )
         return teamusers
 
-    # dataset time estimates (local on mac laptop)
-    # delimited augmented: 20 sec per 1000 records
-    # lpf: 20 sec per 1000 records
-
     @property
     def coordinates_count(self):
         total_coords = 0
@@ -265,47 +244,6 @@ class Dataset(models.Model):
         self.save()
 
         return density
-
-    # download time estimate
-    @property
-    def dl_est(self):
-        # Get the number of associated Place records
-        num_records = self.places.count()
-
-        # Calculate the estimated download time in seconds
-        # (20 seconds per 1000 records)
-        est_time_in_sec = (num_records / 1000) * 20
-
-        # Convert the estimated time to minutes and seconds
-        min, sec = divmod(est_time_in_sec, 60)
-
-        # Format the result
-        if min < 1:
-            result = "%02d sec" % (sec)
-        elif sec >= 10:
-            result = "%02d min %02d sec" % (min, sec)
-        else:
-            result = "%02d min" % (min)
-
-        return result
-
-    # @property
-    # def dl_est(self):
-    #   file = self.files.all().order_by('id')[0]
-    #   if file.file:
-    #     size = int(file.file.size / 1000000)  # seconds +/-
-    #   else:
-    #     # substitute record count for *rough* estimate
-    #     size = self.places.count() / 1000
-    #   min, sec = divmod(size, 60)
-    #   if min < 1:
-    #     result = "%02d sec" % (sec)
-    #   elif sec >= 10:
-    #     result = "%02d min %02d sec" % (min, sec)
-    #   else:
-    #     result = "%02d min" % (min)
-    #     # print("est. %02d min %02d sec" % (min, sec))
-    #   return result
 
     @property
     def feature_collection(self):
