@@ -305,8 +305,8 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
         if (payload.length === 1) {
             $('#collection_form #primarySource')
                 .html(`<option value="${payload[0].place_id}" selected>${payload[0].dataset.title}: ${payload[0].title}</option>`)
-                .closest('.form-group')
-                .hide(); // Hide the dropdown since there's only one option
+                .closest('.form-group');
+            $('#sourceOptions').hide(); // Hide the dropdown since there's only one option
         } else {
             var sourceOptions = payload.map(function (item) {
                 return `<option value="${item.place_id}"${!!item.primary ? ' selected' : ''}>${item.dataset.title}: ${item.title}</option>`;

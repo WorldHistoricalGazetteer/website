@@ -91,9 +91,9 @@
 	                    <div id="sourceOptions">
 							<p><em>Optional:</em></p>
 							<p><label for="primarySource">Primary Source:</label> <select id="primarySource" name="primarySource"
-                              {% if payload|length > 1 %}data-bs-toggle="tooltip"
+                              data-bs-toggle="tooltip"
                               data-bs-title="Change this if you wish to link to a different source, which might have a different place name."
-                              {% else %}disabled{% endif %}></select></p>
+                              ></select></p>
 							<p><input type="checkbox" id="includeAll" name="includeAll" checked data-bs-toggle="tooltip"
                         data-bs-title="If selected, this place in your Collection will be linked to all of the sources associated with it, including any which might become associated with it in future. <b>Leave this selected unless you want to use only the specific <i>Primary Source</i> selected above.<b>"> <label
                 for="includeAll">include all sources</label></p>
