@@ -318,8 +318,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 
         $('#sources').append(noSources);
 
-        // If user is authenticated and payload has more than 1 item
-        if (userAuthenticated && payload.length > 1) {
+        if (userAuthenticated) {
             const addToCollectionButton = `
                 <span id="addtocoll" class="me-1 small">
                     <span id="added_flash" class="mr-2 hidden" style="background-color: yellow; position:absolute; top:10px; right:10px;"> added! </span>
@@ -331,9 +330,6 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 
             // Insert the button at the top of the #sources div
             $('#sources h6').append(addToCollectionButton);
-        }
-        else if (userAuthenticated) {
-            $('#sources h6').append('<span class="me-1 small text-black-50 fst-italic">Sorry, unlinked places cannot be added to Collections.</span>');
         }
 
         featureCollection = geomsGeoJSON(payload);
