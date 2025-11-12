@@ -98,7 +98,7 @@ export function initialiseMap() {
 function groupFeaturesByDataset() {
     const grouped = {};
     featureCollection.features.forEach(feature => {
-        const ds = feature.properties.ds;
+        const ds = feature.properties.dslabel;
         if (!grouped[ds]) grouped[ds] = [];
         grouped[ds].push(feature);
     });
@@ -200,20 +200,11 @@ function toggleHighlight(highlight, element) {
     const matchingFeature = findMatchingFeature(element);
     if (!matchingFeature) return;
 
-    const authority = $(element).data('authority');
+    const datasetSource = matchingFeature.properties.dslabel;
 
-    // Highlight the authority source if available
-    if (authority && whg_map.getSource(authority)) {
+    if (datasetSource && whg_map.getSource(datasetSource)) {
         whg_map.setFeatureState(
-            { source: authority, id: matchingFeature.id },
-            { highlight }
-        );
-    }
-
-    // Always highlight the dataset feature
-    if (whg_map.getSource('dataset')) {
-        whg_map.setFeatureState(
-            { source: 'dataset', id: 0 },
+            { source: datasetSource, id: matchingFeature.id },
             { highlight }
         );
     }
