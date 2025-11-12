@@ -1056,14 +1056,16 @@ def es_lookup_idx(qobj, *, bounds=None):
 
     filters = []
     if has_geom:
-        filters.append({
-            "geo_shape": {
-                "geoms.location": {
-                    "shape": qobj["geom"],
-                    "relation": "intersects",
+        for idx in indices:
+            field = "geoms.location" if idx == settings.ES_WHG else "location"
+            filters.append({
+                "geo_shape": {
+                    field: {
+                        "shape": qobj["geom"],
+                        "relation": "intersects",
+                    }
                 }
-            }
-        })
+            })
     elif has_countries:
         filters.append({"terms": {"ccodes": qobj["countries"]}})
     elif has_bounds:
