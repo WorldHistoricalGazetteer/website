@@ -1,6 +1,6 @@
-/* Fix required for Safari browsers only, August 2024*/
 #whgModal, #whgModal .modal-dialog, #whgModal .modal-content {
 	overflow: visible;
+    overflow-y: auto;
 }
 
 #whgModal {

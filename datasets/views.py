@@ -1011,7 +1011,7 @@ def review(request, dsid, tid, passnum):
     record_list, current_passnum = _filter_unreviewed_places(ds, tid, passnum, auth)
     review_page, review_field = _get_review_page_and_field(auth)
 
-    is_reconciliation = auth == "wdlocal"
+    is_reconciliation = auth in ["wd", "wdlocal"]
 
     # Base context for no hits
     nohit_context = {
