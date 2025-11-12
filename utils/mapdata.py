@@ -427,16 +427,7 @@ def mapdata_dataset(id, task_id=None, chunk_size=1000):
 
         for place in chunk:
             place_obj = place_map[place['id']]
-            geom_list = []
-            for g in getattr(place_obj, 'prefetched_geoms', []):
-                gj = g.jsonb or {}
-                # Fallback: add coordinates from geom if missing
-                if 'coordinates' not in gj and g.geom:
-                    gj = {
-                        "type": g.geom.geom_type,
-                        "coordinates": json.loads(g.geom.geojson)["coordinates"]
-                    }
-                geom_list.append(gj)
+            geom_list = [g.jsonb for g in getattr(place_obj, 'prefetched_geoms', [])]
 
             feature = {
                 "type": "Feature",
