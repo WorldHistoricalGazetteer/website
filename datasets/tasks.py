@@ -1087,6 +1087,9 @@ def es_lookup_idx(qobj, *, bounds=None):
     # ---------- pass 1 : lexical + spatial ----------
     hits1 = []
     if variants:  # Only run if we have variants
+        # Combine all variants into a single string for multi_match
+        qstr_combined = " ".join(variants)
+
         q1 = {
             "size": 100,
             "query": {
@@ -1095,11 +1098,21 @@ def es_lookup_idx(qobj, *, bounds=None):
                         {"exists": {"field": "whg_id"}},
                         {"bool": {
                             "should": [
+                                # 1. Use analyzed field for flexible, fuzzy-like matching
+                                {"multi_match": {
+                                    "query": qstr_combined,
+                                    "fields": [
+                                        "names.toponym.text^2", # Use the analyzed field with a boost
+                                        "searchy",
+                                        "title",
+                                    ],
+                                    "fuzziness": "AUTO", # Add fuzziness for typos and spelling variants
+                                    "type": "best_fields"
+                                }},
+                                # 2. Use terms query for high-score, exact matches
                                 {"terms": {"names.toponym": variants}},
-                                {"terms": {"title": variants}},
-                                {"terms": {"searchy": variants}},
                             ],
-                            "minimum_should_match": 1  # ADD THIS
+                            "minimum_should_match": 1
                         }},
                     ],
                     "should": [
