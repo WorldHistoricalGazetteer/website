@@ -8,11 +8,18 @@ BATCH_SIZE = 500
 class Command(BaseCommand):
     help = "Fix @lang in names.toponym and store separately in names.lang"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Show what would be updated without sending to ES"
+        )
+
     def handle(self, *args, **options):
         es = settings.ES_CONN
         index = "whg"
+        dry_run = options["dry_run"]
 
-        # Use helpers.scan to iterate all documents
         docs = helpers.scan(
             client=es,
             index=index,
@@ -34,11 +41,18 @@ class Command(BaseCommand):
                         t = n["toponym"]
                         if "@" in t:
                             parts = t.split("@", 1)
+                            old_toponym = n["toponym"]
+                            old_lang = n.get("lang")
                             n["toponym"] = parts[0]
                             n["lang"] = parts[1] if parts[1] else None
                             updated = True
 
-            if updated:
+                            if dry_run:
+                                self.stdout.write(
+                                    f"[DRY-RUN] {doc_id}: '{old_toponym}' -> '{n['toponym']}', lang: {old_lang} -> {n['lang']}"
+                                )
+
+            if updated and not dry_run:
                 actions.append({
                     "_op_type": "update",
                     "_index": index,
@@ -46,17 +60,18 @@ class Command(BaseCommand):
                     "doc": {"names": source["names"]}
                 })
 
-            # Send in batches
-            if len(actions) >= BATCH_SIZE:
+            if len(actions) >= BATCH_SIZE and not dry_run:
                 helpers.bulk(es, actions)
                 count += len(actions)
                 self.stdout.write(f"Updated {count} documents...")
                 actions = []
 
-        # Final batch
-        if actions:
+        if actions and not dry_run:
             helpers.bulk(es, actions)
             count += len(actions)
             self.stdout.write(f"Updated {count} documents total.")
 
-        self.stdout.write(self.style.SUCCESS("Toponym fix completed."))
+        if dry_run:
+            self.stdout.write(self.style.SUCCESS("Dry run completed. No documents were modified."))
+        else:
+            self.stdout.write(self.style.SUCCESS("Toponym fix completed."))
