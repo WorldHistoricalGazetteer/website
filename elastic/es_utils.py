@@ -216,7 +216,7 @@ build query object qobj for ES
 
 
 def build_qobj(place):
-    from datasets.utils import hully
+    from datasets.utils import hullify
     # place=get_object_or_404(Place, pk=pid)
     # print('building qobj for ' + str(place.id) + ': ' + place.title)
 
@@ -268,7 +268,7 @@ def build_qobj(place):
         # any geoms at all...
         g_list = [g.jsonb for g in place.geoms.all()]
         # make everything a simple polygon hull for spatial filter purposes
-        qobj['geom'] = hully(g_list)
+        qobj['geom'] = hullify(g_list)
 
     return qobj
 

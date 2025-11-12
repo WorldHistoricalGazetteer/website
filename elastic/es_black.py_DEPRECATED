@@ -15,7 +15,7 @@ from areas.models import Area
 from datasets.es_utils import * # 
 from datasets.models import Dataset, Hit
 from datasets.regions import regions as region_hash
-from datasets.utils import roundy, fixName, classy, bestParent, elapsed, hully
+from datasets.utils import roundy, fixName, classy, bestParent, elapsed, hullify
 from places.models import Place
 
 # 

@@ -130,9 +130,42 @@
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <div id="links_home">
                         <a id="version_badge"
-                           href="https://github.com/WorldHistoricalGazetteer/website/releases/latest">
-                           <img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?label=&display_name=tag&color=success"
-                                alt="Latest Release">
+                           href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
+                           title="Current Version: v{{ APP_VERSION }}">
+
+                            {% with version_tag="v"|add:APP_VERSION %}
+                            {% comment %}
+                                SVG template adapted from shields.io, using APP_VERSION
+                                and keeping the original fixed dimensions for simplicity.
+                            {% endcomment %}
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                 width="35"
+                                 height="20"
+                                 role="img"
+                                 aria-label="{{ version_tag }}">
+                                <title>{{ version_tag }}</title>
+                                <linearGradient id="s" x2="0" y2="100%">
+                                    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+                                    <stop offset="1" stop-opacity=".1"/>
+                                </linearGradient>
+                                <clipPath id="r">
+                                    <rect width="35" height="20" rx="3" fill="#fff"/>
+                                </clipPath>
+                                <g clip-path="url(#r)">
+                                    <rect width="0" height="20" fill="#4c1"/>
+                                    <rect x="0" width="35" height="20" fill="#4c1"/>
+                                    <rect width="35" height="20" fill="url(#s)"/>
+                                </g>
+                                <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+                                    {% comment %}
+                                        The key dynamic parts are the text content.
+                                        The x/y/textLength values are hard-coded for a 4-character string like 'v3.2'.
+                                    {% endcomment %}
+                                    <text aria-hidden="true" x="175" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="250">{{ version_tag }}</text>
+                                    <text x="175" y="140" transform="scale(.1)" fill="#fff" textLength="250">{{ version_tag }}</text>
+                                </g>
+                            </svg>
+                            {% endwith %}
                         </a>
                         <a data-whg-modal="/contact_modal/">contact</a>
                     </div>

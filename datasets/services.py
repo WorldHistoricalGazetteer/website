@@ -15,6 +15,7 @@ from datasets.models import Hit, Dataset
 from elastic.es_utils import makeDoc
 from places.models import Place, PlaceGeom, PlaceName, PlaceLink, CloseMatch
 from whg import settings
+from .geometry_utils import _simplify_geometry
 from .helpers import link_uri
 from .static.hashes.parents import ccodes as cchash
 from .tasks import maxID
@@ -157,58 +158,80 @@ def _get_country_names(place):
     return countries
 
 
-def _build_feature_collection(records, raw_hits):
+def _build_feature_collection(records, raw_hits, is_reconciliation):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
 
-    # These (green) are the geometries from the submitted dataset and reconciled places
-    for idx, record in enumerate(records):
-        geometries = [geom['jsonb'] for geom in record.geoms.all().values('jsonb')]
-        if geometries:
+    def combine_and_simplify(geoms):
+        """Simplify geometries or wrap in a GeometryCollection if mixed types."""
+        if not geoms:
+            return None
+        types = {g.get("type") for g in geoms}
+        if len(types) == 1:
+            # Single type, simplify individually or merge as appropriate
+            return [_simplify_geometry(g) for g in geoms][0] if len(geoms) == 1 else {
+                "type": f"Multi{list(types)[0].title()}",
+                "coordinates": [g["coordinates"] for g in geoms]
+            }
+        return {"type": "GeometryCollection", "geometries": geoms}
+
+    # Green: geometries from submitted dataset and reconciled places
+    for record in records:
+        geoms = [geom['jsonb'] for geom in record.geoms.all().values('jsonb')]
+        geometry = combine_and_simplify(geoms)
+        if geometry:
             features.append({
                 "type": "Feature",
                 "properties": {"record_id": record.id, "ds": "dataset"},
-                "geometry": {"type": "GeometryCollection", "geometries": geometries},
+                "geometry": geometry,
                 "id": len(features)
             })
 
     # These (orange) are the geometries from the reconciliation or accession suggestions
-    for idx, hit in enumerate(raw_hits):
-        # Fetch full geometries for each source in the hit
-        # logger.debug(f"🚨 Raw hits JSON: {hit.json}")
+    if is_reconciliation:
+        for hit in raw_hits:
+            for geom in hit.json.get('geoms', []):
+                simplified = _simplify_geometry({
+                    "type": geom["type"],
+                    "coordinates": geom.get("coordinates")
+                })
+                features.append({
+                    "type": "Feature",
+                    "properties": {k: v for k, v in geom.items() if k not in ["coordinates", "type"]},
+                    "geometry": simplified,
+                    "id": len(features)
+                })
+    else:
+        # Accession: bulk-fetch all source Places
+        all_pids = [
+            s.get('pid')
+            for hit in raw_hits
+            for s in hit.json.get('sources', [])
+            if s.get('pid')
+        ]
+        place_map = {
+            p.id: p for p in Place.objects.filter(id__in=all_pids).prefetch_related('geoms')
+        }
 
-        # Reconciliation: hits have `geoms` in the JSON
-        for geom in hit.json.get('geoms', []):
-            features.append({
-                "type": "Feature",
-                "properties": {
-                    **{key: value for key, value in geom.items() if key not in ["coordinates", "type"]},
-                    # "green": False,  # Set to True for green markers - following 2 lines are redundant v2 code
-                    # (review_page=="accession.html" and geom["ds"]==ds.label) or
-                    # (review_page=="review.html" and not geom["ds"] in ['tgn', 'wd', 'whg'])
-                },
-                "geometry": {"type": geom["type"], "coordinates": geom.get("coordinates")},
-                "id": len(features)
-            })
+        for hit in raw_hits:
+            for source in hit.json.get('sources', []):
+                pid = source.get('pid')
+                if not pid:
+                    continue
+                place = place_map.get(pid)
+                if not place:
+                    logger.warning(f"Source Place with pid {pid} not found for hit {hit.id}")
+                    continue
 
-        # Accession: hits have `sources` in the JSON
-        for source in hit.json.get('sources', []):
-            source_pid = source.get('pid')
-            if source_pid:
-                try:
-                    source_place = Place.objects.get(id=source_pid)
-                    source_place_geometries = [geom['jsonb'] for geom in source_place.geoms.all().values('jsonb')]
-                    if source_place_geometries:
-                        features.append({
-                            "type": "Feature",
-                            "properties": {"record_id": source_pid, "hit_id": hit.id, "dslabel": source.get('dslabel')},
-                            "geometry": {"type": "GeometryCollection", "geometries": source_place_geometries},
-                            "id": len(features)
-                        })
-                except Place.DoesNotExist:
-                    logger.warning(f"Source Place with pid {source_pid} not found for hit {hit.id}")
-                except Exception as e:
-                    logger.error(f"Error fetching full geometry for pid {source_pid}: {e}")
+                geoms = [geom['jsonb'] for geom in place.geoms.all().values('jsonb')]
+                geometry = combine_and_simplify(geoms)
+                if geometry:
+                    features.append({
+                        "type": "Feature",
+                        "properties": {"record_id": pid, "hit_id": hit.id, "dslabel": source.get('dslabel')},
+                        "geometry": geometry,
+                        "id": len(features)
+                    })
 
     return json.dumps({"type": "FeatureCollection", "features": features})
 
@@ -259,7 +282,7 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
             if auth in ["wdlocal", "wd", "tgn"]:
                 has_geom = "geoms" in hit_json and hit_json["geoms"]
                 has_names = ("variants" in hit_json and hit_json["variants"]) or (
-                    "names" in hit_json and hit_json["names"]
+                        "names" in hit_json and hit_json["names"]
                 )
 
                 # --- Geometries ---
@@ -299,7 +322,8 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
                                 toponym=name,
                                 jsonb={
                                     "toponym": name,
-                                    "citations": [{"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
+                                    "citations": [
+                                        {"id": f"{auth}:{hit_json.get('authrecord_id', '')}", "label": authname}]
                                 }
                             ))
                             existing_toponyms.add(name)  # Prevent duplicates in same batch
@@ -383,14 +407,18 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
 
     # --- Update place review status (single save) ---
     setattr(place, review_field, 1)
+    if 'indexed' in update_fields:
+        place.indexed = True
     place.save(update_fields=update_fields)
 
     # --- Update dataset totals ---
     if total_new_links > 0:
+        from django.db.models import F
         unique_place_ids = len({l.place_id for l in links_to_create})
-        ds.numlinked = (ds.numlinked or 0) + unique_place_ids
-        ds.total_links = (ds.total_links or 0) + total_new_links
-        ds.save(update_fields=['numlinked', 'total_links'])
+        Dataset.objects.filter(pk=ds.pk).update(
+            numlinked=F('numlinked') + unique_place_ids,
+            total_links=F('total_links') + total_new_links
+        )
 
     # --- Update dataset status ---
     status_changed = False
@@ -411,11 +439,12 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
 def indexMatch(pid, hit_pid=None, user=None, task=None):
     """
     Indexes a db record upon a single hit match in align_idx review.
-    If the place is already indexed, it is related as a child to an existing parent.
+    If hit_pid is provided, creates as child of that parent.
+    Otherwise, creates as new parent.
     """
     logger = logging.getLogger('accession')
 
-    logger.debug(f'indexMatch(): user: {user}; task: {str(hit_pid)}')
+    logger.debug(f'indexMatch(): user: {user}; task: {str(task)}')
     logger.debug(f'indexMatch(): pid {str(pid)}; hit_pid: {str(hit_pid)}')
 
     es = settings.ES_CONN
@@ -442,49 +471,86 @@ def indexMatch(pid, hit_pid=None, user=None, task=None):
 
     is_already_indexed = res['hits']['total']['value'] > 0
 
-    if not is_already_indexed:
-        # If the place is not indexed, create it as a new parent
-        logger.debug(f'Place {pid} not found in index. Creating as parent.')
+    if is_already_indexed:
+        # Place already indexed - shouldn't happen in normal accession flow
+        logger.warning(f'Place {pid} already indexed. Skipping.')
+        return
+
+    # Place is not yet indexed - need to index it
+    if hit_pid:
+        # ✅ LINK TO EXISTING PARENT
+        try:
+            # Find the parent place in ES
+            q_hit = {"query": {"bool": {"must": [{"match": {"place_id": hit_pid}}]}}}
+            res_hit = es.search(index=idx, body=q_hit)
+
+            if not res_hit['hits']['hits']:
+                logger.error(f"No index entry found for hit_pid={hit_pid}. Cannot create child.")
+                return
+
+            hit = res_hit['hits']['hits'][0]
+            hit_source = hit['_source']
+
+            # Get the whg_id of the parent (may itself be a child, so get its parent)
+            if hit_source['relation']['name'] == 'parent':
+                parent_whgid = hit['_id']
+            else:
+                parent_whgid = hit_source['relation']['parent']
+
+            logger.debug(f"Parent WHG ID: {parent_whgid}")
+
+            # Create new doc as child
+            new_doc = makeDoc(place)
+            new_doc['relation'] = {"name": "child", "parent": parent_whgid}
+
+            # Index the child with place.id as the ES document id
+            es.index(index=idx, id=str(pid), routing=1, body=json.dumps(new_doc))
+            logger.info(f"Place {pid} indexed as child of parent {parent_whgid}.")
+
+            # ✅ Update parent's children array
+            try:
+                update_parent_script = {
+                    "script": {
+                        "source": "if (!ctx._source.children.contains(params.child_id)) { ctx._source.children.add(params.child_id) }",
+                        "lang": "painless",
+                        "params": {
+                            "child_id": str(pid)
+                        }
+                    }
+                }
+                es.update(index=idx, id=parent_whgid, body=update_parent_script)
+                logger.info(f"Added {pid} to parent {parent_whgid}'s children array")
+            except Exception as e:
+                logger.error(f"Error updating parent {parent_whgid} children array: {e}")
+
+            # ✅ Create CloseMatch record in database
+            if user and task:
+                update_close_matches(int(pid), int(hit_pid), user, task)
+                logger.info(f"Created CloseMatch between {pid} and {hit_pid}")
+            else:
+                logger.warning(f"Cannot create CloseMatch for {pid} and {hit_pid}: missing user or task")
+
+            # ✅ Mark place as indexed
+            place.indexed = True
+            place.save()
+
+        except Exception as e:
+            logger.error(f"Error linking Place {pid} to parent {hit_pid}: {e}", exc_info=True)
+    else:
+        # ✅ CREATE NEW PARENT
+        logger.debug(f'Place {pid} - no hit_pid. Creating as new parent.')
         try:
             new_doc = makeDoc(place)
             new_doc['relation'] = {"name": "parent"}
             new_doc['whg_id'] = maxID(es, idx) + 1
+            new_doc['children'] = []
 
             es.index(index=idx, id=str(new_doc['whg_id']), body=json.dumps(new_doc))
             place.indexed = True
             place.save()
-            logger.info(f'Place {pid} indexed as new parent.')
+            logger.info(f'Place {pid} indexed as new parent with whg_id {new_doc["whg_id"]}.')
         except Exception as e:
-            logger.error(f"Failed to index Place {pid} as parent: {e}")
-        return
-
-    # If already indexed, handle relationship logic
-    try:
-        parent_record = res['hits']['hits'][0]
-        parent_id = parent_record['_id']
-        logger.debug(f'Place {pid} found in index. Parent ID: {parent_id}')
-
-        # Handle hit_pid logic
-        if hit_pid:
-            q_hit = {"query": {"bool": {"must": [{"match": {"place_id": hit_pid}}]}}}
-            res_hit = es.search(index=idx, body=q_hit)
-            if not res_hit['hits']['hits']:
-                logger.warning(f"No hits found for hit_pid={hit_pid}.")
-                return
-
-            hit = res_hit['hits']['hits'][0]
-            parent_whgid = hit['_id'] if hit['_source']['relation']['name'] != 'child' else hit['_source']['relation'][
-                'parent']
-
-            new_doc = makeDoc(place)
-            new_doc['relation'] = {"name": "child", "parent": parent_whgid}
-
-            es.index(index=idx, id=place.id, body=json.dumps(new_doc))
-            logger.info(f"Place {pid} added as child of parent {parent_whgid}.")
-        else:
-            logger.debug(f"No hit_pid provided for Place {pid}. No child-parent relationship created.")
-    except Exception as e:
-        logger.error(f"Error processing relationship for Place {pid}: {e}")
+            logger.error(f"Failed to index Place {pid} as parent: {e}", exc_info=True)
 
 
 def indexMultiMatch(pid, matchlist, user, task):
@@ -735,40 +801,42 @@ def write_wd_pass0(request, tid):
 
 
 @transaction.atomic
-# ensuring unique CloseMatch records
 def update_close_matches(new_child_id, parent_place_id, user, task):
+    """
+    Optimized version: Uses get_or_create which does everything in one query
+    """
     # Normalize the tuple
     place_a_id, place_b_id = sorted([new_child_id, parent_place_id])
+
     try:
-        # Ensure that the user and task are valid instances
+        # Ensure valid instances (no DB query needed for these checks)
         assert isinstance(user, User), f'user is not a User instance: {type(user)}'
         assert isinstance(task, TaskResult), f'task is not a TaskResult instance: {type(task)}'
 
-        # Check that both place IDs exist in the Place model before linking
-        if not Place.objects.filter(id__in=[place_a_id, place_b_id]).count() == 2:
-            logger.error(
-                f'Link attempt failed: One or both Place records are missing. '
-                f'IDs checked: {place_a_id}, {place_b_id}'
-            )
-            # Prevent proceeding with database operation
-            return
+        # Use get_or_create - single query that creates only if doesn't exist
+        close_match, created = CloseMatch.objects.get_or_create(
+            place_a_id=place_a_id,
+            place_b_id=place_b_id,
+            defaults={
+                'created_by': user,
+                'task': task,
+                'basis': 'reviewed'
+            }
+        )
 
-        # Check if a CloseMatch record already exists
-        if not CloseMatch.objects.filter(
-                Q(place_a_id=place_a_id) & Q(place_b_id=place_b_id)
-        ).exists():
-            logger.debug(f'User: {user} (ID: {user.id}), Task: {task} (ID: {task.id})')
-
-            # Create the CloseMatch record
-            CloseMatch.objects.create(
-                place_a_id=place_a_id,
-                place_b_id=place_b_id,
-                created_by=user,
-                task=task,
-                basis='reviewed'
-            )
+        if created:
+            logger.debug(f'Created CloseMatch: {place_a_id} <-> {place_b_id}')
         else:
-            logger.debug(f'CloseMatch record already exists for {parent_place_id} and {new_child_id}')
+            logger.debug(f'CloseMatch already exists for {place_a_id} <-> {place_b_id}')
+
+    except Place.DoesNotExist as e:
+        logger.error(
+            f'Link attempt failed: One or both Place records are missing. '
+            f'IDs: {place_a_id}, {place_b_id}. Error: {e}'
+        )
     except Exception as e:
         logger.exception(
-            f'Error creating CloseMatch record: {e}; new_child_id={new_child_id}, parent_place_id={parent_place_id}, user={user}, task={task}')
+            f'Error creating CloseMatch: {e}; '
+            f'new_child_id={new_child_id}, parent_place_id={parent_place_id}, '
+            f'user={user}, task={task}'
+        )

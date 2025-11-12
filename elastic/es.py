@@ -15,7 +15,7 @@ from datasets.es_utils import *  #
 
 from datasets.models import Dataset, Hit
 from datasets.regions import regions as region_hash
-from datasets.utils import roundy, fixName, classy, bestParent, elapsed, hully
+from datasets.utils import roundy, fixName, classy, bestParent, elapsed, hullify
 from places.models import Place
 
 import logging
@@ -125,7 +125,7 @@ def init():
 
 
 def queryObject(place):
-    from datasets.utils import hully
+    from datasets.utils import hullify
     qobj = {"place_id": place.id, "src_id": place.src_id, "title": place.title}
     variants = [];
     geoms = [];
@@ -167,6 +167,6 @@ def queryObject(place):
         if geom['type'] in ('Point', 'MultiPolygon'):
             qobj['geom'] = place.geoms.first().jsonb
         elif geom['type'] == 'MultiLineString':
-            qobj['geom'] = hully(geom)
+            qobj['geom'] = hullify(geom)
 
     return qobj

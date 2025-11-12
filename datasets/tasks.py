@@ -34,8 +34,14 @@ from datasets.models import Dataset, Hit
 from datasets.static.hashes.parents import ccodes as cchash
 from datasets.static.hashes.qtypes import qtypes
 from elastic.es_utils import makeDoc, build_qobj, profileHit, removeDatasetFromIndex
-from datasets.utils import elapsed, getQ, \
-    HitRecord, hully, parse_wkt, post_recon_update  # bestParent, makeNow,
+from datasets.utils import (
+    elapsed,
+    getQ,
+    HitRecord,
+    hullify,
+    parse_wkt,
+    post_recon_update
+)
 from main.models import Log, DownloadFile
 from places.models import Place, PlaceGeom, PlaceLink, PlaceName
 from whgmail.messaging import WHGmail
@@ -865,7 +871,7 @@ def align_wdlocal(*args, **kwargs):
         if len(place.geoms.all()) > 0:
             g_list = [g.jsonb for g in place.geoms.all()]
             # make simple polygon hull for ES shape filter
-            qobj['geom'] = hully(g_list)
+            qobj['geom'] = hullify(g_list)
             # make a representative_point
             # qobj['repr_point'] = pointy(g_list)
 
@@ -1370,16 +1376,13 @@ def process_hits(place, result_obj, task_id, dataset, tracking_vars, hit_summary
         tracking_vars['count_hit'] += 1
 
         parents, children = classify_hits(result_obj['hits'])
-        # Log if no parents found
-        if not parents:
-            logger.info(f"Parents: {parents}")
-            logger.info(f"Children: {children}")
-            logger.debug(f"🚨 No parents found for place {place.id} - {place.title}")
+
         for parent in parents:
             merged_hit = merge_parent_child(parent, children)
             hit_summary['hits'].append(merged_hit)
             save_hit_record(merged_hit, place, dataset, task_id, logger)
-            # logger.info(f"Saved hit record: {merged_hit}")
+            tracking_vars['total_hits'] += 1
+
     except Exception as e:
         logger.error(f"Error processing hits for place {place.id}: {e}", exc_info=True)
         raise e
@@ -1503,6 +1506,8 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
     try:
         post_recon_update(dataset, user, 'idx', test_mode)
 
+        summary = hit_summary.get('summary', {})
+
         WHGmail(context={
             'template': 'align_idx',
             'to_email': user.email,
@@ -1512,8 +1517,10 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
             'dataset_title': dataset.title,
             'dataset_label': dataset.label,
             'dataset_id': dataset.id,
-            'counthit': hit_summary['summary']['got_hits'],
-            'totalhits': hit_summary['summary']['total_hits'],
+            'total_count': summary.get('count', 0),
+            'counthit': summary.get('got_hits', 0),
+            'totalhits': summary.get('total_hits', 0),
+            'seeds': summary.get('seeds', 0),
         })
     except Exception as e:
         logger.error(f"Error in finalizing task for dataset {dataset.id}: {e}", exc_info=True)

@@ -372,3 +372,8 @@ class CloseMatch(models.Model):
     class Meta:
         managed = True
         db_table = 'close_matches'
+        indexes = [
+            models.Index(fields=['place_a', 'place_b']),  # Speeds up duplicate checks
+            models.Index(fields=['task']),
+            models.Index(fields=['created_by']),
+        ]

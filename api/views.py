@@ -142,72 +142,48 @@ class GalleryView(ListAPIView):
 
         # Paginate the data (DRF handles pagination)
         page = self.paginate_queryset(queryset)
+
         if page is not None:
-            # Serialize the paginated data
+            # Case 1: Pagination IS applied. Serialize the page data.
             serializer = self.get_serializer(page, many=True,
                                              model=Collection if self.gallery_type == 'collections' else Dataset)
             serializer_data = serializer.data
+
+            # Use get_paginated_response to include DRF's built-in links/metadata
+            # and wrap it with the custom format.
+            # NOTE: This approach is slightly awkward, but it correctly passes the paginated queryset's info.
             return self.get_paginated_response(self.custom_response_format(serializer_data, queryset))
 
-        # Serialize the non-paginated data
-        serializer = self.get_serializer(page, many=True,
+        # Case 2: Pagination IS NOT applied (page is None).
+        # Correctly serialize the full queryset.
+        serializer = self.get_serializer(queryset, many=True,
                                          model=Collection if self.gallery_type == 'collections' else Dataset)
+
+        # When not paginated, use a simplified custom_response_format
+        # (or a separate helper) that doesn't rely on self.paginator.page.
         return Response(self.custom_response_format(serializer.data, queryset))
 
     def custom_response_format(self, serializer_data, queryset):
+        # Check if pagination was applied and the paginator objects exist.
+        if hasattr(self, 'paginator') and hasattr(self.paginator, 'page'):
+            # Pagination was successful. Access the total count and page info.
+            paginator = self.paginator.page.paginator
+            total_items = paginator.count
+            total_pages = paginator.num_pages
+            current_page = int(self.request.query_params.get('page', 1))
+        else:
+            # Pagination was NOT applied (e.g., page_size=None or page=None).
+            # We must call count() here, but since the queryset isn't annotated, it's safe.
+            total_items = queryset.count()
+            total_pages = 1  # Only one page
+            current_page = 1  # Always page 1
+
         return {
             'items': serializer_data,
-            'total_items': queryset.count(),
-            'current_page': int(self.request.query_params.get('page', 1)),
-            'total_pages': (queryset.count() // self.pagination_class.page_size) + (
-                1 if queryset.count() % self.pagination_class.page_size > 0 else 0),
+            'total_items': total_items,
+            'current_page': current_page,
+            'total_pages': total_pages,
         }
-
-    # def list(self, request, *args, **kwargs):
-    #     # Retrieve the queryset
-    #     queryset = self.get_queryset()
-    #
-    #     # Paginate the queryset (DRF handles pagination automatically)
-    #     page = self.paginate_queryset(queryset)
-    #     if page is not None:
-    #         serializer = self.get_serializer(page, many=True)
-    #         return self.get_paginated_response(serializer.data)
-    #
-    #     # If pagination is not applied, return all data
-    #     serializer = self.get_serializer(queryset, many=True)
-    #     return Response(serializer.data)
-
-    # def list(self, request, *args, **kwargs):
-    #     queryset = self.get_queryset()
-    #
-    #     # Paginate the data
-    #     paginator = self.pagination_class()
-    #     try:
-    #         page = paginator.paginate_queryset(queryset, request)
-    #     except PageNotAnInteger:
-    #         page = 1
-    #     except EmptyPage:
-    #         page = paginator.page.paginator.num_pages
-    #
-    #     # Use the defined serializer class to serialize the data
-    #     serializer = self.get_serializer(page, many=True)
-    #
-    #     # Get the serialized data
-    #     serializer_data = serializer.data
-    #
-    #     # qs_list = [instance.carousel_metadata for instance in serializer_data]
-    #     # qs_json = json.dumps(qs_list, default=str)
-    #
-    #     qs_json = json.dumps(serializer_data, default=str)
-    #
-    #     response_data = {
-    #         'items': json.loads(qs_json),
-    #         'total_items': queryset.count(),
-    #         'current_page': int(request.query_params.get('page', 1)),
-    #         'total_pages': paginator.page.paginator.num_pages,
-    #     }
-    #
-    #     return JsonResponse(response_data, safe=False)
 
 
 class StandardResultsSetPagination(PageNumberPagination):
