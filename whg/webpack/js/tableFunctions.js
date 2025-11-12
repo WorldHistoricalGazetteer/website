@@ -98,21 +98,11 @@ export function highlightFeature(ds_pid, features, whg_map, extent = false) {
         whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: false });
     }
 
-    const feature = features[featureIndex];
-    const geom = feature.geometry;
-
-    // Check for valid geometry
-    if (!geom || !geom.type || !Array.isArray(geom.coordinates)) {
-        console.warn('Feature has invalid or missing geometry:', feature);
-        return;
-    }
-
     // Zoom to feature (using extent if provided, otherwise compute bbox)
     try {
-        const targetExtent = extent || bbox(feature);
-        whg_map.fitViewport(targetExtent, defaultZoom);
+        whg_map.fitViewport(extent, defaultZoom);
     } catch (err) {
-        console.error('Failed to fit viewport for feature geometry:', err, feature);
+        console.error('Failed to fit viewport for feature', err);
         return;
     }
 
