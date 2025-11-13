@@ -305,9 +305,11 @@ Promise.all([
             highlight: true,
             hint: true,
             minLength: 3,
+            limit: 20,
         }, {
             name: 'Places',
             source: suggestions.ttAdapter(),
+            limit: 20,
         }).on('typeahead:select', function (e, item) {
             $(this).val(item);
             $(this).trigger($.Event('keyup', {key: 'Enter', which: 13, keyCode: 13}));
