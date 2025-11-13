@@ -253,11 +253,7 @@ class SearchViewV3(View):
         fields = STANDARD_FIELDS
 
         search_mode = params.get("mode", "default")  # Default to "default" if "mode" is not present
-        if search_mode == "starts":
-            search_query = {"bool": {"should": [{"prefix": {field: qstr}} for field in fields]}}
-        elif search_mode == "in":
-            search_query = {"bool": {"should": [{"wildcard": {field: f"*{qstr}*"}} for field in fields]}}
-        elif search_mode == "fuzzy":
+        if search_mode == "fuzzy":
             search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": 2}}
         else:
             search_query = {"multi_match": {"query": qstr, "fields": fields}}
