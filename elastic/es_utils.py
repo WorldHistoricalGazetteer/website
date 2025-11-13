@@ -251,9 +251,6 @@ def build_qobj(place):
     # Check for missing metadata and apply minimal defaults
     # Principle: Only apply defaults if the place has NO AAT identifiers AND NO existing fclasses.
     if not types and not qobj['fclasses']:
-        # Apply default AAT types (inhabited place, cultural group, site)
-        types.extend(['aat:300008347', 'aat:300387171', 'aat:300000809'])
-
         # Apply default fclasses
         qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
 
