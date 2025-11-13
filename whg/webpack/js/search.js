@@ -293,17 +293,11 @@ Promise.all([
             queryTokenizer: Bloodhound.tokenizers.whitespace,
             local: [],
             indexRemote: false,
-            sufficient: 20,
             remote: {
                 url: '/search/suggestions/?q=%QUERY',
                 wildcard: '%QUERY',
                 rateLimitBy: 'debounce',
                 rateLimitWait: 100,
-                transform: function (response) {
-                    console.debug('Transform received:', response);
-                    console.debug('Transform returning:', response.slice(0, 20));
-                    return response.slice(0, 20);  // Explicitly limit to 20
-                }
             },
         });
 
@@ -311,12 +305,14 @@ Promise.all([
             highlight: true,
             hint: true,
             minLength: 3,
+            limit: 20,
         }, {
             name: 'Places',
-            source: function (query, syncResults, asyncResults) {
-                suggestions.search(query, syncResults, asyncResults);
-            },
+            source: suggestions.ttAdapter(),
             limit: 20,
+            display: function (item) {
+                return item;
+            }
         }).on('typeahead:select', function (e, item) {
             $(this).val(item);
             $(this).trigger($.Event('keyup', {key: 'Enter', which: 13, keyCode: 13}));
