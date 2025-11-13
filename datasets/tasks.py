@@ -1147,6 +1147,7 @@ def _mark_hit(hit, label):
 @sleep_and_retry
 @limits(calls=CALLS_PER_SECOND, period=1)
 def throttled_lookup(es, qobj, bounds):
+    logger.debug(f'throttled_lookup called with qobj: {qobj}')
     return es_lookup_idx(qobj, bounds=bounds)
 
 
