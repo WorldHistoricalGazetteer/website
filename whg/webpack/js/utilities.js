@@ -653,5 +653,3 @@ export function initSimpleTypeahead(selector, {
         clearDropdown();
     });
 }
-
-

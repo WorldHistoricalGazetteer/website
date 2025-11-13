@@ -289,6 +289,7 @@ Promise.all([
 
     initSimpleTypeahead('#search_input');
 
+
     function deriveOuterBounds(period) {
         if (!period.when || !Array.isArray(period.when.timespans) || period.when.timespans.length === 0) {
             return {outerStart: null, outerEnd: null};
@@ -321,113 +322,263 @@ Promise.all([
         };
     }
 
+
     function initialiseChrononymSuggestions() {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const input = document.querySelector('#chrononym_input');
+        if (!input) return;
 
-        const chrononyms = new Bloodhound({
-            datumTokenizer: Bloodhound.tokenizers.whitespace,
-            queryTokenizer: Bloodhound.tokenizers.whitespace,
-            limit: 50,
-            remote: {
-                url: '/suggest/entity?limit=60&type=period&mode=nosort&prefix=%QUERY',
-                wildcard: '%QUERY',
-                rateLimitBy: 'debounce',
-                rateLimitWait: 200,
-                transport: function (opts, onSuccess, onError) {
-                    $.ajax({
-                        url: opts.url,
-                        type: 'GET',
-                        headers: {
-                            'X-CSRF-Token': csrfToken,
-                        },
-                        success: function (data) {
-                            // Map API response to array of suggestions
-                            const suggestions = data.result
-                                .map(r => ({
-                                    id: r.id,
-                                    name: r.name,
-                                    description: r.description,
-                                }));
-                            onSuccess(suggestions);
-                        },
-                        error: onError,
-                    });
-                },
-            },
-        });
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : null;
+        const urlBase = '/suggest/entity?limit=60&type=period&mode=nosort&prefix=';
 
-        $('#chrononym_input').typeahead('destroy').typeahead({
-            highlight: true,
-            hint: true,
-            minLength: 2,
-        }, {
-            name: 'Chrononyms',
-            display: 'name',  // what goes into the input when selected
-            source: chrononyms.ttAdapter(),
-            limit: 50,
-            templates: {
-                suggestion: function (data) {
-                    return `
-                      <div>
-                        <strong>${data.name}</strong><br>
-                        <small>${data.description}</small>
-                      </div>
-                    `;
-                },
-                empty: `
-                  <div class="tt-empty-message">
-                    <i>No matching chrononyms found</i>
-                  </div>
-                `
-            },
-        }).on('typeahead:select', function (e, item) {
-            const url = `/entity/${item.id}/api`;
+        let dropdown = null;
+        let activeIndex = -1;
+        let suggestions = [];
+        let isSelecting = false;
 
-            $.ajax({
-                url: url,
-                type: 'GET',
-                headers: {
-                    'X-CSRFToken': csrfToken
-                },
-                success: function (period) {
-                    console.debug('Entity API response:', period);
+        const debounce = (fn, delay) => {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => fn(...args), delay);
+            };
+        };
+
+        function createDropdown() {
+            dropdown = document.createElement('div');
+            dropdown.className = 'tt-menu';
+            Object.assign(dropdown.style, {
+                position: 'absolute',
+                zIndex: 1000,
+                background: '#fff',
+                border: '1px solid #ccc',
+                borderRadius: '0 0 4px 4px',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                maxHeight: '300px',
+                overflowY: 'auto',
+                boxSizing: 'border-box'
+            });
+
+            const parent = input.offsetParent || input.parentNode;
+            if (parent && getComputedStyle(parent).position === 'static') {
+                parent.style.position = 'relative';
+            }
+            parent.appendChild(dropdown);
+        }
+
+        function clearDropdown() {
+            if (dropdown) dropdown.remove();
+            dropdown = null;
+            activeIndex = -1;
+        }
+
+        function highlightActive() {
+            if (!dropdown) return;
+            const nodes = dropdown.querySelectorAll('.tt-suggestion');
+            nodes.forEach((n, i) => {
+                n.classList.toggle('tt-cursor', i === activeIndex);
+                n.style.background = i === activeIndex ? '#eee' : '#fff';
+            });
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        async function fetchChrononyms(query) {
+            if (!query || query.length < 2) {
+                clearDropdown();
+                return;
+            }
+
+            try {
+                const res = await fetch(urlBase + encodeURIComponent(query), {
+                    method: 'GET',
+                    headers: csrfToken ? {'X-CSRF-Token': csrfToken} : {}
+                });
+                if (!res.ok) throw new Error(res.statusText);
+                const data = await res.json();
+                // Map API response to array of suggestions (consistent with original)
+                suggestions = (data.result || []).map(r => ({
+                    id: r.id,
+                    name: r.name,
+                    description: r.description
+                }));
+                renderDropdown(suggestions);
+            } catch (err) {
+                console.warn('Chrononym fetch failed', err);
+                clearDropdown();
+            }
+        }
+
+        const debouncedFetch = debounce(fetchChrononyms, 200);
+
+        function renderDropdown(items) {
+            clearDropdown();
+            if (!items || !items.length) return;
+
+            createDropdown();
+            const rect = input.getBoundingClientRect();
+            const parentRect = input.offsetParent?.getBoundingClientRect() || {top: 0, left: 0};
+            Object.assign(dropdown.style, {
+                top: (rect.bottom - parentRect.top) + 'px',
+                left: (rect.left - parentRect.left) + 'px',
+                width: rect.width + 'px'
+            });
+
+            const list = document.createElement('div');
+            list.className = 'tt-dataset tt-dataset-Chrononyms';
+
+            items.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'tt-suggestion';
+                div.innerHTML = `
+            <div>
+                <strong>${escapeHtml(item.name)}</strong><br>
+                <small>${item.description || ''}</small>
+            </div>
+        `;
+                Object.assign(div.style, {padding: '6px 10px', cursor: 'pointer'});
+
+                // Use mousedown to prevent blur issues
+                div.addEventListener('mousedown', e => {
+                    e.preventDefault();
+                    selectSuggestion(i);
+                });
+
+                div.addEventListener('mouseenter', () => {
+                    activeIndex = i;
+                    highlightActive();
+                });
+
+                list.appendChild(div);
+            });
+
+            dropdown.appendChild(list);
+        }
+
+        function selectSuggestion(index) {
+            if (!Array.isArray(suggestions) || index < 0 || index >= suggestions.length) return;
+
+            const item = suggestions[index];
+            isSelecting = true;
+
+            // Clear dropdown immediately
+            clearDropdown();
+
+            // Fill input
+            input.value = item.name || '';
+            input.setAttribute('data-chrononym-id', item.id);
+            input.focus();
+
+            // Trigger input & Enter
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+            input.dispatchEvent(new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                which: 13,
+                keyCode: 13,
+                bubbles: true
+            }));
+
+            setTimeout(() => {
+                isSelecting = false;
+            }, 100);
+
+            // Fetch entity
+            fetch(`/entity/${encodeURIComponent(item.id)}/api`, {
+                method: 'GET',
+                headers: csrfToken ? {'X-CSRFToken': csrfToken} : {}
+            }).then(r => r.json()).then(period => {
+                try {
                     const {outerStart, outerEnd} = deriveOuterBounds(period);
                     if (outerStart !== null && outerEnd !== null) {
                         dateline.reconfigure(outerStart, outerEnd, outerStart, outerEnd, true);
                     }
                     draw.deleteAll();
-                    if (!!period.geometry) {
+                    if (period.geometry) {
                         if (period.geometry.type === "GeometryCollection") {
-                            // Split collection and add each geometry separately
                             period.geometry.geometries.forEach(geom => {
-                                const feature = {
-                                    type: "Feature",
-                                    properties: period.properties || {},
-                                    geometry: geom
-                                };
-                                draw.add(feature);
+                                draw.add({type: "Feature", properties: period.properties || {}, geometry: geom});
                             });
                         } else {
                             draw.add(period);
                         }
                         whg_map.fitViewport(bbox(period));
-                        $drawControl.show();
+                        if (window.jQuery) window.jQuery('#clear_chrononym').show();
                     } else {
                         whg_map.reset();
                     }
-                },
-                error: function (xhr) {
-                    console.error('Error fetching entity:', xhr.responseText);
+                } catch (err) {
+                    console.error('Error processing entity period:', err);
                 }
-            });
-            // initiateSearch();
+            }).catch(err => console.error('Error fetching entity:', err));
+        }
+
+        // Keyboard navigation and selection
+        input.addEventListener('keydown', e => {
+            if (!dropdown) {
+                if (e.key === 'Enter') {
+                    // If user presses enter manually, clear any chrononym id (keep previous behaviour if applicable)
+                    input.removeAttribute('data-chrononym-id');
+                }
+                return;
+            }
+            const maxIndex = suggestions.length - 1;
+            switch (e.key) {
+                case 'ArrowDown':
+                    activeIndex = Math.min(activeIndex + 1, maxIndex);
+                    highlightActive();
+                    e.preventDefault();
+                    break;
+                case 'ArrowUp':
+                    activeIndex = Math.max(activeIndex - 1, 0);
+                    highlightActive();
+                    e.preventDefault();
+                    break;
+                case 'Enter':
+                    if (activeIndex >= 0) {
+                        e.preventDefault();
+                        selectSuggestion(activeIndex);
+                    }
+                    break;
+                case 'Escape':
+                    clearDropdown();
+                    break;
+            }
         });
 
-        $('#clear_chrononym').on('click', function () {
-            $('#chrononym_input').typeahead('val', '');
-            $('#chrononym_input').removeData('chrononym-id');
-            initiateSearch();
+        // Input typing => debounce requests
+        input.addEventListener('input', e => {
+            // Check if the change was caused by a selection
+            if (isSelecting) {
+                return; // Exit without calling debouncedFetch
+            }
+            // clear stored chrononym id if user types manually
+            input.removeAttribute('data-chrononym-id');
+            debouncedFetch(e.target.value);
         });
+
+        // Close dropdown on outside click
+        document.addEventListener('click', e => {
+            if (!dropdown || dropdown.contains(e.target) || e.target === input) return;
+            clearDropdown();
+        });
+
+        // clear_chrononym behaviour
+        const clearBtn = document.querySelector('#clear_chrononym');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                input.value = '';
+                input.removeAttribute('data-chrononym-id');
+                if (typeof initiateSearch === 'function') initiateSearch();
+            });
+        }
     }
 
     initialiseChrononymSuggestions();
