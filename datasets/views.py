@@ -17,6 +17,7 @@ import pandas as pd
 from celery import current_app as celapp
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.gis.geos import GEOSGeometry
 from django.core.paginator import Paginator
 from django.db.models import Count, Prefetch, Q
 from django.forms import modelformset_factory
@@ -58,7 +59,7 @@ from .forms import (
     DatasetUploadForm,
     DatasetCreateEmptyModelForm
 )
-from .models import DatasetUser
+from .models import DatasetUser, DatasetFile
 from .services import _get_task_details, _get_hit_counts, _filter_unreviewed_places, _get_review_page_and_field, \
     _get_place_and_hits, _build_dataset_details, _extract_passes, _get_country_names, _build_feature_collection, \
     _process_matching_decisions

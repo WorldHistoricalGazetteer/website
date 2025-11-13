@@ -19,6 +19,12 @@ import sys, logging
 
 logger = logging.getLogger(__name__)
 
+GEOJSON_GEOMETRY_KEYS = {'type', 'coordinates', 'geometries', 'bbox'}
+GEOJSON_GEOMETRY_BASETYPES = {
+    'Point', 'MultiPoint', 'LineString', 'MultiLineString',
+    'Polygon', 'MultiPolygon'
+}
+
 
 # given pid, gets db and index records
 # called by: elastic/index_admin.html
@@ -915,13 +921,53 @@ def makeDoc(place):
 def parsePlace(place, attr):
     qs = eval('place.' + attr + '.all()')
     arr = []
+
+    # Helper function to process a single geometry object
+    def process_geometry(g):
+        geom_doc = {}
+        geometry_data = {}
+
+        # 1. Iterate over all keys in the source geometry 'g'
+        for key, value in g.items():
+            if key in GEOJSON_GEOMETRY_KEYS:
+                # 2. Whitelist: Keep these keys for the pure geometry object
+                geometry_data[key] = value
+            else:
+                # 3. Agnostic Blacklist: Assume everything else is metadata,
+                #    and assign it directly to the parent geom_doc (e.g., geom_doc["when"] = ...)
+                geom_doc[key] = value
+
+        # 4. Assign the pure GeoJSON object to 'location'
+        if geometry_data.get('type'):
+            geom_doc["location"] = geometry_data
+
+        return geom_doc
+
     for obj in qs:
         if attr == 'geoms':
-            g = obj.jsonb
-            geom = {"location": {"type": g['type'], "coordinates": g['coordinates']}}
-            if 'citation' in g.keys(): geom["citation"] = g['citation']
-            if 'geowkt' in g.keys(): geom["geowkt"] = g['geowkt']
-            arr.append(geom)
+            g = obj.jsonb.copy()
+
+            # If it's a GeometryCollection, we must flatten it
+            if g.get('type') == 'GeometryCollection' and 'geometries' in g:
+                # The top-level GeometryCollection object itself might contain metadata
+                # (e.g., citations), so we process those fields first.
+                top_level_metadata = {k: g[k] for k in g.keys() if k not in GEOJSON_GEOMETRY_KEYS}
+
+                for sub_g in g['geometries']:
+                    geom_doc = process_geometry(sub_g.copy())
+
+                    # Merge top-level metadata into sub-geometry document
+                    geom_doc.update(top_level_metadata)
+
+                    if geom_doc.get("location"):
+                        arr.append(geom_doc)
+
+            # Handle single geometries (Point, Polygon, etc.)
+            elif g.get('type') in GEOJSON_GEOMETRY_BASETYPES:
+                geom_doc = process_geometry(g)
+                if geom_doc.get("location"):
+                    arr.append(geom_doc)
+
         elif attr == 'whens':
             when_ts = obj.jsonb['timespans']
             # TODO: index wants numbers, spec says strings

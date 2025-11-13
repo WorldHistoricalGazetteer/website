@@ -136,17 +136,13 @@ def delete_reconciliation_task(tid, scope, dsid, user_id):
         return {'status': 'error', 'message': str(e)}
 
 
-"""
-  adds newly public dataset to 'pub' index
-  making it accessible to search (and API eventually)
-"""
-
-
 @shared_task()
-def index_to_pub(dataset_id):
-    # appropriate connection and index, dev vs. prod
+def index_to_pub(dataset_id, idx=settings.ES_PUB):
+    """
+    Indexes places from a dataset into the 'pub' index in Elasticsearch.
+    """
     es = settings.ES_CONN
-    idx = settings.ES_PUB
+
     # Fetch dataset by ID
     try:
         dataset = Dataset.objects.get(pk=dataset_id, ds_status__in=['wd-complete', 'accessioning'])
@@ -191,16 +187,13 @@ def index_to_pub(dataset_id):
         logger.debug(f"Failed documents: {failed_docs}")
 
 
-"""
-  unindex from 'pub': an entire dataset or a single record
-"""
-
-
 @shared_task()
-def unindex_from_pub(dataset_id=None, place_id=None):
-    # appropriate connection and index, dev vs. prod
+def unindex_from_pub(dataset_id=None, place_id=None, idx=settings.ES_PUB):
+    """
+    Removes place(s) from the 'pub' index in Elasticsearch.
+    """
     es = settings.ES_CONN
-    idx = settings.ES_PUB
+
     if place_id:
         try:
             # Check if the place exists in PostgreSQL and is indexed in 'pub'
@@ -1104,11 +1097,11 @@ def es_lookup_idx(qobj, *, bounds=None):
                                 {"multi_match": {
                                     "query": qstr_combined,
                                     "fields": [
-                                        "names.toponym.text^2", # Use the analyzed field with a boost
+                                        "names.toponym.text^2",  # Use the analyzed field with a boost
                                         "searchy",
                                         "title",
                                     ],
-                                    "fuzziness": "AUTO", # Add fuzziness for typos and spelling variants
+                                    "fuzziness": "AUTO",  # Add fuzziness for typos and spelling variants
                                     "type": "best_fields"
                                 }},
                                 # 2. Use terms query for high-score, exact matches
