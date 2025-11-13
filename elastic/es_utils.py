@@ -223,13 +223,13 @@ build query object qobj for ES
 
 def build_qobj(place):
     from datasets.utils import hullify
-    # place=get_object_or_404(Place, pk=pid)
-    # print('building qobj for ' + str(place.id) + ': ' + place.title)
 
     qobj = {"place_id": place.id,
             "src_id": place.src_id,
             "title": place.title,
-            "fclasses": place.fclasses or []}
+            "fclasses": list(set(place.fclasses)) if place.fclasses else []
+            }
+
     [links, ccodes, types, variants, parents, geoms] = [[], [], [], [], [], []]
 
     # links
@@ -242,26 +242,29 @@ def build_qobj(place):
         ccodes.append(c)
     qobj['countries'] = list(set(place.ccodes))
 
-    # types (Getty AAT identifiers)
-    # if no aat mappings (srcLabel only)
+    # Collect valid types (AAT identifiers) ONLY
+    # If a PlaceType exists but lacks an identifier, we simply ignore it for now.
     for t in place.types.all():
-        if t.jsonb['identifier'] not in ['', None]:
+        if t.jsonb.get('identifier') not in ['', None]:
             types.append(t.jsonb['identifier'])
-        else:
-            # no type? use inhabited place, cultural group, site
-            types.extend(['aat:300008347', 'aat:300387171', 'aat:300000809'])
-            # add fclasses
-            # qobj['fclasses'] = ['P','S']
 
-            # hot fix 2 Apr 2023:
-            # if no types, add all fclasses ('X' appears in some)
-            qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
+    # Check for missing metadata and apply minimal defaults
+    # Principle: Only apply defaults if the place has NO AAT identifiers AND NO existing fclasses.
+    if not types and not qobj['fclasses']:
+        # Apply default AAT types (inhabited place, cultural group, site)
+        types.extend(['aat:300008347', 'aat:300387171', 'aat:300000809'])
+
+        # Apply default fclasses
+        qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
+
     qobj['placetypes'] = list(set(types))
 
-    # variants
+    # Ensure variants list is robust
+    variants.append(place.title)  # Add the title itself
     for name in place.names.all():
         variants.append(name.toponym)
-    qobj['variants'] = [v.lower() for v in variants]
+
+    qobj['variants'] = list(set([v.lower() for v in variants]))
 
     # parents
     for rel in place.related.all():
