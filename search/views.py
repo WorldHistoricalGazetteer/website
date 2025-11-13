@@ -21,41 +21,11 @@ from utils.regions_countries import get_regions_countries
 
 logger = logging.getLogger(__name__)
 
-
-def typeahead_suggester(qstr, mode="default"):
-    # fields = ["title^3", "names.toponym", "searchy"]
-    fields = ["title"]
-    indices = [settings.ES_WHG, settings.ES_PUB]
-
-    query_constructors = {  # Ignore `exactly` mode and use default `starts` instead
-        "default": {"bool": {"should": [{"prefix": {field: qstr}} for field in fields]}},
-        "in": {"bool": {"should": [{"wildcard": {field: f"*{qstr}*"}} for field in fields]}},
-        "fuzzy": {"multi_match": {"query": qstr, "fields": fields, "fuzziness": 2}}
-    }
-
-    query_body = {
-        "size": 20,
-        "query": {
-            "bool": {
-                "must": [
-                    {"exists": {"field": "whg_id"}},
-                    query_constructors.get(mode, query_constructors["default"])
-                ]
-            }
-        }
-    }
-
-    response = suggester(query_body, indices)
-    unique_titles = list({item['hit']['title'] for item in response if 'hit' in item and 'title' in item['hit']})
-
-    return unique_titles
-
-
-def TypeaheadSuggestions(request):
-    q = request.GET.get('q', '')
-    mode = request.GET.get('mode', 'default')
-    suggestions = typeahead_suggester(q, mode)
-    return JsonResponse(suggestions, safe=False)
+STANDARD_FIELDS = [
+    "names.toponym.text^3",  # Primary, flexible matching
+    "names.toponym^1.5",  # Exact keyword match, slightly boosted for precision
+    "names.toponym.edge_ngram",  # Substring/suggestion matching (default boost 1.0)
+]
 
 
 # new
@@ -230,6 +200,47 @@ def suggester(q, indices):
     return sortedsugs
 
 
+def TypeaheadSuggestions(request):
+    """
+    Typeahead suggestions using SearchViewV3 query building logic
+    """
+    q = request.GET.get('q', '')
+    mode = request.GET.get('mode', 'default')
+
+    if not q:
+        return JsonResponse([], safe=False)
+
+    # Build minimal params for SearchViewV3
+    params = {
+        "qstr": q,
+        "mode": mode,
+    }
+
+    # Use SearchViewV3's query builder
+    query_body = SearchViewV3.build_search_query(params)
+    query_body["size"] = 20  # Limit typeahead results
+
+    es = settings.ES_CONN
+    indices = [settings.ES_WHG, settings.ES_PUB]
+
+    try:
+        res = es.search(index=','.join(indices), body=query_body)
+        hits = res['hits']['hits']
+
+        # Extract unique titles for typeahead
+        unique_titles = list({
+            hit['_source']['title']
+            for hit in hits
+            if 'title' in hit['_source']
+        })
+
+        return JsonResponse(unique_titles, safe=False)
+
+    except Exception as e:
+        logger.error(f"Typeahead ES query failed: {e}")
+        return JsonResponse([], safe=False)
+
+
 class SearchViewV3(View):
     """
     /search/index/?
@@ -239,13 +250,7 @@ class SearchViewV3(View):
     @staticmethod
     def build_search_query(params):
         qstr = params["qstr"]
-        fields = [
-            "title^3",
-            "names.toponym",
-            "names.toponym.edge_ngram",
-            "names.toponym.text",
-            "searchy"
-        ]
+        fields = STANDARD_FIELDS
 
         search_mode = params.get("mode", "default")  # Default to "default" if "mode" is not present
         if search_mode == "starts":
@@ -289,12 +294,7 @@ class SearchViewV3(View):
                 }
             })
 
-        ''' 
-        Spatial filters >>>
-        query will return features that intersect with at least one of the `bounds` or `userareas` geometries
-        '''
         geometry_filters = []
-
         if params.get("bounds"):
             bounds = params["bounds"]["geometries"]
             for geometry in bounds:
@@ -327,10 +327,6 @@ class SearchViewV3(View):
 
         if len(geometry_filters) > 0:
             q['query']['bool']['must'].append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
-
-        ''' 
-        <<< Spatial filters
-        '''
 
         return q
 
@@ -408,13 +404,6 @@ class SearchViewV3(View):
         request.POST.update(json_data)
 
         return self.handle_request(request)
-
-
-""" 
-  /search/index/?
-  performs es search in index aliased 'whg'
-  from search.html 
-"""
 
 
 class SearchView(View):
