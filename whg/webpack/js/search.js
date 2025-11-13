@@ -299,6 +299,11 @@ Promise.all([
                 wildcard: '%QUERY',
                 rateLimitBy: 'debounce',
                 rateLimitWait: 100,
+                transform: function (response) {
+                    console.debug('Transform received:', response);
+                    console.debug('Transform returning:', response.slice(0, 20));
+                    return response.slice(0, 20);  // Explicitly limit to 20
+                }
             },
         });
 
@@ -308,9 +313,10 @@ Promise.all([
             minLength: 3,
         }, {
             name: 'Places',
-            source: suggestions.ttAdapter(),
+            source: function (query, syncResults, asyncResults) {
+                suggestions.search(query, syncResults, asyncResults);
+            },
             limit: 20,
-            display: function(item) { return item; },
         }).on('typeahead:select', function (e, item) {
             $(this).val(item);
             $(this).trigger($.Event('keyup', {key: 'Enter', which: 13, keyCode: 13}));
