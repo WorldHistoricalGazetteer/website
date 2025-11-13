@@ -294,7 +294,7 @@ Promise.all([
             local: [],
             indexRemote: false,
             remote: {
-                url: '/search/suggestions/?q=%QUERY&mode=' + $('#search_mode').val(),
+                url: '/search/suggestions/?q=%QUERY',
                 wildcard: '%QUERY',
                 rateLimitBy: 'debounce',
                 rateLimitWait: 100,
@@ -317,13 +317,6 @@ Promise.all([
     }
 
     initialiseSuggestions();
-    $('#search_mode')
-        .on('focus', function () {
-            $(this).tooltip('hide').tooltip('disable');
-        })
-        .on('change', function () {
-            initialiseSuggestions();
-        });
 
     function deriveOuterBounds(period) {
         if (!period.when || !Array.isArray(period.when.timespans) || period.when.timespans.length === 0) {
@@ -532,10 +525,6 @@ Promise.all([
     whg_map.on('draw.delete', initiateSearch);
     whg_map.on('draw.update', initiateSearch);
 
-    $('#search_mode').change(function () {
-        initiateSearch();
-    });
-
     $('#initiate_search, #clear_search').each(function () {
         $(this).tooltip({
             title: function () {
@@ -569,7 +558,6 @@ function toggleButtonState() {
 
 function clearResults() { // Reset all inputs to default values
     searchDisabled = true;
-    $('#search_mode').val('exactly');
     $('#search_input').typeahead('close');
     $('#search_input').val('');
     $('#result_facets input[type="checkbox"]').prop('checked', false);
@@ -967,7 +955,6 @@ function gatherOptions() { // gather and return option values from the UI
 
     const options = {
         qstr: $('#search_input').val(),
-        mode: $('#search_mode').val(),
         idx: eswhg, // hard-coded in `search.html` template
         fclasses: fclasses.join(','),
         temporal: window.dateline.open,

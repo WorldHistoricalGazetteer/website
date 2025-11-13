@@ -252,11 +252,7 @@ class SearchViewV3(View):
         qstr = params["qstr"]
         fields = STANDARD_FIELDS
 
-        search_mode = params.get("mode", "default")  # Default to "default" if "mode" is not present
-        if search_mode == "fuzzy":
-            search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": 2}}
-        else:
-            search_query = {"multi_match": {"query": qstr, "fields": fields}}
+        search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": "AUTO"}}
 
         # Construct the full query with additional filters
         q = {

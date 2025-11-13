@@ -5,9 +5,6 @@
 #input {
 	padding-left: 0;
 }
-#search_mode {
-	max-width: 132px;
-}
 @keyframes flash {
     0%, 50%, 100% {
         border-color: #ced4da;
