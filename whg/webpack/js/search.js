@@ -4,7 +4,7 @@ import {errorModal} from './error-modal.js';
 import Dateline from './dateline';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import {geomsGeoJSON,} from './utilities';
+import {geomsGeoJSON, initSimpleTypeahead,} from './utilities';
 import CountryParents from './countryParents';
 import {CountryCacheFeatureCollection} from './countryCache';
 import './toggle-truncate.js';
@@ -287,41 +287,7 @@ Promise.all([
 
     //$('#advanced_search').hide();
 
-    function initialiseSuggestions() { // based on search mode
-        var suggestions = new Bloodhound({ // https://github.com/twitter/typeahead.js/blob/master/doc/bloodhound.md#remote
-            datumTokenizer: Bloodhound.tokenizers.whitespace,
-            queryTokenizer: Bloodhound.tokenizers.whitespace,
-            local: [],
-            indexRemote: false,
-            remote: {
-                url: '/search/suggestions/?q=%QUERY',
-                wildcard: '%QUERY',
-                rateLimitBy: 'debounce',
-                rateLimitWait: 100,
-            },
-        });
-
-        $('#search_input').typeahead('destroy').typeahead({ // https://github.com/twitter/typeahead.js/blob/master/doc/jquery_typeahead.md
-            highlight: true,
-            hint: true,
-            minLength: 3,
-            limit: 20,
-        }, {
-            name: 'Places',
-            source: suggestions.ttAdapter(),
-            limit: 20,
-            display: function (item) {
-                return item;
-            }
-        }).on('typeahead:select', function (e, item) {
-            $(this).val(item);
-            $(this).trigger($.Event('keyup', {key: 'Enter', which: 13, keyCode: 13}));
-        });
-
-        return suggestions;
-    }
-
-    initialiseSuggestions();
+    initSimpleTypeahead('#search_input');
 
     function deriveOuterBounds(period) {
         if (!period.when || !Array.isArray(period.when.timespans) || period.when.timespans.length === 0) {

@@ -74,21 +74,21 @@
     <div id="search_content" class="row no-results initial">
 	    <!-- Full-width row at the top -->
 	    <div id="search_bar" class="my-2 position-relative">
-	        <div id="input" class="input-group mx-auto">
-	            <!-- Label only for Large Screens -->
-	            <label class="input-group-text d-none d-lg-block" for="search_mode">Search</label>
-	            <!-- Search Input -->
-	            <input id="search_input"{% if toponym %} value="{{ toponym }}" data-locate="true" {% endif %} class="form-control typeahead" data-bs-toggle="tooltip" data-bs-title="Type a place name. You can also filters from the Advanced Options section." data-provide="typeahead" type="text" placeholder="Enter place name" aria-label="Search" aria-describedby="search-addon" autocomplete="off" spellcheck="false">
-	            <!-- Clear Search Button -->
-	            <button id="clear_search" data-bs-toggle="tooltip" data-title="Clear search input|Nothing to clear" class="btn btn-outline-secondary" type="button">
-	                <i class="fas fa-times"></i>
-	            </button>
-	            <!-- Search Button -->
-	            <button id="initiate_search" data-bs-toggle="tooltip" data-title="Initiate search|Cannot search without a place name" class="btn btn-outline-secondary btn-success" type="button">
-	                <i class="fas fa-search"></i>
-	            </button>
-	        </div>
-	    </div>
+            <div id="input" class="input-group mx-auto">
+                <!-- Label only for Large Screens -->
+                <label class="input-group-text d-none d-lg-block" for="search_input">Search</label>
+                <!-- Search Input -->
+                <input id="search_input" class="form-control tt-input" type="text" autocomplete="off" spellcheck="false" placeholder="Enter place name"/>
+                <!-- Clear Search Button -->
+                <button id="clear_search" data-bs-toggle="tooltip" data-title="Clear search input|Nothing to clear" class="btn btn-outline-secondary" type="button">
+                    <i class="fas fa-times"></i>
+                </button>
+                <!-- Search Button -->
+                <button id="initiate_search" data-bs-toggle="tooltip" data-title="Initiate search|Cannot search without a place name" class="btn btn-outline-secondary btn-success" type="button">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
         <!-- Left Column -->
         <div class="col-lg-4 col-md-6 mb-2 mb-md-0 ps-md-0 pe-md-1 d-flex flex-column">
             <div id="adv_options">

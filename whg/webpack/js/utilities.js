@@ -27,8 +27,7 @@ export function deepCopy(obj) {
 export function geomsGeoJSON(geomItemsOriginal) { // Convert array of items with .geom to GeoJSON FeatureCollection
     let geomItems = deepCopy(geomItemsOriginal);
     let featureCollection = {
-        type: 'FeatureCollection',
-        features: [],
+        type: 'FeatureCollection', features: [],
     };
     let idCounter = 0;
     for (const item of geomItems) {
@@ -36,13 +35,9 @@ export function geomsGeoJSON(geomItemsOriginal) { // Convert array of items with
         item.geom = item.geom || item.geometry;
 
         const feature = {
-            type: 'Feature',
-            geometry: {
-                type: 'GeometryCollection',
-                geometries: Array.isArray(item.geom) ? item.geom : [item.geom],
-            },
-            properties: {},
-            id: idCounter,
+            type: 'Feature', geometry: {
+                type: 'GeometryCollection', geometries: Array.isArray(item.geom) ? item.geom : [item.geom],
+            }, properties: {}, id: idCounter,
         };
         delete item.geom;
         for (const prop in item) { // Copy all non-standard properties from the original item
@@ -57,8 +52,7 @@ export function geomsGeoJSON(geomItemsOriginal) { // Convert array of items with
 }
 
 export function largestSubGeometry(geometry) {
-    if (getType(geometry) === 'MultiPoint' || getType(geometry) ===
-        'MultiLineString' || getType(geometry) === 'MultiPolygon') {
+    if (getType(geometry) === 'MultiPoint' || getType(geometry) === 'MultiLineString' || getType(geometry) === 'MultiPolygon') {
         if (geometry.coordinates && geometry.coordinates.length > 0) {
             // Initialize variables to keep track of the largest bounding box area and its corresponding geometry
             let largestArea = 0;
@@ -66,12 +60,10 @@ export function largestSubGeometry(geometry) {
 
             for (const subGeometry of geometry.coordinates) {
                 const subGeometryType = getType({
-                    type: getType(geometry).replace('Multi', ''),
-                    coordinates: subGeometry,
+                    type: getType(geometry).replace('Multi', ''), coordinates: subGeometry,
                 });
                 const subGeometryArea = area({
-                    type: subGeometryType,
-                    coordinates: subGeometry,
+                    type: subGeometryType, coordinates: subGeometry,
                 });
 
                 if (subGeometryArea > largestArea) {
@@ -103,8 +95,7 @@ export function representativePoint(geometry) {
         geometry.type = 'Point';
         geometry.coordinates = centerPoint.geometry.coordinates;
         return geometry;
-    } else if (getType(geometry) === 'MultiPoint' || getType(geometry) ===
-        'MultiLineString' || getType(geometry) === 'MultiPolygon') {
+    } else if (getType(geometry) === 'MultiPoint' || getType(geometry) === 'MultiLineString' || getType(geometry) === 'MultiPolygon') {
         // For Multi-geometries, use the preceding rules for the largest sub-geometry.
         if (geometry.coordinates && geometry.coordinates.length > 0) {
             return representativePoint(largestSubGeometry(geometry));
@@ -116,10 +107,7 @@ export function representativePoint(geometry) {
 
 export function getDistinctColours(numColors) {
     // For small sets, use proven palette
-    const baseColors = [
-        '#4477AA', '#EE6677', '#228833', '#CCBB44',
-        '#66CCEE', '#AA3377', '#EE7733', '#BBBBBB'
-    ];
+    const baseColors = ['#4477AA', '#EE6677', '#228833', '#CCBB44', '#66CCEE', '#AA3377', '#EE7733', '#BBBBBB'];
 
     if (numColors <= baseColors.length) {
         return baseColors.slice(0, numColors);
@@ -136,8 +124,7 @@ export function getDistinctColours(numColors) {
         const cVar = chromaVariations[Math.floor(i / baseColors.length) % chromaVariations.length];
 
         // Adjust lightness and chroma while keeping safe hue
-        const adjustedColor = lch(
-            baseColor.l * (lVar / 60),  // Scale lightness
+        const adjustedColor = lch(baseColor.l * (lVar / 60),  // Scale lightness
             baseColor.c * (cVar / 60),   // Scale chroma
             baseColor.h                  // Keep safe hue
         );
@@ -179,9 +166,7 @@ export function colorTable(arrayColors, target, labels = null, multiDataset = fa
     }
 
     for (let i = 0; i < arrayColors.length - (multiDataset.length > 0 ? 0 : 2); i += 2) {
-        const label = i == arrayColors.length - 2 ?
-            labels ? '<i>various</i>' : '<i>other</i>' :
-            labels ? fancyLabel(arrayColors[i], labels[i / 2]) : arrayColors[i];
+        const label = i == arrayColors.length - 2 ? labels ? '<i>various</i>' : '<i>other</i>' : labels ? fancyLabel(arrayColors[i], labels[i / 2]) : arrayColors[i];
         const color = arrayColors[i + 1];
         const row = $('<tr>');
         const colorCell = $('<td>').addClass('color-swatch');
@@ -277,8 +262,7 @@ export function attributionString(data) {
     if (attributionParts.length > 0) attribution = attributionParts.join(', ');
 
     let attributionStringParts = [];
-    if (!!data) attributionStringParts.push(
-        data.attribution || data.citation || attribution);
+    if (!!data) attributionStringParts.push(data.attribution || data.citation || attribution);
 
     return attributionStringParts.join(' | ');
 }
@@ -299,8 +283,7 @@ export function initUtils(whg_map) {
                 text: function (trigger) {
                     let target = trigger.getAttribute('data-clipboard-target');
                     return target ? $(target).text() : trigger.getAttribute('aria-label');
-                },
-                container: container,
+                }, container: container,
             }).on('success', function (e) {
                 console.log('Content copied to clipboard successfully!');
                 e.clearSelection();
@@ -467,15 +450,9 @@ export function get_ds_list_stats(allFeatures, allExtents = []) {
     let seqMax = -Infinity;
     for (let i = 0; i < allFeatures.length; i++) {
         // Convert strings to integers
-        const featureMin = (/^-?\d+$/.test(allFeatures[i].properties.min)) ?
-            parseInt(allFeatures[i].properties.min) :
-            false;
-        const featureMax = (/^-?\d+$/.test(allFeatures[i].properties.max)) ?
-            parseInt(allFeatures[i].properties.max) :
-            false;
-        const seqValue = (/^-?\d+$/.test(allFeatures[i].properties.seq)) ?
-            parseInt(allFeatures[i].properties.seq) :
-            false;
+        const featureMin = (/^-?\d+$/.test(allFeatures[i].properties.min)) ? parseInt(allFeatures[i].properties.min) : false;
+        const featureMax = (/^-?\d+$/.test(allFeatures[i].properties.max)) ? parseInt(allFeatures[i].properties.max) : false;
+        const seqValue = (/^-?\d+$/.test(allFeatures[i].properties.seq)) ? parseInt(allFeatures[i].properties.seq) : false;
         if (featureMin && featureMax) {
             min = Math.min(min, featureMin);
             max = Math.max(max, featureMax);
@@ -493,33 +470,188 @@ export function get_ds_list_stats(allFeatures, allExtents = []) {
 
     const extent = allExtentsAreNull ? [-180, -90, 180, 90] : bbox({
         'type': 'FeatureCollection',
-        'features': [
-            ...allFeatures.filter(
-                feature => feature.geometry && feature.geometry.coordinates), // Ignore any nullGeometry features
+        'features': [...allFeatures.filter(feature => feature.geometry && feature.geometry.coordinates), // Ignore any nullGeometry features
             ...allExtents.map((extent) => ({
-                type: 'Feature',
-                geometry: {
+                type: 'Feature', geometry: {
                     type: 'Polygon',
-                    coordinates: [
-                        [
-                            [extent[0], extent[1]],
-                            [extent[2], extent[1]],
-                            [extent[2], extent[3]],
-                            [extent[0], extent[3]],
-                            [extent[0], extent[1]],
-                        ],
-                    ],
+                    coordinates: [[[extent[0], extent[1]], [extent[2], extent[1]], [extent[2], extent[3]], [extent[0], extent[3]], [extent[0], extent[1]],],],
                 },
-            })),
-        ],
+            })),],
     });
 
     return {
-        min: min,
-        max: max,
-        seqmin: seqMin,
-        seqmax: seqMax,
-        count: allFeatures.length,
-        extent: extent,
+        min: min, max: max, seqmin: seqMin, seqmax: seqMax, count: allFeatures.length, extent: extent,
     };
 }
+
+
+export function initSimpleTypeahead(selector, {
+    url = '/search/suggestions/?q=',
+    minLength = 3,
+    limit = 20,
+    debounceMs = 100
+} = {}) {
+
+    const input = document.querySelector(selector);
+    if (!input) return;
+
+    let dropdown;
+    let activeIndex = -1;
+    let suggestions = [];
+
+    const debounce = (fn, delay) => {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), delay);
+        };
+    };
+
+    function createDropdown() {
+        dropdown = document.createElement('div');
+        dropdown.className = 'tt-menu';
+        Object.assign(dropdown.style, {
+            position: 'absolute',
+            zIndex: 1000,
+            background: '#fff',
+            border: '1px solid #ccc',
+            borderRadius: '0 0 4px 4px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+            maxHeight: '300px',
+            overflowY: 'auto',
+            boxSizing: 'border-box'
+        });
+
+        const parent = input.offsetParent || input.parentNode;
+        if (parent && getComputedStyle(parent).position === 'static')
+            parent.style.position = 'relative';
+
+        parent.appendChild(dropdown);
+    }
+
+    function clearDropdown() {
+        if (dropdown) dropdown.remove();
+        dropdown = null;
+        activeIndex = -1;
+    }
+
+    function renderDropdown(items) {
+        clearDropdown();
+        if (!items.length) return;
+
+        createDropdown();
+        const rect = input.getBoundingClientRect();
+        const parentRect = input.offsetParent?.getBoundingClientRect() || {top: 0, left: 0};
+
+        Object.assign(dropdown.style, {
+            top: (rect.bottom - parentRect.top) + 'px',
+            left: (rect.left - parentRect.left) + 'px',
+            width: rect.width + 'px'
+        });
+
+        const list = document.createElement('div');
+        list.className = 'tt-dataset tt-dataset-Places';
+
+        items.slice(0, limit).forEach((item, i) => {
+            const div = document.createElement('div');
+            div.className = 'tt-suggestion';
+            div.textContent = typeof item === 'string' ? item : (item.title || item.name || '');
+            Object.assign(div.style, {
+                padding: '6px 10px',
+                cursor: 'pointer'
+            });
+
+            div.addEventListener('pointerdown', e => {
+                e.preventDefault();
+                selectSuggestion(i);
+            });
+
+            div.addEventListener('mouseenter', () => {
+                activeIndex = i;
+                highlightActive();
+            });
+
+            list.appendChild(div);
+        });
+
+        dropdown.appendChild(list);
+    }
+
+    function highlightActive() {
+        if (!dropdown) return;
+        dropdown.querySelectorAll('.tt-suggestion').forEach((el, i) => {
+            el.classList.toggle('tt-cursor', i === activeIndex);
+            el.style.background = i === activeIndex ? '#eee' : '#fff';
+        });
+    }
+
+    function selectSuggestion(index) {
+        if (index < 0 || index >= suggestions.length) return;
+        const item = suggestions[index];
+        const text = typeof item === 'string' ? item : (item.title || item.name || '');
+        input.value = text;
+        clearDropdown();
+        input.focus();
+
+        // simulate Enter keyup for existing handlers
+        const evt = new KeyboardEvent('keyup', {key: 'Enter', which: 13, keyCode: 13, bubbles: true});
+        input.dispatchEvent(evt);
+
+        // also emit jQuery event if jQuery present
+        if (window.jQuery) {
+            window.jQuery(input).trigger(window.jQuery.Event('keyup', {key: 'Enter', which: 13, keyCode: 13}));
+        }
+    }
+
+    const fetchSuggestions = debounce(async (query) => {
+        if (query.length < minLength) {
+            clearDropdown();
+            return;
+        }
+        try {
+            const res = await fetch(url + encodeURIComponent(query));
+            if (!res.ok) throw new Error(res.statusText);
+            const data = await res.json();
+            suggestions = Array.isArray(data) ? data : (data.suggestions || []);
+            renderDropdown(suggestions);
+        } catch (e) {
+            console.warn('Suggestion fetch failed', e);
+            clearDropdown();
+        }
+    }, debounceMs);
+
+    input.addEventListener('input', e => fetchSuggestions(e.target.value));
+
+    input.addEventListener('keydown', e => {
+        if (!dropdown) return;
+        const maxIndex = suggestions.length - 1;
+        switch (e.key) {
+            case 'ArrowDown':
+                activeIndex = Math.min(activeIndex + 1, maxIndex);
+                highlightActive();
+                e.preventDefault();
+                break;
+            case 'ArrowUp':
+                activeIndex = Math.max(activeIndex - 1, 0);
+                highlightActive();
+                e.preventDefault();
+                break;
+            case 'Enter':
+                if (activeIndex >= 0) {
+                    e.preventDefault();
+                    selectSuggestion(activeIndex);
+                }
+                break;
+            case 'Escape':
+                clearDropdown();
+                break;
+        }
+    });
+
+    document.addEventListener('click', e => {
+        if (!dropdown || dropdown.contains(e.target) || e.target === input) return;
+        clearDropdown();
+    });
+}
+
+

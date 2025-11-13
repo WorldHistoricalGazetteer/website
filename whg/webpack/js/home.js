@@ -3,6 +3,7 @@
 import '../css/home.css';
 import { errorModal } from './error-modal.js';
 import { initialiseCarousels } from './carousels';
+import {initSimpleTypeahead} from "./utilities";
 
 let whg_map = new whg_maplibre.Map({
     style: ['whg-basic-light'],
@@ -65,6 +66,8 @@ Promise.all([
 
 	// always clear last_search (if set)
 	localStorage.removeItem('last_search');
+
+    initSimpleTypeahead('#search_input');
 
 	// listen for search action
 	$('#initiate_search').click(function() {

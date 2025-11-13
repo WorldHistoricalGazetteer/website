@@ -21,6 +21,7 @@
     "citation-js": "^0.7.15",
     "clipboard": "~2.0.11",
     "copy-webpack-plugin": "^11.0.0",
+    "corejs-typeahead": "^1.3.4",
     "css-loader": "^6.8.1",
     "css-minimizer-webpack-plugin": "^1.0.0",
     "d3": "^4.13.0",
@@ -44,7 +45,6 @@
     "spin.js": "^4.1.1",
     "style-loader": "^3.3.3",
     "terser-webpack-plugin": "^5.3.9",
-    "twitter-typeahead-components-bundle": "^1.0.3",
     "webpack": "^5.89.0",
     "webpack-bundle-analyzer": "^4.10.1",
     "webpack-cli": "^5.1.4"
