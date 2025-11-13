@@ -44,6 +44,7 @@ from datasets.utils import (
 )
 from main.models import Log, DownloadFile
 from places.models import Place, PlaceGeom, PlaceLink, PlaceName
+from whg.settings import STANDARD_FIELDS
 from whgmail.messaging import WHGmail
 
 import logging
@@ -1093,18 +1094,12 @@ def es_lookup_idx(qobj, *, bounds=None):
                         {"exists": {"field": "whg_id"}},
                         {"bool": {
                             "should": [
-                                # 1. Use analyzed field for flexible, fuzzy-like matching
                                 {"multi_match": {
                                     "query": qstr_combined,
-                                    "fields": [
-                                        "names.toponym.text^2",  # Use the analyzed field with a boost
-                                        "searchy",
-                                        "title",
-                                    ],
-                                    "fuzziness": "AUTO",  # Add fuzziness for typos and spelling variants
+                                    "fields": STANDARD_FIELDS,
+                                    "fuzziness": "AUTO",
                                     "type": "best_fields"
                                 }},
-                                # 2. Use terms query for high-score, exact matches
                                 {"terms": {"names.toponym": variants}},
                             ],
                             "minimum_should_match": 1

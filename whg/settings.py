@@ -436,6 +436,13 @@ AUTHENTICATION_BACKENDS = (
     'accounts.orcid.OIDCBackend',
 )
 
+# Elasticsearch settings: fields used for Search and Accession on the `pub` and `whg` indexes
+STANDARD_FIELDS = [
+    "names.toponym.text^3",  # Primary, flexible matching
+    "names.toponym^1.5",  # Exact keyword match, slightly boosted for precision
+    "names.toponym.edge_ngram",  # Substring/suggestion matching (default boost 1.0)
+]
+
 OIDC_RP_SCOPES = "openid"  # ORCiD base url and credentials must be set in `env_template.py`
 ORCID_BASE_URL = os.environ.get("ORCID_BASE")
 OIDC_RP_CLIENT_ID = os.environ.get("ORCID_CLIENT_ID")

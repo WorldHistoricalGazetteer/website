@@ -18,14 +18,9 @@ from datasets.tasks import get_bounds_filter
 from places.models import Place, PlaceGeom
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
+from whg.settings import STANDARD_FIELDS
 
 logger = logging.getLogger(__name__)
-
-STANDARD_FIELDS = [
-    "names.toponym.text^3",  # Primary, flexible matching
-    "names.toponym^1.5",  # Exact keyword match, slightly boosted for precision
-    "names.toponym.edge_ngram",  # Substring/suggestion matching (default boost 1.0)
-]
 
 
 # new
