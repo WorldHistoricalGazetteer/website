@@ -1206,6 +1206,7 @@ def align_idx(*args, **kwargs):
                 # continue
 
                 qobj = build_qobj(place)
+                logger.debug(f'Built qobj for place {place.id}: {qobj}')
                 result_obj = throttled_lookup(es, qobj, bounds=kwargs['bounds'])
 
                 if not result_obj['hits']:
