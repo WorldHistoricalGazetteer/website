@@ -889,7 +889,20 @@ def uriMaker(place):
 # ***
 def makeDoc(place):
     fclasses_value = place.fclasses if place.fclasses not in [None, []] else ["X"]
-    # print('makeDoc fclasses', fclasses_value)
+
+    # 1. Get names from database via parsePlace
+    place_names = parsePlace(place, 'names')
+
+    # 2. Add 'title' to names if it's not already present
+    title_text = place.title
+    title_is_present = any(n.get('toponym') == title_text for n in place_names)
+
+    if not title_is_present:
+        title_name_doc = {
+            "toponym": title_text,
+        }
+        place_names.append(title_name_doc)
+
     es_doc = {
         "relation": {},
         "children": [],
@@ -900,7 +913,7 @@ def makeDoc(place):
         "title": place.title,
         "uri": uriMaker(place),
         "ccodes": place.ccodes,
-        "names": parsePlace(place, 'names'),
+        "names": place_names,
         "types": parsePlace(place, 'types'),
         "geoms": parsePlace(place, 'geoms'),
         "links": parsePlace(place, 'links'),
