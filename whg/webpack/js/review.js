@@ -36,6 +36,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 		$( "#select_pass" ).val(passnum)
 		// pass number listener
 		$( "#select_pass" ).change(function() {
+            $('body').spin();
 			let z=window.location.href
 			let baseurl=z.substring(0,z.lastIndexOf('/')+1)
 			window.location.href = baseurl + $(this).val()
@@ -107,6 +108,23 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 	}
 	
 	if (whg_map) addReviewListeners();
+
+    $('#btn_save').on('click', function() {
+        $('body').spin();
+    });
+
+    $('a[href]').not('[data-whg-modal]').not('.ext').not('.ext-recon').on('click', function() {
+        // Prevent spinner if the link is handled by AJAX/other script (like geolink) or is a JS void
+        let href = $(this).attr('href');
+        if (href && href !== 'javascript:void(0)') {
+            $('body').spin();
+        }
+    });
+
+    // Special listener for the form submission itself, in case Save is triggered by pressing Enter
+    $('#form_related').on('submit', function() {
+        $('body').spin();
+    });
 	
 })
 .catch(error => console.error("An error occurred:", error));
