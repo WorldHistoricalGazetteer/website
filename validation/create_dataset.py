@@ -142,7 +142,8 @@ def save_dataset(task_id):
 
             # Create Dataset object
             dataset = Dataset.objects.create(
-                title=dataset_metadata['title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
+                title=dataset_metadata[
+                          'title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
                 label=dataset_metadata['label'],
                 description=dataset_metadata['description'] or '[-Description yet to be added to metadata-]',
                 numrows=dataset_metadata['feature_count'],
@@ -200,7 +201,7 @@ def save_dataset(task_id):
 
             # 4. Truncate the base filename if necessary
             if len(base) > max_base_length:
-                base = base[:max_base_length]
+                base = base[len(base) - max_base_length:]
 
             counter = 1
             new_filename = f"{base}{ext}"
@@ -550,18 +551,22 @@ def get_fclass_list(feat):
               'Q26557']
     }
 
-    types = feat.get('types', [])
+    properties = feat.get('properties', {})
 
-    fclass_list = []
-    for t in types:
+    fclass_list = properties.get('fclasses', [])
+    fclass_set = set(fclass_list)
+
+    types_to_process = properties.get('types', [])
+    for t in types_to_process:
         identifier = t.get('identifier')
         if identifier and identifier.startswith('aat:'):
             aat_id = int(identifier[4:])
             # Check if the aat_id exists in the database
             if Type.objects.filter(aat_id=aat_id).exists():
                 try:
+                    # If found, add fclass to the set
                     fclass = get_object_or_404(Type, aat_id=aat_id).fclass
-                    fclass_list.append(fclass)
+                    fclass_set.add(fclass)
                 except Exception as e:
                     logger.error(f"Error retrieving fclass for aat_id {aat_id}: {e}")
             else:
@@ -571,13 +576,14 @@ def get_fclass_list(feat):
             mapped_fclass = next((fclass for fclass, wd_types in geo_wd_mapping.items() if identifier[3:] in wd_types),
                                  None)
             if mapped_fclass:
-                fclass_list.append(mapped_fclass)
+                fclass_set.add(mapped_fclass)
             else:
                 logger.warning(f"Identifier {identifier} not found in geo_wd_mapping.")
         else:
-            logger.warning(f"Invalid identifier format: {identifier}")
+            logger.warning(f"Invalid type object encountered: {t}")
 
-    return fclass_list
+    # Convert the set back to a list for return
+    return list(fclass_set)
 
 
 def get_memory_size(obj):
