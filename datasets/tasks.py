@@ -857,56 +857,42 @@ def align_wdlocal(*args, **kwargs):
         qs = qs.filter(geoms__isnull=True)
 
     for place in qs:
-        # build query object
-        qobj = {"place_id": place.id,
-                "src_id": place.src_id,
-                "title": place.title,
-                "fclasses": place.fclasses or []}
+        qobj = {
+            "place_id": place.id,
+            "src_id": place.src_id,
+            "title": place.title,
+            "fclasses": place.fclasses or [],
 
-        [variants, geoms, types, ccodes, parents, links] = [[], [], [], [], [], []]
+            # Country codes (ISO 2-letter, uppercase, unique)
+            "countries": list(set(c.upper() for c in place.ccodes if c)) if place.ccodes else [],
 
-        # ccodes (2-letter iso codes)
-        for c in place.ccodes:
-            ccodes.append(c.upper())
-        qobj['countries'] = place.ccodes
+            # Place types (Getty AAT integer ids if available)
+            "placetypes": [
+                int(t.jsonb['identifier'].replace('aat:', ''))
+                for t in place.types.all()
+                if t.jsonb.get('identifier', '').startswith('aat:')
+            ],
 
-        # types (Getty AAT integer ids if available)
-        for t in place.types.all():
-            if t.jsonb['identifier'].startswith('aat:'):
-                types.append(int(t.jsonb['identifier'].replace('aat:', '')))
-        qobj['placetypes'] = types
+            # Name variants (including title, lowercase, unique)
+            "variants": list(set(
+                [place.title.lower()] +
+                [name.toponym.lower() for name in place.names.all()]
+            )),
 
-        # variants
-        variants.append(place.title)
-        for name in place.names.all():
-            variants.append(name.toponym)
-        qobj['variants'] = list(set(variants))
+            # Parent relationships
+            "parents": [
+                rel.jsonb['label']
+                for rel in place.related.all()
+                if rel.jsonb.get('relationType') == 'gvp:broaderPartitive'
+            ],
 
-        # parents
-        if len(place.related.all()) > 0:
-            for rel in place.related.all():
-                if rel.jsonb['relationType'] == 'gvp:broaderPartitive':
-                    parents.append(rel.jsonb['label'])
-            qobj['parents'] = parents
-        else:
-            qobj['parents'] = []
+            # Links (authority identifiers: gn, pleiades, loc, viaf, bnf, tgn, gov, cerl, gnd)
+            "authids": [l.jsonb['identifier'] for l in place.links.all()],
+        }
 
-        # geoms
-        if len(place.geoms.all()) > 0:
-            g_list = [g.jsonb for g in place.geoms.all()]
-            # make simple polygon hull for ES shape filter
-            qobj['geom'] = hullify(g_list)
-            # make a representative_point
-            # qobj['repr_point'] = pointy(g_list)
-
-        # 'P1566':'gn', 'P1584':'pleiades', 'P244':'loc', 'P214':'viaf', 'P268':'bnf', 'P1667':'tgn',
-        # 'P2503':'gov', 'P1871':'cerl', 'P227':'gnd'
-        # links
-        if len(place.links.all()) > 0:
-            l_list = [l.jsonb['identifier'] for l in place.links.all()]
-            qobj['authids'] = l_list
-        else:
-            qobj['authids'] = []
+        # Geometry (representative point) - conditional
+        if place.geom_count > 0:
+            qobj['geom'] = place.repr_point
 
         # TODO: ??? skip records that already have a Wikidata record in l_list
         # they are returned as Pass 0 hits right now
