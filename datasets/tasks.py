@@ -695,6 +695,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
 
     # Construct the initial query (q0) to check for authid matches
     q0 = {
+        "size": 10,
         "query": {
             "bool": {
                 "must": [
@@ -729,6 +730,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
 
     # Base query structure for subsequent queries (qbase)
     qbase = {
+        "size": 10,
         "query": {
             "bool": {
                 "must": [
