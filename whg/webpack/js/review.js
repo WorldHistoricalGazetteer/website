@@ -113,7 +113,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
         $('body').spin();
     });
 
-    $('a[href]').not('[data-whg-modal]').not('.ext').not('.ext-recon').on('click', function() {
+    $('#form_related a[href]').not('[data-whg-modal]').not('.ext').not('.ext-recon').on('click', function() {
         // Prevent spinner if the link is handled by AJAX/other script (like geolink) or is a JS void
         let href = $(this).attr('href');
         if (href && href !== 'javascript:void(0)') {
