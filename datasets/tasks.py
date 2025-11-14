@@ -1104,7 +1104,7 @@ def es_lookup_idx(qobj, *, bounds=None):
     links = list(set(qobj.get("links", [])))
     has_countries = bool(qobj.get("countries"))
     has_bounds = bounds and bounds.get("id") != ["0"]
-    point_search = bool(qobj.get("geom"))
+    point_search = qobj.get('geom') if "geom" in qobj else None
 
 
     # Only strict, non-scoring filters (Country Code, Bounds)
