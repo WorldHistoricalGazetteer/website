@@ -190,6 +190,23 @@ def save_dataset(task_id):
             return new_filename
 
         def create_DatasetFile(file, format=dataset_metadata['format'], delimiter=None, header=""):
+
+            # --- DEBUG LOGGING ADDED HERE ---
+            header_list = header.split(';')
+
+            # Log the individual header names and their lengths
+            for i, h in enumerate(header_list):
+                logger.debug(f"Header item [{i}]: '{h}' (Length: {len(h)})")
+
+            # Log the critical variables before creation
+            logger.debug(f"Attempting DatasetFile creation with:")
+            logger.debug(f"  - dataset_id: {dataset.id}")
+            logger.debug(f"  - file: {file}")
+            logger.debug(f"  - format: {format} (Length: {len(format)})")
+            logger.debug(f"  - header (split list): {header_list}")
+            # --- END DEBUG LOGGING ---
+
+
             DatasetFile.objects.create(
                 dataset_id=dataset,
                 file=file,
@@ -208,6 +225,13 @@ def save_dataset(task_id):
                 shutil.move(jsonld_filepath, destination_path)
                 cleanup_paths.append(destination_path)
                 logger.debug(f"Moved uploaded file to {destination_path}")
+
+                # --- DEBUG LOGGING ADDED HERE ---
+                # Log the raw string before splitting
+                raw_header = dataset_metadata['header']
+                logger.debug(f"Raw header string: '{raw_header}' (Length: {len(raw_header)})")
+                # --- END DEBUG LOGGING ---
+
                 create_DatasetFile(destination_path)
             else:
                 logger.warning("No file to move as both jsonld_filepath and delimited_filepath are missing.")
