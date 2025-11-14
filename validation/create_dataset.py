@@ -179,33 +179,46 @@ def save_dataset(task_id):
         # Ensure that the user folder exists
         os.makedirs(user_folder, exist_ok=True)
 
-        def get_unique_filename(filename, new_ext=None):
+        def get_unique_filename(filename, new_ext=None, max_path_length=100):
             base, ext = os.path.splitext(filename)
             ext = new_ext or ext
+
+            # 1. Calculate the fixed length of the directory path: /app/media/user_<username>/
+            fixed_dir_length = len(user_folder) + 1  # +1 for the path separator '/'
+
+            # 2. Calculate the fixed length of the extension and potential suffix: _<counter><ext>
+            # Max possible suffix is "_9999<ext>"
+            max_suffix_length = 5 + len(ext)  # e.g., "_9999" (5 chars) + ".tsv" (4 chars) = 9
+
+            # 3. Calculate the maximum allowed length for the base filename itself
+            max_base_length = max_path_length - fixed_dir_length - max_suffix_length
+
+            # Ensure the required length is positive
+            if max_base_length < 0:
+                max_base_length = 10
+                logger.warning("User folder path is too long; truncating filename severely.")
+
+            # 4. Truncate the base filename if necessary
+            if len(base) > max_base_length:
+                base = base[:max_base_length]
+
             counter = 1
             new_filename = f"{base}{ext}"
+
+            # Check for uniqueness and append counter if needed
             while os.path.exists(os.path.join(user_folder, new_filename)):
+                current_max_len = max_base_length - (len(str(counter)) + 1)
+                base = base[:current_max_len]
+
                 new_filename = f"{base}_{counter}{ext}"
                 counter += 1
+
+                if counter > 9999:  # Safety break to prevent infinite loop or huge file numbers
+                    raise Exception("File naming counter exceeded 9999 attempts.")
+
             return new_filename
 
         def create_DatasetFile(file, format=dataset_metadata['format'], delimiter=None, header=""):
-
-            # --- DEBUG LOGGING ADDED HERE ---
-            header_list = header.split(';')
-
-            # Log the individual header names and their lengths
-            for i, h in enumerate(header_list):
-                logger.debug(f"Header item [{i}]: '{h}' (Length: {len(h)})")
-
-            # Log the critical variables before creation
-            logger.debug(f"Attempting DatasetFile creation with:")
-            logger.debug(f"  - dataset_id: {dataset.id}")
-            logger.debug(f"  - file: {file}")
-            logger.debug(f"  - format: {format} (Length: {len(format)})")
-            logger.debug(f"  - header (split list): {header_list}")
-            # --- END DEBUG LOGGING ---
-
 
             DatasetFile.objects.create(
                 dataset_id=dataset,
@@ -225,12 +238,6 @@ def save_dataset(task_id):
                 shutil.move(jsonld_filepath, destination_path)
                 cleanup_paths.append(destination_path)
                 logger.debug(f"Moved uploaded file to {destination_path}")
-
-                # --- DEBUG LOGGING ADDED HERE ---
-                # Log the raw string before splitting
-                raw_header = dataset_metadata['header']
-                logger.debug(f"Raw header string: '{raw_header}' (Length: {len(raw_header)})")
-                # --- END DEBUG LOGGING ---
 
                 create_DatasetFile(destination_path)
             else:
