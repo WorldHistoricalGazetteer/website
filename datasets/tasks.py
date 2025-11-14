@@ -301,16 +301,46 @@ def reverse(coords):
 
 
 def maxID(es, idx):
-    q = {"query": {"bool": {"must": {"match_all": {}}}},
-         "sort": [{"whg_id": {"order": "desc"}}],
-         "size": 1
-         }
+    """
+    Finds the maximum 'whg_id' using an Elasticsearch Max Aggregation.
+
+    Raises:
+        ValueError: If the aggregation result is None (indicating an empty index).
+        Exception: For any other Elasticsearch query failure.
+    """
+    q = {
+        "size": 0,
+        "aggs": {
+            "max_whg_id": {
+                "max": {
+                    "field": "whg_id"
+                }
+            }
+        }
+    }
+
     try:
         res = es.search(index=idx, body=q)
-        maxy = int(res['hits']['hits'][0]['_source']['whg_id'])
-    except:
-        maxy = 12345677
-    return maxy
+
+        # Extract the aggregated value
+        max_value = res['aggregations']['max_whg_id']['value']
+
+        if max_value is None:
+            # An empty index returns 'None' for max aggregation value.
+            # Raise a specific error for the caller to handle index initialization.
+            raise ValueError(f"Index '{idx}' appears empty: max aggregation returned None.")
+
+        # Convert to integer and return
+        return int(max_value)
+
+    except ValueError as ve:
+        # Re-raise the specific ValueError for empty index
+        logger.warning(f"Index check failed: {ve}")
+        raise ve
+    except Exception as e:
+        # Catch all other query/network errors and re-raise
+        logger.error(f"FATAL: Failed to retrieve max whg_id from index '{idx}'.", exc_info=True)
+        raise e
 
 
 def parseDateTime(string):
@@ -985,20 +1015,19 @@ def _safe_es_search(indices, body, pass_label, size=100):
     for idx in indices:
         start = time.perf_counter()
         try:
-            # ES8: Don't pass size separately, ensure it's in the body
             if "size" not in body:
                 body["size"] = size
 
-            res = es.search(index=idx, body=body)  # Remove size parameter here
+            res = es.search(index=idx, body=body)
             hits = res.get("hits", {}).get("hits", [])
             for h in hits:
                 h["_index"] = idx
                 from_pub = (idx == settings.ES_PUB)
                 h["_source"]["from_pub"] = from_pub
 
-                # Apply a mild boost for published hits
+                # Apply a markdown (penalty) factor for unaccessioned hits
                 if from_pub:
-                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 1.25
+                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 0.80
 
             all_hits.extend(hits)
             logger.debug(
@@ -1010,14 +1039,43 @@ def _safe_es_search(indices, body, pass_label, size=100):
                 f"ES error in {pass_label} for {idx}: {e}", exc_info=True
             )
 
-    # Deduplicate by ES _id across all indices (keep higher score)
+    return all_hits
+
+
+def _deduplicate_hits_by_score(hits_list):
     unique_hits = {}
-    for h in all_hits:
+    for h in hits_list:
         _id = h["_id"]
         if _id not in unique_hits or h["_score"] > unique_hits[_id]["_score"]:
             unique_hits[_id] = h
-
     return list(unique_hits.values())
+
+
+def _consolidate_passes_by_score(hit_dict, pass_hits_map):
+    """
+    Consolidates hits across multiple passes, updating hit_dict only if a hit is new
+    or has a higher score than the existing hit for the same _id.
+
+    Args:
+        hit_dict (dict): The dictionary to store and consolidate unique hits.
+        pass_hits_map (list of tuples): [(pass_label, raw_hits_list), ...]
+    """
+
+    for pass_label, hits_list in pass_hits_map:
+        # Deduplicate hits within the current pass first (to handle multiple hits from the same pass)
+        # Note: We assume _deduplicate_hits_by_score() handles local deduplication and returns unique hits for that list.
+        unique_pass_hits = _deduplicate_hits_by_score(hits_list)
+
+        for h in unique_pass_hits:
+            _id = h["_id"]
+
+            # Check if the hit is new OR if the new hit has a higher score
+            if _id not in hit_dict or h["_score"] > hit_dict[_id]["_score"]:
+                hit_dict[_id] = h
+                _mark_hit(h, pass_label)  # Mark the hit with the label of the winning pass
+
+    # Return the consolidated dictionary (though it was updated in place)
+    return hit_dict
 
 
 def es_lookup_idx(qobj, *, bounds=None):
@@ -1066,7 +1124,7 @@ def es_lookup_idx(qobj, *, bounds=None):
         filters.append(get_bounds_filter(bounds, "whg"))
 
     # ---------- pass 0 : identifier matches ----------
-    hits0 = []
+    hits0_raw = []
     if links:  # Only run if we have links
         q0 = {
             "size": 100,
@@ -1078,13 +1136,30 @@ def es_lookup_idx(qobj, *, bounds=None):
                 }
             }
         }
-        hits0 = _safe_es_search(indices, q0, pass_label="pass0")
+        hits0_raw = _safe_es_search(indices, q0, pass_label="pass0")
 
     # ---------- pass 1 : lexical + spatial ----------
-    hits1 = []
+    hits1_raw = []
     if variants:  # Only run if we have variants
-        # Combine all variants into a single string for multi_match
-        qstr_combined = " ".join(variants)
+
+        # Create a list of 'should' clauses for all variant matching logic
+        should_clauses = [
+            # 1. Terms Query (Exact Match)
+            # Checks if ANY variant string exists exactly in the 'names.toponym' field
+            {"terms": {"names.toponym": variants}},
+        ]
+
+        # 2. Add Fuzzy/Multi-Match for Each Variant
+        # Create a separate multi_match object for each variant name
+        for variant in variants:
+            should_clauses.append(
+                {"multi_match": {
+                    "query": variant,
+                    "fields": STANDARD_FIELDS,
+                    "fuzziness": "AUTO",
+                    "type": "best_fields"
+                }}
+            )
 
         q1 = {
             "size": 100,
@@ -1093,16 +1168,8 @@ def es_lookup_idx(qobj, *, bounds=None):
                     "must": [
                         {"exists": {"field": "whg_id"}},
                         {"bool": {
-                            "should": [
-                                {"multi_match": {
-                                    "query": qstr_combined,
-                                    "fields": STANDARD_FIELDS,
-                                    "fuzziness": "AUTO",
-                                    "type": "best_fields"
-                                }},
-                                {"terms": {"names.toponym": variants}},
-                            ],
-                            "minimum_should_match": 1
+                            "should": should_clauses,
+                            "minimum_should_match": 1  # Match at least one variant query
                         }},
                     ],
                     "should": [
@@ -1112,17 +1179,33 @@ def es_lookup_idx(qobj, *, bounds=None):
                 }
             },
         }
-        hits1 = _safe_es_search(indices, q1, pass_label="pass1")
+        hits1_raw = _safe_es_search(indices, q1, pass_label="pass1")
 
     # ---------- consolidate and label ----------
-    seen_ids = set()
-    for src_hits, label in [(hits0, "pass0"), (hits1, "pass1")]:
-        for h in src_hits:
-            if h["_id"] in seen_ids:
-                continue
-            seen_ids.add(h["_id"])
-            _mark_hit(h, label)
-            result["hits"].append(h)
+
+    # Group raw hits by index for local deduplication
+    pass0_whg = [h for h in hits0_raw if not h["_source"].get("from_pub")]
+    pass0_pub = [h for h in hits0_raw if h["_source"].get("from_pub")]
+    pass1_whg = [h for h in hits1_raw if not h["_source"].get("from_pub")]
+    pass1_pub = [h for h in hits1_raw if h["_source"].get("from_pub")]
+
+    # Initialize empty hit dictionaries
+    whg_hits = {}
+    pub_hits = {}
+
+    # Map the passes for each index group
+    whg_pass_map = [("pass0", pass0_whg), ("pass1", pass1_whg)]
+    pub_pass_map = [("pass0", pass0_pub), ("pass1", pass1_pub)]
+
+    # --- 1. Deduplicate and Consolidate WHG Hits (Pass 0 vs Pass 1) ---
+    whg_hits = _consolidate_passes_by_score(whg_hits, whg_pass_map)
+
+    # --- 2. Deduplicate and Consolidate Pub Hits (Pass 0 vs Pass 1) ---
+    pub_hits = _consolidate_passes_by_score(pub_hits, pub_pass_map)
+
+    # 3. Final Merge (WHG and Pub IDs are non-overlapping)
+    result["hits"].extend(list(whg_hits.values()))
+    result["hits"].extend(list(pub_hits.values()))
 
     # Sort by adjusted score (desc)
     result["hits"].sort(key=lambda h: h.get("_score", 0), reverse=True)
@@ -1200,10 +1283,6 @@ def align_idx(*args, **kwargs):
         for index, place in enumerate(places):
             try:
                 # logger.info(f'Processing place: {place.id} - {place.title}')
-
-                # TODO: Comment out the following 2 lines for production (pushes all places directly to index)
-                # new_seeds.append(place.id)
-                # continue
 
                 qobj = build_qobj(place)
                 logger.debug(f'Built qobj for place {place.id}: {qobj}')
