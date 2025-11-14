@@ -44,6 +44,7 @@ from datasets.utils import (
 )
 from main.models import Log, DownloadFile
 from places.models import Place, PlaceGeom, PlaceLink, PlaceName
+from whg.settings import STANDARD_FIELDS
 from whgmail.messaging import WHGmail
 
 import logging
@@ -136,17 +137,13 @@ def delete_reconciliation_task(tid, scope, dsid, user_id):
         return {'status': 'error', 'message': str(e)}
 
 
-"""
-  adds newly public dataset to 'pub' index
-  making it accessible to search (and API eventually)
-"""
-
-
 @shared_task()
-def index_to_pub(dataset_id):
-    # appropriate connection and index, dev vs. prod
+def index_to_pub(dataset_id, idx=settings.ES_PUB):
+    """
+    Indexes places from a dataset into the 'pub' index in Elasticsearch.
+    """
     es = settings.ES_CONN
-    idx = settings.ES_PUB
+
     # Fetch dataset by ID
     try:
         dataset = Dataset.objects.get(pk=dataset_id, ds_status__in=['wd-complete', 'accessioning'])
@@ -191,16 +188,13 @@ def index_to_pub(dataset_id):
         logger.debug(f"Failed documents: {failed_docs}")
 
 
-"""
-  unindex from 'pub': an entire dataset or a single record
-"""
-
-
 @shared_task()
-def unindex_from_pub(dataset_id=None, place_id=None):
-    # appropriate connection and index, dev vs. prod
+def unindex_from_pub(dataset_id=None, place_id=None, idx=settings.ES_PUB):
+    """
+    Removes place(s) from the 'pub' index in Elasticsearch.
+    """
     es = settings.ES_CONN
-    idx = settings.ES_PUB
+
     if place_id:
         try:
             # Check if the place exists in PostgreSQL and is indexed in 'pub'
@@ -307,16 +301,46 @@ def reverse(coords):
 
 
 def maxID(es, idx):
-    q = {"query": {"bool": {"must": {"match_all": {}}}},
-         "sort": [{"whg_id": {"order": "desc"}}],
-         "size": 1
-         }
+    """
+    Finds the maximum 'whg_id' using an Elasticsearch Max Aggregation.
+
+    Raises:
+        ValueError: If the aggregation result is None (indicating an empty index).
+        Exception: For any other Elasticsearch query failure.
+    """
+    q = {
+        "size": 0,
+        "aggs": {
+            "max_whg_id": {
+                "max": {
+                    "field": "whg_id"
+                }
+            }
+        }
+    }
+
     try:
         res = es.search(index=idx, body=q)
-        maxy = int(res['hits']['hits'][0]['_source']['whg_id'])
-    except:
-        maxy = 12345677
-    return maxy
+
+        # Extract the aggregated value
+        max_value = res['aggregations']['max_whg_id']['value']
+
+        if max_value is None:
+            # An empty index returns 'None' for max aggregation value.
+            # Raise a specific error for the caller to handle index initialization.
+            raise ValueError(f"Index '{idx}' appears empty: max aggregation returned None.")
+
+        # Convert to integer and return
+        return int(max_value)
+
+    except ValueError as ve:
+        # Re-raise the specific ValueError for empty index
+        logger.warning(f"Index check failed: {ve}")
+        raise ve
+    except Exception as e:
+        # Catch all other query/network errors and re-raise
+        logger.error(f"FATAL: Failed to retrieve max whg_id from index '{idx}'.", exc_info=True)
+        raise e
 
 
 def parseDateTime(string):
@@ -979,65 +1003,43 @@ def align_wdlocal(*args, **kwargs):
     return hit_parade['summary']
 
 
-def _safe_es_search(indices, body, pass_label, size=100):
+def _safe_es_search(index, body, pass_label, size=100):
     """
-    Executes an ES search against one or more indices.
-    Returns combined, deduplicated hits with index origin annotated and score adjusted.
+    Executes an ES search against a single index.
+    Returns hits with pass label annotated.
     """
-    if isinstance(indices, str):
-        indices = [indices]
+    start = time.perf_counter()
+    hits = []
 
-    all_hits = []
-    for idx in indices:
-        start = time.perf_counter()
-        try:
-            # ES8: Don't pass size separately, ensure it's in the body
-            if "size" not in body:
-                body["size"] = size
+    try:
+        if "size" not in body:
+            body["size"] = size
 
-            res = es.search(index=idx, body=body)  # Remove size parameter here
-            hits = res.get("hits", {}).get("hits", [])
-            for h in hits:
-                h["_index"] = idx
-                from_pub = (idx == settings.ES_PUB)
-                h["_source"]["from_pub"] = from_pub
+        res = es.search(index=index, body=body)
+        hits = res.get("hits", {}).get("hits", [])
 
-                # Apply a mild boost for published hits
-                if from_pub:
-                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 1.25
+        logger.debug(
+            f"ES search ({pass_label}) on {index}: {len(hits)} hits "
+            f"in {time.perf_counter() - start:.3f}s"
+        )
+    except Exception as e:
+        logger.warning(
+            f"ES error in {pass_label} for {index}: {e}", exc_info=True
+        )
 
-            all_hits.extend(hits)
-            logger.debug(
-                f"ES search ({pass_label}) on {idx}: {len(hits)} hits "
-                f"in {time.perf_counter() - start:.3f}s"
-            )
-        except Exception as e:
-            logger.warning(
-                f"ES error in {pass_label} for {idx}: {e}", exc_info=True
-            )
-
-    # Deduplicate by ES _id across all indices (keep higher score)
-    unique_hits = {}
-    for h in all_hits:
-        _id = h["_id"]
-        if _id not in unique_hits or h["_score"] > unique_hits[_id]["_score"]:
-            unique_hits[_id] = h
-
-    return list(unique_hits.values())
+    return hits
 
 
 def es_lookup_idx(qobj, *, bounds=None):
     """
     ElasticSearch lookup for index alignment.
-    Searches both dataset (settings.ES_WHG) and published (settings.ES_PUB) indices.
+    Searches the `whg` (settings.ES_WHG) index.
     Pass0: identifier matches.
-    Pass1: lexical + spatial matches.
+    Pass1: lexical + spatial scoring (soft match).
     """
     start_total = time.perf_counter()
 
-    indices = [settings.ES_WHG]
-    if getattr(settings, "ES_PUB", None):
-        indices.append(settings.ES_PUB)
+    idx = settings.ES_WHG
 
     result = {
         "place_id": qobj["place_id"],
@@ -1050,86 +1052,121 @@ def es_lookup_idx(qobj, *, bounds=None):
 
     variants = list(set(qobj.get("variants", [])))
     links = list(set(qobj.get("links", [])))
-    has_geom = "geom" in qobj
     has_countries = bool(qobj.get("countries"))
     has_bounds = bounds and bounds.get("id") != ["0"]
+    point_search = qobj.get('geom') if "geom" in qobj else None
 
+
+    # Only strict, non-scoring filters (Country Code, Bounds)
     filters = []
-    if has_geom:
-        filters.append({
-            "geo_shape": {
-                "geoms.location": {
-                    "shape": qobj["geom"],
-                    "relation": "intersects",
-                }
-            }
-        })
-    elif has_countries:
+    if has_countries:
         filters.append({"terms": {"ccodes": qobj["countries"]}})
     elif has_bounds:
         filters.append(get_bounds_filter(bounds, "whg"))
 
     # ---------- pass 0 : identifier matches ----------
-    hits0 = []
-    if links:  # Only run if we have links
+    hits0_raw = []
+    if links:
         q0 = {
-            "size": 100,
             "query": {
                 "bool": {
                     "must": [
                         {"terms": {"links.identifier.keyword": links}}
-                    ]
+                    ],
+                    "filter": filters  # Use the new strict filters
                 }
             }
         }
-        hits0 = _safe_es_search(indices, q0, pass_label="pass0")
+        hits0_raw = _safe_es_search(idx, q0, pass_label="pass0")
 
     # ---------- pass 1 : lexical + spatial ----------
-    hits1 = []
-    if variants:  # Only run if we have variants
+    hits1_raw = []
+    if variants:
+
+        # 1. Build lexical search terms (goes in the 'must' clause for required match)
+        lexical_should_clauses = [
+            {"terms": {"names.toponym": variants}},
+        ]
+        for variant in variants:
+            lexical_should_clauses.append(
+                {"multi_match": {
+                    "query": variant,
+                    "fields": STANDARD_FIELDS,
+                    "fuzziness": "AUTO",
+                    "type": "best_fields"
+                }}
+            )
+
+        # 2. Build overall boosting terms (goes in main 'should' clause for scoring)
+        overall_should_clauses = [
+            {"terms": {"types.identifier": qobj.get("placetypes", [])}},
+        ]
+
+        # --- NEW SPATIAL BOOSTING LOGIC ---
+        if point_search:
+            lon, lat = point_search
+
+            # Proximity Boost 1: Tight radius, high boost (Rewards exact hits)
+            overall_should_clauses.append({
+                "geo_distance": {
+                    "distance": "10km",
+                    "geoms.location": {"lon": lon, "lat": lat},
+                    "boost": 4.0
+                }
+            })
+
+            # Proximity Boost 2: Wider radius, medium boost (Rewards adjacency)
+            overall_should_clauses.append({
+                "geo_distance": {
+                    "distance": "100km",
+                    "geoms.location": {"lon": lon, "lat": lat},
+                    "boost": 1.0
+                }
+            })
+
         q1 = {
-            "size": 100,
+            "size": 10,
             "query": {
                 "bool": {
                     "must": [
                         {"exists": {"field": "whg_id"}},
+                        # Lexical Match: A result MUST match at least one variant/name
                         {"bool": {
-                            "should": [
-                                {"terms": {"names.toponym": variants}},
-                                {"terms": {"title": variants}},
-                                {"terms": {"searchy": variants}},
-                            ],
-                            "minimum_should_match": 1  # ADD THIS
+                            "should": lexical_should_clauses,
+                            "minimum_should_match": 1
                         }},
                     ],
-                    "should": [
-                        {"terms": {"types.identifier": qobj.get("placetypes", [])}},
-                    ],
+                    # Types and Proximity are soft boosts (should)
+                    "should": overall_should_clauses,
                     "filter": filters,
                 }
             },
         }
-        hits1 = _safe_es_search(indices, q1, pass_label="pass1")
+        hits1_raw = _safe_es_search(idx, q1, pass_label="pass1")
 
     # ---------- consolidate and label ----------
-    seen_ids = set()
-    for src_hits, label in [(hits0, "pass0"), (hits1, "pass1")]:
-        for h in src_hits:
-            if h["_id"] in seen_ids:
-                continue
-            seen_ids.add(h["_id"])
-            _mark_hit(h, label)
+    result["hits"] = []
+
+    # Add all pass0 hits in the order ES returned them (these are prioritized)
+    if hits0_raw:
+        for h in hits0_raw:
+            _mark_hit(h, "pass0")
             result["hits"].append(h)
 
-    # Sort by adjusted score (desc)
-    result["hits"].sort(key=lambda h: h.get("_score", 0), reverse=True)
+    # Add pass1 hits (in ES order) if not already present and under limit
+    if hits1_raw:
+        seen_ids = {h["_id"] for h in result["hits"]}
+        for h in hits1_raw:
+            if h["_id"] not in seen_ids and len(result["hits"]) < 10:
+                _mark_hit(h, "pass1")
+                result["hits"].append(h)
 
     result["hit_count"] = len(result["hits"])
     result["total_hits"] = result["hit_count"]
 
     logger.info(
         f"es_lookup_idx(): {result['hit_count']} unique hits for "
-        f"{qobj.get('title')} [{', '.join(indices)}] "
+        f"{qobj.get('title')} [{idx}] "
         f"in {time.perf_counter() - start_total:.3f}s"
     )
 
@@ -1144,6 +1181,7 @@ def _mark_hit(hit, label):
 @sleep_and_retry
 @limits(calls=CALLS_PER_SECOND, period=1)
 def throttled_lookup(es, qobj, bounds):
+    logger.debug(f'throttled_lookup called with qobj: {qobj}')
     return es_lookup_idx(qobj, bounds=bounds)
 
 
@@ -1197,11 +1235,8 @@ def align_idx(*args, **kwargs):
             try:
                 # logger.info(f'Processing place: {place.id} - {place.title}')
 
-                # TODO: Comment out the following 2 lines for production (pushes all places directly to index)
-                # new_seeds.append(place.id)
-                # continue
-
                 qobj = build_qobj(place)
+                logger.debug(f'Built qobj for place {place.id}: {qobj}')
                 result_obj = throttled_lookup(es, qobj, bounds=kwargs['bounds'])
 
                 if not result_obj['hits']:
@@ -1389,15 +1424,21 @@ def process_hits(place, result_obj, task_id, dataset, tracking_vars, hit_summary
 
 
 def classify_hits(hits):
-    """Classifies hits into parents and children in a single pass."""
+    """
+    Classifies hits into parents and children in a single pass, safely
+    handling cases where relation metadata is missing or malformed.
+    """
     parents, children = [], []
     for h in hits:
-        relation = h['_source']['relation']['name']
-        profiled = profileHit(h)
-        if relation == 'parent':
-            parents.append(profiled)
-        elif relation == 'child':
-            children.append(profiled)
+        relation_obj = h['_source'].get('relation', {})
+        relation_name = relation_obj.get('name')
+        if relation_name:
+            profiled = profileHit(h)
+            if relation_name == 'parent':
+                parents.append(profiled)
+            elif relation_name == 'child':
+                children.append(profiled)
+
     return parents, children
 
 

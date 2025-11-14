@@ -75,11 +75,6 @@ var jquery_dependent_fallbacks = [
         position: 'head'
     },
     {
-        cdnUrl: 'https://cdnjs.cloudflare.com/ajax/libs/typeahead.js/0.11.1/typeahead.bundle.min.js', // Includes both typeahead and bloodhound
-        localUrl: 'typeahead.bundle.min.js',
-        position: 'head'
-    },
-    {
         cdnUrl: 'https://cdnjs.cloudflare.com/ajax/libs/jquery-scrollintoview/1.8/jquery.scrollintoview.min.js',
         localUrl: 'scrollintoview.min.js',
         position: 'head'

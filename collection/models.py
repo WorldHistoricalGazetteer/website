@@ -212,29 +212,6 @@ class Collection(models.Model):
 
         return density
 
-    # download time estimate
-    @property
-    def dl_est(self):
-        # Get the number of associated Place records
-        num_records = self.places_all.count()
-
-        # Calculate the estimated download time in seconds
-        # (20 seconds per 1000 records)
-        est_time_in_sec = (num_records / 1000) * 20
-
-        # Convert the estimated time to minutes and seconds
-        min, sec = divmod(est_time_in_sec, 60)
-
-        # Format the result
-        if min < 1:
-            result = "%02d sec" % (sec)
-        elif sec >= 10:
-            result = "%02d min %02d sec" % (min, sec)
-        else:
-            result = "%02d min" % (min)
-
-        return result
-
     @property
     def ds_counter(self):
         from collections import Counter
@@ -248,7 +225,6 @@ class Collection(models.Model):
     def ds_list(self):
         if self.collection_class == 'dataset':
             dsc = [{"id": d.id, "label": d.label, "extent": d.extent, "bounds": d.bounds, "title": d.title,
-                    "dl_est": d.dl_est,
                     "numrows": d.numrows, "modified": d.last_modified_text} for d in self.datasets.all()]
             return list({item['id']: item for item in dsc}.values())
         elif self.collection_class == 'place':

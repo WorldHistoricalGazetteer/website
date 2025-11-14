@@ -18,44 +18,9 @@ from datasets.tasks import get_bounds_filter
 from places.models import Place, PlaceGeom
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
+from whg.settings import STANDARD_FIELDS
 
 logger = logging.getLogger(__name__)
-
-
-def typeahead_suggester(qstr, mode="default"):
-    # fields = ["title^3", "names.toponym", "searchy"]
-    fields = ["title"]
-    indices = [settings.ES_WHG, settings.ES_PUB]
-
-    query_constructors = {  # Ignore `exactly` mode and use default `starts` instead
-        "default": {"bool": {"should": [{"prefix": {field: qstr}} for field in fields]}},
-        "in": {"bool": {"should": [{"wildcard": {field: f"*{qstr}*"}} for field in fields]}},
-        "fuzzy": {"multi_match": {"query": qstr, "fields": fields, "fuzziness": 2}}
-    }
-
-    query_body = {
-        "size": 20,
-        "query": {
-            "bool": {
-                "must": [
-                    {"exists": {"field": "whg_id"}},
-                    query_constructors.get(mode, query_constructors["default"])
-                ]
-            }
-        }
-    }
-
-    response = suggester(query_body, indices)
-    unique_titles = list({item['hit']['title'] for item in response if 'hit' in item and 'title' in item['hit']})
-
-    return unique_titles
-
-
-def TypeaheadSuggestions(request):
-    q = request.GET.get('q', '')
-    mode = request.GET.get('mode', 'default')
-    suggestions = typeahead_suggester(q, mode)
-    return JsonResponse(suggestions, safe=False)
 
 
 # new
@@ -230,6 +195,47 @@ def suggester(q, indices):
     return sortedsugs
 
 
+def TypeaheadSuggestions(request):
+    """
+    Typeahead suggestions using SearchViewV3 query building logic
+    """
+    q = request.GET.get('q', '')
+    mode = request.GET.get('mode', 'default')
+
+    if not q:
+        return JsonResponse([], safe=False)
+
+    # Build minimal params for SearchViewV3
+    params = {
+        "qstr": q,
+        "mode": mode,
+    }
+
+    # Use SearchViewV3's query builder
+    query_body = SearchViewV3.build_search_query(params)
+    query_body["size"] = 20  # Limit typeahead results
+
+    es = settings.ES_CONN
+    indices = [settings.ES_WHG, settings.ES_PUB]
+
+    try:
+        res = es.search(index=','.join(indices), body=query_body)
+        hits = res['hits']['hits']
+
+        # Extract unique titles for typeahead
+        unique_titles = list({
+            hit['_source']['title']
+            for hit in hits
+            if 'title' in hit['_source']
+        })
+
+        return JsonResponse(unique_titles, safe=False)
+
+    except Exception as e:
+        logger.error(f"Typeahead ES query failed: {e}")
+        return JsonResponse([], safe=False)
+
+
 class SearchViewV3(View):
     """
     /search/index/?
@@ -239,54 +245,55 @@ class SearchViewV3(View):
     @staticmethod
     def build_search_query(params):
         qstr = params["qstr"]
-        fields = ["title^3", "names.toponym", "searchy"]
+        fields = STANDARD_FIELDS
+        # Lexical search component (affects score)
+        search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": "AUTO"}}
 
-        search_mode = params.get("mode", "default")  # Default to "default" if "mode" is not present
-        if search_mode == "starts":
-            search_query = {"bool": {"should": [{"prefix": {field: qstr}} for field in fields]}}
-        elif search_mode == "in":
-            search_query = {"bool": {"should": [{"wildcard": {field: f"*{qstr}*"}} for field in fields]}}
-        elif search_mode == "fuzzy":
-            search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": 2}}
-        else:
-            search_query = {"multi_match": {"query": qstr, "fields": fields}}
-
-        # Construct the full query with additional filters
+        # Initialize the query with the lexical search in the 'must' clause
         q = {
             "size": 100,
-            "query": {"bool": {"must": [{"exists": {"field": "whg_id"}}, search_query]}}
+            "query": {
+                "bool": {
+                    "must": [
+                        search_query
+                    ],
+                    "filter": [
+                        # Required for all records
+                        {"exists": {"field": "whg_id"}}
+                    ]
+                }
+            }
         }
 
+        # Reference the filter list for easier manipulation
+        filters = q['query']['bool']['filter']
+
+        # --- 1. FEATURE CLASSES (FCLASS) ---
         if params.get("fclasses"):
             fclist = params["fclasses"].split(',')
-            fclist.append('X')
-            q['query']['bool']['must'].append({"terms": {"fclasses": fclist}})
+            fclist.append('X')  # Include the 'Other/Unknown' class
+            filters.append({"terms": {"fclasses": fclist}})
 
+        # --- 2. TEMPORAL FILTERS ---
         if params.get("temporal"):
             current_year = datetime.now().year
             start_year = str(params["start"])
             end_year = str(params.get("end", current_year))
-            timespan_filter = {"range": {"timespans": {"gte": start_year, "lte": end_year}}}
+            temporal_range = {"range": {"timespans": {"gte": start_year, "lte": end_year}}}
 
             if params.get("undated"):
-                q['query']['bool']['must'].append({
-                    "bool": {"should": [timespan_filter, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
+                filters.append({
+                    "bool": {"should": [temporal_range, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
                 })
             else:
-                q['query']['bool']['must'].append(timespan_filter)
+                filters.append(temporal_range)
 
+        # --- 3. COUNTRY CODES ---
         if params.get("countries"):
             countries = params["countries"]
-            q['query']['bool']['must'].append({
-                "terms": {
-                    "ccodes": countries
-                }
-            })
+            filters.append({"terms": {"ccodes": countries}})
 
-        ''' 
-        Spatial filters >>>
-        query will return features that intersect with at least one of the `bounds` or `userareas` geometries
-        '''
+        # --- 4. GEOMETRY FILTERS (Bounds/User Areas) ---
         geometry_filters = []
 
         if params.get("bounds"):
@@ -307,7 +314,7 @@ class SearchViewV3(View):
         if params.get("userareas"):
             userareas = params["userareas"]
             for userarea_id in userareas:
-                # Fetch user area by ID
+                # Fetch user area by ID (assuming Area model is available)
                 user_area = Area.objects.filter(id=userarea_id).values('geojson').first()
                 if user_area:
                     geometry_filters.append({
@@ -320,11 +327,8 @@ class SearchViewV3(View):
                     })
 
         if len(geometry_filters) > 0:
-            q['query']['bool']['must'].append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
-
-        ''' 
-        <<< Spatial filters
-        '''
+            # Geometry constraints are combined using a strict 'should' clause (must match at least one area)
+            filters.append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
 
         return q
 
@@ -402,13 +406,6 @@ class SearchViewV3(View):
         request.POST.update(json_data)
 
         return self.handle_request(request)
-
-
-""" 
-  /search/index/?
-  performs es search in index aliased 'whg'
-  from search.html 
-"""
 
 
 class SearchView(View):

@@ -142,7 +142,8 @@ def save_dataset(task_id):
 
             # Create Dataset object
             dataset = Dataset.objects.create(
-                title=dataset_metadata['title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
+                title=dataset_metadata[
+                          'title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
                 label=dataset_metadata['label'],
                 description=dataset_metadata['description'] or '[-Description yet to be added to metadata-]',
                 numrows=dataset_metadata['feature_count'],
@@ -179,17 +180,47 @@ def save_dataset(task_id):
         # Ensure that the user folder exists
         os.makedirs(user_folder, exist_ok=True)
 
-        def get_unique_filename(filename, new_ext=None):
+        def get_unique_filename(filename, new_ext=None, max_path_length=100):
             base, ext = os.path.splitext(filename)
             ext = new_ext or ext
+
+            # 1. Calculate the fixed length of the directory path: /app/media/user_<username>/
+            fixed_dir_length = len(user_folder) + 1  # +1 for the path separator '/'
+
+            # 2. Calculate the fixed length of the extension and potential suffix: _<counter><ext>
+            # Max possible suffix is "_9999<ext>"
+            max_suffix_length = 5 + len(ext)  # e.g., "_9999" (5 chars) + ".tsv" (4 chars) = 9
+
+            # 3. Calculate the maximum allowed length for the base filename itself
+            max_base_length = max_path_length - fixed_dir_length - max_suffix_length
+
+            # Ensure the required length is positive
+            if max_base_length < 0:
+                max_base_length = 10
+                logger.warning("User folder path is too long; truncating filename severely.")
+
+            # 4. Truncate the base filename if necessary
+            if len(base) > max_base_length:
+                base = base[len(base) - max_base_length:]
+
             counter = 1
             new_filename = f"{base}{ext}"
+
+            # Check for uniqueness and append counter if needed
             while os.path.exists(os.path.join(user_folder, new_filename)):
+                current_max_len = max_base_length - (len(str(counter)) + 1)
+                base = base[:current_max_len]
+
                 new_filename = f"{base}_{counter}{ext}"
                 counter += 1
+
+                if counter > 9999:  # Safety break to prevent infinite loop or huge file numbers
+                    raise Exception("File naming counter exceeded 9999 attempts.")
+
             return new_filename
 
         def create_DatasetFile(file, format=dataset_metadata['format'], delimiter=None, header=""):
+
             DatasetFile.objects.create(
                 dataset_id=dataset,
                 file=file,
@@ -208,6 +239,7 @@ def save_dataset(task_id):
                 shutil.move(jsonld_filepath, destination_path)
                 cleanup_paths.append(destination_path)
                 logger.debug(f"Moved uploaded file to {destination_path}")
+
                 create_DatasetFile(destination_path)
             else:
                 logger.warning("No file to move as both jsonld_filepath and delimited_filepath are missing.")
@@ -519,18 +551,22 @@ def get_fclass_list(feat):
               'Q26557']
     }
 
-    types = feat.get('types', [])
+    properties = feat.get('properties', {})
 
-    fclass_list = []
-    for t in types:
+    fclass_list = properties.get('fclasses', [])
+    fclass_set = set(fclass_list)
+
+    types_to_process = properties.get('types', [])
+    for t in types_to_process:
         identifier = t.get('identifier')
         if identifier and identifier.startswith('aat:'):
             aat_id = int(identifier[4:])
             # Check if the aat_id exists in the database
             if Type.objects.filter(aat_id=aat_id).exists():
                 try:
+                    # If found, add fclass to the set
                     fclass = get_object_or_404(Type, aat_id=aat_id).fclass
-                    fclass_list.append(fclass)
+                    fclass_set.add(fclass)
                 except Exception as e:
                     logger.error(f"Error retrieving fclass for aat_id {aat_id}: {e}")
             else:
@@ -540,13 +576,14 @@ def get_fclass_list(feat):
             mapped_fclass = next((fclass for fclass, wd_types in geo_wd_mapping.items() if identifier[3:] in wd_types),
                                  None)
             if mapped_fclass:
-                fclass_list.append(mapped_fclass)
+                fclass_set.add(mapped_fclass)
             else:
                 logger.warning(f"Identifier {identifier} not found in geo_wd_mapping.")
         else:
-            logger.warning(f"Invalid identifier format: {identifier}")
+            logger.warning(f"Invalid type object encountered: {t}")
 
-    return fclass_list
+    # Convert the set back to a list for return
+    return list(fclass_set)
 
 
 def get_memory_size(obj):

@@ -182,7 +182,7 @@ def _build_feature_collection(records, raw_hits, is_reconciliation):
         if geometry:
             features.append({
                 "type": "Feature",
-                "properties": {"record_id": record.id, "ds": "dataset"},
+                "properties": {"record_id": record.id, "dslabel": "dataset"},
                 "geometry": geometry,
                 "id": len(features)
             })
@@ -195,9 +195,12 @@ def _build_feature_collection(records, raw_hits, is_reconciliation):
                     "type": geom["type"],
                     "coordinates": geom.get("coordinates")
                 })
+                geom_props = {k: v for k, v in geom.items() if k not in ["coordinates", "type"]}
+                geom_props['dslabel'] = hit.json.get('dataset', 'unknown')
+                geom_props['record_id'] = hit.authrecord_id
                 features.append({
                     "type": "Feature",
-                    "properties": {k: v for k, v in geom.items() if k not in ["coordinates", "type"]},
+                    "properties": geom_props,
                     "geometry": simplified,
                     "id": len(features)
                 })

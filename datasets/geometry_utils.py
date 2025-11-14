@@ -4,12 +4,88 @@ Geometry utilities that require Django's GIS components.
 """
 import json
 import logging
-from django.contrib.gis.geos import GEOSGeometry, GeometryCollection, Polygon
 from django.contrib.gis.db.models import Extent
+from django.contrib.gis.geos import GEOSGeometry, GeometryCollection, Polygon
 
-from .core_utils import flatten
+from shapely.geometry import shape, GeometryCollection, mapping
+from shapely.ops import transform
+from pyproj import Proj, Transformer, CRS
 
 logger = logging.getLogger(__name__)
+
+
+def hullify(g_list, buffer_km=10):
+    """
+    Creates a convex hull from a list of geometries, buffered by a specified distance (km)
+    using a dynamic Azimuthal Equidistant projection.
+
+    Args:
+        g_list (list): List of geometry dicts (GeoJSON format).
+        buffer_km (float): Distance in kilometers to buffer the hull (default: 10 km).
+
+    Returns:
+        dict: GeoJSON geometry of buffered convex hull, or empty dict on error.
+    """
+
+    # 1. Convert buffer distance to meters
+    buffer_m = buffer_km * 1000
+
+    # Convert GEOS dicts to Shapely objects for easier processing
+    try:
+        shapes = [shape(g) for g in g_list]
+        geom_collection = GeometryCollection(shapes)
+
+        if not geom_collection.geoms:
+            return {}
+
+        # Find the center point for the projection (centroid of the collection)
+        # Use a safe centroid, converting it to a basic Point first
+        safe_centroid = geom_collection.centroid
+        lon, lat = safe_centroid.x, safe_centroid.y
+
+    except Exception as e:
+        logger.exception(f'hullify() initial setup failed on g_list {g_list}')
+        return {}
+
+    # 2. Define dynamic Azimuthal Equidistant projection (meters)
+    # CRS based on WGS84, centered at the centroid of the geometry.
+    local_azimuthal = Proj(
+        proj='aeqd',
+        ellps='WGS84',
+        datum='WGS84',
+        lon_0=lon,
+        lat_0=lat
+    )
+
+    # Transformer for conversion: WGS84 (EPSG:4326) <-> Local AEQD (meters)
+    transformer_to_local = Transformer.from_proj(
+        CRS.from_epsg(4326), local_azimuthal, always_xy=True
+    )
+    transformer_to_wgs84 = Transformer.from_proj(
+        local_azimuthal, CRS.from_epsg(4326), always_xy=True
+    )
+
+    # 3. Transform to Local Projection, Calculate Hull, Apply Buffer
+    try:
+        # Transform geometries to the local AEQD projection (in meters)
+        projected_shapes = [
+            transform(transformer_to_local.transform, s) for s in shapes
+        ]
+
+        # Calculate the convex hull in the projected (meter-based) system
+        projected_hull = GeometryCollection(projected_shapes).convex_hull
+
+        # Apply the buffer in meters
+        buffered_projected_hull = projected_hull.buffer(buffer_m)
+
+        # 4. Transform back to WGS84 (degrees)
+        final_hull = transform(transformer_to_wgs84.transform, buffered_projected_hull)
+
+        return mapping(final_hull)
+
+    except Exception as e:
+        logger.exception(f'hullify() processing failed: {e}')
+        return {}
 
 
 def _simplify_geometry(geom):
@@ -139,43 +215,6 @@ def patch_geos_signatures():
         return capi.create_collection(c_int(self._typeid), geoms, c_uint(length))
 
     GeometryCollection._create_collection = new_create_collection
-
-
-def hullify(g_list):
-    """
-    Create convex hull from list of geometries with buffering.
-
-    Args:
-        g_list: List of geometry dicts (GeoJSON format)
-
-    Returns:
-        dict: GeoJSON geometry of convex hull, or empty list on error
-    """
-    # Apply GEOS patch if needed
-    patch_geos_signatures()
-
-    # 1 point -> Point; 2 points -> LineString; >2 -> Polygon
-    try:
-        mp = [GEOSGeometry(json.dumps(g)) for g in g_list]
-        hull = GeometryCollection(mp).convex_hull
-    except Exception as e:
-        logger.exception(f'hullify() failed on g_list {g_list}')
-        return []
-
-    if hull.geom_type in ['Point', 'LineString', 'Polygon']:
-        # buffer hull, but only a little if near meridian
-        coll = GeometryCollection([GEOSGeometry(json.dumps(g)) for g in g_list]).simplify()
-        longs = list(c[0] for c in flatten(coll.coords))
-
-        try:
-            if len([i for i in longs if i >= 175]) == 0:
-                hull = hull.buffer(1.4)  # ~100km radius
-            else:
-                hull = hull.buffer(0.1)
-        except Exception as e:
-            logger.exception(f'hullify buffer error longs: {longs}')
-
-    return json.loads(hull.geojson) if hull.geojson is not None else []
 
 
 def ccodesFromGeom(geom):

@@ -103,7 +103,6 @@
                              name="recon" value="wdlocal"
                              {% if not ds.recon_status|dict_item:'idx' %} checked{% else %} disabled{% endif %}>
                       Wikidata + GeoNames
-                      <span class="ms-2 font-italic small">(estimated time: {{ numrows|time_estimate }})</span>
                     </label>
                     {% if msg_wdlocal %}
                       <div id="wdlocal_tasks" class="smaller">

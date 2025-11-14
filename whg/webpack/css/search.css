@@ -5,9 +5,6 @@
 #input {
 	padding-left: 0;
 }
-#search_mode {
-	max-width: 132px;
-}
 @keyframes flash {
     0%, 50%, 100% {
         border-color: #ced4da;
@@ -18,12 +15,6 @@
 }
 #initiate_search.flashing {
     animation: flash 2s infinite;
-}
-#input span.twitter-typeahead {
-	flex: 1 1 auto;
-}
-#input span.twitter-typeahead input {
-	border-radius: 0; /* Override typeahead default */
 }
 #input #clear_search, #spatial_selector .clearButton, button#clear_chrononym {
 	background-color: #e6e5b69e;
@@ -247,7 +238,6 @@ span.select2-selection {
 
 .tt-dataset-Chrononyms {
     max-height: 500px;
-    overflow-y: auto;
     width: 100% !important;
 }
 

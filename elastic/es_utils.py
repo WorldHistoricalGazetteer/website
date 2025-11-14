@@ -4,6 +4,8 @@
 
 from django.contrib.auth import get_user_model
 
+from datasets.geometry_utils import _simplify_geometry
+
 # from main.views import logger
 
 User = get_user_model()
@@ -18,6 +20,12 @@ from copy import deepcopy
 import sys, logging
 
 logger = logging.getLogger(__name__)
+
+GEOJSON_GEOMETRY_KEYS = {'type', 'coordinates', 'geometries', 'bbox'}
+GEOJSON_GEOMETRY_BASETYPES = {
+    'Point', 'MultiPoint', 'LineString', 'MultiLineString',
+    'Polygon', 'MultiPolygon'
+}
 
 
 # given pid, gets db and index records
@@ -216,14 +224,13 @@ build query object qobj for ES
 
 
 def build_qobj(place):
-    from datasets.utils import hullify
-    # place=get_object_or_404(Place, pk=pid)
-    # print('building qobj for ' + str(place.id) + ': ' + place.title)
 
     qobj = {"place_id": place.id,
             "src_id": place.src_id,
             "title": place.title,
-            "fclasses": place.fclasses or []}
+            "fclasses": list(set(place.fclasses)) if place.fclasses else []
+            }
+
     [links, ccodes, types, variants, parents, geoms] = [[], [], [], [], [], []]
 
     # links
@@ -236,26 +243,26 @@ def build_qobj(place):
         ccodes.append(c)
     qobj['countries'] = list(set(place.ccodes))
 
-    # types (Getty AAT identifiers)
-    # if no aat mappings (srcLabel only)
+    # Collect valid types (AAT identifiers) ONLY
+    # If a PlaceType exists but lacks an identifier, we simply ignore it for now.
     for t in place.types.all():
-        if t.jsonb['identifier'] not in ['', None]:
+        if t.jsonb.get('identifier') not in ['', None]:
             types.append(t.jsonb['identifier'])
-        else:
-            # no type? use inhabited place, cultural group, site
-            types.extend(['aat:300008347', 'aat:300387171', 'aat:300000809'])
-            # add fclasses
-            # qobj['fclasses'] = ['P','S']
 
-            # hot fix 2 Apr 2023:
-            # if no types, add all fclasses ('X' appears in some)
-            qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
+    # Check for missing metadata and apply minimal defaults
+    # Principle: Only apply defaults if the place has NO AAT identifiers AND NO existing fclasses.
+    if not types and not qobj['fclasses']:
+        # Apply default fclasses
+        qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
+
     qobj['placetypes'] = list(set(types))
 
-    # variants
+    # Ensure variants list is robust
+    variants.append(place.title)  # Add the title itself
     for name in place.names.all():
         variants.append(name.toponym)
-    qobj['variants'] = [v.lower() for v in variants]
+
+    qobj['variants'] = list(set([v.lower() for v in variants]))
 
     # parents
     for rel in place.related.all():
@@ -264,11 +271,8 @@ def build_qobj(place):
     qobj['parents'] = parents
 
     # geoms
-    if len(place.geoms.all()) > 0:
-        # any geoms at all...
-        g_list = [g.jsonb for g in place.geoms.all()]
-        # make everything a simple polygon hull for spatial filter purposes
-        qobj['geom'] = hullify(g_list)
+    if place.geom_count > 0:
+        qobj['geom'] = place.repr_point
 
     return qobj
 
@@ -883,7 +887,20 @@ def uriMaker(place):
 # ***
 def makeDoc(place):
     fclasses_value = place.fclasses if place.fclasses not in [None, []] else ["X"]
-    # print('makeDoc fclasses', fclasses_value)
+
+    # 1. Get names from database via parsePlace
+    place_names = parsePlace(place, 'names')
+
+    # 2. Add 'title' to names if it's not already present
+    title_text = place.title
+    title_is_present = any(n.get('toponym') == title_text for n in place_names)
+
+    if not title_is_present:
+        title_name_doc = {
+            "toponym": title_text,
+        }
+        place_names.append(title_name_doc)
+
     es_doc = {
         "relation": {},
         "children": [],
@@ -894,7 +911,7 @@ def makeDoc(place):
         "title": place.title,
         "uri": uriMaker(place),
         "ccodes": place.ccodes,
-        "names": parsePlace(place, 'names'),
+        "names": place_names,
         "types": parsePlace(place, 'types'),
         "geoms": parsePlace(place, 'geoms'),
         "links": parsePlace(place, 'links'),
@@ -915,13 +932,53 @@ def makeDoc(place):
 def parsePlace(place, attr):
     qs = eval('place.' + attr + '.all()')
     arr = []
+
+    # Helper function to process a single geometry object
+    def process_geometry(g):
+        geom_doc = {}
+        geometry_data = {}
+
+        # 1. Iterate over all keys in the source geometry 'g'
+        for key, value in g.items():
+            if key in GEOJSON_GEOMETRY_KEYS:
+                # 2. Whitelist: Keep these keys for the pure geometry object
+                geometry_data[key] = value
+            else:
+                # 3. Agnostic Blacklist: Assume everything else is metadata,
+                #    and assign it directly to the parent geom_doc (e.g., geom_doc["when"] = ...)
+                geom_doc[key] = value
+
+        # 4. Assign the pure GeoJSON object to 'location'
+        if geometry_data.get('type'):
+            geom_doc["location"] = geometry_data
+
+        return geom_doc
+
     for obj in qs:
         if attr == 'geoms':
-            g = obj.jsonb
-            geom = {"location": {"type": g['type'], "coordinates": g['coordinates']}}
-            if 'citation' in g.keys(): geom["citation"] = g['citation']
-            if 'geowkt' in g.keys(): geom["geowkt"] = g['geowkt']
-            arr.append(geom)
+            g = obj.jsonb.copy()
+
+            # If it's a GeometryCollection, we must flatten it
+            if g.get('type') == 'GeometryCollection' and 'geometries' in g:
+                # The top-level GeometryCollection object itself might contain metadata
+                # (e.g., citations), so we process those fields first.
+                top_level_metadata = {k: g[k] for k in g.keys() if k not in GEOJSON_GEOMETRY_KEYS}
+
+                for sub_g in g['geometries']:
+                    geom_doc = process_geometry(sub_g.copy())
+
+                    # Merge top-level metadata into sub-geometry document
+                    geom_doc.update(top_level_metadata)
+
+                    if geom_doc.get("location"):
+                        arr.append(geom_doc)
+
+            # Handle single geometries (Point, Polygon, etc.)
+            elif g.get('type') in GEOJSON_GEOMETRY_BASETYPES:
+                geom_doc = process_geometry(g)
+                if geom_doc.get("location"):
+                    arr.append(geom_doc)
+
         elif attr == 'whens':
             when_ts = obj.jsonb['timespans']
             # TODO: index wants numbers, spec says strings

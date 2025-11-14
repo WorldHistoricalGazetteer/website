@@ -1,7 +1,7 @@
 # place.models
 from django.conf import settings
 from django.contrib.auth import get_user_model
-
+from django.contrib.gis.geos import GeometryCollection
 
 User = get_user_model()
 from django.contrib.gis.db import models as geomodels
@@ -15,6 +15,10 @@ from datasets.static.hashes.parents import ccodes as cc
 from main.choices import FEATURE_CLASSES, STATUS_REVIEW
 from django_celery_results.models import TaskResult
 from traces.models import TraceAnnotation
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def yearPadder(y):
@@ -123,16 +127,36 @@ class Place(models.Model):
 
     @property
     def repr_geom(self):
-        return self.geoms.all()[0].geom
+        """
+        Returns a consolidated GEOS GeometryCollection representing ALL associated geometries.
+
+        This replaces the old logic that only returned the first geometry.
+        """
+        geoms_qs = self.geoms.all()
+        if not geoms_qs:
+            return None
+
+        geos_list = [g.geom for g in geoms_qs if g.geom]
+        if not geos_list:
+            return None
+
+        try:
+            return GeometryCollection(geos_list)
+        except Exception as e:
+            logger.error(f"Failed to create consolidated GeometryCollection for Place {self.id}: {e}")
+            return None
 
     @property
     def repr_point(self):
-        g = self.geoms.all()[0].geom
-        gtype = str(type(g))
-        if 'MultiPolygon' in gtype:
-            return g.coords[0][0][0]
-        elif 'Point' in gtype:
-            return g.coords
+        g = self.repr_geom
+
+        if not g:
+            return None
+
+        try:
+            return list(g.centroid.coords)
+        except Exception:
+            return None
 
     @property
     def traces(self):

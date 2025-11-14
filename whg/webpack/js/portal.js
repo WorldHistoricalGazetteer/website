@@ -301,10 +301,21 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
         $('#sources').height($('#sources').height()); // Fix height to prevent change when content is hidden
         $('.notes').notes();
 
-        var sourceOptions = payload.map(function (item) {
-            return `<option value="${item.place_id}"${!!item.primary ? ' selected' : ''}>${item.dataset.title}: ${item.title}</option>`;
-        }).join('');
-        $('#collection_form #primarySource').html(sourceOptions);
+        // For single source (unlinked), the place_id is the primary source
+        if (payload.length === 1) {
+            $('#collection_form #primarySource')
+                .html(`<option value="${payload[0].place_id}" selected>${payload[0].dataset.title}: ${payload[0].title}</option>`)
+                .closest('.form-group');
+            $('#sourceOptions').hide(); // Hide the dropdown since there's only one option
+        } else {
+            var sourceOptions = payload.map(function (item) {
+                return `<option value="${item.place_id}"${!!item.primary ? ' selected' : ''}>${item.dataset.title}: ${item.title}</option>`;
+            }).join('');
+            $('#collection_form #primarySource')
+                .html(sourceOptions)
+                .closest('.form-group')
+                .show(); // Show the dropdown for multiple sources
+        }
 
         updateCollections();
         var chevron = $('#source_detail h6 i.fas');
@@ -318,8 +329,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 
         $('#sources').append(noSources);
 
-        // If user is authenticated and payload has more than 1 item
-        if (userAuthenticated && payload.length > 1) {
+        if (userAuthenticated) {
             const addToCollectionButton = `
                 <span id="addtocoll" class="me-1 small">
                     <span id="added_flash" class="mr-2 hidden" style="background-color: yellow; position:absolute; top:10px; right:10px;"> added! </span>
@@ -331,9 +341,6 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 
             // Insert the button at the top of the #sources div
             $('#sources h6').append(addToCollectionButton);
-        }
-        else if (userAuthenticated) {
-            $('#sources h6').append('<span class="me-1 small text-black-50 fst-italic">Sorry, unlinked places cannot be added to Collections.</span>');
         }
 
         featureCollection = geomsGeoJSON(payload);

@@ -123,10 +123,6 @@ module.exports = {
 		          to: 'CDNfallbacks/',
 		        },
 		        {
-		          from: 'node_modules/twitter-typeahead-components-bundle/main.js',
-		          to: 'CDNfallbacks/',
-		        },
-		        {
 		          from: 'node_modules/@turf/turf/turf.min.js',
 		          to: 'CDNfallbacks/',
 		        },
