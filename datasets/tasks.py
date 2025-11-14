@@ -1003,93 +1003,43 @@ def align_wdlocal(*args, **kwargs):
     return hit_parade['summary']
 
 
-def _safe_es_search(indices, body, pass_label, size=100):
+def _safe_es_search(index, body, pass_label, size=100):
     """
-    Executes an ES search against one or more indices.
-    Returns combined, deduplicated hits with index origin annotated and score adjusted.
+    Executes an ES search against a single index.
+    Returns hits with pass label annotated.
     """
-    if isinstance(indices, str):
-        indices = [indices]
+    start = time.perf_counter()
+    hits = []
 
-    all_hits = []
-    for idx in indices:
-        start = time.perf_counter()
-        try:
-            if "size" not in body:
-                body["size"] = size
+    try:
+        if "size" not in body:
+            body["size"] = size
 
-            res = es.search(index=idx, body=body)
-            hits = res.get("hits", {}).get("hits", [])
-            for h in hits:
-                h["_index"] = idx
-                from_pub = (idx == settings.ES_PUB)
-                h["_source"]["from_pub"] = from_pub
+        res = es.search(index=index, body=body)
+        hits = res.get("hits", {}).get("hits", [])
 
-                # Apply a markdown (penalty) factor for unaccessioned hits
-                if from_pub:
-                    h["_score"] = (h.get("_score", 1.0) or 1.0) * 0.80
+        logger.debug(
+            f"ES search ({pass_label}) on {index}: {len(hits)} hits "
+            f"in {time.perf_counter() - start:.3f}s"
+        )
+    except Exception as e:
+        logger.warning(
+            f"ES error in {pass_label} for {index}: {e}", exc_info=True
+        )
 
-            all_hits.extend(hits)
-            logger.debug(
-                f"ES search ({pass_label}) on {idx}: {len(hits)} hits "
-                f"in {time.perf_counter() - start:.3f}s"
-            )
-        except Exception as e:
-            logger.warning(
-                f"ES error in {pass_label} for {idx}: {e}", exc_info=True
-            )
-
-    return all_hits
-
-
-def _deduplicate_hits_by_score(hits_list):
-    unique_hits = {}
-    for h in hits_list:
-        _id = h["_id"]
-        if _id not in unique_hits or h["_score"] > unique_hits[_id]["_score"]:
-            unique_hits[_id] = h
-    return list(unique_hits.values())
-
-
-def _consolidate_passes_by_score(hit_dict, pass_hits_map):
-    """
-    Consolidates hits across multiple passes, updating hit_dict only if a hit is new
-    or has a higher score than the existing hit for the same _id.
-
-    Args:
-        hit_dict (dict): The dictionary to store and consolidate unique hits.
-        pass_hits_map (list of tuples): [(pass_label, raw_hits_list), ...]
-    """
-
-    for pass_label, hits_list in pass_hits_map:
-        # Deduplicate hits within the current pass first (to handle multiple hits from the same pass)
-        # Note: We assume _deduplicate_hits_by_score() handles local deduplication and returns unique hits for that list.
-        unique_pass_hits = _deduplicate_hits_by_score(hits_list)
-
-        for h in unique_pass_hits:
-            _id = h["_id"]
-
-            # Check if the hit is new OR if the new hit has a higher score
-            if _id not in hit_dict or h["_score"] > hit_dict[_id]["_score"]:
-                hit_dict[_id] = h
-                _mark_hit(h, pass_label)  # Mark the hit with the label of the winning pass
-
-    # Return the consolidated dictionary (though it was updated in place)
-    return hit_dict
+    return hits
 
 
 def es_lookup_idx(qobj, *, bounds=None):
     """
     ElasticSearch lookup for index alignment.
-    Searches both dataset (settings.ES_WHG) and published (settings.ES_PUB) indices.
+    Searches the `whg` (settings.ES_WHG) index.
     Pass0: identifier matches.
     Pass1: lexical + spatial scoring (soft match).
     """
     start_total = time.perf_counter()
 
-    indices = [settings.ES_WHG]
-    if getattr(settings, "ES_PUB", None):
-        indices.append(settings.ES_PUB)
+    idx = settings.ES_WHG
 
     result = {
         "place_id": qobj["place_id"],
@@ -1118,7 +1068,6 @@ def es_lookup_idx(qobj, *, bounds=None):
     hits0_raw = []
     if links:
         q0 = {
-            "size": 100,
             "query": {
                 "bool": {
                     "must": [
@@ -1128,7 +1077,7 @@ def es_lookup_idx(qobj, *, bounds=None):
                 }
             }
         }
-        hits0_raw = _safe_es_search(indices, q0, pass_label="pass0")
+        hits0_raw = _safe_es_search(idx, q0, pass_label="pass0")
 
     # ---------- pass 1 : lexical + spatial ----------
     hits1_raw = []
@@ -1176,7 +1125,7 @@ def es_lookup_idx(qobj, *, bounds=None):
             })
 
         q1 = {
-            "size": 100,
+            "size": 10,
             "query": {
                 "bool": {
                     "must": [
@@ -1193,43 +1142,31 @@ def es_lookup_idx(qobj, *, bounds=None):
                 }
             },
         }
-        hits1_raw = _safe_es_search(indices, q1, pass_label="pass1")
+        hits1_raw = _safe_es_search(idx, q1, pass_label="pass1")
 
     # ---------- consolidate and label ----------
+    result["hits"] = []
 
-    # Group raw hits by index for local deduplication
-    pass0_whg = [h for h in hits0_raw if not h["_source"].get("from_pub")]
-    pass0_pub = [h for h in hits0_raw if h["_source"].get("from_pub")]
-    pass1_whg = [h for h in hits1_raw if not h["_source"].get("from_pub")]
-    pass1_pub = [h for h in hits1_raw if h["_source"].get("from_pub")]
+    # Add all pass0 hits in the order ES returned them (these are prioritized)
+    if hits0_raw:
+        for h in hits0_raw:
+            _mark_hit(h, "pass0")
+            result["hits"].append(h)
 
-    # Initialize empty hit dictionaries
-    whg_hits = {}
-    pub_hits = {}
-
-    # Map the passes for each index group
-    whg_pass_map = [("pass0", pass0_whg), ("pass1", pass1_whg)]
-    pub_pass_map = [("pass0", pass0_pub), ("pass1", pass1_pub)]
-
-    # --- 1. Deduplicate and Consolidate WHG Hits (Pass 0 vs Pass 1) ---
-    whg_hits = _consolidate_passes_by_score(whg_hits, whg_pass_map)
-
-    # --- 2. Deduplicate and Consolidate Pub Hits (Pass 0 vs Pass 1) ---
-    pub_hits = _consolidate_passes_by_score(pub_hits, pub_pass_map)
-
-    # 3. Final Merge (WHG and Pub IDs are non-overlapping)
-    result["hits"].extend(list(whg_hits.values()))
-    result["hits"].extend(list(pub_hits.values()))
-
-    # Sort by adjusted score (desc)
-    result["hits"].sort(key=lambda h: h.get("_score", 0), reverse=True)
+    # Add pass1 hits (in ES order) if not already present and under limit
+    if hits1_raw:
+        seen_ids = {h["_id"] for h in result["hits"]}
+        for h in hits1_raw:
+            if h["_id"] not in seen_ids and len(result["hits"]) < 10:
+                _mark_hit(h, "pass1")
+                result["hits"].append(h)
 
     result["hit_count"] = len(result["hits"])
     result["total_hits"] = result["hit_count"]
 
     logger.info(
         f"es_lookup_idx(): {result['hit_count']} unique hits for "
-        f"{qobj.get('title')} [{', '.join(indices)}] "
+        f"{qobj.get('title')} [{idx}] "
         f"in {time.perf_counter() - start_total:.3f}s"
     )
 
@@ -1487,15 +1424,21 @@ def process_hits(place, result_obj, task_id, dataset, tracking_vars, hit_summary
 
 
 def classify_hits(hits):
-    """Classifies hits into parents and children in a single pass."""
+    """
+    Classifies hits into parents and children in a single pass, safely
+    handling cases where relation metadata is missing or malformed.
+    """
     parents, children = [], []
     for h in hits:
-        relation = h['_source']['relation']['name']
-        profiled = profileHit(h)
-        if relation == 'parent':
-            parents.append(profiled)
-        elif relation == 'child':
-            children.append(profiled)
+        relation_obj = h['_source'].get('relation', {})
+        relation_name = relation_obj.get('name')
+        if relation_name:
+            profiled = profileHit(h)
+            if relation_name == 'parent':
+                parents.append(profiled)
+            elif relation_name == 'child':
+                children.append(profiled)
+
     return parents, children
 
 
