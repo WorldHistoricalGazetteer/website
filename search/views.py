@@ -246,42 +246,56 @@ class SearchViewV3(View):
     def build_search_query(params):
         qstr = params["qstr"]
         fields = STANDARD_FIELDS
-
+        # Lexical search component (affects score)
         search_query = {"multi_match": {"query": qstr, "fields": fields, "fuzziness": "AUTO"}}
 
-        # Construct the full query with additional filters
+        # Initialize the query with the lexical search in the 'must' clause
         q = {
             "size": 100,
-            "query": {"bool": {"must": [{"exists": {"field": "whg_id"}}, search_query]}}
+            "query": {
+                "bool": {
+                    "must": [
+                        search_query
+                    ],
+                    "filter": [
+                        # Required for all records
+                        {"exists": {"field": "whg_id"}}
+                    ]
+                }
+            }
         }
 
+        # Reference the filter list for easier manipulation
+        filters = q['query']['bool']['filter']
+
+        # --- 1. FEATURE CLASSES (FCLASS) ---
         if params.get("fclasses"):
             fclist = params["fclasses"].split(',')
-            fclist.append('X')
-            q['query']['bool']['must'].append({"terms": {"fclasses": fclist}})
+            fclist.append('X')  # Include the 'Other/Unknown' class
+            filters.append({"terms": {"fclasses": fclist}})
 
+        # --- 2. TEMPORAL FILTERS ---
         if params.get("temporal"):
             current_year = datetime.now().year
             start_year = str(params["start"])
             end_year = str(params.get("end", current_year))
-            timespan_filter = {"range": {"timespans": {"gte": start_year, "lte": end_year}}}
+            temporal_range = {"range": {"timespans": {"gte": start_year, "lte": end_year}}}
 
             if params.get("undated"):
-                q['query']['bool']['must'].append({
-                    "bool": {"should": [timespan_filter, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
+                filters.append({
+                    "bool": {"should": [temporal_range, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
                 })
             else:
-                q['query']['bool']['must'].append(timespan_filter)
+                filters.append(temporal_range)
 
+        # --- 3. COUNTRY CODES ---
         if params.get("countries"):
             countries = params["countries"]
-            q['query']['bool']['must'].append({
-                "terms": {
-                    "ccodes": countries
-                }
-            })
+            filters.append({"terms": {"ccodes": countries}})
 
+        # --- 4. GEOMETRY FILTERS (Bounds/User Areas) ---
         geometry_filters = []
+
         if params.get("bounds"):
             bounds = params["bounds"]["geometries"]
             for geometry in bounds:
@@ -300,7 +314,7 @@ class SearchViewV3(View):
         if params.get("userareas"):
             userareas = params["userareas"]
             for userarea_id in userareas:
-                # Fetch user area by ID
+                # Fetch user area by ID (assuming Area model is available)
                 user_area = Area.objects.filter(id=userarea_id).values('geojson').first()
                 if user_area:
                     geometry_filters.append({
@@ -313,7 +327,8 @@ class SearchViewV3(View):
                     })
 
         if len(geometry_filters) > 0:
-            q['query']['bool']['must'].append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
+            # Geometry constraints are combined using a strict 'should' clause (must match at least one area)
+            filters.append({"bool": {"should": geometry_filters, "minimum_should_match": 1}})
 
         return q
 

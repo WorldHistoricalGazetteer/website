@@ -1083,7 +1083,7 @@ def es_lookup_idx(qobj, *, bounds=None):
     ElasticSearch lookup for index alignment.
     Searches both dataset (settings.ES_WHG) and published (settings.ES_PUB) indices.
     Pass0: identifier matches.
-    Pass1: lexical + spatial matches.
+    Pass1: lexical + spatial scoring (soft match).
     """
     start_total = time.perf_counter()
 
@@ -1102,37 +1102,29 @@ def es_lookup_idx(qobj, *, bounds=None):
 
     variants = list(set(qobj.get("variants", [])))
     links = list(set(qobj.get("links", [])))
-    has_geom = "geom" in qobj
     has_countries = bool(qobj.get("countries"))
     has_bounds = bounds and bounds.get("id") != ["0"]
+    point_search = bool(qobj.get("geom"))
 
+
+    # Only strict, non-scoring filters (Country Code, Bounds)
     filters = []
-    if has_geom:
-        for idx in indices:
-            field = "geoms.location" if idx == settings.ES_WHG else "location"
-            filters.append({
-                "geo_shape": {
-                    field: {
-                        "shape": qobj["geom"],
-                        "relation": "intersects",
-                    }
-                }
-            })
-    elif has_countries:
+    if has_countries:
         filters.append({"terms": {"ccodes": qobj["countries"]}})
     elif has_bounds:
         filters.append(get_bounds_filter(bounds, "whg"))
 
     # ---------- pass 0 : identifier matches ----------
     hits0_raw = []
-    if links:  # Only run if we have links
+    if links:
         q0 = {
             "size": 100,
             "query": {
                 "bool": {
                     "must": [
                         {"terms": {"links.identifier.keyword": links}}
-                    ]
+                    ],
+                    "filter": filters  # Use the new strict filters
                 }
             }
         }
@@ -1140,19 +1132,14 @@ def es_lookup_idx(qobj, *, bounds=None):
 
     # ---------- pass 1 : lexical + spatial ----------
     hits1_raw = []
-    if variants:  # Only run if we have variants
+    if variants:
 
-        # Create a list of 'should' clauses for all variant matching logic
-        should_clauses = [
-            # 1. Terms Query (Exact Match)
-            # Checks if ANY variant string exists exactly in the 'names.toponym' field
+        # 1. Build lexical search terms (goes in the 'must' clause for required match)
+        lexical_should_clauses = [
             {"terms": {"names.toponym": variants}},
         ]
-
-        # 2. Add Fuzzy/Multi-Match for Each Variant
-        # Create a separate multi_match object for each variant name
         for variant in variants:
-            should_clauses.append(
+            lexical_should_clauses.append(
                 {"multi_match": {
                     "query": variant,
                     "fields": STANDARD_FIELDS,
@@ -1161,20 +1148,47 @@ def es_lookup_idx(qobj, *, bounds=None):
                 }}
             )
 
+        # 2. Build overall boosting terms (goes in main 'should' clause for scoring)
+        overall_should_clauses = [
+            {"terms": {"types.identifier": qobj.get("placetypes", [])}},
+        ]
+
+        # --- NEW SPATIAL BOOSTING LOGIC ---
+        if point_search:
+            lon, lat = point_search
+
+            # Proximity Boost 1: Tight radius, high boost (Rewards exact hits)
+            overall_should_clauses.append({
+                "geo_distance": {
+                    "distance": "10km",
+                    "geoms.location": {"lon": lon, "lat": lat},
+                    "boost": 4.0
+                }
+            })
+
+            # Proximity Boost 2: Wider radius, medium boost (Rewards adjacency)
+            overall_should_clauses.append({
+                "geo_distance": {
+                    "distance": "100km",
+                    "geoms.location": {"lon": lon, "lat": lat},
+                    "boost": 1.0
+                }
+            })
+
         q1 = {
             "size": 100,
             "query": {
                 "bool": {
                     "must": [
                         {"exists": {"field": "whg_id"}},
+                        # Lexical Match: A result MUST match at least one variant/name
                         {"bool": {
-                            "should": should_clauses,
-                            "minimum_should_match": 1  # Match at least one variant query
+                            "should": lexical_should_clauses,
+                            "minimum_should_match": 1
                         }},
                     ],
-                    "should": [
-                        {"terms": {"types.identifier": qobj.get("placetypes", [])}},
-                    ],
+                    # Types and Proximity are soft boosts (should)
+                    "should": overall_should_clauses,
                     "filter": filters,
                 }
             },

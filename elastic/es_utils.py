@@ -4,6 +4,8 @@
 
 from django.contrib.auth import get_user_model
 
+from datasets.geometry_utils import _simplify_geometry
+
 # from main.views import logger
 
 User = get_user_model()
@@ -222,7 +224,6 @@ build query object qobj for ES
 
 
 def build_qobj(place):
-    from datasets.utils import hullify
 
     qobj = {"place_id": place.id,
             "src_id": place.src_id,
@@ -270,11 +271,8 @@ def build_qobj(place):
     qobj['parents'] = parents
 
     # geoms
-    if len(place.geoms.all()) > 0:
-        # any geoms at all...
-        g_list = [g.jsonb for g in place.geoms.all()]
-        # make everything a simple polygon hull for spatial filter purposes
-        qobj['geom'] = hullify(g_list)
+    if place.geom_count > 0:
+        qobj['geom'] = place.repr_point
 
     return qobj
 
