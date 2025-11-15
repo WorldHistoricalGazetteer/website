@@ -18,6 +18,7 @@ from celery import current_app as celapp
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry
+from django.core.cache import caches
 from django.core.paginator import Paginator
 from django.db.models import Count, Prefetch, Q
 from django.forms import modelformset_factory
@@ -1008,9 +1009,19 @@ def review(request, dsid, tid, passnum):
     pid = request.GET.get("pid")
     ds = get_object_or_404(Dataset, id=dsid)
     task, auth, authname, kwargs, test = _get_task_details(tid)
-    cnt_pass_def, cnt_pass0, cnt_pass1, cnt_pass2, cnt_pass3 = _get_hit_counts(tid)
     record_list, current_passnum = _filter_unreviewed_places(ds, tid, passnum, auth)
     review_page, review_field = _get_review_page_and_field(auth)
+
+    # ✅ Use Redis cache for hit counts
+    review_cache = caches['property_cache']
+    cache_key = f"hit_counts:{tid}"
+    hit_counts = review_cache.get(cache_key)
+
+    if not hit_counts:
+        hit_counts = _get_hit_counts(tid)
+        review_cache.set(cache_key, hit_counts, timeout=300)  # 5 minutes
+
+    cnt_pass_def, cnt_pass0, cnt_pass1, cnt_pass2, cnt_pass3 = hit_counts
 
     is_reconciliation = auth in ["wd", "wdlocal"]
 
@@ -1038,10 +1049,9 @@ def review(request, dsid, tid, passnum):
     # Determine page
     if pid:
         try:
-            place_obj = Place.objects.get(id=pid)
-            page = list(record_list).index(place_obj) + 1
-        except (Place.DoesNotExist, ValueError):
-            return render(request, f"datasets/{review_page}", context=nohit_context)
+            page = record_list.filter(id__lt=pid).count() + 1
+        except Exception:
+            page = 1
     else:
         page = request.GET.get("page", 1)
 
