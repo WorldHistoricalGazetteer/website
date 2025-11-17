@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import time
+import zlib
 
 import redis
 from celery import shared_task
@@ -147,36 +148,61 @@ def stream_from_file(filepath):
 
 def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
     """
-    Generic streaming generator for LPF or TSV
+    Safe streaming generator for LPF or TSV that yields gzip-compressed bytes.
     """
-    cache_file = None
+    cache_tmp = None
     if cache_filepath:
-        cache_file = open(cache_filepath + '.tmp', 'wb')
+        cache_tmp = cache_filepath + '.tmp'
+        os.makedirs(os.path.dirname(cache_tmp) or '.', exist_ok=True)
+        cache_file = open(cache_tmp, 'wb')
+    else:
+        cache_file = None
 
-    buffer = io.BytesIO()
-    gzip_file = gzip.GzipFile(fileobj=buffer, mode='w')
+    # gzip mode: 31 = 16 + 15 (gzip header + max window)
+    compressor = zlib.compressobj(level=6, method=zlib.DEFLATED, wbits=31)
 
-    def write_and_yield(data: str):
-        gzip_file.write(data.encode('utf-8'))
-        gzip_file.flush()
-        buffer.seek(0)
-        chunk = buffer.read()
-        if chunk:
-            if cache_file:
-                cache_file.write(chunk)
-            yield chunk
-        buffer.truncate(0)
-        buffer.seek(0)
+    def emit(b: bytes):
+        """Write to cache and yield a chunk."""
+        if not b:
+            return
+        if cache_file:
+            cache_file.write(b)
+        yield b
+
+    def write_text(text: str):
+        """Compress text and yield chunks."""
+        if not text:
+            return
+        data = text.encode('utf-8')
+        out = compressor.compress(data)
+        if out:
+            yield from emit(out)
+
+    def finish():
+        """Flush gzip trailer and finalize cache."""
+        trailer = compressor.flush()
+        if trailer:
+            yield from emit(trailer)
+
+        if cache_file:
+            cache_file.close()
+            try:
+                os.replace(cache_tmp, cache_filepath)
+            except Exception:
+                if os.path.exists(cache_tmp):
+                    os.remove(cache_tmp)
+                raise
 
     try:
+        # --- LPF LOGIC ---
         if filetype == 'lpf':
-            yield from write_and_yield(
+            yield from write_text(
                 '{"@context":"https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld","type":"FeatureCollection"'
             )
 
             citation = getattr(obj, "citation_csl", None)
             if citation:
-                yield from write_and_yield(',"citation":' + json.dumps(citation))
+                yield from write_text(',"citation":' + json.dumps(citation))
 
             licence_text = (
                 "Unless specified otherwise, all content created for or uploaded to the World Historical Gazetteer — "
@@ -185,304 +211,284 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 "Externally hosted datasets and content that are linked to by WHG remain under the copyrights "
                 "and licenses specified by their original contributors."
             )
-            yield from write_and_yield(',"license":' + json.dumps(licence_text))
-            yield from write_and_yield(',"features":[')
+            yield from write_text(',"license":' + json.dumps(licence_text))
+            yield from write_text(',"features":[')
 
-            first = True
+            # dataset / collection resolution:
+            qs = None
             if obj_type == "dataset":
                 qs = obj.places.all()
-            elif obj_type == "collection" and obj.collection_class == "dataset":
-                yield from write_and_yield(
-                    '],"error":{"message":"Dataset collections may not be downloaded. Please download each constituent dataset individually."}}'
-                )
-                return
-            elif obj_type == "collection" and obj.collection_class == "place":
-                qs = obj.places.all()
-            else:
-                yield from write_and_yield(
-                    '],"error":{"message":"LPF export by streaming is only supported for datasets and place collections."}}'
-                )
-                return
-
-            for place in qs.iterator():
-                if not first:
-                    yield from write_and_yield(',')
+            elif obj_type == "collection":
+                if obj.collection_class == "dataset":
+                    yield from write_text(
+                        '],"error":{"message":"Dataset collections may not be downloaded. Please download each constituent dataset individually."}}')
+                    yield from finish()
+                    return
+                elif obj.collection_class == "place":
+                    qs = obj.places.all()
                 else:
-                    first = False
+                    yield from write_text('],"error":{"message":"Unknown collection class."}}')
+                    yield from finish()
+                    return
+            else:
+                yield from write_text(
+                    '],"error":{"message":"LPF export by streaming is only supported for datasets and place collections."}}')
+                yield from finish()
+                return
 
-                feature = PlaceFeatureSerializer(place, context={"request": request}).data
-                yield from write_and_yield(json.dumps(feature))
+            if qs is not None:
+                first = True
+                for place in qs.iterator():
+                    if not first:
+                        yield from write_text(',')
+                    else:
+                        first = False
 
-            yield from write_and_yield(']')
-            yield from write_and_yield('}')
+                    feature = PlaceFeatureSerializer(place, context={"request": request}).data
+                    yield from write_text(json.dumps(feature))
 
-        else:  # TSV format
-            # LP-TSV headers based on the specification
+            yield from write_text(']')
+            yield from write_text('}')
+
+        # --- TSV LOGIC ---
+        else:
             headers = [
-                "id",
-                "title",
-                "title_source",
-                "title_uri",
-                "ccodes",
-                "matches",
-                "names",
-                "types",
-                "aat_types",
-                "parent_name",
-                "parent_id",
-                "lon",
-                "lat",
-                "geowkt",
-                "geo_source",
-                "geo_id",
-                "start",
-                "end",
+                "id", "title", "title_source", "title_uri", "ccodes", "matches",
+                "names", "types", "aat_types", "parent_name", "parent_id",
+                "lon", "lat", "geowkt", "geo_source", "geo_id", "start", "end",
             ]
-
-            # Add dataset columns for collections
             if obj_type == "collection":
                 headers.extend(["dataset_id", "dataset_title", "dataset_label"])
 
-            yield from write_and_yield('\t'.join(headers) + '\n')
+            yield from write_text('\t'.join(headers) + '\n')
 
+            qs = None
             if obj_type == "dataset":
                 qs = obj.places.all()
-            elif obj_type == "collection" and obj.collection_class == "dataset":
-                yield from write_and_yield(
-                    'Error: Dataset collections may not be downloaded. Please download each constituent dataset individually.\n'
-                )
-                return
-            elif obj_type == "collection" and obj.collection_class == "place":
-                qs = obj.places.all()
+            elif obj_type == "collection":
+                if obj.collection_class == "dataset":
+                    yield from write_text(
+                        'Error: Dataset collections may not be downloaded. Please download each constituent dataset individually.\n')
+                    yield from finish()
+                    return
+                elif obj.collection_class == "place":
+                    qs = obj.places.all()
+                else:
+                    yield from write_text('Error: Unknown collection class.\n')
+                    yield from finish()
+                    return
             else:
-                yield from write_and_yield(
-                    'Error: TSV export by streaming is only supported for datasets and place collections.\n'
-                )
+                yield from write_text(
+                    'Error: TSV export by streaming is only supported for datasets and place collections.\n')
+                yield from finish()
                 return
 
-            for place in qs.iterator():
-                # Serialize the place to get structured data
-                feature = PlaceFeatureSerializer(place, context={"request": request}).data
+            if qs is not None:
+                for place in qs.iterator():
+                    feature = PlaceFeatureSerializer(place, context={"request": request}).data
 
-                # Extract primary geometry (representative point)
-                lon, lat = '', ''
-                geowkt = ''
-                geo_source = ''
-                geo_id = ''
+                    lon, lat = '', ''
+                    geowkt = ''
+                    geo_source = ''
+                    geo_id = ''
 
-                if feature.get('geoms'):
-                    primary_geom = feature['geoms'][0] if feature['geoms'] else None
-                    if primary_geom:
-                        geom_data = primary_geom.get('geom')
-                        if geom_data:
-                            # Extract representative coordinates
-                            geom_type = geom_data.get('type', '')
-                            coords = geom_data.get('coordinates', [])
+                    if feature.get('geoms'):
+                        primary_geom = feature['geoms'][0] if feature['geoms'] else None
+                        if primary_geom:
+                            geom_data = primary_geom.get('geom')
+                            if geom_data:
+                                geom_type = geom_data.get('type', '')
+                                coords = geom_data.get('coordinates', [])
 
-                            if geom_type == 'Point' and coords:
-                                lon, lat = str(coords[0]), str(coords[1])
-                            elif geom_type in ['LineString', 'MultiPoint'] and coords:
-                                lon, lat = str(coords[0][0]), str(coords[0][1])
-                            elif geom_type == 'Polygon' and coords:
-                                lon, lat = str(coords[0][0][0]), str(coords[0][0][1])
-                            elif geom_type == 'MultiPolygon' and coords:
-                                lon, lat = str(coords[0][0][0][0]), str(coords[0][0][0][1])
+                                if geom_type == 'Point' and coords:
+                                    lon, lat = str(coords[0]), str(coords[1])
+                                elif geom_type in ['LineString', 'MultiPoint'] and coords:
+                                    lon, lat = str(coords[0][0]), str(coords[0][1])
+                                elif geom_type == 'Polygon' and coords:
+                                    lon, lat = str(coords[0][0][0]), str(coords[0][0][1])
+                                elif geom_type == 'MultiPolygon' and coords:
+                                    lon, lat = str(coords[0][0][0][0]), str(coords[0][0][0][1])
 
-                            # Convert to WKT with size management
-                            try:
-                                from django.contrib.gis.geos import GEOSGeometry
-                                geos_geom = GEOSGeometry(json.dumps(geom_data))
+                                try:
+                                    from django.contrib.gis.geos import GEOSGeometry
+                                    geos_geom = GEOSGeometry(json.dumps(geom_data))
 
-                                # For complex geometries, use simplified version or representative point
-                                if geom_type in ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString']:
-                                    # First try the full WKT
-                                    full_wkt = geos_geom.wkt
-
-                                    if len(full_wkt) > MAX_WKT_LENGTH:
-                                        # Try simplifying the geometry
-                                        try:
-                                            simplified = geos_geom.simplify(
-                                                tolerance=SIMPLIFY_TOLERANCE,
-                                                preserve_topology=True
-                                            )
-                                            simplified_wkt = simplified.wkt
-
-                                            if len(simplified_wkt) <= MAX_WKT_LENGTH:
-                                                geowkt = simplified_wkt
-                                            else:
-                                                # Still too large, use centroid/representative point
-                                                if hasattr(geos_geom, 'point_on_surface'):
-                                                    geowkt = geos_geom.point_on_surface.wkt
+                                    if geom_type in ['Polygon', 'MultiPolygon', 'LineString', 'MultiLineString']:
+                                        full_wkt = geos_geom.wkt
+                                        if len(full_wkt) > MAX_WKT_LENGTH:
+                                            try:
+                                                simplified = geos_geom.simplify(
+                                                    tolerance=SIMPLIFY_TOLERANCE,
+                                                    preserve_topology=True
+                                                )
+                                                simplified_wkt = simplified.wkt
+                                                if len(simplified_wkt) <= MAX_WKT_LENGTH:
+                                                    geowkt = simplified_wkt
                                                 else:
-                                                    geowkt = geos_geom.centroid.wkt
-                                        except:
-                                            # Simplification failed, use representative point
-                                            geowkt = geos_geom.centroid.wkt
+                                                    if hasattr(geos_geom, 'point_on_surface'):
+                                                        geowkt = geos_geom.point_on_surface.wkt
+                                                    else:
+                                                        geowkt = geos_geom.centroid.wkt
+                                            except:
+                                                geowkt = geos_geom.centroid.wkt
+                                        else:
+                                            geowkt = full_wkt
                                     else:
-                                        geowkt = full_wkt
+                                        geowkt = geos_geom.wkt
+
+                                except Exception:
+                                    if lon and lat:
+                                        geowkt = f"POINT({lon} {lat})"
+                                    else:
+                                        geowkt = ''
+
+                            geo_source = primary_geom.get('src', '')
+                            if primary_geom.get('citation'):
+                                citation_data = primary_geom['citation']
+                                if isinstance(citation_data, dict):
+                                    geo_id = citation_data.get('id', '')
                                 else:
-                                    # Simple geometries - use as is
-                                    geowkt = geos_geom.wkt
+                                    geo_id = str(citation_data)
 
-                            except Exception as e:
-                                # Fallback: use the lon/lat point if available
-                                if lon and lat:
-                                    geowkt = f"POINT({lon} {lat})"
+                    start, end = '', ''
+                    if feature.get('whens'):
+                        for when in feature['whens']:
+                            timespans = when.get('timespans', [])
+                            if timespans:
+                                timespan = timespans[0]
+                                if timespan.get('start'):
+                                    start_val = timespan['start'].get('in', '')
+                                    if start_val and not start:
+                                        start = str(start_val)
+                                if timespan.get('end'):
+                                    end_val = timespan['end'].get('in', '')
+                                    if end_val and not end:
+                                        end = str(end_val)
+                            if start and end:
+                                break
+
+                    names_list = []
+                    if feature.get('names'):
+                        for name in feature['names']:
+                            name_str = name.get('toponym', '')
+                            if name_str:
+                                lang = name.get('lang', '')
+                                if lang:
+                                    names_list.append(f"{name_str}@{lang}")
                                 else:
-                                    geowkt = ''
+                                    names_list.append(name_str)
+                    names = ';'.join(names_list)
 
-                        geo_source = primary_geom.get('src', '')
-                        if primary_geom.get('citation'):
-                            citation_data = primary_geom['citation']
-                            if isinstance(citation_data, dict):
-                                geo_id = citation_data.get('id', '')
-                            else:
-                                geo_id = str(citation_data)
+                    types_list = []
+                    aat_types_list = []
+                    if feature.get('types'):
+                        for type_obj in feature['types']:
+                            type_label = type_obj.get('label', '')
+                            if type_label:
+                                types_list.append(type_label)
+                            if type_obj.get('identifier'):
+                                aat_id = type_obj['identifier']
+                                if 'vocab.getty.edu/aat' in str(aat_id):
+                                    aat_types_list.append(str(aat_id))
+                    types = ';'.join(types_list)
+                    aat_types = ';'.join(aat_types_list)
 
-                # Extract temporal coverage
-                start, end = '', ''
-                if feature.get('whens'):
-                    for when in feature['whens']:
-                        timespans = when.get('timespans', [])
-                        if timespans:
-                            timespan = timespans[0]
-                            if timespan.get('start'):
-                                start_val = timespan['start'].get('in', '')
-                                if start_val and not start:  # Take first available
-                                    start = str(start_val)
-                            if timespan.get('end'):
-                                end_val = timespan['end'].get('in', '')
-                                if end_val and not end:  # Take first available
-                                    end = str(end_val)
-                        if start and end:
-                            break
+                    matches_list = []
+                    if feature.get('links'):
+                        for link in feature['links']:
+                            link_type = link.get('type', '')
+                            if link_type in ['closeMatch', 'exactMatch']:
+                                identifier = link.get('identifier', '')
+                                if identifier:
+                                    matches_list.append(str(identifier))
+                    matches = ';'.join(matches_list)
 
-                # Extract names - semicolon separated with language tags
-                names_list = []
-                if feature.get('names'):
-                    for name in feature['names']:
-                        name_str = name.get('toponym', '')
-                        if name_str:
-                            lang = name.get('lang', '')
-                            if lang:
-                                names_list.append(f"{name_str}@{lang}")
-                            else:
-                                names_list.append(name_str)
-                names = ';'.join(names_list)
+                    title_source = ''
+                    title_uri = ''
+                    if feature.get('links'):
+                        for link in feature['links']:
+                            if link.get('type') == 'primaryTopicOf':
+                                title_uri = link.get('identifier', '')
+                                break
 
-                # Extract types - semicolon separated
-                types_list = []
-                aat_types_list = []
-                if feature.get('types'):
-                    for type_obj in feature['types']:
-                        type_label = type_obj.get('label', '')
-                        if type_label:
-                            types_list.append(type_label)
-                        # Extract AAT identifiers if present
-                        if type_obj.get('identifier'):
-                            aat_id = type_obj['identifier']
-                            if 'vocab.getty.edu/aat' in str(aat_id):
-                                aat_types_list.append(str(aat_id))
-                types = ';'.join(types_list)
-                aat_types = ';'.join(aat_types_list)
+                    parent_name = ''
+                    parent_id = ''
+                    if feature.get('related'):
+                        for rel in feature['related']:
+                            rel_type = rel.get('relationType', '')
+                            if rel_type in ['gvp:broaderPartitive', 'broader', 'partOf']:
+                                parent_name = rel.get('label', '')
+                                parent_id = rel.get('relationTo', '')
+                                break
 
-                # Extract matches (closeMatch, exactMatch links)
-                matches_list = []
-                if feature.get('links'):
-                    for link in feature['links']:
-                        link_type = link.get('type', '')
-                        if link_type in ['closeMatch', 'exactMatch']:
-                            identifier = link.get('identifier', '')
-                            if identifier:
-                                matches_list.append(str(identifier))
-                matches = ';'.join(matches_list)
+                    row = [
+                        str(feature.get('id', '')),
+                        feature.get('title', ''),
+                        title_source,
+                        title_uri,
+                        ';'.join(str(c) for c in feature.get('ccodes', [])),
+                        matches,
+                        names,
+                        types,
+                        aat_types,
+                        parent_name,
+                        parent_id,
+                        lon,
+                        lat,
+                        geowkt,
+                        geo_source,
+                        geo_id,
+                        start,
+                        end,
+                    ]
 
-                # Extract title source and URI
-                title_source = ''
-                title_uri = ''
-                if feature.get('links'):
-                    for link in feature['links']:
-                        if link.get('type') == 'primaryTopicOf':
-                            title_uri = link.get('identifier', '')
-                            break
+                    if obj_type == "collection":
+                        dataset_id = str(feature.get('dataset_id', ''))
+                        dataset_title = feature.get('dataset', '')
+                        dataset_label = ''
+                        if hasattr(place, 'dataset') and place.dataset:
+                            dataset_label = getattr(place.dataset, 'label', '')
+                        row.extend([dataset_id, dataset_title, dataset_label])
 
-                # Parent information (if available from related)
-                parent_name = ''
-                parent_id = ''
-                if feature.get('related'):
-                    for rel in feature['related']:
-                        rel_type = rel.get('relationType', '')
-                        if rel_type in ['gvp:broaderPartitive', 'broader', 'partOf']:
-                            parent_name = rel.get('label', '')
-                            parent_id = rel.get('relationTo', '')
-                            break
+                    row = [
+                        field.replace('\t', ' ').replace('\n', ' ').replace('\r', '').strip()
+                        for field in row
+                    ]
 
-                # Build the row
-                row = [
-                    str(feature.get('id', '')),
-                    feature.get('title', ''),
-                    title_source,
-                    title_uri,
-                    ';'.join(str(c) for c in feature.get('ccodes', [])),
-                    matches,
-                    names,
-                    types,
-                    aat_types,
-                    parent_name,
-                    parent_id,
-                    lon,
-                    lat,
-                    geowkt,
-                    geo_source,
-                    geo_id,
-                    start,
-                    end,
-                ]
+                    yield from write_text('\t'.join(row) + '\n')  # ← Changed from write_and_yield_text
 
-                # Add dataset information for collections
-                if obj_type == "collection":
-                    dataset_id = str(feature.get('dataset_id', ''))
-                    dataset_title = feature.get('dataset', '')
-                    # Get label from the actual dataset object if available
-                    dataset_label = ''
-                    if hasattr(place, 'dataset') and place.dataset:
-                        dataset_label = getattr(place.dataset, 'label', '')
-                    row.extend([dataset_id, dataset_title, dataset_label])
+        yield from finish()
 
-                # Escape tabs, newlines, and carriage returns in field values
-                row = [
-                    field.replace('\t', ' ').replace('\n', ' ').replace('\r', '').strip()
-                    for field in row
-                ]
-
-                yield from write_and_yield('\t'.join(row) + '\n')
-
-        # Finish gzip stream properly
-        gzip_file.close()
-        buffer.seek(0)
-        trailer = buffer.read()
-        if trailer:
-            if cache_file:
-                cache_file.write(trailer)
-            yield trailer
-
-    finally:
-        if cache_file:
+    except GeneratorExit:
+        if cache_file and not cache_file.closed:
             cache_file.close()
-            if os.path.exists(cache_filepath + '.tmp'):
-                os.rename(cache_filepath + '.tmp', cache_filepath)
+            if os.path.exists(cache_tmp):
+                os.remove(cache_tmp)
+        cache_file = None
+        raise
+    except Exception:
+        if cache_file and not cache_file.closed:
+            cache_file.close()
+            if os.path.exists(cache_tmp):
+                os.remove(cache_tmp)
+        cache_file = None
+        raise
+    finally:
+        if cache_file and not cache_file.closed:
+            cache_file.close()
+            if os.path.exists(cache_tmp):
+                os.remove(cache_tmp)
 
 
 @shared_task(bind=True)
 def build_cache(self, obj_type, obj_id, filetype='lpf'):
     """
     Celery task to build LPF or TSV cache file in background.
-    Preserves logging, atomic writes, revocation handling, and cleanup.
+    Delegates atomic cache writing to stream_live by passing cache_filepath.
     """
     cache_path = FileCache.get_cache_path(obj_type, obj_id, filetype)
     logger.info(f"Starting cache build for {filetype.upper()} {obj_type}:{obj_id}")
 
-    # Store task ID for potential cancellation
     FileCache.store_build_task_id(obj_type, obj_id, self.request.id, filetype)
 
     try:
@@ -490,30 +496,28 @@ def build_cache(self, obj_type, obj_id, filetype='lpf'):
         if not config:
             return f"Unsupported object type: {obj_type}"
 
-        # Get the object
         obj = config["model"].objects.get(pk=obj_id)
 
-        # Build the cache file atomically
-        with open(cache_path + '.tmp', 'wb', encoding='utf-8') as cache_file:
-            for chunk in stream_live(obj_type, obj, None, filetype=filetype, cache_filepath=None):
-                cache_file.write(chunk)
+        # Let stream_live manage the atomic cache write when cache_filepath provided
+        for _chunk in stream_live(obj_type, obj, None, filetype=filetype, cache_filepath=cache_path):
+            # Keep iterating to force generation. We don't need to write here;
+            # stream_live already writes to the .tmp and renames on completion.
+            # Check for abort/revoke periodically
+            if self.is_aborted():
+                # If revoked, remove tmp file if present
+                tmp = cache_path + '.tmp'
+                if os.path.exists(tmp):
+                    os.remove(tmp)
+                return f"Build task for {filetype.upper()} {obj_type}:{obj_id} was cancelled"
 
-                # Check if task has been revoked
-                if self.is_aborted():
-                    cache_file.close()
-                    if os.path.exists(cache_path + '.tmp'):
-                        os.remove(cache_path + '.tmp')
-                    return f"Build task for {filetype.upper()} {obj_type}:{obj_id} was cancelled"
-
-        # Atomically rename to final location
-        os.rename(cache_path + '.tmp', cache_path)
         logger.info(f"Finished cache build for {filetype.upper()} {obj_type}:{obj_id}")
-
         return f"Successfully built {filetype.upper()} cache for {obj_type}:{obj_id}"
 
     except Exception as e:
-        if os.path.exists(cache_path + '.tmp'):
-            os.remove(cache_path + '.tmp')
+        # Remove tmp on failure
+        tmp = cache_path + '.tmp'
+        if os.path.exists(tmp):
+            os.remove(tmp)
         return f"Failed to build {filetype.upper()} cache for {obj_type}:{obj_id}: {str(e)}"
 
     finally:
