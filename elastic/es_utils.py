@@ -218,72 +218,57 @@ def ccDecode(codes):
     return countries
 
 
-"""
-build query object qobj for ES
-"""
-
-
 def build_qobj(place):
+    qobj = {
+        "place_id": place.id,
+        "src_id": place.src_id,
+        "title": place.title,
+        "fclasses": list(set(place.fclasses)) if place.fclasses else [],
 
-    qobj = {"place_id": place.id,
-            "src_id": place.src_id,
-            "title": place.title,
-            "fclasses": list(set(place.fclasses)) if place.fclasses else []
-            }
+        # Country codes (ISO 2-letter, uppercase, unique)
+        "countries": list(set(c.upper() for c in place.ccodes if c)) if place.ccodes else [],
 
-    [links, ccodes, types, variants, parents, geoms] = [[], [], [], [], [], []]
+        # Place types (Getty AAT integer ids if available)
+        "placetypes": [
+            int(t.jsonb['identifier'].replace('aat:', ''))
+            for t in place.types.all()
+            if t.jsonb.get('identifier', '').startswith('aat:')
+        ],
 
-    # links
-    for l in place.links.all():
-        links.append(l.jsonb['identifier'])
-    qobj['links'] = links
+        # Name variants (including title, lowercase, unique)
+        "variants": list(set(
+            [place.title.lower()] +
+            [name.toponym.lower() for name in place.names.all()]
+        )),
 
-    # ccodes (2-letter iso codes)
-    for c in place.ccodes:
-        ccodes.append(c)
-    qobj['countries'] = list(set(place.ccodes))
+        # Parent relationships
+        "parents": [
+            rel.jsonb['label']
+            for rel in place.related.all()
+            if rel.jsonb.get('relationType') == 'gvp:broaderPartitive'
+        ],
 
-    # Collect valid types (AAT identifiers) ONLY
-    # If a PlaceType exists but lacks an identifier, we simply ignore it for now.
-    for t in place.types.all():
-        if t.jsonb.get('identifier') not in ['', None]:
-            types.append(t.jsonb['identifier'])
+        # Links (authority identifiers: gn, pleiades, loc, viaf, bnf, tgn, gov, cerl, gnd)
+        "authids": [l.jsonb['identifier'] for l in place.links.all()],
+    }
 
     # Check for missing metadata and apply minimal defaults
     # Principle: Only apply defaults if the place has NO AAT identifiers AND NO existing fclasses.
-    if not types and not qobj['fclasses']:
-        # Apply default fclasses
+    if not qobj['placetypes'] and not qobj['fclasses']:
         qobj['fclasses'] = ['P', 'S', 'A', 'T', 'H', 'L', 'R', 'X']
 
-    qobj['placetypes'] = list(set(types))
-
-    # Ensure variants list is robust
-    variants.append(place.title)  # Add the title itself
-    for name in place.names.all():
-        variants.append(name.toponym)
-
-    qobj['variants'] = list(set([v.lower() for v in variants]))
-
-    # parents
-    for rel in place.related.all():
-        if rel.jsonb['relationType'] == 'gvp:broaderPartitive':
-            parents.append(rel.jsonb['label'])
-    qobj['parents'] = parents
-
-    # geoms
+    # Geometry (representative point) - conditional
     if place.geom_count > 0:
         qobj['geom'] = place.repr_point
 
     return qobj
 
 
-"""
-Fetch place ids for a given whg_id
-HOTFIX: 2024-07-17 kg; added 'else:'; sometimes there are no hits
-"""
-
-
 def findPortalPlaces(whg_id):
+    """
+    Fetch place ids for a given whg_id
+    HOTFIX: 2024-07-17 kg; added 'else:'; sometimes there are no hits
+    """
     es = settings.ES_CONN
     # idx = 'whg'
     idx = settings.ES_WHG
@@ -314,12 +299,10 @@ def findPortalPlaces(whg_id):
     return ids
 
 
-"""
-Fetch place ids sharing a whg_id for a given place id
-"""
-
-
 def findPortalPIDs(pid):
+    """
+    Fetch place ids sharing a whg_id for a given place id
+    """
     es = settings.ES_CONN
     # idx = 'whg'
     idx = settings.ES_WHG
@@ -349,12 +332,10 @@ def findPortalPIDs(pid):
         return []
 
 
-"""
-summarize a WHG hit for analysis
-"""
-
-
 def profileHit(hit):
+    """
+    summarize a WHG hit for analysis
+    """
     _id = hit['_id']
     src = hit['_source']
     pid = src['place_id']

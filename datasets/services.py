@@ -6,7 +6,7 @@ import re
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import GEOSGeometry
 from django.db import transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Exists, OuterRef
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django_celery_results.models import TaskResult
@@ -52,35 +52,71 @@ def _get_hit_counts(task_id):
 
 def _filter_unreviewed_places(dataset, task_id, passnum, auth):
     """Filters unreviewed place IDs based on the pass number and authority."""
-    review_field = None
-    if auth in ["whg", "idx"]:
-        review_field = "review_whg"
-    elif auth.startswith("wd"):
-        review_field = "review_wd"
-    else:
-        review_field = "review_tgn"
-
-    logger.debug(f"🚨 Dataset ID: {dataset.id}, Task ID: {task_id}, Pass Number: {passnum}, Authority: {auth}")
-    # Accessioning example: Dataset ID: 1601, Task ID: 6fcade71-5035-4fa5-87bb-0ba7084d6ac0, Pass Number: 0and1, Authority: idx
+    review_field_map = {
+        "whg": "review_whg",
+        "idx": "review_whg",
+        "wd": "review_wd",
+        "wdlocal": "review_wd",
+        "tgn": "review_tgn"
+    }
+    review_field = review_field_map.get(auth, "review_tgn")
 
     if passnum.startswith("pass"):
         try:
             pass_int = int(passnum[4])
         except (IndexError, ValueError):
             pass_int = 10
-        cnt_pass = Hit.objects.values("place_id").filter(task_id=task_id, reviewed=False, query_pass=passnum).count()
-        current_passnum = passnum if cnt_pass > 0 else f"pass{pass_int + 1}"
-        hitplaces = Hit.objects.values("place_id").filter(
-            task_id=task_id, reviewed=False, query_pass=current_passnum
+
+        # Check if current pass has hits
+        cnt_pass = Hit.objects.filter(
+            task_id=task_id,
+            reviewed=False,
+            query_pass=passnum
+        ).exists()
+
+        current_passnum = passnum if cnt_pass else f"pass{pass_int + 1}"
+
+        has_unreviewed_hit = Exists(
+            Hit.objects.filter(
+                place_id=OuterRef('pk'),
+                task_id=task_id,
+                reviewed=False,
+                query_pass=current_passnum
+            )
         )
-        filter_kwargs = {f"{review_field}__in": [0]}
-        if passnum == "def":
-            filter_kwargs = {f"{review_field}__in": [2]}
-        return dataset.places.order_by("id").filter(pk__in=hitplaces, **filter_kwargs), current_passnum
+
+        filter_kwargs = {f"{review_field}__in": [2] if passnum == "def" else [0]}
+
+        return (
+            dataset.places.annotate(
+                has_hit=has_unreviewed_hit
+            ).filter(
+                has_hit=True,
+                **filter_kwargs
+            ).order_by("id"),
+            current_passnum
+        )
     else:
-        hitplaces = Hit.objects.values("place_id").filter(task_id=task_id, reviewed=False)
+        # Handle "def" or other pass numbers
+        has_unreviewed_hit = Exists(
+            Hit.objects.filter(
+                place_id=OuterRef('pk'),
+                task_id=task_id,
+                reviewed=False
+            )
+        )
+
         filter_kwargs = {f"{review_field}__in": [2] if passnum == "def" else [0, None]}
-        return dataset.places.order_by("id").filter(pk__in=hitplaces, **filter_kwargs), passnum
+
+        return (
+            dataset.places.annotate(
+                has_hit=has_unreviewed_hit
+            ).filter(
+                has_hit=True,
+                **filter_kwargs
+            ).order_by("id"),
+            passnum
+        )
 
 
 def _get_review_page_and_field(auth):
@@ -158,9 +194,12 @@ def _get_country_names(place):
     return countries
 
 
-def _build_feature_collection(records, raw_hits, is_reconciliation):
+def _build_feature_collection(records, raw_hits, is_reconciliation, max_features=500):
     """Creates a GeoJSON FeatureCollection for mapping."""
     features = []
+
+    if raw_hits.count() > max_features:
+        raw_hits = raw_hits[:max_features]
 
     def combine_and_simplify(geoms):
         """Simplify geometries or wrap in a GeometryCollection if mixed types."""

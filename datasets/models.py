@@ -545,6 +545,11 @@ class Hit(models.Model):
     class Meta:
         managed = True
         db_table = "hits"
+        indexes = [
+            models.Index(fields=['task_id', 'reviewed', 'query_pass'], name='hit_review_lookup'),
+            models.Index(fields=['place_id', 'task_id'], name='hit_place_task'),
+            models.Index(fields=['task_id', 'reviewed'], name='hit_task_reviewed'),
+        ]
 
 
 class DatasetUser(models.Model):

@@ -682,32 +682,27 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
     has_bounds = bounds.get('id', ['0']) != ['0']  # '0' is the default value for no bounds
     logger.info(f'bounds: {bounds if has_bounds else "None"}')
 
-    # Check if the query object contains a geometric shape.
+    # Check for point geometry (for proximity boosting)
     has_geom = 'geom' in qobj.keys()
-    logger.info(f'geom: {qobj["geom"] if has_geom else "None"}')
+    point_geom = qobj.get('geom') if has_geom else None
+    logger.info(f'geom: {point_geom if has_geom else "None"}')
 
     if has_bounds:
         area_filter = get_bounds_filter(bounds, 'wd')
-    if has_geom:
-        shape_filter = {"geo_shape": {
-            "location": {
-                "shape": {
-                    "type": qobj['geom']['type'],
-                    "coordinates": qobj['geom']['coordinates']},
-                "relation": "intersects"}
-        }}
+
     if has_countries:
         countries_match = {"terms": {"claims.P17": countries}}
 
-    # Construct the initial query (q0) to check for authid matches.
+    # Construct the initial query (q0) to check for authid matches
     q0 = {
+        "size": 10,
         "query": {
             "bool": {
                 "must": [
                     {
                         "bool": {
                             "should": [
-                                {"terms": {"authids": qobj['authids']}},  # Existing match on authids
+                                {"terms": {"authids": qobj['authids']}},
                                 {
                                     "bool": {
                                         "must": [
@@ -715,7 +710,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
                                             {"term": {"dataset": "wikidata"}}
                                         ]
                                     }
-                                },  # Match on wikidata IDs
+                                },
                                 {
                                     "bool": {
                                         "must": [
@@ -723,7 +718,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
                                             {"term": {"dataset": "geonames"}}
                                         ]
                                     }
-                                }  # Match on geonames IDs
+                                }
                             ],
                             "minimum_should_match": 1
                         }
@@ -733,19 +728,55 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
         }
     }
 
-    # Base query structure for subsequent queries (qbase).
-    qbase = {"query": {
-        "bool": {
-            "must": [
-                {"terms": {"variants.names": variants}}
-            ],
-            # boosts score if matched
-            "should": [
-                {"terms": {"authids": qobj['authids']}}
-            ],
-            "filter": []
+    # Base query structure for subsequent queries (qbase)
+    qbase = {
+        "size": 10,
+        "query": {
+            "bool": {
+                "must": [
+                    {"terms": {"variants.names": variants}}
+                ],
+                "should": [
+                    {"terms": {"authids": qobj['authids']}}
+                ],
+                "filter": []
+            }
         }
-    }}
+    }
+
+    # Add proximity boosting if point geometry available
+    if has_geom and point_geom:
+        lon, lat = point_geom
+
+        # Add proximity boosts to 'should' clause
+        qbase['query']['bool']['should'].extend([
+            {
+                "geo_distance": {
+                    "distance": "10km",
+                    "repr_point": {"lon": lon, "lat": lat},
+                    "boost": 4.0
+                }
+            },
+            {
+                "geo_distance": {
+                    "distance": "100km",
+                    "repr_point": {"lon": lon, "lat": lat},
+                    "boost": 1.0
+                }
+            }
+        ])
+
+        # Country match becomes a boost rather than filter
+        if has_countries:
+            qbase['query']['bool']['should'].append(countries_match)
+    elif has_countries:
+        # No geometry: country is a required match
+        qbase['query']['bool']['must'].append(countries_match)
+    elif has_bounds:
+        # Bounds filter as fallback
+        qbase['query']['bool']['filter'].append(area_filter)
+        if has_countries:
+            qbase['query']['bool']['should'].append(countries_match)
 
     # If exclude_geonames is True, add a must_not condition
     if exclude_geonames:
@@ -753,25 +784,11 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
         q0["query"]["bool"]["must_not"] = [exclude_condition]
         qbase["query"]["bool"]["must_not"] = [exclude_condition]
 
-    # Add spatial filter if available in qobj
-    if has_geom:
-        # shape_filter is polygon hull ~100km diameter
-        qbase['query']['bool']['filter'].append(shape_filter)
-        if has_countries:
-            qbase['query']['bool']['should'].append(countries_match)
-    elif has_countries:
-        # matches ccodes
-        qbase['query']['bool']['must'].append(countries_match)
-    elif has_bounds:
-        # area_filter (predefined region or study area)
-        qbase['query']['bool']['filter'].append(area_filter)
-        if has_countries:
-            qbase['query']['bool']['should'].append(countries_match)
-
-    # Create the q1 and q2 queries based on qbase
+    # Create q1 and q2 queries based on qbase
     q1 = deepcopy(qbase)
     # add types if any
-    q1['query']['bool']['must'].append({"terms": {"types.id": qtypes}})
+    if qtypes:
+        q1['query']['bool']['must'].append({"terms": {"types.id": qtypes}})
 
     q2 = deepcopy(qbase)
     if len(qobj['fclasses']) > 0:
@@ -815,6 +832,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
             else:
                 result_obj['missed'] = str(qobj['place_id']) + ': ' + qobj['title']
                 logger.info(f'No hits found for place {qobj["place_id"]}: {qobj["title"]}')
+
     result_obj['hit_count'] = hit_count
     return result_obj
 
@@ -857,56 +875,42 @@ def align_wdlocal(*args, **kwargs):
         qs = qs.filter(geoms__isnull=True)
 
     for place in qs:
-        # build query object
-        qobj = {"place_id": place.id,
-                "src_id": place.src_id,
-                "title": place.title,
-                "fclasses": place.fclasses or []}
+        qobj = {
+            "place_id": place.id,
+            "src_id": place.src_id,
+            "title": place.title,
+            "fclasses": place.fclasses or [],
 
-        [variants, geoms, types, ccodes, parents, links] = [[], [], [], [], [], []]
+            # Country codes (ISO 2-letter, uppercase, unique)
+            "countries": list(set(c.upper() for c in place.ccodes if c)) if place.ccodes else [],
 
-        # ccodes (2-letter iso codes)
-        for c in place.ccodes:
-            ccodes.append(c.upper())
-        qobj['countries'] = place.ccodes
+            # Place types (Getty AAT integer ids if available)
+            "placetypes": [
+                int(t.jsonb['identifier'].replace('aat:', ''))
+                for t in place.types.all()
+                if t.jsonb.get('identifier', '').startswith('aat:')
+            ],
 
-        # types (Getty AAT integer ids if available)
-        for t in place.types.all():
-            if t.jsonb['identifier'].startswith('aat:'):
-                types.append(int(t.jsonb['identifier'].replace('aat:', '')))
-        qobj['placetypes'] = types
+            # Name variants (including title, lowercase, unique)
+            "variants": list(set(
+                [place.title.lower()] +
+                [name.toponym.lower() for name in place.names.all()]
+            )),
 
-        # variants
-        variants.append(place.title)
-        for name in place.names.all():
-            variants.append(name.toponym)
-        qobj['variants'] = list(set(variants))
+            # Parent relationships
+            "parents": [
+                rel.jsonb['label']
+                for rel in place.related.all()
+                if rel.jsonb.get('relationType') == 'gvp:broaderPartitive'
+            ],
 
-        # parents
-        if len(place.related.all()) > 0:
-            for rel in place.related.all():
-                if rel.jsonb['relationType'] == 'gvp:broaderPartitive':
-                    parents.append(rel.jsonb['label'])
-            qobj['parents'] = parents
-        else:
-            qobj['parents'] = []
+            # Links (authority identifiers: gn, pleiades, loc, viaf, bnf, tgn, gov, cerl, gnd)
+            "authids": [l.jsonb['identifier'] for l in place.links.all()],
+        }
 
-        # geoms
-        if len(place.geoms.all()) > 0:
-            g_list = [g.jsonb for g in place.geoms.all()]
-            # make simple polygon hull for ES shape filter
-            qobj['geom'] = hullify(g_list)
-            # make a representative_point
-            # qobj['repr_point'] = pointy(g_list)
-
-        # 'P1566':'gn', 'P1584':'pleiades', 'P244':'loc', 'P214':'viaf', 'P268':'bnf', 'P1667':'tgn',
-        # 'P2503':'gov', 'P1871':'cerl', 'P227':'gnd'
-        # links
-        if len(place.links.all()) > 0:
-            l_list = [l.jsonb['identifier'] for l in place.links.all()]
-            qobj['authids'] = l_list
-        else:
-            qobj['authids'] = []
+        # Geometry (representative point) - conditional
+        if place.geom_count > 0:
+            qobj['geom'] = place.repr_point
 
         # TODO: ??? skip records that already have a Wikidata record in l_list
         # they are returned as Pass 0 hits right now

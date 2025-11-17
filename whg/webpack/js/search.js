@@ -287,7 +287,7 @@ Promise.all([
 
     //$('#advanced_search').hide();
 
-    initSimpleTypeahead('#search_input');
+    window.whgTypeahead = initSimpleTypeahead('#search_input');
 
 
     function deriveOuterBounds(period) {
@@ -680,7 +680,9 @@ function toggleButtonState() {
 
 function clearResults() { // Reset all inputs to default values
     searchDisabled = true;
-    $('#search_input').typeahead('close');
+    if (window.whgTypeahead && typeof window.whgTypeahead.closeDropdown === 'function') {
+        window.whgTypeahead.closeDropdown();
+    }
     $('#search_input').val('');
     $('#result_facets input[type="checkbox"]').prop('checked', false);
     $('#adv_checkboxes input').prop('checked', true);
