@@ -176,22 +176,9 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
             "type": "Feature",
             "id": feature.get("id"),
             "geometry": geom,  # GeoJSON geometry or None
-            "properties": {
-                "title": feature.get("title", ""),
-                "ccodes": feature.get("ccodes", []),
-                "fclasses": feature.get("fclasses", []),
-                "types": feature.get("types", []),
-                "names": feature.get("names", []),
-                "whens": feature.get("whens", []),
-                "links": feature.get("links", []),
-                "related": feature.get("related", []),
-                "descriptions": feature.get("descriptions", []),
-                "depictions": feature.get("depictions", []),
-                "dataset": feature.get("dataset", ""),
-                "dataset_id": feature.get("dataset_id"),
-                "src_id": feature.get("src_id"),
-                "url": feature.get("url"),
-            }
+            "properties": {k: feature.get(k) for k in
+                           ["title", "ccodes", "fclasses", "types", "names", "whens", "links", "related",
+                            "descriptions", "depictions", "dataset", "dataset_id", "src_id", "url"]}
         }
 
     def emit(b: bytes):
@@ -500,19 +487,23 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
         yield from finish()
 
+        if cache_file:
+            cache_file.close()
+            if cache_tmp and cache_filepath:
+                os.replace(cache_tmp, cache_filepath)
+
     except GeneratorExit:
+        # Client disconnected; remove tmp cache
         if cache_file and not cache_file.closed:
             cache_file.close()
-            if os.path.exists(cache_tmp):
+            if cache_tmp and os.path.exists(cache_tmp):
                 os.remove(cache_tmp)
-        cache_file = None
         raise
     except Exception:
         if cache_file and not cache_file.closed:
             cache_file.close()
-            if os.path.exists(cache_tmp):
+            if cache_tmp and os.path.exists(cache_tmp):
                 os.remove(cache_tmp)
-        cache_file = None
         raise
     finally:
         if cache_file and not cache_file.closed:
