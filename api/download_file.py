@@ -161,6 +161,39 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
     # gzip mode: 31 = 16 + 15 (gzip header + max window)
     compressor = zlib.compressobj(level=6, method=zlib.DEFLATED, wbits=31)
 
+    def lpf_feature_from_serialized(feature):
+        """
+        Transform a PlaceFeatureSerializer output into a valid LPF/GeoJSON Feature.
+        """
+        # Pick primary geometry if available
+        geom = None
+        if feature.get('geoms'):
+            primary_geom = feature['geoms'][0]
+            geom = primary_geom.get('geojson') or primary_geom.get('geom')
+
+        # Construct LPF feature
+        return {
+            "type": "Feature",
+            "id": feature.get("id"),
+            "geometry": geom,  # GeoJSON geometry or None
+            "properties": {
+                "title": feature.get("title", ""),
+                "ccodes": feature.get("ccodes", []),
+                "fclasses": feature.get("fclasses", []),
+                "types": feature.get("types", []),
+                "names": feature.get("names", []),
+                "whens": feature.get("whens", []),
+                "links": feature.get("links", []),
+                "related": feature.get("related", []),
+                "descriptions": feature.get("descriptions", []),
+                "depictions": feature.get("depictions", []),
+                "dataset": feature.get("dataset", ""),
+                "dataset_id": feature.get("dataset_id"),
+                "src_id": feature.get("src_id"),
+                "url": feature.get("url"),
+            }
+        }
+
     def emit(b: bytes):
         """Write to cache and yield a chunk."""
         if not b:
@@ -252,7 +285,8 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                         first = False
 
                     feature = PlaceFeatureSerializer(place, context={"request": request}).data
-                    yield from write_text(json.dumps(feature))
+                    lpf_feature = lpf_feature_from_serialized(feature)
+                    yield from write_text(json.dumps(lpf_feature))
 
             yield from write_text(']')
             yield from write_text('}')
