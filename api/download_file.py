@@ -169,6 +169,11 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
             cache_file.write(b)
         yield b
 
+    def sync_flush():
+        chunk = compressor.flush(zlib.Z_SYNC_FLUSH)
+        if chunk:
+            yield from emit(chunk)
+
     def write_text(text: str):
         """Compress text and yield chunks."""
         if not text:
@@ -177,6 +182,8 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
         out = compressor.compress(data)
         if out:
             yield from emit(out)
+        # force early output
+        yield from sync_flush()
 
     def finish():
         """Flush gzip trailer and finalize cache."""
