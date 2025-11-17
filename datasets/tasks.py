@@ -687,12 +687,6 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
     point_geom = qobj.get('geom') if has_geom else None
     logger.info(f'geom: {point_geom if has_geom else "None"}')
 
-    if has_bounds:
-        area_filter = get_bounds_filter(bounds, 'wd')
-
-    if has_countries:
-        countries_match = {"terms": {"claims.P17": countries}}
-
     # Construct the initial query (q0) to check for authid matches
     q0 = {
         "size": 10,
@@ -728,6 +722,15 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
         }
     }
 
+    # Apply hard filters for countries and bounds
+    filters = []
+    if has_countries:
+        countries_match = {"terms": {"claims.P17": countries}}
+        filters.append(countries_match)
+    if has_bounds:
+        area_filter = get_bounds_filter(bounds, 'wd')
+        filters.append(area_filter)
+
     # Base query structure for subsequent queries (qbase)
     qbase = {
         "size": 10,
@@ -739,7 +742,7 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
                 "should": [
                     {"terms": {"authids": qobj['authids']}}
                 ],
-                "filter": []
+                "filter": filters
             }
         }
     }
@@ -765,18 +768,6 @@ def es_lookup_wdlocal(qobj, *args, logger=None, **kwargs):
                 }
             }
         ])
-
-        # Country match becomes a boost rather than filter
-        if has_countries:
-            qbase['query']['bool']['should'].append(countries_match)
-    elif has_countries:
-        # No geometry: country is a required match
-        qbase['query']['bool']['must'].append(countries_match)
-    elif has_bounds:
-        # Bounds filter as fallback
-        qbase['query']['bool']['filter'].append(area_filter)
-        if has_countries:
-            qbase['query']['bool']['should'].append(countries_match)
 
     # If exclude_geonames is True, add a must_not condition
     if exclude_geonames:
@@ -1060,12 +1051,11 @@ def es_lookup_idx(qobj, *, bounds=None):
     has_bounds = bounds and bounds.get("id") != ["0"]
     point_search = qobj.get('geom') if "geom" in qobj else None
 
-
     # Only strict, non-scoring filters (Country Code, Bounds)
     filters = []
     if has_countries:
         filters.append({"terms": {"ccodes": qobj["countries"]}})
-    elif has_bounds:
+    if has_bounds:
         filters.append(get_bounds_filter(bounds, "whg"))
 
     # ---------- pass 0 : identifier matches ----------
