@@ -147,7 +147,8 @@ Promise.all([
             highlight: true,
         });
 
-        const featureCollection = whg_map.getSource('places')._data;
+        const dataWrapper = whg_map.getSource('places')._data;
+        const featureCollection = dataWrapper.geojson;
 
         if ($clickedResult.attr('data-map-clicked') === 'true') { // Scroll table
             $clickedResult.removeAttr('data-map-clicked');
