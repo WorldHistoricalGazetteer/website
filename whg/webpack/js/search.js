@@ -851,12 +851,17 @@ function renderResults(data, fromStorage = false) {
             window.location.href = `/places/${id}/${path}`;
         })
         .on('click', '.unlinked', function () {
+            const isRevealing = $(this).hasClass('reveal');
             $(this)
                 .blur()
-                .text($(this).hasClass('reveal') ? 'Hide unlinked results' : 'Show unlinked results')
+                .text(isRevealing ? 'Hide unlinked results' : 'Show unlinked results')
                 .toggleClass('reveal');
             let $resultsToToggle = $(this).parent('div').nextAll('.result');
-            $resultsToToggle.toggle();
+            if (isRevealing) {
+                $resultsToToggle.removeClass('hidden').show();
+            } else {
+                $resultsToToggle.addClass('hidden').hide();
+            }
         })
         .find('.more-or-less')
         .toggleTruncate();
