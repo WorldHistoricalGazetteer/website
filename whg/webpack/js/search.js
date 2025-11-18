@@ -147,23 +147,24 @@ Promise.all([
             highlight: true,
         });
 
-        const dataWrapper = whg_map.getSource('places')._data;
-        const featureCollection = dataWrapper.geojson;
+        const featureCollection = whg_map.getSource('places')._data?.geojson;
 
         if ($clickedResult.attr('data-map-clicked') === 'true') { // Scroll table
             $clickedResult.removeAttr('data-map-clicked');
             $clickedResult.scrollintoview({duration: 'slow'});
         } else if ($clickedResult.attr('data-map-initialising') === 'true') {
             $clickedResult.removeAttr('data-map-initialising');
-            whg_map.fitViewport(bbox(featureCollection), defaultZoom);
+            if (featureCollection) {
+                whg_map.fitViewport(bbox(featureCollection), defaultZoom);
+            } else {
+                console.warn("Cannot fit map viewport: featureCollection data is missing.");
+            }
         } else {
-
-
-            console.log(featureCollection, index)
-            console.log(featureCollection.features[index])
-            console.log('bbox(featureCollection.features[index])', bbox(featureCollection.features[index]))
-
-            whg_map.fitViewport(bbox(featureCollection.features[index]), defaultZoom);
+            if (featureCollection?.features?.length > index) {
+                whg_map.fitViewport(bbox(featureCollection.features[index]), defaultZoom);
+            } else {
+                console.warn(`Cannot fit map viewport: Feature at index ${index} is missing or array is empty.`);
+            }
         }
 
         $('.result').removeClass('selected');
