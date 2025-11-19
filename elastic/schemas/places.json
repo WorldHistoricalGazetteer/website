@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "number_of_shards": 3,
+    "number_of_replicas": 1
+  },
+  "mappings": {
+    "properties": {
+      "place_id": { "type": "keyword" },
+      "toponyms": { "type": "keyword" },
+      "canonical": { "type": "keyword" },
+      "published": { "type": "boolean" },
+      "types": {
+        "properties": {
+          "identifier": { "type": "keyword" },
+          "label": { "type": "keyword" },
+          "sourceLabel": { "type": "text" },
+          "src_label": { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 256 } } }
+        }
+      },
+      "fclasses": { "type": "keyword" },
+      "ccodes": { "type": "keyword" },
+      "children": { "type": "keyword" },
+      "relations": {
+        "properties": {
+          "label": { "type": "text" },
+          "relationTo": { "type": "keyword" },
+          "relationType": { "type": "keyword" }
+        }
+      },
+      "timespans": { "type": "integer_range" },
+      "minmax": { "type": "integer_range" },
+      "location": { "type": "geo_shape", "ignore_malformed": true, "coerce": true }
+    }
+  }
+}
