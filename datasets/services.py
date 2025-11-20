@@ -429,6 +429,14 @@ def _process_matching_decisions(request, place, formset, task, auth, authname, k
     if hits_to_update:
         Hit.objects.bulk_update(hits_to_update, ['reviewed'], batch_size=100)
 
+    # Mark ALL hits for this place as reviewed, not just those in formset
+    # This ensures places with many hits don't get orphaned unreviewed hits
+    Hit.objects.filter(
+        place_id=place.id,
+        task_id=tid,
+        reviewed=False
+    ).update(reviewed=True)
+
     # --- Handle indexing for align_idx ---
     update_fields = [review_field]
     if task.task_name == "align_idx":
