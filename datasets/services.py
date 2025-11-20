@@ -85,7 +85,7 @@ def _filter_unreviewed_places(dataset, task_id, passnum, auth):
             )
         )
 
-        filter_kwargs = {f"{review_field}__in": [2] if passnum == "def" else [0]}
+        filter_kwargs = {f"{review_field}__in": [2] if passnum == "def" else [0, None]}
 
         return (
             dataset.places.annotate(
