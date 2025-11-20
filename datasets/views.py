@@ -535,13 +535,25 @@ class DatasetStatusView(LoginRequiredMixin, UpdateView, DatasetContextMixin,
 
         # Pass counts
         if task_wdgn:
-            hits_wdgn = Hit.objects.filter(task_id=task_wdgn.task_id, reviewed=False)
+            # Get non-deferred places only for pass counting
+            non_deferred_place_ids = ds.places.exclude(review_wd=2).values_list('id', flat=True)
+            hits_wdgn = Hit.objects.filter(
+                task_id=task_wdgn.task_id,
+                reviewed=False,
+                place_id__in=non_deferred_place_ids
+            )
             context['wdgn_passes'] = self.count_pass_hits(hits_wdgn)
         else:
             context['wdgn_passes'] = {}
 
         if task_idx:
-            hits_idx = Hit.objects.filter(task_id=task_idx.task_id, reviewed=False)
+            # Get non-deferred places only for pass counting
+            non_deferred_place_ids = ds.places.exclude(review_whg=2).values_list('id', flat=True)
+            hits_idx = Hit.objects.filter(
+                task_id=task_idx.task_id,
+                reviewed=False,
+                place_id__in=non_deferred_place_ids
+            )
             context['idx_passes'] = self.count_pass_hits(hits_idx)
         else:
             context['idx_passes'] = {}
