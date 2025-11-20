@@ -162,7 +162,7 @@
                 {% endif %}
                 <br/>
               Deferred: {{ wdgn_status.deferred }}
-                {% if wdgn_status.deferred != 'none' %};
+                {% if wdgn_status.deferred > 0 %};
                   <a href="{% url 'datasets:review' dsid=ds.id tid=task_wdgn.task_id passnum='def' %}">review</a>
                 {% endif %}
               </p>
@@ -260,7 +260,7 @@
                 <a href="{% url 'datasets:review' dsid=ds.id tid=task_idx.task_id passnum='0and1' %}">review</a>
                 <br/>
                 Deferred: {{ idx_status.deferred }}
-                {% if idx_status.deferred != 'none' %};
+                {% if idx_status.deferred > 0 %};
                   <a href="{% url 'datasets:review' dsid=ds.id tid=task_idx.task_id passnum='def' %}">review</a>
                 {% endif %}
               </p>
