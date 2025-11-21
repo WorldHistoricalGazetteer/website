@@ -20,12 +20,9 @@ services:
              npm install --include=dev --no-save && 
              mkdir -p /app/static && 
              npx webpack --config webpack.config.js"
-    cpu_shares: 256
-    cpus: 0.5
-    mem_limit: 1024m
-    memswap_limit: 1024m
-    blkio_config:
-      weight: 100
+    cpus: 4.0              # Use multiple cores: minimise build time, which affects other services
+    mem_limit: 4096m       # 4GB RAM
+    memswap_limit: 4096m
 
 networks:
   whgazetteer-org_whgazetteer-org:
