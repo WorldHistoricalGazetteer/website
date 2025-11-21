@@ -16,14 +16,14 @@ services:
     working_dir: /app
     command: >
       sh -c "git config --global --add safe.directory /app &&
-             npm install --include=dev && 
+             nice -n 19 npm install --include=dev && 
              mkdir -p /app/static && 
-             npx webpack --config webpack.config.js && echo 'WEBPACK FINISHED'"
+             nice -n 19 npx webpack --config webpack.config.js"
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '1.0'
+          memory: 1536M
 
 networks:
   whgazetteer-org_whgazetteer-org:
