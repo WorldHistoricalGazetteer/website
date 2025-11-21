@@ -1,7 +1,7 @@
 services:
   webpack-builder:
     networks:
-      - whgazetteer-org
+      - whgazetteer-org_whgazetteer-org
     platform: linux/amd64
     image: node:18
     container_name: webpack_builder_whgazetteer-org_main
@@ -25,5 +25,5 @@ services:
           memory: 2G
 
 networks:
-  whgazetteer-org:
+  whgazetteer-org_whgazetteer-org:
     external: true
