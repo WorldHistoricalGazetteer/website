@@ -1,5 +1,3 @@
-name: whgazetteer-org-webpack-build
-
 services:
   webpack-builder:
     platform: linux/amd64
