@@ -37,7 +37,7 @@ cd ~/sites/whgazetteer-org
 # Check if webpack-only mode
 if [[ "$1" == "-webpackonly" ]] || [[ "$1" == "--webpackonly" ]]; then
     echo -e "${BLUE}==> Running webpack build only...${NC}"
-    docker compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder
+    docker-compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder
     echo -e "${GREEN}==> Webpack build complete!${NC}"
     exit 0
 fi
@@ -51,11 +51,11 @@ sudo python3 ./server-admin/load_env.py
 # Check if webpack build is requested
 if [[ "$1" == "-webpack" ]] || [[ "$1" == "--webpack" ]]; then
     echo -e "${BLUE}==> Running webpack build...${NC}"
-    docker compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder
+    docker-compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder
 fi
 
 echo -e "${BLUE}==> Restarting services...${NC}"
-docker compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate
+docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate
 
 echo -e "${BLUE}==> Current running containers:${NC}"
 docker ps
