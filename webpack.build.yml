@@ -17,14 +17,21 @@ services:
     working_dir: /app
     command: >
       sh -c "git config --global --add safe.directory /app &&
-             nice -n 19 npm install --include=dev --no-save && 
+             npm install --include=dev --no-save && 
              mkdir -p /app/static && 
-             nice -n 19 npx webpack --config webpack.config.js"
+             npx webpack --config webpack.config.js"
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 1536M
+          cpus: '0.5'
+          memory: 1024M
+        reservations:
+          cpus: '0.25'
+          memory: 512M
+    cpu_shares: 256            # Low priority (default is 1024)
+    mem_swappiness: 0
+    blkio_config:
+      weight: 100              # Low I/O priority (default is 500)
 
 networks:
   whgazetteer-org_whgazetteer-org:
