@@ -63,8 +63,11 @@ $(function () {
     $("#coll_placelist").scrollTop(offset)
 
     window.remove_these = []
-    $(".nav-link").click(function () {
-        var tab = $(this).data('id')
+
+    // FIXED: Use Bootstrap's tab event instead of generic click handler
+    // This ensures tabs are properly shown before we manipulate visibility
+    $('#coll_tabs button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+        var tab = $(e.target).data('id')
         /*console.log(tab)*/
         if (tab == 'ds') {
             $("#coll_right_anno").addClass('hidden')
@@ -76,6 +79,12 @@ $(function () {
             }
             /*$("#coll_right_intro").addClass('hidden')*/
         }
+    })
+
+    // Also handle the main tab list (for switching between form, builder, and collaborators)
+    $('#tab-list button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
+        var target = $(e.target).attr('data-bs-target')
+        console.log('Main tab switched to:', target)
     })
 
     let dslist = []
@@ -724,5 +733,3 @@ $(function () {
 
     $(".col-place-card").first().click();
 }) // end doc ready
-
-
