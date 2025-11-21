@@ -14,7 +14,7 @@ services:
     command: >
       sh -c "npm install && 
              mkdir -p /app/static && 
-             npx webpack --config webpack.config.js"
+             npx webpack --config webpack.config.js --watch=false"
     deploy:
       resources:
         limits:
