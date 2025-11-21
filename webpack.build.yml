@@ -9,7 +9,10 @@ services:
       - /home/whgadmin/sites/whgazetteer-org:/app
       - node_modules_cache_whgazetteer-org:/app/node_modules
     working_dir: /app
-    entrypoint: ["/app/entrypoints/entrypoint-webpack.sh"]
+    command: >
+      sh -c "npm install && 
+             mkdir -p /app/static && 
+             npx webpack --config webpack.config.js"
     deploy:
       resources:
         limits:
