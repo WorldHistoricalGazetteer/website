@@ -9,17 +9,13 @@ services:
       - NODE_ENV=production
     volumes:
       - /home/whgadmin/sites/whgazetteer-org:/app
-      - node_modules_cache_whgazetteer-org:/app/node_modules
     working_dir: /app
     command: >
       sh -c "npm install && 
              mkdir -p /app/static && 
-             npx webpack --config webpack.config.js"
+             npx webpack --config webpack.config.js && echo 'WEBPACK FINISHED'"
     deploy:
       resources:
         limits:
           cpus: '2'
           memory: 2G
-
-volumes:
-  node_modules_cache_whgazetteer-org:
