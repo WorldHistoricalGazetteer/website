@@ -5,6 +5,8 @@ services:
     container_name: webpack_builder_whgazetteer-org_main
     logging:
       driver: local
+    environment:
+      - NODE_ENV=production
     volumes:
       - /home/whgadmin/sites/whgazetteer-org:/app
       - node_modules_cache_whgazetteer-org:/app/node_modules
@@ -12,7 +14,7 @@ services:
     command: >
       sh -c "npm install && 
              mkdir -p /app/static && 
-             npx webpack --config webpack.config.js --watch=false"
+             npx webpack --config webpack.config.js"
     deploy:
       resources:
         limits:
