@@ -1,15 +1,16 @@
 services:
   webpack-builder:
+    networks:
+      - whgazetteer-org
     platform: linux/amd64
     image: node:18
     container_name: webpack_builder_whgazetteer-org_main
     logging:
       driver: local
+    env_file:
+      - .env/.env
     environment:
       - NODE_ENV=production
-      - SENTRY_AUTH_TOKEN=
-      - SENTRY_ORG=
-      - SENTRY_PROJECT=
     volumes:
       - /home/whgadmin/sites/whgazetteer-org:/app
     working_dir: /app
@@ -22,3 +23,7 @@ services:
         limits:
           cpus: '2'
           memory: 2G
+
+networks:
+  whgazetteer-org:
+    external: true
