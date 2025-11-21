@@ -1,0 +1,26 @@
+services:
+  webpack-builder:
+    networks:
+      - whgazetteer-org
+    platform: linux/amd64
+    image: node:18
+    container_name: webpack_builder_whgazetteer-org_main
+    logging:
+      driver: local
+    volumes:
+      - /home/whgadmin/sites/whgazetteer-org:/app
+      - node_modules_cache_whgazetteer-org:/app/node_modules
+    working_dir: /app
+    entrypoint: ["/app/entrypoints/entrypoint-webpack.sh"]
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+volumes:
+  node_modules_cache_whgazetteer-org:
+
+networks:
+  whgazetteer-org:
+    external: true
