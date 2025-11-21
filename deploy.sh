@@ -43,7 +43,7 @@ if [[ "$1" == "-webpackonly" ]] || [[ "$1" == "--webpackonly" ]]; then
 fi
 
 echo -e "${BLUE}==> Pulling latest changes from git...${NC}"
-git pull origin main
+git pull --rebase origin main
 
 echo -e "${BLUE}==> Loading environment variables...${NC}"
 sudo python3 ./server-admin/load_env.py
