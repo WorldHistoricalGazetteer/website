@@ -7,21 +7,21 @@ cat ~/sites/env_template.py
 
 ## Deploy directly from `main`
 
-### Without WebPack Build
+### If necessary, include WebPack Build (for Javascript & CSS bundling)
 
 ```bash
-cd ~/sites/whgazetteer-org
+cd ~/sites/whgazetteer-org && \
 git pull origin main && sudo python3 ./server-admin/load_env.py && \
+docker-compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder && \
 docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
 docker ps
 ```
 
-### With WebPack Build
+### Otherwise, update and restart without WebPack Build
 
 ```bash
-cd ~/sites/whgazetteer-org
+cd ~/sites/whgazetteer-org && \
 git pull origin main && sudo python3 ./server-admin/load_env.py && \
-ENV_CONTEXT=whgazetteer-org npm run build:prod && \
 docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
 docker ps
 ```
