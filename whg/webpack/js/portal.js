@@ -65,11 +65,34 @@ function waitMapLoad() {
             if (!!mapParameters.temporalControl) {
                 new Historygram(whg_map, allts, dateRangeChanged);
             }
-            ;
 
-            const ecoAdminFeatures = whg_map.queryRenderedFeatures(whg_map.project(centroid)).filter(feature => {
-                return feature.source === 'ecoregions' || feature.source === 'natural_earth';
-            });
+            // 1. Initialize empty to prevent reference errors later
+            let ecoAdminFeatures = [];
+
+            // 2. Wrap the projection and query in a Try-Catch block
+            try {
+                // Only attempt this if centroid looks valid
+                if (centroid && Array.isArray(centroid) && centroid.length === 2) {
+                    const screenPoint = whg_map.project(centroid);
+
+                    // Ensure the projected point is actually within the canvas dimensions
+                    const canvas = whg_map.getCanvas();
+                    const isOnScreen = screenPoint.x >= 0 && screenPoint.x <= canvas.width &&
+                        screenPoint.y >= 0 && screenPoint.y <= canvas.height;
+
+                    if (isOnScreen) {
+                        ecoAdminFeatures = whg_map.queryRenderedFeatures(screenPoint).filter(feature => {
+                            return feature.source === 'ecoregions' || feature.source === 'natural_earth';
+                        });
+                    } else {
+                        console.warn("Centroid is off-screen; skipping biome lookup.");
+                    }
+                }
+            } catch (error) {
+                console.warn("Could not query eco/admin features (Terrain not ready):", error);
+            }
+
+            // 3. Run loop on the result (safely)
             ecoAdminFeatures.forEach(feature => {
                 if (feature.layer['source-layer'] === 'biomes' && !!feature.properties.label) {
                     geoData.biome.name = feature.properties.label;
