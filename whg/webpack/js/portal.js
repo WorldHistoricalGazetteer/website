@@ -108,8 +108,13 @@ function waitMapLoad() {
             whg_map
                 .setZoom(mapParameters.maxZoom) // Maximum resolution for terrain elevation query
                 .once('idle', function () {
-                    const elevation = -whg_map.queryTerrainElevation([4.892321, 52.372748], {exaggerated: false}); // Using datum coordinates of European Vertical Reference System
-                    console.log('raw elevation', elevation);
+                    let elevation = 0;
+                    try {
+                        elevation = -whg_map.queryTerrainElevation(centroid, {exaggerated: false});
+                        console.log('raw elevation', elevation);
+                    } catch (error) {
+                        console.warn("Could not query terrain elevation:", error);
+                    }
                     geoData.elevation = Math.max(0, Math.floor(elevation));
                     whg_map.getContainer().style.opacity = 1;
                     resolve();
