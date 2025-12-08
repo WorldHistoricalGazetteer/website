@@ -1,11 +1,34 @@
-## Deploy Staging
+## Preliminary Check of Environment Variables
 
-- Firstly, check current status of https://dev.whgazetteer.org/ so that the impact of any deployment can be gauged.
 - Ensure that `~/sites/env_template.py` is up-to-date, including the `DOCKER_IMAGE_TAG`:
 ```bash
 cat ~/sites/env_template.py
 ```
-- Then switch to the `dev-whgazetteer-org` site, pull updates, and update environment:
+
+## Deploy directly from `main`
+
+### If necessary, include WebPack Build (for Javascript & CSS bundling)
+
+```bash
+cd ~/sites/whgazetteer-org && \
+git pull origin main && sudo python3 ./server-admin/load_env.py && \
+docker-compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder && \
+docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
+docker ps
+```
+
+### Otherwise, update and restart without WebPack Build
+
+```bash
+cd ~/sites/whgazetteer-org && \
+git pull origin main && sudo python3 ./server-admin/load_env.py && \
+docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
+docker ps
+```
+
+## Deploy Staging
+
+- Switch to the `dev-whgazetteer-org` site, pull updates, and update environment:
 ```bash
 cd ~/sites/dev-whgazetteer-org
 git pull origin staging && sudo python3 ./server-admin/load_env.py
