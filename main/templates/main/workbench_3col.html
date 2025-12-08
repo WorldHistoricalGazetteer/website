@@ -8,7 +8,11 @@
 
 {% block extra_head %}
 <link href="{% static 'webpack/workbench.bundle.css' %}" rel="stylesheet"/>
-<style></style>
+<style>
+  #wb_columns .quick-start {
+    position: unset;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
