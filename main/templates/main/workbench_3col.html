@@ -29,18 +29,18 @@
       <div class="workbench-column-inner">
         <div class="content-group">
           <span class="path-number d-block bg-lightgrey ps-1">1
-            <span class="path-title">Individual Datasets</span>
+            <span class="path-title">Datasets (Upload Structured Place Data)</span>
             <span class="float-end me-1 hide-on-narrow">
               <img src="{% static 'images/noun-spreadsheet.svg' %}" height="26"/> </span>
           </span>
-          <p class="ps-1 mb-1">Upload, augment and describe place data. You can download your augmented dataset for offline use in other software, and you can submit it for editorial review and publication in the WHG.</p>
+          <p class="ps-1 mb-1">Use this pathway if you have a spreadsheet, CSV, or GeoJSON containing place records—such as historical towns, administrative units, archaeological sites, mills, villages, etc. This is for contributors who want to publish or share raw place data with WHG so it can be reconciled, mapped, and linked to other datasets.</p>
         </div>
         <div class="quick-start">
         <mark-g-lite class="text-uppercase ps-1 small mt-3">quick start</mark-g-lite>
         {% if user.is_anonymous %}
           <ol>
             <li>Log in (register first if necessary)</li>
-            <li>From your My Data dashboard, add a Dataset (<span class="")</li>
+            <li>From your My Data dashboard, add a Dataset</li>
             <li>Instructions on the "Add dataset" form page will guide you</li>
           </ol>
         {% else %}
@@ -49,7 +49,7 @@
           <li>Instructions on the "Upload dataset" form page will guide you</li>
           </ol>
         {% endif %}
-        <div class="help-matches mt-2 ps-1" data-url="100-Tutorials.html#choosing-an-upload-data-format-lpf-or-lp-tsv">
+        <div class="help-matches mt-2 ps-1" data-url="https://docs.whgazetteer.org/content/guides/workbench.html#individual-datasets">
           <a class="btn btn-sm btn-outline-primary">Learn more</a>
         </div>
         </div> <!-- quick-start -->
@@ -59,18 +59,16 @@
       <div class="workbench-column-inner">
         <div class="content-group">
           <span class="path-number d-block bg-lightgrey ps-1">2
-            <span class="path-title">Multiple Datasets</span>
+            <span class="path-title">Dataset Collections (Combine Multiple Datasets)</span>
             <span class="float-end me-1 hide-on-narrow">
               <img src="{% static 'images/008-collect.png' %}" height="32"/></span>
           </span>
-          <p>Gather multiple indexed datasets into a WHG <i>Dataset Collection</i>, link those records from each that refer
-            to a single place, and publish the compiled information as a single gazetteer.</p>
-
+          <p>Use this pathway if you want to integrate several published datasets into a single collection for comparison or analysis. This is ideal for researchers combining different sources (e.g., colonial gazetteers + archaeological sites + modern administrative data) to see overlaps or differences across datasets.</p>
         </div>
         <div class="quick-start">
           <mark-g-lite class="text-uppercase ps-1 small mt-3">quick start</mark-g-lite>
           <p class="mt-2 ms-1 smallish">See <b>Pathway 1</b>&mdash;Dataset Collections begin with individual datasets!</p>
-          <div class="help-matches mt-4 ps-1" data-url="100-Tutorials.html#create-and-publish-a-dataset-collection">
+          <div class="help-matches mt-4 ps-1" data-url="https://docs.whgazetteer.org/content/guides/workbench.html#multiple-datasets">
           <a class="btn btn-sm btn-outline-primary">Learn more</a>
           </div>
         </div>
@@ -80,15 +78,16 @@
       <div class="workbench-column-inner">
         <div class="content-group">
           <span class="path-number d-block bg-lightgrey ps-1">3
-            <span class="path-title">Place Collections</span>
+            <span class="path-title">Place Collections (Curate Places for Teaching or Thematic Storytelling)</span>
             <span class="float-end me-1 hide-on-narrow ">
               <img src="{% static 'images/noun-spreadsheet.svg' %}" height="20"
                    style="margin-right:-8px;"/>
               <img src="{% static 'images/noun-anno-grey.svg' %}" height="30"/>
             </span>
           </span>
-          <p class="ps-1 mb-1">Collect, sequence, annotate, and publish place records; or create
-            collection building groups for teaching and collaboration.</p>
+          <p class="ps-1 mb-1">Use this pathway if you want to select and curate places manually to tell a story, build a historical narrative, or design a teaching assignment.
+  This is for creating collections such as <em>“Industrial Bombay,” “Silk Road Cities,”</em> or <em>“Women in the Freedom Movement.”</em>
+  Place Collections are not data uploads—they are curated selections meant for interpretation, pedagogy, or thematic exploration.</p>
           <p class="mb-1"><a href="/collections/50/browse_pl" target="_blank">
               Example Place Collection</a></p>
           <p class="mb-1"><a data-whg-modal="/contact_modal/">Request <i>group leader</i> access</a></p>
@@ -107,7 +106,7 @@
             </ol>
           {% endif %}
 
-          <div class="help-matches mt-2 ps-1" data-url="100-Tutorials.html#create-and-publish-a-place-collection">
+          <div class="help-matches mt-2 ps-1" data-url="https://docs.whgazetteer.org/content/guides/workbench.html#thematic-place-collections">
             <a class="btn btn-sm btn-outline-primary">Learn more</a>
           </div>
           </div> <!-- quick-start -->
