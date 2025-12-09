@@ -1,9 +1,9 @@
 #home_banner img.logo_responsive {
-    filter: drop-shadow(2px 2px 3px grey);
+    filter: drop-shadow(2px 2px 3px #dddddd);
 }
 
 .text-shadow, .accordion-item h2 button {
-    text-shadow: 2px 2px 3px grey;
+    text-shadow: 2px 2px 3px #dddddd;
 }
 
 .accordion-item h2 button:hover {
