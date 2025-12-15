@@ -1242,14 +1242,41 @@ maplibregl.Map = function (options = {}) {
     mapInstance.initOptions = chosenOptions;
 
     mapInstance.on('error', (e) => {
-        console.error('MapLibre runtime error:', e);
-        // Check if it's a critical WebGL error
+        // Identify if this is a "Fatal" error (WebGL or Critical Resource Failure)
+        let isFatal = false;
+        let userMessage = 'The map encountered an error.';
+
+        // Check for WebGL/Context errors
         if (e.error && (
             e.error.message?.includes('WebGL') ||
             e.error.message?.includes('context') ||
             e.error.message?.includes('CONTEXT_LOST')
         )) {
-            handleMapCreationFailure(chosenOptions, 'Runtime WebGL error', mapInstance);
+            isFatal = true;
+            userMessage = 'Graphics context lost. Please refresh.';
+        }
+
+        // Check for Style/Network Fetch errors
+        else if (e.error && (
+             (e.error.status && e.error.status >= 400) || // Catch 404, 500, etc.
+             (e.error.message && (
+                 e.error.message.includes('Fetch') ||
+                 e.error.message.includes('Network') ||
+                 e.error.message.includes('Failed to load') ||
+                 e.error.message.includes('style') // Catch style parsing/loading errors
+             ))
+        )) {
+            isFatal = true;
+            userMessage = 'Unable to load map data or style. Please check your connection.';
+            console.warn('Map resource failed to load:', e.error);
+        }
+
+        // If fatal, trigger UI overlay
+        if (isFatal) {
+            handleMapCreationFailure(chosenOptions, userMessage, mapInstance);
+        } else {
+            // Log non-fatal errors (like missing tiles or minor warnings)
+            console.error('MapLibre runtime error:', e);
         }
     });
 
