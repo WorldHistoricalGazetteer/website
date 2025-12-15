@@ -35,32 +35,53 @@ def format_url(type, id, obj):
 def get_creators(obj):
     try:
         citation_data = json.loads(obj.citation_csl) if isinstance(obj.citation_csl, str) else obj.citation_csl
-    except json.JSONDecodeError:
-        logger.error("Error decoding citation_csl JSON.")
+    except (json.JSONDecodeError, TypeError):
+        logger.warning(f"Invalid JSON in citation_csl for object {obj.id}")
         return []
 
-    # Ensure this is a list before getting 'author'
     if not isinstance(citation_data, dict):
         return []
 
     creators = citation_data.get('author', [])
-    return [
-        {
-            "nameType": "Organizational" if "literal" in creator else "Personal",
-            "name": creator.get("literal") or f"{creator['family']}, {creator.get('given', '')}",
-            **({"givenName": creator.get("given"), "familyName": creator["family"]} if "family" in creator else {}),
-            **({
-                "nameIdentifiers": [
-                    {
-                        "nameIdentifier": creator["ORCID"],
-                        "nameIdentifierScheme": "ORCID",
-                        "schemeURI": "https://orcid.org"
-                    }
-                ]
-            } if "ORCID" in creator else {})
+    valid_creators = []
+
+    for creator in creators:
+        # Skip garbage entries
+        if not isinstance(creator, dict):
+            continue
+
+        # Determine Name
+        literal_name = creator.get("literal")
+        family_name = creator.get("family")
+        given_name = creator.get("given", "")
+
+        # If we have no name source, skip this creator
+        if not literal_name and not family_name:
+            continue
+
+        creator_entry = {
+            "nameType": "Organizational" if literal_name else "Personal",
+            "name": literal_name or f"{family_name}, {given_name}".strip(", "),
         }
-        for creator in creators
-    ]
+
+        # Add Personal specific fields
+        if family_name:
+            creator_entry["givenName"] = given_name
+            creator_entry["familyName"] = family_name
+
+        # Add ORCID if present
+        if "ORCID" in creator:
+            creator_entry["nameIdentifiers"] = [
+                {
+                    "nameIdentifier": creator["ORCID"],
+                    "nameIdentifierScheme": "ORCID",
+                    "schemeURI": "https://orcid.org"
+                }
+            ]
+
+        valid_creators.append(creator_entry)
+
+    return valid_creators
 
 
 def get_bbox(obj):
@@ -103,7 +124,7 @@ def get_doi_metadata(type, id):
     # Check for core metadata requirements before building the API payload
     creators_list = get_creators(obj)
     if not creators_list:
-        logger.error(f"DOI Failed: Object {type}:{id} has no valid creators (author field missing/empty in citation_csl).")
+        logger.warning(f"DOI Failed: Object {type}:{id} has no valid creators (author field missing/empty in citation_csl).")
         return obj, None
 
     metadata = {
@@ -172,7 +193,7 @@ def doi(type, id, event='publish'):
     obj, attributes = get_doi_metadata(type, id)
 
     if not obj or not attributes:
-        logger.error(f"DOI metadata could not be retrieved for type '{type}' and id '{id}'")
+        logger.warning(f"DOI update aborted for '{type}:{id}' due to missing metadata.")
         return None
 
     # Read `doi` & `public` fields from the object
