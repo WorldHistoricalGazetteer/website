@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 # Change user password
-/app/entrypoints/user_pwd.sh
+#/app/entrypoints/user_pwd.sh
 
 # Wait for the database to be ready
 source /app/entrypoints/wait_for_db.sh
