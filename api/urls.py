@@ -1,6 +1,6 @@
 # api.urls
 
-from django.urls import path
+from django.urls import path, re_path
 from rest_framework.urlpatterns import format_suffix_patterns
 
 from . import views
@@ -30,8 +30,18 @@ urlpatterns = [
 
     # use: single place for ds_browse:: PlaceSerializer
     # also search.html if search scope = 'db'
-    path('place/<int:pk>/', views.PlacesDetailAPIView.as_view(), name='place-detail'),
-    path('place/<str:pk_list>/', views.PlacesDetailAPIView.as_view(), name='places-detail'),
+
+    # 1. STRICT: Valid Single ID (e.g., "place/1234/")
+    # Matches only if the argument is pure digits
+    re_path(r'^place/(?P<pk>\d+)/$', views.PlacesDetailAPIView.as_view(), name='place-detail'),
+
+    # 2. STRICT: Valid ID List (e.g., "place/1234-5678/")
+    # Matches digits separated by dashes.
+    re_path(r'^place/(?P<pk_list>\d+(?:-\d+)+)/$', views.PlacesDetailAPIView.as_view(), name='places-detail'),
+
+    # 3. THE SINKHOLE: Catches EVERYTHING else under "place/"
+    # This regex matches "place/" followed by literally anything (.+)
+    re_path(r'^place/.+/$', views.bad_request_trap, name='place-trap'),
 
     # single place for record comparison in ds_update
     path('place_compare/<int:pk>/', views.PlaceCompareAPIView.as_view(), name='place-compare'),

@@ -281,6 +281,25 @@ class SpatialAPIView(generics.ListAPIView):
         return JsonResponse(result, json_dumps_params={'ensure_ascii': False, 'indent': 2})
 
 
+def bad_request_trap(request):
+    """
+    Catches any URL that starts with 'place/' but does not match
+    the strict valid patterns (Integer ID or Dash-separated integers).
+    """
+    return JsonResponse(
+        {
+            "error": "Malformed URL",
+            "message": "The URL pattern provided is not supported.",
+            "valid_formats": [
+                "/api/place/1234/ (Single Integer ID)",
+                "/api/place/1234-5678-9012/ (Dash-separated Integer IDs)"
+            ],
+            "your_url": request.path
+        },
+        status=400
+    )
+
+
 """
   makeGeom(); called by responseItem(), childItem
   format index locations as geojson
