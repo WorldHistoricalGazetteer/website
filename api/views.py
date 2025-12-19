@@ -3,7 +3,7 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, MultipleObjectsReturned
 from elasticsearch8 import BadRequestError
 from rest_framework.request import Request
 
@@ -1099,14 +1099,24 @@ class PlacesDetailAPIView(View):
 
         cid = request.GET.get('cid')
 
+        # --- TRAP 1: INPUT NORMALIZATION ---
         if pk_list is not None:
-            # Split the string of IDs using the delimiter "-"
-            ids = pk_list.split("-")
+            # Trap for trailing dashes or double dashes (e.g. "1-2--")
+            # This filters out empty strings before they hit the int() converter
+            ids = [x for x in pk_list.split("-") if x]
         elif pk is not None:
             ids = [str(pk)]
         else:
+            return JsonResponse({"error": "No place ID(s) provided"}, status=400)
+
+        # --- TRAP 2: VOLUME LIMIT ---
+        # This prevents abuse by someone requesting 10,000 IDs.
+        if len(ids) > 50:
             return JsonResponse(
-                {"error": "No place ID(s) provided"},
+                {
+                    "error": "Too many IDs requested",
+                    "message": "Please request 50 or fewer places at a time."
+                },
                 status=400
             )
 
@@ -1152,10 +1162,13 @@ class PlacesDetailAPIView(View):
 
             return unique_items
 
-        with open(os.path.join(settings.STATIC_ROOT, 'aliases.json')) as json_file:
-            json_data = json_file.read()
-        base_urls = json.loads('{' + json_data + '}')[
-            'base_urls']  # Wrap the contents in {} to create a valid JSON object
+        try:
+            with open(os.path.join(settings.STATIC_ROOT, 'aliases.json')) as json_file:
+                json_data = json_file.read()
+            base_urls = json.loads('{' + json_data + '}')['base_urls']
+        except Exception:
+            # Fallback if aliases.json is missing/broken so API doesn't 500
+            base_urls = {}
 
         def add_urls(data):
             return [
@@ -1175,15 +1188,31 @@ class PlacesDetailAPIView(View):
                 for item in data
             ]
 
-        # Serialize the Place records
+        # --- TRAP 3: SERIALIZATION SAFETY ---
         serialized_places = []
         attestation_years = set()
+
         for place in places:
-            # Pass the request in the serializer context
-            serializer = PlaceSerializer(place, context={'cid': cid, 'request': request})
-            serialized_places.append(serializer.data)
-            if place.attestation_year:
-                attestation_years.add(place.attestation_year)
+            try:
+                # Pass the request in the serializer context
+                serializer = PlaceSerializer(place, context={'cid': cid, 'request': request})
+                serialized_places.append(serializer.data)
+                if place.attestation_year:
+                    attestation_years.add(place.attestation_year)
+            except MultipleObjectsReturned:
+                # This catches the specific error from your traceback
+                # if it happens inside the Serializer (e.g. on a RelatedField)
+                print(f"Data Integrity Error for Place ID: {place.id}")
+                continue
+            except Exception as e:
+                # Catch generic serialization errors so valid places still return
+                print(f"Serialization error for Place ID {place.id}: {e}")
+                continue
+
+        if not serialized_places:
+            return JsonResponse(
+                {"error": "Server Error", "message": "Unable to serialize found places due to data errors."},
+                status=500)
 
         # Calculate the overall extent
         aggregated_extent = None
@@ -1210,9 +1239,13 @@ class PlacesDetailAPIView(View):
         min_value = min(min_values, default=None)
         max_value = max(max_values, default=None)
 
-        country_codes_mapping = {country['id']: country['text'] for item in
-                                 json.load(open('media/data/regions_countries.json')) if item.get('text') == 'Countries'
-                                 for country in item.get('children', [])}
+        try:
+            country_codes_mapping = {country['id']: country['text'] for item in
+                                     json.load(open('media/data/regions_countries.json')) if
+                                     item.get('text') == 'Countries'
+                                     for country in item.get('children', [])}
+        except FileNotFoundError:
+            country_codes_mapping = {}
         unique_country_codes = {ccode for place in serialized_places for ccode in place.get("ccodes", [])}
         countries_with_labels = [{'ccode': ccode, 'label': country_codes_mapping.get(ccode, '')} for ccode in
                                  unique_country_codes]
