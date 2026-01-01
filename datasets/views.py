@@ -1328,66 +1328,50 @@ def match_undo(request, ds, tid, pid):
 
 @login_required
 def collab_add(request, dsid, v):
-    """Add or update a collaborator on a dataset with full logging."""
-
-    logger.error("collab_add HIT: user=%s, dsid=%s, v=%s", request.user, dsid, v)
+    """Add or update a collaborator on a dataset using their username."""
 
     if request.method != "POST":
-        logger.error("collab_add rejected: not POST")
         return HttpResponseForbidden("POST required")
 
-    email = request.POST.get("email")
+    username = request.POST.get("username")
     role = request.POST.get("role", "member")
 
-    if not email:
-        messages.info(request, "Email is required.")
-        logger.error("collab_add rejected: email missing")
+    if not username:
+        messages.info(request, "Username is required.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
     dataset = get_object_or_404(Dataset, id=dsid)
-    logger.error("Dataset resolved: id=%s label=%s", dataset.id, dataset.label)
 
     # Permission check
-    is_owner = DatasetUser.objects.filter(dataset_id=dataset, user_id=request.user, role="owner").exists()
-    if not (request.user.is_superuser or is_owner):
-        logger.error("Permission denied: user=%s is_super=%s is_owner=%s",
-                     request.user, request.user.is_superuser, is_owner)
+    if not (request.user.is_superuser or request.user in dataset.owners.all()):
         return HttpResponseForbidden("Not allowed")
 
     try:
-        user = User.objects.get(email=email)
+        user = User.objects.get(username=username)
     except User.DoesNotExist:
-        messages.info(request, f"No user with email '{email}'.")
-        logger.error("User not found: email=%s", email)
+        messages.info(request, f"No user with username '{username}'.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
-    logger.error("Preparing to create/update DatasetUser: dataset=%s user=%s role=%s",
-                 dataset.id, user.id, role)
+    # Check if user is already a collaborator
+    collab, created = DatasetUser.objects.get_or_create(
+        dataset_id=dataset,
+        user_id=user,
+        defaults={"role": role},
+    )
 
-    # Use update_or_create to safely add or update the collaborator
-    try:
-        collab, created = DatasetUser.objects.update_or_create(
-            dataset_id=dataset,
-            user_id=user,
-            defaults={"role": role},
-        )
-        logger.error("DatasetUser processed: id=%s created=%s role=%s",
-                     collab.id, created, collab.role)
-    except Exception as e:
-        logger.error("Failed to create/update DatasetUser: %s", e, exc_info=True)
-        messages.error(request, "Failed to add/update collaborator.")
-        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-    # Provide user feedback
-    if created:
-        messages.success(request, f"{user.email} added as {role}.")
+    if not created:
+        # Only update if the role has changed
+        if collab.role != role:
+            collab.role = role
+            collab.save(update_fields=["role"])
+            messages.success(request, f"{user.username} role updated to {role}.")
+        else:
+            messages.info(request, f"{user.username} is already a {role}.")
     else:
-        messages.success(request, f"{user.email} role updated to {role}.")
+        messages.success(request, f"{user.username} added as {role}.")
 
-    # Redirect preserving v
-    if v == "1":
-        return redirect(f"/datasets/{dsid}/collab")
-    return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+    # Redirect (v switch preserved)
+    return redirect(f"/datasets/{dsid}/collab") if v == "1" else HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
 
 def collab_delete(request, uid, dsid, v):
