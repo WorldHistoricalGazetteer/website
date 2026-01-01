@@ -93,7 +93,7 @@ urlpatterns = [
 
   ## COLLABORATORS
   # add DatasetUser collaborator
-  path('collab-add/<int:dsid>/<str:v>', views.collab_add, name="collab-add"),
+  path('collab-add/<int:dsid>/<str:v>/', views.collab_add, name="collab-add"),
   # list dataset on Volunteer Opportunities page
   path('toggle_volunteers', toggle_volunteers, name="toggle-volunteers"),
   # list datasets requesting volunteers

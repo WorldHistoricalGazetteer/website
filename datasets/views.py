@@ -1330,6 +1330,8 @@ def match_undo(request, ds, tid, pid):
 def collab_add(request, dsid, v):
     """Add or update a collaborator on a dataset."""
 
+    logger.error("collab_add HIT")
+
     if request.method != "POST":
         return HttpResponseForbidden("POST required")
 
