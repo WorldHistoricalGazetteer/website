@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 from celery import current_app as celapp
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry
 from django.core.cache import caches
@@ -25,7 +26,7 @@ from django.forms import modelformset_factory
 from django.http import (
     HttpResponseRedirect,
     HttpResponseNotFound,
-    JsonResponse
+    JsonResponse, HttpResponseForbidden
 )
 from django.shortcuts import redirect, render, get_object_or_404
 from django.test import Client
@@ -1325,36 +1326,49 @@ def match_undo(request, ds, tid, pid):
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
 
+@login_required
 def collab_add(request, dsid, v):
-    """Add collaborator to dataset."""
-    try:
-        email = request.POST['email']
-        role = request.POST['role']
-        uid = get_object_or_404(User, email=email).id
-    except MultiValueDictKeyError:
-        messages.info(request, "The email or role field is missing from the form.")
-        return redirect(f'/datasets/{dsid}/collab') if v == '1' else HttpResponseRedirect(
-            request.META.get('HTTP_REFERER')
-        )
-    except User.DoesNotExist:
-        messages.info(
-            request,
-            f"Please check email address: we don't have '{request.POST.get('email', 'unknown')}'"
-        )
-        return redirect(f'/datasets/{dsid}/collab') if v == '1' else HttpResponseRedirect(
-            request.META.get('HTTP_REFERER')
-        )
-    except Exception as e:
-        logger.error(f"Error adding collaborator: {e}")
-        messages.info(request, "An error occurred while processing the request.")
-        return redirect(f'/datasets/{dsid}/collab') if v == '1' else HttpResponseRedirect(
-            request.META.get('HTTP_REFERER')
-        )
+    """Add or update a collaborator on a dataset."""
 
-    DatasetUser.objects.create(user_id_id=uid, dataset_id_id=dsid, role=role)
-    return redirect(f'/datasets/{dsid}/collab') if v == '1' else HttpResponseRedirect(
-        request.META.get('HTTP_REFERER')
+    if request.method != "POST":
+        return HttpResponseForbidden("POST required")
+
+    email = request.POST.get("email")
+    role = request.POST.get("role", "member")
+
+    if not email:
+        messages.info(request, "Email is required.")
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+    # Resolve objects explicitly
+    dataset = get_object_or_404(Dataset, id=dsid)
+
+    # Permission check
+    if not (request.user.is_superuser or request.user in dataset.owners.all()):
+        return HttpResponseForbidden("Not allowed")
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        messages.info(request, f"No user with email '{email}'.")
+        return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
+
+    # Create or update collaborator
+    collab, created = DatasetUser.objects.update_or_create(
+        dataset_id=dataset,
+        user_id=user,
+        defaults={"role": role},
     )
+
+    if created:
+        messages.success(request, f"{user.email} added as {role}.")
+    else:
+        messages.success(request, f"{user.email} role updated to {role}.")
+
+    # Redirect (v switch preserved)
+    if v == "1":
+        return redirect(f"/datasets/{dsid}/collab")
+    return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
 
 def collab_delete(request, uid, dsid, v):
