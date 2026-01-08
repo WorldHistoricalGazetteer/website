@@ -1,5 +1,4 @@
 import gzip
-import io
 import json
 import logging
 import os
@@ -151,32 +150,30 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
     """
     cache_file = None
     if cache_filepath:
+        # open a .tmp file while streaming so partial outputs never replace the final file
         cache_file = open(cache_filepath + '.tmp', 'wb')
 
-    buffer = io.BytesIO()
-    gzip_file = gzip.GzipFile(fileobj=buffer, mode='w')
+    # logging instrumentation
+    LOG_EVERY = 100  # how often to emit progress logs
+    feature_count = 0
+    row_count = 0
 
-    def write_and_yield(data: str):
-        gzip_file.write(data.encode('utf-8'))
-        gzip_file.flush()
-        buffer.seek(0)
-        chunk = buffer.read()
-        if chunk:
-            if cache_file:
-                cache_file.write(chunk)
-            yield chunk
-        buffer.truncate(0)
-        buffer.seek(0)
+    logger.info(f"Starting live stream for {filetype.upper()} {obj_type}:{getattr(obj, 'pk', obj)} (cache={'yes' if cache_filepath else 'no'})")
 
-    def finalize():
-        """Close gzip and yield final trailer"""
-        gzip_file.close()
-        buffer.seek(0)
-        trailer = buffer.read()
-        if trailer:
-            if cache_file:
-                cache_file.write(trailer)
-            yield trailer
+    # Helper that compresses a UTF-8 string into a gzip member and yields/writes it
+    def emit_chunk(text: str):
+        if not text:
+            return
+        data_bytes = text.encode('utf-8')
+        compressed = gzip.compress(data_bytes)
+        if cache_file:
+            cache_file.write(compressed)
+            # keep partial cache visible during long streams
+            try:
+                cache_file.flush()
+            except Exception:
+                pass
+        yield compressed
 
     def lpf_feature_from_serialized(feature):
         """
@@ -211,13 +208,13 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
     try:
         if filetype == 'lpf':
-            yield from write_and_yield(
-                '{"@context":"https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld","type":"FeatureCollection"'
-            )
+            # Start of LPF FeatureCollection (send as its own gzip member)
+            header = ('{"@context":"https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld","type":"FeatureCollection"')
+            yield from emit_chunk(header)
 
             citation = getattr(obj, "citation_csl", None)
             if citation:
-                yield from write_and_yield(',"citation":' + json.dumps(citation))
+                yield from emit_chunk(',"citation":' + json.dumps(citation))
 
             licence_text = (
                 "Unless specified otherwise, all content created for or uploaded to the World Historical Gazetteer — "
@@ -226,39 +223,36 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 "Externally hosted datasets and content that are linked to by WHG remain under the copyrights "
                 "and licenses specified by their original contributors."
             )
-            yield from write_and_yield(',"license":' + json.dumps(licence_text))
-            yield from write_and_yield(',"features":[')
+            yield from emit_chunk(',"license":' + json.dumps(licence_text))
+            yield from emit_chunk(',"features":[')
 
             first = True
             if obj_type == "dataset":
                 qs = obj.places.all()
             elif obj_type == "collection" and obj.collection_class == "dataset":
-                yield from write_and_yield(
-                    '],"error":{"message":"Dataset collections may not be downloaded. Please download each constituent dataset individually."}}'
-                )
-                yield from finalize()
+                yield from emit_chunk('],"error":{"message":"Dataset collections may not be downloaded. Please download each constituent dataset individually."}}')
                 return
             elif obj_type == "collection" and obj.collection_class == "place":
                 qs = obj.places.all()
             else:
-                yield from write_and_yield(
-                    '],"error":{"message":"LPF export by streaming is only supported for datasets and place collections."}}'
-                )
-                yield from finalize()
+                yield from emit_chunk('],"error":{"message":"LPF export by streaming is only supported for datasets and place collections."}}')
                 return
 
             for place in qs.iterator():
                 if not first:
-                    yield from write_and_yield(',')
+                    yield from emit_chunk(',')
                 else:
                     first = False
 
                 feature = PlaceFeatureSerializer(place, context={"request": request}).data
                 feature = lpf_feature_from_serialized(feature)
-                yield from write_and_yield(json.dumps(feature))
+                yield from emit_chunk(json.dumps(feature))
+                feature_count += 1
+                if feature_count % LOG_EVERY == 0:
+                    logger.info(f"Streaming LPF {obj_type}:{getattr(obj, 'pk', obj)} - emitted {feature_count} features so far")
 
-            yield from write_and_yield(']')
-            yield from write_and_yield('}')
+            yield from emit_chunk(']')
+            yield from emit_chunk('}')
 
         else:  # TSV format
             headers = [
@@ -270,23 +264,17 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
             if obj_type == "collection":
                 headers.extend(["dataset_id", "dataset_title", "dataset_label"])
 
-            yield from write_and_yield('\t'.join(headers) + '\n')
+            yield from emit_chunk('\t'.join(headers) + '\n')
 
             if obj_type == "dataset":
                 qs = obj.places.all()
             elif obj_type == "collection" and obj.collection_class == "dataset":
-                yield from write_and_yield(
-                    'Error: Dataset collections may not be downloaded. Please download each constituent dataset individually.\n'
-                )
-                yield from finalize()
+                yield from emit_chunk('Error: Dataset collections may not be downloaded. Please download each constituent dataset individually.\n')
                 return
             elif obj_type == "collection" and obj.collection_class == "place":
                 qs = obj.places.all()
             else:
-                yield from write_and_yield(
-                    'Error: TSV export by streaming is only supported for datasets and place collections.\n'
-                )
-                yield from finalize()
+                yield from emit_chunk('Error: TSV export by streaming is only supported for datasets and place collections.\n')
                 return
 
             for place in qs.iterator():
@@ -462,10 +450,17 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                     for field in row
                 ]
 
-                yield from write_and_yield('\t'.join(row) + '\n')
+                yield from emit_chunk('\t'.join(row) + '\n')
+                row_count += 1
+                if row_count % LOG_EVERY == 0:
+                    logger.info(f"Streaming TSV {obj_type}:{getattr(obj, 'pk', obj)} - emitted {row_count} rows so far")
 
-        # Normal completion: finalize gzip
-        yield from finalize()
+        # Normal completion
+        if filetype == 'lpf':
+            logger.info(f"Completed streaming LPF {obj_type}:{getattr(obj, 'pk', obj)} - total features: {feature_count}")
+        else:
+            logger.info(f"Completed streaming TSV {obj_type}:{getattr(obj, 'pk', obj)} - total rows: {row_count}")
+        return
 
     finally:
         if cache_file:
@@ -541,7 +536,7 @@ def invalidate_and_rebuild_cache(obj_type, obj_id, filetype='lpf', force=False):
         delay_seconds = max(300 - (time.time() - last_time) + 10, 10)
 
         deferred_rebuild.apply_async(
-            args=[obj_type, obj_id, filetype],
+            args=(obj_type, obj_id, filetype),
             countdown=int(delay_seconds)
         )
 
@@ -585,7 +580,7 @@ def deferred_rebuild(obj_type, obj_id, filetype='lpf'):
             return f"Deferred rebuild completed for {obj_type}:{obj_id} ({filetype}): {result['message']}"
         else:
             # Still throttled, try again in 1 minute
-            deferred_rebuild.apply_async(args=[obj_type, obj_id, filetype], countdown=60)
+            deferred_rebuild.apply_async(args=(obj_type, obj_id, filetype), countdown=60)
             return f"Deferred rebuild rescheduled for {obj_type}:{obj_id} ({filetype})"
     else:
         return f"No pending rebuild for {obj_type}:{obj_id} ({filetype}) - skipping"
