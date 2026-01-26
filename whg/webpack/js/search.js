@@ -151,7 +151,54 @@ Promise.all([
 
         if ($clickedResult.attr('data-map-clicked') === 'true') { // Scroll table
             $clickedResult.removeAttr('data-map-clicked');
-            $clickedResult.scrollintoview({duration: 'slow'});
+
+            // Prefer scrolling the results container so the list (not whole page) recenters the item.
+            const $container = $('#result_container');
+            const $elem = $clickedResult;
+            const duration = 400; // ms
+
+            // helper to start the flash overlay after scrolling finishes
+            function startFlash(elem) {
+                // Simple CSS-driven flash: add class then remove after 3s. Clear any previous timer.
+                const existingTimer = elem.data('flashTimer');
+                if (existingTimer) {
+                    clearTimeout(existingTimer);
+                    elem.removeData('flashTimer');
+                    elem.removeClass('flash-border');
+                }
+                elem.addClass('flash-border');
+                const t = setTimeout(() => {
+                    elem.removeClass('flash-border');
+                    elem.removeData('flashTimer');
+                }, 3000);
+                elem.data('flashTimer', t);
+            }
+
+            if ($container.length) {
+                // Compute offsets relative to the container and animate its scrollTop so the element is centered.
+                const containerTop = $container.offset().top;
+                const containerScrollTop = $container.scrollTop();
+                const containerHeight = $container.innerHeight();
+
+                const elemTop = $elem.offset().top;
+                const elemHeight = $elem.outerHeight(true);
+
+                const targetScrollTop = Math.round(containerScrollTop + (elemTop - containerTop) - (containerHeight / 2) + (elemHeight / 2));
+
+                // Animate then start flash in callback so overlay is positioned correctly
+                $container.stop(true).animate({scrollTop: targetScrollTop}, duration, function () {
+                    startFlash($elem);
+                });
+            } else {
+                // Fallback: animate whole page so the element is vertically centered in the viewport
+                const elemTop = $elem.offset().top;
+                const elemHeight = $elem.outerHeight(true);
+                const windowHeight = $(window).height();
+                const target = Math.round(elemTop - (windowHeight / 2) + (elemHeight / 2));
+                $('html, body').stop(true).animate({scrollTop: target}, duration, function () {
+                    startFlash($elem);
+                });
+            }
         } else if ($clickedResult.attr('data-map-initialising') === 'true') {
             $clickedResult.removeAttr('data-map-initialising');
             if (featureCollection) {
@@ -767,7 +814,6 @@ function renderResults(data, fromStorage = false) {
     // Update Results
     $('#search_content').toggleClass('no-results', results.length == 0); // CSS hides #search_results, #result_facets
 
-    let hideUnindexed = null;
     results.forEach((feature, index) => {
         let result = feature.properties;
         const count = parseInt(result.linkcount) + 1;
@@ -776,28 +822,17 @@ function renderResults(data, fromStorage = false) {
         const children = result.children;
         const encodedChildren = encodeURIComponent(children.join(','));
 
-        if (index == 0 && count == 1) {
-            hideUnindexed = false;
-            $resultsDiv.append('<div class="btn-group d-grid mb-1"><button class="no-linked btn btn-warning text-dark disabled py-0">No linked results</button></div>');
-        }
-
-        if (index > 0 && count == 1 && hideUnindexed === null) {
-            hideUnindexed = true;
-            $resultsDiv.append('<div class="btn-group d-grid mb-1"><button class="unlinked reveal btn btn-primary py-0">Show unlinked results</button></div>');
-        }
-
         let resultIdx = count > 1 ? 'whg' : 'pub';
         // Aberaeron (in 'pub' and 'whg') will have two cards, one for each index
-        let html = `<div data-bs-toggle="tooltip" title="Click to zoom on map" class="result ${resultIdx}-result${hideUnindexed ? ' hidden' : ''}">
-	    <span>
-	      <span class="red-head">${result.title}</span>
-	      <span class="float-end small">${resultIdx === 'pub' ? '' : (count > 1 ?
-            `${count} linked records <i class="fas fa-link"></i>` : '')}
+        let html = `<div data-bs-toggle="tooltip" title="Click to zoom on map" class="result ${resultIdx}-result">
+	<span>
+	  <span class="red-head">${result.title}</span>
+	  <span class="float-end small">${resultIdx === 'pub' ? '<i class="fas fa-chain-broken" data-bs-toggle="tooltip" title="This place has not yet been reconciled to any other WHG places" aria-hidden="true" style="margin-right:6px;"></i>' : (count > 1 ? `${count} linked records <i class="fas fa-link"></i>` : '')}
 	        <button data-bs-toggle="tooltip" title="Click to view all details for this ${count > 1 ? 'set of linked places' : 'unlinked place'}" class="btn btn-primary btn-sm m-1 portal-link" data-whg-id="${whg_id}" data-pid="${pid}" data-children="${encodedChildren}">
                 Place Details
             </button>
-	      </span>
-	    </span>`;
+	  </span>
+	</span>`;
 
         if (result.variants && result.variants.length > 0) {
             // Sort variants so that strings with ASCII characters precede those with non-ASCII
@@ -849,21 +884,9 @@ function renderResults(data, fromStorage = false) {
             const id = $(this).data('whg-id') || $(this).data('pid');
             const path = $(this).data('whg-id') ? 'portal/' : 'detail';
             window.location.href = `/places/${id}/${path}`;
-        })
-        .on('click', '.unlinked', function () {
-            const isRevealing = $(this).hasClass('reveal');
-            $(this)
-                .blur()
-                .text(isRevealing ? 'Hide unlinked results' : 'Show unlinked results')
-                .toggleClass('reveal');
-            let $resultsToToggle = $(this).parent('div').nextAll('.result');
-            if (isRevealing) {
-                $resultsToToggle.removeClass('hidden').show();
-            } else {
-                $resultsToToggle.addClass('hidden').hide();
-            }
-        })
-        .find('.more-or-less')
+        });
+
+    $resultsDiv.find('.more-or-less')
         .toggleTruncate();
 
     // Update Map & Detail with first result (if any)

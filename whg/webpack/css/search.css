@@ -77,7 +77,8 @@
 }
 
 .whg-result {
-  /*background-color: #f0f7f9;*/
+  background-color: #eaf6ff; /* pale blue wash for linked results */
+  border-color: #d1eaf9; /* subtle border tint */
 }
 
 .pub-result {
@@ -122,8 +123,9 @@
     border: 1px solid #ccc;
     padding: 0 5px;
     border-radius: 5px;
-    box-shadow: gainsboro;
+    box-shadow: none;
     margin-bottom: 0.3rem;
+    position: relative; /* allow absolutely-positioned overlay child */
 }
 
 .result::after { /* clearfix */
@@ -159,6 +161,34 @@
     border: 1px solid #c38c8c;
     box-shadow: gainsboro 2px 2px 2px;
     background-color: #fffff2;
+}
+
+/* Flash border to highlight a result briefly when selected from the map */
+.result.flash-border {
+  /* Use outline to simulate a border flash so it cannot be overridden by existing `border: ... !important` rules
+     Outline does not affect layout and will visually appear like a border. Keep outline width constant. */
+  outline: 2px solid transparent;
+  /* place outline slightly inside the element so it's not clipped by overflow on the container */
+  outline-offset: -2px;
+  /* 3 seconds total, 6 discrete steps (0.5s each) to get 3 on/off cycles */
+  animation: whg-flash-outline 3s steps(6,end) forwards;
+}
+
+@keyframes whg-flash-outline {
+  /* 3 cycles, each cycle = 1s (0.5s on, 0.5s off) -> total 3s
+     Percentages map to 0.5s intervals over 3s -> 16.6667% per half-second */
+  0% { outline-color: #e3342f; }
+  16.666% { outline-color: #e3342f; }
+  16.667% { outline-color: transparent; }
+  33.333% { outline-color: transparent; }
+  33.334% { outline-color: #e3342f; }
+  50% { outline-color: #e3342f; }
+  50.001% { outline-color: transparent; }
+  66.666% { outline-color: transparent; }
+  66.667% { outline-color: #e3342f; }
+  83.333% { outline-color: #e3342f; }
+  83.334% { outline-color: transparent; }
+  100% { outline-color: transparent; }
 }
 
 #detail p {
