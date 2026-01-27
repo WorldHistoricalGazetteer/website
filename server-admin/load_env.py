@@ -1,4 +1,5 @@
 # load_env.py
+import json
 import os
 import shutil
 import importlib.util
@@ -9,6 +10,18 @@ import grp
 from dotenv import load_dotenv
 from collections import OrderedDict
 from jinja2 import Template
+
+def get_docker_network_subnet(network_name='whgazetteer-org'):
+    try:
+        output = subprocess.check_output([
+            'docker', 'network', 'inspect', network_name
+        ])
+        net_info = json.loads(output)
+        subnet = net_info[0]['IPAM']['Config'][0]['Subnet']
+        return subnet
+    except Exception as e:
+        print(f"Failed to detect subnet for {network_name}: {e}")
+        return None
 
 def get_git_branch():
     try:
@@ -133,6 +146,11 @@ def load_environment(context='local',
         return
     
     env_vars = apply_context_overrides(template_vars, context)
+
+    env_vars['SUBNET'] = get_docker_network_subnet()
+    if not env_vars['SUBNET']:
+        env_vars['SUBNET'] = '172.20.0.0/16'  # fallback
+
     write_env_file(env_vars, output_path)
     load_dotenv(output_path)
     
