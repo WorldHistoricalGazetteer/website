@@ -413,13 +413,9 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
     validator = Draft7Validator(schema)
     redis_client = get_redis_client()
 
-    # Store the current task ID as a subtask
+    # Store the current task ID as a subtask (do not duplicate recording which is done by the scheduler).
     sub_task_id = self.request.id
-    try:
-        redis_client.rpush(f"{task_id}_subtasks", sub_task_id)
-        redis_client.hincrby(task_id, 'queued_batches', 1)
-    except Exception:
-        logger.debug(f"Could not record subtask {sub_task_id} in redis for parent {task_id}")
+    logger.debug(f"Subtask {sub_task_id} registered locally for parent {task_id}")
 
     # If a batch reference was passed as a string, support either Redis key references (redis:<key>)
     # or a filesystem path (legacy). Load the JSON into memory and remember which backing store to clean up.
@@ -521,17 +517,17 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
             while not stopValidation:
                 try:
                     # logger.debug(f'Validating feature: {feature}')
+                    # Log immediately before schema validation to catch hangs
+                    logger.debug(f"Subtask {sub_task_id}: starting schema validation for feature id={feature_id} ({processed_in_batch}/{len(feature_batch)})")
                     validate_start = time.time()
                     validator.validate(featureCollection)
                     validate_elapsed = time.time() - validate_start
                     stopValidation = True
-                    # logger.debug(f'Validated feature: {feature}')
                     logger.debug(f"Subtask {sub_task_id}: validated feature id={feature_id} (schema) in {validate_elapsed:.2f}s")
-                    # update Redis heartbeat
-                    try:
-                        redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-                    except Exception:
-                        pass
+                    # Warn if validation was unusually slow
+                    SLOW_VALIDATE_WARN = getattr(settings, 'VALIDATION_SLOW_VALIDATE_WARN', 5.0)
+                    if validate_elapsed > SLOW_VALIDATE_WARN:
+                        logger.warning(f"Subtask {sub_task_id}: slow schema validation for feature id={feature_id} took {validate_elapsed:.1f}s")
                 except ValidationError as e:
                     # logger.debug(f'ValidationError: {e}')
                     error_path = " -> ".join([str(p) for p in e.absolute_path])
@@ -583,8 +579,9 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
 
                 if stopValidation:
                     try:
-                        redis_client.hincrby(task_id, 'queued_features', -1)
+                        new_q = redis_client.hincrby(task_id, 'queued_features', -1)
                         redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                        logger.debug(f"Subtask {sub_task_id}: decremented queued_features, new value: {new_q}")
                     except Exception as e:
                         logger.error(f"Error updating Redis status: {e}")
 

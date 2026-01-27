@@ -655,9 +655,19 @@ def read_json_features_in_batches(file_path):
                 if total_features_parsed % LOG_EVERY == 0:
                     logger.info(f"Parsed {total_features_parsed} features so far from {file_path}")
 
-                if current_memory_size >= settings.VALIDATION_BATCH_MEMORY_LIMIT:
+                # Also split batches that become too large by feature count to avoid long-running Celery tasks
+                max_features = getattr(settings, 'VALIDATION_MAX_BATCH_FEATURES', 250)
+                if current_memory_size >= settings.VALIDATION_BATCH_MEMORY_LIMIT or len(feature_batch) >= max_features:
                     logger.info(f"Yielding batch of {len(feature_batch)} features (approx {current_memory_size} bytes) from {file_path}")
-                    yield feature_batch
+                    # If the batch is larger than max_features, split it into sub-batches
+                    while len(feature_batch) > max_features:
+                        sub = feature_batch[:max_features]
+                        logger.debug(f"Splitting large batch: yielding sub-batch of {len(sub)} features")
+                        yield sub
+                        feature_batch = feature_batch[max_features:]
+                    if feature_batch:
+                        logger.debug(f"Yielding remaining batch of {len(feature_batch)} features")
+                        yield feature_batch
                     feature_batch = []
                     current_memory_size = 0
 
