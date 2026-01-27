@@ -726,10 +726,11 @@ REMOTE_DATASET_CONFIGS = [
 # Dataset Validation
 LPF_SCHEMA_PATH = os.path.join(BASE_DIR, 'validation/static/lpf_v2.0.jsonld')
 LPF_CONTEXT_PATH = os.path.join(BASE_DIR, 'validation/static/lpo_v2.0.jsonld')
-VALIDATION_ALLOWED_EXTENSIONS = ['.csv', '.tsv', '.xlsx', '.ods', '.jsonld', '.geojson', '.json']
+VALIDATION_ALLOWED_EXTENSIONS = ['.csv', '.tsv', '.xlsx', '.ods', '.jsonld', '.geojson', '.json', '.zip']
 VALIDATION_ALLOWED_ENCODINGS = ['ascii', 'us-ascii', 'utf-8']
 VALIDATION_SUPPORTED_TYPES = [
     'application/json',
+    'application/zip',
     'text/plain',
     'text/csv',
     'text/tab-separated-values',

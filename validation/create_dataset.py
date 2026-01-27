@@ -602,21 +602,27 @@ def read_json_features_in_batches(file_path):
             parser = ijson.items(file, 'features.item', use_float=True)
             feature_batch = []
             current_memory_size = 0
+            total_features_parsed = 0
+            LOG_EVERY = 1000
 
             logger.debug(f'Parsing batch from {file_path} with parser: {type(parser)}')
             for feature in parser:
                 current_memory_size += get_memory_size(feature)
                 feature_batch.append(feature)
+                total_features_parsed += 1
+
+                if total_features_parsed % LOG_EVERY == 0:
+                    logger.info(f"Parsed {total_features_parsed} features so far from {file_path}")
 
                 if current_memory_size >= settings.VALIDATION_BATCH_MEMORY_LIMIT:
-                    # logger.debug(f'Yielding batch ({current_memory_size} bytes): {feature_batch}')
+                    logger.info(f"Yielding batch of {len(feature_batch)} features (approx {current_memory_size} bytes) from {file_path}")
                     yield feature_batch
                     feature_batch = []
                     current_memory_size = 0
 
             # Yield any remaining features in the last batch
             if feature_batch:
-                # logger.debug(f'Yielding final batch ({current_memory_size} bytes): {feature_batch}')
+                logger.info(f"Yielding final batch of {len(feature_batch)} features (approx {current_memory_size} bytes) from {file_path}; total parsed: {total_features_parsed}")
                 yield feature_batch
 
     except (IOError, ValueError) as e:

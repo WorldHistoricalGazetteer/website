@@ -7,19 +7,19 @@ import logging
 import subprocess
 import uuid
 import ijson
+import zipfile
+import tempfile
+import shutil
 from django.conf import settings
 from django.http import JsonResponse
 from django.utils import timezone
-from pyld import jsonld
 
 from validation.create_dataset import read_json_features_in_batches
 from validation.tasks import validate_feature_batch, cleanup
 import redis
-import sys
 from validation.tLPF_mappings import tLPF_mappings
 from shapely import wkt
 from shapely.geometry import mapping as shapely_mapping
-import geojson
 
 logger = logging.getLogger('validation')
 
@@ -319,18 +319,59 @@ def validate_file(request, dataset_metadata):
     namespaces = None
     schema_org_metadata = None
     try:
+        # Handle .zip uploads by extracting the first suitable json/geojson/jsonld member
+        if ext == 'zip':
+            logger.debug(f"Received zip file for validation: {uploaded_filepath}")
+            try:
+                with zipfile.ZipFile(uploaded_filepath, 'r') as zf:
+                    # Find candidate members (primary preference order)
+                    candidates = [name for name in zf.namelist() if name.lower().endswith(('.geojson', '.json', '.jsonld'))]
+                    if not candidates:
+                        message = "Zip archive does not contain a supported JSON/GeoJSON/JSON-LD file."
+                        logger.error(message)
+                        return JsonResponse({"status": "failed", "message": message}, status=500)
+
+                    # Prefer geojson over json/jsonld by sorting
+                    candidates.sort(key=lambda n: (not n.lower().endswith('.geojson'), n))
+                    chosen = candidates[0]
+                    logger.info(f"Extracting member '{chosen}' from uploaded zip for validation")
+
+                    # Extract chosen member to a temporary file
+                    extracted_temp = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(chosen)[1], dir='/var/tmp')
+                    with zf.open(chosen) as member, open(extracted_temp.name, 'wb') as out_f:
+                        shutil.copyfileobj(member, out_f)
+
+                    # Replace uploaded filepath with extracted file for downstream processing
+                    dataset_metadata['jsonld_filepath'] = extracted_temp.name
+                    dataset_metadata['delimited_filepath'] = ''
+                    ext = 'json'
+                    # Remove original uploaded zip to free disk space (best-effort)
+                    try:
+                        if os.path.exists(uploaded_filepath):
+                            os.remove(uploaded_filepath)
+                            logger.debug(f"Removed original uploaded zip file {uploaded_filepath} after extraction")
+                    except Exception as e:
+                        logger.warning(f"Could not remove uploaded zip file {uploaded_filepath}: {e}")
+            except zipfile.BadZipFile as e:
+                message = f"Uploaded file is not a valid zip archive: {e}"
+                logger.error(message)
+                return JsonResponse({"status": "failed", "message": message}, status=500)
+
         if 'json' in ext:  # mime type is not a reliable determinant of JSON
             dataset_metadata["format"] = 'json'
             dataset_metadata["delimited_filepath"] = ''
-            dataset_metadata["jsonld_filepath"] = uploaded_filepath
+            # If a zip was extracted above, dataset_metadata['jsonld_filepath'] may already be set
+            if not dataset_metadata.get('jsonld_filepath'):
+                dataset_metadata["jsonld_filepath"] = uploaded_filepath
             dataset_metadata["feature_count"] = json_feature_count(dataset_metadata["jsonld_filepath"])
             logger.debug(f'JSON contains {dataset_metadata.get("feature_count")} features.')
 
             # Extract any local namespace definitions (these will be expanded during validation)
-            namespaces = extract_context_namespaces(uploaded_filepath)
+            json_path = dataset_metadata.get('jsonld_filepath') or uploaded_filepath
+            namespaces = extract_context_namespaces(json_path)
 
             # Extract any metadata from JSON file
-            dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'], dataset_metadata['webpage'] = extract_dataset_metadata(uploaded_filepath)
+            dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'], dataset_metadata['webpage'] = extract_dataset_metadata(json_path)
             logger.debug(f'Metadata extracted from JSON: {schema_org_metadata}')
         else:
             dataset_metadata["format"] = ext
