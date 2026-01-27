@@ -289,7 +289,8 @@ def validate_geometry(geometry):
             return round(obj, ndigits)
         if isinstance(obj, int):
             return obj
-        if isinstance(obj, list):
+        if isinstance(obj, (list, tuple)):
+            # Convert tuples to lists (Shapely outputs tuples)
             return [_round_coords(i, ndigits) for i in obj]
         return obj
 
