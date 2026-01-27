@@ -410,45 +410,43 @@ def validate_file(request, dataset_metadata):
         total_scheduled = 0
         # Process each batch of features as a separate Celery task
         batch_index = 0
-        temp_batch_dir = os.path.join('/var/tmp', f'validation_batches_{task_id}')
-        os.makedirs(temp_batch_dir, exist_ok=True)
-        redis_client.hset(task_id, 'batch_dir', temp_batch_dir)
+        redis_client_local = redis_client
         for feature_batch in read_json_features_in_batches(dataset_metadata["jsonld_filepath"]):
-             # The following line could be implemented if the LP Ontology were correct
-             # feature_batch = [jsonld.compact(feature, context) for feature in feature_batch]
-             # Schedule validation as a Celery subtask and log its id for debugging
-             try:
-+                # Serialize batch to a temp file to avoid pushing large messages via the broker
-+                batch_fname = os.path.join(temp_batch_dir, f'batch_{batch_index}.json')
-+                batch_index += 1
-+                try:
-+                    with open(batch_fname, 'w', encoding='utf-8') as bf:
-+                        json.dump(feature_batch, bf, ensure_ascii=False)
-+                    logger.debug(f"Wrote batch file {batch_fname} ({len(feature_batch)} features)")
-+                except Exception as e:
-+                    logger.error(f"Failed to write batch file {batch_fname}: {e}")
-+                    raise
-+
-                 apply_start = time.time()
-                 async_result = validate_feature_batch.apply_async((batch_fname, schema, task_id, namespaces))
-                 apply_elapsed = time.time() - apply_start
-                 if apply_elapsed > 1.0:
-                     logger.warning(f"Scheduling subtask took {apply_elapsed:.2f}s which is unusually long")
-                 subtask_id = async_result.id
-                 feature_tally = len(feature_batch)
-                 # Record subtask id so it can be inspected or revoked later
-                 try:
-                     redis_client.rpush(f"{task_id}_subtasks", subtask_id)
-                     redis_client.hincrby(task_id, 'queued_batches', 1)
-                 except Exception:
-                     logger.warning(f"Could not record subtask id {subtask_id} in redis for task {task_id}")
-                 # Increment the queued_features counter and heartbeat
-                 redis_client.hincrby(task_id, 'queued_features', feature_tally)
-                 redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-                 logger.info(f"Scheduled subtask {subtask_id} for {feature_tally} features (parent task {task_id})")
-                 total_scheduled += 1
-             except Exception as e:
-                 logger.error(f"Failed to schedule validate_feature_batch subtask: {e}")
+            # The following line could be implemented if the LP Ontology were correct
+            # feature_batch = [jsonld.compact(feature, context) for feature in feature_batch]
+            try:
+                # Store batch JSON in Redis under a per-task key to avoid cross-container file sharing
+                batch_key = f"{task_id}:batch:{batch_index}"
+                batch_index += 1
+                try:
+                    redis_client_local.set(batch_key, json.dumps(feature_batch), ex=86400)
+                    logger.debug(f"Stored batch in Redis key {batch_key} ({len(feature_batch)} features)")
+                except Exception as e:
+                    logger.error(f"Failed to store batch in Redis key {batch_key}: {e}")
+                    raise
+
+                # Schedule the Celery subtask and pass the Redis key reference (prefixed with 'redis:')
+                apply_start = time.time()
+                async_result = validate_feature_batch.apply_async((f"redis:{batch_key}", schema, task_id, namespaces))
+                apply_elapsed = time.time() - apply_start
+                if apply_elapsed > 1.0:
+                    logger.warning(f"Scheduling subtask took {apply_elapsed:.2f}s which is unusually long")
+
+                subtask_id = async_result.id
+                feature_tally = len(feature_batch)
+                # Record subtask id so it can be inspected or revoked later
+                try:
+                    redis_client_local.rpush(f"{task_id}_subtasks", subtask_id)
+                    redis_client_local.hincrby(task_id, 'queued_batches', 1)
+                except Exception:
+                    logger.warning(f"Could not record subtask id {subtask_id} in redis for task {task_id}")
+                # Increment the queued_features counter and heartbeat
+                redis_client_local.hincrby(task_id, 'queued_features', feature_tally)
+                redis_client_local.hset(task_id, 'last_update', timezone.now().isoformat())
+                logger.info(f"Scheduled subtask {subtask_id} for {feature_tally} features (parent task {task_id}); redis_key={batch_key}")
+                total_scheduled += 1
+            except Exception as e:
+                logger.error(f"Failed to schedule validate_feature_batch subtask: {e}")
 
         # Summary after scheduling
         try:

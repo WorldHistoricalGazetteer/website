@@ -421,18 +421,36 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
     except Exception:
         logger.debug(f"Could not record subtask {sub_task_id} in redis for parent {task_id}")
 
-    # If a batch was passed as a filename (to avoid large broker messages), load it now
+    # If a batch reference was passed as a string, support either Redis key references (redis:<key>)
+    # or a filesystem path (legacy). Load the JSON into memory and remember which backing store to clean up.
     temp_batch_file = None
+    redis_batch_key = None
     if isinstance(feature_batch, str):
-        temp_batch_file = feature_batch
+        temp_ref = feature_batch
         try:
-            t_load_start = time.time()
-            with open(temp_batch_file, 'r', encoding='utf-8') as bf:
-                feature_batch = json.load(bf)
-            t_load = time.time() - t_load_start
-            logger.info(f"Sub-task {sub_task_id}: loaded {len(feature_batch)} features from {temp_batch_file} in {t_load:.2f}s")
+            if temp_ref.startswith('redis:'):
+                # Load batch from Redis
+                redis_batch_key = temp_ref.split(':', 1)[1]
+                t_load_start = time.time()
+                raw = redis_client.get(redis_batch_key)
+                if raw is None:
+                    raise Exception(f"Redis key '{redis_batch_key}' not found or expired")
+                # raw may be bytes
+                if isinstance(raw, bytes):
+                    raw = raw.decode('utf-8')
+                feature_batch = json.loads(raw)
+                t_load = time.time() - t_load_start
+                logger.info(f"Sub-task {sub_task_id}: loaded {len(feature_batch)} features from redis key {redis_batch_key} in {t_load:.2f}s")
+            else:
+                # Treat as filepath
+                temp_batch_file = temp_ref
+                t_load_start = time.time()
+                with open(temp_batch_file, 'r', encoding='utf-8') as bf:
+                    feature_batch = json.load(bf)
+                t_load = time.time() - t_load_start
+                logger.info(f"Sub-task {sub_task_id}: loaded {len(feature_batch)} features from {temp_batch_file} in {t_load:.2f}s")
         except Exception as e:
-            logger.error(f"Sub-task {sub_task_id}: failed to load batch file {temp_batch_file}: {e}")
+            logger.error(f"Sub-task {sub_task_id}: failed to load batch {temp_ref}: {e}")
             # Record an error and exit early
             try:
                 redis_client.rpush(f"{task_id}_errors", json.dumps({
@@ -659,3 +677,9 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
                 logger.debug(f"Temporary batch file {temp_batch_file} deleted.")
             except Exception as e:
                 logger.error(f"Error deleting temp batch file {temp_batch_file}: {e}")
+        if redis_batch_key:
+            try:
+                redis_client.delete(redis_batch_key)
+                logger.debug(f"Temporary redis batch key {redis_batch_key} deleted.")
+            except Exception as e:
+                logger.error(f"Error deleting temp redis batch key {redis_batch_key}: {e}")
