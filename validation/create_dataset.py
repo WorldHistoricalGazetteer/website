@@ -4,6 +4,7 @@ import os
 import re
 import shutil
 import sys
+import time
 
 import ijson
 import redis
@@ -379,9 +380,19 @@ def ds_insert(jsonld_filepath, ds, task_id):
     # Start a transaction to ensure atomicity
     with transaction.atomic():
         try:
+            total_inserted = 0
+            batch_index = 0
+            LOG_EVERY = getattr(settings, 'VALIDATION_LOG_EVERY', 50)
             for feature_batch in read_json_features_in_batches(jsonld_filepath):
+                batch_index += 1
+                batch_size = len(feature_batch)
+                logger.info(f"ds_insert: starting batch {batch_index} with {batch_size} features for dataset {ds.label}")
+                batch_start = time.time()
                 for feat in feature_batch:
                     logger.debug(f"Inserting feature: {feat}")
+                    feature_proc_start = time.time()
+
+                    # Apply fixes if available
                     feature_id = feat.get("@id", "-- no @id --")
                     fixes_key = f"{task_id}_fixes_{safe_key(feature_id)}"
                     # logger.debug(f"Fixes key: {fixes_key}")
@@ -394,8 +405,6 @@ def ds_insert(jsonld_filepath, ds, task_id):
                                 fix = json.loads(fix_json)
                                 apply_fix(feat, fix)
                                 logger.debug(f"Feature after applying fix: {feat}")
-                            # feat = apply_fix(feat, json.loads(redis_client.lpop(fixes_key)))
-
                     title = re.sub(r'\(.*?\)', '', feat.get('properties', {}).get('title', ''))
                     # logger.debug(f'title: {title}')
                     geojson = feat.get('geometry')
@@ -412,6 +421,7 @@ def ds_insert(jsonld_filepath, ds, task_id):
 
                     logger.debug(f"New Place from feature: {feat}")
 
+                    logger.info(f"ds_insert: creating Place object for feature {feat.get('@id', '-- no @id --')}")
                     newpl = Place(
                         src_id=feat.get('@id') if ds.uri_base in ['', None] or not feat.get('@id').startswith(
                             ds.uri_base) else feat.get('@id')[len(ds.uri_base):],
@@ -423,8 +433,15 @@ def ds_insert(jsonld_filepath, ds, task_id):
                         timespans=intervals,
                         create_date=timezone.now()
                     )
-                    newpl.save()
-                    logger.debug(f'New place: {newpl}')
+                    # Save new Place and time the operation to detect stalls
+                    try:
+                        save_start = time.time()
+                        newpl.save()
+                        save_elapsed = time.time() - save_start
+                        logger.info(f"ds_insert: saved Place {newpl} (save took {save_elapsed:.2f}s)")
+                    except Exception as e:
+                        logger.error(f"Error saving Place {newpl}: {e}")
+                        raise
 
                     objs = {key: list(filter(None, [item for sublist in map(create_func, [feat]) for item in sublist]))
                             for key, (_, feat_key, create_func) in data_mappings.items()
@@ -436,7 +453,15 @@ def ds_insert(jsonld_filepath, ds, task_id):
                             model_class = globals()[f'Place{model}']
                             for obj in obj_list:
                                 obj.pk = pk_manager.get_next_pk(model_class.__name__)
-                                obj.save()
+                                # time each related object save
+                                try:
+                                    rsave_start = time.time()
+                                    obj.save()
+                                    rsave_elapsed = time.time() - rsave_start
+                                    logger.debug(f"Saved related {model_class.__name__} object (pk={obj.pk}) in {rsave_elapsed:.2f}s")
+                                except Exception as e:
+                                    logger.error(f"Error saving related object {model_class.__name__} for Place {newpl}: {e}")
+                                    raise
                         except IntegrityError as e:
                             errors.append({"field": model, "error": str(e)})
                             raise IntegrityError(f"IntegrityError in database insertion for {model}: {e}")
@@ -450,10 +475,26 @@ def ds_insert(jsonld_filepath, ds, task_id):
                             errors.append({"field": model, "error": str(e)})
                             raise Exception(f"Unexpected error in database insertion for {model}: {e}")
 
-                    redis_client.hincrby(task_id, 'queued_features', -1)
+                    total_inserted += 1
+                    # update heartbeat frequently so UI shows progress
+                    try:
+                        redis_client.hincrby(task_id, 'queued_features', -1)
+                        redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                    except Exception:
+                        pass
+
+                    # periodic progress log
+                    if total_inserted % LOG_EVERY == 0:
+                        elapsed = time.time() - batch_start
+                        logger.info(f"ds_insert: inserted {total_inserted} features so far (last batch {batch_index} progress: {total_inserted % batch_size}/{batch_size}) in {elapsed:.1f}s")
+                    feature_proc_elapsed = time.time() - feature_proc_start
+                    logger.debug(f"Processed and saved feature {feat.get('@id', '-- no @id --')} in {feature_proc_elapsed:.2f}s")
+
+                elapsed = time.time() - batch_start
+                logger.info(f"ds_insert: completed batch {batch_index} with {batch_size} features in {elapsed:.2f}s")
 
         except Exception as e:
-            logger.debug(f"Failed to insert data into dataset: {e}")
+            logger.error(f"Failed to insert data into dataset: {e}")
             raise Exception(f"Failed to insert data into dataset: {e}, Errors: {errors}")
 
 

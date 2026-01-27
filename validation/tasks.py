@@ -415,212 +415,247 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
 
     # Store the current task ID as a subtask
     sub_task_id = self.request.id
-    redis_client.rpush(f"{task_id}_subtasks", sub_task_id)
-    redis_client.hincrby(task_id, 'queued_batches', 1)
+    try:
+        redis_client.rpush(f"{task_id}_subtasks", sub_task_id)
+        redis_client.hincrby(task_id, 'queued_batches', 1)
+    except Exception:
+        logger.debug(f"Could not record subtask {sub_task_id} in redis for parent {task_id}")
 
-    # Instrumentation / logging
-    LOG_EVERY = getattr(settings, 'VALIDATION_LOG_EVERY', 50)
-    batch_size = len(feature_batch)
-    logger.info(f"Sub-task {sub_task_id} started: validating batch size {batch_size} for parent {task_id}")
-
-    processed_in_batch = 0
-    batch_start_time = time.time()
-
-    for feature in feature_batch:
-        stopValidation = False
-        fixAttempts = 0
-
-        processed_in_batch += 1
-        feature_id = feature.get('@id', feature.get('id', '-- no @id --'))
-        feature_start = time.time()
-        logger.debug(f"Subtask {sub_task_id}: processing feature {processed_in_batch}/{batch_size} id={feature_id}")
-
-        feature, fixed, valid = validate_feature_geometry(feature)
-        geom_time = time.time() - feature_start
-        logger.debug(f"Subtask {sub_task_id}: geometry validation for feature id={feature_id} -> valid={valid}, fixed={fixed} (took {geom_time:.2f}s)")
-        # update Redis heartbeat
+    # If a batch was passed as a filename (to avoid large broker messages), load it now
+    temp_batch_file = None
+    if isinstance(feature_batch, str):
+        temp_batch_file = feature_batch
         try:
-            redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+            t_load_start = time.time()
+            with open(temp_batch_file, 'r', encoding='utf-8') as bf:
+                feature_batch = json.load(bf)
+            t_load = time.time() - t_load_start
+            logger.info(f"Sub-task {sub_task_id}: loaded {len(feature_batch)} features from {temp_batch_file} in {t_load:.2f}s")
+        except Exception as e:
+            logger.error(f"Sub-task {sub_task_id}: failed to load batch file {temp_batch_file}: {e}")
+            # Record an error and exit early
+            try:
+                redis_client.rpush(f"{task_id}_errors", json.dumps({
+                    "feature_id": "--batch-load--",
+                    "path": "batch_load",
+                    "description": str(e)
+                }))
+                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+            except Exception:
+                pass
+            return
+
+    # record subtask start and ensure we always clean up temp files
+    try:
+        # record subtask start and ensure we always clean up temp files
+        try:
+            redis_client.hset(task_id, mapping={f'subtask_{sub_task_id}_start': timezone.now().isoformat()})
         except Exception:
             pass
 
-        if not valid:
-            redis_client.rpush(f"{task_id}_errors", json.dumps({
-                "feature_id": feature.get("@id", "-- no @id --"),
-                "path": "features.feature.geometry",
-                "description": "Geometry failed validation and could not be fixed."
-            }))
-            redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-        if fixed:
-            redis_client.rpush(f"{task_id}_fixes", json.dumps({
-                "feature_id": feature.get("@id", "-- no @id --"),
-                "path": "features.feature.geometry",
-                "fix": feature['geometry'],
-                "description": "Geometry fixed."
-            }))
-            redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+        logger.info(f"Sub-task {sub_task_id} started: validating batch size {len(feature_batch)} for parent {task_id}")
 
-        featureCollection = {
-            "type": "FeatureCollection",
-            "features": [feature]
-        }
+        LOG_EVERY = getattr(settings, 'VALIDATION_LOG_EVERY', 50)
 
-        while not stopValidation:
+        # Main processing loop (existing logic follows)
+        processed_in_batch = 0
+        batch_start_time = time.time()
+
+        for feature in feature_batch:
+            stopValidation = False
+            fixAttempts = 0
+
+            processed_in_batch += 1
+            feature_id = feature.get('@id', feature.get('id', '-- no @id --'))
+            feature_start = time.time()
+            logger.debug(f"Subtask {sub_task_id}: processing feature {processed_in_batch}/{len(feature_batch)} id={feature_id}")
+
+            feature, fixed, valid = validate_feature_geometry(feature)
+            geom_time = time.time() - feature_start
+            logger.debug(f"Subtask {sub_task_id}: geometry validation for feature id={feature_id} -> valid={valid}, fixed={fixed} (took {geom_time:.2f}s)")
+            # update Redis heartbeat
             try:
-                # logger.debug(f'Validating feature: {feature}')
-                validate_start = time.time()
-                validator.validate(featureCollection)
-                validate_elapsed = time.time() - validate_start
-                stopValidation = True
-                # logger.debug(f'Validated feature: {feature}')
-                logger.debug(f"Subtask {sub_task_id}: validated feature id={feature_id} (schema) in {validate_elapsed:.2f}s")
-                # update Redis heartbeat
-                try:
-                    redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-                except Exception:
-                    pass
-            except ValidationError as e:
-                # logger.debug(f'ValidationError: {e}')
-                error_path = " -> ".join([str(p) for p in e.absolute_path])
-                detailed_error = parse_validation_error(e)
-                full_error = f"Validation error at {error_path}: {detailed_error}"
-                # logger.debug(full_error)
-                json_error = json.dumps({
-                    "feature_id": feature.get("@id", "-- no @id --"),
-                    "path": error_path,
-                    "description": detailed_error
-                })
-                if fixAttempts < settings.VALIDATION_MAXFIXATTEMPTS:
-                    try:
-                        featureCollection, fixes = fix_feature({
-                            "type": "FeatureCollection",
-                            "features": [feature]
-                        }, e, namespaces)
-                        fixAttempts += 1
+                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+            except Exception:
+                pass
 
-                        if fixes:
-                            for fix in fixes:  # Iterate over the list of fixes
-                                try:
-                                    redis_client.rpush(f"{task_id}_fixes", json.dumps(fix))
-                                except Exception as e:
-                                    logger.error(f"Failed to push fix to Redis: {e}")
-                        else:
-                            # No fixes applied; no point in revalidating
+            if not valid:
+                redis_client.rpush(f"{task_id}_errors", json.dumps({
+                    "feature_id": feature.get("@id", "-- no @id --"),
+                    "path": "features.feature.geometry",
+                    "description": "Geometry failed validation and could not be fixed."
+                }))
+                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+            if fixed:
+                redis_client.rpush(f"{task_id}_fixes", json.dumps({
+                    "feature_id": feature.get("@id", "-- no @id --"),
+                    "path": "features.feature.geometry",
+                    "fix": feature['geometry'],
+                    "description": "Geometry fixed."
+                }))
+                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+
+            featureCollection = {
+                "type": "FeatureCollection",
+                "features": [feature]
+            }
+
+            while not stopValidation:
+                try:
+                    # logger.debug(f'Validating feature: {feature}')
+                    validate_start = time.time()
+                    validator.validate(featureCollection)
+                    validate_elapsed = time.time() - validate_start
+                    stopValidation = True
+                    # logger.debug(f'Validated feature: {feature}')
+                    logger.debug(f"Subtask {sub_task_id}: validated feature id={feature_id} (schema) in {validate_elapsed:.2f}s")
+                    # update Redis heartbeat
+                    try:
+                        redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                    except Exception:
+                        pass
+                except ValidationError as e:
+                    # logger.debug(f'ValidationError: {e}')
+                    error_path = " -> ".join([str(p) for p in e.absolute_path])
+                    detailed_error = parse_validation_error(e)
+                    full_error = f"Validation error at {error_path}: {detailed_error}"
+                    # logger.debug(full_error)
+                    json_error = json.dumps({
+                        "feature_id": feature.get("@id", "-- no @id --"),
+                        "path": error_path,
+                        "description": detailed_error
+                    })
+                    if fixAttempts < settings.VALIDATION_MAXFIXATTEMPTS:
+                        try:
+                            featureCollection, fixes = fix_feature({
+                                "type": "FeatureCollection",
+                                "features": [feature]
+                            }, e, namespaces)
+                            fixAttempts += 1
+
+                            if fixes:
+                                for fix in fixes:  # Iterate over the list of fixes
+                                    try:
+                                        redis_client.rpush(f"{task_id}_fixes", json.dumps(fix))
+                                    except Exception as e:
+                                        logger.error(f"Failed to push fix to Redis: {e}")
+                            else:
+                                # No fixes applied; no point in revalidating
+                                logger.error(full_error)
+                                redis_client.rpush(f"{task_id}_errors", json_error)
+                                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                                stopValidation = True
+
+                        except Exception as fix_error:
+                            logger.error(f"Failed to fix feature: {fix_error}")
                             logger.error(full_error)
                             redis_client.rpush(f"{task_id}_errors", json_error)
                             redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
                             stopValidation = True
-
-                    except Exception as fix_error:
-                        logger.error(f"Failed to fix feature: {fix_error}")
+                    else:
                         logger.error(full_error)
                         redis_client.rpush(f"{task_id}_errors", json_error)
                         redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
                         stopValidation = True
-                else:
-                    logger.error(full_error)
-                    redis_client.rpush(f"{task_id}_errors", json_error)
+                except Exception as e:
+                    logger.error(f"Unexpected error during validation: {e}")
+                    redis_client.rpush(f"{task_id}_errors", str(e))
                     redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
                     stopValidation = True
-            except Exception as e:
-                logger.error(f"Unexpected error during validation: {e}")
-                redis_client.rpush(f"{task_id}_errors", str(e))
-                redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-                stopValidation = True
 
-            if stopValidation:
+                if stopValidation:
+                    try:
+                        redis_client.hincrby(task_id, 'queued_features', -1)
+                        redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                    except Exception as e:
+                        logger.error(f"Error updating Redis status: {e}")
+
+                # NB: Cannot keep tally of errors within this task because it may be running multiple times concurrently
+                errors = [error.decode('utf-8') for error in redis_client.lrange(f"{task_id}_errors", 0, -1)]
+                if len(errors) > settings.VALIDATION_MAX_ERRORS:
+                    task_status = redis_client.hgetall(f"{task_id}_metadata")
+                    task_status = {k.decode('utf-8'): v.decode('utf-8') for k, v in task_status.items()}
+
+                    # Clean up files
+                    delimited_filepath = task_status.get('delimited_filepath', '')
+                    if delimited_filepath and os.path.exists(delimited_filepath):
+                        os.remove(delimited_filepath)
+                    file_path = task_status.get('file_path', '')
+                    if file_path and os.path.exists(file_path):
+                        os.remove(file_path)
+
+                    revoke_all_subtasks(redis_client, task_id)
+                    redis_client.hset(task_id, mapping={
+                        'status': 'aborted',
+                        'end_time': timezone.now().isoformat(),
+                        'time_remaining': 0
+                    })
+
+                    logger.debug(
+                        f"More than {settings.VALIDATION_MAX_ERRORS} errors found: aborting validation of feature batch.")
+                    return
+
+                    # Add a delay to each iteration for testing UI
+                time.sleep(settings.VALIDATION_TEST_DELAY)
+
+            # Periodic progress log for the subtask
+            if processed_in_batch % LOG_EVERY == 0 or processed_in_batch == len(feature_batch):
+                elapsed = time.time() - batch_start_time
                 try:
-                    redis_client.hincrby(task_id, 'queued_features', -1)
-                    redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
-                except Exception as e:
-                    logger.error(f"Error updating Redis status: {e}")
+                    task_status = redis_client.hgetall(task_id)
+                    queued_features = int(task_status.get(b'queued_features', b'0')) if task_status else 0
+                except Exception:
+                    queued_features = 0
+                logger.info(f"Subtask {sub_task_id}: processed {processed_in_batch}/{len(feature_batch)} features in {elapsed:.1f}s; parent queued_features={queued_features}")
 
-            # NB: Cannot keep tally of errors within this task because it may be running multiple times concurrently
-            errors = [error.decode('utf-8') for error in redis_client.lrange(f"{task_id}_errors", 0, -1)]
-            if len(errors) > settings.VALIDATION_MAX_ERRORS:
-                task_status = redis_client.hgetall(f"{task_id}_metadata")
-                task_status = {k.decode('utf-8'): v.decode('utf-8') for k, v in task_status.items()}
+        # End of try main processing
+        total_elapsed = time.time() - batch_start_time
+        logger.info(f"Subtask {sub_task_id} completed: processed {processed_in_batch} features in {total_elapsed:.1f}s")
+        try:
+            redis_client.hset(task_id, mapping={f'subtask_{sub_task_id}_end': timezone.now().isoformat()})
+        except Exception:
+            pass
 
-                # Clean up files
-                delimited_filepath = task_status.get('delimited_filepath', '')
-                if delimited_filepath and os.path.exists(delimited_filepath):
-                    os.remove(delimited_filepath)
-                file_path = task_status.get('file_path', '')
-                if file_path and os.path.exists(file_path):
-                    os.remove(file_path)
+        try:
+            task_status = redis_client.hgetall(task_id)
+            task_status = {k.decode('utf-8'): v.decode('utf-8') for k, v in task_status.items()}
 
-                revoke_all_subtasks(redis_client, task_id)
+            all_queued = task_status.get('all_queued', '')
+            queued_features = int(task_status.get('queued_features', 0))
+            start_time_str = task_status.get('start_time', '')
+
+            if start_time_str:
+                start_time = datetime.fromisoformat(start_time_str)
+            else:
+                start_time = timezone.now()
+            end_time = timezone.now()
+            elapsed_time = (end_time - start_time).total_seconds()
+
+            if all_queued == 'true' and queued_features == 0:
+
+                if redis_client.llen(f"{task_id}_errors") == 0:
+                    logger.debug(f"Saving Dataset: {task_status.get('label', '(missing label)')}")
+                    save_dataset(task_id)
+
                 redis_client.hset(task_id, mapping={
-                    'status': 'aborted',
-                    'end_time': timezone.now().isoformat(),
+                    'status': 'complete',
+                    'end_time': end_time.isoformat(),
+                    'time_taken': elapsed_time,
                     'time_remaining': 0
                 })
+                logger.debug(f'Task {task_id} completed successfully.')
 
-                logger.debug(
-                    f"More than {settings.VALIDATION_MAX_ERRORS} errors found: aborting validation of feature batch.")
-                return
+                # Cleanup Redis record of subtasks
+                redis_client.delete(f"{task_id}_subtasks")
+                logger.debug(f"Redis list '{task_id}_subtasks' has been deleted.")
 
-                # Add a delay to each iteration for testing UI
-            time.sleep(settings.VALIDATION_TEST_DELAY)
-
-        # Periodic progress log for the subtask
-        if processed_in_batch % LOG_EVERY == 0 or processed_in_batch == batch_size:
-            elapsed = time.time() - batch_start_time
+        except Exception as e:
+            logger.error(f"Error checking or updating task status: {e}")
+    finally:
+        # Ensure temp file is deleted
+        if temp_batch_file and os.path.exists(temp_batch_file):
             try:
-                task_status = redis_client.hgetall(task_id)
-                queued_features = int(task_status.get(b'queued_features', b'0')) if task_status else 0
-            except Exception:
-                queued_features = 0
-            logger.info(f"Subtask {sub_task_id}: processed {processed_in_batch}/{batch_size} features in {elapsed:.1f}s; parent queued_features={queued_features}")
-
-    try:
-        task_status = redis_client.hgetall(task_id)
-        task_status = {k.decode('utf-8'): v.decode('utf-8') for k, v in task_status.items()}
-
-        all_queued = task_status.get('all_queued', '')
-        queued_features = int(task_status.get('queued_features', 0))
-        start_time_str = task_status.get('start_time', '')
-
-        if start_time_str:
-            start_time = datetime.fromisoformat(start_time_str)
-        else:
-            start_time = timezone.now()
-        end_time = timezone.now()
-        elapsed_time = (end_time - start_time).total_seconds()
-
-        if all_queued == 'true' and queued_features == 0:
-
-            if redis_client.llen(f"{task_id}_errors") == 0:
-                logger.debug(f"Saving Dataset: {task_status.get('label', '(missing label)')}")
-                save_dataset(task_id)
-
-            redis_client.hset(task_id, mapping={
-                'status': 'complete',
-                'end_time': end_time.isoformat(),
-                'time_taken': elapsed_time,
-                'time_remaining': 0
-            })
-            logger.debug(f'Task {task_id} completed successfully.')
-
-            # Cleanup Redis record of subtasks
-            redis_client.delete(f"{task_id}_subtasks")
-            logger.debug(f"Redis list '{task_id}_subtasks' has been deleted.")
-
-    except Exception as e:
-        logger.error(f"Error checking or updating task status: {e}")
-
-
-def parse_validation_error(error: ValidationError) -> str:
-    schema_path = ".".join([str(p) for p in error.schema_path])
-    instance_path = ".".join([str(p) for p in error.absolute_path])
-    error_message = error.message
-    error_value = '...' if error.validator == "required" else error.instance
-
-    formatted_error = (
-        f"Error Type: {error.validator} ({error.validator_value})\n"
-        f"Schema Path: {schema_path}\n"
-        f"Instance Path: {instance_path}\n"
-        f"Invalid Value: {error_value}\n"
-        f"Message: {error_message}"
-    )
-    return formatted_error
+                os.remove(temp_batch_file)
+                logger.debug(f"Temporary batch file {temp_batch_file} deleted.")
+            except Exception as e:
+                logger.error(f"Error deleting temp batch file {temp_batch_file}: {e}")
