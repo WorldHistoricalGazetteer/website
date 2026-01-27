@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from collections import OrderedDict
 from jinja2 import Template
 
-def get_docker_network_subnet(network_name='whgazetteer-org'):
+def get_docker_network_subnet(network_name='whgazetteer-org_whgazetteer-org'):
     try:
         output = subprocess.check_output([
             'docker', 'network', 'inspect', network_name
