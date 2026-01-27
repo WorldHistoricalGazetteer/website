@@ -17,7 +17,9 @@ from django.conf import settings
 import redis
 
 from shapely.geometry import shape
+from shapely.geometry import mapping as shapely_mapping
 from shapely.validation import make_valid
+
 from validation.create_dataset import save_dataset
 
 logger = logging.getLogger('validation')
@@ -282,7 +284,18 @@ def validate_geometry(geometry):
 
     geometry_type = geometry.get('type', None)
     geometry_coordinates = geometry.get('coordinates', None)
-    if geometry_type and geometry_coordinates:
+    def _round_coords(obj, ndigits):
+        if isinstance(obj, float):
+            return round(obj, ndigits)
+        if isinstance(obj, int):
+            return obj
+        if isinstance(obj, list):
+            return [_round_coords(i, ndigits) for i in obj]
+        return obj
+
+    ndigits = getattr(settings, 'VALIDATION_COORD_DECIMALS', 6)
+
+    if geometry_type and geometry_coordinates is not None:
         try:
             # Convert GeoJSON to Shapely geometry
             geom = shape({
@@ -297,7 +310,9 @@ def validate_geometry(geometry):
                 # First Tier Fix: Attempt to fix the geometry using buffer(0)
                 fixed_geom = geom.buffer(0)
                 if fixed_geom.is_valid:
-                    geometry['coordinates'] = fixed_geom.geometry['coordinates']
+                    geojson_fixed = shapely_mapping(fixed_geom)
+                    geometry['type'] = geojson_fixed.get('type')
+                    geometry['coordinates'] = _round_coords(geojson_fixed.get('coordinates'), ndigits)
                     logger.debug(f"Fixed invalid geometry with buffer(0).")
                     fixed = True
                     valid = True
@@ -307,15 +322,25 @@ def validate_geometry(geometry):
                     # Second Tier Fix: Attempt to fix the geometry using make_valid
                     fixed_geom = make_valid(geom)
                     if fixed_geom.is_valid:
-                        geometry['coordinates'] = fixed_geom.geometry['coordinates']
+                        geojson_fixed = shapely_mapping(fixed_geom)
+                        geometry['type'] = geojson_fixed.get('type')
+                        geometry['coordinates'] = _round_coords(geojson_fixed.get('coordinates'), ndigits)
                         logger.debug(f"Fixed invalid geometry with make_valid.")
                         fixed = True
                         valid = True
                     else:
                         logger.error("Failed to fix geometry with make_valid.")
             else:
-                logger.debug(f"Geometry passed validation.")
-                valid = True
+                # Geometry is valid; ensure coordinates are normalized/rounded
+                try:
+                    geojson_ok = shapely_mapping(geom)
+                    geometry['type'] = geojson_ok.get('type')
+                    geometry['coordinates'] = _round_coords(geojson_ok.get('coordinates'), ndigits)
+                    logger.debug(f"Geometry passed validation.")
+                    valid = True
+                except Exception:
+                    logger.debug(f"Geometry passed validation (could not remap).")
+                    valid = True
 
         except Exception as e:
             logger.error(f"Error processing geometry: {e}")
@@ -680,3 +705,32 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
                 logger.debug(f"Temporary redis batch key {redis_batch_key} deleted.")
             except Exception as e:
                 logger.error(f"Error deleting temp redis batch key {redis_batch_key}: {e}")
+
+
+def parse_validation_error(e: ValidationError) -> str:
+    """Return a concise, human-readable description of a jsonschema ValidationError.
+
+    Includes the validator, validator_value, a short message and the failing instance value.
+    """
+    try:
+        parts = []
+        if hasattr(e, 'validator') and e.validator:
+            parts.append(f"validator={e.validator}")
+        if hasattr(e, 'validator_value') and e.validator_value is not None:
+            parts.append(f"validator_value={e.validator_value}")
+        if hasattr(e, 'message'):
+            parts.append(f"message={e.message}")
+        # include problematic instance snippet
+        try:
+            inst = e.instance
+            # stringify small values
+            if isinstance(inst, (str, int, float, bool)):
+                parts.append(f"instance={inst}")
+            else:
+                parts.append(f"instance_type={type(inst).__name__}")
+        except Exception:
+            pass
+        return "; ".join(parts)
+    except Exception as ex:
+        return str(getattr(e, 'message', str(e)))
+
