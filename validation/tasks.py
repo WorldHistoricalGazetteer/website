@@ -7,7 +7,7 @@ import time
 from celery import Celery
 from celery import shared_task
 from celery.result import AsyncResult
-from datetime import timedelta
+from datetime import timedelta, datetime
 from itertools import chain
 
 from jsonschema import Draft7Validator, ValidationError
@@ -226,12 +226,12 @@ def get_task_status(request, task_id):
         redis_client.hset(task_id, 'start_time', current_time.isoformat())
 
     # Estimate remaining time
-    start_time = timezone.datetime.fromisoformat(
+    start_time = datetime.fromisoformat(
         status.get('mapdata_start_time') or
         status.get('insert_start_time', status.get('start_time'))
     )
     last_update_time_str = status.get('last_update', status.get('start_time'))
-    last_update_time = timezone.datetime.fromisoformat(last_update_time_str)
+    last_update_time = datetime.fromisoformat(last_update_time_str)
 
     if queued_features == 0:
         estimated_remaining_time = 0
@@ -418,11 +418,32 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
     redis_client.rpush(f"{task_id}_subtasks", sub_task_id)
     redis_client.hincrby(task_id, 'queued_batches', 1)
 
+    # Instrumentation / logging
+    LOG_EVERY = getattr(settings, 'VALIDATION_LOG_EVERY', 50)
+    batch_size = len(feature_batch)
+    logger.info(f"Sub-task {sub_task_id} started: validating batch size {batch_size} for parent {task_id}")
+
+    processed_in_batch = 0
+    batch_start_time = time.time()
+
     for feature in feature_batch:
         stopValidation = False
         fixAttempts = 0
 
+        processed_in_batch += 1
+        feature_id = feature.get('@id', feature.get('id', '-- no @id --'))
+        feature_start = time.time()
+        logger.debug(f"Subtask {sub_task_id}: processing feature {processed_in_batch}/{batch_size} id={feature_id}")
+
         feature, fixed, valid = validate_feature_geometry(feature)
+        geom_time = time.time() - feature_start
+        logger.debug(f"Subtask {sub_task_id}: geometry validation for feature id={feature_id} -> valid={valid}, fixed={fixed} (took {geom_time:.2f}s)")
+        # update Redis heartbeat
+        try:
+            redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+        except Exception:
+            pass
+
         if not valid:
             redis_client.rpush(f"{task_id}_errors", json.dumps({
                 "feature_id": feature.get("@id", "-- no @id --"),
@@ -447,9 +468,17 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
         while not stopValidation:
             try:
                 # logger.debug(f'Validating feature: {feature}')
+                validate_start = time.time()
                 validator.validate(featureCollection)
+                validate_elapsed = time.time() - validate_start
                 stopValidation = True
                 # logger.debug(f'Validated feature: {feature}')
+                logger.debug(f"Subtask {sub_task_id}: validated feature id={feature_id} (schema) in {validate_elapsed:.2f}s")
+                # update Redis heartbeat
+                try:
+                    redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
+                except Exception:
+                    pass
             except ValidationError as e:
                 # logger.debug(f'ValidationError: {e}')
                 error_path = " -> ".join([str(p) for p in e.absolute_path])
@@ -534,6 +563,16 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
                 # Add a delay to each iteration for testing UI
             time.sleep(settings.VALIDATION_TEST_DELAY)
 
+        # Periodic progress log for the subtask
+        if processed_in_batch % LOG_EVERY == 0 or processed_in_batch == batch_size:
+            elapsed = time.time() - batch_start_time
+            try:
+                task_status = redis_client.hgetall(task_id)
+                queued_features = int(task_status.get(b'queued_features', b'0')) if task_status else 0
+            except Exception:
+                queued_features = 0
+            logger.info(f"Subtask {sub_task_id}: processed {processed_in_batch}/{batch_size} features in {elapsed:.1f}s; parent queued_features={queued_features}")
+
     try:
         task_status = redis_client.hgetall(task_id)
         task_status = {k.decode('utf-8'): v.decode('utf-8') for k, v in task_status.items()}
@@ -543,7 +582,7 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
         start_time_str = task_status.get('start_time', '')
 
         if start_time_str:
-            start_time = timezone.datetime.fromisoformat(start_time_str)
+            start_time = datetime.fromisoformat(start_time_str)
         else:
             start_time = timezone.now()
         end_time = timezone.now()
