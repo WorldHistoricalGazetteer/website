@@ -142,13 +142,3 @@ footer {
     padding: 8px!important;
     border: 1px solid black!important;
 }
-
-/*.carousel-item h6 {*/
-/*    font-family: 'Raleway Bold', sans-serif;*/
-/*    font-size: 1rem;*/
-/*    color: #fff;*/
-/*}*/
-
-.test-webpack-rebuilding {
-    color: red;
-}
