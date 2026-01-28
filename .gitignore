@@ -76,7 +76,16 @@ docker-compose-altnet.yml
 !.env/.gitkeep
 
 
-/static
+# Static files
+/static/*
+# But include webpack bundles (built locally, not on server)
+!/static/webpack/
+# Exclude webpack analysis reports and stats
+/static/webpack/webpackReport.html
+/static/webpack/stats.json
+# Also exclude CDN fallbacks (copied by webpack, not needed in Git)
+/static/CDNfallbacks/
+
 whg/logs/debug.log
 whg/debug.log
 !whg/logs/
