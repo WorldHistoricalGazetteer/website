@@ -19,7 +19,7 @@ else
 fi
 
 # Change user password
-/app/entrypoints/user_pwd.sh
+#/app/entrypoints/user_pwd.sh
 
 # Collect static files from app directories (datasets/static, main/static, etc.)
 # Note: Webpack bundles are already in static/webpack/ (committed to Git),
