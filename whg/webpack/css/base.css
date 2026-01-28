@@ -148,3 +148,7 @@ footer {
 /*    font-size: 1rem;*/
 /*    color: #fff;*/
 /*}*/
+
+.test-webpack-rebuilding {
+    color: red;
+}
