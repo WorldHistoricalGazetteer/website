@@ -1,17 +1,27 @@
 ## Update mapdata cache
 - For a single collection or dataset:
 ```sh
-# EXAMPLE
-docker exec -it web_whgazetteer-org_main bash -c "./manage.py refresh_mapdata_cache collection 134"
+# EXAMPLE - Collection ID 134
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --collections --id 134
+
+# EXAMPLE - Dataset ID 1592
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets --id 1592
 ```
 - For all collections or datasets:
 ```sh
-# EXAMPLE
-docker exec -it web_whgazetteer-org_main bash -c "./manage.py refresh_mapdata_cache dataset"
+# All collections
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --collections
+
+# All datasets
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets
 ```
 - For all collections and datasets:
 ```sh
-docker exec -it web_whgazetteer-org_main bash -c "./manage.py refresh_mapdata_cache"
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata
+```
+- To only clear cache without regenerating (will regenerate on first access):
+```sh
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --clear-only
 ```
 
 ## Update `toponyms` (table of unique place names)
