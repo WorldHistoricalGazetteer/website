@@ -405,7 +405,21 @@ def ds_insert(jsonld_filepath, ds, task_id):
                                 fix = json.loads(fix_json)
                                 apply_fix(feat, fix)
                                 logger.debug(f"Feature after applying fix: {feat}")
-                    title = re.sub(r'\(.*?\)', '', feat.get('properties', {}).get('title', ''))
+                    # Only strip parenthetical content if there's exactly one set of parentheses
+                    # at the end of the string and there's text before it.
+                    # Preserves: "(Spring and Autumn States)", "Name with (parentheses) inside"
+                    # Removes: "Paris (France)" -> "Paris"
+                    raw_title = feat.get('properties', {}).get('title', '')
+                    # Check if there's exactly one '(' and it's followed by ')' at the end
+                    if raw_title.count('(') == 1 and raw_title.count(')') == 1 and raw_title.rstrip().endswith(')'):
+                        # Check if there's text before the opening parenthesis
+                        match = re.match(r'^(.+?)\s*\([^)]*\)$', raw_title)
+                        if match:
+                            title = match.group(1).strip()
+                        else:
+                            title = raw_title
+                    else:
+                        title = raw_title
                     # logger.debug(f'title: {title}')
                     geojson = feat.get('geometry')
                     # logger.debug(f'geojson: {geojson}')

@@ -156,7 +156,15 @@ function initMapInteractions(table) {
     whg_map.on('click', function () {
         if (activePopup && activePopup.pid) {
             let savedID = activePopup.pid; // Store the ID of the clicked feature before clearing the popup
+            let savedFeatureHighlight = activePopup.featureHighlight; // Store the feature highlight info
             clearPopup();
+
+            // Set the clicked feature as the highlighted feature to keep it red
+            if (savedFeatureHighlight !== false) {
+                window.highlightedFeatureIndex = savedFeatureHighlight;
+                whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+            }
+
             table.search('').draw();
             scrollToRowByProperty(table, 'id', savedID);
         }
@@ -171,8 +179,10 @@ function initMapInteractions(table) {
 
         whg_map.getCanvas().style.cursor = 'pointer';
 
+        // Look up table feature by table_id property (not feature.id which is now a global counter)
+        const tableId = topFeature.properties.table_id;
         const datasetFeature = window.datacollection.table.features.find(
-            f => f.properties.id === topFeature.id);
+            f => f.properties.id === tableId);
         if (datasetFeature) {
             topFeature.properties.title = datasetFeature.properties.title;
             topFeature.properties.pid = datasetFeature.properties.pid;
@@ -180,7 +190,7 @@ function initMapInteractions(table) {
             topFeature.properties.max = datasetFeature.properties.max;
         }
         else {
-            console.warn('Feature not found in dataset:', topFeature.id);
+            console.warn('Feature not found in dataset. table_id:', tableId, 'feature.id:', topFeature.id);
         }
 
         if (!activePopup || activePopup.id !== topFeature.id) {
@@ -191,20 +201,21 @@ function initMapInteractions(table) {
             activePopup = new whg_maplibre.Popup({
                 closeButton: false,
             }).setLngLat(e.lngLat).setHTML(popupFeatureHTML(topFeature)).addTo(whg_map);
+            activePopup.id = topFeature.id;  // Map feature id for highlighting
             activePopup.pid = topFeature.properties.pid;
             activePopup.featureHighlight = {
                 source: topFeature.source,
                 id: topFeature.id,
             };
+            // Don't highlight if this is the already-selected feature (via table click or previous map click)
             if (!!window.highlightedFeatureIndex &&
-                window.highlightedFeatureIndex.id ===
-                activePopup.featureHighlight.id &&
-                window.highlightedFeatureIndex.source ===
-                activePopup.featureHighlight.source) {
+                window.highlightedFeatureIndex.id === activePopup.featureHighlight.id &&
+                window.highlightedFeatureIndex.source === activePopup.featureHighlight.source) {
+                // This is the selected feature - don't change its highlight via hover popup
                 activePopup.featureHighlight = false;
             } else {
-                whg_map.setFeatureState(activePopup.featureHighlight,
-                    {highlight: true});
+                // This is a different feature - apply hover highlight
+                whg_map.setFeatureState(activePopup.featureHighlight, {highlight: true});
             }
         } else {
             // ... otherwise just update its position
@@ -215,6 +226,9 @@ function initMapInteractions(table) {
 
 function clearPopup(preserveCursor = false) {
     if (activePopup) {
+        if (activePopup.featureHighlight !== false) {
+            whg_map.setFeatureState(activePopup.featureHighlight, {highlight: false});
+        }
         activePopup.remove();
         activePopup = null;
         if (!preserveCursor) {
@@ -224,31 +238,72 @@ function clearPopup(preserveCursor = false) {
 }
 
 function highlightFeature(ds_pid, features, whg_map, extent = false) {
-    var featureIndex = features.findIndex(f => f.properties.pid === parseInt(ds_pid.pid));
-    if (featureIndex !== -1) {
-        if (window.highlightedFeatureIndex !== undefined) whg_map.setFeatureState(window.highlightedFeatureIndex, {
-            highlight: false
-        });
-        var feature = features[featureIndex];
-        const geom = feature.geometry;
-        if (geom) {
-            whg_map.fitViewport(extent || bbox(geom), defaultZoom);
+    if (!Array.isArray(features) || features.length === 0) {
+        console.warn('No features provided to highlightFeature.');
+        return;
+    }
 
-			// highlight feature in multiple sources & layers
-			window.datacollection.metadata.layers.forEach(layerName => {
-				window.highlightedFeatureIndex = {
-					source: `${ds_pid.ds_id}_${layerName}`,
-					id: featureIndex,
-				};
-				whg_map.setFeatureState(window.highlightedFeatureIndex, {
-					highlight: true,
-				});
-			});
-        } else {
-            console.log('Feature in clicked row has no geometry.');
+    // Find the table feature by pid
+    const tableFeature = features.find(f => f.properties.pid === parseInt(ds_pid.pid));
+
+    if (!tableFeature) {
+        console.log(`Feature ${ds_pid.pid} not found.`);
+        return;
+    }
+
+    // Get the table ID (index in table.features array)
+    const tableId = tableFeature.properties.id;
+
+    // Remove highlight from previously highlighted feature
+    if (window.highlightedFeatureIndex !== undefined) {
+        whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: false });
+    }
+
+    // Zoom to feature (using extent if provided, otherwise compute bbox)
+    const geom = tableFeature.geometry;
+    if (geom) {
+        try {
+            whg_map.fitViewport(extent || bbox(geom), defaultZoom);
+        } catch (err) {
+            console.error('Failed to fit viewport for feature', err);
+            return;
+        }
+
+        // Highlight feature in all relevant layers by finding map features with matching table_id
+        if (!window.datacollection?.metadata?.layers?.length) {
+            console.warn('No layers defined in datacollection metadata.');
+            return;
+        }
+
+        // We need to find the actual map feature(s) with this table_id
+        // Query all features from all relevant sources
+        let foundFeature = false;
+        window.datacollection.metadata.layers.forEach(layerName => {
+            const sourceId = `${ds_pid.ds_id}_${layerName}`;
+            const source = whg_map.getSource(sourceId);
+            if (!source) {
+                console.warn(`Source ${sourceId} not found in current map style.`);
+                return;
+            }
+
+            // Query all features from this source
+            const mapFeatures = whg_map.querySourceFeatures(sourceId);
+
+            // Find features with matching table_id
+            mapFeatures.forEach(mapFeature => {
+                if (mapFeature.properties && mapFeature.properties.table_id === tableId) {
+                    window.highlightedFeatureIndex = { source: sourceId, id: mapFeature.id };
+                    whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+                    foundFeature = true;
+                }
+            });
+        });
+
+        if (!foundFeature) {
+            console.warn(`No map features found with table_id ${tableId} for pid ${ds_pid.pid}`);
         }
     } else {
-        console.log(`Feature ${ds_pid.pid} not found.`);
+        console.log('Feature in clicked row has no geometry.');
     }
 }
 

@@ -274,14 +274,16 @@ export function initPopups(table) {
 
         whg_map.getCanvas().style.cursor = 'pointer';
 
+        // Look up table feature by table_id property (not feature.id which is now a global counter)
+        const tableId = topFeature.properties.table_id;
         const datasetFeature = window.datacollection.table.features.find(
-            f => f.properties.id === topFeature.id);
+            f => f.properties.id === tableId);
         if (datasetFeature) {
             topFeature.properties.title = datasetFeature.properties.title;
             topFeature.properties.min = datasetFeature.properties.min;
             topFeature.properties.max = datasetFeature.properties.max;
         } else {
-            console.warn('Feature not found in dataset:', topFeature.id);
+            console.warn('Feature not found in dataset. table_id:', tableId, 'feature.id:', topFeature.id);
         }
 
         if (!activePopup || activePopup.id !== topFeature.id) {
@@ -292,21 +294,22 @@ export function initPopups(table) {
             activePopup = new whg_maplibre.Popup({
                 closeButton: false,
             }).setLngLat(e.lngLat).setHTML(popupFeatureHTML(topFeature)).addTo(whg_map);
-            activePopup.id = topFeature.id;
+            activePopup.id = topFeature.id;  // Map feature id for highlighting
+            activePopup.tableId = topFeature.properties.table_id;  // Table id for scrolling
             activePopup.featureHighlight = {
                 source: topFeature.source,
                 sourceLayer: topFeature.sourceLayer,
                 id: topFeature.id,
             };
+            // Don't highlight if this is the already-selected feature (via table click or previous map click)
             if (!!window.highlightedFeatureIndex &&
-                window.highlightedFeatureIndex.id ===
-                activePopup.featureHighlight.id &&
-                window.highlightedFeatureIndex.source ===
-                activePopup.featureHighlight.source) {
+                window.highlightedFeatureIndex.id === activePopup.featureHighlight.id &&
+                window.highlightedFeatureIndex.source === activePopup.featureHighlight.source) {
+                // This is the selected feature - don't change its highlight via hover popup
                 activePopup.featureHighlight = false;
             } else {
-                whg_map.setFeatureState(activePopup.featureHighlight,
-                    {highlight: true});
+                // This is a different feature - apply hover highlight
+                whg_map.setFeatureState(activePopup.featureHighlight, {highlight: true});
             }
         } else {
             // ... otherwise just update its position
@@ -316,11 +319,19 @@ export function initPopups(table) {
     });
 
     whg_map.on('click', function () {
-        if (activePopup && activePopup.id) {
-            let savedID = activePopup.id; // Store the ID of the clicked feature before clearing the popup
+        if (activePopup && activePopup.tableId !== undefined) {
+            let savedTableID = activePopup.tableId; // Store the table ID of the clicked feature before clearing the popup
+            let savedFeatureHighlight = activePopup.featureHighlight; // Store the feature highlight info
             clearPopup();
+
+            // Set the clicked feature as the highlighted feature to keep it red
+            if (savedFeatureHighlight !== false) {
+                window.highlightedFeatureIndex = savedFeatureHighlight;
+                whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+            }
+
             table.search('').draw();
-            scrollToRowByProperty(table, 'id', savedID);
+            scrollToRowByProperty(table, 'id', savedTableID);
         }
     });
 }

@@ -221,10 +221,14 @@ function init_mapControls(whg_map, datelineContainer, toggleFilters, mapParamete
 		mapSequencer = new sequencerControl();
 		whg_map.addControl(mapSequencer, 'bottom-left');
 	}
-			
+
+	// Use longer throttle delay for large datasets to reduce processing overhead
+	const isLargeDataset = window.datacollection.metadata.num_places > 5000;
+	const throttleDelay = isLargeDataset ? 500 : 300;
+
 	const dateRangeChanged = throttle(() => { // Uses imported lodash function
 	    toggleFilters(true, whg_map, table);
-	}, 300);
+	}, throttleDelay);
 
 	if (window.dateline) {
 		window.dateline.destroy();
@@ -243,9 +247,29 @@ function init_mapControls(whg_map, datelineContainer, toggleFilters, mapParamete
 		const range = window.datacollection.metadata.max - window.datacollection.metadata.min;
 		const buffer = range * 0.1; // 10% buffer
 
-		// Update the temporal settings
-		mapParameters.temporalControl.fromValue = window.datacollection.metadata.min;
-		mapParameters.temporalControl.toValue = window.datacollection.metadata.max;
+		// Initialize temporal control based on whether dataset has multitemporal geometries
+		if (window.datacollection.metadata.has_multitemporal_geometries) {
+			// For multitemporal datasets, initialize to mid-year to minimize initial rendering
+			const midYear = Math.floor((window.datacollection.metadata.min + window.datacollection.metadata.max) / 2);
+
+			// Only override if fromValue/toValue weren't already set in mapParameters
+			if (!mapParameters.temporalControl.fromValue) {
+				mapParameters.temporalControl.fromValue = midYear;
+			}
+			if (!mapParameters.temporalControl.toValue) {
+				mapParameters.temporalControl.toValue = midYear;
+			}
+		} else {
+			// For legacy datasets, use full range (existing behavior)
+			if (!mapParameters.temporalControl.fromValue) {
+				mapParameters.temporalControl.fromValue = window.datacollection.metadata.min;
+			}
+			if (!mapParameters.temporalControl.toValue) {
+				mapParameters.temporalControl.toValue = window.datacollection.metadata.max;
+			}
+		}
+
+		// Set min/max bounds with buffer
 		mapParameters.temporalControl.minValue = Math.floor(window.datacollection.metadata.min - buffer);
 		mapParameters.temporalControl.maxValue = Math.ceil(window.datacollection.metadata.max + buffer);
 

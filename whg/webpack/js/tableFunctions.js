@@ -83,15 +83,18 @@ export function highlightFeature(ds_pid, features, whg_map, extent = false) {
         return;
     }
 
-    // Find the feature by pid
-    const featureIndex = features.findIndex(
+    // Find the table feature by pid
+    const tableFeature = features.find(
         f => String(f.properties?.pid) === String(ds_pid.pid)
     );
 
-    if (featureIndex === -1) {
+    if (!tableFeature) {
         console.warn(`Feature ${ds_pid.pid} not found in dataset ${ds_pid.ds}.`);
         return;
     }
+
+    // Get the table ID (index in table.features array)
+    const tableId = tableFeature.properties.id;
 
     // Remove highlight from previously highlighted feature
     if (window.highlightedFeatureIndex !== undefined) {
@@ -106,21 +109,39 @@ export function highlightFeature(ds_pid, features, whg_map, extent = false) {
         return;
     }
 
-    // Highlight feature in all relevant layers
+    // Highlight feature in all relevant layers by finding map features with matching table_id
     if (!window.datacollection?.metadata?.layers?.length) {
         console.warn('No layers defined in datacollection metadata.');
         return;
     }
 
+    // We need to find the actual map feature(s) with this table_id
+    // Query all features from all relevant sources
+    let foundFeature = false;
     window.datacollection.metadata.layers.forEach(layerName => {
         const sourceId = `${ds_pid.ds_id}_${layerName}`;
-        if (!whg_map.getSource(sourceId)) {
+        const source = whg_map.getSource(sourceId);
+        if (!source) {
             console.warn(`Source ${sourceId} not found in current map style.`);
             return;
         }
-        window.highlightedFeatureIndex = { source: sourceId, id: featureIndex };
-        whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+
+        // Query all features from this source
+        const mapFeatures = whg_map.querySourceFeatures(sourceId);
+
+        // Find features with matching table_id
+        mapFeatures.forEach(mapFeature => {
+            if (mapFeature.properties && mapFeature.properties.table_id === tableId) {
+                window.highlightedFeatureIndex = { source: sourceId, id: mapFeature.id };
+                whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: true });
+                foundFeature = true;
+            }
+        });
     });
+
+    if (!foundFeature) {
+        console.warn(`No map features found with table_id ${tableId} for pid ${ds_pid.pid}`);
+    }
 }
 
 export function initialiseTable(
@@ -490,7 +511,9 @@ export function initialiseTable(
 
 	// Custom search function to filter table based on dateline.fromValue and dateline.toValue
 	$.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-		if ($('.range_container.expanded').length == 0) { // Is dateline inactive?
+		// Check if temporal filtering is enabled
+		// If dateline doesn't exist or filtering is disabled, show all rows
+		if (!window.dateline || !window.dateline.filteringEnabled) {
 			return true;
 		}
 
@@ -516,9 +539,16 @@ export function initialiseTable(
 			return includeUndated;
 		}
 
-		return (min !== null && min >= fromValue && min <= toValue) ||
-			(max !== null && max >= fromValue && max <= toValue) ||
-			(min !== null && max !== null && fromValue >= min && fromValue <= max);
+		// Check if feature's temporal range [min, max] overlaps with selected range [fromValue, toValue]
+		// Two ranges overlap if: max >= fromValue AND min <= toValue
+		const passes = max >= fromValue && min <= toValue;
+
+		// Debug logging for first few rows on initial filter
+		if (dataIndex < 5 && window.tableFilterDebugCount === undefined) {
+			console.debug(`Table filter row ${dataIndex}: ${props.title} [${min}, ${max}] vs [${fromValue}, ${toValue}] → ${passes}`);
+		}
+
+		return passes;
 
 	});
 

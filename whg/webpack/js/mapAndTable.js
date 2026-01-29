@@ -37,9 +37,18 @@ async function loadDataset() {
             window.datacollection = data;
             console.debug(`Dataset "${data.metadata.title}" loaded.`, data);
 
-            $('#dataset_content').spin({
-                label: `Loading ${data.metadata.num_places.toLocaleString('en-US')} places...`
-            });
+            const numPlaces = data.metadata.num_places;
+            const isLargeDataset = numPlaces > 5000;
+
+            if (isLargeDataset) {
+                $('#dataset_content').spin({
+                    label: `Loading ${numPlaces.toLocaleString('en-US')} places...<br><small>This is a large dataset. Rendering may take a moment.</small>`
+                });
+            } else {
+                $('#dataset_content').spin({
+                    label: `Loading ${numPlaces.toLocaleString('en-US')} places...`
+                });
+            }
 
             loadMapParameters();
             resolve();
@@ -70,12 +79,11 @@ function loadMapParameters() {
         mapParameters = {
             ...mapParameters,
             temporalControl: {
-                fromValue: 1550,
-                toValue: 1720,
-                minValue: -2000,
-                maxValue: 2100,
+                // Don't set fromValue/toValue here - let mapControls.js initialize based on has_multitemporal_geometries flag
+                minValue: meta.min || -2000,
+                maxValue: meta.max || 2100,
                 open: meta.ds_type !== 'collections',
-                includeUndated: true,
+                includeUndated: !meta.has_multitemporal_geometries,  // Uncheck "Undated" only for multitemporal datasets
                 epochs: null,
                 automate: null,
             },
@@ -90,9 +98,24 @@ function loadMapParameters() {
 // Load map once parameters are ready
 async function loadMap() {
     return new Promise((resolve) => {
+        const isLargeDataset = window.datacollection.metadata.num_places > 5000;
+
+        if (isLargeDataset) {
+            $('#dataset_content').spin({
+                label: `Rendering map with ${window.datacollection.metadata.num_places.toLocaleString('en-US')} places...<br><small>Please wait while the map is being prepared.</small>`
+            });
+        }
+
         whg_map = new whg_maplibre.Map(mapParameters);
         whg_map.on('load', () => {
             console.log('Map loaded.');
+
+            if (isLargeDataset) {
+                $('#dataset_content').spin({
+                    label: `Processing geometries...<br><small>Almost ready!</small>`
+                });
+            }
+
             resolve();
         });
     });
@@ -133,9 +156,31 @@ function completeLoading() {
     }
 
     let marker_reducer = !!window.datacollection.metadata.coordinate_density ? (window.datacollection.metadata.coordinate_density < 50 ? 1 : 50 / window.datacollection.metadata.coordinate_density) : 1
+
+    // Calculate initial temporal filter for mid-year only if dataset has multitemporal GeometryCollections
+    let initialTemporalFilter = null;
+    if (mapParameters.temporalControl && window.datacollection.metadata.has_multitemporal_geometries) {
+        const meta = window.datacollection.metadata;
+        const midYear = Math.floor((meta.min + meta.max) / 2);
+
+        // Create the same filter that will be used by the temporal widget
+        initialTemporalFilter = [
+            'all',
+            ['!=', 'max', 'null'],
+            ['!=', 'min', 'null'],
+            ['>=', 'max', midYear],
+            ['<=', 'min', midYear],
+        ];
+
+        console.log(`Dataset has multitemporal geometries. Setting initial temporal filter to mid-year: ${midYear}`);
+    } else if (mapParameters.temporalControl) {
+        console.log(`Dataset has monotemporal geometries. Initial filter will show full temporal range.`);
+    }
+
+    // Create layerset with initial temporal filter
     whg_map
         .newSource(window.datacollection)
-        .newLayerset(window.datacollection.metadata.ds_id, window.datacollection, null, null, null, null, marker_reducer, circleColors); // Add standard layerset (defined in `layerset.js` and prototyped in `whg_maplibre.js`)
+        .newLayerset(window.datacollection.metadata.ds_id, window.datacollection, null, null, null, null, marker_reducer, circleColors, initialTemporalFilter);
 
     // Initialise Data Table
     const tableInit = initialiseTable(window.datacollection.table.features, checked_rows, whg_map);
@@ -147,6 +192,16 @@ function completeLoading() {
     datelineContainer = mapControlsInit.datelineContainer;
     mapSequencer = mapControlsInit.mapSequencer;
     mapParameters = mapControlsInit.mapParameters;
+
+    // Apply initial temporal filtering if temporal control exists
+    if (mapParameters.temporalControl) {
+        // For datasets, enable filtering by default
+        // For collections, filtering will be controlled by updateVisualisation
+        const isDataset = window.datacollection.metadata.ds_type !== 'collections';
+        if (isDataset) {
+            toggleFilters(true, whg_map, table);
+        }
+    }
 
     window.mapBounds = window.datacollection.metadata.extent || [-180, -90, 180, 90];
     recenterMap(false, true);

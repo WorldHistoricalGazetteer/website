@@ -209,42 +209,78 @@ def generate_mapdata(category, id, refresh=False):
     multi_relations = set()
     default_group = grouped["Point"]
 
-    # Properties to retain for map features
-    required_keys = {"min", "max", "relation", "granularity"}
+    # Global counter for unique feature IDs across all geometry type layers
+    global_feature_id = 0
 
-    def trim_properties(f, index, g):
+    # Properties to retain for map features
+    # table_id: Index in table features array for direct lookup (provides access to all table data including pid)
+    required_keys = {"min", "max", "relation", "granularity", "table_id"}
+
+    # Flag to detect if dataset has multitemporal GeometryCollections
+    has_multitemporal_geometries = False
+
+    def trim_properties(f, g):
         """Return a copy of feature with minimal properties, rounded and validated geometry (or None if invalid)."""
+        nonlocal global_feature_id
         geometry = None
         if g:
             try:
-                # Create a Shapely geometry from the rounded coordinates
-                rounded = {
-                    "type": g["type"],
-                    "coordinates": round_coords(g["coordinates"])
-                }
+                # Extract only standard GeoJSON properties (type and coordinates)
+                # This strips out LPF-specific properties like 'when', 'approximation', etc.
+                geom_type = g.get("type")
+                coords = g.get("coordinates")
 
-                # Use Shapely to validate
-                shapely_geom = shape(rounded)
-                if shapely_geom.is_valid:
-                    geometry = mapping(shapely_geom)
+                if not geom_type or coords is None:
+                    logger.warning(f"Feature {f.get('id')}: Missing type or coordinates in geometry")
+                    geometry = None
                 else:
-                    logger.warning(f"Invalid geometry at index {index}; replacing with None.")
+                    clean_geom = {
+                        "type": geom_type,
+                        "coordinates": coords
+                    }
 
-            except Exception as e:
-                logger.warning(f"Error processing geometry {g} {rounded} at index {index}: {e}")
+                    # Round coordinates
+                    rounded = {
+                        "type": clean_geom["type"],
+                        "coordinates": round_coords(clean_geom["coordinates"])
+                    }
+
+                    # Use Shapely to validate and ensure proper GeoJSON structure
+                    try:
+                        shapely_geom = shape(rounded)
+                        if shapely_geom.is_valid:
+                            geometry = mapping(shapely_geom)
+                        else:
+                            logger.warning(f"Feature {f.get('id')}: Shapely reports invalid {geom_type} geometry")
+                            geometry = None
+                    except Exception as shapely_error:
+                        logger.warning(f"Feature {f.get('id')}: Shapely validation error for {geom_type}: {shapely_error}")
+                        geometry = None
+
+            except KeyError as e:
+                logger.warning(f"Feature {f.get('id')}: KeyError accessing geometry field: {e}")
                 geometry = None
+            except Exception as e:
+                logger.warning(f"Feature {f.get('id')}: Error processing {g.get('type', 'unknown')} geometry: {e}")
+                geometry = None
+
+        feature_id = global_feature_id
+        global_feature_id += 1
 
         return {
             "type": "Feature",
             "geometry": geometry,
             "properties": {k: v for k, v in f.get("properties", {}).items() if k in required_keys},
-            "id": index
+            "id": feature_id
         }
 
     for index, feature in enumerate(mapdata["features"]):
 
         geom = feature.get("geometry")
         props = feature.get("properties", {})
+
+        # Add table_id for linking map features back to table
+        props["table_id"] = index
 
         grouped["Table"].append({
             "type": "Feature",
@@ -258,50 +294,74 @@ def generate_mapdata(category, id, refresh=False):
             multi_relations.add(relation)
 
         if not geom:
-            default_group.append(trim_properties(feature, index, None))
+            default_group.append(trim_properties(feature, None))
             continue
 
         gtype = geom["type"]
 
         if gtype == "GeometryCollection":
-
-            subgroups = defaultdict(list)
+            # Explode GeometryCollection into separate features, each with its own temporal range
             for subgeom in geom.get("geometries", []):
                 subtype = subgeom["type"]
-                subgroups[subtype].append(subgeom)
+                base_type = "Point" if subtype.removeprefix("Multi") == "Point" else "Granular" if "granularity" in feature["properties"] else "Polygon"
 
-            for subtype, geoms in subgroups.items():
-                base_type = "Point" if subtype.removeprefix("Multi") == "Point" else "Granular" if "granularity" in \
-                                                                                                   feature[
-                                                                                                       "properties"] else "Polygon"
+                # Extract temporal range from this specific geometry
+                geom_min = None
+                geom_max = None
+                when = subgeom.get("when", {})
+                timespans = when.get("timespans", [])
 
-                if subtype.startswith("Multi"):
-                    # Already a multi-geometry, just collect their coordinates
-                    coords = []
-                    for g in geoms:
-                        coords.extend(g["coordinates"])
-                    new_geom = {
-                        "type": subtype,
-                        "coordinates": coords,
-                    }
-                else:
-                    if len(geoms) > 1:
-                        new_geom = {
-                            "type": f"Multi{subtype}",
-                            "coordinates": [g["coordinates"] for g in geoms],
-                        }
-                    else:
-                        new_geom = {
-                            "type": subtype,
-                            "coordinates": geoms[0]["coordinates"],
-                        }
+                if timespans:
+                    # We have a multitemporal GeometryCollection
+                    has_multitemporal_geometries = True
+                    all_years = []
+                    for ts in timespans:
+                        if 'start' in ts:
+                            if 'latest' in ts['start']:
+                                try:
+                                    all_years.append(int(ts['start']['latest']))
+                                except (ValueError, TypeError):
+                                    pass
+                            elif 'earliest' in ts['start']:
+                                try:
+                                    all_years.append(int(ts['start']['earliest']))
+                                except (ValueError, TypeError):
+                                    pass
+                        if 'end' in ts:
+                            if 'earliest' in ts['end']:
+                                try:
+                                    all_years.append(int(ts['end']['earliest']))
+                                except (ValueError, TypeError):
+                                    pass
+                            elif 'latest' in ts['end']:
+                                try:
+                                    all_years.append(int(ts['end']['latest']))
+                                except (ValueError, TypeError):
+                                    pass
 
-                grouped[base_type].append(trim_properties(feature, index, new_geom))
+                    if all_years:
+                        geom_min = min(all_years)
+                        geom_max = max(all_years)
+
+                # Create a copy of the feature properties with this geometry's temporal range
+                geom_props = props.copy()
+                if geom_min is not None and geom_max is not None:
+                    geom_props["min"] = geom_min
+                    geom_props["max"] = geom_max
+
+                # Create feature with individual geometry (without the 'when' property)
+                clean_geom = {
+                    "type": subgeom["type"],
+                    "coordinates": subgeom["coordinates"]
+                }
+
+                trimmed = trim_properties({"properties": geom_props}, clean_geom)
+                grouped[base_type].append(trimmed)
 
         else:
             base_type = "Point" if gtype.removeprefix("Multi") == "Point" else "Granular" if "granularity" in feature[
                 "properties"] else "Polygon"
-            trimmed = trim_properties(feature, index, geom)
+            trimmed = trim_properties(feature, geom)
             if base_type in grouped:
                 grouped[base_type].append(trimmed)
 
@@ -356,6 +416,7 @@ def generate_mapdata(category, id, refresh=False):
         "datasets": mapdata.get("datasets", None),
         "relations": mapdata.get("relations", None),
         "multi_relations": list(multi_relations) if multi_relations else [],
+        "has_multitemporal_geometries": has_multitemporal_geometries,  # Flag for temporal optimization
         # Default values for visParameters:
         # tabulate: 'initial'|true|false - include sortable table column, 'initial' indicating the initial sort column
         # temporal_control: 'player'|'filter'|null - control to be displayed when sorting on this column
@@ -389,7 +450,7 @@ def mapdata_dataset(id, task_id=None, chunk_size=1000):
 
     features = []
     redis_batch_size = 100
-    index = 0
+    feature_index = 0  # Global feature index for unique IDs
 
     bbox = ds.bbox or compute_dataset_bbox(ds.label)
 
@@ -429,8 +490,20 @@ def mapdata_dataset(id, task_id=None, chunk_size=1000):
             place_obj = place_map[place['id']]
             geom_list = [g.jsonb for g in getattr(place_obj, 'prefetched_geoms', [])]
 
+            # 1. Check if minmax exists and contains no None values
+            mm = place.get('minmax')
+            f_min, f_max = mm if (mm and None not in mm) else ("null", "null")
+
+            # 2. Determine Geometry (0 = None, 1 = Single, >1 = Collection)
+            geometry = (
+                geom_list[0] if len(geom_list) == 1 else
+                {"type": "GeometryCollection", "geometries": geom_list} if geom_list else
+                None
+            )
+
             feature = {
                 "type": "Feature",
+                "id": feature_index,
                 "properties": {
                     "pid": place['id'],
                     "src_id": place['src_id'],
@@ -439,27 +512,20 @@ def mapdata_dataset(id, task_id=None, chunk_size=1000):
                     "review_wd": place['review_wd'],
                     "review_tgn": place['review_tgn'],
                     "review_whg": place['review_whg'],
-                    "min": "null" if place['minmax'] is None or place['minmax'][0] is None else place['minmax'][0],
-                    "max": "null" if place['minmax'] is None or place['minmax'][1] is None else place['minmax'][1],
+                    # TODO: UI may throw errors because the minmax range is not representative of temporally-discontinuous geometries
+                    "min": f_min,
+                    "max": f_max,
                 },
-                "geometry": geom_list[0] if len(geom_list) == 1
-                else (
-                    None if len(geom_list) == 0
-                    else {
-                        "type": "GeometryCollection",
-                        "geometries": geom_list
-                    }
-                )
+                "geometry": geometry
             }
             features.append(feature)
+            feature_index += 1
 
-            if task_id and (index + 1) % redis_batch_size == 0:
+            if task_id and feature_index % redis_batch_size == 0:
                 redis_client.hincrby(task_id, 'queued_features', -redis_batch_size)
 
-            index += 1
-
     if task_id:
-        redis_client.hincrby(task_id, 'queued_features', -(index % redis_batch_size))
+        redis_client.hincrby(task_id, 'queued_features', -(feature_index % redis_batch_size))
 
     return {
         "title": ds.title,

@@ -60,10 +60,10 @@ maplibregl.Map.prototype.newSource = function(ds, fc = null) {
 
 maplibregl.Map.prototype.layersets = [];
 maplibregl.Map.prototype.layersetObjects = [];
-maplibregl.Map.prototype.newLayerset = function (dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors) {
+maplibregl.Map.prototype.newLayerset = function (dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors, initialTemporalFilter = null) {
 	this.layersets.push(dc_id);
-	console.debug('New layerset', dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors);
-	const layerset = new Layerset(this, dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors);
+	console.debug('New layerset', dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors, initialTemporalFilter);
+	const layerset = new Layerset(this, dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors, initialTemporalFilter);
 	this.layersetObjects.push(layerset);
     return layerset;
 };

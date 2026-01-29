@@ -66,7 +66,14 @@ def login(request):
                                      backend='django.contrib.auth.backends.ModelBackend')
             if user is not None:
                 auth.login(request, user)
-                # Redirect to the ORCiD authorisation URL if provided
+
+                # DEBUG MODE BYPASS: Skip ORCiD for local development
+                if settings.DEBUG:
+                    logger.info(f"DEBUG mode: Skipping ORCiD authorization for user {username}")
+                    messages.success(request, f"Welcome back, {user.get_full_name() or username}! (DEBUG mode - ORCiD bypassed)")
+                    return redirect('home')
+
+                # Production: Redirect to the ORCiD authorisation URL if provided
                 if orcid_auth_url:
                     # Ensure the ORCiD URL is valid
                     if orcid_auth_url.startswith(settings.ORCID_BASE):
@@ -95,7 +102,10 @@ def login(request):
         return render(
             request,
             'accounts/login.html',
-            context={"orcid_auth_url": build_orcid_authorize_url(request)}
+            context={
+                "orcid_auth_url": build_orcid_authorize_url(request),
+                "debug": settings.DEBUG,
+            }
         )
 
 

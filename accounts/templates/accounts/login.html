@@ -159,6 +159,12 @@
         </div>
 
         <div class="col-md-5 ps-md-4">
+            {% if debug %}
+            <div class="alert alert-warning mb-3" role="alert">
+                <i class="fas fa-code me-2"></i><strong>DEBUG MODE:</strong> ORCiD authorization bypassed.
+                You can login with just username and password.
+            </div>
+            {% endif %}
             <h4 class="text-muted">
                 <i class="fas fa-sign-in-alt me-2"></i>Legacy WHG Login
             </h4>

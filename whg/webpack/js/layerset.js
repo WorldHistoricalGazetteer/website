@@ -2,7 +2,7 @@
 
 class Layerset {
 
-    constructor(mapInstance, dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors) {
+    constructor(mapInstance, dc_id, source_id, paintOption, colour, colour_highlight, number, enlarger, relation_colors, initialTemporalFilter = null) {
         // The following default colours must be expressed in rgba format
         this.colour = (typeof colour !== 'string') ? 'rgba(255,165,0,1)' : colour; // orange
         // this.colour = (typeof colour !== 'string') ? 'rgba(0,158,255,1)' : colour; // blue
@@ -19,7 +19,7 @@ class Layerset {
                 : this.colour
         ]
 
-        this.temporalFilter = null;  // Store temporal filter
+        this.temporalFilter = initialTemporalFilter;  // Store initial temporal filter
         this.relationFilter = null;  // Store relation filter
 
         const paintOptions = {
@@ -309,64 +309,14 @@ class Layerset {
                     else if (!relation_colors && typeLower === 'point') {
                         layer['minzoom'] = 5;
                     }
+
+                    // Apply initial temporal filter if one exists before adding layer
+                    if (this.temporalFilter) {
+                        layer['filter'] = this.temporalFilter;
+                    }
+
                     console.debug(`Adding layer "${layerName}" to map...`, layer);
 
-                    if (['polygon', 'granular'].includes(layerName) && layer.type === 'fill') {
-                        const worker = new Worker(new URL('./workers/granularity.js', import.meta.url), {type: 'module'});
-                        worker.onmessage = (event) => {
-                            const source = mapInstance.getSource(`${sourcePrefix}_${layerName}`);
-                            if (!source) {
-                                console.warn(`Source "${sourcePrefix}_${layerName}" not found`);
-                                worker.terminate();
-                                return;
-                            }
-
-                            const {patterns, bufferedGeoJSON} = event.data;
-                            source.setData(bufferedGeoJSON);
-
-                            console.debug(`Layer "${layerName}" updated with buffered GeoJSON:`, bufferedGeoJSON);
-
-                            if (!patterns || patterns.length === 0) {
-                                worker.terminate();
-                                return;
-                            }
-
-                            // Async pattern registration and layer paint update
-                            (async () => {
-                                try {
-                                    // Add each ImageBitmap as a named pattern
-                                    const patternNames = []
-                                    for (let i = 0; i < patterns.length; i++) {
-                                        const patternName = `${sourcePrefix}_pattern_${i}`;
-                                        patternNames.push(patternName);
-                                        if (!mapInstance.hasImage(patternName)) {
-                                            await mapInstance.addImage(patternName, patterns[i], {pixelRatio: 1});
-                                        }
-                                    }
-
-                                    // Switch paint from fill-color to fill-pattern
-                                    const layerId = `${sourcePrefix}_${layerName}`;
-                                    // TODO: pattern will not switch on feature-state at present - see https://github.com/maplibre/maplibre-gl-js/issues/4930
-                                    await mapInstance.setPaintProperty(layerId, 'fill-pattern', [...this._highlighter, ...patternNames]);
-                                    await mapInstance.setPaintProperty(layerId, 'fill-color', undefined);
-                                    await mapInstance.setPaintProperty(layerId, 'fill-antialias', true);
-
-                                    // Log the amended properties of the layer
-                                    console.debug(`Layer "${layerId}" updated with fill-pattern:`, [...this._highlighter, ...patternNames]);
-                                } catch (e) {
-                                    console.error('Error registering pattern bitmaps:', e);
-                                } finally {
-                                    worker.terminate();
-                                }
-                            })();
-                        };
-                        // if array of colours, use white
-                        const patternColours = typeof this.colour_options[1] === 'string' ? this.colour_options : [this.colour_highlight, 'rgba(255,255,255,1)'];
-                        worker.postMessage({
-                            colours: layerName === 'granular' ? patternColours : [],
-                            featureCollection: this._source[layerName]
-                        });
-                    }
                     mapInstance.addLayer(layer);
                     this._layerIDs.push(layerID);
                     this._sourceIDs.add(`${sourcePrefix}_${layerName}`);
