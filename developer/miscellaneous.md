@@ -1,4 +1,6 @@
 ## Update mapdata cache
+
+### Basic Usage
 - For a single collection or dataset:
 ```sh
 # EXAMPLE - Collection ID 134
@@ -12,16 +14,37 @@ docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --d
 # All collections
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --collections
 
-# All datasets
+# All datasets (continues even if individual datasets fail)
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets
 ```
 - For all collections and datasets:
 ```sh
+# By default, continues on error - skips problematic datasets like Getty TGN
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata
 ```
 - To only clear cache without regenerating (will regenerate on first access):
 ```sh
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --clear-only
+```
+
+### Advanced Options
+- Stop processing if an error occurs (default is to continue):
+```sh
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --stop-on-error
+```
+- Resume from a specific ID (useful after interruption):
+```sh
+# Skip datasets/collections with ID < 100
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets --skip-to 100
+```
+
+### Handling Large Datasets
+Very large datasets (>1M places, e.g., Getty TGN) may cause out-of-memory errors during regeneration.
+The command will automatically skip these and continue with other datasets.
+For these datasets, you can also use `--clear-only` and let the cache regenerate on first access:
+```sh
+# Clear cache for specific large dataset
+docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets --id 16 --clear-only
 ```
 
 ## Update `toponyms` (table of unique place names)

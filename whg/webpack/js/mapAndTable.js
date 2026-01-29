@@ -102,7 +102,7 @@ async function loadMap() {
 
         if (isLargeDataset) {
             $('#dataset_content').spin({
-                label: `Rendering map with ${window.datacollection.metadata.num_places.toLocaleString('en-US')} places...<br><small>Please wait while the map is being prepared.</small>`
+                label: `Rendering map with ${window.datacollection.metadata.num_places.toLocaleString('en-US')} places...Please wait while the map is being prepared.`
             });
         }
 
@@ -112,7 +112,7 @@ async function loadMap() {
 
             if (isLargeDataset) {
                 $('#dataset_content').spin({
-                    label: `Processing geometries...<br><small>Almost ready!</small>`
+                    label: `Processing geometries...Almost ready!`
                 });
             }
 
