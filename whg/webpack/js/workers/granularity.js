@@ -1,86 +1,87 @@
 import * as turf from '@turf/turf';
 
-/**
- * Generates an array of ImageBitmaps representing mottled fill patterns for different colours.
- * The pattern is created on an OffscreenCanvas and consists of randomly positioned,
- * semi-transparent circles with a radial gradient.
- *
- * @async
- * @param {string[]} colours - An array of CSS colour strings to generate patterns for.
- * @param {number} finalSize - The desired size (width and height) of the individual pattern image (before tiling).
- * @returns {Promise<ImageBitmap[]>} A promise that resolves to an array of ImageBitmaps, one for each colour.
- */
-async function generateFillPatterns(colours, finalSize) {
-    const drawCanvas = new OffscreenCanvas(finalSize * 2, finalSize * 2);
-    const drawCtx = drawCanvas.getContext('2d');
-
-    const maxRadius = finalSize / 3;
-    const circleCount = Math.round(3 * Math.pow(finalSize, 2) / (Math.PI * Math.pow(maxRadius, 2)));
-    const circleData = [];
-
-    for (let i = 0; i < circleCount; i++) {
-        const x = Math.random() * finalSize;
-        const y = Math.random() * finalSize;
-        const radius = maxRadius * (Math.random() * 0.5 + 0.5);
-        circleData.push({ x, y, radius });
-    }
-
-    function drawCircle(x, y, radius, colour, ctx) {
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        gradient.addColorStop(0, colour);
-        gradient.addColorStop(1, colour.replace(/[^,]+(?=\))/, '0')); // fade to transparent
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
-    }
-
-    function drawPattern(colour) {
-        drawCtx.clearRect(0, 0, finalSize * 2, finalSize * 2);
-        circleData.forEach(({ x, y, radius }) => {
-            drawCircle(x, y, radius, colour, drawCtx);
-            drawCircle(x + finalSize, y, radius, colour, drawCtx);
-            drawCircle(x, y + finalSize, radius, colour, drawCtx);
-            drawCircle(x + finalSize, y + finalSize, radius, colour, drawCtx);
-        });
-    }
-
-    const bitmaps = [];
-
-    for (const colour of colours) {
-        drawPattern(colour);
-
-        // Create a canvas to extract the central tile-sized square
-        const cropCanvas = new OffscreenCanvas(finalSize, finalSize);
-        const cropCtx = cropCanvas.getContext('2d');
-
-        cropCtx.drawImage(
-            drawCanvas,
-            finalSize / 4, finalSize / 4, // start cropping from the centre
-            finalSize, finalSize,         // width and height of the crop
-            0, 0,                         // destination top-left corner
-            finalSize, finalSize          // destination width and height
-        );
-
-        const bitmap = await createImageBitmap(await cropCanvas.convertToBlob());
-        bitmaps.push(bitmap);
-    }
-
-    return bitmaps;
-}
+// /**
+//  * Generates an array of ImageBitmaps representing mottled fill patterns for different colours.
+//  * The pattern is created on an OffscreenCanvas and consists of randomly positioned,
+//  * semi-transparent circles with a radial gradient.
+//  *
+//  * @async
+//  * @param {string[]} colours - An array of CSS colour strings to generate patterns for.
+//  * @param {number} finalSize - The desired size (width and height) of the individual pattern image (before tiling).
+//  * @returns {Promise<ImageBitmap[]>} A promise that resolves to an array of ImageBitmaps, one for each colour.
+//  */
+// async function generateFillPatterns(colours, finalSize) {
+//     const drawCanvas = new OffscreenCanvas(finalSize * 2, finalSize * 2);
+//     const drawCtx = drawCanvas.getContext('2d');
+//
+//     const maxRadius = finalSize / 3;
+//     const circleCount = Math.round(3 * Math.pow(finalSize, 2) / (Math.PI * Math.pow(maxRadius, 2)));
+//     const circleData = [];
+//
+//     for (let i = 0; i < circleCount; i++) {
+//         const x = Math.random() * finalSize;
+//         const y = Math.random() * finalSize;
+//         const radius = maxRadius * (Math.random() * 0.5 + 0.5);
+//         circleData.push({ x, y, radius });
+//     }
+//
+//     function drawCircle(x, y, radius, colour, ctx) {
+//         const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+//         gradient.addColorStop(0, colour);
+//         gradient.addColorStop(1, colour.replace(/[^,]+(?=\))/, '0')); // fade to transparent
+//         ctx.beginPath();
+//         ctx.arc(x, y, radius, 0, Math.PI * 2);
+//         ctx.fillStyle = gradient;
+//         ctx.fill();
+//     }
+//
+//     function drawPattern(colour) {
+//         drawCtx.clearRect(0, 0, finalSize * 2, finalSize * 2);
+//         circleData.forEach(({ x, y, radius }) => {
+//             drawCircle(x, y, radius, colour, drawCtx);
+//             drawCircle(x + finalSize, y, radius, colour, drawCtx);
+//             drawCircle(x, y + finalSize, radius, colour, drawCtx);
+//             drawCircle(x + finalSize, y + finalSize, radius, colour, drawCtx);
+//         });
+//     }
+//
+//     const bitmaps = [];
+//
+//     for (const colour of colours) {
+//         drawPattern(colour);
+//
+//         // Create a canvas to extract the central tile-sized square
+//         const cropCanvas = new OffscreenCanvas(finalSize, finalSize);
+//         const cropCtx = cropCanvas.getContext('2d');
+//
+//         cropCtx.drawImage(
+//             drawCanvas,
+//             finalSize / 4, finalSize / 4, // start cropping from the centre
+//             finalSize, finalSize,         // width and height of the crop
+//             0, 0,                         // destination top-left corner
+//             finalSize, finalSize          // destination width and height
+//         );
+//
+//         const bitmap = await createImageBitmap(await cropCanvas.convertToBlob());
+//         bitmaps.push(bitmap);
+//     }
+//
+//     return bitmaps;
+// }
 
 /**
  * Buffers features in a GeoJSON FeatureCollection based on their geometry type and properties.
- * Features with a 'granularity' property will be buffered by that amount (in kilometers).
+ * Features with a 'granularity' property > 0 will be buffered by that amount (in kilometers).
  * Other LineString and MultiLineString geometries will be buffered by a fixed amount (0.25 kilometers).
  * GeometryCollections will have their individual geometries processed recursively.
+ * Features with granularity=0 are passed through unchanged (no buffering needed).
  *
  * @async
  * @param {turf.FeatureCollection} featureCollection - The GeoJSON FeatureCollection to process.
- * @param {string[]} colours - An array of CSS colour strings to generate fill patterns with (if buffering occurs).
- * @param {number} patternSize - The desired size of the generated fill pattern images.
+ * @param {string[]} colours - An array of CSS colour strings (currently unused).
+ * @param {number} patternSize - The desired size of the generated fill pattern images (currently unused).
  * @returns {Promise<{bufferedFeatureCollection: turf.FeatureCollection | null, patternImageBitmaps: string[] | null}>}
- * A promise that resolves to an object containing the buffered FeatureCollection and an array of pattern image URLs (if any buffering occurred).
+ * A promise that resolves to an object containing the buffered FeatureCollection (patterns are no longer generated).
  */
 async function bufferFeatureCollection(featureCollection, colours, patternSize) {
     const result = {
@@ -93,7 +94,8 @@ async function bufferFeatureCollection(featureCollection, colours, patternSize) 
     async function bufferIfGranular(feature) {
         const { geometry } = feature;
 
-        if (feature?.properties?.granularity) { // False if granularity is zero (or undefined or null)
+        // Only buffer if granularity > 0
+        if (feature?.properties?.granularity && feature.properties.granularity > 0) {
             anyGranular = true;
             const buffered = turf.buffer(geometry, feature.properties.granularity, { units: 'kilometers' });
             return buffered.geometry;
@@ -164,10 +166,10 @@ async function bufferFeatureCollection(featureCollection, colours, patternSize) 
 
     result.bufferedFeatureCollection = turf.featureCollection(processedFeatures);
 
-    // Only generate patterns if any buffering occurred
-    if (anyGranular) {
-        result.patternImageBitmaps = await generateFillPatterns(colours, patternSize);
-    }
+    // Pattern generation is disabled (commented out above)
+    // if (anyGranular) {
+    //     result.patternImageBitmaps = await generateFillPatterns(colours, patternSize);
+    // }
 
     return result;
 }

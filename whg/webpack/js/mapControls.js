@@ -273,6 +273,9 @@ function init_mapControls(whg_map, datelineContainer, toggleFilters, mapParamete
 		mapParameters.temporalControl.minValue = Math.floor(window.datacollection.metadata.min - buffer);
 		mapParameters.temporalControl.maxValue = Math.ceil(window.datacollection.metadata.max + buffer);
 
+		// For multitemporal datasets, clamp the range so both sliders move together
+		mapParameters.temporalControl.clampedRange = window.datacollection.metadata.has_multitemporal_geometries;
+
 		window.dateline = new Dateline({
 			...mapParameters.temporalControl,
 			onChange: dateRangeChanged

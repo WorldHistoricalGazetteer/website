@@ -403,7 +403,38 @@ export function initialiseTable(
 
     $('#placetable_filter input')
     .attr('placeholder', 'Filter places...')
-    .removeAttr('aria-controls');
+    .removeAttr('aria-controls')
+    .on('keyup search', function() {
+        const searchTerm = $(this).val().toLowerCase();
+
+        if (searchTerm === '') {
+            whg_map.layersetObjects.forEach(layerset => {
+                layerset.setSearchFilter(null);
+            });
+        } else {
+            // Get visible rows and extract their table_id (properties.id)
+            const visibleTableIds = table.rows({ search: 'applied' }).data().toArray()
+                .map(row => row.properties?.id) // Use 'id', not 'pid'
+                .filter(id => id !== null && id !== undefined);
+
+            console.log('Visible table IDs:', visibleTableIds);
+
+            if (visibleTableIds.length === 0) {
+                whg_map.layersetObjects.forEach(layerset => {
+                    layerset.setSearchFilter(['==', 'table_id', -1]);
+                });
+            } else {
+                // Filter by table_id, not pid
+                const filter = ['in', 'table_id', ...visibleTableIds];
+                console.log('Applying filter:', filter);
+
+                whg_map.layersetObjects.forEach(layerset => {
+                    layerset.setSearchFilter(filter);
+                });
+            }
+        }
+    });
+
     $('#placetable_filter label').contents().filter(function() {
         return this.nodeType === 3; // Remove text nodes (i.e., "Search:")
     }).remove();
@@ -542,11 +573,6 @@ export function initialiseTable(
 		// Check if feature's temporal range [min, max] overlaps with selected range [fromValue, toValue]
 		// Two ranges overlap if: max >= fromValue AND min <= toValue
 		const passes = max >= fromValue && min <= toValue;
-
-		// Debug logging for first few rows on initial filter
-		if (dataIndex < 5 && window.tableFilterDebugCount === undefined) {
-			console.debug(`Table filter row ${dataIndex}: ${props.title} [${min}, ${max}] vs [${fromValue}, ${toValue}] → ${passes}`);
-		}
 
 		return passes;
 

@@ -161,7 +161,7 @@ def generate_mapdata(category, id, refresh=False):
     # As a concept, `granularity` is a measure of the precision of the geometry. In LPF this is represented as
     # `approximation` with a `type` of either:
     # a) `geo:hasSpatialAccuracy` with a `tolerance` value in kilometres, or
-    # b) `geo:sfWithin` (for Polygons) without a `tolerance` value.
+    # b) Qualitative approximation types (geo:sfWithin, crm:P189_approximates) without a `tolerance` value.
     # WHG cannot at present handle different `granularity` values for different geometries in a GeometryCollection:
     # instead, the largest `granularity` value is used for the entire GeometryCollection.
     # If a feature's geometry has `granularity`, or if the geometry is a GeometryCollection with any subgeometry
@@ -177,10 +177,23 @@ def generate_mapdata(category, id, refresh=False):
             approx = g.get("approximation")
             if not approx or not isinstance(approx, dict):
                 return None
-            if approx.get("type") == "geo:hasSpatialAccuracy":
+            approx_type = approx.get("type")
+
+            # Quantified accuracy with tolerance in km
+            if approx_type == "geo:hasSpatialAccuracy":
                 return approx.get("tolerance", 0)
-            elif approx.get("type") == "geo:sfWithin" and g.get("type") in ("Polygon", "MultiPolygon"):
+
+            # Qualitative approximation types - all return 0 (meaning "approximate but unquantified")
+            # These will be rendered with dashed outlines
+            elif approx_type in (
+                "geo:sfWithin",                  # Maximum extent (Polygon/MultiPolygon only)
+                "crm:P189_approximates",         # CIDOC-CRM approximation
+            ):
+                # geo:sfWithin only applies to Polygons
+                if approx_type == "geo:sfWithin" and g.get("type") not in ("Polygon", "MultiPolygon"):
+                    return None
                 return 0
+
             return None
 
         if geom.get("type") == "GeometryCollection":
@@ -196,6 +209,8 @@ def generate_mapdata(category, id, refresh=False):
             granularity = extract_granularity(geom)
             geom.pop("approximation", None)
 
+        # Add granularity property for any approximation (including qualitative ones with granularity=0)
+        # This allows frontend to style features with dashed borders via the "Granular" layer
         if granularity is not None:
             feature.setdefault("properties", {})["granularity"] = granularity
 
@@ -349,7 +364,7 @@ def generate_mapdata(category, id, refresh=False):
                     geom_props["min"] = geom_min
                     geom_props["max"] = geom_max
 
-                # Create feature with individual geometry (without the 'when' property)
+                # Create feature with individual geometry (clean - without 'when' or 'approximation')
                 clean_geom = {
                     "type": subgeom["type"],
                     "coordinates": subgeom["coordinates"]

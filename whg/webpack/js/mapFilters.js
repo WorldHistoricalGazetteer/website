@@ -15,12 +15,6 @@ export function toggleFilters(on, whg_map, table) {
         window.dateline.filteringEnabled = on;
     }
 
-    // Reset debug counter to log first few rows
-    if (on) {
-        delete window.tableFilterDebugCount;
-        console.debug(`toggleFilters(${on}): fromValue=${fromValue}, toValue=${toValue}, includeUndated=${window.dateline?.includeUndated}`);
-    }
-
     whg_map.layersetObjects.forEach(layerset => {
         // Update the temporal filter for this layerset
         if (on) {
@@ -52,7 +46,4 @@ export function toggleFilters(on, whg_map, table) {
         }
     });
     table.draw();
-
-    // Mark that we've logged debug info
-    window.tableFilterDebugCount = true;
 }

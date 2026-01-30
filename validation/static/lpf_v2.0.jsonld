@@ -378,7 +378,7 @@
             }
         },
         "approximation": {
-            "oneOf": [
+            "anyOf": [
               {
                 "type": "object",
                 "required": ["type", "tolerance"],
@@ -389,10 +389,27 @@
                   },
                   "tolerance": {
                     "type": "number",
-                    "minimum": 0
+                    "minimum": 0,
+                    "description": "Tolerance in kilometres"
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Quantified spatial accuracy with tolerance in kilometres"
+              },
+              {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "geo:sfWithin",
+                      "crm:P189_approximates"
+                    ]
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Qualitative approximation type: geo:sfWithin (maximum extent), crm:P189_approximates (CIDOC-CRM approximation)"
               },
               {
                 "type": "object",
@@ -402,7 +419,8 @@
                     "$ref": "#/definitions/patterns/definitions/validURLorNamespaceTerm"
                   }
                 },
-                "additionalProperties": false
+                "additionalProperties": false,
+                "description": "Custom approximation type using any valid URL or namespace term"
               }
             ]
         },

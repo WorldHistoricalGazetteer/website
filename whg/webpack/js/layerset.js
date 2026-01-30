@@ -391,6 +391,11 @@ class Layerset {
         this.updateFilter();
     }
 
+    setSearchFilter(filter) {
+        this.searchFilter = filter;
+        this.updateFilter();
+    }
+
     getCombinedFilter() {
         let combinedFilter = [];
 
@@ -400,6 +405,10 @@ class Layerset {
 
         if (this.relationFilter) {
             combinedFilter.push(this.relationFilter);
+        }
+
+        if (this.searchFilter) {
+            combinedFilter.push(this.searchFilter);
         }
 
         return combinedFilter.length > 0 ? ['all', ...combinedFilter] : null;

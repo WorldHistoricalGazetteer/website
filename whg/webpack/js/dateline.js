@@ -55,7 +55,8 @@ export default class Dateline {
                     open = false,
                     includeUndated = true, // null | false | true - 'false/true' determine state of select box input; 'null' excludes the button altogether
                     epochs = true,
-                    automate = true
+                    automate = true,
+                    clampedRange = false // For multitemporal datasets - both sliders move together at the same value
                 }) {
         this.fromValue = fromValue;
         this.toValue = toValue;
@@ -67,6 +68,7 @@ export default class Dateline {
         this.includeUndated = includeUndated;
         this.epochs = epochs;
         this.automate = automate;
+        this.clampedRange = clampedRange;
 
         this.createSliderElements();
         this.updateFormInputs();
@@ -198,17 +200,27 @@ export default class Dateline {
                 updateTooltip(event);
             });
             slider.addEventListener('input', event => {
-                if (event.target.classList.contains('to')) {
-                    this.toValue = parseInt(event.target.value);
-                    if (this.toValue <= this.fromValue) {
-                        this.fromValue = this.toValue;
-                        this.fromSlider.value = this.fromValue;
-                    }
-                } else { // from
-                    this.fromValue = parseInt(event.target.value);
-                    if (this.fromValue >= this.toValue) {
-                        this.toValue = this.fromValue;
-                        this.toSlider.value = this.toValue;
+                if (this.clampedRange) {
+                    // For clamped range (multitemporal datasets), both sliders move together
+                    const newValue = parseInt(event.target.value);
+                    this.fromValue = newValue;
+                    this.toValue = newValue;
+                    this.fromSlider.value = newValue;
+                    this.toSlider.value = newValue;
+                } else {
+                    // Normal behavior - sliders can move independently
+                    if (event.target.classList.contains('to')) {
+                        this.toValue = parseInt(event.target.value);
+                        if (this.toValue <= this.fromValue) {
+                            this.fromValue = this.toValue;
+                            this.fromSlider.value = this.fromValue;
+                        }
+                    } else { // from
+                        this.fromValue = parseInt(event.target.value);
+                        if (this.fromValue >= this.toValue) {
+                            this.toValue = this.fromValue;
+                            this.toSlider.value = this.toValue;
+                        }
                     }
                 }
                 this.updateFormInputs();
