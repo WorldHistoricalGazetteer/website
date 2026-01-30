@@ -27,6 +27,67 @@ let checked_rows;
 let mapParameters;
 let whg_map;
 
+/**
+ * Wait for GPU to finish rendering using WebGL fence synchronization
+ * This is more reliable than 'idle' or 'render' events for complex datasets
+ * @param {Map} map - MapLibre map instance
+ * @returns {Promise} - Resolves when GPU has finished rendering
+ */
+function waitForGPUCompletion(map) {
+    return new Promise((resolve) => {
+        // First wait for the map to be idle (no more tiles loading, no transitions)
+        const onIdle = () => {
+            map.off('idle', onIdle);
+
+            // Now check if GPU has finished rendering using fence sync
+            try {
+                const gl = map.painter.context.gl;
+
+                // Create a sync object - this acts as a "fence" in the GPU command queue
+                const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+
+                // Flush to ensure the fence command is sent to the GPU
+                gl.flush();
+
+                // Poll for fence completion
+                function checkFence() {
+                    const status = gl.clientWaitSync(sync, 0, 0);
+
+                    if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
+                        // GPU has finished all rendering commands
+                        gl.deleteSync(sync);
+                        console.log('GPU rendering complete - all pixels drawn');
+                        resolve();
+                    } else {
+                        // GPU still working, check again on next tick
+                        setTimeout(checkFence, 0);
+                    }
+                }
+
+                checkFence();
+
+            } catch (error) {
+                // Fallback if WebGL sync is not available (shouldn't happen in modern browsers)
+                console.warn('WebGL fence sync not available, using fallback:', error);
+                // Wait an additional frame to be safe
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(resolve);
+                });
+            }
+        };
+
+        // If map is already idle, trigger immediately
+        if (!map.isMoving() && !map.isRotating() && !map.isZooming()) {
+            // Wait one frame to ensure current render is complete
+            requestAnimationFrame(() => {
+                map.once('idle', onIdle);
+            });
+        } else {
+            map.once('idle', onIdle);
+        }
+    });
+}
+
 // Utility to load dataset
 async function loadDataset() {
     return new Promise((resolve, reject) => {
@@ -132,13 +193,14 @@ async function initialiseMapInterface() {
         await loadDataset();
         await loadCDNResources();
         await loadMap();
-        completeLoading();
+        await completeLoading();
     } catch (error) {
         console.error('Error during initialisation:', error);
+        $('#dataset_content').stopSpin();
     }
 }
 
-function completeLoading() {
+async function completeLoading() {
 
     initOverlays(whg_map.getContainer());
     initDownloadLinks();
@@ -253,6 +315,18 @@ function completeLoading() {
 
     init_collection_listeners(checked_rows);
 
+    // Update spinner message before waiting for GPU
+    const isLargeDataset = window.datacollection.metadata.num_places > 5000;
+    if (isLargeDataset) {
+        $('#dataset_content').spin({
+            label: `Finalizing rendering...Almost there!`
+        });
+    }
+
+    // Wait for GPU to finish rendering before removing spinner
+    await waitForGPUCompletion(whg_map);
+
+    console.log('Map interface fully loaded and rendered');
     $('#dataset_content').stopSpin();
 
 }
