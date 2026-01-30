@@ -31,10 +31,28 @@ let whg_map;
  * Wait for GPU to finish rendering using WebGL fence synchronization
  * This is more reliable than 'idle' or 'render' events for complex datasets
  * @param {Map} map - MapLibre map instance
- * @returns {Promise} - Resolves when GPU has finished rendering
+ * @param {number} timeout - Maximum time to wait in milliseconds (default: 90000 = 90 seconds)
+ * @returns {Promise} - Resolves when GPU has finished rendering or timeout occurs
  */
-function waitForGPUCompletion(map) {
+function waitForGPUCompletion(map, timeout = 90000) {
     return new Promise((resolve) => {
+        const startTime = Date.now();
+        let idleTimeout;
+        let fenceCheckCount = 0;
+        const maxFenceChecks = 10000; // Prevent infinite loops (allow up to 10k checks for very long renders)
+
+        // Safety timeout - always resolve after timeout period
+        const safetyTimeout = setTimeout(() => {
+            console.warn(`[GPU Sync] Safety timeout after ${Date.now() - startTime}ms`);
+            cleanup();
+            resolve();
+        }, timeout);
+
+        function cleanup() {
+            clearTimeout(safetyTimeout);
+            clearTimeout(idleTimeout);
+        }
+
         // First wait for the map to be idle (no more tiles loading, no transitions)
         const onIdle = () => {
             map.off('idle', onIdle);
@@ -43,46 +61,225 @@ function waitForGPUCompletion(map) {
             try {
                 const gl = map.painter.context.gl;
 
+                if (!gl || !gl.fenceSync) {
+                    console.warn('[GPU Sync] WebGL fence sync not available - using fallback');
+                    useFallback();
+                    return;
+                }
+
                 // Create a sync object - this acts as a "fence" in the GPU command queue
                 const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+
+                if (!sync) {
+                    console.warn('[GPU Sync] Failed to create fence sync - using fallback');
+                    useFallback();
+                    return;
+                }
 
                 // Flush to ensure the fence command is sent to the GPU
                 gl.flush();
 
                 // Poll for fence completion
                 function checkFence() {
-                    const status = gl.clientWaitSync(sync, 0, 0);
+                    fenceCheckCount++;
 
-                    if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
-                        // GPU has finished all rendering commands
-                        gl.deleteSync(sync);
-                        console.log('GPU rendering complete - all pixels drawn');
+                    // Safety check to prevent infinite loops
+                    if (fenceCheckCount > maxFenceChecks) {
+                        console.warn(`[GPU Sync] Exceeded max fence checks (${maxFenceChecks})`);
+                        try { gl.deleteSync(sync); } catch(e) {}
+                        cleanup();
                         resolve();
-                    } else {
-                        // GPU still working, check again on next tick
-                        setTimeout(checkFence, 0);
+                        return;
+                    }
+
+                    // Check if we've exceeded timeout
+                    if (Date.now() - startTime > timeout) {
+                        console.warn('[GPU Sync] Fence check timeout');
+                        try { gl.deleteSync(sync); } catch(e) {}
+                        cleanup();
+                        resolve();
+                        return;
+                    }
+
+                    try {
+                        const status = gl.clientWaitSync(sync, 0, 0);
+
+                        if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
+                            // GPU has finished all rendering commands
+                            const totalTime = Date.now() - startTime;
+                            console.log(`[GPU Sync] GPU rendering complete (${totalTime}ms, ${fenceCheckCount} checks)`);
+                            gl.deleteSync(sync);
+                            cleanup();
+                            resolve();
+                        } else if (status === gl.WAIT_FAILED) {
+                            console.warn('[GPU Sync] Fence wait failed - using fallback');
+                            gl.deleteSync(sync);
+                            useFallback();
+                        } else {
+                            // GPU still working, check again on next tick
+                            setTimeout(checkFence, 0);
+                        }
+                    } catch (error) {
+                        console.warn('[GPU Sync] Error checking fence:', error);
+                        try { gl.deleteSync(sync); } catch(e) {}
+                        useFallback();
                     }
                 }
 
                 checkFence();
 
             } catch (error) {
-                // Fallback if WebGL sync is not available (shouldn't happen in modern browsers)
-                console.warn('WebGL fence sync not available, using fallback:', error);
-                // Wait an additional frame to be safe
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(resolve);
-                });
+                console.warn('Error in GPU fence sync:', error);
+                useFallback();
             }
         };
 
-        // If map is already idle, trigger immediately
-        if (!map.isMoving() && !map.isRotating() && !map.isZooming()) {
-            // Wait one frame to ensure current render is complete
-            requestAnimationFrame(() => {
-                map.once('idle', onIdle);
-            });
+        // Fallback method using map state polling
+        function useFallback() {
+            cleanup();
+
+            let checkCount = 0;
+            let consecutiveIdleChecks = 0; // Track how many times we've seen idle+no-tiles
+            const maxChecks = 600; // Max 600 checks = ~60 seconds at 100ms intervals
+            const checkInterval = 100; // Check every 100ms
+
+            function checkMapState() {
+                checkCount++;
+
+                // Check if we've exceeded max checks or timeout
+                if (checkCount >= maxChecks || Date.now() - startTime > timeout) {
+                    const totalTime = Date.now() - startTime;
+                    console.log(`[GPU Sync] Fallback timeout (${totalTime}ms)`);
+                    resolve();
+                    return;
+                }
+
+                // Check if map is truly idle and not rendering
+                const isMapIdle = !map.isMoving() && !map.isRotating() && !map.isZooming();
+                const isLoaded = map.loaded();
+                const hasStyle = map.isStyleLoaded();
+
+                // Also check if there are pending tiles
+                let hasPendingTiles = false;
+                try {
+                    const style = map.getStyle();
+                    if (style && style.sources) {
+                        // Check if any source is still loading
+                        const sources = Object.keys(style.sources);
+                        for (const sourceId of sources) {
+                            const source = map.getSource(sourceId);
+                            if (source && source.loaded && !source.loaded()) {
+                                hasPendingTiles = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // If we can't check sources, assume they're loaded
+                }
+
+                // Ideal condition: everything reports ready
+                if (isMapIdle && isLoaded && hasStyle && !hasPendingTiles) {
+                    // Map appears to be fully loaded and idle
+                    requestAnimationFrame(() => {
+                        const totalTime = Date.now() - startTime;
+                        console.log(`[GPU Sync] Rendering complete (${totalTime}ms)`);
+                        resolve();
+                    });
+                    return;
+                }
+
+                // Relaxed condition: map is idle with no pending tiles
+                // (loaded and style may incorrectly report false with globe projection + terrain)
+                if (isMapIdle && !hasPendingTiles) {
+                    consecutiveIdleChecks++;
+
+                    // If we've seen idle+no-tiles for 30 consecutive checks (3 seconds), that's good enough
+                    if (consecutiveIdleChecks >= 30) {
+                        requestAnimationFrame(() => {
+                            const totalTime = Date.now() - startTime;
+                            console.log(`[GPU Sync] Rendering complete (${totalTime}ms, relaxed mode)`);
+                            if (!isLoaded || !hasStyle) {
+                                console.log(`[GPU Sync] Note: map.loaded=${isLoaded}, isStyleLoaded=${hasStyle}`);
+                            }
+                            resolve();
+                        });
+                        return;
+                    }
+                } else {
+                    // Reset counter if conditions not met
+                    consecutiveIdleChecks = 0;
+                }
+
+                // Continue checking
+                setTimeout(checkMapState, checkInterval);
+            }
+
+            // Start checking after a brief delay
+            setTimeout(checkMapState, checkInterval);
+        }
+
+        // Additional safety: also listen for render events as backup
+        let renderCount = 0;
+        const onRender = () => {
+            renderCount++;
+            // After a few render events, if we haven't resolved yet, use fallback
+            if (renderCount >= 3) {
+                map.off('render', onRender);
+                if (Date.now() - startTime > timeout / 2) {
+                    console.warn('[GPU Sync] Multiple render events without idle - using fallback');
+                    useFallback();
+                }
+            }
+        };
+        map.on('render', onRender);
+
+        // Cleanup render listener when we resolve
+        const originalResolve = resolve;
+        resolve = () => {
+            map.off('render', onRender);
+            originalResolve();
+        };
+
+        // Start the idle detection with its own timeout
+        idleTimeout = setTimeout(() => {
+            console.warn('[GPU Sync] Idle event timeout - using fallback');
+            // Check if map has any sources - if not, it might be empty
+            const sources = map.getStyle()?.sources || {};
+            const hasAnySources = Object.keys(sources).length > 0;
+
+            if (!hasAnySources) {
+                console.warn('[GPU Sync] Map has no sources - completing immediately');
+                cleanup();
+                resolve();
+            } else {
+                useFallback();
+            }
+        }, timeout - 1000); // Slightly less than main timeout
+
+        // Register idle listener
+        const alreadyIdle = !map.isMoving() && !map.isRotating() && !map.isZooming();
+
+        if (alreadyIdle) {
+            // Map claims to be idle, but idle event may never fire with globe projection + terrain
+            // Set a shorter timeout for this case - if idle doesn't fire within 5s, use fallback
+            const earlyFallbackTimeout = setTimeout(() => {
+                console.warn('[GPU Sync] Map idle but event not firing - using fallback');
+                map.off('idle', onIdle); // Remove the listener that will never fire
+                useFallback();
+            }, 5000); // 5 seconds - if idle event hasn't fired by then, it probably won't
+
+            // Wrap onIdle to clear the early timeout if idle does fire
+            const originalOnIdle = onIdle;
+            const wrappedOnIdle = () => {
+                clearTimeout(earlyFallbackTimeout);
+                originalOnIdle();
+            };
+
+            // Register immediately - no need to wait for rAF
+            map.once('idle', wrappedOnIdle);
         } else {
+            // Map is actively moving/rotating/zooming - wait for idle normally
             map.once('idle', onIdle);
         }
     });
@@ -94,26 +291,43 @@ async function loadDataset() {
         $('#dataset_content').spin({
             label: `Fetching data...`
         });
-        $.get(mapdata_url, function (data) {
-            window.datacollection = data;
-            console.debug(`Dataset "${data.metadata.title}" loaded.`, data);
+        $.ajax({
+            url: mapdata_url,
+            type: 'GET',
+            dataType: 'json',
+            success: function (data, textStatus, jqXHR) {
+                window.datacollection = data;
 
-            const numPlaces = data.metadata.num_places;
-            const isLargeDataset = numPlaces > 5000;
+                // Calculate approximate size of the mapdata
+                // This is a better indicator of rendering complexity than feature count
+                const dataString = JSON.stringify(data);
+                const dataSizeBytes = new Blob([dataString]).size;
+                const dataSizeMB = (dataSizeBytes / (1024 * 1024)).toFixed(2);
 
-            if (isLargeDataset) {
-                $('#dataset_content').spin({
-                    label: `Loading ${numPlaces.toLocaleString('en-US')} places...<br><small>This is a large dataset. Rendering may take a moment.</small>`
-                });
-            } else {
-                $('#dataset_content').spin({
-                    label: `Loading ${numPlaces.toLocaleString('en-US')} places...`
-                });
-            }
+                // Store size for timeout calculation
+                window.datacollection.metadata.mapdata_size_bytes = dataSizeBytes;
+                window.datacollection.metadata.mapdata_size_mb = parseFloat(dataSizeMB);
 
-            loadMapParameters();
-            resolve();
-        }).fail(reject);
+                console.debug(`Dataset "${data.metadata.title}" loaded. Size: ${dataSizeMB} MB`, data);
+
+                const numPlaces = data.metadata.num_places;
+                const isLargeDataset = dataSizeBytes > 5 * 1024 * 1024; // > 5MB
+
+                if (isLargeDataset) {
+                    $('#dataset_content').spin({
+                        label: `Loading ${numPlaces.toLocaleString('en-US')} places (${dataSizeMB} MB)... This is a large dataset. Rendering may take a moment.`
+                    });
+                } else {
+                    $('#dataset_content').spin({
+                        label: `Loading ${numPlaces.toLocaleString('en-US')} places...`
+                    });
+                }
+
+                loadMapParameters();
+                resolve();
+            },
+            error: reject
+        });
     });
 }
 
@@ -315,19 +529,43 @@ async function completeLoading() {
 
     init_collection_listeners(checked_rows);
 
+    // Get mapdata size for timeout calculation (better proxy for rendering complexity than feature count)
+    const dataSizeMB = window.datacollection.metadata.mapdata_size_mb || 0;
+    const dataSizeBytes = window.datacollection.metadata.mapdata_size_bytes || 0;
+    const numFeatures = window.datacollection.metadata.num_places;
+    const isLargeDataset = dataSizeMB > 5; // > 5MB
+
     // Update spinner message before waiting for GPU
-    const isLargeDataset = window.datacollection.metadata.num_places > 5000;
     if (isLargeDataset) {
         $('#dataset_content').spin({
-            label: `Finalizing rendering...Almost there!`
+            label: `Finalising rendering (${dataSizeMB} MB)... Almost there!`
         });
     }
 
     // Wait for GPU to finish rendering before removing spinner
-    await waitForGPUCompletion(whg_map);
+    // Use try-finally to ensure spinner is always removed
+    try {
+        // Set timeout based on mapdata size (better indicator of rendering complexity)
+        // Polygon datasets with many coordinates take much longer than point datasets
+        // Small (<2MB): 30s, Medium (2-10MB): 60s, Large (10-30MB): 90s, Very Large (>30MB): 120s
+        let timeoutMs;
+        if (dataSizeMB < 2) {
+            timeoutMs = 30000; // 30 seconds - simple datasets
+        } else if (dataSizeMB < 10) {
+            timeoutMs = 60000; // 1 minute - moderate complexity
+        } else if (dataSizeMB < 30) {
+            timeoutMs = 90000; // 1.5 minutes - complex polygon datasets
+        } else {
+            timeoutMs = 120000; // 2 minutes - very complex datasets
+        }
 
-    console.log('Map interface fully loaded and rendered');
-    $('#dataset_content').stopSpin();
+        await waitForGPUCompletion(whg_map, timeoutMs);
+    } catch (error) {
+        console.error('Error during GPU completion wait:', error);
+    } finally {
+        // Always remove spinner, even if there was an error
+        $('#dataset_content').stopSpin();
+    }
 
 }
 
