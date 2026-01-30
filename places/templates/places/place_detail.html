@@ -92,7 +92,7 @@
                             <tr>
                                 <td>Type(s):</td>
                                 <td>{% for t in object.types.all %}
-                                    {{ t.jsonb.sourceLabel }}{% if t.label %} ({{ t.label }}) {% endif %}
+                                    {{ t.jsonb.sourceLabel }}{% if t.jsonb.label %} ({{ t.jsonb.label }}) {% endif %}
                                     ; {% endfor %}</td>
                             </tr>
 
