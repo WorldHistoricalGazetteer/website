@@ -117,6 +117,11 @@
       {% endfor %}
       {% endif %}
 
+      <div class="d-flex mb-2">
+        <div class="fw-semibold" style="max-width: 30%;">WHG User Name</div>
+        <div class="clippable ps-3" id="whg-username">{{ user.username }}</div>
+      </div>
+
       {% if user.email %}
         <div class="d-flex mb-2">
           <div class="flex-shrink-0 fw-semibold" style="max-width: 30%;">Email Address</div>
