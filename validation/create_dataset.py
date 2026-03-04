@@ -406,7 +406,7 @@ def ds_insert(jsonld_filepath, ds, task_id):
                                 apply_fix(feat, fix)
                                 logger.debug(f"Feature after applying fix: {feat}")
                     # Only strip parenthetical content if there's exactly one set of parentheses
-                    # at the end of the string and there's text before it.
+                    # at the end and there's text before it.
                     # Preserves: "(Spring and Autumn States)", "Name with (parentheses) inside"
                     # Removes: "Paris (France)" -> "Paris"
                     raw_title = feat.get('properties', {}).get('title', '')
@@ -528,10 +528,15 @@ def parse_dates(feature):
     def reduce_timespan_to_years(timespan):
 
         def extract_year(date_str):
-            if not date_str:
+            if date_str is None:
                 return None
-
-            match = re.match(r'^-?\d{1,4}$|^-\d{5,}', date_str)
+            if isinstance(date_str, (int, float)):
+                return int(date_str)
+            if not isinstance(date_str, str):
+                return None
+            match = re.match(r'^-?\d{1,4}', date_str)
+            if not match:
+                match = re.match(r'^-\d{5,}', date_str)
             return int(match.group(0)) if match else None
 
         def extract_from_dates(dates):
