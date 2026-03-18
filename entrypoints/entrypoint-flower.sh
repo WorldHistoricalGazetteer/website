@@ -9,7 +9,7 @@ set -o nounset
 : "${FLOWER_BASIC_AUTH:?Environment variable FLOWER_BASIC_AUTH is not set}"
 
 # Change user password
-/app/entrypoints/user_pwd.sh
+#/app/entrypoints/user_pwd.sh
 
 # Ensure Redis is available
 echo "Waiting for Redis at redis:6379 to be ready..."
