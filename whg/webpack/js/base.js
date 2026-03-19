@@ -217,7 +217,11 @@ Promise.all([
                 ],
                 tracesSampleRate: 0.01,
                 environment: ENV_CONTEXT,
-                release: GLITCHTIP_RELEASE,
+                release: GLITCHTIP_RELEASE,ignoreErrors: [
+                    'MapLibre runtime error: [object Object]', // Exact string
+                    // /NetworkError/,                        // Regex
+                    // /^Specific Error Message$/i            // Case-insensitive regex
+                ],
             });
 
             if (USER_ID) {

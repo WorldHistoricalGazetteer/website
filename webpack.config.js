@@ -127,7 +127,7 @@ module.exports = {
 		          to: 'CDNfallbacks/',
 		        },
 		        {
-		          from: 'node_modules/d3/dist/d3.min.js',
+		          from: 'node_modules/d3/build/d3.min.js',
 		          to: 'CDNfallbacks/',
 		        },
 		        {
