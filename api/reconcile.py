@@ -33,6 +33,7 @@ from rest_framework.views import APIView
 from periods.models import Period, Chrononym
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
+from .crc_client import crc_reconcile_search, crc_suggest_search
 from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, extract_entity_type, \
     create_type_guessing_dummies, parse_schema
@@ -220,7 +221,7 @@ class ReconciliationView(APIView):
                 return JsonResponse(results)
 
             # Place reconciliation
-            results = process_queries(queries, batch_size=batch_size)
+            results = process_queries(queries, batch_size=batch_size, user=request.user)
             return JsonResponse(results)
 
         return json_error("Missing 'queries' or 'extend' parameter")
@@ -415,6 +416,19 @@ class SuggestEntityView(AuthenticatedAPIView):
                 candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
                 place_candidates.append(candidate)
 
+            # --- 2b. CRC gateway search (new places/toponyms indexes) ---
+            crc_mode = "starts" if exact else "fuzzy"
+            crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user)
+            if crc_hits:
+                crc_max_score = crc_hits[0].get("_score", 1.0)
+                # Deduplicate against existing candidates by name
+                existing_names = {c["name"].lower() for c in place_candidates}
+                for hit in crc_hits:
+                    candidate = make_candidate(hit, prefix, crc_max_score, SCHEMA_SPACE)
+                    if candidate["name"].lower() not in existing_names:
+                        place_candidates.append(candidate)
+                        existing_names.add(candidate["name"].lower())
+
         # --- 3. Search for Periods (Database - Chrononym) ---
         period_candidates = []
         if type in ("all", "period"):
@@ -583,7 +597,7 @@ def parse_request_payload(request):
         raise ValueError(f"Unsupported Content-Type: {content_type}")
 
 
-def process_queries(queries, batch_size=50):
+def process_queries(queries, batch_size=50, user=None):
     """
     Enforce batch limit, normalise each query, and return a dict of results.
     """
@@ -598,7 +612,7 @@ def process_queries(queries, batch_size=50):
     for key, params in queries.items():
         try:
             query = normalise_query_params(params)
-            results[key] = reconcile_place_es(query)
+            results[key] = reconcile_place_es(query, user=user)
         except ValueError as e:
             results[key] = {"error": str(e), "result": []}
     return {**results, "messages": messages} if messages else results
@@ -678,20 +692,48 @@ def normalise_query_params(params):
     }
 
 
-def reconcile_place_es(query):
+def reconcile_place_es(query, user=None):
     """
     Execute a reconciliation query against Elasticsearch.
 
+    Searches the legacy WHG indexes and, if enabled, the CRC gateway's
+    new places/toponyms indexes.  Results are merged, deduplicated, and
+    re-ranked by score.
+
     query: dict from normalise_query_params
+    user:  Django User instance (used for CRC gateway access check)
     """
-    hits = es_search(query=query)
-    if not hits:
+    # 1. Legacy ES search
+    legacy_hits = es_search(query=query)
+
+    # 2. CRC gateway search (fail-safe: returns [] on error)
+    crc_hits = crc_reconcile_search(query, user=user)
+
+    # 3. Merge: legacy first, then CRC
+    all_hits = legacy_hits + crc_hits
+
+    if not all_hits:
         return {"result": [], "geojson": None}
 
-    max_score = hits[0]["_score"]
+    # 4. Deduplicate by place_id (prefer legacy hits)
+    seen_ids = set()
+    deduped = []
+    for hit in all_hits:
+        pid = str(hit.get("_source", {}).get("place_id", hit.get("_id", "")))
+        if pid not in seen_ids:
+            seen_ids.add(pid)
+            deduped.append(hit)
+
+    # 5. Re-sort by score descending
+    deduped.sort(key=lambda h: h.get("_score", 0), reverse=True)
+
+    # 6. Trim to requested size
+    deduped = deduped[:query.get("size", 100)]
+
+    max_score = deduped[0]["_score"] if deduped else 1
     results = []
 
-    for hit in hits:
+    for hit in deduped:
         candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
         results.append(candidate)
 
