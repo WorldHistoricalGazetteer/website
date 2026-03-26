@@ -35,7 +35,7 @@ services:
     depends_on:
       - redis
       - {{ DB_HOST }}
-{% if ENV_CONTEXT != 'whgazetteer-org' %}
+{% if ENV_CONTEXT == 'local' %}
       - webpack
 {% endif %}
     restart: unless-stopped
@@ -46,16 +46,13 @@ services:
       start_period: 60s
       timeout: 15s
 
-{% if ENV_CONTEXT != 'whgazetteer-org' %}
+{% if ENV_CONTEXT == 'local' %}
   webpack:
     networks:
       - {{ ENV_CONTEXT }}
     platform: linux/amd64
     image: node:18
     container_name: webpack_{{ ENV_CONTEXT }}_{{ BRANCH }}
-    {% if MEM_LIMIT_WEBPACK is defined %}
-    mem_limit: {{ MEM_LIMIT_WEBPACK }}
-    {% endif %}
     logging:
       driver: local
     volumes:

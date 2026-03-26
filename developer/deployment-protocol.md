@@ -1,223 +1,154 @@
-## Preliminary Check of Environment Variables
+# Deployment Protocol
 
-- Ensure that `~/sites/env_template.py` is up-to-date, including the `DOCKER_IMAGE_TAG`:
-```bash
-cat ~/sites/env_template.py
-```
+## Overview
 
-## Deploy directly from `main`
+| Environment | Server path | Branch | URL |
+|---|---|---|---|
+| **Production** | `~/sites/whgazetteer-org` | `main` | `https://whgazetteer.org` |
+| **Development** | `~/sites/dev-whgazetteer-org` | `staging` | `https://dev.whgazetteer.org` |
 
-### Update
+Both environments use auto-generated Docker Compose files, regenerated from
+templates by `load_env.py` whenever settings change.
 
-This is sufficient for changes to templates and/or static files (including Webpack bundles):
+The development stack runs with reduced resources (2 Gunicorn workers, memory
+limits on all containers, no Flower or Webpack) to protect the production site.
 
-```bash
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase
-```
+---
 
-### Restart
+## Local Workflow
 
-#### If you have changed Django code and not Celery:
+All code changes, branch merges, and webpack builds happen locally. The servers
+only ever pull and restart.
 
-```bash
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase && \
-sudo python3 ./server-admin/load_env.py && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env restart web
-```
+### Webpack Build
 
-#### If you have changed Django code AND Celery:
+Webpack bundles are committed to the repository and **must only be built
+locally**. The webpack container is only included in the `local` Docker Compose
+configuration.
 
 ```bash
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase && \
-sudo python3 ./server-admin/load_env.py && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env restart web celery_worker celery_beat
-```
-
-#### Full Restart:
-
-```bash
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase && \
-sudo python3 ./server-admin/load_env.py && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env restart
-```
-
-#### Full Recreation:
-
-```bash
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase && \
-sudo python3 ./server-admin/load_env.py && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
-docker ps
-```
-
-### If ABSOLUTELY necessary, include WebPack Build (for Javascript & CSS bundling)
-
-> NOTE: Server resources are so tightly constrained that running WebPack Build may result in significant outage and may crash the Elasticsearch service. Bundles should be
-> built locally (usually in a development Docker network) and deployed through GitHub.
-
-Server resources are too limited for rebuilding while the main site is running:
-
-```bash
-# 1. Update from repository and rebuild docker-compose file
-cd ~/sites/whgazetteer-org && \
-git pull origin main --rebase && \
-sudo python3 ./server-admin/load_env.py && \
-
-# 2. Stop the main site to free up ALL resources
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env down --remove-orphans && \
-
-# 3. Reset the Network
-# Try to remove it first. '|| true' ensures the script continues even if the network is already gone.
-(docker network rm whgazetteer-org_whgazetteer-org 2>/dev/null || true) && \
-docker network create -d bridge whgazetteer-org_whgazetteer-org && \
-
-# 4. Run the webpack build (using the free resources)
-docker-compose -f webpack.build.yml -p whgazetteer-org-build run --rm webpack-builder && \
-
-# 5. Restart the main site
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --force-recreate && \
-docker ps
-```
-
-## Deploy Staging
-
-- Switch to the `dev-whgazetteer-org` site, pull updates, and update environment:
-```bash
-cd ~/sites/dev-whgazetteer-org
-git pull origin staging && sudo python3 ./server-admin/load_env.py
-```
-- _Or, to switch to a different branch_
-```bash
-git fetch origin
-git checkout staging  # Replace "staging" with the desired branch name
-```
-- If all is OK, restart network:
-```bash
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env down && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d && \
-docker ps
-```
-
-#### If necessary, apply Django migrations
-```bash
-docker exec -it web_dev-whgazetteer-org_staging bash -c "./manage.py makemigrations"
-```
-```bash
-docker exec -it web_dev-whgazetteer-org_staging bash -c "./manage.py migrate"
-```
-
-#### Check Logs
-```bash
-docker logs -f postgres_dev-whgazetteer-org_staging
-```
-```bash
-docker logs -f web_dev-whgazetteer-org_staging
-```
-```bash
-docker logs -f celery-worker_dev-whgazetteer-org_staging
-```
-
-#### Monitor Django Logs
-```
-# For example, `validation` log on `staging` branch:
-docker exec -it web_dev-whgazetteer-org_staging bash -c "tail -f ./whg/logs/validation.log"
-
-```
-
-```
-# For example, `authentication` log on `orcid-integration` branch:
-docker exec -it web_dev-whgazetteer-org_orcid-integration bash -c "tail -f ./whg/logs/authentication.log"
-
-```
-
-## Deploy to Main from Staging
-
-Firstly, merge `staging` into `main`:
-```bash
-cd ~/sites/whgazetteer-org
-git fetch origin
-git checkout main
-git pull origin main
-git merge origin/staging -m "Merging staging into main"
-# At this point, Git will attempt to merge the staging branch into the main branch. If there are merge conflicts,
-# Git will notify you, and you will need to manually resolve these conflicts.
-# After resolving conflicts, use `git add <resolved-files>` to stage the resolved files,
-# and `git commit` to complete the merge.
+npm run build
+git add static/webpack/
+git commit -m "Rebuild webpack bundles"
 git push origin main
 ```
 
-- Then ensure that `whgazetteer-org/server-admin/env_template.py` is up-to-date, including the `DOCKER_IMAGE_TAG`:
+### Branch Merges
+
+Merge feature branches into `main` locally:
+
 ```bash
-cat ~/sites/env_template.py
+git checkout main
+git pull origin main
+git merge feature-branch
+git push origin main
 ```
 
-- Then update the root static folder, which may include webpack updates which would not otherwise be modified in the absence of a webpack service in this docker network:
+To propagate to the development site, fast-forward `staging`:
+
 ```bash
-# Synchronise from dev-whgazetteer-org/static/ to whgazetteer-org/static/, overwriting older files but deleting none
-rsync -a ~/sites/dev-whgazetteer-org/static/ ~/sites/whgazetteer-org/static/
-# Ensure correct ownerships
-sudo chown -R whgadmin:whgadmin ~/sites/whgazetteer-org/static/
+git checkout staging
+git merge --ff-only main
+git push origin staging
 ```
 
-- Then switch to the `whgazetteer-org` site, pull updates, update environment, and restart network:
-```bash
-cd ~/sites/whgazetteer-org
-git pull origin main && sudo python3 ./server-admin/load_env.py
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env down && \
-docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d && \
-docker ps
-# For safety's sake, switch back to staging site
-cd ~/sites/dev-whgazetteer-org
+---
+
+## Deploy Script
+
+A single script on the DO server handles all deployment operations:
+
+```
+~/sites/whgazetteer-org/server-admin/deploy.sh
 ```
 
-#### If necessary, apply Django migrations
+### Quick Reference
+
 ```bash
-docker exec -it web_whgazetteer-org_main bash -c "./manage.py makemigrations"
+deploy                           # dev, restart web
+deploy prod                      # prod, restart web
+deploy pull                      # dev, pull only
+deploy prod full                 # prod, restart all containers
+deploy restart --celery          # dev, restart web + celery
+deploy prod recreate --migrate   # prod, full recreation + migrations
+deploy status                    # dev, show containers
+deploy prod status               # prod, show containers
 ```
+
+### Arguments
+
+| Argument | Description |
+|---|---|
+| `dev` | Target development environment (default) |
+| `prod` | Target production environment |
+| `pull` | Pull code only, no restart |
+| `restart` | Pull + regenerate config + restart web (default) |
+| `full` | Pull + regenerate config + restart all containers |
+| `recreate` | Pull + regenerate config + tear down + recreate all |
+| `status` | Show running containers |
+| `--celery` | Also restart celery worker and beat (with `restart`) |
+| `--migrate` | Run Django migrations after deploy |
+| `--logs` | Tail web container logs after deploy |
+
+### Setup
+
+Add an alias on the DO server (in `~/.bashrc`):
+
 ```bash
+alias deploy='~/sites/whgazetteer-org/server-admin/deploy.sh'
+```
+
+---
+
+## Manual Operations
+
+### Apply Django Migrations
+
+```bash
+# Production
 docker exec -it web_whgazetteer-org_main bash -c "./manage.py migrate"
+
+# Development
+docker exec -it web_dev-whgazetteer-org_staging bash -c "./manage.py migrate"
 ```
 
-#### Check Logs
+### Check Logs
+
 ```bash
-docker logs -f postgres_whgazetteer-org_main
-```
-```bash
+# Production
 docker logs -f web_whgazetteer-org_main
-```
-```bash
-docker logs -f celery-worker_whgazetteer-org_main
+
+# Development
+docker logs -f web_dev-whgazetteer-org_staging
 ```
 
 ### Regenerate Map Data
-Occasionally, it may be necessary to force a refresh of mapdata. You can refresh the data for a single dataset, a collection, all datasets, or all collections.
 
-#### Refresh a Single Dataset by its ID:
+Substitute the appropriate container name for the environment.
+
 ```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets --id <id>
-```
-#### Refresh a Single Collection by its ID:
-```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --collections --id <id>
-```
-#### Refresh All Datasets
-```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --datasets
-```
-#### Refresh All Collections
-```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --collections
-```
-#### Refresh All Datasets and Collections
-```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata
-```
-#### Clear Cache Only (Will regenerate on first access)
-```bash
 docker exec -it web_whgazetteer-org_main python manage.py regenerate_mapdata --clear-only
 ```
+
+---
+
+## Notes
+
+- **Webpack** runs only in local development. Bundles are built locally,
+  committed to git, and deployed via `git pull`.
+
+- **Database backups** run nightly at 01:00 UTC via `pg_basebackup`, retained
+  for 2 days at `~/backup/whgazetteer-org/`, and pulled to Pitt CRC NFS
+  (`/ix1/ishi/backups/`) at 03:00 UTC.
+
+- **Elasticsearch** is hosted on the Pitt CRC. The local ES and Kibana services
+  have been decommissioned.
+
+- **Development resource limits** are in `env_template.py` under
+  `dev-whgazetteer-org`: 2 Gunicorn workers, memory caps on all containers,
+  Flower disabled.
