@@ -35,5 +35,6 @@ wait_for_db
 #echo "Running migrations..."
 #sudo /py/bin/python manage.py migrate
 
-echo "Starting Gunicorn server..."
-exec gunicorn whg.wsgi:application --bind 0.0.0.0:${APP_PORT} --timeout 1200 -w 4
+GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"
+echo "Starting Gunicorn server with ${GUNICORN_WORKERS} workers..."
+exec gunicorn whg.wsgi:application --bind 0.0.0.0:${APP_PORT} --timeout 1200 -w ${GUNICORN_WORKERS}

@@ -13,6 +13,9 @@ services:
     platform: linux/amd64
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: web_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_WEB is defined %}
+    mem_limit: {{ MEM_LIMIT_WEB }}
+    {% endif %}
     volumes:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-web.sh:/entrypoint.sh
@@ -50,6 +53,9 @@ services:
     platform: linux/amd64
     image: node:18
     container_name: webpack_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_WEBPACK is defined %}
+    mem_limit: {{ MEM_LIMIT_WEBPACK }}
+    {% endif %}
     logging:
       driver: local
     volumes:
@@ -64,6 +70,9 @@ services:
     platform: linux/amd64
     image: postgis/postgis:15-3.4
     container_name: postgres_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_DB is defined %}
+    mem_limit: {{ MEM_LIMIT_DB }}
+    {% endif %}
     ports:
       - "127.0.0.1:{{ DB_PORT }}:{{ DB_PORT_INTERNAL }}"
     volumes:
@@ -92,6 +101,9 @@ services:
     platform: linux/amd64
     image: redis:bullseye
     container_name: redis_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_REDIS is defined %}
+    mem_limit: {{ MEM_LIMIT_REDIS }}
+    {% endif %}
     ports:
       - "{{ REDIS_PORT }}:6379"
     {% if not ENV_CONTEXT == 'local' %}
@@ -112,6 +124,9 @@ services:
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-worker_{{ ENV_CONTEXT }}_{{ BRANCH }}
     hostname: celery_worker
+    {% if MEM_LIMIT_CELERY_WORKER is defined %}
+    mem_limit: {{ MEM_LIMIT_CELERY_WORKER }}
+    {% endif %}
     volumes:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh
@@ -142,6 +157,9 @@ services:
       - {{ ENV_CONTEXT }}
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-beat_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_CELERY_BEAT is defined %}
+    mem_limit: {{ MEM_LIMIT_CELERY_BEAT }}
+    {% endif %}
     volumes:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-celery-beat.sh:/entrypoint.sh
@@ -157,11 +175,15 @@ services:
       - {{ DB_HOST }}
     restart: unless-stopped
 
+{% if ENABLE_FLOWER is not defined or ENABLE_FLOWER != 'False' %}
   flower:
     networks:
       - {{ ENV_CONTEXT }}
     image: {{ DOCKER_IMAGE }}:{{ DOCKER_IMAGE_TAG }}
     container_name: celery-flower_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_FLOWER is defined %}
+    mem_limit: {{ MEM_LIMIT_FLOWER }}
+    {% endif %}
     ports:
       - "{{ FLOWER_PORT }}:5555"
     volumes:
@@ -178,6 +200,7 @@ services:
       - redis
       - {{ DB_HOST }}
     restart: unless-stopped
+{% endif %}
 
   {% if ENV_CONTEXT == 'local' %}
 
