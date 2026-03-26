@@ -147,9 +147,8 @@ def load_environment(context='local',
     
     env_vars = apply_context_overrides(template_vars, context)
 
-    env_vars['SUBNET'] = get_docker_network_subnet()
-    if not env_vars['SUBNET']:
-        env_vars['SUBNET'] = '172.20.0.0/16'  # fallback
+    if not env_vars.get('SUBNET'):
+        env_vars['SUBNET'] = get_docker_network_subnet() or '172.20.0.0/16'
 
     write_env_file(env_vars, output_path)
     load_dotenv(output_path)
