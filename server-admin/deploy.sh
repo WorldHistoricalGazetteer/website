@@ -117,18 +117,25 @@ echo ""
 
 # ─── Deploy action ───────────────────────────────────────────────────────────
 
+# Check if any containers are running for this environment
+RUNNING=$(docker ps --filter "name=${PREFIX}" --format "{{.Names}}" | head -1)
+
 case "$ACTION" in
-    restart)
-        SERVICES="web"
-        if [ "$WITH_CELERY" = true ]; then
-            SERVICES="web celery_worker celery_beat"
+    restart|full)
+        if [ -z "$RUNNING" ]; then
+            echo "── No running containers found. Starting stack..."
+            $COMPOSE up -d
+        elif [ "$ACTION" = "full" ]; then
+            echo "── Restarting all containers..."
+            $COMPOSE restart
+        else
+            SERVICES="web"
+            if [ "$WITH_CELERY" = true ]; then
+                SERVICES="web celery_worker celery_beat"
+            fi
+            echo "── Restarting: $SERVICES"
+            $COMPOSE restart $SERVICES
         fi
-        echo "── Restarting: $SERVICES"
-        $COMPOSE restart $SERVICES
-        ;;
-    full)
-        echo "── Restarting all containers..."
-        $COMPOSE restart
         ;;
     recreate)
         echo "── Recreating all containers..."
