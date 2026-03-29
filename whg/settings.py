@@ -37,13 +37,16 @@ sentry_sdk.init(
 VERSION_FILE = os.path.join(BASE_DIR, "VERSION")
 try:
     with open(VERSION_FILE) as f:
-        APP_VERSION = f.read().strip()
+        _file_version = f.read().strip()
 except FileNotFoundError:
-    APP_VERSION = "dev"
+    _file_version = "dev"
+
+# Published (stable) version.  Env var takes precedence; falls back to VERSION file.
+APP_VERSION = os.environ.get('WHG_VERSION', '') or _file_version
 
 # Beta version available for testing via the header version switcher.
-# Set to empty string or None to disable the switcher entirely.
-BETA_VERSION = '3.5-beta'
+# Set WHG_BETA_VERSION to an empty string (or leave unset) to disable the switcher.
+BETA_VERSION = os.environ.get('WHG_BETA_VERSION', '')
 
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
