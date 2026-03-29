@@ -129,56 +129,47 @@
             <div class="collapse navbar-collapse smallish pt-2" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <div id="links_home">
+                        {% if BETA_VERSION %}
+                        {# ── Dual-version badge with integrated switcher ── #}
+                        <span id="version_badge" style="display:inline-flex; align-items:center; vertical-align:middle; border-radius:3px; overflow:hidden; font-family:Verdana,Geneva,DejaVu Sans,sans-serif; font-size:11px; line-height:20px; height:20px;">
+                            {# ── Stable half ── #}
+                            {% if IS_BETA %}
+                            <form method="post" action="{% url 'main:set-version' %}" style="display:contents;">
+                                {% csrf_token %}
+                                <input type="hidden" name="version" value="{{ APP_VERSION }}">
+                                <button type="submit"
+                                        style="border:none; cursor:pointer; background:#8b8; color:#fff; padding:0 6px; height:20px; font:inherit; line-height:20px; opacity:.65;"
+                                        title="Switch to stable v{{ APP_VERSION }}">v{{ APP_VERSION }}</button>
+                            </form>
+                            {% else %}
+                            <a href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
+                               style="background:#4c1; color:#fff; padding:0 6px; height:20px; text-decoration:none; display:inline-block; line-height:20px;"
+                               title="Current version: v{{ APP_VERSION }}">v{{ APP_VERSION }}</a>
+                            {% endif %}
+                            {# ── Divider ── #}
+                            <span style="width:1px; height:20px; background:rgba(255,255,255,.35); display:inline-block;"></span>
+                            {# ── Beta half ── #}
+                            {% if IS_BETA %}
+                            <a href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
+                               style="background:#e08a00; color:#fff; padding:0 6px; height:20px; text-decoration:none; display:inline-block; line-height:20px;"
+                               title="Current version: v{{ BETA_VERSION }}">v{{ BETA_VERSION }}</a>
+                            {% else %}
+                            <form method="post" action="{% url 'main:set-version' %}" style="display:contents;">
+                                {% csrf_token %}
+                                <input type="hidden" name="version" value="{{ BETA_VERSION }}">
+                                <button type="submit"
+                                        style="border:none; cursor:pointer; background:#daa520; color:#fff; padding:0 6px; height:20px; font:inherit; line-height:20px; opacity:.5;"
+                                        title="Switch to v{{ BETA_VERSION }}">v{{ BETA_VERSION }}</button>
+                            </form>
+                            {% endif %}
+                        </span>
+                        {% else %}
+                        {# ── Single version badge (no beta available) ── #}
                         <a id="version_badge"
                            href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
-                           title="Current Version: v{{ SELECTED_VERSION }}">
-
-                            {% with version_tag="v"|add:SELECTED_VERSION %}
-                            {% comment %}
-                                SVG template adapted from shields.io, using SELECTED_VERSION
-                                and keeping the original fixed dimensions for simplicity.
-                            {% endcomment %}
-                            <svg xmlns="http://www.w3.org/2000/svg"
-                                 width="{% if IS_BETA %}62{% else %}35{% endif %}"
-                                 height="20"
-                                 role="img"
-                                 aria-label="{{ version_tag }}">
-                                <title>{{ version_tag }}</title>
-                                <linearGradient id="s" x2="0" y2="100%">
-                                    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
-                                    <stop offset="1" stop-opacity=".1"/>
-                                </linearGradient>
-                                <clipPath id="r">
-                                    <rect width="{% if IS_BETA %}62{% else %}35{% endif %}" height="20" rx="3" fill="#fff"/>
-                                </clipPath>
-                                <g clip-path="url(#r)">
-                                    <rect width="{% if IS_BETA %}62{% else %}35{% endif %}" height="20" fill="{% if IS_BETA %}#f90{% else %}#4c1{% endif %}"/>
-                                    <rect width="{% if IS_BETA %}62{% else %}35{% endif %}" height="20" fill="url(#s)"/>
-                                </g>
-                                <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
-                                    <text aria-hidden="true" x="{% if IS_BETA %}310{% else %}175{% endif %}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="{% if IS_BETA %}520{% else %}250{% endif %}">{{ version_tag }}</text>
-                                    <text x="{% if IS_BETA %}310{% else %}175{% endif %}" y="140" transform="scale(.1)" fill="#fff" textLength="{% if IS_BETA %}520{% else %}250{% endif %}">{{ version_tag }}</text>
-                                </g>
-                            </svg>
-                            {% endwith %}
+                           title="Current Version: v{{ APP_VERSION }}">
+                            <span style="display:inline-block; border-radius:3px; background:#4c1; color:#fff; font-family:Verdana,Geneva,DejaVu Sans,sans-serif; font-size:11px; line-height:20px; height:20px; padding:0 6px;">v{{ APP_VERSION }}</span>
                         </a>
-                        {% if BETA_VERSION %}
-                        <form method="post" action="{% url 'main:set-version' %}" class="d-inline-flex align-items-center" style="vertical-align: middle;">
-                            {% csrf_token %}
-                            {% if IS_BETA %}
-                            <input type="hidden" name="version" value="{{ APP_VERSION }}">
-                            <button type="submit" class="btn btn-link btn-sm p-0 ms-1" style="font-size: .7rem; text-decoration: none; color: #999;"
-                                    title="Switch to stable v{{ APP_VERSION }}">
-                                <i class="fas fa-toggle-on" style="color: #f90;"></i>
-                            </button>
-                            {% else %}
-                            <input type="hidden" name="version" value="{{ BETA_VERSION }}">
-                            <button type="submit" class="btn btn-link btn-sm p-0 ms-1" style="font-size: .7rem; text-decoration: none; color: #999;"
-                                    title="Switch to v{{ BETA_VERSION }}">
-                                <i class="fas fa-toggle-off"></i>
-                            </button>
-                            {% endif %}
-                        </form>
                         {% endif %}
                         <a data-whg-modal="/contact_modal/">contact</a>
                     </div>
