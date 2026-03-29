@@ -221,7 +221,7 @@ class ReconciliationView(APIView):
                 return JsonResponse(results)
 
             # Place reconciliation
-            results = process_queries(queries, batch_size=batch_size, user=request.user)
+            results = process_queries(queries, batch_size=batch_size, request=request)
             return JsonResponse(results)
 
         return json_error("Missing 'queries' or 'extend' parameter")
@@ -418,7 +418,7 @@ class SuggestEntityView(AuthenticatedAPIView):
 
             # --- 2b. CRC gateway search (new places/toponyms indexes) ---
             crc_mode = "starts" if exact else "fuzzy"
-            crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user)
+            crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, request=request)
             if crc_hits:
                 crc_max_score = crc_hits[0].get("_score", 1.0)
                 # Deduplicate against existing candidates by name
@@ -597,7 +597,7 @@ def parse_request_payload(request):
         raise ValueError(f"Unsupported Content-Type: {content_type}")
 
 
-def process_queries(queries, batch_size=50, user=None):
+def process_queries(queries, batch_size=50, request=None):
     """
     Enforce batch limit, normalise each query, and return a dict of results.
     """
@@ -612,7 +612,7 @@ def process_queries(queries, batch_size=50, user=None):
     for key, params in queries.items():
         try:
             query = normalise_query_params(params)
-            results[key] = reconcile_place_es(query, user=user)
+            results[key] = reconcile_place_es(query, request=request)
         except ValueError as e:
             results[key] = {"error": str(e), "result": []}
     return {**results, "messages": messages} if messages else results
@@ -692,7 +692,7 @@ def normalise_query_params(params):
     }
 
 
-def reconcile_place_es(query, user=None):
+def reconcile_place_es(query, request=None):
     """
     Execute a reconciliation query against Elasticsearch.
 
@@ -700,14 +700,14 @@ def reconcile_place_es(query, user=None):
     new places/toponyms indexes.  Results are merged, deduplicated, and
     re-ranked by score.
 
-    query: dict from normalise_query_params
-    user:  Django User instance (used for CRC gateway access check)
+    query:   dict from normalise_query_params
+    request: Django HttpRequest (used for CRC gateway version-based access check)
     """
     # 1. Legacy ES search
     legacy_hits = es_search(query=query)
 
     # 2. CRC gateway search (fail-safe: returns [] on error)
-    crc_hits = crc_reconcile_search(query, user=user)
+    crc_hits = crc_reconcile_search(query, request=request)
 
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits

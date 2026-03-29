@@ -1,6 +1,7 @@
 # accounts/orcid.py
 
 import logging
+import os
 from datetime import timedelta
 from typing import Optional
 
@@ -192,6 +193,20 @@ class OIDCBackend(BaseBackend):
         else:
             # Lookup or create by ORCiD
             expires_in = token_json.get("expires_in")
+
+            # --- Dev-server guard: block new account creation ---
+            if os.environ.get('ENV_CONTEXT', '') == 'dev-whgazetteer-org':
+                if not User.objects.filter(orcid=orcid_id).exists():
+                    logger.warning(
+                        "Blocked new account creation on dev server for ORCiD %s", orcid_id
+                    )
+                    if request:
+                        messages.error(
+                            request,
+                            "New account registration is not available on the development server. "
+                            "Please use the <a href='https://whgazetteer.org'>production site</a>."
+                        )
+                    return None
 
             # Prepare defaults for new user
             defaults = {

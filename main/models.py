@@ -106,54 +106,6 @@ class Comment(models.Model):
         db_table = 'comments'
 
 
-class SiteSetting(models.Model):
-    """
-    Singleton model for site-wide configuration managed via the Django admin panel.
-
-    Only one row should ever exist (enforced by the ``load()`` class method
-    and a unique singleton key).
-    """
-
-    CRC_MODES = [
-        ('disabled', 'Disabled – no users'),
-        ('admin_only', 'Admin only – staff / superusers'),
-        ('all_users', 'All users'),
-    ]
-
-    singleton_key = models.BooleanField(
-        default=True, unique=True, editable=False,
-        help_text="Ensures only one SiteSetting row exists.",
-    )
-
-    crc_gateway_mode = models.CharField(
-        max_length=12,
-        choices=CRC_MODES,
-        default='disabled',
-        verbose_name='CRC gateway mode',
-        help_text=(
-            "Controls who receives results from the CRC places/toponyms indexes "
-            "alongside the legacy WHG indexes in the Reconciliation API. "
-            "'Admin only' restricts to staff/superuser accounts (useful for testing)."
-        ),
-    )
-
-    class Meta:
-        managed = True
-        db_table = 'site_settings'
-        verbose_name = 'Site setting'
-        verbose_name_plural = 'Site settings'
-
-    def __str__(self):
-        return f"Site settings (CRC: {self.get_crc_gateway_mode_display()})"
-
-    def save(self, *args, **kwargs):
-        # Force singleton
-        self.singleton_key = True
-        super().save(*args, **kwargs)
-
-    @classmethod
-    def load(cls):
-        """Return the single SiteSetting instance, creating it if needed."""
-        obj, _ = cls.objects.get_or_create(singleton_key=True)
-        return obj
-
+# SiteSetting model was removed in v3.5 — CRC gateway mode is now
+# determined by the selected UI version (≥ 3.5 → enabled).
+# See migration 0017_delete_sitesetting.

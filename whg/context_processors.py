@@ -12,4 +12,14 @@ def environment(request):
     }
 
 def app_version(request):
-    return {'APP_VERSION': getattr(settings, 'APP_VERSION', 'dev')}
+    beta = getattr(settings, 'BETA_VERSION', '')
+    selected = request.session.get('whg_version', settings.APP_VERSION)
+    # Validate: selected must be either the current APP_VERSION or the BETA_VERSION
+    if selected not in (settings.APP_VERSION, beta):
+        selected = settings.APP_VERSION
+    return {
+        'APP_VERSION': getattr(settings, 'APP_VERSION', 'dev'),
+        'BETA_VERSION': beta,
+        'SELECTED_VERSION': selected,
+        'IS_BETA': bool(beta and selected == beta),
+    }

@@ -1,3 +1,4 @@
+import os
 import secrets
 import traceback
 
@@ -50,63 +51,28 @@ def build_orcid_authorize_url(request):
 
 
 def login(request):
+    # Legacy login has been retired — ORCiD sign-in is the only option.
     if request.method == 'POST':
-        # Legacy WHG Login -> ORCiD
-        username = request.POST.get('username', '').strip()
-        password = request.POST.get('password', '').strip()
-        orcid_auth_url = request.POST.get('orcid_auth_url', '')
+        # No legacy form; reject stale POSTs gracefully.
+        return redirect('accounts:login')
 
-        # Check for missing fields
-        if not username or not password:
-            messages.error(request, "Both Username and Password are required.")
-            return redirect("accounts:login")
+    # Prevent login page view if user is already authenticated
+    if request.user.is_authenticated:
+        return redirect('home')
 
-        try:
-            user = auth.authenticate(request, username=username, password=password,
-                                     backend='django.contrib.auth.backends.ModelBackend')
-            if user is not None:
-                auth.login(request, user)
+    # Dev server: ORCiD redirect URI is not registered for this domain,
+    # so superusers authenticate via the Django admin login instead.
+    if os.environ.get('ENV_CONTEXT', '') == 'dev-whgazetteer-org':
+        return redirect('/admin/login/?next=/')
 
-                # DEBUG MODE BYPASS: Skip ORCiD for local development
-                if settings.DEBUG:
-                    logger.info(f"DEBUG mode: Skipping ORCiD authorization for user {username}")
-                    messages.success(request, f"Welcome back, {user.get_full_name() or username}! (DEBUG mode - ORCiD bypassed)")
-                    return redirect('home')
-
-                # Production: Redirect to the ORCiD authorisation URL if provided
-                if orcid_auth_url:
-                    # Ensure the ORCiD URL is valid
-                    if orcid_auth_url.startswith(settings.ORCID_BASE):
-                        return redirect(orcid_auth_url)
-                    else:
-                        logger.error("Invalid ORCiD authorisation URL.")
-                        return redirect('accounts:login')
-                else:
-                    # No ORCiD URL provided, redirect to home
-                    return redirect('home')
-            else:
-                # Authentication fails
-                messages.error(request, "Invalid password.")
-                return redirect('accounts:login')
-        except User.DoesNotExist:
-            # User not found
-            messages.error(request,
-                           "<h4><i class='fas fa-triangle-exclamation'></i> Invalid WHG username.</h4><p>Please correct this and try again.</p>")
-            return redirect('accounts:login')
-    else:
-        # Prevent login page view if user is already authenticated
-        if request.user.is_authenticated:
-            return redirect('home')
-
-        # GET request, render the login page with ORCiD auth URL
-        return render(
-            request,
-            'accounts/login.html',
-            context={
-                "orcid_auth_url": build_orcid_authorize_url(request),
-                "debug": settings.DEBUG,
-            }
-        )
+    # GET request, render the login page with ORCiD auth URL
+    return render(
+        request,
+        'accounts/login.html',
+        context={
+            "orcid_auth_url": build_orcid_authorize_url(request),
+        }
+    )
 
 
 def logout(request):

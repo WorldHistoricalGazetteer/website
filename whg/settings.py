@@ -41,6 +41,10 @@ try:
 except FileNotFoundError:
     APP_VERSION = "dev"
 
+# Beta version available for testing via the header version switcher.
+# Set to empty string or None to disable the switcher entirely.
+BETA_VERSION = '3.5-beta'
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -158,6 +162,7 @@ MIDDLEWARE = [
     # 'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'main.middleware.DevServerAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'api.middleware.PlausibleAPIMiddleware',

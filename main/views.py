@@ -39,6 +39,17 @@ import sys
 from urllib.parse import urlparse
 import urllib.parse
 
+
+@require_POST
+def set_version(request):
+    """Switch the active WHG version stored in the session."""
+    version = request.POST.get('version', '')
+    valid = {settings.APP_VERSION, getattr(settings, 'BETA_VERSION', '')}
+    valid.discard('')
+    if version in valid:
+        request.session['whg_version'] = version
+    return redirect(request.META.get('HTTP_REFERER', '/'))
+
 es = settings.ES_CONN
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin

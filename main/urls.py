@@ -10,6 +10,9 @@ from . import views
 app_name='main'
 urlpatterns = [
 
+    # version switcher
+    path('set_version/', views.set_version, name='set-version'),
+
     # new 'dashboard' LIST VIEWS
     path('datasets_list/<str:sort>/<str:order>/', views.dataset_list, name='dataset-list'),
     path('collections_list/<str:sort>/<str:order>/', views.collection_list, name='collection-list'),
