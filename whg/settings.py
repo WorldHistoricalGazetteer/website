@@ -48,6 +48,12 @@ APP_VERSION = os.environ.get('WHG_VERSION', '') or _file_version
 # Set WHG_BETA_VERSION to an empty string (or leave unset) to disable the switcher.
 BETA_VERSION = os.environ.get('WHG_BETA_VERSION', '')
 
+# CRC Gateway (Pitt CRC Elasticsearch + FastAPI gateway)
+# Automatically enabled when a user selects UI version >= 3.5.
+CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL', '')
+CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY', '')
+CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT', '10'))
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
