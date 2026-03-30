@@ -14,7 +14,7 @@ All calls are fail-safe: on timeout, connection error, or HTTP error,
 a warning is logged and an empty list is returned.  Legacy results are
 always returned regardless of CRC availability.
 
-Access is gated by the selected UI version (stored in the user's session):
+Access is gated by the configured APP_VERSION in settings:
   - version < 3.5  → never call the gateway (legacy behaviour)
   - version >= 3.5 → call the gateway for all authenticated users
 """
@@ -34,7 +34,7 @@ def _is_enabled_for_request(request) -> bool:
     The gateway is enabled when:
     1. ``CRC_GATEWAY_URL`` is configured in settings.
     2. The user is authenticated.
-    3. The user has selected a UI version >= 3.5 (stored in the session).
+    3. The configured ``APP_VERSION`` is >= 3.5.
     """
     # Must have a gateway URL configured at all
     gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")
@@ -51,21 +51,19 @@ def _is_enabled_for_request(request) -> bool:
         logger.warning("CRC gateway disabled: user not authenticated (user=%s)", user)
         return False
 
-    # Determine the selected UI version from the session
-    selected = getattr(request, "session", {}).get(
-        "whg_version", getattr(settings, "APP_VERSION", "0")
-    )
+    # Determine the version from settings
+    version_str = getattr(settings, "APP_VERSION", "0")
     try:
-        version_num = float(selected.split("-")[0])
+        version_num = float(version_str.split("-")[0])
     except (ValueError, AttributeError):
-        logger.warning("CRC gateway disabled: cannot parse version %r", selected)
+        logger.warning("CRC gateway disabled: cannot parse version %r", version_str)
         return False
 
     if version_num < 3.5:
         logger.warning("CRC gateway disabled: version %.1f < 3.5", version_num)
         return False
 
-    logger.info("CRC gateway enabled: url=%s, user=%s, version=%s", gateway_url, user, selected)
+    logger.info("CRC gateway enabled: url=%s, user=%s, version=%s", gateway_url, user, version_str)
     return True
 
 

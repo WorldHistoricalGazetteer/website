@@ -41,15 +41,10 @@ try:
 except FileNotFoundError:
     _file_version = "dev"
 
-# Published (stable) version.  Env var takes precedence; falls back to VERSION file.
+# Published version.  Env var takes precedence; falls back to VERSION file.
 APP_VERSION = os.environ.get('WHG_VERSION', '') or _file_version
 
-# Beta version available for testing via the header version switcher.
-# Set WHG_BETA_VERSION to an empty string (or leave unset) to disable the switcher.
-BETA_VERSION = os.environ.get('WHG_BETA_VERSION', '')
-
 # CRC Gateway (Pitt CRC Elasticsearch + FastAPI gateway)
-# Automatically enabled when a user selects UI version >= 3.5.
 # Env var wins; then fall back to whatever local_settings set; then default.
 CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWAY_URL', '')
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')

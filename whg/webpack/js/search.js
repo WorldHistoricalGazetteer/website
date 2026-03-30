@@ -57,15 +57,6 @@ let whg_map = new whg_maplibre.Map(mapParameters);
 function waitMapLoad() {
     return new Promise((resolve) => {
         whg_map.on('load', () => {
-            console.log('Map loaded.');
-
-            /* This codeblock commented-out because labels can now be switched off using the style-switcher
-            const style = whg_map.getStyle();
-            style.layers.forEach(layer => {
-                if (layer.id.includes('label')) {
-                    whg_map.setLayoutProperty(layer.id, 'visibility', 'none');
-                }
-            });*/
 
             if (has_areas) {
                 whg_map.newSource('userareas') // Add empty source
@@ -714,7 +705,6 @@ Promise.all([
         });
     });
 
-    console.log(whg_map.getStyle());
 
 }).catch(error => console.error('An error occurred:', error));
 
@@ -1087,7 +1077,6 @@ function buildResultFilters() {
         $('#headingCountries button').click();
     }
 
-    console.log('allCountries', allCountries, ccode_hash)
     $('#country_checkboxes').html(allCountries.map(country => {
         const cName = ccode_hash[country]['gnlabel'];
         const count = countryCounts[country] || 0;

@@ -129,48 +129,11 @@
             <div class="collapse navbar-collapse smallish pt-2" id="navbarSupportedContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0">
                     <div id="links_home" style="display:inline-flex; align-items:center; gap:6px;">
-                        {% if BETA_VERSION %}
-                        {# ── Dual-version badge with integrated switcher ── #}
-                        <span id="version_badge" style="display:inline-flex; align-items:center; vertical-align:middle; border-radius:3px; overflow:hidden; font-family:Verdana,Geneva,DejaVu Sans,sans-serif; font-size:11px; line-height:20px; height:20px;">
-                            {# ── Stable half ── #}
-                            {% if IS_BETA %}
-                            <form method="post" action="{% url 'main:set-version' %}" style="display:contents;">
-                                {% csrf_token %}
-                                <input type="hidden" name="version" value="{{ APP_VERSION }}">
-                                <button type="submit"
-                                        style="border:none; cursor:pointer; background:#8b8; color:#fff; padding:0 6px; height:20px; font:inherit; line-height:20px; opacity:.65;"
-                                        title="Switch to stable v{{ APP_VERSION }}">v{{ APP_VERSION }}</button>
-                            </form>
-                            {% else %}
-                            <a href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
-                               style="background:#4c1; color:#fff; padding:0 6px; height:20px; text-decoration:none; display:inline-block; line-height:20px;"
-                               title="Current version: v{{ APP_VERSION }}">v{{ APP_VERSION }}</a>
-                            {% endif %}
-                            {# ── Divider ── #}
-                            <span style="width:1px; height:20px; background:rgba(255,255,255,.35); display:inline-block;"></span>
-                            {# ── Beta half ── #}
-                            {% if IS_BETA %}
-                            <a href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
-                               style="background:#e08a00; color:#fff; padding:0 6px; height:20px; text-decoration:none; display:inline-block; line-height:20px;"
-                               title="Current version: v{{ BETA_VERSION }}">v{{ BETA_VERSION }}</a>
-                            {% else %}
-                            <form method="post" action="{% url 'main:set-version' %}" style="display:contents;">
-                                {% csrf_token %}
-                                <input type="hidden" name="version" value="{{ BETA_VERSION }}">
-                                <button type="submit"
-                                        style="border:none; cursor:pointer; background:#daa520; color:#fff; padding:0 6px; height:20px; font:inherit; line-height:20px; opacity:.5;"
-                                        title="Switch to v{{ BETA_VERSION }}">v{{ BETA_VERSION }}</button>
-                            </form>
-                            {% endif %}
-                        </span>
-                        {% else %}
-                        {# ── Single version badge (no beta available) ── #}
                         <a id="version_badge"
                            href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
                            title="Current Version: v{{ APP_VERSION }}">
                             <span style="display:inline-block; border-radius:3px; background:#4c1; color:#fff; font-family:Verdana,Geneva,DejaVu Sans,sans-serif; font-size:11px; line-height:20px; height:20px; padding:0 6px;">v{{ APP_VERSION }}</span>
                         </a>
-                        {% endif %}
                         <a data-whg-modal="/contact_modal/" style="line-height:20px; vertical-align:middle;">contact</a>
                     </div>
                     <div id="links_other" class="d-none">

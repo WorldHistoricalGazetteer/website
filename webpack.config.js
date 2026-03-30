@@ -46,7 +46,6 @@ module.exports = {
 		profile: './whg/webpack/js/profile.js',
 		review: './whg/webpack/js/review.js',
 		search: './whg/webpack/js/search.js',
-		search_functions: './whg/webpack/js/search_resources.js',
 		tasks: './whg/webpack/js/tasks.js',
 		whg_maplibre: './whg/webpack/js/whg_maplibre.js',
 		workbench: './whg/webpack/js/workbench.js',
