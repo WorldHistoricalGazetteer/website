@@ -186,6 +186,74 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, reque
 
 
 # ---------------------------------------------------------------------------
+# Beta search proxy — calls the new /api/search and /api/suggest endpoints
+# ---------------------------------------------------------------------------
+
+def crc_search(params: dict, request=None) -> dict:
+    """
+    Call the CRC gateway ``/api/search`` endpoint (beta only).
+
+    Args:
+        params: Dict with keys matching the gateway SearchRequest schema:
+            query, mode, ccodes, bounds, start_year, end_year, undated,
+            size, exclude_namespaces.
+        request: Django HttpRequest (for version-based access check).
+
+    Returns:
+        The full gateway response dict (hits, total, max_score, facets),
+        or an empty-result dict on any error.
+    """
+    if not _is_enabled_for_request(request):
+        return {"hits": [], "total": 0, "max_score": 0, "facets": {"types": [], "countries": []}}
+
+    try:
+        resp = requests.post(
+            f"{_gateway_url()}/api/search",
+            json=params,
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.Timeout:
+        logger.warning("CRC gateway /api/search timeout after %ss", _timeout())
+    except requests.ConnectionError as e:
+        logger.warning("CRC gateway /api/search connection error: %s", e)
+    except requests.HTTPError as e:
+        logger.warning("CRC gateway /api/search HTTP error: %s", e)
+    except Exception as e:
+        logger.warning("CRC gateway /api/search unexpected error: %s", e)
+
+    return {"hits": [], "total": 0, "max_score": 0, "facets": {"types": [], "countries": []}}
+
+
+def crc_suggest(prefix: str, size: int = 10, request=None) -> dict:
+    """
+    Call the CRC gateway ``GET /api/suggest`` endpoint (beta only).
+
+    Returns:
+        The gateway response dict (suggestions, total), or an empty-result
+        dict on any error.
+    """
+    if not _is_enabled_for_request(request):
+        return {"suggestions": [], "total": 0}
+
+    try:
+        resp = requests.get(
+            f"{_gateway_url()}/api/suggest",
+            params={"q": prefix, "size": size},
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logger.warning("CRC gateway /api/suggest error: %s", e)
+
+    return {"suggestions": [], "total": 0}
+
+
+# ---------------------------------------------------------------------------
 # Adapter: CRC response → legacy ES hit shape
 # ---------------------------------------------------------------------------
 

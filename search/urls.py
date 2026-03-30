@@ -5,6 +5,8 @@ from search.views import (
     SearchViewV3, SearchPageView, FeatureContextView, TraceGeomView,
     SearchDatabaseView, CollectionGeomView, TypeaheadSuggestions
 )
+from search.views_beta import SearchViewBeta, TypeaheadSuggestionsBeta
+from utils.version_dispatch import version_dispatch
 
 # app_name = "search"
 
@@ -14,8 +16,8 @@ urlpatterns = [
     # path('old/', SearchPageView.as_view(), name='search-page-old'),
 
     # generic search view, renders search.html w/results
-    path('index/', SearchViewV3.as_view(), name='search'),  # executes index search
-    path('suggestions/', TypeaheadSuggestions, name='typeahead_suggestions'),  # finds suggestions for Search
+    path('index/', version_dispatch(SearchViewV3, SearchViewBeta), name='search'),
+    path('suggestions/', version_dispatch(TypeaheadSuggestions, TypeaheadSuggestionsBeta), name='typeahead_suggestions'),
 
     path('db/', SearchDatabaseView.as_view(), name='search-db'),  # executes database search
     path('context/', FeatureContextView.as_view(), name='feature_context'),  # place portal context
