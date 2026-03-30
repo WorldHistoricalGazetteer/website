@@ -97,38 +97,53 @@ class Command(BaseCommand):
             '--dry-run', action='store_true',
             help='Parse and report counts without writing to the database.',
         )
+        parser.add_argument(
+            '--api', action='store_true',
+            help='Crawl the hierarchy via the Getty Linked Art JSON API '
+                 'instead of downloading the bulk N-Triples dump. '
+                 'Slower but works when the dump endpoint is unavailable.',
+        )
 
     def handle(self, *args, **options):
         force = options['force']
         local_path = options['local']
         dry_run = options['dry_run']
+        use_api = options['api']
 
-        # ── Step 1: Obtain the .nt file ──────────────────────────────
-        if local_path:
-            nt_path = Path(local_path)
-            if not nt_path.exists():
-                raise CommandError(f"Local file not found: {local_path}")
-            self.stdout.write(f"Using local file: {nt_path}")
-        else:
-            nt_path = self._download_if_needed(force)
-            if nt_path is None:
-                self.stdout.write(self.style.SUCCESS(
-                    "AAT dump has not changed since last sync. Use --force to re-download."
-                ))
-                return
-
-        # ── Step 2: Parse ─────────────────────────────────────────────
-        self.stdout.write("Pass 1: Collecting hierarchy edges and labels …")
         t0 = time.time()
-        children, labels, notes = self._parse_pass1(nt_path)
-        t1 = time.time()
-        self.stdout.write(f"  → {len(children)} parent→children edges, "
-                          f"{len(labels)} labelled concepts in {t1 - t0:.1f}s")
 
-        self.stdout.write("Pass 2: Walking hierarchy from root nodes …")
-        place_types = self._walk_hierarchy(children, labels, notes)
-        t2 = time.time()
-        self.stdout.write(f"  → {len(place_types)} place-type concepts in {t2 - t1:.1f}s")
+        if use_api:
+            place_types = self._crawl_api()
+        else:
+            # ── Step 1: Obtain the .nt file ──────────────────────────────
+            if local_path:
+                nt_path = Path(local_path)
+                if not nt_path.exists():
+                    raise CommandError(f"Local file not found: {local_path}")
+                self.stdout.write(f"Using local file: {nt_path}")
+            else:
+                nt_path = self._download_if_needed(force)
+                if nt_path is None:
+                    self.stdout.write(self.style.SUCCESS(
+                        "AAT dump has not changed since last sync. Use --force to re-download."
+                    ))
+                    return
+
+            # ── Step 2: Parse ─────────────────────────────────────────────
+            self.stdout.write("Pass 1: Collecting hierarchy edges and labels …")
+            t1 = time.time()
+            children, labels, notes = self._parse_pass1(nt_path)
+            t1b = time.time()
+            self.stdout.write(f"  → {len(children)} parent→children edges, "
+                              f"{len(labels)} labelled concepts in {t1b - t1:.1f}s")
+
+            self.stdout.write("Pass 2: Walking hierarchy from root nodes …")
+            place_types = self._walk_hierarchy(children, labels, notes)
+            t2 = time.time()
+            self.stdout.write(f"  → {len(place_types)} place-type concepts in {t2 - t1b:.1f}s")
+
+        t_parsed = time.time()
+        self.stdout.write(f"  → {len(place_types)} place-type concepts collected in {t_parsed - t0:.1f}s")
 
         if dry_run:
             self.stdout.write(self.style.WARNING("Dry run — no database changes made."))
@@ -139,7 +154,7 @@ class Command(BaseCommand):
         self.stdout.write("Upserting into Type table …")
         created, updated = self._upsert(place_types)
         t3 = time.time()
-        self.stdout.write(f"  → {created} created, {updated} updated in {t3 - t2:.1f}s")
+        self.stdout.write(f"  → {created} created, {updated} updated in {t3 - t_parsed:.1f}s")
 
         # ── Step 4: Invalidate caches ─────────────────────────────────
         from placetypes.aat_utils import invalidate_caches
@@ -148,6 +163,123 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Done. {len(place_types)} place types synchronised."
         ))
+
+    # ------------------------------------------------------------------
+    # API crawl (fallback when the bulk dump is unavailable)
+    # ------------------------------------------------------------------
+
+    _API_BASE = "https://vocab.getty.edu/aat/{aat_id}.json"
+    _API_TIMEOUT = 30
+    _API_RETRY_WAIT = 2
+    _API_MAX_RETRIES = 3
+
+    def _fetch_concept_json(self, aat_id, session):
+        """Fetch a single AAT concept via the Linked Art JSON API."""
+        url = self._API_BASE.format(aat_id=aat_id)
+        for attempt in range(1, self._API_MAX_RETRIES + 1):
+            try:
+                resp = session.get(url, timeout=self._API_TIMEOUT)
+                if resp.status_code == 200:
+                    return resp.json()
+                if resp.status_code in (429, 500, 502, 503):
+                    time.sleep(self._API_RETRY_WAIT * attempt)
+                    continue
+                logger.warning("HTTP %s for aat:%s", resp.status_code, aat_id)
+                return None
+            except requests.RequestException as e:
+                logger.warning("Request failed for aat:%s (attempt %d): %s",
+                               aat_id, attempt, e)
+                time.sleep(self._API_RETRY_WAIT * attempt)
+        return None
+
+    def _extract_label_and_note(self, data):
+        """
+        Extract the English preferred label and scope note from Linked Art JSON.
+        """
+        label = data.get('_label', '')
+
+        # Try to find the English preferred label from identified_by
+        for ident in data.get('identified_by', []):
+            classes = [c.get('_label', '') for c in ident.get('classified_as', [])]
+            lang_list = ident.get('language', [])
+            lang_codes = [l.get('_label', '') for l in lang_list]
+            if 'preferred term' in classes and 'en' in lang_codes:
+                label = ident.get('content', label)
+                break
+
+        # Extract scope note
+        note = ''
+        for subj in data.get('subject_of', []):
+            lang_list = subj.get('language', [])
+            lang_codes = [l.get('_label', '') for l in lang_list]
+            if 'en' in lang_codes and subj.get('content'):
+                note = subj['content'][:3000]
+                break
+
+        return label, note
+
+    def _crawl_api(self):
+        """
+        BFS crawl of the AAT hierarchy via the Linked Art JSON API.
+        Returns a list of dicts in the same format as _walk_hierarchy().
+        """
+        self.stdout.write("Crawling AAT hierarchy via JSON API …")
+        session = requests.Session()
+        session.headers.update({'Accept': 'application/json'})
+
+        result = []
+        visited = set()
+        fetched = 0
+
+        # Queue: (aat_id, parent_aat_id_or_None, path_so_far, depth, fclass)
+        queue = []
+        for root_id in ROOT_AAT_IDS:
+            fclass = ROOT_TO_FCLASS[root_id]
+            queue.append((root_id, None, str(root_id), 0, fclass))
+
+        while queue:
+            aat_id, parent_id, path, depth, fclass = queue.pop(0)
+            if aat_id in visited:
+                continue
+            visited.add(aat_id)
+
+            data = self._fetch_concept_json(aat_id, session)
+            fetched += 1
+            if fetched % 50 == 0:
+                self.stdout.write(f"  … fetched {fetched} concepts, "
+                                  f"{len(queue)} queued")
+
+            if data is None:
+                logger.warning("Skipping aat:%s — could not fetch", aat_id)
+                continue
+
+            label, note = self._extract_label_and_note(data)
+
+            result.append({
+                'aat_id': aat_id,
+                'parent_id': parent_id,
+                'term': label[:100],
+                'term_full': label[:100],
+                'note': note,
+                'fclass': fclass,
+                'path': path,
+                'depth': depth,
+                'is_place_type': True,
+            })
+
+            # Enqueue narrower (child) concepts
+            for child in sorted(data.get('narrower', []),
+                                key=lambda c: c.get('id', '')):
+                child_uri = child.get('id', '')
+                child_id = _aat_id_from_uri(child_uri)
+                if child_id is not None and child_id not in visited:
+                    child_path = f"{path}.{child_id}"
+                    queue.append((child_id, aat_id, child_path,
+                                  depth + 1, fclass))
+
+        self.stdout.write(f"  … {fetched} API requests, "
+                          f"{len(result)} concepts collected")
+        return result
 
     # ------------------------------------------------------------------
     # Download
