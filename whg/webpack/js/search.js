@@ -829,7 +829,8 @@ function renderResults(data, fromStorage = false) {
         const encodedChildren = encodeURIComponent(children.join(','));
 
         let resultIdx = count > 1 ? 'whg' : 'pub';
-        // Aberaeron (in 'pub' and 'whg') will have two cards, one for each index
+
+        // --- Header row: title, link count badge, Place Details button ---
         let html = `<div data-bs-toggle="tooltip" title="Click to zoom on map" class="result ${resultIdx}-result">
 	<span>
 	  <span class="red-head">${result.title}</span>
@@ -840,8 +841,32 @@ function renderResults(data, fromStorage = false) {
 	  </span>
 	</span>`;
 
-        if (result.variants && result.variants.length > 0) {
-            // Sort variants so that strings with ASCII characters precede those with non-ASCII
+        // --- Dataset badge ---
+        if (result.dataset) {
+            html += `<span class="result-dataset-badge" data-bs-toggle="tooltip" title="Source dataset">${result.dataset}</span>`;
+        }
+
+        // --- Description (first available, truncated) ---
+        if (result.descriptions && result.descriptions.length > 0) {
+            const desc = result.descriptions[0];
+            const langTag = desc.lang ? ` <span class="result-lang">[${desc.lang}]</span>` : '';
+            html += `<p class="result-description more-or-less">${desc.value}${langTag}</p>`;
+        }
+
+        // --- Names with language tags ---
+        if (result.names && result.names.length > 0) {
+            // Group names: show toponym (lang) pairs, skip the title
+            const nameItems = result.names
+                .filter(n => n.toponym && n.toponym !== result.title)
+                .map(n => {
+                    const lang = n.lang ? `<span class="result-lang">${n.lang}</span>` : '';
+                    return `${n.toponym}${lang ? ' ' + lang : ''}`;
+                });
+            if (nameItems.length > 0) {
+                html += `<p class="more-or-less">Names (${nameItems.length}): ${nameItems.join(', ')}</p>`;
+            }
+        } else if (result.variants && result.variants.length > 0) {
+            // Fallback to old variants display
             result.variants.sort((a, b) => {
                 const aAscii = /^[\x00-\x7F]/.test(a);
                 const bAscii = /^[\x00-\x7F]/.test(b);
@@ -850,13 +875,23 @@ function renderResults(data, fromStorage = false) {
                 else return 1;
             });
             html += `<p class="more-or-less">Variants (${result.variants.length}): ${result.variants.join(', ')}</p>`;
-        } else {
-            html += `<p>Variants: none provided</p>`;
         }
 
-        html += (result.types && result.types.length > 0) ?
-            `<p>Type(s): ${result.types.join(', ')}</p>` :
-            '';
+        // --- Types with AAT identifiers ---
+        if (result.types_full && result.types_full.length > 0) {
+            const typeItems = result.types_full.map(t => {
+                const label = t.sourceLabel || t.label || '';
+                const aat = t.identifier ? ` <a href="http://vocab.getty.edu/page/${t.identifier.replace('aat:', 'aat/')}" target="_blank" class="result-aat-link" data-bs-toggle="tooltip" title="View in AAT: ${t.identifier}">${t.identifier}</a>` : '';
+                return `${label}${aat}`;
+            }).filter(s => s.trim());
+            if (typeItems.length > 0) {
+                html += `<p>Type(s): ${typeItems.join('; ')}</p>`;
+            }
+        } else if (result.types && result.types.length > 0) {
+            html += `<p>Type(s): ${result.types.join(', ')}</p>`;
+        }
+
+        // --- Country codes ---
         html += (result.ccodes && result.ccodes.length > 0 && !(result.ccodes.length == 1 && result.ccodes[0] == '')) ?
             `<p>Country Codes: ${result.ccodes.map(ccode => {
                 const country = dropdown_data[1].children.find(child => child.id === ccode);
@@ -865,9 +900,82 @@ function renderResults(data, fromStorage = false) {
             }).join(', ')}</p>` :
             '';
 
+        // --- Timespans ---
         if (result.timespans && result.timespans.length > 0) {
             result.timespans.sort((a, b) => a[0] - b[0]);
             html += `<p>Chronology: ${result.timespans.map(span => `${span[0]}-${span[1]}`).join(', ')}</p>`;
+        }
+
+        // --- External links (Wikidata, GeoNames, etc.) ---
+        if (result.links && result.links.length > 0) {
+            const linkItems = result.links.map(lnk => {
+                const id = lnk.identifier || '';
+                let icon = 'fas fa-external-link-alt';
+                let label = id;
+                let url = id;
+                if (id.startsWith('wd:') || id.startsWith('Q')) {
+                    const qid = id.replace('wd:', '');
+                    icon = 'fab fa-wikipedia-w';
+                    label = qid;
+                    url = `https://www.wikidata.org/wiki/${qid}`;
+                } else if (id.startsWith('gn:') || id.match(/^\d{5,}$/)) {
+                    const gnid = id.replace('gn:', '');
+                    label = `GeoNames ${gnid}`;
+                    url = `https://www.geonames.org/${gnid}`;
+                } else if (id.startsWith('tgn:')) {
+                    const tgnid = id.replace('tgn:', '');
+                    label = `TGN ${tgnid}`;
+                    url = `http://vocab.getty.edu/page/tgn/${tgnid}`;
+                } else if (id.startsWith('dbp:')) {
+                    const dbpid = id.replace('dbp:', '');
+                    label = `DBpedia`;
+                    url = `https://dbpedia.org/resource/${dbpid}`;
+                } else if (id.startsWith('viaf:')) {
+                    const viafid = id.replace('viaf:', '');
+                    label = `VIAF ${viafid}`;
+                    url = `https://viaf.org/viaf/${viafid}`;
+                } else if (id.startsWith('loc:')) {
+                    const locid = id.replace('loc:', '');
+                    label = `LoC ${locid}`;
+                    url = `https://id.loc.gov/authorities/${locid}`;
+                } else if (id.startsWith('http')) {
+                    url = id;
+                    label = new URL(id).hostname;
+                }
+                const relType = lnk.type ? `<span class="result-link-type">${lnk.type}</span> ` : '';
+                return `${relType}<a href="${url}" target="_blank" data-bs-toggle="tooltip" title="${id}"><i class="${icon}"></i> ${label}</a>`;
+            });
+            html += `<p class="result-links more-or-less">Links (${linkItems.length}): ${linkItems.join(', ')}</p>`;
+        }
+
+        // --- Source identifier & URI ---
+        if (result.src_id || result.uri) {
+            let srcParts = [];
+            if (result.src_id) srcParts.push(`Source ID: ${result.src_id}`);
+            if (result.uri) srcParts.push(`<a href="${result.uri}" target="_blank" class="result-uri-link" data-bs-toggle="tooltip" title="${result.uri}">URI</a>`);
+            html += `<p class="result-source-info">${srcParts.join(' · ')}</p>`;
+        }
+
+        // --- Depictions (thumbnail images) ---
+        if (result.depictions && result.depictions.length > 0) {
+            html += `<div class="result-depictions">`;
+            result.depictions.forEach(dep => {
+                if (dep.id) {
+                    const depTitle = dep.title || 'Depiction';
+                    html += `<a href="${dep.id}" target="_blank" data-bs-toggle="tooltip" title="${depTitle}"><img src="${dep.id}" alt="${depTitle}" class="result-depiction-thumb" loading="lazy"/></a>`;
+                }
+            });
+            html += `</div>`;
+        }
+
+        // --- Relations ---
+        if (result.relations && result.relations.length > 0) {
+            const relItems = result.relations.map(rel => {
+                const label = rel.label || '';
+                const relType = rel.relationType || '';
+                return `${relType}: ${label}`;
+            });
+            html += `<p class="more-or-less">Relations (${relItems.length}): ${relItems.join('; ')}</p>`;
         }
 
         html += `</div>`;

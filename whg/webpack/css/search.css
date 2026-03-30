@@ -152,6 +152,97 @@
     border: 1px solid #eee;
     border-radius: 5px;
 }
+
+/* --- Rich result additions --- */
+
+.result-dataset-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    background-color: #5a9bd5;
+    color: #fff;
+    padding: 0 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1.6;
+    float: left;
+    clear: left;
+}
+.pub-result .result-dataset-badge {
+    background-color: #6ab96a;
+}
+
+.result-description {
+    font-style: italic;
+    color: #444;
+    clear: both;
+    width: 100%;
+}
+
+.result-lang {
+    font-size: 0.7rem;
+    color: #888;
+    font-style: normal;
+}
+
+.result-aat-link {
+    font-size: 0.7rem;
+    color: #6a7b8b;
+    text-decoration: none;
+}
+.result-aat-link:hover {
+    text-decoration: underline;
+    color: #3a5a7b;
+}
+
+.result-links {
+    clear: both;
+    width: 100%;
+}
+.result-links a {
+    color: #4477AA;
+    text-decoration: none;
+    font-size: 0.78rem;
+}
+.result-links a:hover {
+    text-decoration: underline;
+}
+.result-link-type {
+    font-size: 0.65rem;
+    color: #999;
+    font-variant: small-caps;
+}
+
+.result-source-info {
+    font-size: 0.72rem !important;
+    color: #777;
+    clear: both;
+}
+.result-uri-link {
+    color: #4477AA;
+    text-decoration: none;
+}
+.result-uri-link:hover {
+    text-decoration: underline;
+}
+
+.result-depictions {
+    clear: both;
+    padding: 2px 0;
+    float: left;
+}
+.result-depiction-thumb {
+    height: 40px;
+    width: auto;
+    border-radius: 3px;
+    margin-right: 4px;
+    border: 1px solid #ddd;
+    object-fit: cover;
+}
+.result-depiction-thumb:hover {
+    border-color: #999;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
 .result:hover {
     background-color: #fffff2;
     cursor: pointer;
