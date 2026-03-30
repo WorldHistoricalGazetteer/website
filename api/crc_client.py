@@ -206,7 +206,11 @@ def crc_search(params: dict, request=None) -> dict:
     Args:
         params: Dict with keys matching the gateway SearchRequest schema:
             query, mode, ccodes, bounds, start_year, end_year, undated,
-            size, exclude_namespaces.
+            size, exclude_namespaces, geom.
+
+            ``geom`` controls geometry detail level:
+              - ``"full"`` (default) — complete GeoJSON geometries + repr_point
+              - ``"repr_point"`` — centroids only (lighter payloads)
         request: Django HttpRequest (for version-based access check).
 
     Returns:
@@ -314,10 +318,41 @@ def _adapt_hits(data: dict) -> list[dict]:
         if title and title.lower() not in searchy:
             searchy.append(title.lower())
 
-        # Build geoms in legacy format
+        # Build geoms in legacy format — prefer full geometries,
+        # fall back to repr_point.  The gateway may return any of:
+        #   • {type, coordinates}  — full GeoJSON geometry
+        #   • {location: {type, coordinates}}  — ES-style wrapper
+        #   • {repr_point: [lon, lat]}  — centroid only
         geoms = []
         for g in geometries:
-            rp = g.get("repr_point")
+            if isinstance(g, dict):
+                # Full GeoJSON geometry object
+                if g.get("type") and g.get("coordinates"):
+                    geoms.append({
+                        "location": {
+                            "type": g["type"],
+                            "coordinates": g["coordinates"],
+                        }
+                    })
+                # ES-style wrapper
+                elif isinstance(g.get("location"), dict):
+                    loc = g["location"]
+                    if loc.get("type") and loc.get("coordinates"):
+                        geoms.append({"location": loc})
+                # Legacy repr_point inside a geometries entry
+                else:
+                    rp = g.get("repr_point")
+                    if rp and len(rp) == 2:
+                        geoms.append({
+                            "location": {
+                                "type": "Point",
+                                "coordinates": rp,
+                            }
+                        })
+
+        # Fall back to top-level repr_point when no full geometries exist
+        if not geoms:
+            rp = hit.get("repr_point")
             if rp and len(rp) == 2:
                 geoms.append({
                     "location": {

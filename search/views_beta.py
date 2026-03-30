@@ -60,10 +60,49 @@ def _adapt_gateway_hit(hit):
                 name_obj["lang"] = lang
             names.append(name_obj)
 
-    # Geometry in legacy format
+    # Geometries — prefer full geometry objects, fall back to repr_point
+    #
+    # The gateway may return any of:
+    #   • geometries: [{type, coordinates, ...}, ...]   — full GeoJSON
+    #   • geometries: [{location: {type, coordinates}}, ...]  — ES-style
+    #   • repr_point: [lon, lat]  — centroid only (current gateway default)
+    #
+    # We pass through whatever geometry types are available (Point,
+    # Polygon, LineString, MultiPolygon, GeometryCollection, etc.)
+    # so that the JS ``geomsGeoJSON()`` helper can render lines and
+    # polygons on the map, not just point markers.
     geom = []
     for g in (hit.get("geometries") or []):
-        rp = g.get("repr_point")
+        if isinstance(g, dict):
+            # Full GeoJSON geometry object (has "type" and "coordinates")
+            if g.get("type") and g.get("coordinates"):
+                geom.append({
+                    "type": g["type"],
+                    "coordinates": g["coordinates"],
+                    "properties": {"pid": place_id},
+                })
+            # ES-style wrapper: {location: {type, coordinates}}
+            elif isinstance(g.get("location"), dict):
+                loc = g["location"]
+                if loc.get("type") and loc.get("coordinates"):
+                    geom.append({
+                        "type": loc["type"],
+                        "coordinates": loc["coordinates"],
+                        "properties": {"pid": place_id},
+                    })
+            # Legacy repr_point inside a geometries entry
+            else:
+                grp = g.get("repr_point")
+                if grp and len(grp) == 2:
+                    geom.append({
+                        "type": "Point",
+                        "coordinates": grp,
+                        "properties": {"pid": place_id},
+                    })
+
+    # Fall back to the top-level repr_point when no full geometries exist
+    if not geom:
+        rp = hit.get("repr_point")
         if rp and len(rp) == 2:
             geom.append({
                 "type": "Point",
