@@ -15,7 +15,8 @@ from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
 from datasets.tasks import get_bounds_filter
-from places.models import Place, PlaceGeom, Type
+from places.models import Place, PlaceGeom
+from placetypes.aat_utils import build_adv_filters
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
 from whg.settings import STANDARD_FIELDS
@@ -72,27 +73,8 @@ class SearchPageView(TemplateView):
         # context['bboxes'] = bboxes
         context['dropdown_data'] = get_regions_countries()  # Used for spatial filter
 
-        # Build AAT type categories from the Type model, grouped by fclass
-        # Each category: [label, description, [aat_identifiers]]
-        fclass_labels = {
-            "A": "Administrative entities",
-            "P": "Cities, towns, hamlets",
-            "S": "Sites, buildings, complexes",
-            "R": "Roads, routes, rail...",
-            "L": "Regions, landscape areas",
-            "T": "Terrestrial landforms",
-            "H": "Water bodies",
-        }
-        adv_filters = []
-        for fclass_code, category_label in fclass_labels.items():
-            aat_ids = list(
-                Type.objects.filter(fclass=fclass_code)
-                .values_list('aat_id', flat=True)
-            )
-            identifiers = [f"aat:{aid}" for aid in aat_ids]
-            adv_filters.append([fclass_code, category_label, identifiers])
-
-        context['adv_filters'] = adv_filters
+        # Build AAT type categories from the types app hierarchy
+        context['adv_filters'] = build_adv_filters()
 
         user_areas = []
         if self.request.user.is_authenticated:
