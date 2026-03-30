@@ -192,6 +192,7 @@ def suggester(q, indices):
                     {
                         "_id": h['_id'],
                         "_index": h['_index'],
+                        "_score": h.get('_score', 0) or 0,
                         "linkcount": len(set(h['_source']['children'])),
                         "hit": h['_source'],
                         "timespans": h['_source'].get('timespans', [])
@@ -201,7 +202,8 @@ def suggester(q, indices):
         logger.debug(f"ES query failed: {e}")
         return []
 
-    sortedsugs = sorted(suggestions, key=lambda x: x['linkcount'], reverse=True)
+    # Sort primarily by ES relevance score, then by linkcount as tiebreaker
+    sortedsugs = sorted(suggestions, key=lambda x: (x['_score'], x['linkcount']), reverse=True)
     # print('sortedsugs', sortedsugs)
     # TODO: there may be parents and children
     return sortedsugs
