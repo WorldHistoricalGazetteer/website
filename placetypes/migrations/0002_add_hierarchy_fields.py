@@ -11,6 +11,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ('placetypes', '0001_initial'),
+        ('places', '0024_remove_type_model'),
     ]
 
     operations = [

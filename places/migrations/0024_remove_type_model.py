@@ -22,8 +22,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.DeleteModel(
-            name='Type',
+        migrations.SeparateDatabaseAndState(
+            # Only remove from Django's state — do NOT drop the table
+            state_operations=[
+                migrations.DeleteModel(
+                    name='Type',
+                ),
+            ],
+            database_operations=[],
         ),
     ]
 
