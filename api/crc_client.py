@@ -37,14 +37,18 @@ def _is_enabled_for_request(request) -> bool:
     3. The user has selected a UI version >= 3.5 (stored in the session).
     """
     # Must have a gateway URL configured at all
-    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+    gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")
+    if not gateway_url:
+        logger.warning("CRC gateway disabled: CRC_GATEWAY_URL is empty")
         return False
 
     if request is None:
+        logger.warning("CRC gateway disabled: request is None")
         return False
 
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
+        logger.warning("CRC gateway disabled: user not authenticated (user=%s)", user)
         return False
 
     # Determine the selected UI version from the session
@@ -54,9 +58,15 @@ def _is_enabled_for_request(request) -> bool:
     try:
         version_num = float(selected.split("-")[0])
     except (ValueError, AttributeError):
+        logger.warning("CRC gateway disabled: cannot parse version %r", selected)
         return False
 
-    return version_num >= 3.5
+    if version_num < 3.5:
+        logger.warning("CRC gateway disabled: version %.1f < 3.5", version_num)
+        return False
+
+    logger.info("CRC gateway enabled: url=%s, user=%s, version=%s", gateway_url, user, selected)
+    return True
 
 
 def _gateway_url() -> str:
@@ -207,12 +217,15 @@ def crc_search(params: dict, request=None) -> dict:
         return {"hits": [], "total": 0, "max_score": 0, "facets": {"types": [], "countries": []}}
 
     try:
+        url = f"{_gateway_url()}/api/search"
+        logger.info("CRC gateway POST %s with params: %s", url, params)
         resp = requests.post(
-            f"{_gateway_url()}/api/search",
+            url,
             json=params,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway /api/search response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
         resp.raise_for_status()
         return resp.json()
     except requests.Timeout:
@@ -239,12 +252,15 @@ def crc_suggest(prefix: str, size: int = 10, request=None) -> dict:
         return {"suggestions": [], "total": 0}
 
     try:
+        url = f"{_gateway_url()}/api/suggest"
+        logger.info("CRC gateway GET %s?q=%s&size=%s", url, prefix, size)
         resp = requests.get(
-            f"{_gateway_url()}/api/suggest",
+            url,
             params={"q": prefix, "size": size},
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway /api/suggest response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
         resp.raise_for_status()
         return resp.json()
     except Exception as e:
