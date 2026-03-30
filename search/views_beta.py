@@ -35,21 +35,8 @@ def _adapt_gateway_hit(hit):
     Convert a single CRC Gateway hit into the ``suggestionItem`` shape
     expected by the browser-side ``renderResults()`` JS function.
 
-    Legacy suggestion format::
-
-        {
-            "whg_id": "",
-            "pid": "gn:745044",
-            "index": "crc",
-            "children": [],
-            "linkcount": 0,
-            "title": "Istanbul",
-            "variants": ["Constantinople", ...],
-            "ccodes": ["TR"],
-            "types": ["inhabited place"],
-            "geom": [{"type": "Point", "coordinates": [...], "properties": {"pid": ...}}],
-            "timespans": [[800, 1800]],
-        }
+    Includes both legacy fields (for backward-compatible filters) and
+    rich fields (for the enhanced beta result display).
     """
     place_id = hit.get("place_id", "")
     title = hit.get("title", "")
@@ -60,6 +47,18 @@ def _adapt_gateway_hit(hit):
         n.get("label", "") for n in names_raw
         if n.get("label") and n.get("label") != title
     })
+
+    # Rich name objects: [{toponym, lang}, ...]
+    # Gateway names use "label" key; JS expects "toponym"
+    names = []
+    for n in names_raw:
+        label = n.get("label", "")
+        if label:
+            name_obj = {"toponym": label}
+            lang = n.get("lang") or n.get("language")
+            if lang:
+                name_obj["lang"] = lang
+            names.append(name_obj)
 
     # Geometry in legacy format
     geom = []
@@ -75,13 +74,24 @@ def _adapt_gateway_hit(hit):
     # Types — gateway may return dicts with 'label' or plain strings
     raw_types = hit.get("types") or []
     types = []
+    types_full = []
     for t in raw_types:
         if isinstance(t, dict):
             label = t.get("label", "")
             if label:
                 types.append(label)
+            type_obj = {}
+            if label:
+                type_obj["label"] = label
+            if t.get("identifier"):
+                type_obj["identifier"] = t["identifier"]
+            if t.get("sourceLabel") or t.get("src_label"):
+                type_obj["sourceLabel"] = t.get("sourceLabel") or t.get("src_label", "")
+            if type_obj:
+                types_full.append(type_obj)
         elif isinstance(t, str) and t:
             types.append(t)
+            types_full.append({"label": t})
 
     # Timespans
     timespans = []
@@ -94,6 +104,30 @@ def _adapt_gateway_hit(hit):
         elif isinstance(span, (list, tuple)) and len(span) == 2:
             timespans.append(list(span))
 
+    # External links: [{identifier, type}, ...]
+    links = []
+    for lnk in (hit.get("links") or []):
+        link_obj = {}
+        if isinstance(lnk, dict):
+            if "identifier" in lnk:
+                link_obj["identifier"] = lnk["identifier"]
+            if "type" in lnk:
+                link_obj["type"] = lnk["type"]
+        if link_obj:
+            links.append(link_obj)
+
+    # Descriptions: [{value, lang}, ...]
+    descriptions = []
+    for d in (hit.get("descriptions") or []):
+        if isinstance(d, dict):
+            desc_obj = {}
+            if "value" in d:
+                desc_obj["value"] = d["value"]
+            if "lang" in d:
+                desc_obj["lang"] = d["lang"]
+            if desc_obj:
+                descriptions.append(desc_obj)
+
     children = hit.get("children") or []
 
     return {
@@ -105,9 +139,21 @@ def _adapt_gateway_hit(hit):
         "title": title,
         "variants": variants,
         "ccodes": hit.get("ccodes") or [],
+        # Flat type labels for backward compatibility (filters, etc.)
         "types": types,
         "geom": geom,
         "timespans": timespans,
+        # Rich fields for enhanced beta display
+        "names": names,
+        "types_full": types_full,
+        "links": links,
+        "descriptions": descriptions,
+        "depictions": hit.get("depictions") or [],
+        "relations": hit.get("relations") or [],
+        "dataset": hit.get("dataset", ""),
+        "fclasses": hit.get("fclasses") or [],
+        "src_id": hit.get("src_id", ""),
+        "uri": hit.get("uri", ""),
     }
 
 

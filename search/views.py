@@ -150,55 +150,6 @@ def suggestionItem(s):
         else:
             timespans.append(span)
 
-    # Build rich name objects: [{toponym, lang}, ...]
-    names = []
-    for n in h.get('names', []):
-        name_obj = {"toponym": n.get('toponym', '')}
-        if n.get('lang'):
-            name_obj["lang"] = n['lang']
-        names.append(name_obj)
-
-    # Full type objects: [{label, identifier, sourceLabel}, ...]
-    types_full = []
-    for t in h.get('types', []):
-        type_obj = {}
-        if 'label' in t:
-            type_obj['label'] = t['label']
-        if 'identifier' in t:
-            type_obj['identifier'] = t['identifier']
-        if 'sourceLabel' in t or 'src_label' in t:
-            type_obj['sourceLabel'] = t.get('sourceLabel') or t.get('src_label', '')
-        if type_obj:
-            types_full.append(type_obj)
-
-    # External links: [{identifier, type}, ...]
-    links = []
-    for lnk in h.get('links', []):
-        link_obj = {}
-        if 'identifier' in lnk:
-            link_obj['identifier'] = lnk['identifier']
-        if 'type' in lnk:
-            link_obj['type'] = lnk['type']
-        if link_obj:
-            links.append(link_obj)
-
-    # Descriptions: [{value, lang}, ...]
-    descriptions = []
-    for d in h.get('descriptions', []):
-        desc_obj = {}
-        if 'value' in d:
-            desc_obj['value'] = d['value']
-        if 'lang' in d:
-            desc_obj['lang'] = d['lang']
-        if desc_obj:
-            descriptions.append(desc_obj)
-
-    # Depictions: [{id, title, license}, ...]
-    depictions = h.get('depictions', [])
-
-    # Relations: [{label, relationTo, relationType}, ...]
-    relations = h.get('relations', [])
-
     item = {
         "whg_id": h.get('whg_id', ''),
         "pid": h['place_id'],
@@ -208,21 +159,10 @@ def suggestionItem(s):
         "title": h['title'],
         "variants": [n for n in h['searchy'] if n != h['title']],
         "ccodes": h['ccodes'],
-        # Flat type labels for backward compatibility (filters, etc.)
+        # TODO: 'label' is an AAT value; sourceLabel is probably preferred if available
         "types": [t['label'] for t in h.get('types', []) if 'label' in t],
         "geom": makeGeom(h['place_id'], h['geoms']),
-        "timespans": timespans,
-        # Rich fields
-        "names": names,
-        "types_full": types_full,
-        "links": links,
-        "descriptions": descriptions,
-        "depictions": depictions,
-        "relations": relations,
-        "dataset": h.get('dataset', ''),
-        "fclasses": h.get('fclasses', []),
-        "src_id": h.get('src_id', ''),
-        "uri": h.get('uri', ''),
+        "timespans": timespans
     }
     return item
 
