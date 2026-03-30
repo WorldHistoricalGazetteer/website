@@ -42,7 +42,7 @@ from api.serializers import (
 from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
-from main.choices import FEATURE_CLASSES
+# main.choices import removed (FEATURE_CLASSES no longer needed here)
 from main.models import Log
 from datasets.tasks import get_bounds_filter
 from places.models import PlaceGeom
@@ -1277,14 +1277,6 @@ class PlacesDetailAPIView(View):
             "title": "|".join(set(place["title"] for place in serialized_places)),
             "names": sort_unique([name for place in serialized_places for name in place["names"]], 'toponym'),
             "types": add_urls(sort_unique([type for place in serialized_places for type in place["types"]], 'label')),
-            "fclasses": [
-                {"code": fclass,
-                 "description": next((description for code, description in FEATURE_CLASSES if code == fclass),
-                                     "Unknown")}
-                for place in serialized_places
-                if place.get("fclasses")  # Ensure fclasses is not None or empty
-                for fclass in place["fclasses"]
-            ],
             "geoms": [geom for place in serialized_places for geom in place["geoms"]],
             "extent": aggregated_extent,
             "links": add_urls(

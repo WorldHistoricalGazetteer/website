@@ -15,7 +15,7 @@ from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
 from datasets.tasks import get_bounds_filter
-from places.models import Place, PlaceGeom
+from places.models import Place, PlaceGeom, Type
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
 from whg.settings import STANDARD_FIELDS
@@ -72,15 +72,27 @@ class SearchPageView(TemplateView):
         # context['bboxes'] = bboxes
         context['dropdown_data'] = get_regions_countries()  # Used for spatial filter
 
-        context['adv_filters'] = [
-            ["A", "Administrative entities"],
-            ["P", "Cities, towns, hamlets"],
-            ["S", "Sites, buildings, complexes"],
-            ["R", "Roads, routes, rail..."],
-            ["L", "Regions, landscape areas"],
-            ["T", "Terrestrial landforms"],
-            ["H", "Water bodies"],
-        ]
+        # Build AAT type categories from the Type model, grouped by fclass
+        # Each category: [label, description, [aat_identifiers]]
+        fclass_labels = {
+            "A": "Administrative entities",
+            "P": "Cities, towns, hamlets",
+            "S": "Sites, buildings, complexes",
+            "R": "Roads, routes, rail...",
+            "L": "Regions, landscape areas",
+            "T": "Terrestrial landforms",
+            "H": "Water bodies",
+        }
+        adv_filters = []
+        for fclass_code, category_label in fclass_labels.items():
+            aat_ids = list(
+                Type.objects.filter(fclass=fclass_code)
+                .values_list('aat_id', flat=True)
+            )
+            identifiers = [f"aat:{aid}" for aid in aat_ids]
+            adv_filters.append([fclass_code, category_label, identifiers])
+
+        context['adv_filters'] = adv_filters
 
         user_areas = []
         if self.request.user.is_authenticated:
@@ -146,7 +158,6 @@ def suggestionItem(s):
         "title": h['title'],
         "variants": [n for n in h['searchy'] if n != h['title']],
         "ccodes": h['ccodes'],
-        "fclasses": h['fclasses'],
         # TODO: 'label' is an AAT value; sourceLabel is probably preferred if available
         "types": [t['label'] for t in h.get('types', []) if 'label' in t],
         "geom": makeGeom(h['place_id'], h['geoms']),
@@ -268,11 +279,12 @@ class SearchViewV3(View):
         # Reference the filter list for easier manipulation
         filters = q['query']['bool']['filter']
 
-        # --- 1. FEATURE CLASSES (FCLASS) ---
+        # --- 1. AAT TYPE CATEGORIES ---
         if params.get("fclasses"):
-            fclist = params["fclasses"].split(',')
-            fclist.append('X')  # Include the 'Other/Unknown' class
-            filters.append({"terms": {"fclasses": fclist}})
+            # fclasses param now contains comma-separated AAT identifiers (e.g. "aat:300008347,aat:300000809")
+            type_ids = [t.strip() for t in params["fclasses"].split(',') if t.strip()]
+            if type_ids:
+                filters.append({"terms": {"types.identifier": type_ids}})
 
         # --- 2. TEMPORAL FILTERS ---
         if params.get("temporal"):
@@ -339,7 +351,7 @@ class SearchViewV3(View):
             [string] qstr: query string
             [string] mode: search mode (starts, in, fuzzy)
             [string] idx: index to be queried
-            [string] fclasses: filter on geonames class (A,H,L,P,S,T)
+            [string] fclasses: filter on AAT type identifiers (comma-separated)
             [string] temporal: text of boolean for consideration of temporal parameters
             [string] start: filter for timespans
             [string] end: filter for timespans

@@ -767,10 +767,16 @@ function renderResults(data, fromStorage = false) {
         $('#result_facets input[type="checkbox"]').prop('checked', false);
 
         if (data.parameters.fclasses) {
-            const checkedOptions = data.parameters.fclasses.toLowerCase().split(',');
+            // fclasses now contains AAT identifiers - match against category identifiers
+            const storedIdentifiers = data.parameters.fclasses.split(',').map(s => s.trim());
             $('#adv_checkboxes input').each(function (index, checkbox) {
-                $(checkbox).prop('checked',
-                    checkedOptions.includes($(checkbox).attr('id').split('_')[1]));
+                const catKey = $(checkbox).val();
+                const category = adv_filters.find(f => f[0].toLowerCase() === catKey.toLowerCase());
+                if (category && category[2]) {
+                    // Check if any of this category's identifiers are in the stored set
+                    const hasMatch = category[2].some(id => storedIdentifiers.includes(id));
+                    $(checkbox).prop('checked', hasMatch);
+                }
             });
         } else {
             $('#adv_checkboxes input').prop('checked', true);
@@ -856,13 +862,6 @@ function renderResults(data, fromStorage = false) {
                 const country = dropdown_data[1].children.find(child => child.id === ccode);
                 const countryName = country ? country.text : '';
                 return `<span class="pointer" data-bs-toggle="tooltip" title="${countryName}">${ccode}</span>`;
-            }).join(', ')}</p>` :
-            '';
-        html += (result.fclasses && result.fclasses.length > 0) ?
-            `<p>Feature Classes: ${result.fclasses.map(fclass => {
-                const facet = adv_filters.find(child => child[0] === fclass);
-                const facetName = facet ? facet[1] : '';
-                return `<span class="pointer" data-bs-toggle="tooltip" title="${facetName}">${fclass}</span>`;
             }).join(', ')}</p>` :
             '';
 
@@ -1096,9 +1095,19 @@ function initiateSearch() {
 
 function gatherOptions() { // gather and return option values from the UI
 
-    const fclasses = $('#adv_checkboxes input:checked').map(function () {
+    // Collect AAT type identifiers from checked category checkboxes
+    const checkedCategories = $('#adv_checkboxes input:checked').map(function () {
         return $(this).val();
     }).get(); // .get() converts jQuery object to an array
+
+    // Map checked category keys to their AAT identifiers
+    const typeIdentifiers = [];
+    checkedCategories.forEach(catKey => {
+        const category = adv_filters.find(f => f[0].toLowerCase() === catKey.toLowerCase());
+        if (category && category[2]) {
+            typeIdentifiers.push(...category[2]);
+        }
+    });
 
     const areaFilter = {
         type: 'GeometryCollection',
@@ -1110,7 +1119,7 @@ function gatherOptions() { // gather and return option values from the UI
     const options = {
         qstr: $('#search_input').val(),
         idx: eswhg, // hard-coded in `search.html` template
-        fclasses: fclasses.join(','),
+        fclasses: typeIdentifiers.join(','),
         temporal: window.dateline.open,
         start: window.dateline.open ? window.dateline.fromValue : '',
         end: window.dateline.open ? window.dateline.toValue : '',
