@@ -30,14 +30,95 @@ def _has_geometries(bounds: dict) -> bool:
     return bool(geom_type)
 
 
+def _adapt_gateway_hit(hit):
+    """
+    Convert a single CRC Gateway hit into the ``suggestionItem`` shape
+    expected by the browser-side ``renderResults()`` JS function.
+
+    Legacy suggestion format::
+
+        {
+            "whg_id": "",
+            "pid": "gn:745044",
+            "index": "crc",
+            "children": [],
+            "linkcount": 0,
+            "title": "Istanbul",
+            "variants": ["Constantinople", ...],
+            "ccodes": ["TR"],
+            "types": ["inhabited place"],
+            "geom": [{"type": "Point", "coordinates": [...], "properties": {"pid": ...}}],
+            "timespans": [[800, 1800]],
+        }
+    """
+    place_id = hit.get("place_id", "")
+    title = hit.get("title", "")
+
+    # Variants: all name labels except the title itself
+    names_raw = hit.get("names") or []
+    variants = list({
+        n.get("label", "") for n in names_raw
+        if n.get("label") and n.get("label") != title
+    })
+
+    # Geometry in legacy format
+    geom = []
+    for g in (hit.get("geometries") or []):
+        rp = g.get("repr_point")
+        if rp and len(rp) == 2:
+            geom.append({
+                "type": "Point",
+                "coordinates": rp,
+                "properties": {"pid": place_id},
+            })
+
+    # Types — gateway may return dicts with 'label' or plain strings
+    raw_types = hit.get("types") or []
+    types = []
+    for t in raw_types:
+        if isinstance(t, dict):
+            label = t.get("label", "")
+            if label:
+                types.append(label)
+        elif isinstance(t, str) and t:
+            types.append(t)
+
+    # Timespans
+    timespans = []
+    for span in (hit.get("timespans") or []):
+        if isinstance(span, dict):
+            gte = span.get("gte") or span.get("start")
+            lte = span.get("lte") or span.get("end")
+            if gte is not None and lte is not None:
+                timespans.append([gte, lte])
+        elif isinstance(span, (list, tuple)) and len(span) == 2:
+            timespans.append(list(span))
+
+    children = hit.get("children") or []
+
+    return {
+        "whg_id": hit.get("whg_id", ""),
+        "pid": place_id,
+        "index": "crc",
+        "children": children,
+        "linkcount": len(set(children)) if children else 0,
+        "title": title,
+        "variants": variants,
+        "ccodes": hit.get("ccodes") or [],
+        "types": types,
+        "geom": geom,
+        "timespans": timespans,
+    }
+
+
 class SearchViewBeta(View):
     """
     POST /search/index/ — beta proxy.
 
     Translates the browser's POST payload into the CRC Gateway
-    ``/api/search`` request shape and returns the gateway response
-    directly.  The browser-side JS will need to understand the new
-    response format (hits/facets/total instead of parameters/suggestions).
+    ``/api/search`` request shape, then adapts the response into the
+    legacy ``{parameters, suggestions}`` format so the existing
+    browser-side ``renderResults()`` JS works unchanged.
     """
 
     def post(self, request):
@@ -49,8 +130,7 @@ class SearchViewBeta(View):
         qstr = data.get("qstr", "").strip()
         if not qstr:
             return JsonResponse(
-                {"hits": [], "total": 0, "max_score": 0,
-                 "facets": {"types": [], "countries": []}},
+                {"parameters": data, "suggestions": []},
                 safe=False,
             )
 
@@ -106,7 +186,17 @@ class SearchViewBeta(View):
         # Store params in session for the search page template
         request.session["search_params"] = data
 
-        result = crc_search(gateway_params, request=request)
+        gateway_result = crc_search(gateway_params, request=request)
+
+        # Adapt gateway response into legacy {parameters, suggestions} shape
+        suggestions = [
+            _adapt_gateway_hit(hit)
+            for hit in gateway_result.get("hits", [])
+        ]
+        # Sort by linkcount descending (matching legacy behaviour)
+        suggestions.sort(key=lambda s: s["linkcount"], reverse=True)
+
+        result = {"parameters": data, "suggestions": suggestions}
         return JsonResponse(result, safe=False)
 
     def get(self, request):
