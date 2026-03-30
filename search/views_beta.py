@@ -19,6 +19,17 @@ from api.crc_client import crc_search, crc_suggest
 logger = logging.getLogger(__name__)
 
 
+def _has_geometries(bounds: dict) -> bool:
+    """Return True only if the GeoJSON geometry contains actual geometry data."""
+    if not bounds:
+        return False
+    geom_type = bounds.get("type", "")
+    if geom_type == "GeometryCollection":
+        return bool(bounds.get("geometries"))
+    # Any other valid GeoJSON type (Polygon, MultiPolygon, etc.) is usable
+    return bool(geom_type)
+
+
 class SearchViewBeta(View):
     """
     POST /search/index/ — beta proxy.
@@ -61,6 +72,8 @@ class SearchViewBeta(View):
             gateway_params["ccodes"] = countries
 
         # Spatial bounds — GeoJSON geometry
+        # The browser always sends bounds; skip when the GeometryCollection
+        # is empty (no actual geometries drawn / selected).
         bounds = data.get("bounds")
         if bounds:
             if isinstance(bounds, str):
@@ -68,7 +81,7 @@ class SearchViewBeta(View):
                     bounds = json.loads(bounds)
                 except (json.JSONDecodeError, ValueError):
                     bounds = None
-            if bounds:
+            if bounds and _has_geometries(bounds):
                 gateway_params["bounds"] = bounds
 
         # Temporal range
