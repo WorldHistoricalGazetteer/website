@@ -94,42 +94,19 @@
             <div id="adv_options">
                 <h5>Advanced options</h5>
                 <p class="mb-0">
-                    <span class="categories ms-1">place type categories</span>
+                    <span class="categories ms-1">place type filter</span>
+                    <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
                     <span class="ms-1 categories">
                         <span class="me-1">
-                            <a id="check_select" href="#">select all</a>
-                        </span>
-                        <span class="me-1">
-                            <a id="check_clear" href="#">clear all</a>
+                            <a id="tree_clear" href="#">clear all</a>
                         </span>
                     </span>
                 </p>
                 <div class="ps-1 border-secondary small fw-lighter fst-italic">
-                    <p class="mb-0">Select or clear place type categories to filter initial results</p>
+                    <p class="mb-0">Browse and select AAT place types to filter results</p>
                 </div>
-                <div id="adv_checkboxes" class="small mt-1 ps-1">
-					{% for filter in adv_filters %}
-					<p>
-                        <input type="checkbox" id="cb_{{ filter.0|lower }}" value="{{ filter.0|lower }}" checked>
-                        <label for="cb_{{ filter.0|lower }}"> {{ filter.1 }}</label>
-                    </p>
-					{% endfor %}
-				</div>
-                <div id="type_tree_section" class="mt-2 ps-1">
-                    <p class="mb-1">
-                        <a id="type_tree_toggle" href="#" class="categories">
-                            <i class="fas fa-caret-right" id="tree_toggle_icon"></i>
-                            browse specific types
-                        </a>
-                        <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
-                        <a id="tree_clear" href="#" class="ms-1 small" style="display:none">clear</a>
-                    </p>
-                    <div class="ps-1 border-secondary small fw-lighter fst-italic">
-                        <p class="mb-0">Optionally drill into the AAT hierarchy to select specific place types</p>
-                    </div>
-                    <div id="type_tree_container" style="display:none">
-                        <div id="aat_type_tree"></div>
-                    </div>
+                <div id="type_tree_container" class="mt-1">
+                    <div id="aat_type_tree"></div>
                 </div>
                 <div class="mt-3 mx-0">
                     <p class="mb-0">
@@ -256,7 +233,6 @@
 	var eswhg = "{{ es_whg|escapejs }}";
 	const has_areas = {{ has_areas|yesno:"true,false" }};
 	const user_areas = {{ user_areas|safe }}
-	const adv_filters = {{ adv_filters|safe }};  // [category_key, label, [aat_identifiers]]
 </script>
 
 {% endblock %}

@@ -291,21 +291,21 @@
     color: #993333;
 }
 
-#adv_checkboxes p, #result_facets p {
+#result_facets p {
     font-size: 0.8rem;
     margin: 0;
     top: 6px;
     position: relative;
 }
 
-#adv_checkboxes label, #result_facets label {
+#result_facets label {
     margin-left: 2px;
     top: -4px;
     position: relative;
     cursor: pointer;
 }
 
-#adv_checkboxes input, #result_facets input {
+#result_facets input {
     cursor: pointer;
 }
 
@@ -381,19 +381,6 @@ span.select2-selection {
    AAT Type-Tree Widget
    =================================================================== */
 
-#type_tree_section a#type_tree_toggle {
-    text-decoration: none;
-    cursor: pointer;
-}
-#type_tree_section a#type_tree_toggle:hover {
-    text-decoration: underline;
-}
-#type_tree_section a#type_tree_toggle i {
-    width: 10px;
-    text-align: center;
-    margin-right: 2px;
-    transition: transform 0.15s;
-}
 
 #tree_selection_badge {
     font-size: 0.65rem;

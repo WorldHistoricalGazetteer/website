@@ -16,7 +16,6 @@ from collection.models import Collection
 from datasets.models import Dataset
 from datasets.tasks import get_bounds_filter
 from places.models import Place, PlaceGeom
-from placetypes.aat_utils import build_adv_filters
 from sitemap.models import Toponym
 from utils.regions_countries import get_regions_countries
 from whg.settings import STANDARD_FIELDS
@@ -73,8 +72,6 @@ class SearchPageView(TemplateView):
         # context['bboxes'] = bboxes
         context['dropdown_data'] = get_regions_countries()  # Used for spatial filter
 
-        # Build AAT type categories from the types app hierarchy
-        context['adv_filters'] = build_adv_filters()
 
         user_areas = []
         if self.request.user.is_authenticated:
