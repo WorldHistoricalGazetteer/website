@@ -227,7 +227,21 @@ class SearchView(View):
             return JsonResponse({"error": "Invalid JSON"}, status=400)
 
         qstr = data.get("qstr", "").strip()
-        if not qstr:
+
+        # Determine whether any non-text filters are present
+        has_fclasses = bool(data.get("fclasses", "").strip())
+        has_temporal = (
+            data.get("temporal") not in (None, False, "false", "")
+            and (data.get("start") is not None or data.get("end") is not None)
+        )
+        has_countries = bool(data.get("countries"))
+        bounds_raw = data.get("bounds")
+        has_bounds = bool(bounds_raw) and _has_geometries(
+            bounds_raw if isinstance(bounds_raw, dict) else {}
+        )
+        has_filters = has_fclasses and (has_temporal or has_countries or has_bounds)
+
+        if not qstr and not has_filters:
             return JsonResponse(
                 {"parameters": data, "suggestions": []},
                 safe=False,
@@ -235,10 +249,11 @@ class SearchView(View):
 
         # Build the gateway request body
         gateway_params = {
-            "query": qstr,
             "mode": data.get("mode", "fuzzy"),
             "size": 100,
         }
+        if qstr:
+            gateway_params["query"] = qstr
 
         # Country codes — may arrive as JSON string or list
         countries = data.get("countries")

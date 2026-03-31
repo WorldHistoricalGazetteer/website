@@ -112,6 +112,7 @@ AAT_FCLASS_MAP = {
 # Nodes promoted to the root level of the type-tree widget.
 AAT_TREE_PROMOTE_TO_ROOT = {
     300008347,   # inhabited places — extracted as a top-level entry
+    300132294,   # natural landscapes — extracted as a top-level entry
 }
 
 # Nodes removed from the tree display; their children (minus promoted ones)

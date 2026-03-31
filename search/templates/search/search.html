@@ -98,99 +98,117 @@
         <!-- Collapsible filters panel (pre-search) -->
         <div id="search_filters" class="collapse w-100">
             <div id="filters_panel" class="row gx-3 mx-0">
-                <!-- Place type filter -->
-                <div class="col-lg-4 col-md-6 mb-2">
-                    <div class="filter-section">
-                        <div class="filter-header">
-                            <span class="categories">place type filter</span>
-                            <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
-                            <span class="ms-1 categories">
-                                <a id="tree_clear" href="#" class="small">clear all</a>
-                            </span>
-                        </div>
-                        <div class="small text-muted mb-1">Browse and select AAT place types</div>
-                        <div id="type_tree_container">
-                            <div id="aat_type_tree"></div>
-                        </div>
-                    </div>
-                </div>
-                <!-- Period filter -->
-                <div class="col-lg-4 col-md-6 mb-2">
-                    <div class="filter-section">
-                        <div class="filter-header">
-                            <span class="categories">period filter</span>
-                            <em class="smaller">(temporal + spatial)</em>
-                        </div>
-                        <div id="chrononym_selector" class="input-group mt-1">
-                            <input id="chrononym_input"
-                                   data-bs-toggle="popover"
-                                   data-bs-html="true"
-                                   data-bs-title="What is PeriodO?"
-                                   data-bs-content='
-                                     <p class="mb-1">
-                                       <strong>PeriodO</strong> is a gazetteer of scholarly definitions of historical periods, linking time and place for use in digital humanities research.
-                                     </p>'
-                                   class="form-control typeahead"
-                                   type="text"
-                                   placeholder="Enter chrononym (PeriodO name)"
-                                   aria-label="Chrononym filter"
-                                   autocomplete="off"
-                                   spellcheck="false">
-                            <button id="clear_chrononym"
-                                    class="btn btn-outline-secondary"
-                                    type="button">
-                              <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div class="small text-muted mt-2">
-                            <i class="fas fa-info-circle"></i>
-                            Use the timeline control on the map to set a date range directly, or enter a PeriodO chrononym above to set both temporal and spatial bounds automatically.
+                <!-- Place type filter box -->
+                <div class="col-lg-5 col-md-6 mb-2 d-flex flex-column">
+                    <div class="filter-box h-100 d-flex flex-column">
+                        <div class="filter-section">
+                            <div class="filter-header">
+                                <span class="categories">place type filter</span>
+                                <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
+                                <span class="ms-1 categories">
+                                    <a id="tree_clear" href="#" class="small">clear all</a>
+                                </span>
+                            </div>
+                            <div id="type_tree_container">
+                                <div id="aat_type_tree"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <!-- Spatial filter -->
-                <div class="col-lg-4 col-md-6 mb-2">
-                    <div class="filter-section">
-                        <div class="filter-header">
-                            <span class="categories">spatial filter</span>
-                        </div>
-                        <div id="spatial_selector" class="input-group mt-1">
-                            <select data-bs-toggle="tooltip" title="Filter by Regions or Countries" class="form-select" id="categorySelector">
-                                <option value="none" selected>None</option>
-                                <option value="countries">Country</option>
-                                {% if has_areas %}
-                                <option value="userareas">Custom</option>
-                                {% endif %}
-                            </select>
-                            <select data-bs-toggle="tooltip" data-bs-title="Filter by Regions or Countries (select dropdown to the left first)" class="form-select" id="entrySelector" multiple>
-                                <option>(choose type)</option>
-                            </select>
-                            <button data-bs-toggle="tooltip" title="Clear this filter" class="btn btn-outline-secondary clearButton" type="button" id="clearButton">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <div class="small text-muted mt-2">
-                            <i class="fas fa-info-circle"></i>
-                            Select a country or custom area above, or draw a bounding region directly on the map using the drawing tool.
+                <!-- Period + Spatial filters + Map box -->
+                <div class="col-lg-7 col-md-6 mb-2 d-flex flex-column">
+                    <div class="filter-box h-100">
+                        <div class="row gx-2 h-100">
+                            <div class="col-lg-5">
+                                <div class="filter-section mb-3">
+                                    <div class="filter-header">
+                                        <span class="categories">period filter</span>
+                                        <em class="smaller">(temporal + spatial)</em>
+                                    </div>
+                                    <div id="chrononym_selector" class="input-group mt-1">
+                                        <input id="chrononym_input"
+                                               data-bs-toggle="popover"
+                                               data-bs-html="true"
+                                               data-bs-title="What is PeriodO?"
+                                               data-bs-content='
+                                                 <p class="mb-1">
+                                                   <strong>PeriodO</strong> is a gazetteer of scholarly definitions of historical periods, linking time and place for use in digital humanities research.
+                                                 </p>'
+                                               class="form-control typeahead"
+                                               type="text"
+                                               placeholder="Enter chrononym (PeriodO name)"
+                                               aria-label="Chrononym filter"
+                                               autocomplete="off"
+                                               spellcheck="false">
+                                        <button id="clear_chrononym"
+                                                class="btn btn-outline-secondary"
+                                                type="button">
+                                          <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        <i class="fas fa-info-circle"></i>
+                                        Enter a PeriodO chrononym, or use the timeline on the map.
+                                    </div>
+                                </div>
+                                <div class="filter-section">
+                                    <div class="filter-header">
+                                        <span class="categories">spatial filter</span>
+                                    </div>
+                                    <div id="spatial_selector" class="input-group mt-1">
+                                        <select data-bs-toggle="tooltip" title="Filter by Country or Custom area" class="form-select" id="categorySelector">
+                                            <option value="none" selected>None</option>
+                                            <option value="countries">Country</option>
+                                            {% if has_areas %}
+                                            <option value="userareas">Custom</option>
+                                            {% endif %}
+                                        </select>
+                                        <select data-bs-toggle="tooltip" data-bs-title="Select a category first" class="form-select" id="entrySelector" multiple>
+                                            <option>(choose type)</option>
+                                        </select>
+                                        <button data-bs-toggle="tooltip" title="Clear this filter" class="btn btn-outline-secondary clearButton" type="button" id="clearButton">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        <i class="fas fa-info-circle"></i>
+                                        Select above, or draw a region on the map.
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Filter map (timeline + draw + spatial overlays) -->
+                            <div class="col-lg-7 mt-3 mt-lg-0">
+                                <div class="filter-section h-100">
+                                    <div id="filter_map" class="h-100"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Map and results side by side -->
-        <div class="col-lg-7 col-md-6 mb-2 mb-md-0 ps-md-0 pe-md-1 d-flex flex-column">
-            <div id="map" class="bg-lighterblue"></div>
+        <!-- Landing state (shown before any search) -->
+        <div id="landing" class="col-12 text-center py-4">
+            <div class="landing-inner mx-auto">
+                <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="landing-logo mb-3">
+                <p class="lead text-muted mb-1">Search across historical gazetteers</p>
+                <p class="text-muted small">Enter a place name above and use <strong>Filters</strong> to restrict your search by place type, period, or region. You can also search by filters alone — select at least one place type together with a temporal or spatial constraint.</p>
+            </div>
         </div>
-        <div class="col-lg-5 col-md-6 mb-0 ps-md-1 pe-md-0 d-flex flex-column">
-            <div id="result_container" class="flex-grow-1">
-                <div id="initial_results" class="bg-light p-2">
-                    <h6 class="strong">Search in WHG</h6>
-                    <p>Many places have the same name. If your search returns multiple results, browse them to discover what you are looking for. Places that have more linked records and name variants will appear at the top of the list.</p>
-                    <p>Results appearing in green boxes are from published datasets, but not yet linked in our union index.</p>
+
+        <!-- Map and results (shown after search) -->
+        <div id="content_area" class="col-12">
+            <div id="content_row" class="row gx-2">
+                <div id="map_column" class="col-lg-7 col-md-6 d-flex flex-column">
+                    <div id="results_map" class="flex-grow-1"></div>
                 </div>
-                <div id="no_results" class="bg-light p-2">No results — please modify your search terms or filters.</div>
-                <div id="search_results"></div>
+                <div id="results_column" class="col-lg-5 col-md-6 d-flex flex-column">
+                    <div id="result_container" class="flex-grow-1">
+                        <div id="no_results" class="bg-light p-2 rounded">No results — please modify your search terms or filters.</div>
+                        <div id="search_results"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

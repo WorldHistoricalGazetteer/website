@@ -1093,13 +1093,14 @@ class CustomDrawingControl {
 	}
     
     _appendStyles() {
+        const containerId = this._map.getContainer().id || 'map';
         const style = document.createElement('style');
         style.textContent = `
-			#map .mapbox-gl-draw_ctrl-draw-btn.active,
-			#map .mapbox-gl-draw_ctrl-draw-btn:hover {
+			#${containerId} .mapbox-gl-draw_ctrl-draw-btn.active,
+			#${containerId} .mapbox-gl-draw_ctrl-draw-btn:hover {
 			  background-color: rgb(167 8 8 / 17%);
 			}
-			#map .mapbox-gl-draw_ctrl-draw-btn.disabled {
+			#${containerId} .mapbox-gl-draw_ctrl-draw-btn.disabled {
 			  opacity: .3;
 			}
         `;
@@ -1341,7 +1342,7 @@ maplibregl.Map = function (options = {}) {
 		$(mapInstance.getContainer().querySelector('.maplibregl-control-container'))
 		.tooltip({
 	    	selector: 'button:not(.dateline-button), select, summary.maplibregl-ctrl-attrib-button, #dateline.expanded .dateline-button',
-	    	container: '#map'
+	    	container: '#' + (mapInstance.getContainer().id || 'map')
 		})
 		
     });

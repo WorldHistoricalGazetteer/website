@@ -179,6 +179,18 @@ class Command(BaseCommand):
             f"  -> {len(place_types):,} place-type concepts collected "
             f"in {t_parsed - t0:.1f}s")
 
+        # -- Backfill missing labels from the Getty API --------------------
+        gaps = [pt for pt in place_types if re.fullmatch(r'aat:\d+', pt['term'])]
+        if gaps:
+            self.stdout.write(
+                f"  {len(gaps)} concept(s) have no English label "
+                f"— backfilling from Getty API ...")
+            if not dry_run:
+                self._backfill_labels_from_api(gaps)
+            else:
+                self.stdout.write(self.style.WARNING(
+                    "  (skipped API backfill in dry-run mode)"))
+
         if dry_run:
             self.stdout.write(self.style.WARNING(
                 "Dry run -- no database changes made."))
@@ -269,6 +281,8 @@ class Command(BaseCommand):
             if data is None:
                 continue
             label, note = self._extract_label_and_note(data)
+            if not label:
+                label = f"aat:{aat_id}"
             fclasses = sorted(set(
                 fc for anc in self._ancestor_chain(aat_id, {})
                 if (fc := AAT_FCLASS_MAP.get(anc))
@@ -293,6 +307,48 @@ class Command(BaseCommand):
         self.stdout.write(f"  ... {fetched} API requests, "
                           f"{len(result)} concepts collected")
         return result
+
+    # ------------------------------------------------------------------
+    # Backfill missing labels via Getty API
+    # ------------------------------------------------------------------
+
+    def _backfill_labels_from_api(self, gaps):
+        """
+        For each place-type dict in *gaps* whose ``term`` is a raw AAT
+        identifier (``aat:NNNNNNN``), query the Getty Linked Art JSON API
+        to obtain the English preferred label and, if still missing, the
+        scope note.
+
+        Mutates the dicts in-place so the upsert step writes real labels.
+        """
+        session = requests.Session()
+        session.headers.update({'Accept': 'application/json'})
+        filled = 0
+        failed = 0
+
+        for i, pt in enumerate(gaps, 1):
+            aat_id = pt['aat_id']
+            data = self._fetch_concept_json(aat_id, session)
+            if data is None:
+                failed += 1
+                continue
+            label, note = self._extract_label_and_note(data)
+            if label:
+                pt['term'] = label[:100]
+                pt['term_full'] = label[:100]
+                filled += 1
+            else:
+                failed += 1
+            if note and not pt.get('note'):
+                pt['note'] = note[:3000]
+            if i % 25 == 0:
+                self.stdout.write(
+                    f"    ... {i}/{len(gaps)} checked, "
+                    f"{filled} filled, {failed} still missing")
+
+        self.stdout.write(
+            f"  -> backfilled {filled} label(s); "
+            f"{failed} could not be resolved")
 
     # ------------------------------------------------------------------
     # Download & extract
@@ -709,3 +765,15 @@ class Command(BaseCommand):
         self.stdout.write("\nBreakdown by depth:")
         for d in sorted(depths):
             self.stdout.write(f"  depth {d}: {depths[d]:,}")
+
+        no_label = [pt for pt in place_types
+                    if re.fullmatch(r'aat:\d+', pt['term'])]
+        if no_label:
+            self.stdout.write(self.style.WARNING(
+                f"\nMissing English labels: {len(no_label):,} "
+                f"(will be backfilled from Getty API on a live run)"))
+            for pt in no_label[:20]:
+                self.stdout.write(f"  aat:{pt['aat_id']}")
+            if len(no_label) > 20:
+                self.stdout.write(f"  ... and {len(no_label) - 20} more")
+

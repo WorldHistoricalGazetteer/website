@@ -26,17 +26,17 @@ const countryParents = new CountryParents();
 await countryParents.dataLoaded;
 
 let dateRangeChanged = throttle(() => { // Uses imported lodash function
+    toggleButtonState();
     initiateSearch();
 }, 300);
 
-let mapParameters = {
+// --- Filter map: lives inside the filters panel, carries dateline + draw ---
+let filterMapParams = {
+    container: 'filter_map',
     maxZoom: 14,
-    style: [
-        'WHG',
-        'Satellite'
-    ],
+    style: ['WHG'],
     fullscreenControl: false,
-    downloadMapControl: true,
+    downloadMapControl: false,
     drawingControl: {
         hide: false,
     },
@@ -46,14 +46,26 @@ let mapParameters = {
         minValue: -2000,
         maxValue: 2100,
         open: false,
-        includeUndated: true, // null | false | true - 'false/true' determine state of select box input; 'null' excludes the button altogether
+        includeUndated: true,
         epochs: null,
         automate: null,
         onChange: dateRangeChanged,
         onClick: initiateSearch,
     },
 };
-let whg_map = new whg_maplibre.Map(mapParameters);
+let filterMap = new whg_maplibre.Map(filterMapParams);
+
+// --- Results map: shows search result geometries only ---
+let resultsMapParams = {
+    container: 'results_map',
+    maxZoom: 14,
+    style: ['WHG', 'Satellite'],
+    fullscreenControl: false,
+    downloadMapControl: true,
+    drawingControl: false,
+    temporalControl: false,
+};
+let resultsMap = new whg_maplibre.Map(resultsMapParams);
 
 // --- AAT Type Tree Widget (initialised independently of map/CDN loading) ---
 function updateTreeBadge() {
@@ -86,11 +98,33 @@ function updateActiveFiltersBadge() {
     }
 }
 
+
+// --- Check whether enough filters are set to allow a no-name search ---
+function hasFilterOnlySearchCriteria() {
+    // At least one place type selected
+    const hasTypes = typeTree && typeTree.selectionCount() > 0;
+    if (!hasTypes) return false;
+
+    // Plus at least one spatial or temporal constraint
+    const hasTemporal = window.dateline && window.dateline.open;
+    const hasChrononym = !!($('#chrononym_input').val() || '').trim();
+    const hasSpatialCategory = $('#categorySelector').val() !== 'none';
+    let hasSpatialEntries = false;
+    try {
+        const selData = $('#entrySelector').select2('data');
+        hasSpatialEntries = selData && selData.length > 0;
+    } catch (_) { /* Select2 not yet initialised */ }
+    const hasDrawn = draw && draw.getAll().features.length > 0;
+
+    return hasTemporal || hasChrononym || hasSpatialCategory && hasSpatialEntries || hasDrawn;
+}
+
 waitDocumentReady().then(() => {
     console.log('TypeTreeWidget: DOM ready, constructing widget');
     typeTree = new TypeTreeWidget('#aat_type_tree', {
         onchange: () => {
             updateTreeBadge();
+            toggleButtonState();
             initiateSearch();
         },
     });
@@ -106,50 +140,52 @@ waitDocumentReady().then(() => {
 });
 
 function waitMapLoad() {
-    return new Promise((resolve) => {
-        whg_map.on('load', () => {
-
+    // Wait for BOTH maps to load
+    const filterReady = new Promise((resolve) => {
+        filterMap.on('load', () => {
             if (has_areas) {
-                whg_map.newSource('userareas') // Add empty source
+                filterMap.newSource('userareas')
                     .newLayerset('userareas', 'userareas', 'userareas');
             }
-
-            whg_map.newSource('countries') // Add empty source
+            filterMap.newSource('countries')
                 .newLayerset('countries', 'countries', 'countries');
+            resolve();
+        });
+    });
 
-            whg_map.newSource('places') // Add empty source
+    const resultsReady = new Promise((resolve) => {
+        resultsMap.on('load', () => {
+            resultsMap.newSource('places')
                 .newLayerset('places', null, 'plain');
 
             function getFeatureId(e) {
-                const features = whg_map.queryRenderedFeatures(e.point);
+                const features = resultsMap.queryRenderedFeatures(e.point);
                 if (features.length > 0) {
-                    if (features[0].layer.id.startsWith('places_')) { // Query only the top-most feature
-                        whg_map.getCanvas().style.cursor = 'pointer';
+                    if (features[0].layer.id.startsWith('places_')) {
+                        resultsMap.getCanvas().style.cursor = 'pointer';
                         return features[0].id;
                     }
                 }
-                whg_map.getCanvas().style.cursor = 'grab';
+                resultsMap.getCanvas().style.cursor = 'grab';
                 return null;
             }
 
-            whg_map.on('mousemove', function (e) {
-                if (!whg_map._draw || whg_map._draw.getMode() !== 'draw_polygon') {
-                    getFeatureId(e);
-                }
+            resultsMap.on('mousemove', function (e) {
+                getFeatureId(e);
             });
 
-            whg_map.on('click', function (e) {
-                if (!whg_map._draw || whg_map._draw.getMode() !== 'draw_polygon') {
-                    $('.result')
-                        .eq(getFeatureId(e))
-                        .attr('data-map-clicked', 'true')
-                        .click();
-                }
+            resultsMap.on('click', function (e) {
+                $('.result')
+                    .eq(getFeatureId(e))
+                    .attr('data-map-clicked', 'true')
+                    .click();
             });
 
             resolve();
         });
     });
+
+    return Promise.all([filterReady, resultsReady]);
 }
 
 function waitDocumentReady() {
@@ -164,8 +200,8 @@ Promise.all([
     Promise.all(select2_CDN_fallbacks.map(loadResource))
 ]).then(() => {
 
-    draw = whg_map._draw;
-    $drawControl = $(whg_map._drawControl);
+    draw = filterMap._draw;
+    $drawControl = $(filterMap._drawControl);
 
     // Delegated event listener for Portal links
     $(document).on('click', '.portal-link', function (e) {
@@ -179,17 +215,17 @@ Promise.all([
         const $clickedResult = $(this);
         const index = $clickedResult.index('.result'); // Get index of clicked card
 
-        whg_map.removeFeatureState({
+        resultsMap.removeFeatureState({
             source: 'places',
         });
-        whg_map.setFeatureState({
+        resultsMap.setFeatureState({
             source: 'places',
             id: index,
         }, {
             highlight: true,
         });
 
-        const featureCollection = whg_map.getSource('places')._data?.geojson;
+        const featureCollection = resultsMap.getSource('places')._data?.geojson;
 
         if ($clickedResult.attr('data-map-clicked') === 'true') { // Scroll table
             $clickedResult.removeAttr('data-map-clicked');
@@ -244,13 +280,13 @@ Promise.all([
         } else if ($clickedResult.attr('data-map-initialising') === 'true') {
             $clickedResult.removeAttr('data-map-initialising');
             if (featureCollection) {
-                whg_map.fitViewport(bbox(featureCollection), defaultZoom);
+                resultsMap.fitViewport(bbox(featureCollection), defaultZoom);
             } else {
                 console.warn("Cannot fit map viewport: featureCollection data is missing.");
             }
         } else {
             if (featureCollection?.features?.length > index) {
-                whg_map.fitViewport(bbox(featureCollection.features[index]), defaultZoom);
+                resultsMap.fitViewport(bbox(featureCollection.features[index]), defaultZoom);
             } else {
                 console.warn(`Cannot fit map viewport: Feature at index ${index} is missing or array is empty.`);
             }
@@ -263,17 +299,17 @@ Promise.all([
 
     function updateAreaMap() {
 
-        if (has_areas) whg_map.clearSource('userareas');
-        whg_map.clearSource('countries');
+        if (has_areas) filterMap.clearSource('userareas');
+        filterMap.clearSource('countries');
 
         var data = $('#entrySelector').select2('data');
 
         function fitMap(features) {
             if (!$('#search_content').hasClass('no-results')) return;
             try {
-                whg_map.fitViewport(bbox(features), defaultZoom);
+                filterMap.fitViewport(bbox(features), defaultZoom);
             } catch {
-                whg_map.reset();
+                filterMap.reset();
             }
         }
 
@@ -283,17 +319,17 @@ Promise.all([
                     type: 'FeatureCollection',
                     features: data.some(feature => feature.feature) ? data.map(feature => feature.feature) : [],
                 }
-                whg_map.getSource('userareas').setData(userAreas);
+                filterMap.getSource('userareas').setData(userAreas);
                 fitMap(userAreas);
             } else {
                 const selectedCountries = data.length < 1 || data.some(feature => feature.feature) ? [] :
                     (data.some(region => region.ccodes) ? [].concat(...data.map(region => region.ccodes)) : data.map(country => country.id));
                 countryCache.filter(selectedCountries).then(filteredCountries => {
-                    whg_map.getSource('countries').setData(filteredCountries);
+                    filterMap.getSource('countries').setData(filteredCountries);
                     fitMap(filteredCountries);
                 });
             }
-        } else if ($('#search_content').hasClass('no-results')) whg_map.reset();
+        } else if ($('#search_content').hasClass('no-results')) filterMap.reset();
     }
 
     const debouncedUpdates = debounce(() => { // Uses imported lodash function
@@ -352,6 +388,7 @@ Promise.all([
                 });
                 break;
         }
+        toggleButtonState();
     });
 
     $('#clearButton').on('click', function () {
@@ -372,8 +409,8 @@ Promise.all([
         // Initialise default temporal control
         let datelineContainer = document.createElement('div');
         datelineContainer.id = 'dateline';
-        document.querySelector('.maplibregl-control-container').appendChild(datelineContainer);
-        window.dateline = new Dateline(mapParameters.temporalControl);
+        filterMap.getContainer().querySelector('.maplibregl-control-container').appendChild(datelineContainer);
+        window.dateline = new Dateline(filterMapParams.temporalControl);
     }
 
     //$('#advanced_search').hide();
@@ -600,10 +637,10 @@ Promise.all([
                         } else {
                             draw.add(period);
                         }
-                        whg_map.fitViewport(bbox(period));
+                        filterMap.fitViewport(bbox(period));
                         if (window.jQuery) window.jQuery('#clear_chrononym').show();
                     } else {
-                        whg_map.reset();
+                        filterMap.reset();
                     }
                 } catch (err) {
                     console.error('Error processing entity period:', err);
@@ -715,9 +752,18 @@ Promise.all([
 
 
 
-    whg_map.on('draw.create', initiateSearch); // draw events fail to register if not done individually
-    whg_map.on('draw.delete', initiateSearch);
-    whg_map.on('draw.update', initiateSearch);
+    filterMap.on('draw.create', initiateSearch); // draw events fail to register if not done individually
+    filterMap.on('draw.delete', initiateSearch);
+    filterMap.on('draw.update', initiateSearch);
+
+    // Resize maps when the filters panel finishes its collapse/expand animation
+    $('#search_filters')
+        .on('shown.bs.collapse', () => {
+            filterMap.resize();
+        })
+        .on('hidden.bs.collapse', () => {
+            resultsMap.resize();
+        });
 
     $('#initiate_search, #clear_search').each(function () {
         $(this).tooltip({
@@ -731,7 +777,8 @@ Promise.all([
 }).catch(error => console.error('An error occurred:', error));
 
 function toggleButtonState() {
-    const disable = $('#search_input').val().trim() == '';
+    const hasText = $('#search_input').val().trim() !== '';
+    const disable = !hasText && !hasFilterOnlySearchCriteria();
     $('#initiate_search, #clear_search').each(function () {
         $(this)
             //.prop('disabled', disable) // Cannot use this because it disables the title
@@ -749,13 +796,14 @@ function clearResults() { // Reset all inputs to default values
         typeTree.clearAll();
         $('#tree_selection_badge').hide();
     }
-    window.dateline.reset(mapParameters.temporalControl.fromValue,
-        mapParameters.temporalControl.toValue,
-        mapParameters.temporalControl.open);
+    window.dateline.reset(filterMapParams.temporalControl.fromValue,
+        filterMapParams.temporalControl.toValue,
+        filterMapParams.temporalControl.open);
     draw.deleteAll();
-    whg_map.getSource('places').setData(whg_map.nullCollection());
-    whg_map.reset();
-    whg_map.getSource('countries').setData(whg_map.nullCollection());
+    resultsMap.getSource('places').setData(resultsMap.nullCollection());
+    resultsMap.reset();
+    filterMap.getSource('countries').setData(filterMap.nullCollection());
+    filterMap.reset();
     $('#search_content')
         .toggleClass('initial', true)
         .toggleClass('no-results', true);
@@ -788,13 +836,13 @@ function renderResults(data, fromStorage = false) {
         // Initialise temporal control
         let datelineContainer = document.createElement('div');
         datelineContainer.id = 'dateline';
-        document.querySelector('.maplibregl-control-container').appendChild(datelineContainer);
+        filterMap.getContainer().querySelector('.maplibregl-control-container').appendChild(datelineContainer);
         window.dateline = new Dateline({
-            ...mapParameters.temporalControl,
+            ...filterMapParams.temporalControl,
             fromValue: data.parameters.start == '' ?
-                mapParameters.temporalControl.fromValue : data.parameters.start,
+                filterMapParams.temporalControl.fromValue : data.parameters.start,
             toValue: data.parameters.end == '' ?
-                mapParameters.temporalControl.toValue : data.parameters.end,
+                filterMapParams.temporalControl.toValue : data.parameters.end,
             open: data.parameters.temporal,
             includeUndated: data.parameters.undated,
         });
@@ -1000,14 +1048,24 @@ function renderResults(data, fromStorage = false) {
         .toggleTruncate();
 
     // Update Map & Detail with first result (if any)
-    whg_map.getSource('places').setData(featureCollection);
+    resultsMap.getSource('places').setData(featureCollection);
     $drawControl.toggle(results.length > 0 || draw.getAll().features.length > 0); // Leave control to allow deletion of areas
 
     if (fromStorage || results.length > 0) {
+        // Auto-collapse the filters panel to make room for results
+        const filtersEl = document.getElementById('search_filters');
+        if (filtersEl && filtersEl.classList.contains('show')) {
+            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(filtersEl);
+            // Resize results map after the collapse animation finishes
+            $(filtersEl).one('hidden.bs.collapse', () => {
+                resultsMap.resize();
+            });
+            bsCollapse.hide();
+        }
         // Highlight first result and render its detail
         $('.result').first().attr('data-map-initialising', 'true').click();
     } else {
-        whg_map.reset();
+        resultsMap.reset();
         $('#detail').empty(); // Clear the detail view
     }
 
@@ -1022,8 +1080,8 @@ function initiateSearch() {
 
     const options = gatherOptions();
 
-    if (options.qstr == '') {
-        console.log('Cannot search without an input place name.');
+    if (options.qstr == '' && !hasFilterOnlySearchCriteria()) {
+        console.log('Cannot search without a place name or sufficient filters.');
         return;
     }
 

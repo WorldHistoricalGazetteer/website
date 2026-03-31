@@ -435,11 +435,14 @@ input[type=range].slider.to::-moz-range-thumb {
     padding: 0;
 }
 #filters_panel {
+    padding: 4px 0;
+    margin-bottom: 8px;
+}
+.filter-box {
     background: #f8f9fa;
     border: 1px solid #dee2e6;
     border-radius: 6px;
-    padding: 12px 8px 4px;
-    margin-bottom: 8px;
+    padding: 10px 10px 6px;
 }
 .filter-section {
     min-height: 0;
@@ -454,11 +457,6 @@ input[type=range].slider.to::-moz-range-thumb {
 }
 #spatial_selector span.select2-selection {
     border-radius: 0 !important;
-}
-
-#map {
-    border: 1px gainsboro solid;
-    min-height: 400px;
 }
 
 #search_info {
@@ -478,25 +476,121 @@ input[type=range].slider.to::-moz-range-thumb {
     background-color: antiquewhite;
 }
 
+/* ===================================================================
+   Landing state — shown before any search
+   =================================================================== */
+#landing {
+    display: none;
+}
+#search_content.initial #landing {
+    display: block;
+}
+.landing-inner {
+    max-width: 440px;
+}
+.landing-logo {
+    width: 120px;
+    height: auto;
+    opacity: 0.7;
+}
+
+/* ===================================================================
+   Content area — results map + results list
+   =================================================================== */
+#content_area {
+    display: none;
+}
+#search_content:not(.initial) #content_area {
+    display: block;
+}
+
+/* --- Dynamic heights: keep map + results within viewport --- */
+#content_row {
+    --content-overhead: 140px;
+    max-height: calc(100vh - var(--content-overhead));
+    max-height: calc(100dvh - var(--content-overhead));
+}
+
+#results_map {
+    border: 1px gainsboro solid;
+    min-height: 280px;
+    max-height: calc(100vh - var(--content-overhead, 140px));
+    max-height: calc(100dvh - var(--content-overhead, 140px));
+}
+
 /* --- Result visibility states --- */
 #search_content.no-results #search_results {
-	display: none;
+    display: none;
+}
+#search_content #no_results {
+    display: none;
+    height: fit-content;
+}
+#search_content.no-results:not(.initial) #no_results {
+    display: block;
 }
 
-#search_content #no_results,
-#search_content #initial_results {
-	display: none;
-	height: fit-content;
+#result_container {
+    max-height: calc(100vh - var(--content-overhead, 140px));
+    max-height: calc(100dvh - var(--content-overhead, 140px));
+    overflow-y: auto;
 }
-#search_content.no-results:not(.initial) #no_results,
-#search_content.initial #initial_results
-{
-	display: block;
+
+/* ===================================================================
+   Filter map (inside collapsible filters panel)
+   =================================================================== */
+#filter_map {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    min-height: 220px;
+    background: #daecf1;
 }
+
+/* Give the type tree more vertical space when filters are open */
+#type_tree_container {
+    max-height: 340px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+/* Place-type filter-section fills available height inside its flex parent */
+.filter-box.d-flex .filter-section {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===================================================================
+   Mobile overrides (< 768px)
+   =================================================================== */
+@media (max-width: 767.98px) {
+    #results_map {
+        min-height: 200px;
+        max-height: 35vh;
+        max-height: 35dvh;
+    }
+    #result_container {
+        max-height: 45vh;
+        max-height: 45dvh;
+    }
+    .landing-logo {
+        width: 80px;
+    }
+    #type_tree_container {
+        max-height: 200px;
+    }
+}
+
+/* Filter map: ensure usable height when stacked on sub-lg screens */
+@media (max-width: 991.98px) {
+    #filter_map {
+        min-height: 260px;
+    }
+}
+#result_container p { font-size: small;}
 
 .whg-result {
-  background-color: #eaf6ff; /* pale blue wash for linked results */
-  border-color: #d1eaf9; /* subtle border tint */
+  background-color: #eaf6ff;
+  border-color: #d1eaf9;
 }
 
 .pub-result {
@@ -510,11 +604,6 @@ input[type=range].slider.to::-moz-range-thumb {
   color: grey;
 }
 
-#result_container {
-    max-height: calc(100vh - 180px);
-    overflow-y: auto;
-}
-#result_container p { font-size: small;}
 
 .result {
     border: 1px solid #ccc;
@@ -757,7 +846,6 @@ span.select2-selection {
 }
 
 #type_tree_container {
-    max-height: 250px;
     overflow-y: auto;
     overflow-x: hidden;
     border: 1px solid #dee2e6;

@@ -131,11 +131,17 @@ def _clean_label(term):
       reduced (e.g. ``<barns by form>`` → ``by form``).
     - ``is_guide`` is True for AAT guide terms (angle-bracket labels)
       which are organisational grouping nodes, not real place types.
+    - If the term is a raw AAT identifier (e.g. ``aat:300391509``), the
+      label is returned as ``None`` so the caller can supply a fallback.
     """
     import re
 
     label = term.strip()
     is_guide = False
+
+    # Detect raw AAT identifiers stored as labels (sync fallback artefact)
+    if re.fullmatch(r'aat:\d+', label):
+        return None, False
 
     # Strip trailing "(hierarchy name)" / "(hierarchy name )"
     cleaned = re.sub(r'\s*\(hierarchy name\s*\)\s*$', '', label)
@@ -182,6 +188,16 @@ def get_type_tree_json(root_aat_id=None):
 
     def _to_node(t, has_kids, parent_label=None):
         text, guide = _clean_label(t.term)
+        # If _clean_label returned None the stored term was a raw AAT
+        # identifier — fall back to the scope note or a placeholder.
+        if text is None:
+            if t.note:
+                # Use the first sentence / clause of the note as a label.
+                import re
+                first_sentence = re.split(r'[.;]', t.note, maxsplit=1)[0].strip()
+                text = first_sentence[:80] or f"[unnamed type aat:{t.aat_id}]"
+            else:
+                text = f"[unnamed type aat:{t.aat_id}]"
         # Strip redundant parenthesised qualifiers that just repeat the
         # parent's label, e.g. "countries (sovereign states)" → "countries"
         # when displayed under the "sovereign states" parent node.
@@ -324,6 +340,7 @@ def search_types(query, limit=30):
         Type.objects
         .filter(is_place_type=True)
         .exclude(term__startswith='<')
+        .exclude(term__regex=r'^aat:\d+$')
         .order_by('term')
     )
 
@@ -333,7 +350,7 @@ def search_types(query, limit=30):
         if query_folded not in term_folded:
             continue
         text, guide = _clean_label(m.term)
-        if guide:
+        if guide or text is None:
             continue
         ancestors = (
             [int(x) for x in m.path.split('.')]

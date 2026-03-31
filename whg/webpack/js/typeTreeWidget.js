@@ -74,7 +74,7 @@ export default class TypeTreeWidget {
                 <div class="tt-search">
                     <div class="tt-search-input-wrap">
                         <input type="text" class="tt-search-input form-control form-control-sm"
-                               placeholder="Search types…" autocomplete="off" spellcheck="false">
+                               placeholder="Browse or search AAT place types…" autocomplete="off" spellcheck="false">
                         <span class="tt-search-clear" title="Clear">&times;</span>
                     </div>
                 </div>
