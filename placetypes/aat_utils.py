@@ -11,7 +11,6 @@ import logging
 from django.core.cache import cache
 
 from placetypes.aat_config import (
-    AAT_FCLASS_MAP,
     CATEGORY_LABELS,
 )
 
@@ -122,37 +121,70 @@ def build_adv_filters():
     return filters
 
 
+def _clean_label(term):
+    """
+    Clean an AAT term for tree-widget display.
+
+    Returns (label, is_guide) where:
+    - ``label`` has "(hierarchy name)" stripped, is lowercased if it was
+      a hierarchy-name term, and has angle-bracket guide-term boilerplate
+      reduced (e.g. ``<barns by form>`` → ``by form``).
+    - ``is_guide`` is True for AAT guide terms (angle-bracket labels)
+      which are organisational grouping nodes, not real place types.
+    """
+    import re
+
+    label = term.strip()
+    is_guide = False
+
+    # Strip trailing "(hierarchy name)" / "(hierarchy name )"
+    cleaned = re.sub(r'\s*\(hierarchy name\s*\)\s*$', '', label)
+    was_hierarchy_name = cleaned != label
+    if was_hierarchy_name:
+        label = cleaned.strip().lower()
+
+    # Handle angle-bracket guide terms: <barns by form> → "by form"
+    if label.startswith('<') and label.endswith('>'):
+        is_guide = True
+        inner = label[1:-1].strip()
+        by_match = re.search(r'\b(by\b.+)', inner)
+        if by_match:
+            label = by_match.group(1)
+        else:
+            label = inner
+
+    return label, is_guide
+
+
 def get_type_tree_json(root_aat_id=None):
     """
     Return a JSON-serialisable tree structure for the type selector widget.
 
-    If root_aat_id is None, returns the top-level nodes (depth == 1 in the
-    walk, i.e. the immediate children of the entry points).
-    Otherwise returns the children of the given node using the materialized
-    path field.
+    If root_aat_id is None, returns the entry-point nodes (depth == 0).
+    Otherwise returns the immediate children of the given node.
 
     Each node dict has:
-        id, aat_id, text, fclasses, children (True | [])
+        id, aat_id, text, fclasses, guide, children (True | [])
     """
     from placetypes.models import Type
-    from placetypes.aat_config import AAT_ENTRY_POINTS
 
     def _to_node(t, has_kids):
+        text, guide = _clean_label(t.term)
         return {
             "id": f"aat:{t.aat_id}",
             "aat_id": t.aat_id,
-            "text": t.term,
+            "text": text,
             "fclasses": t.fclasses or [],
+            "guide": guide,
             "children": True if has_kids else [],
         }
 
     if root_aat_id is None:
-        # Top-level: depth-1 concepts under any entry point.
-        # These are the nodes whose path is "<entry_point>.<self>"
-        # (i.e. exactly one dot in the path).
+        # Root level: the entry-point concepts themselves (depth 0).
+        # This groups sovereign-state types under "sovereign states", etc.
         nodes = []
         for t in Type.objects.filter(
-            depth=1, is_place_type=True,
+            depth=0, is_place_type=True,
         ).order_by('term'):
             has_children = Type.objects.filter(
                 path__startswith=f"{t.path}.",
@@ -161,8 +193,7 @@ def get_type_tree_json(root_aat_id=None):
             nodes.append(_to_node(t, has_children))
         return nodes
 
-    # Children of a specific node: find concepts whose path is
-    # exactly "<parent_path>.<child_aat_id>" — i.e. one level deeper.
+    # Children of a specific node — one level deeper in the path.
     try:
         parent = Type.objects.get(aat_id=root_aat_id)
     except Type.DoesNotExist:

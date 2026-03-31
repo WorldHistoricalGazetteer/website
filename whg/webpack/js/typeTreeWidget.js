@@ -103,17 +103,22 @@ export default class TypeTreeWidget {
 
     _renderNode(node) {
         const hasChildren = node.children === true;
+        const isGuide = !!node.guide;
         const $li = $('<li class="tt-node"></li>')
             .attr('data-id', node.id)
             .attr('data-aat-id', node.aat_id);
+
+        if (isGuide) $li.addClass('tt-guide');
 
         // Toggle arrow (only when the node can have children)
         const $toggle = hasChildren
             ? $('<span class="tt-toggle"><i class="fas fa-caret-right"></i></span>')
             : $('<span class="tt-toggle tt-leaf"></span>');
 
-        // Checkbox
-        const $cb = $(`<input type="checkbox" class="tt-cb" value="${node.id}">`);
+        // Checkbox — guide (organisational) nodes are not selectable
+        const $cb = isGuide
+            ? null
+            : $(`<input type="checkbox" class="tt-cb" value="${node.id}">`);
 
         // Label
         const $label = $(`<span class="tt-label">${this._esc(node.text)}</span>`);
@@ -123,10 +128,15 @@ export default class TypeTreeWidget {
             f => `<span class="tt-badge tt-badge-${f.toLowerCase()}">${f}</span>`
         ).join('');
 
-        $li.append($toggle, $cb, ' ', $label, ' ', badges);
+        if ($cb) {
+            $li.append($toggle, $cb, ' ', $label, ' ', badges);
+        } else {
+            $li.append($toggle, ' ', $label, ' ', badges);
+        }
 
         if (hasChildren) {
-            $li.append('<ul class="tt-children"></ul>');
+            // Start hidden so the first toggle opens correctly
+            $li.append('<ul class="tt-children" style="display:none"></ul>');
             $li.data('loaded', false);
         }
 
@@ -138,17 +148,19 @@ export default class TypeTreeWidget {
             if (hasChildren) this._toggle($li);
         });
 
-        // Checkbox cascade
-        $cb.on('change', () => {
-            const checked = $cb.prop('checked');
-            // Cascade down
-            $li.find('.tt-cb')
-                .prop('checked', checked)
-                .prop('indeterminate', false);
-            // Cascade up
-            this._updateAncestors($li);
-            this._onchange();
-        });
+        // Checkbox cascade (only for non-guide nodes)
+        if ($cb) {
+            $cb.on('change', () => {
+                const checked = $cb.prop('checked');
+                // Cascade down (only to non-guide checkboxes)
+                $li.find('.tt-cb')
+                    .prop('checked', checked)
+                    .prop('indeterminate', false);
+                // Cascade up
+                this._updateAncestors($li);
+                this._onchange();
+            });
+        }
 
         return $li;
     }

@@ -485,3 +485,11 @@ span.select2-selection {
 .tt-error {
     color: #dc3545;
 }
+
+/* Guide (organisational) nodes — not selectable place types */
+.tt-guide > .tt-label {
+    font-style: italic;
+    color: #888;
+    font-size: 0.72rem;
+}
+
