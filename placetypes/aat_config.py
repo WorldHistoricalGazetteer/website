@@ -2,11 +2,12 @@
 """
 AAT (Art & Architecture Thesaurus) configuration for WHG place types.
 
-Defines the root nodes of the AAT hierarchy that correspond to place-type
-concepts. All descendants of these root nodes are considered valid WHG
-place types.
+Top-down approach: we walk the AAT hierarchy from a small number of broad
+entry points and EXCLUDE the few subtrees that are clearly not place types.
+Every other descendant is a valid WHG place type.
 
-Each root maps to a legacy GeoNames fclass letter for backward compatibility.
+fclass assignment is multi-valued: each concept inherits fclass letters
+from ALL mapped ancestor nodes reachable via any path (polyhierarchy).
 
 AAT data source:
   https://vocab.getty.edu/dataset/aat/
@@ -35,22 +36,10 @@ AAT_NT_SCOPE_NOTES = "AATOut_ScopeNotes.nt"
 # ---------------------------------------------------------------------------
 # RDF predicates used when parsing the AAT N-Triples
 # ---------------------------------------------------------------------------
-
-# Hierarchical parent — the explicit export has direct triples for both:
-#   <child> gvp:broaderPreferred <parent> .   (canonical single parent)
-#   <child> gvp:broaderGeneric   <parent> .   (additional poly-hierarchy)
 GVP_BROADER_PREFERRED = "http://vocab.getty.edu/ontology#broaderPreferred"
 GVP_BROADER_GENERIC = "http://vocab.getty.edu/ontology#broaderGeneric"
-
-# SKOS-XL labels  (two-hop: concept → term URI → literal)
-#   <concept> skos-xl:prefLabel <term-URI> .
-#   <term-URI> skos-xl:literalForm "label"@en .
 SKOSXL_PREF_LABEL = "http://www.w3.org/2008/05/skos-xl#prefLabel"
 SKOSXL_LITERAL_FORM = "http://www.w3.org/2008/05/skos-xl#literalForm"
-
-# Scope notes  (two-hop: concept → note URI → text)
-#   <concept> skos:scopeNote <note-URI> .
-#   <note-URI> rdf:value "text"@en .
 SKOS_SCOPE_NOTE = "http://www.w3.org/2004/02/skos/core#scopeNote"
 RDF_VALUE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#value"
 
@@ -60,85 +49,66 @@ AAT_TERM_URI_PREFIX = "http://vocab.getty.edu/aat/term/"
 AAT_SCOPE_NOTE_URI_PREFIX = "http://vocab.getty.edu/aat/scopeNote/"
 
 # ---------------------------------------------------------------------------
-# Place-type root nodes
+# Entry points: broad AAT nodes whose descendants we walk
 # ---------------------------------------------------------------------------
-# Each entry: (aat_id, fclass, label, description)
-#
-# These are the top-level AAT concepts whose descendants form the WHG
-# place-type vocabulary. The fclass letter maps to the legacy GeoNames
-# feature class for backward compatibility.
-#
-# Verify any ID at: http://vocab.getty.edu/page/aat/<id>
-#
-# NOTE: Multiple roots can map to the same fclass. When the UI groups
-# by fclass it will merge them automatically.
-#
-AAT_PLACE_TYPE_ROOTS = [
-    # --- A: Administrative / political ---
-    (300387506, "A", "political divisions",
-     "Administrative and political entities: countries, provinces, counties, municipalities, etc."),
-
-    # --- P: Populated places ---
-    (300008347, "P", "inhabited places",
-     "Cities, towns, villages, hamlets, and other populated places."),
-
-    # --- S: Sites, structures, buildings ---
-    (300004792, "S", "single built works",
-     "Individual buildings, structures, monuments, bridges, and other built works."),
-
-    (300000745, "S", "complexes",
-     "Built complexes, districts, campuses, and compound structures."),
-
-    (300006891, "S", "fortifications",
-     "Defensive works: castles, forts, walls, and military structures."),
-
-    (300000810, "S", "archaeological sites",
-     "Sites of archaeological significance: ruins, tells, excavation sites."),
-
-    (300007391, "S", "religious buildings",
-     "Churches, mosques, temples, monasteries, and other religious structures."),
-
-    (300004895, "S", "agricultural structures",
-     "Farms, granaries, mills, irrigation works, and agricultural buildings."),
-
-    (300121918, "S", "industrial structures",
-     "Factories, mines, workshops, kilns, and industrial complexes."),
-
-    # --- R: Routes / transportation ---
-    (300007836, "R", "transportation structures",
-     "Roads, routes, bridges, railways, canals, and other transportation infrastructure."),
-
-    # --- L: Regions / landscape areas ---
-    (300008178, "L", "open spaces and site elements",
-     "Regions, landscape areas, parks, gardens, fields, and other open areas."),
-
-    (300182722, "L", "geographic regions",
-     "Named regions: continents, sub-regions, cultural areas, biomes."),
-
-    # --- T: Terrestrial landforms ---
-    (300266060, "T", "landforms (terrestrial)",
-     "Terrestrial landforms: mountains, hills, valleys, plains, deserts, islands, etc."),
-
-    # --- H: Water bodies ---
-    (300008680, "H", "bodies of water",
-     "Water features: rivers, lakes, seas, oceans, bays, springs, etc."),
+AAT_ENTRY_POINTS = [
+    300264550,   # Built Environment (hierarchy name)
+    300182722,   # geographic regions (Associated Concepts Facet)
+    300232420,   # sovereign states (Agents Facet)
 ]
 
 # ---------------------------------------------------------------------------
-# Derived lookup tables (built at import time from AAT_PLACE_TYPE_ROOTS)
+# Excluded subtrees: NOT place types — skip these and all descendants
 # ---------------------------------------------------------------------------
+AAT_EXCLUDED_SUBTREES = {
+    300266061,   # vegetation (1,083 concepts — plant species/communities)
+    300266157,   # extraterrestrial bodies (23 concepts — stars, galaxies)
+}
 
-FCLASS_TO_ROOTS = {}   # fclass letter -> list of root aat_ids
-ROOT_TO_FCLASS = {}    # root aat_id -> fclass letter
-ROOT_AAT_IDS = set()   # set of all root aat_ids
+# ---------------------------------------------------------------------------
+# fclass assignment map
+# ---------------------------------------------------------------------------
+# Intermediate AAT nodes that define fclass category boundaries.
+# Each concept accumulates fclass letters from ALL mapped ancestors
+# reachable via any broader path (polyhierarchy).
+#
+AAT_FCLASS_MAP = {
+    # A: Administrative / political
+    300232420: 'A',   # sovereign states
+    300120579: 'A',   # <settlements by function: administrative>
+    300387506: 'A',   # countries (sovereign states)
+    300261086: 'A',   # political administrative bodies
 
-for _aat_id, _fclass, _label, _desc in AAT_PLACE_TYPE_ROOTS:
-    ROOT_TO_FCLASS[_aat_id] = _fclass
-    ROOT_AAT_IDS.add(_aat_id)
-    FCLASS_TO_ROOTS.setdefault(_fclass, []).append(_aat_id)
+    # P: Populated places
+    300008347: 'P',   # inhabited places
 
-# Friendly labels for the top-level filter categories shown in the search UI.
-# Keyed by fclass letter for backward compatibility with the search template.
+    # S: Structures, sites, buildings
+    300004790: 'S',   # single built works (built environment)
+    300000202: 'S',   # complexes (buildings and sites)
+    300078073: 'S',   # site elements
+
+    # R: Transportation
+    300120693: 'R',   # transportation structures
+
+    # L: Regions, landscape areas, open spaces
+    300008072: 'L',   # open spaces
+    300008932: 'L',   # cultural landscapes
+    300182722: 'L',   # geographic regions
+    300000705: 'L',   # districts
+
+    # T: Terrestrial landforms
+    300266060: 'T',   # landforms (terrestrial)
+
+    # H: Water bodies
+    300266059: 'H',   # bodies of water (natural)
+
+    # U: Undersea features
+    300387581: 'U',   # undersea landforms
+}
+
+# ---------------------------------------------------------------------------
+# Friendly labels for the search UI filter categories
+# ---------------------------------------------------------------------------
 CATEGORY_LABELS = {
     "A": "Administrative entities",
     "P": "Cities, towns, hamlets",
@@ -147,6 +117,5 @@ CATEGORY_LABELS = {
     "L": "Regions, landscape areas",
     "T": "Terrestrial landforms",
     "H": "Water bodies",
+    "U": "Undersea features",
 }
-
-

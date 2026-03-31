@@ -7,7 +7,10 @@ The db_table remains 'types' for full backward compatibility with the
 existing database; no data migration is needed.
 """
 
+from django.contrib.postgres.fields import ArrayField
 from django.db import models
+
+from main.choices import FEATURE_CLASSES
 
 
 class Type(models.Model):
@@ -16,7 +19,11 @@ class Type(models.Model):
     term = models.CharField(max_length=100)
     term_full = models.CharField(max_length=100)
     note = models.TextField(max_length=3000)
-    fclass = models.CharField(max_length=1, null=True, blank=True)
+    fclasses = ArrayField(
+        models.CharField(max_length=1, choices=FEATURE_CLASSES),
+        null=True, blank=True,
+        help_text="GeoNames feature classes inherited from all AAT ancestor paths.",
+    )
 
     # --- Hierarchy fields (populated by the sync_aat_types command) ---
 
@@ -28,13 +35,21 @@ class Type(models.Model):
     depth = models.IntegerField(default=0)
 
     # Whether this concept is a recognised WHG place type
-    # (i.e. it descends from one of the configured AAT root nodes).
+    # (i.e. it descends from one of the configured AAT entry points
+    # and is not in an excluded subtree).
     is_place_type = models.BooleanField(default=True)
 
     # ------------------------------------------------------------------
 
     def __str__(self):
         return f"{self.aat_id}:{self.term}"
+
+    @property
+    def fclass(self):
+        """Backward-compat: return the first fclass letter, or None."""
+        if self.fclasses:
+            return self.fclasses[0]
+        return None
 
     @property
     def aat_identifier(self):
@@ -63,8 +78,5 @@ class Type(models.Model):
         db_table = 'types'
         indexes = [
             models.Index(fields=['path']),
-            models.Index(fields=['fclass']),
             models.Index(fields=['is_place_type']),
         ]
-
-

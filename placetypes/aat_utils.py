@@ -11,8 +11,8 @@ import logging
 from django.core.cache import cache
 
 from placetypes.aat_config import (
+    AAT_FCLASS_MAP,
     CATEGORY_LABELS,
-    FCLASS_TO_ROOTS,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,29 +62,26 @@ def get_category_identifiers(fclass_code):
     """
     Return all AAT identifier strings for a given fclass category.
 
-    This expands all root nodes for that fclass plus all their descendants.
-    Results are cached for 1 hour.
+    Queries the Type table for all concepts that have this fclass
+    in their fclasses array.  Results are cached for 1 hour.
     """
     cache_key = f"aat_category:{fclass_code}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
 
-    root_ids = FCLASS_TO_ROOTS.get(fclass_code, [])
-    identifiers = []
-    for root_id in root_ids:
-        identifiers.extend(get_descendant_identifiers(root_id, include_self=True))
+    from placetypes.models import Type
 
-    # Deduplicate while preserving order
-    seen = set()
-    unique = []
-    for ident in identifiers:
-        if ident not in seen:
-            seen.add(ident)
-            unique.append(ident)
+    aat_ids = list(
+        Type.objects.filter(
+            fclasses__contains=[fclass_code],
+            is_place_type=True,
+        ).values_list('aat_id', flat=True)
+    )
 
-    cache.set(cache_key, unique, _CACHE_TTL)
-    return unique
+    identifiers = [f"aat:{aid}" for aid in aat_ids]
+    cache.set(cache_key, identifiers, _CACHE_TTL)
+    return identifiers
 
 
 def expand_type_identifiers(aat_identifiers):
@@ -118,8 +115,8 @@ def build_adv_filters():
     matching the format expected by the search.html template and JS.
     """
     filters = []
-    for fclass_code in ["A", "P", "S", "R", "L", "T", "H"]:
-        label = CATEGORY_LABELS.get(fclass_code, fclass_code)
+    for fclass_code in sorted(CATEGORY_LABELS.keys()):
+        label = CATEGORY_LABELS[fclass_code]
         identifiers = get_category_identifiers(fclass_code)
         filters.append([fclass_code, label, identifiers])
     return filters
@@ -129,37 +126,33 @@ def get_type_tree_json(root_aat_id=None):
     """
     Return a JSON-serialisable tree structure for the type selector widget.
 
-    If root_aat_id is None, returns all top-level categories.
+    If root_aat_id is None, returns the top-level entry-point children.
     Otherwise returns the children of the given node.
-
-    Returns a list of dicts:
-    [
-        {
-            "id": "aat:300008347",
-            "aat_id": 300008347,
-            "text": "inhabited places",
-            "fclass": "P",
-            "children": [...]  or True (for lazy-loading)
-        },
-        ...
-    ]
     """
     from placetypes.models import Type
+    from placetypes.aat_config import AAT_ENTRY_POINTS
 
     if root_aat_id is None:
-        # Return top-level categories
-        from placetypes.aat_config import AAT_PLACE_TYPE_ROOTS
+        # Return the immediate children of all entry points as top-level
+        entry_children_ids = set()
+        for ep in AAT_ENTRY_POINTS:
+            child_ids = Type.objects.filter(
+                parent_id=ep, is_place_type=True
+            ).values_list('aat_id', flat=True)
+            entry_children_ids.update(child_ids)
+
         nodes = []
-        for aat_id, fclass, label, desc in AAT_PLACE_TYPE_ROOTS:
+        for t in Type.objects.filter(
+            aat_id__in=entry_children_ids, is_place_type=True
+        ).order_by('term'):
             has_children = Type.objects.filter(
-                parent_id=aat_id, is_place_type=True
+                parent_id=t.aat_id, is_place_type=True
             ).exists()
             nodes.append({
-                "id": f"aat:{aat_id}",
-                "aat_id": aat_id,
-                "text": label,
-                "fclass": fclass,
-                "description": desc,
+                "id": f"aat:{t.aat_id}",
+                "aat_id": t.aat_id,
+                "text": t.term,
+                "fclasses": t.fclasses or [],
                 "children": True if has_children else [],
             })
         return nodes
@@ -179,7 +172,7 @@ def get_type_tree_json(root_aat_id=None):
             "id": f"aat:{t.aat_id}",
             "aat_id": t.aat_id,
             "text": t.term,
-            "fclass": t.fclass or '',
+            "fclasses": t.fclasses or [],
             "children": True if has_children else [],
         })
 
@@ -191,4 +184,3 @@ def invalidate_caches():
     for fclass_code in CATEGORY_LABELS:
         cache.delete(f"aat_category:{fclass_code}")
     logger.info("AAT caches invalidated for category lookups.")
-
