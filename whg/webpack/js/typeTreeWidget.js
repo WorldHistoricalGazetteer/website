@@ -325,6 +325,7 @@ export default class TypeTreeWidget {
         const $input = $wrap.find('.tt-search-input');
         const $results = this._$searchResults;
         const $clear = $wrap.find('.tt-search-clear');
+        let activeIndex = -1;
 
         const positionDropdown = () => {
             const rect = $input[0].getBoundingClientRect();
@@ -335,7 +336,21 @@ export default class TypeTreeWidget {
             });
         };
 
-        const hideResults = () => $results.hide();
+        const hideResults = () => {
+            $results.hide();
+            activeIndex = -1;
+        };
+
+        const highlightActive = () => {
+            $results.find('.tt-search-item').removeClass('tt-search-active');
+            if (activeIndex >= 0) {
+                const $active = $results.find('.tt-search-item').eq(activeIndex);
+                $active.addClass('tt-search-active');
+                // Scroll into view within the dropdown
+                const el = $active[0];
+                if (el) el.scrollIntoView({ block: 'nearest' });
+            }
+        };
 
         const clearSearch = () => {
             $input.val('');
@@ -347,6 +362,7 @@ export default class TypeTreeWidget {
 
         $input.on('input', () => {
             clearTimeout(this._searchTimer);
+            activeIndex = -1;
             const q = $input.val().trim();
             $clear.toggle(q.length > 0);
             if (q.length < 2) {
@@ -360,8 +376,29 @@ export default class TypeTreeWidget {
         });
 
         $input.on('keydown', (e) => {
+            const $items = $results.find('.tt-search-item');
+            const count = $items.length;
+
             if (e.key === 'Escape') {
                 clearSearch();
+                return;
+            }
+
+            if (!$results.is(':visible') || count === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIndex = Math.min(activeIndex + 1, count - 1);
+                highlightActive();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIndex = Math.max(activeIndex - 1, 0);
+                highlightActive();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (activeIndex >= 0 && activeIndex < count) {
+                    $items.eq(activeIndex).trigger('mousedown');
+                }
             }
         });
 

@@ -394,6 +394,7 @@ span.select2-selection {
 #type_tree_container {
     max-height: 250px;
     overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid #dee2e6;
     border-radius: 4px;
     background: #fdfdfd;
@@ -415,7 +416,6 @@ span.select2-selection {
 .tt-node {
     padding: 0;
     line-height: 1.3;
-    white-space: nowrap;
 }
 
 /* Toggle arrow */
@@ -552,7 +552,8 @@ span.select2-selection {
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.tt-search-item:hover {
+.tt-search-item:hover,
+.tt-search-item.tt-search-active {
     background: #e9ecef;
 }
 .tt-search-empty {
