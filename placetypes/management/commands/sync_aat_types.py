@@ -69,6 +69,21 @@ def _parse_nt_line(line):
     return m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)
 
 
+# Regex for \uXXXX and \UXXXXXXXX escapes in N-Triples string literals.
+_NT_UNICODE_RE = re.compile(r'\\u([0-9A-Fa-f]{4})|\\U([0-9A-Fa-f]{8})')
+
+
+def _decode_nt_unicode(s):
+    """Decode N-Triples \\uXXXX / \\UXXXXXXXX escapes to proper Unicode."""
+    if s is None:
+        return s
+    if '\\u' not in s and '\\U' not in s:
+        return s
+    return _NT_UNICODE_RE.sub(
+        lambda m: chr(int(m.group(1) or m.group(2), 16)), s
+    )
+
+
 def _aat_id_from_uri(uri):
     """Extract integer AAT id from a URI like http://vocab.getty.edu/aat/300008347."""
     if uri and uri.startswith(AAT_URI_PREFIX):
@@ -473,7 +488,7 @@ class Command(BaseCommand):
                 elif pred_uri == SKOSXL_LITERAL_FORM and literal:
                     if subj_uri.startswith(AAT_TERM_URI_PREFIX):
                         if lang and lang.startswith('en'):
-                            term_uri_to_literal[subj_uri] = literal
+                            term_uri_to_literal[subj_uri] = _decode_nt_unicode(literal)
 
         self.stdout.write(f"  ... {line_count:,} lines in {AAT_NT_TERMS}")
 
@@ -515,7 +530,7 @@ class Command(BaseCommand):
                 elif pred_uri == RDF_VALUE and literal:
                     if subj_uri.startswith(AAT_SCOPE_NOTE_URI_PREFIX):
                         if lang == 'en':
-                            note_uri_to_text[subj_uri] = literal
+                            note_uri_to_text[subj_uri] = _decode_nt_unicode(literal)
 
         self.stdout.write(
             f"  ... {line_count:,} lines in {AAT_NT_SCOPE_NOTES}")
