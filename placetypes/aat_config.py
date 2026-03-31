@@ -16,7 +16,7 @@ AAT data source:
 # ---------------------------------------------------------------------------
 # AAT bulk download URL
 # ---------------------------------------------------------------------------
-AAT_FULL_DUMP_URL = "https://vocab.getty.edu/dataset/aat/full/AATOut_Full.nt.zip"
+AAT_FULL_DUMP_URL = "http://aatdownloads.getty.edu/VocabData/full.zip"
 
 # Local path (relative to BASE_DIR) where the downloaded dump is cached
 AAT_DUMP_CACHE_DIR = "data/aat"
@@ -86,10 +86,10 @@ AAT_PLACE_TYPE_ROOTS = [
     (300007391, "S", "religious buildings",
      "Churches, mosques, temples, monasteries, and other religious structures."),
 
-    (300000099, "S", "agricultural structures",
+    (300004895, "S", "agricultural structures",
      "Farms, granaries, mills, irrigation works, and agricultural buildings."),
 
-    (300006032, "S", "industrial structures",
+    (300121918, "S", "industrial structures",
      "Factories, mines, workshops, kilns, and industrial complexes."),
 
     # --- R: Routes / transportation ---
@@ -104,7 +104,7 @@ AAT_PLACE_TYPE_ROOTS = [
      "Named regions: continents, sub-regions, cultural areas, biomes."),
 
     # --- T: Terrestrial landforms ---
-    (300008708, "T", "landforms",
+    (300266060, "T", "landforms (terrestrial)",
      "Terrestrial landforms: mountains, hills, valleys, plains, deserts, islands, etc."),
 
     # --- H: Water bodies ---
