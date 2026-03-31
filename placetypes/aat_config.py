@@ -10,13 +10,14 @@ Each root maps to a legacy GeoNames fclass letter for backward compatibility.
 
 AAT data source:
   https://vocab.getty.edu/dataset/aat/
-  Full N-Triples dump: AATOut_Full.nt.zip (~300 MB compressed)
+  Explicit N-Triples dump: explicit.zip (~93 MB compressed)
+  See: https://vocab.getty.edu/doc/#Export_Files  §6.6.1
 """
 
 # ---------------------------------------------------------------------------
-# AAT bulk download URL
+# AAT bulk download URL  (explicit export — separate .nt files)
 # ---------------------------------------------------------------------------
-AAT_FULL_DUMP_URL = "http://aatdownloads.getty.edu/VocabData/full.zip"
+AAT_EXPLICIT_DUMP_URL = "http://aatdownloads.getty.edu/VocabData/explicit.zip"
 
 # Local path (relative to BASE_DIR) where the downloaded dump is cached
 AAT_DUMP_CACHE_DIR = "data/aat"
@@ -25,27 +26,38 @@ AAT_DUMP_CACHE_DIR = "data/aat"
 AAT_DUMP_META_FILE = "aat_dump_meta.json"
 
 # ---------------------------------------------------------------------------
+# Files inside explicit.zip that we parse
+# ---------------------------------------------------------------------------
+AAT_NT_HIERARCHICAL_RELS = "AATOut_HierarchicalRels.nt"
+AAT_NT_TERMS = "AATOut_2Terms.nt"
+AAT_NT_SCOPE_NOTES = "AATOut_ScopeNotes.nt"
+
+# ---------------------------------------------------------------------------
 # RDF predicates used when parsing the AAT N-Triples
 # ---------------------------------------------------------------------------
 
-# Hierarchical parent (broader concept) — gvp:broaderGeneric is the
-# primary hierarchy predicate in AAT; skos:broader mirrors it.
-GVP_BROADER = "http://vocab.getty.edu/ontology#broaderGeneric"
-SKOS_BROADER = "http://www.w3.org/2004/02/skos/core#broader"
+# Hierarchical parent — the explicit export has direct triples for both:
+#   <child> gvp:broaderPreferred <parent> .   (canonical single parent)
+#   <child> gvp:broaderGeneric   <parent> .   (additional poly-hierarchy)
+GVP_BROADER_PREFERRED = "http://vocab.getty.edu/ontology#broaderPreferred"
+GVP_BROADER_GENERIC = "http://vocab.getty.edu/ontology#broaderGeneric"
 
-# Labels
-SKOS_PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel"
-RDFS_LABEL = "http://www.w3.org/2000/01/rdf-schema#label"
+# SKOS-XL labels  (two-hop: concept → term URI → literal)
+#   <concept> skos-xl:prefLabel <term-URI> .
+#   <term-URI> skos-xl:literalForm "label"@en .
+SKOSXL_PREF_LABEL = "http://www.w3.org/2008/05/skos-xl#prefLabel"
+SKOSXL_LITERAL_FORM = "http://www.w3.org/2008/05/skos-xl#literalForm"
 
-# Scope note (for the note field)
+# Scope notes  (two-hop: concept → note URI → text)
+#   <concept> skos:scopeNote <note-URI> .
+#   <note-URI> rdf:value "text"@en .
 SKOS_SCOPE_NOTE = "http://www.w3.org/2004/02/skos/core#scopeNote"
+RDF_VALUE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#value"
 
-# RDF type
-RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
-GVP_CONCEPT = "http://vocab.getty.edu/ontology#Concept"
-
-# AAT subject URI prefix
+# AAT URI prefixes
 AAT_URI_PREFIX = "http://vocab.getty.edu/aat/"
+AAT_TERM_URI_PREFIX = "http://vocab.getty.edu/aat/term/"
+AAT_SCOPE_NOTE_URI_PREFIX = "http://vocab.getty.edu/aat/scopeNote/"
 
 # ---------------------------------------------------------------------------
 # Place-type root nodes

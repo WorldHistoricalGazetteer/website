@@ -1,26 +1,31 @@
 # placetypes/management/commands/sync_aat_types.py
 """
 Django management command to synchronise the local Type table with the
-Getty AAT (Art & Architecture Thesaurus) bulk N-Triples dump.
+Getty AAT (Art & Architecture Thesaurus) explicit N-Triples export.
 
 Usage:
     python manage.py sync_aat_types              # download if new, parse, update DB
     python manage.py sync_aat_types --force      # re-download even if unchanged
-    python manage.py sync_aat_types --local /path/to/AATOut_Full.nt
-                                                  # parse a pre-downloaded file
+    python manage.py sync_aat_types --local /path/to/explicit_dir/
+                                                  # parse pre-extracted .nt files
     python manage.py sync_aat_types --dry-run    # report counts without writing
+    python manage.py sync_aat_types --api        # crawl via JSON API (slow fallback)
 
 Workflow:
-    1. HEAD request to the Getty dump URL to check Last-Modified / ETag.
-    2. If changed (or --force), download the .nt.zip and extract.
-    3. Stream the N-Triples file in two passes:
-       Pass 1 — collect hierarchy edges (child → parent via gvp:broaderGeneric)
-                and English prefLabels for every aat: subject.
-       Pass 2 — starting from the configured root nodes, walk the hierarchy
-                downward to identify which concepts are place types and
-                compute materialized paths, depths, and fclass assignments.
-    4. Bulk upsert into the Type table.
-    5. Invalidate caches.
+    1. HEAD request to the Getty explicit dump URL to check Last-Modified / ETag.
+    2. If changed (or --force), download explicit.zip and extract the three
+       files we need: AATOut_HierarchicalRels.nt, AATOut_2Terms.nt,
+       AATOut_ScopeNotes.nt.
+    3. Parse those files:
+       - HierarchicalRels -> parent/child edges (gvp:broaderPreferred +
+         gvp:broaderGeneric direct triples)
+       - Terms -> English preferred labels via SKOS-XL two-hop:
+         concept -> term-URI (skos-xl:prefLabel) -> literal (skos-xl:literalForm)
+       - ScopeNotes -> English scope notes via two-hop:
+         concept -> note-URI (skos:scopeNote) -> text (rdf:value)
+    4. BFS walk from configured root nodes to identify place-type concepts.
+    5. Bulk upsert into the Type table.
+    6. Invalidate caches.
 """
 
 import json
@@ -39,13 +44,21 @@ from django.db import transaction
 from placetypes.aat_config import (
     AAT_DUMP_CACHE_DIR,
     AAT_DUMP_META_FILE,
-    AAT_FULL_DUMP_URL,
+    AAT_EXPLICIT_DUMP_URL,
+    AAT_NT_HIERARCHICAL_RELS,
+    AAT_NT_SCOPE_NOTES,
+    AAT_NT_TERMS,
+    AAT_SCOPE_NOTE_URI_PREFIX,
+    AAT_TERM_URI_PREFIX,
     AAT_URI_PREFIX,
-    GVP_BROADER,
+    GVP_BROADER_GENERIC,
+    GVP_BROADER_PREFERRED,
+    RDF_VALUE,
     ROOT_AAT_IDS,
     ROOT_TO_FCLASS,
-    SKOS_PREF_LABEL,
     SKOS_SCOPE_NOTE,
+    SKOSXL_LITERAL_FORM,
+    SKOSXL_PREF_LABEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,9 +69,9 @@ logger = logging.getLogger(__name__)
 _NT_LINE_RE = re.compile(
     r'^<([^>]+)>\s+<([^>]+)>\s+'      # subject, predicate
     r'(?:<([^>]+)>'                     # object URI
-    r'|"([^"]*)"'                       # or literal value
-    r'(?:@(\w[\w-]*))?'                 # optional language tag
-    r'(?:\^\^<[^>]+>)?'                 # optional datatype (ignored)
+    r'|"((?:[^"\\]|\\.)*)"'            # or literal value (handles escaped quotes)
+    r'(?:@(\w[\w-]*))?'                # optional language tag
+    r'(?:\^\^<[^>]+>)?'                # optional datatype (ignored)
     r')\s*\.\s*$'                       # trailing dot
 )
 
@@ -82,7 +95,7 @@ def _aat_id_from_uri(uri):
 
 
 class Command(BaseCommand):
-    help = "Synchronise the local Type table with the Getty AAT N-Triples dump."
+    help = "Synchronise the local Type table with the Getty AAT explicit N-Triples dump."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -91,7 +104,8 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             '--local', type=str, default=None,
-            help='Path to a pre-downloaded .nt file (skips download).',
+            help='Path to a directory containing the extracted .nt files '
+                 '(skips download).',
         )
         parser.add_argument(
             '--dry-run', action='store_true',
@@ -115,48 +129,72 @@ class Command(BaseCommand):
         if use_api:
             place_types = self._crawl_api()
         else:
-            # ── Step 1: Obtain the .nt file ──────────────────────────────
+            # -- Step 1: Obtain the .nt files ------------------------------
             if local_path:
-                nt_path = Path(local_path)
-                if not nt_path.exists():
-                    raise CommandError(f"Local file not found: {local_path}")
-                self.stdout.write(f"Using local file: {nt_path}")
+                nt_dir = Path(local_path)
+                if not nt_dir.is_dir():
+                    raise CommandError(f"Local path is not a directory: {local_path}")
+                self.stdout.write(f"Using local directory: {nt_dir}")
             else:
-                nt_path = self._download_if_needed(force)
-                if nt_path is None:
+                nt_dir = self._download_if_needed(force)
+                if nt_dir is None:
                     self.stdout.write(self.style.SUCCESS(
-                        "AAT dump has not changed since last sync. Use --force to re-download."
+                        "AAT dump has not changed since last sync. "
+                        "Use --force to re-download."
                     ))
                     return
 
-            # ── Step 2: Parse ─────────────────────────────────────────────
-            self.stdout.write("Pass 1: Collecting hierarchy edges and labels …")
+            # -- Step 2: Parse the three files -----------------------------
             t1 = time.time()
-            children, labels, notes = self._parse_pass1(nt_path)
-            t1b = time.time()
-            self.stdout.write(f"  → {len(children)} parent→children edges, "
-                              f"{len(labels)} labelled concepts in {t1b - t1:.1f}s")
 
-            self.stdout.write("Pass 2: Walking hierarchy from root nodes …")
-            place_types = self._walk_hierarchy(children, labels, notes)
+            self.stdout.write("Parsing hierarchy edges ...")
+            preferred_parent, children = self._parse_hierarchy(
+                nt_dir / AAT_NT_HIERARCHICAL_RELS)
+            t1a = time.time()
+            self.stdout.write(
+                f"  -> {sum(len(v) for v in children.values()):,} edges, "
+                f"{len(preferred_parent):,} preferred-parent links "
+                f"in {t1a - t1:.1f}s")
+
+            self.stdout.write("Parsing labels (SKOS-XL two-hop) ...")
+            labels = self._parse_labels(nt_dir / AAT_NT_TERMS)
+            t1b = time.time()
+            self.stdout.write(
+                f"  -> {len(labels):,} English labels in {t1b - t1a:.1f}s")
+
+            self.stdout.write("Parsing scope notes ...")
+            notes = self._parse_notes(nt_dir / AAT_NT_SCOPE_NOTES)
+            t1c = time.time()
+            self.stdout.write(
+                f"  -> {len(notes):,} English scope notes in {t1c - t1b:.1f}s")
+
+            # -- Step 3: Walk hierarchy from roots -------------------------
+            self.stdout.write("Walking hierarchy from root nodes ...")
+            place_types = self._walk_hierarchy(
+                preferred_parent, children, labels, notes)
             t2 = time.time()
-            self.stdout.write(f"  → {len(place_types)} place-type concepts in {t2 - t1b:.1f}s")
+            self.stdout.write(
+                f"  -> {len(place_types):,} place-type concepts in {t2 - t1c:.1f}s")
 
         t_parsed = time.time()
-        self.stdout.write(f"  → {len(place_types)} place-type concepts collected in {t_parsed - t0:.1f}s")
+        self.stdout.write(
+            f"  -> {len(place_types):,} place-type concepts collected "
+            f"in {t_parsed - t0:.1f}s")
 
         if dry_run:
-            self.stdout.write(self.style.WARNING("Dry run — no database changes made."))
+            self.stdout.write(self.style.WARNING(
+                "Dry run -- no database changes made."))
             self._report(place_types)
             return
 
-        # ── Step 3: Upsert ────────────────────────────────────────────
-        self.stdout.write("Upserting into Type table …")
+        # -- Step 4: Upsert ------------------------------------------------
+        self.stdout.write("Upserting into Type table ...")
         created, updated = self._upsert(place_types)
         t3 = time.time()
-        self.stdout.write(f"  → {created} created, {updated} updated in {t3 - t_parsed:.1f}s")
+        self.stdout.write(
+            f"  -> {created} created, {updated} updated in {t3 - t_parsed:.1f}s")
 
-        # ── Step 4: Invalidate caches ─────────────────────────────────
+        # -- Step 5: Invalidate caches -------------------------------------
         from placetypes.aat_utils import invalidate_caches
         invalidate_caches()
 
@@ -306,9 +344,9 @@ class Command(BaseCommand):
 
     def _download_if_needed(self, force):
         """
-        Check the remote dump for changes using HEAD (Last-Modified / ETag).
-        Download and extract if needed.  Returns the path to the .nt file,
-        or None if unchanged and not forced.
+        Check the remote explicit dump for changes (HEAD + Last-Modified/ETag).
+        Download and extract if needed.  Returns the cache directory path
+        (containing the extracted .nt files), or None if unchanged.
         """
         meta = self._read_meta()
         headers = {}
@@ -318,28 +356,35 @@ class Command(BaseCommand):
             if meta.get('last_modified'):
                 headers['If-Modified-Since'] = meta['last_modified']
 
-        self.stdout.write(f"Checking {AAT_FULL_DUMP_URL} …")
+        self.stdout.write(f"Checking {AAT_EXPLICIT_DUMP_URL} ...")
         try:
-            resp = requests.head(AAT_FULL_DUMP_URL, headers=headers, timeout=30,
-                                 allow_redirects=True)
+            resp = requests.head(AAT_EXPLICIT_DUMP_URL, headers=headers,
+                                 timeout=30, allow_redirects=True)
         except requests.RequestException as e:
             raise CommandError(f"HEAD request failed: {e}")
 
         if resp.status_code == 304 and not force:
-            return None  # Not modified
+            # Check the three files already exist locally
+            cache = self._cache_dir()
+            needed = [AAT_NT_HIERARCHICAL_RELS, AAT_NT_TERMS, AAT_NT_SCOPE_NOTES]
+            if all((cache / n).exists() for n in needed):
+                return None  # Not modified and files present
+            # Files missing -- fall through to download
 
-        if resp.status_code not in (200, 302):
-            raise CommandError(f"Unexpected status {resp.status_code} from HEAD request")
+        if resp.status_code not in (200, 302, 304):
+            raise CommandError(
+                f"Unexpected status {resp.status_code} from HEAD request")
 
         # Download the zip
-        self.stdout.write("Downloading AAT dump (this may take several minutes) …")
+        self.stdout.write("Downloading AAT explicit dump "
+                          "(this may take a few minutes) ...")
         try:
-            resp = requests.get(AAT_FULL_DUMP_URL, stream=True, timeout=600)
+            resp = requests.get(AAT_EXPLICIT_DUMP_URL, stream=True, timeout=600)
             resp.raise_for_status()
         except requests.RequestException as e:
             raise CommandError(f"Download failed: {e}")
 
-        zip_path = self._cache_dir() / "AATOut_Full.nt.zip"
+        zip_path = self._cache_dir() / "explicit.zip"
         total = int(resp.headers.get('content-length', 0))
         downloaded = 0
         with open(zip_path, 'wb') as f:
@@ -348,10 +393,12 @@ class Command(BaseCommand):
                 downloaded += len(chunk)
                 if total:
                     pct = downloaded * 100 // total
-                    self.stdout.write(f"\r  {pct}% ({downloaded // (1024*1024)} MB)", ending='')
+                    self.stdout.write(
+                        f"\r  {pct}% ({downloaded // (1024*1024)} MB)",
+                        ending='')
         self.stdout.write("")  # newline
 
-        # Save metadata
+        # Save download metadata
         new_meta = {
             'etag': resp.headers.get('ETag', ''),
             'last_modified': resp.headers.get('Last-Modified', ''),
@@ -359,104 +406,257 @@ class Command(BaseCommand):
         }
         self._write_meta(new_meta)
 
-        # Extract .nt from zip
-        self.stdout.write("Extracting …")
-        nt_path = self._cache_dir() / "AATOut_Full.nt"
+        # Extract only the three files we need
+        self.stdout.write("Extracting ...")
+        needed = {AAT_NT_HIERARCHICAL_RELS, AAT_NT_TERMS, AAT_NT_SCOPE_NOTES}
+        cache = self._cache_dir()
         with zipfile.ZipFile(zip_path, 'r') as zf:
-            # Find the .nt file inside the zip
-            nt_names = [n for n in zf.namelist() if n.endswith('.nt')]
-            if not nt_names:
-                raise CommandError("No .nt file found inside the zip archive")
-            with zf.open(nt_names[0]) as src, open(nt_path, 'wb') as dst:
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
+            for name in zf.namelist():
+                if name in needed:
+                    self.stdout.write(f"  -> {name}")
+                    with zf.open(name) as src, \
+                            open(cache / name, 'wb') as dst:
+                        while True:
+                            chunk = src.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            dst.write(chunk)
 
-        self.stdout.write(f"Extracted to {nt_path}")
-        return nt_path
+        # Verify all three were found
+        for name in needed:
+            if not (cache / name).exists():
+                raise CommandError(
+                    f"Expected file {name} not found inside explicit.zip")
+
+        self.stdout.write(f"Extracted to {cache}")
+        return cache
 
     # ------------------------------------------------------------------
-    # Pass 1: Collect edges and labels
+    # Parse: Hierarchy edges
     # ------------------------------------------------------------------
 
-    def _parse_pass1(self, nt_path):
+    def _parse_hierarchy(self, nt_path):
         """
-        Stream the N-Triples file and collect:
-          - children: dict  parent_aat_id -> set of child_aat_ids
-          - labels:   dict  aat_id -> English prefLabel string
-          - notes:    dict  aat_id -> scope note string
+        Parse AATOut_HierarchicalRels.nt for direct broader triples.
+
+        Returns:
+            preferred_parent: dict  child_aat_id -> parent_aat_id
+                              (from gvp:broaderPreferred -- the canonical parent)
+            children:         dict  parent_aat_id -> set of child_aat_ids
+                              (from BOTH broaderPreferred and broaderGeneric)
         """
-        children = defaultdict(set)   # parent -> {child, child, ...}
-        labels = {}                    # aat_id -> "term"
-        notes = {}                     # aat_id -> "scope note"
+        preferred_parent = {}              # child -> canonical parent
+        children = defaultdict(set)        # parent -> {child, child, ...}
         line_count = 0
 
         with open(nt_path, 'r', encoding='utf-8', errors='replace') as fh:
             for line in fh:
                 line_count += 1
-                if line_count % 5_000_000 == 0:
-                    self.stdout.write(f"  … {line_count:,} lines", ending='\r')
+                if line_count % 100_000 == 0:
+                    self.stdout.write(
+                        f"  ... {line_count:,} lines", ending='\r')
+
+                parsed = _parse_nt_line(line)
+                if parsed is None:
+                    continue
+
+                subj_uri, pred_uri, obj_uri, _literal, _lang = parsed
+
+                # We only want direct <aat/CHILD> <broader*> <aat/PARENT>
+                if pred_uri not in (GVP_BROADER_PREFERRED, GVP_BROADER_GENERIC):
+                    continue
+                if not obj_uri:
+                    continue
+
+                child_id = _aat_id_from_uri(subj_uri)
+                parent_id = _aat_id_from_uri(obj_uri)
+                if child_id is None or parent_id is None:
+                    continue
+
+                children[parent_id].add(child_id)
+
+                if pred_uri == GVP_BROADER_PREFERRED:
+                    preferred_parent[child_id] = parent_id
+
+        self.stdout.write(
+            f"  ... {line_count:,} lines in {AAT_NT_HIERARCHICAL_RELS}")
+        return preferred_parent, children
+
+    # ------------------------------------------------------------------
+    # Parse: Labels (SKOS-XL two-hop)
+    # ------------------------------------------------------------------
+
+    def _parse_labels(self, nt_path):
+        """
+        Parse AATOut_2Terms.nt for English preferred labels.
+
+        SKOS-XL stores labels in two hops:
+          <aat/CONCEPT> skos-xl:prefLabel <aat/term/XXXXX-en> .
+          <aat/term/XXXXX-en> skos-xl:literalForm "label text"@en .
+
+        Term URIs use BCP-47 language tags: -en, -en-US, -en-GB, etc.
+        We prefer plain -en; fall back to -en-US or -en-GB.
+
+        Returns:
+            labels: dict  aat_id -> English label string
+        """
+        # concept_aat_id -> (term-URI, is_plain_en)
+        concept_to_term = {}
+        # term-URI -> literal string
+        term_uri_to_literal = {}
+        line_count = 0
+
+        with open(nt_path, 'r', encoding='utf-8', errors='replace') as fh:
+            for line in fh:
+                line_count += 1
+                if line_count % 1_000_000 == 0:
+                    self.stdout.write(
+                        f"  ... {line_count:,} lines", ending='\r')
 
                 parsed = _parse_nt_line(line)
                 if parsed is None:
                     continue
 
                 subj_uri, pred_uri, obj_uri, literal, lang = parsed
-                subj_id = _aat_id_from_uri(subj_uri)
-                if subj_id is None:
+
+                # Hop 1:  concept -> term-URI  (English prefLabel only)
+                if pred_uri == SKOSXL_PREF_LABEL and obj_uri:
+                    if not obj_uri.startswith(AAT_TERM_URI_PREFIX):
+                        continue
+                    suffix = obj_uri[len(AAT_TERM_URI_PREFIX):]
+                    # suffix looks like "1000265430-en" or "1000000745-en-US"
+                    dash_idx = suffix.find('-')
+                    if dash_idx < 0:
+                        continue
+                    uri_lang = suffix[dash_idx + 1:]
+                    if not uri_lang.startswith('en'):
+                        continue
+                    is_plain_en = (uri_lang == 'en')
+                    concept_id = _aat_id_from_uri(subj_uri)
+                    if concept_id is None:
+                        continue
+                    # Prefer plain -en over regional variants
+                    existing = concept_to_term.get(concept_id)
+                    if existing is None or (is_plain_en and not existing[1]):
+                        concept_to_term[concept_id] = (obj_uri, is_plain_en)
+
+                # Hop 2:  term-URI -> literal text
+                elif pred_uri == SKOSXL_LITERAL_FORM and literal:
+                    if subj_uri.startswith(AAT_TERM_URI_PREFIX):
+                        if lang and lang.startswith('en'):
+                            term_uri_to_literal[subj_uri] = literal
+
+        self.stdout.write(f"  ... {line_count:,} lines in {AAT_NT_TERMS}")
+
+        # Resolve the two-hop join
+        labels = {}
+        for concept_id, (term_uri, _) in concept_to_term.items():
+            text = term_uri_to_literal.get(term_uri)
+            if text:
+                labels[concept_id] = text
+
+        return labels
+
+    # ------------------------------------------------------------------
+    # Parse: Scope notes (two-hop)
+    # ------------------------------------------------------------------
+
+    def _parse_notes(self, nt_path):
+        """
+        Parse AATOut_ScopeNotes.nt for English scope notes.
+
+        Two-hop structure:
+          <aat/CONCEPT> skos:scopeNote <aat/scopeNote/NNNNN> .
+          <aat/scopeNote/NNNNN> rdf:value "note text"@en .
+
+        Returns:
+            notes: dict  aat_id -> scope note string
+        """
+        # concept_aat_id -> set of note-URIs
+        concept_to_note_uris = defaultdict(set)
+        # note-URI -> literal string  (English only)
+        note_uri_to_text = {}
+        line_count = 0
+
+        with open(nt_path, 'r', encoding='utf-8', errors='replace') as fh:
+            for line in fh:
+                line_count += 1
+                if line_count % 500_000 == 0:
+                    self.stdout.write(
+                        f"  ... {line_count:,} lines", ending='\r')
+
+                parsed = _parse_nt_line(line)
+                if parsed is None:
                     continue
 
-                # Hierarchy: <child> gvp:broaderGeneric <parent>
-                if pred_uri == GVP_BROADER and obj_uri:
-                    parent_id = _aat_id_from_uri(obj_uri)
-                    if parent_id is not None:
-                        children[parent_id].add(subj_id)
+                subj_uri, pred_uri, obj_uri, literal, lang = parsed
 
-                # English preferred label
-                elif pred_uri == SKOS_PREF_LABEL and literal and lang == 'en':
-                    labels[subj_id] = literal
+                # Hop 1:  concept -> note-URI
+                if pred_uri == SKOS_SCOPE_NOTE and obj_uri:
+                    concept_id = _aat_id_from_uri(subj_uri)
+                    if concept_id is not None:
+                        concept_to_note_uris[concept_id].add(obj_uri)
 
-                # Scope note (take first English one encountered)
-                elif pred_uri == SKOS_SCOPE_NOTE and literal:
-                    if subj_id not in notes and (lang == 'en' or lang is None):
-                        notes[subj_id] = literal[:3000]
+                # Hop 2:  note-URI -> text
+                elif pred_uri == RDF_VALUE and literal:
+                    if subj_uri.startswith(AAT_SCOPE_NOTE_URI_PREFIX):
+                        if lang == 'en':
+                            note_uri_to_text[subj_uri] = literal
 
-        self.stdout.write(f"  … {line_count:,} lines total")
-        return children, labels, notes
+        self.stdout.write(
+            f"  ... {line_count:,} lines in {AAT_NT_SCOPE_NOTES}")
+
+        # Resolve: for each concept, pick the first English note we find
+        notes = {}
+        for concept_id, note_uris in concept_to_note_uris.items():
+            for uri in sorted(note_uris):  # deterministic order
+                text = note_uri_to_text.get(uri)
+                if text:
+                    notes[concept_id] = text[:3000]
+                    break
+
+        return notes
 
     # ------------------------------------------------------------------
-    # Pass 2: Walk hierarchy from roots downward
+    # Walk hierarchy from roots downward
     # ------------------------------------------------------------------
 
-    def _walk_hierarchy(self, children, labels, notes):
+    def _walk_hierarchy(self, preferred_parent, children, labels, notes):
         """
         BFS from each root node downward through the children dict.
+
+        Uses preferred_parent to set the parent_id field (canonical parent),
+        but walks ALL children edges (preferred + generic) to find every
+        descendant reachable from the root nodes.
+
         Returns a list of dicts ready for upserting:
-            [{aat_id, parent_id, term, term_full, note, fclass, path, depth}, ...]
+            [{aat_id, parent_id, term, term_full, note, fclass, path,
+              depth, is_place_type}, ...]
         """
         result = []
         visited = set()
 
-        # Queue items: (aat_id, parent_aat_id_or_None, path_so_far, depth, fclass)
+        # Queue items: (aat_id, walk_parent, path_so_far, depth, fclass)
         queue = []
         for root_id in ROOT_AAT_IDS:
             fclass = ROOT_TO_FCLASS[root_id]
             queue.append((root_id, None, str(root_id), 0, fclass))
 
         while queue:
-            aat_id, parent_id, path, depth, fclass = queue.pop(0)
+            aat_id, walk_parent_id, path, depth, fclass = queue.pop(0)
             if aat_id in visited:
                 continue
             visited.add(aat_id)
 
+            # Use the canonical broaderPreferred parent if available,
+            # otherwise fall back to the walk parent
+            canonical_parent = preferred_parent.get(aat_id, walk_parent_id)
             term = labels.get(aat_id, f"aat:{aat_id}")
             note = notes.get(aat_id, '')
 
             result.append({
                 'aat_id': aat_id,
-                'parent_id': parent_id,
+                'parent_id': canonical_parent,
                 'term': term[:100],
                 'term_full': term[:100],
                 'note': note[:3000],
@@ -466,11 +666,12 @@ class Command(BaseCommand):
                 'is_place_type': True,
             })
 
-            # Enqueue children
+            # Enqueue children (from both preferred and generic edges)
             for child_id in sorted(children.get(aat_id, [])):
                 if child_id not in visited:
                     child_path = f"{path}.{child_id}"
-                    queue.append((child_id, aat_id, child_path, depth + 1, fclass))
+                    queue.append((child_id, aat_id, child_path,
+                                  depth + 1, fclass))
 
         return result
 
