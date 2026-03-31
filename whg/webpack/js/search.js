@@ -14,7 +14,6 @@ import '../css/dateline.css';
 import '../css/search.css';
 
 let results = null;
-let checkboxStates = {};
 let draw;
 let $drawControl;
 let countryCache = new CountryCacheFeatureCollection();
@@ -63,6 +62,25 @@ function updateTreeBadge() {
     const $badge = $('#tree_selection_badge');
     if (count > 0) {
         $badge.text(count + ' selected').show();
+    } else {
+        $badge.hide();
+    }
+    updateActiveFiltersBadge();
+}
+
+// --- Active-filters badge on the Filters toggle button ---
+function updateActiveFiltersBadge() {
+    let count = 0;
+    if (typeTree && typeTree.selectionCount() > 0) count++;
+    const chronVal = $('#chrononym_input').val();
+    if (chronVal && chronVal.trim()) count++;
+    const catVal = $('#categorySelector').val();
+    if (catVal && catVal !== 'none') count++;
+    if (window.dateline && window.dateline.open) count++;
+    if (draw && draw.getAll().features.length > 0) count++;
+    const $badge = $('#active_filters_badge');
+    if (count > 0) {
+        $badge.text(count).show();
     } else {
         $badge.hide();
     }
@@ -696,12 +714,6 @@ Promise.all([
     });
 
 
-    $(document).on('click', '.check_clear, .check_select', (e) => { // Result Filters
-        $(e.target).closest('.accordion-collapse')
-            .find('.accordion-body input.filter-checkbox')
-            .prop('checked', $(e.target).hasClass('check_select'))
-            .trigger('change');
-    });
 
     whg_map.on('draw.create', initiateSearch); // draw events fail to register if not done individually
     whg_map.on('draw.delete', initiateSearch);
@@ -712,16 +724,6 @@ Promise.all([
             title: function () {
                 return $(this).data('title').split('|')[$(this).hasClass('disabledButton') ? 1 : 0];
             }
-        });
-    });
-
-    $('.accordion-button').each(function () { // Initialise Filter Accordions
-        var accordion = $($(this).data('bs-target'));
-        var accordionHeader = accordion.siblings('.accordion-header');
-        var chevron = accordionHeader.find('.accordion-toggle-indicator i');
-        accordionHeader.on('click', function () {
-            chevron.toggleClass('fa-chevron-up fa-chevron-down');
-            accordion.collapse('toggle');
         });
     });
 
@@ -743,7 +745,6 @@ function clearResults() { // Reset all inputs to default values
         window.whgTypeahead.closeDropdown();
     }
     $('#search_input').val('');
-    $('#result_facets input[type="checkbox"]').prop('checked', false);
     if (typeTree) {
         typeTree.clearAll();
         $('#tree_selection_badge').hide();
@@ -757,13 +758,14 @@ function clearResults() { // Reset all inputs to default values
     whg_map.getSource('countries').setData(whg_map.nullCollection());
     $('#search_content')
         .toggleClass('initial', true)
-        .toggleClass('no-results', true)
-        .toggleClass('no-filtered-results', false);
+        .toggleClass('no-results', true);
     $('#search_results').empty();
     localStorage.removeItem('last_search');
     $('#clearButton').click();
+    $('#chrononym_input').val('').removeAttr('data-chrononym-id');
     searchDisabled = false;
     toggleButtonState();
+    updateActiveFiltersBadge();
 
 }
 
@@ -772,12 +774,10 @@ function renderResults(data, fromStorage = false) {
     let $resultsDiv = $('#search_results');
     $resultsDiv.empty();
     $('#search_content').toggleClass('initial', false);
-    $('#search_content').toggleClass('no-filtered-results', false);
 
     if (fromStorage) { // Initialise by setting all inputs to retrieved values
         $('#search_mode').val(data.parameters.mode);
         $('#search_input').val(data.parameters.qstr);
-        $('#result_facets input[type="checkbox"]').prop('checked', false);
 
         if (data.parameters.tree_selections && data.parameters.tree_selections.length > 0) {
             // Tree selections were active — show badge
@@ -821,7 +821,7 @@ function renderResults(data, fromStorage = false) {
     results = featureCollection.features;
 
     // Update Results
-    $('#search_content').toggleClass('no-results', results.length == 0); // CSS hides #search_results, #result_facets
+    $('#search_content').toggleClass('no-results', results.length == 0); // CSS hides #search_results
 
     results.forEach((feature, index) => {
         let result = feature.properties;
@@ -1011,141 +1011,14 @@ function renderResults(data, fromStorage = false) {
         $('#detail').empty(); // Clear the detail view
     }
 
-    buildResultFilters();
-
-}
-
-function buildResultFilters() {
-
-    const {
-        typesSet,
-        typeCounts,
-    } = results.reduce(({
-                            typesSet,
-                            typeCounts,
-                        }, feature) => {
-        const result = feature.properties;
-        result.types.forEach(type => {
-            typesSet.add(type);
-            typeCounts[type] = (typeCounts[type] || 0) + 1;
-        });
-        return {
-            typesSet,
-            typeCounts,
-        };
-    }, {
-        typesSet: new Set(),
-        typeCounts: {},
-    });
-
-    const allTypes = Array.from(typesSet).sort();
-
-    var typesShowing = $('#headingTypes').find('.accordion-toggle-indicator i').hasClass('fa-chevron-up');
-    if ((allTypes.length <= 5 && !typesShowing) ||
-        (allTypes.length > 5 && typesShowing)) {
-        $('#headingTypes button').click();
-    }
-
-    $('#type_checkboxes').html(allTypes.map(type => {
-        const count = typeCounts[type] || 0;
-        return `
-	    <p><input
-	      type="checkbox"
-	      id="type_${type.replace(' ', '_')}"
-	      value="${type}"
-	      class="filter-checkbox type-checkbox"
-	      checked="${checkboxStates[type] || false}"
-	    />
-	    <label for="type_${type}">${type == '' ? 'unspecified' : type} (${count})</label></p>`;
-    }).join(''));
-
-    const {
-        countriesSet,
-        countryCounts,
-    } = results.reduce(({
-                            countriesSet,
-                            countryCounts,
-                        }, feature) => {
-        const result = feature.properties;
-        result.ccodes.forEach(country => {
-            countriesSet.add(country);
-            countryCounts[country] = (countryCounts[country] || 0) + 1;
-        });
-        return {
-            countriesSet,
-            countryCounts,
-        };
-    }, {
-        countriesSet: new Set(),
-        countryCounts: {},
-    });
-
-    const allCountries = Array.from(countriesSet).sort();
-
-    $('#headingCountries').parent().toggle(allCountries.length > 0);
-
-    var countriesShowing = $('#headingCountries').find('.accordion-toggle-indicator i').hasClass('fa-chevron-up');
-    if ((allCountries.length <= 5 && !countriesShowing) ||
-        (allCountries.length > 5 && countriesShowing)) {
-        $('#headingCountries button').click();
-    }
-
-    $('#country_checkboxes').html(allCountries.map(country => {
-        const cName = ccode_hash[country]['gnlabel'];
-        const count = countryCounts[country] || 0;
-        return `
-	    <p><input
-	      type="checkbox"
-	      id="country_${country}"
-	      value="${country}"
-	      class="filter-checkbox country-checkbox"
-	      checked="${checkboxStates[country] || false}"
-	    />
-	    <label for="country_${country}">${cName} (${country}; ${count})</label></p>`;
-    }).join(''));
-
-    $('#typesCount').text(`(${allTypes.length})`);
-    $('#countriesCount').text(`(${allCountries.length})`);
-
-    $('.filter-checkbox').change(function () {
-        // store state
-        checkboxStates[this.value] = this.checked;
-
-        // Get all checked checkboxes
-        let checkedTypes = $('.type-checkbox:checked').map(function () {
-            return this.value;
-        }).get();
-        let checkedCountries = $('.country-checkbox:checked').map(function () {
-            return this.value;
-        }).get();
-
-        const filteredResults = results.filter(feature => {
-            const hasCommonType = feature.properties.types.some(
-                type => checkedTypes.includes(type));
-            const hasCommonCountry = allCountries.length == 0 || feature.properties.ccodes.some(
-                country => checkedCountries.includes(country));
-            return hasCommonType && hasCommonCountry;
-        });
-
-        whg_map.getSource('places').setData({
-            type: 'FeatureCollection',
-            features: filteredResults,
-        });
-        const $pidLinks = $('#result_container .portal-link');
-        $pidLinks.each(function () {
-            const show = filteredResults.some(
-                feature => feature.properties.pid === $(this).data('pid'));
-            $(this).closest('.result').toggle(show);
-        });
-        $('#search_content').toggleClass('no-filtered-results', filteredResults.length == 0);
-
-    });
 
 }
 
 function initiateSearch() {
 
     if (searchDisabled) return;
+
+    updateActiveFiltersBadge();
 
     const options = gatherOptions();
 
