@@ -292,9 +292,19 @@ def get_type_tree_json(root_aat_id=None):
     return nodes
 
 
+def _strip_diacritics(text):
+    """Remove combining diacritical marks so e.g. 'châteaux' → 'chateaux'."""
+    import unicodedata
+    if not text:
+        return text or ""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in nfkd if unicodedata.category(ch)[0] != "M")
+
+
 def search_types(query, limit=30):
     """
-    Search the Type table for terms matching *query* (case-insensitive).
+    Search the Type table for terms matching *query* (case-insensitive,
+    accent-insensitive).
 
     Returns a list of dicts with ``aat_id``, ``text``, and ``ancestors``
     (the materialized-path AAT ids from root to the matched node,
@@ -305,15 +315,23 @@ def search_types(query, limit=30):
     if not query or len(query) < 2:
         return []
 
-    matches = (
+    query_folded = _strip_diacritics(query).lower()
+
+    # Fetch candidates using the DB icontains (catches most matches)
+    # plus a broader pass with the accent-stripped form, then filter
+    # in Python to cover accented terms the DB lookup would miss.
+    candidates = (
         Type.objects
-        .filter(term__icontains=query, is_place_type=True)
+        .filter(is_place_type=True)
         .exclude(term__startswith='<')
-        .order_by('term')[:limit]
+        .order_by('term')
     )
 
     results = []
-    for m in matches:
+    for m in candidates.iterator():
+        term_folded = _strip_diacritics(m.term).lower()
+        if query_folded not in term_folded:
+            continue
         text, guide = _clean_label(m.term)
         if guide:
             continue
@@ -326,6 +344,8 @@ def search_types(query, limit=30):
             'text': text,
             'ancestors': ancestors,
         })
+        if len(results) >= limit:
+            break
     return results
 
 
