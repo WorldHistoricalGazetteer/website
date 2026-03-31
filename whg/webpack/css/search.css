@@ -533,10 +533,8 @@ span.select2-selection {
 }
 .tt-search-results {
     display: none;
-    position: absolute;
-    left: 0;
-    right: 0;
-    z-index: 10;
+    position: fixed;
+    z-index: 10000;
     max-height: 180px;
     overflow-y: auto;
     background: #fff;

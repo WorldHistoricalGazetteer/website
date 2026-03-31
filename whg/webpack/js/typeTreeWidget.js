@@ -19,6 +19,19 @@
 
 const TREE_URL = '/types/tree/';
 
+/** GeoNames feature-class labels shown as badge tooltips. */
+const FCLASS_LABELS = {
+    A: 'Administrative divisions',
+    H: 'Hydrographic features',
+    L: 'Area features',
+    P: 'Populated places',
+    R: 'Road / railroad features',
+    S: 'Spot features',
+    T: 'Hypsographic features',
+    U: 'Undersea features',
+    V: 'Vegetation features',
+};
+
 export default class TypeTreeWidget {
 
     /**
@@ -64,9 +77,12 @@ export default class TypeTreeWidget {
                                placeholder="Search types…" autocomplete="off" spellcheck="false">
                         <span class="tt-search-clear" title="Clear">&times;</span>
                     </div>
-                    <div class="tt-search-results"></div>
                 </div>
             `);
+            // Results dropdown lives on <body> so it isn't clipped by
+            // the overflow:auto tree container.
+            this._$searchResults = $('<div class="tt-search-results"></div>')
+                .appendTo(document.body);
             this.$el.append($searchWrap);
             this._setupSearch($searchWrap);
 
@@ -146,7 +162,11 @@ export default class TypeTreeWidget {
 
         // fclass badges
         const badges = (node.fclasses || []).map(
-            f => `<span class="tt-badge tt-badge-${f.toLowerCase()}">${f}</span>`
+            f => {
+                const key = f.toUpperCase();
+                const title = FCLASS_LABELS[key] || key;
+                return `<span class="tt-badge tt-badge-${f.toLowerCase()}" title="${title}">${f}</span>`;
+            }
         ).join('');
 
         if ($cb) {
@@ -303,12 +323,24 @@ export default class TypeTreeWidget {
 
     _setupSearch($wrap) {
         const $input = $wrap.find('.tt-search-input');
-        const $results = $wrap.find('.tt-search-results');
+        const $results = this._$searchResults;
         const $clear = $wrap.find('.tt-search-clear');
+
+        const positionDropdown = () => {
+            const rect = $input[0].getBoundingClientRect();
+            $results.css({
+                top:   rect.bottom + 'px',
+                left:  rect.left   + 'px',
+                width: rect.width  + 'px',
+            });
+        };
+
+        const hideResults = () => $results.hide();
 
         const clearSearch = () => {
             $input.val('');
-            $results.hide().empty();
+            hideResults();
+            $results.empty();
             $clear.hide();
             this.$el.find('.tt-highlight').removeClass('tt-highlight');
         };
@@ -318,11 +350,12 @@ export default class TypeTreeWidget {
             const q = $input.val().trim();
             $clear.toggle(q.length > 0);
             if (q.length < 2) {
-                $results.hide().empty();
+                hideResults();
+                $results.empty();
                 return;
             }
             this._searchTimer = setTimeout(() => {
-                this._fetchSearchResults(q, $results);
+                this._fetchSearchResults(q, $results, positionDropdown);
             }, 300);
         });
 
@@ -336,18 +369,24 @@ export default class TypeTreeWidget {
 
         // Close results dropdown on outside click
         $(document).on('mousedown', (e) => {
-            if (!$(e.target).closest('.tt-search').length) {
-                $results.hide();
+            if (!$(e.target).closest('.tt-search').length &&
+                !$(e.target).closest('.tt-search-results').length) {
+                hideResults();
             }
         });
+
+        // Hide when the page scrolls (the fixed dropdown would be misaligned)
+        $(window).on('scroll', hideResults);
     }
 
-    async _fetchSearchResults(query, $results) {
+    async _fetchSearchResults(query, $results, positionDropdown) {
         try {
             const data = await $.getJSON(`${TREE_URL}search/?q=${encodeURIComponent(query)}`);
             $results.empty();
             if (!data.length) {
-                $results.html('<div class="tt-search-empty">No matching types</div>').show();
+                $results.html('<div class="tt-search-empty">No matching types</div>');
+                positionDropdown();
+                $results.show();
                 return;
             }
             data.forEach(item => {
@@ -360,6 +399,7 @@ export default class TypeTreeWidget {
                 });
                 $results.append($item);
             });
+            positionDropdown();
             $results.show();
         } catch (err) {
             console.error('TypeTreeWidget: search failed', err);
