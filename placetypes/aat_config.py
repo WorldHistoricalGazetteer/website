@@ -107,6 +107,20 @@ AAT_FCLASS_MAP = {
 }
 
 # ---------------------------------------------------------------------------
+# Tree widget display overrides
+# ---------------------------------------------------------------------------
+# Nodes promoted to the root level of the type-tree widget.
+AAT_TREE_PROMOTE_TO_ROOT = {
+    300008347,   # inhabited places — extracted as a top-level entry
+}
+
+# Nodes removed from the tree display; their children (minus promoted ones)
+# are reparented to the grandparent node.
+AAT_TREE_SKIP_NODES = {
+    300008346,   # Settlements and Landscapes (hierarchy name)
+}
+
+# ---------------------------------------------------------------------------
 # Friendly labels for the search UI filter categories
 # ---------------------------------------------------------------------------
 CATEGORY_LABELS = {

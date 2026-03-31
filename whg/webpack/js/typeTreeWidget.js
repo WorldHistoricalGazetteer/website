@@ -7,6 +7,9 @@
  * the minimal set of selected AAT identifiers (parent selection implies
  * all descendants — the server expands via expand_type_identifiers).
  *
+ * Includes an inline search box that queries /types/tree/search/?q=...
+ * and expands the tree to reveal matched nodes.
+ *
  * Usage:
  *   import TypeTreeWidget from './typeTreeWidget';
  *   const tree = new TypeTreeWidget('#aat_type_tree', {
@@ -27,6 +30,7 @@ export default class TypeTreeWidget {
         this.$el = $(container);
         this._onchange = opts.onchange || function () {};
         this._initialised = false;
+        this._searchTimer = null;
     }
 
     /* ------------------------------------------------------------ *
@@ -51,6 +55,19 @@ export default class TypeTreeWidget {
                 );
                 return;
             }
+
+            // --- Search box (sticky at top of scrollable container) ---
+            const $searchWrap = $(`
+                <div class="tt-search">
+                    <input type="text" class="tt-search-input form-control form-control-sm"
+                           placeholder="Search types…" autocomplete="off" spellcheck="false">
+                    <div class="tt-search-results"></div>
+                </div>
+            `);
+            this.$el.append($searchWrap);
+            this._setupSearch($searchWrap);
+
+            // --- Tree ---
             const $root = $('<ul class="tt-root"></ul>');
             nodes.forEach(n => $root.append(this._renderNode(n)));
             this.$el.append($root);
@@ -94,6 +111,7 @@ export default class TypeTreeWidget {
         this.$el.find('.tt-cb')
             .prop('checked', false)
             .prop('indeterminate', false);
+        this.$el.find('.tt-highlight').removeClass('tt-highlight');
         this._onchange();
     }
 
@@ -213,6 +231,15 @@ export default class TypeTreeWidget {
         $children.slideDown(120);
     }
 
+    /** Expand a node if it is collapsed; no-op if already open or a leaf. */
+    async _ensureExpanded($li) {
+        const $children = $li.children('.tt-children');
+        if ($children.length === 0) return;  // leaf
+        if ($children.is(':hidden')) {
+            await this._toggle($li);
+        }
+    }
+
     /* ------------------------------------------------------------ *
      *  Internal: tri-state checkbox propagation
      * ------------------------------------------------------------ */
@@ -268,6 +295,94 @@ export default class TypeTreeWidget {
     }
 
     /* ------------------------------------------------------------ *
+     *  Search
+     * ------------------------------------------------------------ */
+
+    _setupSearch($wrap) {
+        const $input = $wrap.find('.tt-search-input');
+        const $results = $wrap.find('.tt-search-results');
+
+        $input.on('input', () => {
+            clearTimeout(this._searchTimer);
+            const q = $input.val().trim();
+            if (q.length < 2) {
+                $results.hide().empty();
+                return;
+            }
+            this._searchTimer = setTimeout(() => {
+                this._fetchSearchResults(q, $results);
+            }, 300);
+        });
+
+        $input.on('keydown', (e) => {
+            if (e.key === 'Escape') {
+                $input.val('');
+                $results.hide().empty();
+                this.$el.find('.tt-highlight').removeClass('tt-highlight');
+            }
+        });
+
+        // Close results dropdown on outside click
+        $(document).on('mousedown', (e) => {
+            if (!$(e.target).closest('.tt-search').length) {
+                $results.hide();
+            }
+        });
+    }
+
+    async _fetchSearchResults(query, $results) {
+        try {
+            const data = await $.getJSON(`${TREE_URL}search/?q=${encodeURIComponent(query)}`);
+            $results.empty();
+            if (!data.length) {
+                $results.html('<div class="tt-search-empty">No matching types</div>').show();
+                return;
+            }
+            data.forEach(item => {
+                const $item = $(`<div class="tt-search-item">${this._esc(item.text)}</div>`);
+                $item.on('mousedown', async (e) => {
+                    e.preventDefault();
+                    $results.hide();
+                    this.$el.find('.tt-highlight').removeClass('tt-highlight');
+                    await this._expandToNode(item.aat_id, item.ancestors);
+                });
+                $results.append($item);
+            });
+            $results.show();
+        } catch (err) {
+            console.error('TypeTreeWidget: search failed', err);
+        }
+    }
+
+    /**
+     * Walk the ancestor path, expanding each node in turn, then
+     * highlight and scroll to the target node.
+     */
+    async _expandToNode(targetAatId, ancestors) {
+        for (const aat of ancestors) {
+            if (aat === targetAatId) break;
+            const $node = this.$el.find(`[data-aat-id="${aat}"]`);
+            if ($node.length === 0) continue;  // skip nodes not in display tree
+            await this._ensureExpanded($node);
+        }
+
+        const $target = this.$el.find(`[data-aat-id="${targetAatId}"]`);
+        if ($target.length) {
+            $target.addClass('tt-highlight');
+            // Scroll the tree container so the target is visible
+            const container = this.$el.closest('#type_tree_container')[0];
+            if (container) {
+                const targetEl = $target[0];
+                const cRect = container.getBoundingClientRect();
+                const tRect = targetEl.getBoundingClientRect();
+                if (tRect.top < cRect.top || tRect.bottom > cRect.bottom) {
+                    container.scrollTop += (tRect.top - cRect.top) - (cRect.height / 2) + (tRect.height / 2);
+                }
+            }
+        }
+    }
+
+    /* ------------------------------------------------------------ *
      *  Helpers
      * ------------------------------------------------------------ */
 
@@ -277,4 +392,3 @@ export default class TypeTreeWidget {
         return d.innerHTML;
     }
 }
-

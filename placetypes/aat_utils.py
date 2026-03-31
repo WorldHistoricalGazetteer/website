@@ -160,13 +160,25 @@ def get_type_tree_json(root_aat_id=None):
     """
     Return a JSON-serialisable tree structure for the type selector widget.
 
-    If root_aat_id is None, returns the entry-point nodes (depth == 0).
-    Otherwise returns the immediate children of the given node.
+    If root_aat_id is None, returns the root-level nodes (entry-point
+    concepts at depth 0 **plus** any nodes configured in
+    ``AAT_TREE_PROMOTE_TO_ROOT``).
+
+    Otherwise returns the immediate *visible* children of the given node,
+    accounting for ``AAT_TREE_SKIP_NODES`` (whose children are reparented
+    to the grandparent) and ``AAT_TREE_PROMOTE_TO_ROOT`` (excluded from
+    child lists since they appear at the root).
 
     Each node dict has:
         id, aat_id, text, fclasses, guide, children (True | [])
     """
     from placetypes.models import Type
+    from placetypes.aat_config import (
+        AAT_TREE_PROMOTE_TO_ROOT,
+        AAT_TREE_SKIP_NODES,
+    )
+
+    _skip_and_promote = AAT_TREE_SKIP_NODES | AAT_TREE_PROMOTE_TO_ROOT
 
     def _to_node(t, has_kids):
         text, guide = _clean_label(t.term)
@@ -179,44 +191,130 @@ def get_type_tree_json(root_aat_id=None):
             "children": True if has_kids else [],
         }
 
+    def _has_visible_children(t):
+        """Does *t* have at least one child visible in the restructured tree?"""
+        # Fast path: any normal (non-skip, non-promote) direct children?
+        if Type.objects.filter(
+            path__startswith=f"{t.path}.",
+            depth=t.depth + 1,
+            is_place_type=True,
+        ).exclude(aat_id__in=_skip_and_promote).exists():
+            return True
+
+        # Slower path: check children of any skip-node children.
+        for skip in Type.objects.filter(
+            path__startswith=f"{t.path}.",
+            depth=t.depth + 1,
+            is_place_type=True,
+            aat_id__in=AAT_TREE_SKIP_NODES,
+        ):
+            if Type.objects.filter(
+                path__startswith=f"{skip.path}.",
+                depth=skip.depth + 1,
+                is_place_type=True,
+            ).exclude(aat_id__in=AAT_TREE_PROMOTE_TO_ROOT).exists():
+                return True
+
+        return False
+
+    def _visible_children_of(parent_type):
+        """
+        Yield Type instances that should appear as children of *parent_type*
+        in the display tree.
+        """
+        direct = Type.objects.filter(
+            path__startswith=f"{parent_type.path}.",
+            depth=parent_type.depth + 1,
+            is_place_type=True,
+        )
+        collected = []
+        for child in direct:
+            if child.aat_id in AAT_TREE_PROMOTE_TO_ROOT:
+                continue          # shown at root level
+            if child.aat_id in AAT_TREE_SKIP_NODES:
+                # Reparent this node's children (minus promoted ones)
+                for gc in Type.objects.filter(
+                    path__startswith=f"{child.path}.",
+                    depth=child.depth + 1,
+                    is_place_type=True,
+                ).exclude(aat_id__in=AAT_TREE_PROMOTE_TO_ROOT):
+                    collected.append(gc)
+                continue
+            collected.append(child)
+        collected.sort(key=lambda t: t.term.lower())
+        return collected
+
+    # ------------------------------------------------------------------
+
     if root_aat_id is None:
-        # Root level: the entry-point concepts themselves (depth 0).
-        # This groups sovereign-state types under "sovereign states", etc.
+        # Root level: depth-0 entry points + promoted nodes.
         nodes = []
+        seen = set()
+
         for t in Type.objects.filter(
             depth=0, is_place_type=True,
         ).order_by('term'):
-            has_children = Type.objects.filter(
-                path__startswith=f"{t.path}.",
-                is_place_type=True,
-            ).exists()
-            nodes.append(_to_node(t, has_children))
+            nodes.append(_to_node(t, _has_visible_children(t)))
+            seen.add(t.aat_id)
+
+        for t in Type.objects.filter(
+            aat_id__in=AAT_TREE_PROMOTE_TO_ROOT,
+            is_place_type=True,
+        ):
+            if t.aat_id not in seen:
+                nodes.append(_to_node(t, _has_visible_children(t)))
+                seen.add(t.aat_id)
+
+        nodes.sort(key=lambda n: n['text'].lower())
         return nodes
 
-    # Children of a specific node — one level deeper in the path.
+    # Children of a specific node.
     try:
         parent = Type.objects.get(aat_id=root_aat_id)
     except Type.DoesNotExist:
         return []
 
-    parent_path = parent.path
-    parent_depth = parent.depth
-
-    children_qs = Type.objects.filter(
-        path__startswith=f"{parent_path}.",
-        depth=parent_depth + 1,
-        is_place_type=True,
-    ).order_by('term')
-
     nodes = []
-    for t in children_qs:
-        has_children = Type.objects.filter(
-            path__startswith=f"{t.path}.",
-            is_place_type=True,
-        ).exists()
-        nodes.append(_to_node(t, has_children))
-
+    for t in _visible_children_of(parent):
+        nodes.append(_to_node(t, _has_visible_children(t)))
     return nodes
+
+
+def search_types(query, limit=30):
+    """
+    Search the Type table for terms matching *query* (case-insensitive).
+
+    Returns a list of dicts with ``aat_id``, ``text``, and ``ancestors``
+    (the materialized-path AAT ids from root to the matched node,
+    inclusive).  Guide terms are excluded.
+    """
+    from placetypes.models import Type
+
+    if not query or len(query) < 2:
+        return []
+
+    matches = (
+        Type.objects
+        .filter(term__icontains=query, is_place_type=True)
+        .exclude(term__startswith='<')
+        .order_by('term')[:limit]
+    )
+
+    results = []
+    for m in matches:
+        text, guide = _clean_label(m.term)
+        if guide:
+            continue
+        ancestors = (
+            [int(x) for x in m.path.split('.')]
+            if m.path else [m.aat_id]
+        )
+        results.append({
+            'aat_id': m.aat_id,
+            'text': text,
+            'ancestors': ancestors,
+        })
+    return results
 
 
 def invalidate_caches():
