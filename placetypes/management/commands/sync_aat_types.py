@@ -137,11 +137,10 @@ class Command(BaseCommand):
             else:
                 nt_dir = self._download_if_needed(force)
                 if nt_dir is None:
-                    self.stdout.write(self.style.SUCCESS(
-                        "AAT dump has not changed since last sync. "
-                        "Use --force to re-download."
-                    ))
-                    return
+                    raise CommandError(
+                        "No cached AAT dump files found and the remote "
+                        "returned 304. Use --force to re-download."
+                    )
 
             # -- Step 2: Parse the three files -----------------------------
             t1 = time.time()
@@ -338,7 +337,11 @@ class Command(BaseCommand):
             cache = self._cache_dir()
             needed = [AAT_NT_HIERARCHICAL_RELS, AAT_NT_TERMS, AAT_NT_SCOPE_NOTES]
             if all((cache / n).exists() for n in needed):
-                return None
+                self.stdout.write(
+                    "AAT dump has not changed since last sync "
+                    "(skipping download, using cached files)."
+                )
+                return cache
 
         if resp.status_code not in (200, 302, 304):
             raise CommandError(
