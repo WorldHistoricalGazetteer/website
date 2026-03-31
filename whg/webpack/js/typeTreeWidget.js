@@ -37,12 +37,20 @@ export default class TypeTreeWidget {
     async init() {
         if (this._initialised) return;
         this._initialised = true;
+        console.log('TypeTreeWidget: initialising, fetching', TREE_URL);
         this.$el.html(
             '<div class="tt-loading"><i class="fas fa-spinner fa-spin"></i> Loading types…</div>'
         );
         try {
             const nodes = await $.getJSON(TREE_URL);
+            console.log('TypeTreeWidget: received', nodes.length, 'root nodes');
             this.$el.empty();
+            if (!nodes.length) {
+                this.$el.html(
+                    '<div class="tt-error">No place types found. Run <code>manage.py sync_aat_types</code>.</div>'
+                );
+                return;
+            }
             const $root = $('<ul class="tt-root"></ul>');
             nodes.forEach(n => $root.append(this._renderNode(n)));
             this.$el.append($root);

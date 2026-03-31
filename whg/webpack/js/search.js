@@ -56,6 +56,37 @@ let mapParameters = {
 };
 let whg_map = new whg_maplibre.Map(mapParameters);
 
+// --- AAT Type Tree Widget (initialised independently of map/CDN loading) ---
+function updateTreeBadge() {
+    if (!typeTree) return;
+    const count = typeTree.selectionCount();
+    const $badge = $('#tree_selection_badge');
+    if (count > 0) {
+        $badge.text(count + ' selected').show();
+    } else {
+        $badge.hide();
+    }
+}
+
+waitDocumentReady().then(() => {
+    console.log('TypeTreeWidget: DOM ready, constructing widget');
+    typeTree = new TypeTreeWidget('#aat_type_tree', {
+        onchange: () => {
+            updateTreeBadge();
+            initiateSearch();
+        },
+    });
+    typeTree.init();
+
+    $('#tree_clear').on('click', function (e) {
+        e.preventDefault();
+        if (typeTree) {
+            typeTree.clearAll();
+            updateTreeBadge();
+        }
+    });
+});
+
 function waitMapLoad() {
     return new Promise((resolve) => {
         whg_map.on('load', () => {
@@ -664,36 +695,6 @@ Promise.all([
         if (!$(this).hasClass('disabledButton')) initiateSearch();
     });
 
-    // --- AAT Type Tree Widget ---
-    function updateTreeBadge() {
-        if (!typeTree) return;
-        const count = typeTree.selectionCount();
-        const $badge = $('#tree_selection_badge');
-        if (count > 0) {
-            $badge.text(count + ' selected').show();
-        } else {
-            $badge.hide();
-        }
-    }
-
-    typeTree = new TypeTreeWidget('#aat_type_tree', {
-        onchange: () => {
-            updateTreeBadge();
-            initiateSearch();
-        },
-    });
-
-    // Load the tree immediately
-    typeTree.init();
-
-    // Clear tree selections
-    $('#tree_clear').on('click', function (e) {
-        e.preventDefault();
-        if (typeTree) {
-            typeTree.clearAll();
-            updateTreeBadge();
-        }
-    });
 
     $(document).on('click', '.check_clear, .check_select', (e) => { // Result Filters
         $(e.target).closest('.accordion-collapse')

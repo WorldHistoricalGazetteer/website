@@ -79,4 +79,5 @@ class Type(models.Model):
         indexes = [
             models.Index(fields=['path']),
             models.Index(fields=['is_place_type']),
+            models.Index(fields=['depth', 'is_place_type']),
         ]

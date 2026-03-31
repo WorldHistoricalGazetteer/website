@@ -126,55 +126,64 @@ def get_type_tree_json(root_aat_id=None):
     """
     Return a JSON-serialisable tree structure for the type selector widget.
 
-    If root_aat_id is None, returns the top-level entry-point children.
-    Otherwise returns the children of the given node.
+    If root_aat_id is None, returns the top-level nodes (depth == 1 in the
+    walk, i.e. the immediate children of the entry points).
+    Otherwise returns the children of the given node using the materialized
+    path field.
+
+    Each node dict has:
+        id, aat_id, text, fclasses, children (True | [])
     """
     from placetypes.models import Type
     from placetypes.aat_config import AAT_ENTRY_POINTS
 
-    if root_aat_id is None:
-        # Return the immediate children of all entry points as top-level
-        entry_children_ids = set()
-        for ep in AAT_ENTRY_POINTS:
-            child_ids = Type.objects.filter(
-                parent_id=ep, is_place_type=True
-            ).values_list('aat_id', flat=True)
-            entry_children_ids.update(child_ids)
+    def _to_node(t, has_kids):
+        return {
+            "id": f"aat:{t.aat_id}",
+            "aat_id": t.aat_id,
+            "text": t.term,
+            "fclasses": t.fclasses or [],
+            "children": True if has_kids else [],
+        }
 
+    if root_aat_id is None:
+        # Top-level: depth-1 concepts under any entry point.
+        # These are the nodes whose path is "<entry_point>.<self>"
+        # (i.e. exactly one dot in the path).
         nodes = []
         for t in Type.objects.filter(
-            aat_id__in=entry_children_ids, is_place_type=True
+            depth=1, is_place_type=True,
         ).order_by('term'):
             has_children = Type.objects.filter(
-                parent_id=t.aat_id, is_place_type=True
+                path__startswith=f"{t.path}.",
+                is_place_type=True,
             ).exists()
-            nodes.append({
-                "id": f"aat:{t.aat_id}",
-                "aat_id": t.aat_id,
-                "text": t.term,
-                "fclasses": t.fclasses or [],
-                "children": True if has_children else [],
-            })
+            nodes.append(_to_node(t, has_children))
         return nodes
 
-    # Return children of a specific node
+    # Children of a specific node: find concepts whose path is
+    # exactly "<parent_path>.<child_aat_id>" — i.e. one level deeper.
+    try:
+        parent = Type.objects.get(aat_id=root_aat_id)
+    except Type.DoesNotExist:
+        return []
+
+    parent_path = parent.path
+    parent_depth = parent.depth
+
     children_qs = Type.objects.filter(
-        parent_id=root_aat_id,
+        path__startswith=f"{parent_path}.",
+        depth=parent_depth + 1,
         is_place_type=True,
     ).order_by('term')
 
     nodes = []
     for t in children_qs:
         has_children = Type.objects.filter(
-            parent_id=t.aat_id, is_place_type=True
+            path__startswith=f"{t.path}.",
+            is_place_type=True,
         ).exists()
-        nodes.append({
-            "id": f"aat:{t.aat_id}",
-            "aat_id": t.aat_id,
-            "text": t.term,
-            "fclasses": t.fclasses or [],
-            "children": True if has_children else [],
-        })
+        nodes.append(_to_node(t, has_children))
 
     return nodes
 
