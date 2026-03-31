@@ -59,8 +59,11 @@ export default class TypeTreeWidget {
             // --- Search box (sticky at top of scrollable container) ---
             const $searchWrap = $(`
                 <div class="tt-search">
-                    <input type="text" class="tt-search-input form-control form-control-sm"
-                           placeholder="Search types…" autocomplete="off" spellcheck="false">
+                    <div class="tt-search-input-wrap">
+                        <input type="text" class="tt-search-input form-control form-control-sm"
+                               placeholder="Search types…" autocomplete="off" spellcheck="false">
+                        <span class="tt-search-clear" title="Clear">&times;</span>
+                    </div>
                     <div class="tt-search-results"></div>
                 </div>
             `);
@@ -301,10 +304,19 @@ export default class TypeTreeWidget {
     _setupSearch($wrap) {
         const $input = $wrap.find('.tt-search-input');
         const $results = $wrap.find('.tt-search-results');
+        const $clear = $wrap.find('.tt-search-clear');
+
+        const clearSearch = () => {
+            $input.val('');
+            $results.hide().empty();
+            $clear.hide();
+            this.$el.find('.tt-highlight').removeClass('tt-highlight');
+        };
 
         $input.on('input', () => {
             clearTimeout(this._searchTimer);
             const q = $input.val().trim();
+            $clear.toggle(q.length > 0);
             if (q.length < 2) {
                 $results.hide().empty();
                 return;
@@ -316,11 +328,11 @@ export default class TypeTreeWidget {
 
         $input.on('keydown', (e) => {
             if (e.key === 'Escape') {
-                $input.val('');
-                $results.hide().empty();
-                this.$el.find('.tt-highlight').removeClass('tt-highlight');
+                clearSearch();
             }
         });
+
+        $clear.hide().on('click', clearSearch);
 
         // Close results dropdown on outside click
         $(document).on('mousedown', (e) => {
@@ -392,3 +404,4 @@ export default class TypeTreeWidget {
         return d.innerHTML;
     }
 }
+

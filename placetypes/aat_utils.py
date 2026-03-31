@@ -180,8 +180,19 @@ def get_type_tree_json(root_aat_id=None):
 
     _skip_and_promote = AAT_TREE_SKIP_NODES | AAT_TREE_PROMOTE_TO_ROOT
 
-    def _to_node(t, has_kids):
+    def _to_node(t, has_kids, parent_label=None):
         text, guide = _clean_label(t.term)
+        # Strip redundant parenthesised qualifiers that just repeat the
+        # parent's label, e.g. "countries (sovereign states)" → "countries"
+        # when displayed under the "sovereign states" parent node.
+        if parent_label:
+            import re
+            stripped = re.sub(
+                r'\s*\(' + re.escape(parent_label) + r'\)\s*$',
+                '', text, flags=re.IGNORECASE,
+            ).strip()
+            if stripped:
+                text = stripped
         return {
             "id": f"aat:{t.aat_id}",
             "aat_id": t.aat_id,
@@ -274,9 +285,10 @@ def get_type_tree_json(root_aat_id=None):
     except Type.DoesNotExist:
         return []
 
+    parent_label, _ = _clean_label(parent.term)
     nodes = []
     for t in _visible_children_of(parent):
-        nodes.append(_to_node(t, _has_visible_children(t)))
+        nodes.append(_to_node(t, _has_visible_children(t), parent_label=parent_label))
     return nodes
 
 
