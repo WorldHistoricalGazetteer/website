@@ -7,6 +7,7 @@ import debounce from 'lodash/debounce';
 import {geomsGeoJSON, initSimpleTypeahead,} from './utilities';
 import CountryParents from './countryParents';
 import {CountryCacheFeatureCollection} from './countryCache';
+import TypeTreeWidget from './typeTreeWidget';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/dateline.css';
@@ -19,6 +20,7 @@ let $drawControl;
 let countryCache = new CountryCacheFeatureCollection();
 let searchDisabled = false;
 let enteringPortal = false;
+let typeTree = null;
 
 // Load window.ccode_hash and window.regions
 const countryParents = new CountryParents();
@@ -676,6 +678,52 @@ Promise.all([
         initiateSearch();
     });
 
+    // --- AAT Type Tree Widget ---
+    function updateTreeBadge() {
+        if (!typeTree) return;
+        const count = typeTree.selectionCount();
+        const $badge = $('#tree_selection_badge');
+        const $clear = $('#tree_clear');
+        if (count > 0) {
+            $badge.text(count + ' selected').show();
+            $clear.show();
+        } else {
+            $badge.hide();
+            $clear.hide();
+        }
+    }
+
+    typeTree = new TypeTreeWidget('#aat_type_tree', {
+        onchange: () => {
+            updateTreeBadge();
+            initiateSearch();
+        },
+    });
+
+    // Toggle open/close the tree panel (lazy-init on first open)
+    $('#type_tree_toggle').on('click', function (e) {
+        e.preventDefault();
+        const $container = $('#type_tree_container');
+        const $icon = $('#tree_toggle_icon');
+        if ($container.is(':visible')) {
+            $container.slideUp(150);
+            $icon.removeClass('fa-caret-down').addClass('fa-caret-right');
+        } else {
+            typeTree.init(); // no-op if already initialised
+            $container.slideDown(150);
+            $icon.removeClass('fa-caret-right').addClass('fa-caret-down');
+        }
+    });
+
+    // Clear tree selections
+    $('#tree_clear').on('click', function (e) {
+        e.preventDefault();
+        if (typeTree) {
+            typeTree.clearAll();
+            updateTreeBadge();
+        }
+    });
+
     $(document).on('click', '.check_clear, .check_select', (e) => { // Result Filters
         $(e.target).closest('.accordion-collapse')
             .find('.accordion-body input.filter-checkbox')
@@ -725,6 +773,11 @@ function clearResults() { // Reset all inputs to default values
     $('#search_input').val('');
     $('#result_facets input[type="checkbox"]').prop('checked', false);
     $('#adv_checkboxes input').prop('checked', true);
+    if (typeTree) {
+        typeTree.clearAll();
+        $('#tree_selection_badge').hide();
+        $('#tree_clear').hide();
+    }
     window.dateline.reset(mapParameters.temporalControl.fromValue,
         mapParameters.temporalControl.toValue,
         mapParameters.temporalControl.open);
@@ -756,7 +809,21 @@ function renderResults(data, fromStorage = false) {
         $('#search_input').val(data.parameters.qstr);
         $('#result_facets input[type="checkbox"]').prop('checked', false);
 
-        if (data.parameters.fclasses) {
+        if (data.parameters.tree_selections && data.parameters.tree_selections.length > 0) {
+            // Tree selections were active — show badge, check all categories
+            $('#adv_checkboxes input').prop('checked', true);
+            const treeCount = data.parameters.tree_selections.length;
+            $('#tree_selection_badge').text(treeCount + ' selected').show();
+            $('#tree_clear').show();
+            // Open tree panel and init if needed
+            typeTree.init().then(() => {
+                // Note: we don't re-check tree nodes visually (they may not
+                // be loaded yet in the lazy tree). The badge indicates active
+                // tree filtering. The user can re-open the tree to adjust.
+            });
+            $('#type_tree_container').show();
+            $('#tree_toggle_icon').removeClass('fa-caret-right').addClass('fa-caret-down');
+        } else if (data.parameters.fclasses) {
             // fclasses now contains AAT identifiers - match against category identifiers
             const storedIdentifiers = data.parameters.fclasses.split(',').map(s => s.trim());
             $('#adv_checkboxes input').each(function (index, checkbox) {
@@ -1192,19 +1259,38 @@ function initiateSearch() {
 
 function gatherOptions() { // gather and return option values from the UI
 
-    // Collect AAT type identifiers from checked category checkboxes
-    const checkedCategories = $('#adv_checkboxes input:checked').map(function () {
-        return $(this).val();
-    }).get(); // .get() converts jQuery object to an array
+    // --- Type identifiers ---
+    // If the tree widget has explicit selections, use those (more specific).
+    // Otherwise fall back to the broad category checkboxes.
+    // When all categories are checked and no tree selections, send empty
+    // fclasses (= no type filter) to avoid a huge payload.
+    const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
+    let fclasses = '';
+    let treeSelections = [];
 
-    // Map checked category keys to their AAT identifiers
-    const typeIdentifiers = [];
-    checkedCategories.forEach(catKey => {
-        const category = adv_filters.find(f => f[0].toLowerCase() === catKey.toLowerCase());
-        if (category && category[2]) {
-            typeIdentifiers.push(...category[2]);
+    if (treeIds.length > 0) {
+        // Tree selections → the server will expand descendants
+        fclasses = treeIds.join(',');
+        treeSelections = treeIds;
+    } else {
+        // Category checkboxes
+        const checkedCategories = $('#adv_checkboxes input:checked').map(function () {
+            return $(this).val();
+        }).get();
+        const totalCategories = adv_filters.length;
+        if (checkedCategories.length > 0 && checkedCategories.length < totalCategories) {
+            // Subset of categories checked → send their identifiers
+            const catIdentifiers = [];
+            checkedCategories.forEach(catKey => {
+                const category = adv_filters.find(f => f[0].toLowerCase() === catKey.toLowerCase());
+                if (category && category[2]) {
+                    catIdentifiers.push(...category[2]);
+                }
+            });
+            fclasses = catIdentifiers.join(',');
         }
-    });
+        // else: all checked or none checked → empty fclasses = no type filter
+    }
 
     const areaFilter = {
         type: 'GeometryCollection',
@@ -1216,7 +1302,8 @@ function gatherOptions() { // gather and return option values from the UI
     const options = {
         qstr: $('#search_input').val(),
         idx: eswhg, // hard-coded in `search.html` template
-        fclasses: typeIdentifiers.join(','),
+        fclasses: fclasses,
+        tree_selections: treeSelections,  // persisted for restore
         temporal: window.dateline.open,
         start: window.dateline.open ? window.dateline.fromValue : '',
         end: window.dateline.open ? window.dateline.toValue : '',

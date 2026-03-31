@@ -26,6 +26,24 @@ def _has_geometries(bounds: dict) -> bool:
     return bool(geom_type)
 
 
+def _matches_type_filter(suggestion: dict, expanded_ids: set) -> bool:
+    """
+    Return True if the suggestion has at least one type whose AAT
+    identifier is in the *expanded_ids* set.
+
+    Falls back to True when the suggestion carries no type identifiers
+    at all (so untyped records are never silently dropped).
+    """
+    types_full = suggestion.get("types_full") or []
+    if not types_full:
+        return True  # no type info → don't filter out
+    return any(
+        t.get("identifier") in expanded_ids
+        for t in types_full
+        if t.get("identifier")
+    )
+
+
 def _adapt_gateway_hit(hit):
     """
     Convert a single CRC Gateway hit into the ``suggestionItem`` shape
@@ -274,6 +292,31 @@ class SearchView(View):
             _adapt_gateway_hit(hit)
             for hit in gateway_result.get("hits", [])
         ]
+
+        # --- Type filtering (fclasses) ----------------------------------
+        # fclasses contains comma-separated AAT identifiers (e.g.
+        # "aat:300008347,aat:300120579") from either the category
+        # checkboxes or the type tree widget.  When present, expand
+        # each identifier to include all AAT descendants, then keep
+        # only suggestions whose type identifiers intersect.
+        fclasses_raw = data.get("fclasses", "")
+        if fclasses_raw and isinstance(fclasses_raw, str):
+            fclass_ids = [s.strip() for s in fclasses_raw.split(",") if s.strip()]
+            if fclass_ids:
+                try:
+                    from placetypes.aat_utils import expand_type_identifiers
+                    expanded = set(expand_type_identifiers(fclass_ids))
+                    if expanded:
+                        suggestions = [
+                            s for s in suggestions
+                            if _matches_type_filter(s, expanded)
+                        ]
+                except Exception as exc:
+                    logger.warning(
+                        "Type filter expansion failed, skipping filter: %s",
+                        exc,
+                    )
+
         # Sort by linkcount descending (matching legacy behaviour)
         suggestions.sort(key=lambda s: s["linkcount"], reverse=True)
 

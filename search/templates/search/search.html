@@ -115,6 +115,22 @@
                     </p>
 					{% endfor %}
 				</div>
+                <div id="type_tree_section" class="mt-2 ps-1">
+                    <p class="mb-1">
+                        <a id="type_tree_toggle" href="#" class="categories">
+                            <i class="fas fa-caret-right" id="tree_toggle_icon"></i>
+                            browse specific types
+                        </a>
+                        <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
+                        <a id="tree_clear" href="#" class="ms-1 small" style="display:none">clear</a>
+                    </p>
+                    <div class="ps-1 border-secondary small fw-lighter fst-italic">
+                        <p class="mb-0">Optionally drill into the AAT hierarchy to select specific place types</p>
+                    </div>
+                    <div id="type_tree_container" style="display:none">
+                        <div id="aat_type_tree"></div>
+                    </div>
+                </div>
                 <div class="mt-3 mx-0">
                     <p class="mb-0">
                       <span class="categories ms-1">period filter</span>
