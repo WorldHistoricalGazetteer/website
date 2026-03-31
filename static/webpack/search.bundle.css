@@ -857,6 +857,7 @@ span.select2-selection {
     margin-left: 2px;
     color: #fff;
     line-height: 1.4;
+    cursor: help;
 }
 .tt-badge-a { background-color: #7b68ee; }
 .tt-badge-p { background-color: #e07b53; }
