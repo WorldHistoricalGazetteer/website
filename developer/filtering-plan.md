@@ -209,25 +209,118 @@ The context map shows all component polygons simultaneously: included
 regions in the standard semi-transparent fill, excluded regions in
 hatch fill, buffers as a lighter outer band.
 
-#### Implementation
+#### Architecture: Server-Side Composition via the CRC FastAPI
 
-> **Coding-agent note:** The composite geometry is computed
-> client-side using a geometry library (Turf.js is the natural choice
-> for union, buffer, and difference operations on GeoJSON).  The
-> resulting unified GeoJSON geometry is passed to ES as a single
-> `geo_shape` filter.  ES does not need to know about the
-> composition; it receives only the final geometry.
+The WHG ES instance runs on the Pitt CRC VM behind a **FastAPI**
+gateway.  Geometry composition and buffering happen there, not on
+the Django/DigitalOcean server or in the browser.
+
+**Geometry preview flow (interactive, as the user builds the filter):**
+
+When the user selects a named region or PeriodO period, the browser
+requests its geometry from the FastAPI so it can be drawn on the
+context map immediately.  The user needs to see what they are
+selecting.  This is a lightweight by-ID fetch:
+
+```
+GET /geometry/osm:relation/123456
+GET /geometry/periodo:ark:/99152/p05krdxmkzt
+```
+
+The FastAPI looks up the geometry in the `places` or
+`periodo_periods` ES index and returns it as GeoJSON.  The browser
+draws it on the map as a preview overlay.  For very complex polygons,
+the FastAPI may return a simplified version (e.g.
+`shapely.simplify(tolerance=0.01)`) to keep the preview responsive.
+
+The browser holds these preview geometries in memory for map display
+but does not send them back to the server.
+
+**Search flow (when the user executes the search):**
+
+The browser sends a compact filter descriptor.  Named geometries are
+referenced by ID; only user-drawn polygons are sent as GeoJSON:
+
+```json
+{
+  "spatial_components": [
+    {
+      "ref_type": "osm",
+      "ref_id":   "osm:relation/123456",
+      "mode":     "include",
+      "buffer_km": 5
+    },
+    {
+      "ref_type": "periodo",
+      "ref_id":   "http://n2t.net/ark:/99152/p05krdxmkzt",
+      "mode":     "include",
+      "buffer_km": 0
+    },
+    {
+      "ref_type": "drawn",
+      "geo":      { "type": "Polygon", "coordinates": [...] },
+      "mode":     "exclude",
+      "buffer_km": 0
+    }
+  ],
+  "temporal": { "start_year": -1200, "stop_year": -700 },
+  "periods":  ["http://n2t.net/ark:/99152/p05krdxmkzt"],
+  "type_filter": { ... },
+  "text_query": "..."
+}
+```
+
+The FastAPI then:
+
+1. Re-fetches the full-resolution polygon geometries for each `osm`
+   and `periodo` component by ID from ES.  (These may be more
+   detailed than the simplified previews sent to the browser.)
+2. Applies per-component buffers using Shapely
+   (`geometry.buffer(...)` with geodesic projection).
+3. Computes the composite geometry: union of all `"include"`
+   components, then difference of all `"exclude"` components.
+4. Runs the `places` search query using the composite geometry as a
+   `geo_shape` filter, combined with temporal, type, and text filters.
+5. Returns the search results and the final composite geometry (as
+   GeoJSON) to the browser, so the context map can update its overlay
+   to show the actual buffered/composed region used for filtering.
+
+**Why this split works:**
+
+- **Preview is immediate.** Each component geometry is fetched
+  individually as the user selects it, so the map updates
+  incrementally.  Simplification keeps previews responsive.
+- **Search payload is small.** Named-region polygons (especially OSM
+  admin boundaries with thousands of vertices) never transit from
+  browser to server; only their IDs do.
+- **Geometry quality.** Shapely on the CRC FastAPI handles complex
+  polygon operations, geodesic buffers, and topology repair more
+  robustly than any browser-side library.
+- **No client-side geometry library.** Turf.js is not needed in the
+  frontend build.  The browser only needs to draw GeoJSON on the map,
+  which MapLibre handles natively.
+- **Single search round-trip.** Geometry resolution, composition,
+  buffering, and the ES search all happen within the FastAPI in one
+  request.
+
+> **Coding-agent note:** The geometry preview endpoint and the search
+> endpoint are both on the CRC FastAPI (Pitt VM), not the
+> Django/DigitalOcean server.  Use Shapely for all geometry
+> operations.  Project to an appropriate equal-area CRS (e.g. an
+> auto-UTM zone derived from the geometry centroid) before computing
+> buffers, then project back to WGS84 for the ES query and for the
+> GeoJSON returned to the browser.
 >
-> Component geometries should be stored in the filter state as an
-> ordered array of `{id, geo, source, mode, buffer_km}` objects,
-> where `mode` is `"include"` or `"exclude"` and `buffer_km` defaults
-> to 0.  The composite geometry is recomputed whenever the array
-> changes.
+> For preview simplification, use `shapely.simplify(tolerance,
+> preserve_topology=True)` with a tolerance that keeps the polygon
+> recognisable at the current map zoom level.  A fixed tolerance of
+> ~0.01 degrees is a reasonable starting point; a zoom-adaptive
+> tolerance is a refinement for later.
 >
-> Performance note: Turf.js union and difference operations can be
-> slow for very complex polygons (thousands of vertices).  If this
-> becomes a problem, simplify component polygons
-> (`turf.simplify(...)`) before composing.
+> Cache component geometries in memory on the FastAPI for the
+> duration of a session or with a short TTL, so that the search
+> request does not re-fetch geometries that were just served as
+> previews.
 
 ---
 
@@ -410,27 +503,30 @@ any direction: "I know the region, help me find the right period" or
 
 ### 6.1 Filter State Model
 
-The filter panel maintains a single state object:
+The filter panel maintains a single client-side state object:
 
 ```
 {
   spatial: {
     components: [
       {
-        id:        "abc123",
-        geo:       <GeoJSON geometry>,
-        source:    "osm" | "drawn" | "periodo",
-        label:     "Lincolnshire" | "drawn polygon" | null,
-        mode:      "include" | "exclude",
-        buffer_km: 0
+        id:         "abc123",
+        ref_type:   "osm" | "drawn" | "periodo",
+        ref_id:     "osm:relation/123456" | null,
+        label:      "Lincolnshire" | "drawn polygon" | null,
+        mode:       "include" | "exclude",
+        buffer_km:  0,
+        preview_geo: <GeoJSON geometry>   // simplified geometry
+                                          // fetched from FastAPI
+                                          // for map display only;
+                                          // null until fetched
       }
     ],
-    composite_geo: <GeoJSON geometry>,   // computed: union of
-                                         // included (buffered)
-                                         // components minus
-                                         // excluded components
-    viewport_fallback: true | false      // use map viewport if
-                                         // no components present
+    composite_geo: <GeoJSON geometry>,    // returned by FastAPI
+                                          // after a search;
+                                          // null until first search
+    viewport_fallback: true | false       // use map viewport if
+                                          // no components present
   },
   temporal: {
     start_year: -1200,
@@ -443,11 +539,28 @@ The filter panel maintains a single state object:
 }
 ```
 
+**Two kinds of geometry live in this state:**
+
+- `preview_geo` on each component is a (possibly simplified) geometry
+  fetched from the CRC FastAPI at selection time, used to draw the
+  component on the context map.  It is never sent back to the server.
+- `composite_geo` is the final buffered/composed geometry returned by
+  the FastAPI after a search.  It replaces the individual preview
+  overlays on the context map to show the actual filter region.
+
+**When the search fires**, the browser serialises the components as a
+compact descriptor (section 3.5): `ref_type`, `ref_id`, `mode`, and
+`buffer_km` for named components; `ref_type`, `geo`, `mode`, and
+`buffer_km` for drawn components.  The FastAPI resolves, buffers,
+composes, queries, and returns both results and `composite_geo`.
+
 Any change to one dimension triggers re-filtering of the others:
 
 - Changing `spatial` (adding, removing, or modifying a component)
-  recomputes `composite_geo` and re-queries `periodo_periods` with
-  the new spatial constraint.
+  re-queries `periodo_periods` with the new spatial constraint.
+  (For PeriodO filtering, the individual `preview_geo` values are
+  sufficient to construct the spatial query; the full composite is
+  not needed until the main search fires.)
 - Changing `temporal` re-queries `periodo_periods` with the new
   temporal constraint.
 - Selecting a period offers to add its spatial coverage as a new
@@ -456,12 +569,13 @@ Any change to one dimension triggers re-filtering of the others:
 
 ### 6.2 Feeding Into the Main Search
 
-The composed filter state is passed to the main `places` search
-query as:
+The browser sends the filter descriptor to the CRC FastAPI.  The
+FastAPI composes the spatial filter, runs the `places` search, and
+returns results plus the composite geometry:
 
-- **Spatial:** `composite_geo` is sent as a single `geo_shape` filter
-  on the place's geometry field.  ES receives only the final composed
-  geometry, not the individual components.
+- **Spatial:** the FastAPI constructs and applies the `geo_shape`
+  filter internally.  The browser never sends full polygon
+  geometries for named components.
 - **Temporal:** a numeric range filter on the place's temporal
   fields, if the places index records temporal coverage.
 - **Periods:** currently, most WHG place records do not carry PeriodO
@@ -524,7 +638,7 @@ places) associated with this period definition."
 |-------|-------|--------|
 | 2 | Context map (CSS desaturation, drawing tools, interaction) | 2 days |
 | 3.1--3.3 | Spatial selector (ES-backed, OSM primary) | 3--4 days |
-| 3.5 | Composite spatial filters (union, buffer, exclusion) | 3--4 days |
+| 3.5 | Composite spatial filters (FastAPI geometry endpoints, Shapely composition) | 3--4 days |
 | 5.2 | PeriodO ES index build pipeline | 1--2 days |
 | 5.3 | Period selector widget | 3--4 days |
 | 5.4 + 6 | Bidirectional context flow and filter composition | 2--3 days |
@@ -536,5 +650,5 @@ places) associated with this period definition."
   `geo_shape` fields in the `places` index.  If not currently
   present, this is an additional prerequisite task (estimated 2--3
   days depending on the current OSM ingestion pipeline).
-- Turf.js (or equivalent) must be available in the frontend build for
-  client-side geometry composition.
+- Shapely and pyproj must be available in the CRC FastAPI environment
+  for server-side geometry composition and buffering.
