@@ -218,7 +218,12 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
             citation = getattr(obj, "citation_csl", None)
             if citation:
-                yield from emit_chunk(',"citation":' + json.dumps(citation))
+                # citation_csl returns a JSON string; embed it directly
+                # to avoid double-encoding
+                if isinstance(citation, str):
+                    yield from emit_chunk(',"citation":' + citation)
+                else:
+                    yield from emit_chunk(',"citation":' + json.dumps(citation))
 
             licence_text = (
                 "Unless specified otherwise, all content created for or uploaded to the World Historical Gazetteer — "
