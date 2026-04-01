@@ -554,7 +554,9 @@ compact descriptor (section 3.5): `ref_type`, `ref_id`, `mode`, and
 `buffer_km` for drawn components.  The FastAPI resolves, buffers,
 composes, queries, and returns both results and `composite_geo`.
 
-Any change to one dimension triggers re-filtering of the others:
+Any change to one dimension triggers re-filtering of the **period
+selector only** (lightweight queries against the small
+`periodo_periods` index):
 
 - Changing `spatial` (adding, removing, or modifying a component)
   re-queries `periodo_periods` with the new spatial constraint.
@@ -567,11 +569,34 @@ Any change to one dimension triggers re-filtering of the others:
   `"periodo"`-sourced component and to update `temporal` from the
   period's own extent.
 
+**The main `places` search is never triggered automatically.**
+Changes to any filter dimension mark the search state as **dirty**
+(i.e. the displayed results no longer reflect the current filters).
+The user must explicitly press a **Search** button to execute the
+query.  This avoids unnecessary load on ES and the FastAPI geometry
+composition pipeline while the user is still assembling a
+potentially complex multi-component filter.
+
+The Search button should be persistently visible in the filter panel
+and visually emphasised (e.g. highlighted or pulsing) when the
+filter state is dirty.  If the user has not yet run any search, the
+button reads "Search"; if results are displayed but the filters have
+since changed, the button reads "Update results" or similar, making
+it clear that the current results are stale.
+
+> **Coding-agent note:** Track dirty state with a simple boolean flag
+> toggled to `true` on any filter change and to `false` when search
+> results are received.  The PeriodO period selector re-queries
+> reactively on spatial/temporal changes (these are cheap, hitting a
+> small index); the main `places` search fires only on explicit user
+> action.
+
 ### 6.2 Feeding Into the Main Search
 
-The browser sends the filter descriptor to the CRC FastAPI.  The
-FastAPI composes the spatial filter, runs the `places` search, and
-returns results plus the composite geometry:
+When the user presses the Search button, the browser sends the
+filter descriptor to the CRC FastAPI.  The FastAPI composes the
+spatial filter, runs the `places` search, and returns results plus
+the composite geometry:
 
 - **Spatial:** the FastAPI constructs and applies the `geo_shape`
   filter internally.  The browser never sends full polygon
