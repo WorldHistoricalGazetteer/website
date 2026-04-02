@@ -1,4 +1,4 @@
-# WHG v3.5 Search Filters: Full Specification
+# WHG v3.5 Search Filters: Implementation Record
 
 > **Audience:** Human developers and coding agents working on the WHG v3.5
 > codebase (Django / Elasticsearch / JavaScript / MapLibre).
@@ -7,528 +7,586 @@
 > gateway on the Pitt CRC VM; MapLibre with the WHG tileserver
 > (OSM data, NaturalEarth colouring, DEM hillshading).
 >
-> **Status:** Implementation-ready design.
+> **Status:** Front-end implemented; backend search integration pending.
+>
+> This document describes the **actually-implemented** front-end
+> filter interface as of April 2026.  It supersedes the earlier
+> design-phase specification and serves as the authoritative reference
+> for connecting the backend.
 
 ---
 
-## 1. Design Principles
+## 1. Design Principles (unchanged from original plan)
 
 The filters panel constrains the main WHG toponym and place-type
-search.  It is explicitly **not a GIS tool**.  It provides simple,
-predictable constraints to support search.
+search.  It is explicitly **not a GIS tool**.
 
 - **One temporal authority at a time.**  The user chooses whether time
-  is controlled manually, derived from a PeriodO period, or derived
-  from a polity.  These are mutually exclusive.
+  is controlled manually (dateline slider), derived from a PeriodO
+  period, or derived from a territory dataset.  These are mutually
+  exclusive — enforced by tab switching.
 - **Viewport as primary spatial constraint.**  The context map's
   visible extent is always the spatial filter baseline.  A selected
-  geometry (OSM region, PeriodO coverage, polity boundary) is
+  geometry (OSM region, PeriodO coverage, territory boundary) is
   intersected with the viewport, never used alone.
 - **No client-side geometry processing.**  No polygon drawing, no
-  unions, no buffers, no exclusions.  Geometry is fetched for preview
-  and passed by reference for search.
-- **Manual search triggering.**  Filter changes mark the search as
-  dirty.  The main `places` query fires only when the user presses
-  Search.  Lightweight queries against small indices (PeriodO,
-  polities) may be reactive.
+  unions, no buffers, no exclusions.
+- **Search triggered from the main search bar.**  There is no
+  in-panel Search button.  The main search bar's search icon (and
+  Enter key) triggers the query.  Filter changes are reflected in a
+  badge count on the Filters toggle button.  Filter-only searches
+  (no toponym) are permitted when at least one place type is
+  selected together with a temporal or spatial constraint.
 
 ---
 
 ## 2. Panel Layout
 
-### 2.1 Three-Column Structure
+### 2.1 Three-Column Grid
 
-| Column | Width | Content |
-|--------|-------|---------|
-| Authorities | 1x | Checkbox list of data sources |
-| Place Types | 1x | AAT hierarchy tree widget |
-| Time & Space | 2x | Tabbed interface with persistent context map |
+The filters live in a collapsible `#search_filters` panel beneath
+the search bar.  The panel uses a CSS grid (`.filters-grid`):
 
-Columns are equal height with vertical scrolling within each.  The
-Time & Space column is double-width to accommodate the context map.
+| Column | CSS class | Width | Content |
+|--------|-----------|-------|---------|
+| 1 | `.filter-col--authorities` | `auto` (narrow, max 190 px) | Checkbox list of data sources |
+| 2 | `.filter-col--timespace` | `2fr` (double-width) | Tabbed time/space interface + context map |
+| 3 | `.filter-col--types` | `1fr` | AAT place-type tree widget |
 
-### 2.2 Time & Space Tabs
+Grid definition:
+```css
+grid-template-columns: auto 2fr 1fr;
+```
 
-The Time & Space column contains a **persistent context map** (always
-visible, regardless of active tab) and a tabbed control area beneath
-or alongside it:
+Responsive breakpoints stack columns at `< 992 px` (two-column) and
+`< 576 px` (single-column), with Time & Space always spanning the
+full width when stacked.
 
-| Tab | Label | Purpose |
-|-----|-------|---------|
-| 1 | Timespan + Map | Manual temporal slider; OSM region selector |
-| 2 | Periods | PeriodO period selector (temporal authority from period) |
-| 3 | Polities | Polity selector (temporal authority from polity) |
+### 2.2 Time & Space Internal Layout
 
-Tab 1 is the default.
+The Time & Space panel (`.timespace-inner`) is itself a two-column
+flex layout:
+
+- **Left** (`.timespace-controls`, `flex: 1 1 0`): tab bar + tab
+  content.
+- **Right** (`.timespace-map`, `width: 45%`): persistent context map.
+
+The context map is always visible regardless of active tab.
+
+### 2.3 Time & Space Tabs
+
+| Tab | ID | Icon | Label | Purpose |
+|-----|----|------|-------|---------|
+| 1 | `tab-timespan` / `pane-timespan` | `fa-map-marker-alt` | Region | Manual dateline slider + OSM region type-ahead |
+| 2 | `tab-periods` / `pane-periods` | `fa-hourglass-half` | Period | PeriodO period selector (temporal authority from period) |
+| 3 | `tab-polities` / `pane-polities` | `fa-flag` | Territory | Territory/polity dataset selector (Cliopatria, D-PLACE, NativeLand) |
+
+Tab 1 (Region) is the default active tab.
 
 ---
 
-## 3. Authorities Filter
+## 3. Data Sources Filter
 
-### 3.1 Purpose
+### 3.1 Implementation
 
-Restrict search results to selected data sources.
+File: `search.html`, lines within `.filter-col--authorities`.
 
-### 3.2 UI
+A vertical list of `<label>` elements, each wrapping a checkbox
+(`.authority-cb`) and a descriptive label.  Hover `title` attributes
+explain each source.
 
-A checkbox list.  Default: all selected except OSM.
+### 3.2 Sources Listed
 
-```
-[x] GeoNames
-[x] Wikidata
-[x] TGN
-[ ] OpenStreetMap
-[x] WHG datasets
-```
-
-Each item shows the authority name and an optional result count.
+| Value | Label | Default | Notes |
+|-------|-------|---------|-------|
+| `gn` | GeoNames | ✔ checked | ~12M features from national mapping agencies |
+| `wd` | Wikidata | ✔ checked | ~8M places, multilingual labels, structured data |
+| `tgn` | TGN | ✔ checked | ~3M Getty scholarly place name records |
+| `pl` | Pleiades | ✔ checked | ~37K ancient/classical places |
+| `iv` | IndexVillaris | ✔ checked | ~24K 17th-c. English/Welsh place names |
+| `whg` | WHG datasets | ✔ checked | Contributed historical gazetteers |
+| `osm` | OpenStreetMap | ✘ unchecked | Hover explains noise (buildings, bus stops, etc.) |
+| `gb` | GB1900 | ✘ unchecked | ~800K OS labels 1888–1914, very noisy |
 
 ### 3.3 Behaviour
 
-- Multi-select with OR logic across selected authorities.
-- No selection produces no results.
+- Multi-select with OR logic.  Selecting none produces no results.
+- On change, the checked values are written to
+  `filterState.authorities` and the active-filters badge updates.
+- On "Clear search", defaults are restored (all checked except OSM
+  and GB1900).
 
-### 3.4 ES Query Fragment
+### 3.4 Planned ES Query Fragment
 
 ```json
-{ "terms": { "authority": [...] } }
+{ "terms": { "authority": ["gn", "wd", "tgn", "pl", "iv", "whg"] } }
 ```
 
 ---
 
 ## 4. Place Types Filter
 
-### 4.1 Source
+### 4.1 Implementation
 
-Getty AAT hierarchy (existing tree widget, documented separately in
-the WHG Type System specification).
+File: `search.html`, `.filter-col--types`.  Widget class:
+`TypeTreeWidget` (`typeTreeWidget.js`), mounted in
+`#aat_type_tree`.
+
+The panel header includes a count badge (`#tree_selection_badge`)
+and a "clear all" link (`#tree_clear`).
 
 ### 4.2 Behaviour
 
-- Multi-select tree with OR logic across selected nodes.
-- Selecting a node includes all its descendants.
-- Post-retrieval consanguinity banding applies as described in the
-  Type System specification.
+- Multi-select checkbox tree built from the Getty AAT place-type
+  hierarchy.
+- Selecting a node includes all descendants.
+- Selected identifiers are written to `filterState.place_types`.
+- The tree container scrolls independently (max-height 340 px on
+  desktop, 200 px on mobile).
+- An inline search box (sticky at top of the scrollable container)
+  filters tree nodes by label match.
+
+### 4.3 Hierarchical Post-Filtering Note
+
+An `(i)` icon on the panel title line shows a tooltip on hover:
+_"Select types to filter results. Selecting a parent category
+includes all its children. Results matching your selected types
+exactly are ranked highest; broader matches appear below."_
+
+This describes the planned consanguinity banding behaviour where
+exact-type matches are ranked above broader ancestor matches in
+the result list.
 
 ---
 
 ## 5. Context Map
 
-The context map is the **primary spatial interaction surface** and is
-**always visible** regardless of the active tab.  It serves three
-roles:
+### 5.1 Implementation
 
-1. Defines the **viewport bounding box** (always active as the
-   baseline spatial constraint).
-2. Displays **selected geometries** (OSM region, PeriodO coverage,
-   polity boundary) as preview overlays.
-3. Constrains **available PeriodO periods and polities** offered in
-   their respective selectors.
+File: `contextMap.js` — singleton class `ContextMap`.
+HTML container: `#context_map` inside `#context_map_wrap`.
 
-### 5.1 Visual Treatment
-
-WHG serves its own tiles from a tileserver built on OSM data with
-NaturalEarth colouring and DEM hillshading.  No external tile
-dependencies are used.
-
-- **Desaturated basemap.**  Apply CSS `filter: saturate(0.3)
-  brightness(1.05)` (or similar) to the tile layer container.  This
-  is cheap to implement and reversible.  A dedicated low-saturation
-  tileserver style can be developed later if label legibility suffers
-  under desaturation.
-- **Prominent labels and features.**  The basemap should retain
-  place-name labels, country boundaries, major rivers, and terrain
-  shading.  These help users orient themselves when selecting a
-  region.  Test label legibility at the chosen saturation value and
-  adjust accordingly.
-
-> **Coding-agent note:** Do not introduce dependencies on external
-> tile providers (Mapbox, Stamen, CartoDB, etc.).  The map uses the
-> WHG tileserver exclusively.
-
-### 5.2 Geometry Preview
-
-When an entity with geometry is selected in any tab, its geometry is
-displayed on the context map as an overlay:
-
-- Semi-transparent fill with a distinct border.
-- No complex masking, composition, or inverted masks.
-- Only one overlay is active at a time (since only one
-  temporal/spatial authority is active).
-
-### 5.3 Interaction
-
-- **Pan and zoom** to set the viewport.  The current map extent
-  defines `viewport_bbox`, which is always applied as the baseline
-  spatial constraint.
-- Panning or zooming updates the PeriodO and polity selector results
-  (reactively, since these are lightweight queries).
-- No drawing tools.
-
-### 5.4 Geometry Fetching
-
-When the user selects an entity (OSM region, PeriodO period, polity)
-that has a geometry, the browser fetches it from the CRC FastAPI for
-map preview:
-
-```
-GET /geometry/{index}/{id}
-```
-
-The FastAPI looks up the geometry in the relevant ES index (`places`
-for OSM regions, `periodo_periods` for periods, the polity index for
-polities) and returns GeoJSON.  For complex polygons, the FastAPI may
-return a simplified version (`shapely.simplify(tolerance,
-preserve_topology=True)`) to keep the preview responsive.
-
-The browser draws the returned geometry on the map but does not send
-it back to the server.  When the search fires, the entity is
-referenced by ID only (section 11).
-
-> **Coding-agent note:** Cache fetched geometries on the FastAPI with
-> a short TTL so that the search request does not redundantly re-fetch
-> geometries that were just served as previews.
-
----
-
-## 6. Core Rule: Temporal Authority
-
-> **Only one source of temporal authority is active at a time.**
-
-| Active tab | Temporal source | Temporal control |
-|------------|----------------|------------------|
-| Timespan + Map | User-controlled slider | Manual |
-| Periods | Derived from selected PeriodO period | Locked |
-| Polities | Derived from selected polity | Locked |
-
-Switching tabs clears incompatible state (section 12).
-
----
-
-## 7. Tab 1: Timespan + Map
-
-This is the default tab.  The user controls time manually and may
-optionally select a named spatial region.
-
-### 7.1 Temporal Slider
-
-- Fully user-controlled.
-- Defines `start_year` and `stop_year` using the same convention as
-  PeriodO: negative integers for BCE, positive for CE.
-- Always active in this tab.
-
-### 7.2 OSM Region Selector
-
-A type-ahead search for named administrative regions sourced
-primarily from OpenStreetMap data in the `places` ES index.
-
-#### Why OSM as the primary source
-
-- Comprehensive administrative boundaries worldwide (countries,
-  states/provinces, counties, municipalities).
-- Polygon geometries, not just centroids.
-- Consistent admin-level hierarchy providing natural granularity
-  control.
-- A single namespace, avoiding reconciliation of overlapping entities
-  from GeoNames, Wikidata, and TGN.
-
-#### Controls
-
-- **Admin tier selector** (normalised levels: country, region/state,
-  district/county, municipality).
-- **Type-ahead input:** the user types a region name; after a
-  debounced delay, the widget queries the `places` index filtered to
-  administrative/regional types and the selected admin tier.
-- Results show the region name with parent context (e.g.
-  "Lincolnshire, England, United Kingdom").
-- Results are ranked by specificity relative to the current viewport
-  and textual match quality.
-
-#### Behaviour
-
-- **Single region only.**  Selecting a region loads its geometry onto
-  the context map and adds it to the spatial filter.
-- Selecting a region does **not** affect available PeriodO or polity
-  options (those depend on the viewport only, not the selected
-  region).
-- The selected region appears as a dismissible chip.  Dismissing it
-  removes the geometry overlay and reverts to viewport-only spatial
-  filtering.
-
-#### ES query for the selector
-
-> **Coding-agent note:** Query the `places` index with a `bool`
-> query combining:
-> - `match` or `match_phrase_prefix` on the name field.
-> - `terms` filter on type restricting to administrative/regional AAT
->   types (or their GeoNames equivalents: `ADM1`, `ADM2`, `PCLI`,
->   etc., and OSM admin boundary types).
-> - `geo_bounding_box` filter restricting to entities intersecting
->   the current viewport.
->
-> Prerequisite: OSM administrative boundary geometries must be
-> indexed as `geo_shape` fields in the `places` index.
-
-### 7.3 Effective Geometry
-
-No region selected:
-
-```
-viewport_bbox
-```
-
-Region selected:
-
-```
-viewport_bbox ∩ osm_region
-```
-
----
-
-## 8. Tab 2: Periods
-
-Selecting this tab activates PeriodO as the temporal authority.  The
-user selects a single period definition; time is derived from it.
-
-### 8.1 PeriodO Background
-
-PeriodO (`https://perio.do`) is a public-domain gazetteer of
-scholarly definitions of historical, art-historical, and
-archaeological periods.
-
-- **Flat structure.** No `skos:broader`/`skos:narrower` hierarchy.
-  Each period is an independent assertion.
-- **Multiple competing definitions.** "Bronze Age" has hundreds of
-  entries, each scoped to a different region and date range by a
-  different published authority.
-- **Rich metadata.** Each definition carries a label, temporal extent
-  (start/stop years), spatial coverage (textual description and
-  gazetteer links), and bibliographic authority source.
-- **Persistent URIs.** Each period has an ARK identifier resolvable
-  to JSON-LD.
-
-PeriodO data is available as a single JSON download from
-`https://data.perio.do/dataset/`.
-
-### 8.2 PeriodO ES Index
-
-Period definitions are stored in a dedicated ES index
-(`periodo_periods`) on the CRC staging instance.
-
-#### Index schema
-
-```json
+Initialisation parameters:
+```js
 {
-  "uri":           "http://n2t.net/ark:/99152/p05krdxmkzt",
-  "label":         "Dark Age",
-  "alt_labels":    ["Dark Ages"],
-  "start_year":    -1100,
-  "stop_year":     -750,
-  "spatial_description": "Greece",
-  "spatial_uris":  ["http://www.geonames.org/390903/"],
-  "spatial_geo":   {
-    "type": "envelope",
-    "coordinates": [[19.37, 41.75], [29.65, 34.8]]
-  },
-  "authority_label": "Davis and Alcock 1998",
-  "authority_uri":   "http://n2t.net/ark:/99152/p05krdxm"
+    container: 'context_map',
+    maxZoom: 14,
+    style: ['WHG'],       // WHG tileserver only — no external tiles
+    globeControl: true,    // Toggle control between globe and flat
+    globeMode: true,       // Defaults to globe projection
+    navigationControl: true,
+    fullscreenControl: false,
+    downloadMapControl: false,
+    drawingControl: false,
+    temporalControl: false,
 }
 ```
 
-The `spatial_geo` field is a `geo_shape` enabling ES spatial queries.
-It is pre-computed at index-build time by resolving the
-`dcterms:spatial` URIs (GeoNames, Wikidata, Pleiades) to bounding
-boxes using cached gazetteer data from the WHG `places` index.
+### 5.2 Visual Treatment
 
-> **Coding-agent note:** Where spatial URIs cannot be resolved, set
-> `spatial_geo` to null.  These records appear in label-only searches
-> but are excluded from spatial filtering.  Where multiple spatial
-> URIs resolve to different regions, compute the bounding box of
-> their union.
+- **Desaturated basemap** via CSS:
+  `#context_map .maplibregl-canvas { filter: saturate(0.3) brightness(1.05); }`
+- Square aspect ratio (`aspect-ratio: 1`) in a border-radius
+  container.
+- Globe view by default; a toggle control allows switching to flat
+  projection.
 
-#### Index build pipeline
+### 5.3 Overlay Management
 
-1. Fetch the current PeriodO dataset from
-   `https://data.perio.do/dataset/`.
-2. Parse the JSON-LD.  Each authority (concept scheme) contains one
-   or more period definitions (concepts).
-3. Extract label, temporal extent, spatial coverage, and authority
-   metadata for each period.
-4. Resolve spatial URIs to geometries, using the WHG `places` index
-   as a cache where possible.
-5. Bulk-index into `periodo_periods` on the CRC staging ES instance.
+A single GeoJSON source (`filter-overlay`) with fill and line
+layers.  Only one overlay is displayed at a time:
 
-Re-run monthly.  Use the ES index-alias swap pattern for
-zero-downtime updates.
+- `setOverlay(geojson)` — displays a geometry preview (region,
+  period coverage, or territory boundary).
+- `clearOverlay()` — empties the source.
+- Fill: `#4a90d9` at 15% opacity.  Stroke: `#2563eb`, 2 px, 70%.
 
-### 8.3 Period Selector
+### 5.4 Viewport Tracking
 
-#### Filtering (reactive)
+On every `moveend` event, the bounding box is written to
+`filterState.spatial.bbox` as `[west, south, east, north]`.
+External listeners can subscribe via `onViewportChange(callback)`.
 
-The period selector re-queries `periodo_periods` reactively as the
-user types or as the viewport changes.  These are cheap queries
-against a small index.
+### 5.5 Zoom Gate
 
-1. The user types a label fragment (e.g. "Iron Age").  After a
-   debounced delay (200--300ms), the widget queries with:
-   - `match` or `match_phrase_prefix` on `label` and `alt_labels`.
-   - `geo_shape` intersects filter on `spatial_geo` using the current
-     `viewport_bbox`, if `spatial_geo` exists.
-2. Results are sorted by:
-   - Exact label match first.
-   - Alphabetically by label.
-3. When results span multiple regions, group by
-   `spatial_description` (e.g. Aegean and Levantine definitions of
-   "Iron Age" cluster separately).
+Selector inputs (region, period, territory search boxes) are
+**disabled** until the context map has been zoomed beyond level 2.
+While disabled, the inputs show the placeholder _"Zoom the map
+first to constrain your search area"_.  Once the threshold is
+crossed, inputs are permanently enabled for the session (re-engaging
+only on full clear).
 
-#### Results display
+### 5.6 Globe Auto-Rotation
 
-Each result row shows:
+When the filter panel first opens, the globe rotates slowly
+**westward** (matching Earth's apparent rotation as seen from above
+the north pole) at 6°/s — approximately one full revolution per
+minute.  This avoids favouring any particular hemisphere.
 
-- Period label.
-- Compact year range (e.g. "1100--750 BCE").
-- Spatial description (e.g. "Greece").
-- Authority label, displayed smaller / de-emphasised.
+The rotation stops immediately and permanently on any user
+interaction: mouse click/drag, touch, scroll wheel, or any map
+control.  It also stops if the filter panel is collapsed.  Once
+stopped it does not auto-restart.
 
-#### Authority sub-filter
+---
 
-A collapsible "Filter by authority" panel lists the distinct
-authorities in the current filtered results with counts.  Selecting
-an authority restricts results to that authority's periodisation.
+## 6. Tab 1: Region (Timespan + Map)
 
-### 8.4 Behaviour
+### 6.1 Structure
 
-- **Single selection only.**
+The Region tab (`#pane-timespan`) contains two sub-sections, each
+with a small-caps subtitle:
+
+1. **Time** — the dateline slider with a three-state mode toggle.
+2. **Space** — an informational note and the OSM region type-ahead.
+
+A horizontal divider (bottom border on `#dateline_container`)
+separates the Time and Space sections.
+
+### 6.2 Dateline Temporal Slider
+
+The existing `Dateline` widget (`dateline.js`) is instantiated with
+these parameters:
+
+```js
+{
+    fromValue: 800,
+    toValue: 1800,
+    minValue: -2000,
+    maxValue: 2100,
+    open: true,
+    includeUndated: null,  // managed externally
+    epochs: null,
+    automate: null,
+}
+```
+
+The widget is always expanded (collapse button hidden via CSS).  The
+help icon and built-in undated checkbox are also hidden.
+
+#### Colour overrides
+
+The slider's default red/orange palette is overridden to match the
+search panel's blue-grey scheme:
+
+| Element | Colour |
+|---------|--------|
+| Slider track | `#b0c4d8` |
+| Slider thumbs | `#4c79a6` (SVG replaced) |
+| Thumb hover glow | `rgba(76,121,166,0.4)` |
+| Year buttons | `#4c79a6` text, `#f8f9fa` bg, `#b0c4d8` border |
+| Tooltip | `#4c79a6` bg |
+| Tick labels | `#555` |
+| Range highlight | `#4c79a6` |
+
+#### Three-State Mode Toggle
+
+A `.temporal-mode-toggle` button group above the slider controls
+temporal filtering:
+
+| Mode | `data-temporal-mode` | Behaviour |
+|------|---------------------|-----------|
+| **Off** (default) | `off` | No temporal filter.  Slider is greyed out (`opacity: 0.35`, `pointer-events: none`). |
+| **Year range** | `range` | Slider is active.  Results restricted to places attested within the selected range. |
+| **Range + undated** | `undated` | As above, but also includes places with no temporal attestation. |
+
+Toggle buttons use the shared `.temporal-mode-toggle .btn` styling:
+inactive is `#f8f9fa` bg; active is `#e8f0fe` bg with `#1a56db`
+text and `#a0b8e8` border.
+
+### 6.3 OSM Region Selector
+
+Widget: `RegionSelector` class (`regionSelector.js`), mounted in
+`#region_selector_container`.
+
+#### Info note
+
+An `(i)` icon on the "Space" subtitle line shows a tooltip on
+hover: _"Search for a named region below, or leave empty to use
+the current map extent as a spatial filter."_
+
+#### Admin tier toggle
+
+A `.region-tier-toggle` button group offers four tiers:
+Country, Region/State, District/County, Municipality.
+Default: Country.  Follows the same visual model as the temporal
+mode toggle.
+
+#### Type-ahead input
+
+- Debounced (250 ms) text search.
+- Disabled until the context map passes the zoom gate (§5.5).
+- **Backend stub:** currently displays a "Backend not yet connected"
+  placeholder.  When connected, will POST to the CRC FastAPI with
+  the query string, selected admin tier, and viewport bbox.
+
+#### Selection
+
+- Single region only.
+- Selecting a region renders a dismissible `.filter-chip` below
+  the input and writes to `filterState.spatial.region_id` /
+  `filterState.spatial.geometry_source = 'osm'`.
+- Geometry preview will be fetched and displayed on the context
+  map (backend pending).
+- Dismissing the chip clears the selection and removes the overlay.
+
+---
+
+## 7. Tab 2: Period
+
+### 7.1 Implementation
+
+Widget: `PeriodSelector` class (`periodSelector.js`), mounted in
+`#period_selector_container`.
+
+The tab header includes a PeriodO external link icon.
+
+### 7.2 Type-ahead Input
+
+- Debounced (250 ms) text search.
+- Disabled until zoom gate passes (§5.5).
+- Re-queries reactively when the viewport changes (small-index
+  query, cheap).
+- **Backend stub:** currently shows a "Backend not yet connected"
+  placeholder.  When connected, will POST to `periodo_periods`
+  index with label match + `geo_shape` intersects on viewport bbox.
+
+### 7.3 Results Display
+
+Results are grouped by `spatial_description`.  Each result row
+shows:
+- Period label (bold).
+- Compact year range (e.g. "1100 BCE – 750 BCE").
+- Spatial description.
+- Authority label (italic, de-emphasised).
+
+### 7.4 Authority Sub-filter
+
+A collapsible section lists distinct authorities from the current
+results with counts.  Clicking an authority restricts results to
+that authority's periodisation.  A "clear" link removes the
+authority filter.
+
+### 7.5 Selection
+
+- Single selection only.
 - Selecting a period:
-  - Sets `start_year` and `stop_year` from the period's temporal
-    extent.  The temporal slider is hidden or disabled.
-  - If `spatial_geo` exists, fetches and previews the geometry on the
-    context map.
-- Deselecting reverts to no temporal constraint and removes the
-  geometry overlay.
-
-### 8.5 Effective Geometry
-
-No spatial geometry on selected period:
-
-```
-viewport_bbox
-```
-
-Spatial geometry exists:
-
-```
-viewport_bbox ∩ period_geometry
-```
+  - Sets `filterState.temporal.start_year` and `stop_year` from the
+    period's temporal extent.
+  - Sets `filterState.temporal.source = 'period'`.
+  - If `spatial_geo` exists, previews it on the context map and
+    flies to fit.
+- Renders a yellow-toned `.filter-chip--period` chip.
+- Dismissing the chip clears the period selection and reverts to
+  manual temporal mode.
 
 ---
 
-## 9. Tab 3: Polities
+## 8. Tab 3: Territory
 
-Selecting this tab activates a polity dataset as the temporal
-authority.  The user selects a single polity; time and space are
-derived from it.
+### 8.1 Implementation
 
-### 9.1 Source
+Widget: `PolitySelector` class (`politySelector.js`), mounted in
+`#polity_selector_container`.
 
-Cliopatria or equivalent polity dataset, stored in a dedicated ES
-index on the CRC staging instance.
+### 8.2 Dataset Toggle
 
-> **Coding-agent note:** The polity index schema and build pipeline
-> are not specified here.  The index must at minimum contain: a
-> unique identifier, a label, temporal extent (`start_year`,
-> `stop_year`), and a `geo_shape` geometry field.
+A `.polity-dataset-toggle` button group offers **exclusive**
+switching between three territory datasets:
 
-### 9.2 Polity Selector
+| Value | Label | Description |
+|-------|-------|-------------|
+| `cliopatria` | Cliopatria | Historical polities and empires |
+| `dplace` | D-PLACE | Cultural and linguistic regions |
+| `nativeland` | NativeLand | Indigenous territories, languages, and treaties |
 
-#### Filtering (reactive)
+Default: Cliopatria.  Switching datasets clears the current
+selection (`politySelector.clear()`).  Only one dataset may be
+active at a time.
 
-1. The user types a polity name.  After a debounced delay, the
-   widget queries the polity index with:
-   - `match` or `match_phrase_prefix` on the label field.
-   - `geo_shape` intersects filter using the current `viewport_bbox`.
-   - Optional temporal relevance filter.
-2. Results are sorted by textual match quality.
+### 8.3 Type-ahead Input
 
-### 9.3 Behaviour
+- Debounced (250 ms) text search.
+- Disabled until zoom gate passes (§5.5).
+- Re-queries reactively on viewport change.
+- **Backend stub:** currently shows a "Backend not yet connected"
+  placeholder.  When connected, will POST to the active dataset's
+  ES index with label match + geo_shape intersects on viewport bbox.
 
-- **Single selection only.**
-- Selecting a polity:
-  - Sets `start_year` and `stop_year` from the polity's temporal
-    validity.  The temporal slider is hidden or disabled.
-  - Fetches and previews the polity geometry on the context map.
-    Polity geometries are treated as authoritative and are always
-    previewed.
-- Deselecting reverts to no temporal constraint and removes the
-  geometry overlay.
+### 8.4 Selection
 
-### 9.4 Effective Geometry
-
-```
-viewport_bbox ∩ polity_geometry
-```
+- Single selection only.
+- Selecting a territory:
+  - Sets `filterState.temporal.start_year` and `stop_year`.
+  - Sets `filterState.temporal.source = 'polity'`.
+  - Previews the territory geometry on the context map and flies
+    to fit.
+- Renders a green-toned `.filter-chip--polity` chip.
+- Dismissing the chip clears the selection and reverts to manual.
 
 ---
 
-## 10. Tab Switching Rules
+## 9. Tab Switching Rules
 
 Switching tabs clears the state of the tab being left, since only
-one temporal authority may be active.
+one temporal authority may be active.  Implemented in `search.js`
+via the `shown.bs.tab` event on `#timespaceTab`.
 
-| From | To | Action |
-|------|----|--------|
-| Timespan + Map | Periods | Clear selected OSM region and manual time range |
-| Timespan + Map | Polities | Clear selected OSM region and manual time range |
-| Periods | Timespan + Map | Clear selected period |
-| Polities | Timespan + Map | Clear selected polity |
-| Periods | Polities | Clear selected period |
-| Polities | Periods | Clear selected polity |
+| From | To | Actions Taken |
+|------|----|---------------|
+| Region | Period | Clear selected OSM region, reset dateline to defaults, reset temporal mode toggle to "Off" |
+| Region | Territory | Same as above |
+| Period | Region | Clear selected period |
+| Period | Territory | Clear selected period |
+| Territory | Region | Clear selected territory, reset polity dataset to Cliopatria |
+| Territory | Period | Same as above |
 
-The viewport persists across tab switches.  The Authorities and Place
-Types filters are independent of the active tab and persist always.
+The viewport persists across tab switches.  Data Sources and Place
+Types filters are independent and persist always.
+
+State clearing is handled by `filterState.clearTabState(mode)`,
+which resets the relevant `spatial.*` and `temporal.*` fields.
+The context map overlay is also cleared.
+
+---
+
+## 10. Filter State Model
+
+Maintained by `filterState.js` as a singleton `FilterState`
+instance.
+
+### 10.1 State Shape
+
+```js
+{
+    authorities: ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'],
+    place_types: [],                    // AAT identifier arrays
+
+    mode: 'timespan',                   // 'timespan' | 'period' | 'polity'
+
+    spatial: {
+        bbox: null,                     // [west, south, east, north]
+        region_id: null,                // OSM region ID (Tab 1)
+        period_id: null,                // PeriodO URI (Tab 2)
+        polity_id: null,                // Territory ID (Tab 3)
+        geometry_source: 'none',        // 'osm' | 'period' | 'polity' | 'none'
+        preview_geo: null,              // GeoJSON for map display only
+    },
+
+    temporal: {
+        start_year: -2000,
+        stop_year: 2100,
+        source: 'manual',              // 'manual' | 'period' | 'polity'
+    },
+
+    dirty: false,
+}
+```
+
+### 10.2 Key Methods
+
+| Method | Purpose |
+|--------|---------|
+| `get(key?)` | Read full state or a dot-path (e.g. `'spatial.bbox'`) |
+| `set(key, value)` | Write a dot-path key; marks dirty (except bbox changes) |
+| `clearTabState(mode)` | Reset spatial/temporal fields for the given tab |
+| `toSearchPayload()` | Build the search descriptor with geometry references (not GeoJSON) |
+| `reset()` | Restore all defaults |
+| `subscribe(fn)` | Observer pattern; returns unsubscribe function |
+
+### 10.3 Dirty Tracking
+
+Any `set()` call (except `spatial.bbox`) marks `dirty = true`.
+Viewport panning does not mark dirty because it is not an explicit
+user filter action.  `markClean()` is called after search results
+are received.
 
 ---
 
 ## 11. Search Execution
 
-### 11.1 Manual Triggering
+### 11.1 Trigger
 
-The main `places` search is **never triggered automatically**.
-Changes to any filter dimension mark the search state as **dirty**.
-The user must press a **Search button** to execute the query.
+Search is triggered **exclusively** from the main search bar:
+- Clicking the search button (`#initiate_search`).
+- Pressing Enter in the search input (`#search_input`).
 
-The Search button is persistently visible in the filter panel.
-When the filter state is dirty (filters have changed since the last
-search), the button is visually emphasised.  If results are
-displayed and filters have since changed, the button reads "Update
-results" to indicate staleness.
+There is no in-panel Search button.  The Filters toggle button
+shows a badge with the count of active non-default filter
+dimensions.
 
-> **Coding-agent note:** Track dirty state with a boolean flag
-> toggled to `true` on any filter change and to `false` when search
-> results are received.  The PeriodO and polity selectors re-query
-> reactively on viewport changes (cheap, small indices); the main
-> `places` search fires only on explicit user action.
+Changing filters does **not** automatically re-run the search.
+The user must click the search button (or press Enter) again to
+apply updated filters to the current or a new query.  This allows
+filters to be composed at leisure before re-querying.
 
-### 11.2 Query Construction
+### 11.2 Exact Match Toggle
 
-When the user presses Search, the browser sends a filter descriptor
-to the CRC FastAPI.  The descriptor contains IDs and parameters, not
-geometries:
+A toggle button (`#exact_match_toggle`) sits in the search bar
+between the search button and the Filters button.  It shows a
+crosshairs icon and the label "Exact".
+
+| State | Appearance | Behaviour |
+|-------|-----------|-----------|
+| **Off** (default) | Outline, grey | Phonetic/fuzzy matching — includes similar-sounding names (e.g. "Krakow" finds "Cracow", "Kraków") |
+| **On** | Solid `#993333` background, white text | Exact spelling match only |
+
+The state is passed to the backend as `exact: true|false` in the
+search payload.  The toggle is reset on "Clear search".
+
+### 11.3 Filter-Only Searches
+
+A search without a toponym is permitted when:
+- At least one place type is selected in the tree, **and**
+- At least one of: temporal mode is not "off", a period is
+  selected, a territory is selected, or a region is selected.
+
+### 11.4 Query Construction (`gatherOptions()`)
+
+The `gatherOptions()` function assembles:
+
+```js
+{
+    qstr: '<toponym>',
+    idx: '<es_index>',
+    fclasses: '<comma-separated AAT IDs>',
+    tree_selections: [<AAT IDs>],
+    temporal: true|false,           // whether temporal mode is active
+    start: <from_year>,
+    end: <to_year>,
+    undated: true|false,            // whether to include undated records
+    exact: true|false,              // whether to require exact spelling match
+    // Legacy-compatible empty fields
+    bounds: { type: 'GeometryCollection', geometries: [] },
+    regions: [],
+    countries: [],
+    userareas: [],
+    spatial: 'none',
+    // New filter state (for when backend is updated)
+    filter_state: <full filterState object>,
+}
+```
+
+The `filter_state` field carries the full state including mode,
+spatial references, and temporal parameters.  The backend can
+migrate to reading this field when ready.
+
+### 11.5 Planned Search Payload (via `toSearchPayload()`)
+
+When the backend is updated to accept the new format:
 
 ```json
 {
-  "authorities": ["geonames", "wikidata", "tgn", "whg"],
+  "authorities": ["gn", "wd", "tgn", "pl", "iv", "whg"],
   "place_types": [300008347, 300008389],
   "mode": "timespan",
-
   "spatial": {
-    "bbox": [min_lon, min_lat, max_lon, max_lat],
+    "bbox": [-10.5, 35.2, 45.0, 60.1],
     "geometry_ref": {
       "index": "places",
       "id": "osm:relation/123456"
     }
   },
-
   "temporal": {
     "start_year": -1200,
     "stop_year": -700,
@@ -537,173 +595,193 @@ geometries:
 }
 ```
 
-Or for a PeriodO period:
-
-```json
-{
-  "authorities": ["geonames", "wikidata", "tgn", "whg"],
-  "place_types": [300008347],
-  "mode": "period",
-
-  "spatial": {
-    "bbox": [min_lon, min_lat, max_lon, max_lat],
-    "geometry_ref": {
-      "index": "periodo_periods",
-      "id": "http://n2t.net/ark:/99152/p05krdxmkzt"
-    }
-  },
-
-  "temporal": {
-    "start_year": -1100,
-    "stop_year": -750,
-    "source": "period"
-  }
-}
-```
-
-The `geometry_ref` field is null when no named region, period, or
-polity is selected (viewport-only spatial filtering).
-
-### 11.3 FastAPI Processing
-
-The CRC FastAPI receives the descriptor and:
-
-1. If `geometry_ref` is present, fetches the referenced geometry from
-   the specified ES index by ID.
-2. Constructs the effective spatial filter:
-   - `geo_bounding_box` from `bbox` (always applied, fast).
-   - If geometry was fetched: `geo_shape` intersects filter using
-     the geometry, intersected with the bbox.
-3. Constructs the temporal filter as a numeric range on the place's
-   temporal fields.
-4. Constructs the authority and type filters from the descriptor.
-5. Runs the composed `bool` query against the `places` index.
-6. Applies post-retrieval type consanguinity banding (per the Type
-   System specification).
-7. Returns search results to the browser.
-
-> **Coding-agent note:** Use `geo_bounding_box` as the primary
-> spatial filter (fast, works on all records).  Apply `geo_shape`
-> only when a named geometry is present.  This two-stage approach
-> keeps the common case (viewport-only) cheap.
+Geometry is always referenced by index + ID — never sent as
+GeoJSON.  The FastAPI fetches the geometry server-side.
 
 ---
 
-## 12. Filter State Model
+## 12. Active Filters Badge
 
-The browser maintains a single state object:
+The badge on the Filters toggle button (`#active_filters_badge`)
+counts active non-default filter dimensions:
 
-```json
-{
-  "authorities": ["geonames", "wikidata", "tgn", "whg"],
-  "place_types": [300008347, 300008389],
+1. Place types selected (any).
+2. A period selected.
+3. A territory selected.
+4. A region selected.
+5. Temporal mode is not "off".
+6. Context map has been zoomed (viewport differs from default).
+7. Authority selection differs from defaults.
 
-  "mode": "timespan | period | polity",
-
-  "spatial": {
-    "bbox": [min_lon, min_lat, max_lon, max_lat],
-    "region_id": null,
-    "period_id": null,
-    "polity_id": null,
-    "geometry_source": "osm | period | polity | none",
-    "preview_geo": null
-  },
-
-  "temporal": {
-    "start_year": -1200,
-    "stop_year": -700,
-    "source": "manual | period | polity"
-  },
-
-  "dirty": true
-}
-```
-
-Only one of `region_id`, `period_id`, `polity_id` may be non-null at
-a time (enforced by the tab-switching rules).  `preview_geo` holds
-the geometry fetched from the FastAPI for map display; it is never
-sent back in the search request.
+The count is recalculated on every filter state change.
 
 ---
 
-## 13. Dataset Metadata: Associating Periods with Datasets
+## 13. Clear Behaviour
 
-The PeriodO period selector (section 8.3) is also mounted in the
-dataset metadata input/edit form.  When a contributor creates or
-edits a dataset, they can search for and select one or more PeriodO
-period definitions describing the dataset's temporal scope.
+### 13.1 "Clear all" on Time & Space (`#timespace_clear`)
 
-- `viewport_bbox` is derived from the dataset's spatial coverage (if
-  already entered).
-- Pre-selected periods are populated from any PeriodO URIs already
-  stored against the dataset.
-- Selected URIs are written to the dataset metadata.
+- Resets temporal mode to "Off".
+- Resets dateline to 800–1800.
+- Clears all three selector widgets (region, period, territory).
+- Clears context map overlay and resets viewport.
+- Re-engages the zoom gate.
+- Calls `filterState.clearTabState()` for all three modes.
+- Switches back to the Region tab.
 
-In the dataset metadata context (unlike the search context), multiple
-period selection is permitted, since a dataset may span several
-distinct periods.
+### 13.2 "Clear all" on Place Types (`#tree_clear`)
 
-Over time, as datasets accumulate PeriodO associations, direct
-period-based search becomes viable.
+- Unchecks all tree nodes.
+- Resets the selection badge.
+- Clears `filterState.place_types`.
+
+### 13.3 "Clear search" (main bar `#clear_search`)
+
+Full reset: clears the toponym, all filters (types, time, space,
+authorities), both maps, and all stored state.  Restores default
+authority checkboxes.  Returns to the landing/initial view.
 
 ---
 
-## 14. Migration Path to v4
+## 14. Landing State
 
-- The `periodo_periods` ES index migrates to a collection in the
-  ArangoDB `indexing` database.
-- Spatial filtering uses ArangoDB's geo-spatial index capabilities.
-- The polity dataset becomes a collection in the same database.
-- Type consanguinity computation becomes native AQL graph traversal
-  rather than application-layer post-processing.
+Before any search, the page shows a centred landing block
+(`#landing`) with the WHG logo and explanatory text:
+
+> _"Enter a place name above to search, or open **Filters** to
+> refine by data source, place type, time range, region, historical
+> period, or named territory.  You can also search by filters
+> alone — select at least one place type together with a temporal
+> or spatial constraint."_
+
+This block is hidden once results are displayed.
+
+---
+
+## 15. Results Display
+
+After search, the landing block hides and `#content_area` appears
+with a two-column layout:
+
+- **Left** (`col-lg-7`): Results map (`#results_map`) showing
+  result geometries as point/polygon features.
+- **Right** (`col-lg-5`): Scrollable results list
+  (`#search_results`).
+
+Each result card shows: title, link count, dataset badge,
+description, name variants, types (with AAT links), country codes,
+chronology, external links, source ID/URI, depictions, and
+relations.  All long lists use a "more or less" toggle-truncate.
+
+Clicking a result zooms the results map; clicking a point on the
+results map scrolls to and flashes the corresponding result card.
+
+The filters panel collapses when results arrive.
+
+---
+
+## 16. Guided Tour
+
+### 16.1 Implementation
+
+File: `filtersTour.js` — uses the `driver.js` library (npm
+dependency) to walk users through the filter interface.
+
+### 16.2 Tour Steps (11 steps)
+
+| Step | Target | Title | Focus |
+|------|--------|-------|-------|
+| 1 | `#filters_panel` | Search Filters | Overview of three-panel layout |
+| 2 | `.filter-col--authorities` | Data Sources | Explains gazetteer sources, noisy defaults |
+| 3 | `.filter-col--timespace` | Time & Space | Introduces the context map and tabbed controls |
+| 4 | `#tab-timespan` | Region Tab | Dateline slider modes + region selector |
+| 5 | `#tab-periods` | Period Tab | PeriodO period search |
+| 6 | `#tab-polities` | Territory Tab | Cliopatria / D-PLACE / NativeLand |
+| 7 | `#context_map_wrap` | Context Map | Viewport as spatial filter, zoom gate |
+| 8 | `.filter-col--types` | Place Types | AAT tree, hierarchical post-filtering |
+| 9 | `#exact_match_toggle` | Exact Match | Phonetic vs exact spelling toggle |
+| 10 | `#initiate_search` | Search Button | Must click to apply filters; re-search after changes |
+
+### 16.3 Trigger Behaviour
+
+- **First open:** The tour starts automatically (after a 400 ms
+  delay) the first time the filters panel is opened.  Completion
+  or dismissal sets `localStorage['whg_filters_tour_seen']`.
+- **Subsequent opens:** The tour does not auto-trigger.
+- **Manual trigger:** A "Take a tour" link in the landing text
+  block (`#start_tour_link`) opens the filters panel if needed
+  and starts the tour.  This link is always available.
+
+### 16.4 Visual Styling
+
+Driver.js popover styles are overridden in `search.css` to match
+the WHG palette:
+- Title: `#993333` small-caps (matches `.categories`).
+- Description: `#444`, 0.82 rem.
+- Next button: `#993333` background.
+- Progress text: `#888`, 0.7 rem.
+
+---
+
+## 17. File Inventory
+
+| File | Role |
+|------|------|
+| `search/templates/search/search.html` | Django template — search bar, three-column filter panel, results area |
+| `whg/webpack/js/search.js` | Main orchestration — wires all widgets, handles search lifecycle |
+| `whg/webpack/css/search.css` | All filter panel, result, and map styling |
+| `whg/webpack/js/filterState.js` | Singleton state model with observer pattern |
+| `whg/webpack/js/contextMap.js` | Context map manager (MapLibre, overlays, bbox tracking) |
+| `whg/webpack/js/regionSelector.js` | Tab 1 region type-ahead (backend stub) |
+| `whg/webpack/js/periodSelector.js` | Tab 2 PeriodO period selector (backend stub) |
+| `whg/webpack/js/politySelector.js` | Tab 3 territory/polity selector (backend stub) |
+| `whg/webpack/js/filtersTour.js` | Guided tour of the filter interface (driver.js) |
+| `whg/webpack/js/typeTreeWidget.js` | AAT place-type tree widget |
+| `whg/webpack/js/dateline.js` | Dateline temporal slider widget |
+
+---
+
+## 18. Backend Integration TODO
+
+The front-end is complete.  The following backend work is needed:
+
+1. **Region search endpoint** — proxy to CRC FastAPI.  POST with
+   query string, admin tier, and viewport bbox.  Return name,
+   parent context, and geometry reference.
+
+2. **PeriodO search endpoint** — query `periodo_periods` ES index.
+   POST with label fragment and viewport bbox.  Return grouped
+   results with label, years, spatial description, authority.
+
+3. **Territory search endpoint** — query the active territory
+   dataset's ES index (Cliopatria, D-PLACE, or NativeLand).  POST
+   with label fragment and viewport bbox.
+
+4. **Geometry preview endpoint** — `GET /geometry/{index}/{id}`.
+   Return simplified GeoJSON for map preview.
+
+5. **Updated search endpoint** — accept the new `filter_state`
+   payload alongside the legacy fields.  Construct ES bool query
+   with `geo_bounding_box` (always), `geo_shape` intersects (when
+   geometry ref present), numeric range on temporal fields, and
+   authority/type term filters.
+
+6. **PeriodO ES index build pipeline** — fetch PeriodO dataset,
+   parse JSON-LD, resolve spatial URIs, bulk-index into
+   `periodo_periods`.
+
+7. **Territory dataset indexing** — index Cliopatria, D-PLACE, and
+   NativeLand into dedicated ES indices with label, temporal extent,
+   and geo_shape geometry.
+
+---
+
+## 19. Migration Path to v4
+
+- The `periodo_periods` ES index migrates to an ArangoDB collection.
+- Territory datasets become ArangoDB collections.
+- Spatial filtering uses ArangoDB geo-spatial index capabilities.
+- Type consanguinity computation becomes native AQL graph traversal.
 - The tab-based temporal authority model carries over unchanged.
+- The filter state model and panel layout carry over unchanged.
 
----
-
-## 15. Performance Considerations
-
-- Use `geo_bounding_box` as the primary spatial filter (applied to
-  all records, fast).
-- Use `geo_shape` only when a named geometry exists.
-- Reactive PeriodO and polity queries hit small dedicated indices and
-  are cheap.
-- The main `places` search fires only on manual trigger, avoiding
-  unnecessary load during filter composition.
-- No geometry composition, buffering, or client-side geometry
-  processing.
-
----
-
-## 16. Explicit Non-Goals
-
-- No polygon drawing.
-- No geometry unions, exclusions, or buffers.
-- No multi-period or multi-polity selection (in search context).
-- No mixed temporal authority.
-- No client-side geometry processing.
-- No external tile provider dependencies.
-
----
-
-## 17. Estimated Effort
-
-| Phase | Scope | Effort |
-|-------|-------|--------|
-| 2 | Panel layout (three-column, tabbed Time & Space) | 2 days |
-| 5 | Context map (CSS desaturation, preview overlays) | 1--2 days |
-| 7 | Tab 1: temporal slider + OSM region selector | 3--4 days |
-| 8.2 | PeriodO ES index build pipeline | 1--2 days |
-| 8.3 | Tab 2: PeriodO period selector | 3--4 days |
-| 9 | Tab 3: polity selector | 2--3 days |
-| 10--12 | Tab switching, state management, search triggering | 2--3 days |
-| 11 | FastAPI search endpoint | 2--3 days |
-| 13 | Dataset metadata PeriodO integration | 1 day |
-
-**Prerequisites:**
-
-- OSM administrative boundary geometries indexed as `geo_shape`
-  fields in the `places` index.
-- Shapely available in the CRC FastAPI environment for geometry
-  simplification during preview serving.
-- Polity dataset indexed in ES (schema and pipeline to be specified
-  separately).

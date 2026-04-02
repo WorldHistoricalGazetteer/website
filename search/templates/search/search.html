@@ -84,6 +84,12 @@
                 <button id="initiate_search" data-bs-toggle="tooltip" data-title="Initiate search|Cannot search without a place name" class="btn btn-outline-secondary btn-success" type="button">
                     <i class="fas fa-search"></i>
                 </button>
+                <button id="exact_match_toggle" class="btn btn-outline-secondary" type="button"
+                        title="Exact match: off — currently including phonetically similar names. Click to require exact spelling."
+                        aria-pressed="false">
+                    <i class="fas fa-crosshairs"></i>
+                    <span class="d-none d-md-inline ms-1">Exact</span>
+                </button>
                 <button id="toggle_filters" class="btn btn-outline-secondary" type="button"
                         data-bs-toggle="collapse" data-bs-target="#search_filters"
                         aria-expanded="false" aria-controls="search_filters"
@@ -97,13 +103,157 @@
 
         <!-- Collapsible filters panel (pre-search) -->
         <div id="search_filters" class="collapse w-100">
-            <div id="filters_panel" class="row gx-3 mx-0">
-                <!-- Place type filter box -->
-                <div class="col-lg-5 col-md-6 mb-2 d-flex flex-column">
+            <div id="filters_panel" class="filters-grid">
+
+                <!-- ── Column 1: Data Sources ── -->
+                <div class="filter-col filter-col--authorities">
+                    <div class="filter-box h-100 d-flex flex-column">
+                        <div class="filter-header">
+                            <span class="categories">data sources</span>
+                        </div>
+                        <div class="authority-list">
+                            <label class="authority-item form-check"
+                                   title="GeoNames geographical database — ~12 million features with coordinates, names, and types sourced from national mapping agencies and other authoritative sources">
+                                <input class="form-check-input authority-cb" type="checkbox" value="gn" checked>
+                                <span class="form-check-label">GeoNames</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="Wikidata knowledge graph — ~8 million places with structured data, links to Wikipedia, identifiers for external authorities, and multilingual labels">
+                                <input class="form-check-input authority-cb" type="checkbox" value="wd" checked>
+                                <span class="form-check-label">Wikidata</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="Getty Thesaurus of Geographic Names (TGN) — ~3 million scholarly place name records maintained by the Getty Research Institute">
+                                <input class="form-check-input authority-cb" type="checkbox" value="tgn" checked>
+                                <span class="form-check-label">TGN</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="Pleiades gazetteer of ancient places — ~37,000 places from the classical world, maintained by the ancient-studies community">
+                                <input class="form-check-input authority-cb" type="checkbox" value="pl" checked>
+                                <span class="form-check-label">Pleiades</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="Index Villaris 1680 — ~24,000 English and Welsh place names from a 17th-century gazetteer, linked to modern identifiers">
+                                <input class="form-check-input authority-cb" type="checkbox" value="iv" checked>
+                                <span class="form-check-label">IndexVillaris</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="Contributed historical gazetteer datasets curated by WHG researchers and projects — includes attestations with temporal scoping and rich metadata">
+                                <input class="form-check-input authority-cb" type="checkbox" value="whg" checked>
+                                <span class="form-check-label">WHG datasets</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="OpenStreetMap community mapping data — comprehensive global coverage but very noisy: includes individual buildings, bus stops, businesses, and other micro-features alongside meaningful places">
+                                <input class="form-check-input authority-cb" type="checkbox" value="osm">
+                                <span class="form-check-label">OpenStreetMap</span>
+                            </label>
+                            <label class="authority-item form-check"
+                                   title="GB1900 gazetteer — British place names 1888–1914 from Ordnance Survey maps. Very noisy: ~800,000 text labels including field names, minor features, and annotations">
+                                <input class="form-check-input authority-cb" type="checkbox" value="gb">
+                                <span class="form-check-label">GB1900</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Column 2: Time & Space (double-width) ── -->
+                <div class="filter-col filter-col--timespace">
+                    <div class="filter-box h-100 d-flex flex-column">
+                        <div class="filter-header">
+                            <span class="categories">time &amp; space</span>
+                            <span class="ms-1 categories">
+                                <a id="timespace_clear" href="#" class="small">clear all</a>
+                            </span>
+                        </div>
+                        <div class="timespace-inner">
+
+                            <!-- Left: Controls -->
+                            <div class="timespace-controls">
+
+                                <!-- Tabbed spatial/temporal-authority selectors -->
+                                <ul class="nav nav-tabs nav-tabs-sm" id="timespaceTab" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="tab-timespan" data-bs-toggle="tab"
+                                                data-bs-target="#pane-timespan" type="button" role="tab"
+                                                aria-controls="pane-timespan" aria-selected="true">
+                                            <i class="fas fa-map-marker-alt me-1"></i>Region
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="tab-periods" data-bs-toggle="tab"
+                                                data-bs-target="#pane-periods" type="button" role="tab"
+                                                aria-controls="pane-periods" aria-selected="false">
+                                            <i class="fas fa-hourglass-half me-1"></i>Period
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="tab-polities" data-bs-toggle="tab"
+                                                data-bs-target="#pane-polities" type="button" role="tab"
+                                                aria-controls="pane-polities" aria-selected="false">
+                                            <i class="fas fa-flag me-1"></i>Territory
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                <div class="tab-content flex-grow-1" id="timespaceTabContent">
+
+                                    <!-- Tab 1: Region -->
+                                    <div class="tab-pane fade show active p-2" id="pane-timespan" role="tabpanel" aria-labelledby="tab-timespan">
+                                        <div class="filter-header"><span class="categories">time</span></div>
+                                        <div id="dateline_container" class="temporal-off">
+                                            <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
+                                                <button type="button" class="btn active" data-temporal-mode="off" title="No temporal filtering — return places from all periods">Off</button>
+                                                <button type="button" class="btn" data-temporal-mode="range" title="Restrict results to places attested within the selected year range">Year range</button>
+                                                <button type="button" class="btn" data-temporal-mode="undated" title="Restrict to year range, but also include places with no temporal attestation">Range + undated</button>
+                                            </div>
+                                            <div id="dateline"></div>
+                                        </div>
+                                        <div class="filter-header">
+                                            <span class="categories">space</span>
+                                            <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                                               title="Search for a named region below, or leave empty to use the current map extent as a spatial filter."></i>
+                                        </div>
+                                        <div id="region_selector_container"></div>
+                                    </div>
+
+                                    <!-- Tab 2: Periods -->
+                                    <div class="tab-pane fade p-2" id="pane-periods" role="tabpanel" aria-labelledby="tab-periods">
+                                        <div class="filter-header mb-1">
+                                            <span class="categories small">PeriodO period search</span>
+                                            <a href="https://perio.do" target="_blank" class="small ms-1" data-bs-toggle="tooltip" title="Learn about PeriodO">
+                                                <i class="fas fa-external-link-alt"></i>
+                                            </a>
+                                        </div>
+                                        <div id="period_selector_container"></div>
+                                    </div>
+
+                                    <!-- Tab 3: Territories -->
+                                    <div class="tab-pane fade p-2" id="pane-polities" role="tabpanel" aria-labelledby="tab-polities">
+                                        <div id="polity_selector_container"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Context map -->
+                            <div class="timespace-map">
+                                <div id="context_map_wrap">
+                                    <div id="context_map"></div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- ── Column 3: Place Types ── -->
+                <div class="filter-col filter-col--types">
                     <div class="filter-box h-100 d-flex flex-column">
                         <div class="filter-section">
                             <div class="filter-header">
-                                <span class="categories">place type filter</span>
+                                <span class="categories">place types</span>
+                                <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                                   title="Select types to filter results. Selecting a parent category includes all its children. Results matching your selected types exactly are ranked highest; broader matches appear below."></i>
                                 <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
                                 <span class="ms-1 categories">
                                     <a id="tree_clear" href="#" class="small">clear all</a>
@@ -113,78 +263,10 @@
                                 <div id="aat_type_tree"></div>
                             </div>
                         </div>
+
                     </div>
                 </div>
-                <!-- Period + Spatial filters + Map box -->
-                <div class="col-lg-7 col-md-6 mb-2 d-flex flex-column">
-                    <div class="filter-box h-100">
-                        <div class="row gx-2 h-100">
-                            <div class="col-lg-5">
-                                <div class="filter-section mb-3">
-                                    <div class="filter-header">
-                                        <span class="categories">period filter</span>
-                                        <em class="smaller">(temporal + spatial)</em>
-                                    </div>
-                                    <div id="chrononym_selector" class="input-group mt-1">
-                                        <input id="chrononym_input"
-                                               data-bs-toggle="popover"
-                                               data-bs-html="true"
-                                               data-bs-title="What is PeriodO?"
-                                               data-bs-content='
-                                                 <p class="mb-1">
-                                                   <strong>PeriodO</strong> is a gazetteer of scholarly definitions of historical periods, linking time and place for use in digital humanities research.
-                                                 </p>'
-                                               class="form-control typeahead"
-                                               type="text"
-                                               placeholder="Enter chrononym (PeriodO name)"
-                                               aria-label="Chrononym filter"
-                                               autocomplete="off"
-                                               spellcheck="false">
-                                        <button id="clear_chrononym"
-                                                class="btn btn-outline-secondary"
-                                                type="button">
-                                          <i class="fas fa-times"></i>
-                                        </button>
-                                    </div>
-                                    <div class="small text-muted mt-1">
-                                        <i class="fas fa-info-circle"></i>
-                                        Enter a PeriodO chrononym, or use the timeline on the map.
-                                    </div>
-                                </div>
-                                <div class="filter-section">
-                                    <div class="filter-header">
-                                        <span class="categories">spatial filter</span>
-                                    </div>
-                                    <div id="spatial_selector" class="input-group mt-1">
-                                        <select data-bs-toggle="tooltip" title="Filter by Country or Custom area" class="form-select" id="categorySelector">
-                                            <option value="none" selected>None</option>
-                                            <option value="countries">Country</option>
-                                            {% if has_areas %}
-                                            <option value="userareas">Custom</option>
-                                            {% endif %}
-                                        </select>
-                                        <select data-bs-toggle="tooltip" data-bs-title="Select a category first" class="form-select" id="entrySelector" multiple>
-                                            <option>(choose type)</option>
-                                        </select>
-                                        <button data-bs-toggle="tooltip" title="Clear this filter" class="btn btn-outline-secondary clearButton" type="button" id="clearButton">
-                                            <i class="fas fa-times"></i>
-                                        </button>
-                                    </div>
-                                    <div class="small text-muted mt-1">
-                                        <i class="fas fa-info-circle"></i>
-                                        Select above, or draw a region on the map.
-                                    </div>
-                                </div>
-                            </div>
-                            <!-- Filter map (timeline + draw + spatial overlays) -->
-                            <div class="col-lg-7 mt-3 mt-lg-0">
-                                <div class="filter-section h-100">
-                                    <div id="filter_map" class="h-100"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+
             </div>
         </div>
 
@@ -193,7 +275,7 @@
             <div class="landing-inner mx-auto">
                 <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="landing-logo mb-3">
                 <p class="lead text-muted mb-1">Search across historical gazetteers</p>
-                <p class="text-muted small">Enter a place name above and use <strong>Filters</strong> to restrict your search by place type, period, or region. You can also search by filters alone — select at least one place type together with a temporal or spatial constraint.</p>
+                <p class="text-muted small">Enter a place name above to search, or open <strong>Filters</strong> to refine by data source, place type, time range, region, historical period, or named territory. You can also search by filters alone — select at least one place type together with a temporal or spatial constraint. <a href="#" id="start_tour_link" class="text-decoration-underline">Take a tour</a> of the filters to learn more.</p>
             </div>
         </div>
 
@@ -216,7 +298,7 @@
 
 {% csrf_token %} <!-- Used for Django POST requests -->
 <script type="text/javascript">
-    const dropdown_data = {{ dropdown_data|safe }};  // Used for spatial filter
+    const dropdown_data = {{ dropdown_data|safe }};  // Retained for result rendering (country lookups)
 	var eswhg = "{{ es_whg|escapejs }}";
 	const has_areas = {{ has_areas|yesno:"true,false" }};
 	const user_areas = {{ user_areas|safe }}

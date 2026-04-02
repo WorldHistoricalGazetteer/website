@@ -35,6 +35,11 @@
     margin: 0;
 }
 
+/*!******************************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./node_modules/driver.js/dist/driver.css ***!
+  \******************************************************************************************/
+.driver-active .driver-overlay,.driver-active *{pointer-events:none}.driver-active .driver-active-element,.driver-active .driver-active-element *,.driver-popover,.driver-popover *{pointer-events:auto}@keyframes animate-fade-in{0%{opacity:0}to{opacity:1}}.driver-fade .driver-overlay{animation:animate-fade-in .2s ease-in-out}.driver-fade .driver-popover{animation:animate-fade-in .2s}.driver-popover{all:unset;box-sizing:border-box;color:#2d2d2d;margin:0;padding:15px;border-radius:5px;min-width:250px;max-width:300px;box-shadow:0 1px 10px #0006;z-index:1000000000;position:fixed;top:0;right:0;background-color:#fff}.driver-popover *{font-family:Helvetica Neue,Inter,ui-sans-serif,"Apple Color Emoji",Helvetica,Arial,sans-serif}.driver-popover-title{font:19px/normal sans-serif;font-weight:700;display:block;position:relative;line-height:1.5;zoom:1;margin:0}.driver-popover-close-btn{all:unset;position:absolute;top:0;right:0;width:32px;height:28px;cursor:pointer;font-size:18px;font-weight:500;color:#d2d2d2;z-index:1;text-align:center;transition:color;transition-duration:.2s}.driver-popover-close-btn:hover,.driver-popover-close-btn:focus{color:#2d2d2d}.driver-popover-title[style*=block]+.driver-popover-description{margin-top:5px}.driver-popover-description{margin-bottom:0;font:14px/normal sans-serif;line-height:1.5;font-weight:400;zoom:1}.driver-popover-footer{margin-top:15px;text-align:right;zoom:1;display:flex;align-items:center;justify-content:space-between}.driver-popover-progress-text{font-size:13px;font-weight:400;color:#727272;zoom:1}.driver-popover-footer button{all:unset;display:inline-block;box-sizing:border-box;padding:3px 7px;text-decoration:none;text-shadow:1px 1px 0 #fff;background-color:#fff;color:#2d2d2d;font:12px/normal sans-serif;cursor:pointer;outline:0;zoom:1;line-height:1.3;border:1px solid #ccc;border-radius:3px}.driver-popover-footer .driver-popover-btn-disabled{opacity:.5;pointer-events:none}:not(body):has(>.driver-active-element){overflow:hidden!important}.driver-no-interaction,.driver-no-interaction *{pointer-events:none!important}.driver-popover-footer button:hover,.driver-popover-footer button:focus{background-color:#f7f7f7}.driver-popover-navigation-btns{display:flex;flex-grow:1;justify-content:flex-end}.driver-popover-navigation-btns button+button{margin-left:4px}.driver-popover-arrow{content:"";position:absolute;border:5px solid #fff}.driver-popover-arrow-side-over{display:none}.driver-popover-arrow-side-left{left:100%;border-right-color:transparent;border-bottom-color:transparent;border-top-color:transparent}.driver-popover-arrow-side-right{right:100%;border-left-color:transparent;border-bottom-color:transparent;border-top-color:transparent}.driver-popover-arrow-side-top{top:100%;border-right-color:transparent;border-bottom-color:transparent;border-left-color:transparent}.driver-popover-arrow-side-bottom{bottom:100%;border-left-color:transparent;border-top-color:transparent;border-right-color:transparent}.driver-popover-arrow-side-center{display:none}.driver-popover-arrow-side-left.driver-popover-arrow-align-start,.driver-popover-arrow-side-right.driver-popover-arrow-align-start{top:15px}.driver-popover-arrow-side-top.driver-popover-arrow-align-start,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-start{left:15px}.driver-popover-arrow-align-end.driver-popover-arrow-side-left,.driver-popover-arrow-align-end.driver-popover-arrow-side-right{bottom:15px}.driver-popover-arrow-side-top.driver-popover-arrow-align-end,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-end{right:15px}.driver-popover-arrow-side-left.driver-popover-arrow-align-center,.driver-popover-arrow-side-right.driver-popover-arrow-align-center{top:50%;margin-top:-5px}.driver-popover-arrow-side-top.driver-popover-arrow-align-center,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-center{left:50%;margin-left:-5px}.driver-popover-arrow-none{display:none}
+
 /*!*********************************************************************************!*\
   !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/typeahead.css ***!
   \*********************************************************************************/
@@ -430,6 +435,25 @@ input[type=range].slider.to::-moz-range-thumb {
     vertical-align: middle;
 }
 
+/* --- Exact-match toggle button --- */
+#exact_match_toggle {
+    border-color: #ced4da;
+    color: #555;
+}
+#exact_match_toggle:hover {
+    background-color: #e9ecef;
+    color: #333;
+}
+#exact_match_toggle.active {
+    background-color: #993333;
+    border-color: #993333;
+    color: #fff;
+}
+#exact_match_toggle.active:hover {
+    background-color: #7a2929;
+    border-color: #7a2929;
+}
+
 /* --- Collapsible filters panel --- */
 #search_filters {
     padding: 0;
@@ -451,30 +475,528 @@ input[type=range].slider.to::-moz-range-thumb {
     margin-bottom: 4px;
 }
 
-#categorySelector {
-	max-width: 112px;
-    color: #777;
-}
-#spatial_selector span.select2-selection {
-    border-radius: 0 !important;
+/* ===================================================================
+   Three-column filters grid
+   Columns: Data Sources (narrow) | Time & Space (2x) | Place Types (1x)
+   =================================================================== */
+.filters-grid {
+    display: grid;
+    grid-template-columns: auto 2fr 1fr;
+    gap: 8px;
+    align-items: stretch;
 }
 
-#search_info {
-    font-size: 0.9rem;
-    min-height: 25%;
-    max-height: 50%;
-    border: 1px gainsboro solid;
-    border-radius: 8px;
+.filter-col {
+    min-width: 0; /* prevent grid blowout */
 }
-.search_info-header {
-    font-size: 1rem;
-    font-weight: bold;
-    display: block;
+
+/* Responsive: stack below lg */
+@media (max-width: 991.98px) {
+    .filters-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .filter-col--timespace {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 575.98px) {
+    .filters-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===================================================================
+   Authorities column
+   =================================================================== */
+.filter-col--authorities {
+    max-width: 190px;
+}
+.authority-list {
+    padding: 4px 0;
+}
+.authority-item {
+    margin-bottom: 2px;
+    white-space: nowrap;
+}
+.authority-item .form-check-label {
+    font-size: 0.82rem;
+}
+
+/* ===================================================================
+   Time & Space — two-column internal layout (tabs left, map right)
+   =================================================================== */
+.timespace-inner {
+    display: flex;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.timespace-controls {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.timespace-map {
+    flex: 0 0 auto;
+    width: 45%;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Responsive: stack vertically below md */
+@media (max-width: 767.98px) {
+    .timespace-inner {
+        flex-direction: column;
+    }
+}
+
+/* ===================================================================
+   Context map (§5) — square, desaturated basemap, drives panel height
+   =================================================================== */
+#context_map_wrap {
+    position: relative;
+    aspect-ratio: 1;
+    width: 100%;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    overflow: hidden;
+    background: #daecf1;
+}
+
+#context_map {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* Desaturated basemap (§5.1) */
+#context_map .maplibregl-canvas {
+    filter: saturate(0.3) brightness(1.05);
+}
+
+/* ===================================================================
+   Time & Space tabs
+   =================================================================== */
+#timespaceTab {
+    border-bottom-color: #dee2e6;
+}
+#timespaceTab .nav-link {
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    color: #555;
+    border: 1px solid transparent;
+}
+#timespaceTab .nav-link.active {
+    color: #333;
+    background-color: #f8f9fa;
+    border-color: #dee2e6 #dee2e6 #f8f9fa;
+    font-weight: 500;
+}
+#timespaceTab .nav-link:hover:not(.active) {
+    border-color: #e9ecef #e9ecef #dee2e6;
+}
+
+#timespaceTabContent {
+    overflow-y: auto;
+    flex: 1 1 auto;
+}
+
+/* ===================================================================
+   Temporal filter — three-state control in the Region tab
+   =================================================================== */
+
+/* Wrapper for the mode toggle + dateline slider */
+#dateline_container {
+    margin-bottom: 10px;
+    padding-bottom: 20px;
+    border-bottom: none;
+}
+
+/* Three-state mode toggle (off / range / range+undated) */
+.temporal-mode-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 6px;
+}
+.temporal-mode-toggle .btn {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    line-height: 1.4;
+    border-color: #ccc;
+    color: #666;
+    background: #f8f9fa;
+}
+.temporal-mode-toggle .btn.active {
+    background: #e8f0fe;
+    color: #1a56db;
+    border-color: #a0b8e8;
+    font-weight: 500;
+    z-index: 1;
+}
+.temporal-mode-toggle .btn:hover:not(.active) {
+    background: #eee;
+}
+
+/* ===================================================================
+   Shared toggle-button-group style for region tier & polity dataset
+   (follows the temporal-mode-toggle visual model)
+   =================================================================== */
+.region-tier-toggle,
+.polity-dataset-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 6px;
+}
+.region-tier-toggle .btn,
+.polity-dataset-toggle .btn {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    line-height: 1.4;
+    border-color: #ccc;
+    color: #666;
+    background: #f8f9fa;
+}
+.region-tier-toggle .btn.active,
+.polity-dataset-toggle .btn.active {
+    background: #e8f0fe;
+    color: #1a56db;
+    border-color: #a0b8e8;
+    font-weight: 500;
+    z-index: 1;
+}
+.region-tier-toggle .btn:hover:not(.active),
+.polity-dataset-toggle .btn:hover:not(.active) {
+    background: #eee;
+}
+
+/* Disabled overlay when temporal filter is off */
+#dateline_container.temporal-off #dateline {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+/* --- Dateline widget overrides for inline filter context --- */
+
+/* Override the dateline colour palette to match the search panel */
+#dateline_container {
+    --slider-background: #999;
+    --slider-background-darker: #666;
+    --range-color: #4c79a6;
+    --slider-button-color: #4c79a6;
+    --year-text: #444;
+}
+
+#dateline_container #dateline {
+    position: relative;
+    height: auto;
+    max-height: none;
     margin: 0;
-    padding: 0;
-    margin-bottom: 0.5rem;
-    background-color: antiquewhite;
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
 }
+
+/* Hide the collapse/expand button — always open here */
+#pane-timespan #dateline .dateline-button {
+    display: none !important;
+}
+/* Hide the help icon */
+#pane-timespan #dateline .fas.fa-question-circle.linky {
+    display: none !important;
+}
+
+/* Force the range_container always expanded, no transitions */
+#pane-timespan #dateline .range_container {
+    max-width: 100% !important;
+    width: 100% !important;
+    overflow: visible !important;
+    transition: none !important;
+    left: 0;
+    margin-top: 4px;
+    height: auto;
+}
+#pane-timespan #dateline .range_container .form_control button {
+    visibility: visible !important;
+    opacity: 1 !important;
+    transition: none !important;
+}
+
+/* Compact year buttons — restyled to match panel palette */
+#pane-timespan #dateline .year_button {
+    font-size: 11px;
+    padding: 2px 5px;
+    background-color: #f8f9fa;
+    border: 1px solid #b0c4d8;
+    color: #4c79a6;
+    font-weight: 600;
+}
+#pane-timespan #dateline .year_button:hover {
+    background-color: #e8f0fe;
+    color: #335c85;
+}
+/* Hide the undated button — we handle this with the mode toggle */
+#pane-timespan #dateline .undated_button {
+    display: none !important;
+}
+/* Compact form control row */
+#pane-timespan #dateline .form_control {
+    font-size: 14px;
+    color: #555;
+}
+/* Compact scale */
+#pane-timespan #dateline .scale-container {
+    top: 4px;
+    margin-bottom: 4px;
+}
+/* Ensure control_container doesn't add excess height */
+#pane-timespan #dateline .control_container {
+    min-height: auto;
+}
+
+/* Slider track colour */
+#pane-timespan #dateline input[type="range"] {
+    background-color: #b0c4d8;
+}
+
+/* Replace the red SVG slider thumbs with blue ones */
+#pane-timespan #dateline input[type="range"]::-webkit-slider-thumb {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 21%27%3E%3Crect x=%270%27 y=%270%27 width=%272%27 height=%2721%27 fill=%27%234c79a6%27/%3E%3Cpolygon points=%272,10.5 15,19 15,2%27 fill=%27%234c79a6%27 fill-opacity=%270%27 stroke=%27%234c79a6%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");
+}
+#pane-timespan #dateline input[type="range"]::-moz-range-thumb {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 16 21%27%3E%3Crect x=%270%27 y=%270%27 width=%272%27 height=%2721%27 fill=%27%234c79a6%27/%3E%3Cpolygon points=%272,10.5 15,19 15,2%27 fill=%27%234c79a6%27 fill-opacity=%270%27 stroke=%27%234c79a6%27 stroke-width=%272%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");
+}
+
+/* Slider thumb hover glow — blue instead of default */
+#pane-timespan #dateline input[type="range"]::-webkit-slider-thumb:hover {
+    box-shadow: inset 0 0 3px #4c79a6, 0 0 9px rgba(76,121,166,0.4);
+    -webkit-box-shadow: inset 0 0 3px #4c79a6, 0 0 9px rgba(76,121,166,0.4);
+}
+#pane-timespan #dateline input[type="range"]::-moz-range-thumb:hover {
+    box-shadow: inset 0 0 3px #4c79a6, 0 0 9px rgba(76,121,166,0.4);
+}
+
+/* Tooltip accent — blue instead of orange */
+#pane-timespan #dateline .tooltip {
+    background-color: #4c79a6;
+    color: #fff;
+}
+
+/* Tick label colour — slightly muted */
+#pane-timespan #dateline .value-label {
+    color: #555;
+}
+
+/* ===================================================================
+   Zoom-gate: disabled state for selector inputs until map is zoomed
+   =================================================================== */
+.zoom-gated-input:disabled {
+    background-color: #f0f0f0;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.zoom-gate-notice {
+    font-size: 0.75rem;
+    color: #888;
+    font-style: italic;
+    padding: 4px 0;
+}
+
+/* ===================================================================
+   Region selector (Tab 1)
+   =================================================================== */
+.region-selector {
+    font-size: 0.82rem;
+}
+.region-search-input {
+    font-size: 0.82rem;
+}
+.region-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    max-height: 200px;
+    overflow-y: auto;
+}
+.region-result {
+    padding: 5px 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+.region-result:hover,
+.region-result--active {
+    background: #e9ecef;
+}
+.region-result--stub {
+    cursor: default;
+    color: #888;
+    font-style: italic;
+}
+.region-result-label {
+    font-weight: 500;
+}
+.region-result-sublabel {
+    font-size: 0.72rem;
+    color: #888;
+}
+
+/* ===================================================================
+   Period selector (Tab 2)
+   =================================================================== */
+.period-selector {
+    font-size: 0.82rem;
+}
+.period-search-input {
+    font-size: 0.82rem;
+}
+.period-dropdown {
+    display: none;
+}
+.period-group {
+    margin-bottom: 4px;
+}
+.period-group-header {
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: #666;
+    padding: 2px 4px;
+    background: #f0f0f0;
+    border-radius: 2px;
+}
+.period-result {
+    padding: 4px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+.period-result:hover {
+    background: #e9ecef;
+}
+.period-result-label {
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+.period-result-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.7rem;
+    color: #777;
+}
+.period-result-authority {
+    font-style: italic;
+    color: #999;
+}
+.period-results-area {
+    max-height: 180px;
+    overflow-y: auto;
+}
+.period-authority-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.period-authority-item {
+    cursor: pointer;
+    padding: 1px 6px;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    background: #fff;
+}
+.period-authority-item:hover {
+    background: #e9ecef;
+}
+.period-stub {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+/* ===================================================================
+   Polity selector (Tab 3)
+   =================================================================== */
+.polity-selector {
+    font-size: 0.82rem;
+}
+.polity-search-input {
+    font-size: 0.82rem;
+}
+.polity-result {
+    padding: 4px 8px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+.polity-result:hover {
+    background: #e9ecef;
+}
+.polity-result-label {
+    font-weight: 500;
+    font-size: 0.8rem;
+}
+.polity-results-area {
+    max-height: 180px;
+    overflow-y: auto;
+}
+.polity-stub {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+/* ===================================================================
+   Filter chips (dismissible selections)
+   =================================================================== */
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    background: #e8f0fe;
+    border: 1px solid #c5d8f0;
+    border-radius: 12px;
+    color: #1a56db;
+}
+.filter-chip--period {
+    background: #fef3cd;
+    border-color: #f0d86e;
+    color: #856404;
+}
+.filter-chip--polity {
+    background: #d4edda;
+    border-color: #a3d9a5;
+    color: #155724;
+}
+.filter-chip-years {
+    font-size: 0.7rem;
+    opacity: 0.8;
+}
+.filter-chip-dismiss {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 0.7rem;
+    color: inherit;
+    opacity: 0.6;
+    line-height: 1;
+}
+.filter-chip-dismiss:hover {
+    opacity: 1;
+}
+
+/* ===================================================================
+   Search / Update button — removed from filters panel (§11.1)
+   Search is triggered from the main search bar only.
+   =================================================================== */
 
 /* ===================================================================
    Landing state — shown before any search
@@ -536,16 +1058,6 @@ input[type=range].slider.to::-moz-range-thumb {
     overflow-y: auto;
 }
 
-/* ===================================================================
-   Filter map (inside collapsible filters panel)
-   =================================================================== */
-#filter_map {
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    min-height: 220px;
-    background: #daecf1;
-}
-
 /* Give the type tree more vertical space when filters are open */
 #type_tree_container {
     max-height: 340px;
@@ -578,14 +1090,17 @@ input[type=range].slider.to::-moz-range-thumb {
     #type_tree_container {
         max-height: 200px;
     }
-}
-
-/* Filter map: ensure usable height when stacked on sub-lg screens */
-@media (max-width: 991.98px) {
-    #filter_map {
-        min-height: 260px;
+    #context_map_wrap {
+        aspect-ratio: 4/3;
+    }
+    .timespace-inner {
+        flex-direction: column;
+    }
+    .timespace-map {
+        max-height: 220px;
     }
 }
+
 #result_container p { font-size: small;}
 
 .whg-result {
@@ -611,10 +1126,10 @@ input[type=range].slider.to::-moz-range-thumb {
     border-radius: 5px;
     box-shadow: none;
     margin-bottom: 0.3rem;
-    position: relative; /* allow absolutely-positioned overlay child */
+    position: relative;
 }
 
-.result::after { /* clearfix */
+.result::after {
 	content: "";
 	display: table;
 	clear: both;
@@ -742,18 +1257,12 @@ input[type=range].slider.to::-moz-range-thumb {
 
 /* Flash border to highlight a result briefly when selected from the map */
 .result.flash-border {
-  /* Use outline to simulate a border flash so it cannot be overridden by existing `border: ... !important` rules
-     Outline does not affect layout and will visually appear like a border. Keep outline width constant. */
   outline: 2px solid transparent;
-  /* place outline slightly inside the element so it's not clipped by overflow on the container */
   outline-offset: -2px;
-  /* 3 seconds total, 6 discrete steps (0.5s each) to get 3 on/off cycles */
   animation: whg-flash-outline 3s steps(6,end) forwards;
 }
 
 @keyframes whg-flash-outline {
-  /* 3 cycles, each cycle = 1s (0.5s on, 0.5s off) -> total 3s
-     Percentages map to 0.5s intervals over 3s -> 16.6667% per half-second */
   0% { outline-color: #e3342f; }
   16.666% { outline-color: #e3342f; }
   16.667% { outline-color: transparent; }
@@ -777,64 +1286,9 @@ input[type=range].slider.to::-moz-range-thumb {
     color: #993333;
 }
 
-
-.select2-container {
-	max-width: 230px;
-}
-
-span.select2-selection {
-    border: 1px solid #ced4da !important;
-    border-radius: 0.375rem !important;
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-}
-.select2-search__field {
-    left: 8px;
-    top: 2px;
-    position: relative;
-}
-
-#chrononym_selector .twitter-typeahead {
-    display: block;           /* full width instead of inline-block */
-    flex: 1 1 auto;           /* allow it to grow inside flex container */
-    position: relative;        /* keep Typeahead positioning intact */
-}
-
-#chrononym_input.tt-input {
-    border: 1px solid #ced4da !important;
-    border-radius: 0.375rem !important;
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    height: calc(1.5em + 0.75rem + 2px) !important; /* match select2 height */
-    padding: 0.375rem 0.75rem !important; /* match select2 padding */
-    width: 100% !important;
-    box-sizing: border-box;
-}
-
-.tt-dataset-Chrononyms {
-    max-height: 500px;
-    width: 100% !important;
-}
-
-.tt-dataset-Chrononyms .tt-suggestion {
-    white-space: unset !important;
-}
-
-.tt-suggestion:hover {
-    cursor: pointer;
-    background-color: #c3f3c89e;
-}
-
-.tt-empty-message {
-  padding: 0.5rem 1rem;
-  color: #6c757d;      /* Bootstrap muted text */
-  font-style: italic;
-}
-
 /* ===================================================================
    AAT Type-Tree Widget
    =================================================================== */
-
 
 #tree_selection_badge {
     font-size: 0.65rem;
@@ -1014,6 +1468,70 @@ span.select2-selection {
     font-size: 0.75rem;
     color: #999;
     font-style: italic;
+}
+
+/* Typeahead (retained for search bar) */
+.tt-suggestion:hover {
+    cursor: pointer;
+    background-color: #c3f3c89e;
+}
+
+.tt-empty-message {
+  padding: 0.5rem 1rem;
+  color: #6c757d;
+  font-style: italic;
+}
+
+/* ===================================================================
+   Driver.js tour overrides — match WHG visual style
+   =================================================================== */
+.driver-popover {
+    font-family: inherit;
+    max-width: 360px;
+}
+.driver-popover-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #993333;
+    font-variant: small-caps;
+}
+.driver-popover-description {
+    font-size: 0.82rem;
+    color: #444;
+    line-height: 1.5;
+}
+.driver-popover-progress-text {
+    font-size: 0.7rem;
+    color: #888;
+}
+.driver-popover-navigation-btns .driver-popover-next-btn {
+    background-color: #993333;
+    border-color: #993333;
+    color: #fff;
+    font-size: 0.78rem;
+    padding: 4px 12px;
+    border-radius: 4px;
+}
+.driver-popover-navigation-btns .driver-popover-next-btn:hover {
+    background-color: #7a2929;
+}
+.driver-popover-navigation-btns .driver-popover-prev-btn {
+    font-size: 0.78rem;
+    padding: 4px 12px;
+    border-radius: 4px;
+    color: #666;
+}
+.driver-popover-navigation-btns .driver-popover-prev-btn:hover {
+    color: #333;
+}
+/* "Take a Tour" link styling */
+#start_tour_link {
+    color: #993333;
+    cursor: pointer;
+    font-weight: 500;
+}
+#start_tour_link:hover {
+    color: #7a2929;
 }
 
 

@@ -90,6 +90,17 @@ export default class TypeTreeWidget {
             const $root = $('<ul class="tt-root"></ul>');
             nodes.forEach(n => $root.append(this._renderNode(n)));
             this.$el.append($root);
+
+            // Auto-expand all root-level nodes that have children
+            const $rootNodes = $root.children('.tt-node');
+            for (let i = 0; i < $rootNodes.length; i++) {
+                const $li = $rootNodes.eq(i);
+                if ($li.children('.tt-children').length > 0) {
+                    await this._toggle($li);
+                    // Show immediately without slide animation for initial load
+                    $li.children('.tt-children').stop(true, true).show();
+                }
+            }
         } catch (err) {
             console.error('TypeTreeWidget: failed to load root nodes', err);
             this.$el.html(
