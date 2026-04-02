@@ -15,7 +15,7 @@
 ## 1. System Overview
 
 The CRC Gateway is a FastAPI application running on the University of
-Pittsburgh CRC VM.  It sits in front of an Elasticsearch 8.x cluster
+Pittsburgh CRC VM.  It sits in front of an Elasticsearch 9.x cluster
 and provides a JSON API consumed exclusively by the WHG Django
 application on DigitalOcean.
 
@@ -247,12 +247,63 @@ three separate mappings while allowing independent update cycles via
 
 ---
 
-### 2.4 `osm_regions` (new)
+### 2.4 `osm_admin_polygons` (new, dedicated index)
 
-Administrative boundaries from OpenStreetMap, used by the Region
-selector (Tab 1 in the filter panel).  Regions are categorised into
-four admin tiers: country, region/state, district/county,
-municipality.
+Administrative boundary polygons from OpenStreetMap, used by the
+Region selector (Tab 1 in the filter panel) and by the main search
+endpoint for `filter_geometry` spatial intersection.  Regions are
+categorised into four admin tiers: country, region/state,
+district/county, municipality.
+
+#### Why a dedicated index is required
+
+The existing `osm:` entities in the `places` index **cannot** serve
+this purpose.  The `places` index contains OSM *named places* —
+nodes tagged with `place=city`, `place=town`, etc. — indexed as
+point geometries for toponym search.  It does **not** contain
+administrative boundary relations (`boundary=administrative`), which
+are the polygon geometries needed for spatial filtering.  These are
+fundamentally different data: a point labelled "France" in the
+`places` index is not the same as the polygon boundary of France.
+
+A dedicated index is also necessary for **performance**:
+
+- **Small index, fast queries.**  The `places` index contains ~24M
+  documents optimised for full-text toponym search with complex
+  scoring.  Admin boundaries number ~300K documents with simple
+  label-prefix + geo_shape queries.  Keeping them separate avoids
+  polluting the `places` inverted indexes and segment caches with
+  unrelated data.
+- **Appropriate shard sizing.**  Admin polygons include very large
+  `geo_shape` fields (country boundaries can be several MB of
+  coordinates).  A single-shard index with `geo_shape` optimised
+  settings is far more efficient than embedding these in the
+  multi-shard `places` index.
+- **Independent update cycle.**  OSM admin boundaries update on a
+  different cadence from place ingestion.  A dedicated index allows
+  delete-and-recreate without touching the main search index.
+- **Geometry retrieval.**  The `GET /api/geometry` endpoint (§4.5)
+  and the `filter_geometry` reference in `POST /api/search` (§4.1)
+  both need to fetch full polygon geometries by ID.  A small,
+  dedicated index makes these lookups sub-millisecond.
+
+#### What this index supersedes
+
+This index replaces several PostgreSQL-based systems in the Django
+codebase:
+
+| Superseded component | Current role |
+|---------------------|--------------|
+| `areas.models.Country` (`countries` table) | Country polygons (`mpoly` MultiPolygonField) used for ccodes lookup and spatial filtering |
+| `regions.models.Region` (`regions_region` table) | UN M49 regions with `geom` MultiPolygonField, hierarchical parent/child structure |
+| `regions.models.RegionLabel` | Multilingual labels for Region entries |
+| `media/data/regions_countries.json` | Static JSON export of regions and countries for dropdown population |
+| `utils/regions_countries.py` | Utility that reads the static JSON file |
+| `regions/management/commands/export_regions_json.py` | Command to regenerate the static JSON |
+| `main/management/commands/populate_regions_and_countries.py` | Command to populate regions/countries in the DB |
+
+These components should be removed after this specification is
+implemented (see §9 for the full redundancy list).
 
 #### 2.4.1 Document Schema
 
@@ -361,7 +412,7 @@ by `dataset` and viewport bbox.
 
 ### 3.4 `POST /api/regions/search` (new)
 
-Search the `osm_regions` index.  Supports label typeahead filtered
+Search the `osm_admin_polygons` index.  Supports label typeahead filtered
 by admin `tier` and viewport bbox.
 
 ### 3.5 `GET /api/geometry/{index}/{id}` (new)
@@ -370,7 +421,7 @@ Retrieve the full GeoJSON geometry for a single document from any
 of the spatial indexes.  Used by the front-end to preview a
 selected region, period, or territory on the context map.
 
-**Allowed indexes:** `periodo_periods`, `territories`, `osm_regions`.
+**Allowed indexes:** `periodo_periods`, `territories`, `osm_admin_polygons`.
 The `places` index is NOT exposed via this endpoint.
 
 ---
@@ -396,7 +447,7 @@ The `places` index is NOT exposed via this endpoint.
   "authorities":        ["gn", "wd", "tgn", "pl", "iv", "whg"],
   "fclasses":           ["aat:300008347", "aat:300008389"],
   "filter_geometry": {
-    "index":            "osm_regions",
+    "index":            "osm_admin_polygons",
     "id":               "osm:relation/62149"
   }
 }
@@ -625,7 +676,7 @@ The ES query logic:
 
 | Parameter | Notes |
 |-----------|-------|
-| `index` | One of: `periodo_periods`, `territories`, `osm_regions` |
+| `index` | One of: `periodo_periods`, `territories`, `osm_admin_polygons` |
 | `id` | Document `_id` in the index |
 
 #### Response
@@ -633,7 +684,7 @@ The ES query logic:
 ```json
 {
   "id":       "osm:relation/62149",
-  "index":    "osm_regions",
+  "index":    "osm_admin_polygons",
   "geometry": {
     "type": "MultiPolygon",
     "coordinates": [...]
@@ -742,7 +793,7 @@ GADM, geoBoundaries, or direct OSM Overpass exports).
 3. **Clean geometries** per §6.
 4. **Compute** centroid → `centroid`.
 5. **Compute** bounding box → `bbox`.
-6. **Delete and recreate** the `osm_regions` index.
+6. **Delete and recreate** the `osm_admin_polygons` index.
 7. **Bulk-index** all documents.
 
 ---
@@ -899,10 +950,11 @@ set to the browser.
 
 ## 9. Redundant Django Code
 
-The following Django code was used to ingest PeriodO into the PostgreSQL
-database and is superseded by the CRC ES pipeline described in §5.1.
-It should be removed from the `whg3` codebase after this specification
-is implemented:
+The following Django code is superseded by the CRC ES pipelines
+described in §5.  It should be removed from the `whg3` codebase
+after this specification is implemented.
+
+### 9.1 PeriodO (superseded by `periodo_periods` ES index, §5.1)
 
 | File | Purpose |
 |------|---------|
@@ -917,6 +969,39 @@ The geometry cleaning logic in `update_from_gazetteers.py` has been
 codified as the rules in §6 above.  The temporal bound parsing logic
 in `update_periodo.py` has been codified in §2.2.3.
 
+### 9.2 Admin Polygons (superseded by `osm_admin_polygons` ES index, §5.3)
+
+The PostgreSQL-based country and region polygon system is fully
+replaced by the `osm_admin_polygons` Elasticsearch index.  All
+spatial filtering, region selection, and country-code lookup moves
+to ES.
+
+| File / Component | Purpose |
+|------------------|---------|
+| `areas/models.py` → `Country` class | Country polygons (`mpoly` MultiPolygonField) + bbox; used for ccodes lookup in ingestion and spatial filtering in reconciliation |
+| `regions/models.py` → `Region` class | UN M49 hierarchy (global → region → sub-region → country) with `geom` and `hull` MultiPolygonFields |
+| `regions/models.py` → `RegionLabel` class | Multilingual labels for `Region` entries |
+| `regions/management/commands/export_regions_json.py` | Exports regions and countries to `regions_countries.json` |
+| `regions/data/*` | Source data for region/country loading |
+| `main/management/commands/populate_regions_and_countries.py` | Populates `Region` and `Country` tables from source data |
+| `utils/regions_countries.py` | Reads the static `regions_countries.json` file for dropdown population |
+| `media/data/regions_countries.json` | Static JSON snapshot of regions/countries for front-end dropdowns |
+| `areas/forms.py` → `AreaModelForm` | Study area form using `GEOSGeometry` — may be retained if user-drawn areas remain in PostgreSQL |
+
+**Note on `Area` model:** The `Area` model (user-created study areas
+for reconciliation) is a separate concern from admin polygons.  It
+may be retained in PostgreSQL if user-drawn areas are still needed
+for reconciliation workflows, but the *country* and *predefined
+region* entries currently stored as `Area` records with
+`type='country'` and `type='predefined'` are superseded.
+
+**Note on `Country` usage in ingestion:** The `Country.mpoly` field
+is currently used by `ingestion/transformers.py` (the `isocodes()`
+function) to determine country codes from point geometries during
+place ingestion.  This must be migrated to use the
+`osm_admin_polygons` index (a `geo_shape` `intersects` query against
+tier=country documents) before the `Country` model can be removed.
+
 ---
 
 ## 10. Implementation Priority
@@ -926,11 +1011,16 @@ in `update_periodo.py` has been codified in §2.2.3.
    selector).
 2. **`territories` index + ingestion + search endpoint** — enables
    Tab 3 (Territory selector).
-3. **`osm_regions` index + ingestion + search endpoint** — enables
-   Tab 1 region selector (the dateline slider already works without
-   backend changes).
+3. **`osm_admin_polygons` index + ingestion + search endpoint** —
+   enables Tab 1 region selector and replaces the PostgreSQL
+   country/region polygon system (the dateline slider already works
+   without backend changes).
 4. **`GET /api/geometry/{index}/{id}`** — trivial endpoint needed by
    all three selectors for map preview.
 5. **Enhanced `POST /api/search`** — add `authorities` filter and
    `filter_geometry` support to the existing endpoint.
-
+6. **Migrate `isocodes()` in `ingestion/transformers.py`** — replace
+   the `Country.mpoly` point-in-polygon lookup with an ES query
+   against `osm_admin_polygons` (tier=country).
+7. **Remove redundant Django code** (§9) — only after all above
+   steps are verified working.

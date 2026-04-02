@@ -583,7 +583,7 @@ When the backend is updated to accept the new format:
   "spatial": {
     "bbox": [-10.5, 35.2, 45.0, 60.1],
     "geometry_ref": {
-      "index": "places",
+      "index": "osm_admin_polygons",
       "id": "osm:relation/123456"
     }
   },
