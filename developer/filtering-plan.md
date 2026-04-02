@@ -741,38 +741,13 @@ the WHG palette:
 
 ---
 
-## 18. Backend Integration TODO
+## 18. Backend Specification
 
-The front-end is complete.  The following backend work is needed:
-
-1. **Region search endpoint** — proxy to CRC FastAPI.  POST with
-   query string, admin tier, and viewport bbox.  Return name,
-   parent context, and geometry reference.
-
-2. **PeriodO search endpoint** — query `periodo_periods` ES index.
-   POST with label fragment and viewport bbox.  Return grouped
-   results with label, years, spatial description, authority.
-
-3. **Territory search endpoint** — query the active territory
-   dataset's ES index (Cliopatria, D-PLACE, or NativeLand).  POST
-   with label fragment and viewport bbox.
-
-4. **Geometry preview endpoint** — `GET /geometry/{index}/{id}`.
-   Return simplified GeoJSON for map preview.
-
-5. **Updated search endpoint** — accept the new `filter_state`
-   payload alongside the legacy fields.  Construct ES bool query
-   with `geo_bounding_box` (always), `geo_shape` intersects (when
-   geometry ref present), numeric range on temporal fields, and
-   authority/type term filters.
-
-6. **PeriodO ES index build pipeline** — fetch PeriodO dataset,
-   parse JSON-LD, resolve spatial URIs, bulk-index into
-   `periodo_periods`.
-
-7. **Territory dataset indexing** — index Cliopatria, D-PLACE, and
-   NativeLand into dedicated ES indices with label, temporal extent,
-   and geo_shape geometry.
+The backend — ES indexes, gateway API endpoints, request/response
+contracts, data ingestion pipelines, and geometry cleaning rules —
+is specified in the companion document **`specification.md`** in
+this directory.  That document is the authoritative reference for
+the CRC Gateway VM codebase.
 
 ---
 
