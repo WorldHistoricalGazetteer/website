@@ -524,10 +524,10 @@ distinguish them from OSM admin boundaries.
   "geom":               "full",
   "authorities":        ["gn", "wd", "tgn", "pl", "iv", "whg"],
   "types":              ["aat:300008347", "aat:300008389"],
-  "filter_geometry": {
-    "index":            "osm_admin_polygons",
-    "id":               "osm:relation/62149"
-  }
+  "filter_geometry": [
+    { "index": "osm_admin_polygons", "id": "osm:relation/62149" },
+    { "index": "osm_admin_polygons", "id": "un:150" }
+  ]
 }
 ```
 
@@ -546,11 +546,14 @@ distinguish them from OSM admin boundaries.
 | `geom` | string | No | `"full"` | `"full"` or `"repr_point"` |
 | `authorities` | string[] | No | all | Filter to specific source namespaces |
 | `types` | string[] | No | — | AAT type identifier filter |
-| `filter_geometry` | object | No | — | Reference to a geometry in another index for `geo_shape intersects` |
+| `filter_geometry` | object[] | No | — | Array of references to geometries in other indexes for `geo_shape intersects`. Each element has `index` and `id` fields. When multiple are provided, the gateway applies `bool/should` (union semantics). For backward compatibility, a single object (not wrapped in an array) is also accepted. |
 
-When `filter_geometry` is provided, the gateway fetches the geometry
-from the referenced index/id and applies it as a `geo_shape intersects`
-filter on `geoms.location`, intersected with `bounds` if also present.
+When `filter_geometry` is provided, the gateway fetches each geometry
+from its referenced index/id and applies them as `geo_shape intersects`
+filters on `geoms.location`.  Multiple geometry references use
+`bool/should` (union): a place matching **any** of the referenced
+geometries is included.  The geometry union is then intersected with
+`bounds` if also present.
 
 #### Response
 

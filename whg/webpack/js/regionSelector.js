@@ -2,27 +2,28 @@
 /**
  * Region selector (Tab 1: Timespan + Map).
  *
- * Provides tier radio buttons and a debounced text input
- * for selecting spatial region constraints.
+ * Supports **multi-selection**: selecting a region adds it as a
+ * chip/badge.  Multiple regions can be selected (even across tiers).
+ * "Off" and "Map bounds" clear all selections.  Switching between
+ * other tiers preserves the selection list.
+ *
+ * **Map suggestions**: When switching to any tier other than Off/Map
+ * bounds, the 5 entities closest to the map centre (and within bounds)
+ * are drawn on the map as suggestion markers.  Clicking a suggestion
+ * adds it to the chip list.
+ *
+ * **Zoom gate on tier buttons**: All tier buttons except "Off" are
+ * disabled until the context map is zoomed past the threshold.
  *
  * Tiers:
  *   Off            — no spatial region constraint
  *   Map bounds     — use current viewport as explicit spatial filter
- *   Continental    — UN M49 continental regions (auto-picks closest to map centre)
- *   Sub-Continental — UN M49 subregions + intermediary merged (auto-picks closest)
+ *   Continental    — UN M49 continental regions
+ *   Sub-Continental — UN M49 subregions + intermediary merged
  *   Country        — OSM admin level 2
- *   Region / State — OSM admin levels 3–4
+ *   State          — OSM admin levels 3–4
  *   District / County — OSM admin levels 5–6
  *   Municipality   — OSM admin levels 7–8
- *
- * For Continental and Sub-Continental tiers, regions are compiled as
- * static data.  When the user selects one of these tiers, the region
- * whose representative point is closest to the current map centre is
- * automatically loaded in preview.  The type-ahead input filters the
- * fixed set client-side.
- *
- * For OSM tiers (Country … Municipality), the type-ahead posts to
- * the CRC FastAPI backend (stub until backend is connected).
  */
 
 import filterState from './filterState';
@@ -87,7 +88,7 @@ const ALL_TIERS = [
     { value: 'continental',    label: 'Continental' },
     { value: 'subcontinental', label: 'Sub-Continental' },
     { value: 'country',        label: 'Country' },
-    { value: 'region',         label: 'Region / State' },
+    { value: 'region',         label: 'State' },
     { value: 'district',       label: 'District / County' },
     { value: 'municipality',   label: 'Municipality' },
 ];
@@ -101,18 +102,26 @@ function distSq(a, b) {
     return dx * dx + dy * dy;
 }
 
-/** Return the UN region whose representative point is closest to lngLat. */
-function closestRegion(regions, lngLat) {
-    let best = null;
-    let bestDist = Infinity;
-    for (const r of regions) {
-        const d = distSq(r.repr_point, lngLat);
-        if (d < bestDist) {
-            bestDist = d;
-            best = r;
-        }
+/**
+ * Return the N UN regions whose representative points are closest to
+ * lngLat and within the given map bounds (if provided).
+ */
+function closestRegions(regions, lngLat, bounds, n = 5) {
+    let candidates = regions;
+    if (bounds) {
+        const [west, south, east, north] = bounds;
+        candidates = regions.filter(r => {
+            const [lng, lat] = r.repr_point;
+            return lng >= west && lng <= east && lat >= south && lat <= north;
+        });
     }
-    return best;
+    // If no candidates within bounds, fall back to all
+    if (candidates.length === 0) candidates = regions;
+    return candidates
+        .map(r => ({ region: r, dist: distSq(r.repr_point, lngLat) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, n)
+        .map(x => x.region);
 }
 
 /** Is the tier one of the UN predefined tiers? */
@@ -125,6 +134,11 @@ function isOsmTier(tier) {
     return ['country', 'region', 'district', 'municipality'].includes(tier);
 }
 
+/** Tiers that should be gated behind map zoom. */
+function isZoomGatedTier(tier) {
+    return tier !== 'off';
+}
+
 /* ═══════════════════════════════════════════════════════════════════ */
 
 export default class RegionSelector {
@@ -133,9 +147,10 @@ export default class RegionSelector {
      */
     constructor(container) {
         this.$el = typeof container === 'string' ? document.querySelector(container) : container;
-        this._selectedRegion = null;
+        this._selectedRegions = [];   // Array of {id, label, source, tier}
         this._results = [];
         this._currentTier = 'off';
+        this._tiersEnabled = false;   // Zoom gate state
         this._init();
     }
 
@@ -146,13 +161,14 @@ export default class RegionSelector {
             <div class="region-selector">
                 <div class="region-tier-toggle btn-group btn-group-sm flex-wrap mb-2" role="group" aria-label="Spatial region tier">
                     ${ALL_TIERS.map((t, i) => `
-                        <button type="button" class="btn${i === 0 ? ' active' : ''}"
-                                data-tier="${t.value}" title="${t.label}">${t.label}</button>
+                        <button type="button" class="btn${i === 0 ? ' active' : ''}${isZoomGatedTier(t.value) ? ' zoom-gated-tier' : ''}"
+                                data-tier="${t.value}" title="${t.label}"
+                                ${isZoomGatedTier(t.value) ? 'disabled' : ''}>${t.label}</button>
                     `).join('')}
                 </div>
                 <div class="region-input-wrap position-relative" style="display:none;">
                     <input type="text" class="form-control form-control-sm region-search-input"
-                           placeholder="Search for a region…"
+                           placeholder="Zoom the map first…"
                            autocomplete="off" spellcheck="false">
                     <div class="region-dropdown"></div>
                 </div>
@@ -168,6 +184,7 @@ export default class RegionSelector {
         // Wire tier toggle buttons
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(btn => {
             btn.addEventListener('click', () => {
+                if (btn.disabled) return;
                 this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this._onTierChange(btn.dataset.tier);
@@ -186,6 +203,11 @@ export default class RegionSelector {
             if (!this.$el.contains(e.target)) this._closeDropdown();
         });
 
+        // Listen for suggestion-click events from the context map
+        document.addEventListener('suggestion-click', (e) => {
+            this._onSuggestionClick(e.detail);
+        });
+
         this._activeIndex = -1;
     }
 
@@ -194,74 +216,152 @@ export default class RegionSelector {
     _onTierChange(tier) {
         this._currentTier = tier;
 
-        // Clear any existing selection when switching tiers
-        this._clearSelection();
-
         if (tier === 'off') {
             this._inputWrap.style.display = 'none';
+            this._clearAllSelections();
+            contextMap.clearSuggestions();
             filterState.set('spatial.geometry_source', 'none');
         } else if (tier === 'mapbounds') {
             this._inputWrap.style.display = 'none';
+            this._clearAllSelections();
+            contextMap.clearSuggestions();
             filterState.set('spatial.geometry_source', 'mapbounds');
         } else if (isUnTier(tier)) {
             this._inputWrap.style.display = '';
             this._input.placeholder = tier === 'continental'
                 ? 'Filter continental regions…'
                 : 'Filter sub-continental regions…';
-            // Auto-select the region closest to the current map centre
-            this._autoSelectClosest(tier);
+            this._input.value = '';
+            this._closeDropdown();
+            // Show suggestions on the map
+            this._showSuggestions(tier);
         } else {
             // OSM tier — type-ahead backend search
             this._inputWrap.style.display = '';
             this._input.placeholder = 'Search for a region…';
+            this._input.value = '';
+            this._closeDropdown();
+            contextMap.clearSuggestions();
         }
     }
 
-    /* ── Auto-select closest UN region ── */
+    /* ── Map suggestions ── */
 
-    _autoSelectClosest(tier) {
+    _showSuggestions(tier) {
         const map = contextMap.map;
         if (!map) return;
         const centre = map.getCenter();
         const lngLat = [centre.lng, centre.lat];
+        const bounds = contextMap.getBBox();
         const regions = UN_GEOSCHEME[tier] || [];
-        const closest = closestRegion(regions, lngLat);
-        if (closest) {
-            this._selectUnRegion(closest, tier);
+
+        const closest = closestRegions(regions, lngLat, bounds, 5);
+
+        // Build GeoJSON FeatureCollection for suggestion markers
+        const features = closest.map(r => ({
+            type: 'Feature',
+            geometry: {
+                type: 'Point',
+                coordinates: r.repr_point,
+            },
+            properties: {
+                id: `un:${r.code}`,
+                label: r.label,
+                code: r.code,
+                tier: tier,
+                source: 'un_geoscheme',
+            },
+        }));
+
+        contextMap.setSuggestions({
+            type: 'FeatureCollection',
+            features,
+        });
+    }
+
+    /* ── Handle suggestion click from the map ── */
+
+    _onSuggestionClick(detail) {
+        if (!detail || !detail.id) return;
+        // Only act if we're on a UN tier
+        const tier = detail.tier || this._currentTier;
+        if (!isUnTier(tier)) return;
+
+        const regions = UN_GEOSCHEME[tier] || [];
+        const region = regions.find(r => r.code === detail.code);
+        if (region) {
+            this._addUnRegion(region, tier);
         }
     }
 
-    /* ── Selection helpers ── */
+    /* ── Selection helpers (multi-select) ── */
 
-    _clearSelection() {
-        this._selectedRegion = null;
+    _clearAllSelections() {
+        this._selectedRegions = [];
         this._chipArea.innerHTML = '';
         this._input.value = '';
         this._closeDropdown();
-        filterState.set('spatial.region_id', null);
+        filterState.set('spatial.region_id', []);
         filterState.set('spatial.preview_geo', null);
         contextMap.clearOverlay();
+        contextMap.clearSuggestions();
     }
 
-    _selectUnRegion(region, tier) {
-        this._selectedRegion = {
-            id: `un:${region.code}`,
+    _addUnRegion(region, tier) {
+        const id = `un:${region.code}`;
+        // Don't add duplicates
+        if (this._selectedRegions.some(r => r.id === id)) return;
+
+        const item = {
+            id,
             label: region.label,
             source: 'un_geoscheme',
             tier: tier,
         };
+        this._selectedRegions.push(item);
         this._input.value = '';
         this._closeDropdown();
 
         // Update filter state
-        filterState.set('spatial.region_id', `un:${region.code}`);
+        filterState.addToList('spatial.region_id', item);
         filterState.set('spatial.geometry_source', 'un_geoscheme');
 
-        // Show chip
-        this._renderChip(this._selectedRegion);
+        // Re-render all chips
+        this._renderChips();
 
         // Fetch and preview geometry (when backend is ready)
-        console.log('RegionSelector: UN region selected:', region.label, `(${tier}, M49 code ${region.code})`);
+        console.log('RegionSelector: UN region added:', region.label, `(${tier}, M49 code ${region.code})`);
+    }
+
+    _addOsmRegion(item) {
+        // Don't add duplicates
+        if (this._selectedRegions.some(r => r.id === item.id)) return;
+
+        this._selectedRegions.push(item);
+        this._input.value = '';
+        this._closeDropdown();
+
+        filterState.addToList('spatial.region_id', item);
+        filterState.set('spatial.geometry_source', 'osm');
+
+        this._renderChips();
+        this._fetchGeometry(item.id);
+    }
+
+    _removeRegion(id) {
+        this._selectedRegions = this._selectedRegions.filter(r => r.id !== id);
+        filterState.removeFromList('spatial.region_id', id);
+
+        this._renderChips();
+
+        if (this._selectedRegions.length === 0) {
+            filterState.set('spatial.preview_geo', null);
+            contextMap.clearOverlay();
+            // Revert geometry_source — the tier stays active but no region is selected
+            if (this._currentTier !== 'mapbounds') {
+                filterState.set('spatial.geometry_source', 'none');
+            }
+        }
     }
 
     _selectResult(index) {
@@ -270,20 +370,12 @@ export default class RegionSelector {
 
         // UN region from client-side filtering
         if (item._un) {
-            this._selectUnRegion(item._un, item._tier);
+            this._addUnRegion(item._un, item._tier);
             return;
         }
 
         // OSM region from backend
-        this._selectedRegion = item;
-        this._input.value = '';
-        this._closeDropdown();
-
-        filterState.set('spatial.region_id', item.id);
-        filterState.set('spatial.geometry_source', 'osm');
-
-        this._renderChip(item);
-        this._fetchGeometry(item.id);
+        this._addOsmRegion(item);
     }
 
     /* ── Search / filter ── */
@@ -395,48 +487,87 @@ export default class RegionSelector {
         });
     }
 
-    /* ── Chip ── */
+    /* ── Chips (multi-select) ── */
 
-    _renderChip(item) {
-        this._chipArea.innerHTML = `
-            <span class="filter-chip">
+    _renderChips() {
+        if (this._selectedRegions.length === 0) {
+            this._chipArea.innerHTML = '';
+            return;
+        }
+
+        this._chipArea.innerHTML = this._selectedRegions.map(item => `
+            <span class="filter-chip" data-region-id="${item.id}">
                 <i class="fas fa-map-marker-alt me-1"></i>
-                ${item.label || item.name}
-                <button type="button" class="filter-chip-dismiss" aria-label="Remove">
+                ${item.label}
+                <button type="button" class="filter-chip-dismiss" aria-label="Remove" data-dismiss-id="${item.id}">
                     <i class="fas fa-times"></i>
                 </button>
             </span>
-        `;
-        this._chipArea.querySelector('.filter-chip-dismiss').addEventListener('click', () => {
-            this._dismissChip();
+        `).join(' ');
+
+        this._chipArea.querySelectorAll('.filter-chip-dismiss').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this._removeRegion(btn.dataset.dismissId);
+            });
         });
     }
 
-    /**
-     * Dismiss the chip but stay on the current tier.
-     * Reverts to "no region selected" within the active tier.
-     */
-    _dismissChip() {
-        this._selectedRegion = null;
-        this._chipArea.innerHTML = '';
-        filterState.set('spatial.region_id', null);
-        filterState.set('spatial.preview_geo', null);
-        contextMap.clearOverlay();
+    /* ── Zoom gate: enable/disable tier buttons ── */
 
-        // Revert geometry_source — the tier stays active but no region is selected
-        if (this._currentTier !== 'mapbounds') {
-            filterState.set('spatial.geometry_source', 'none');
+    /**
+     * Called externally (from search.js) when the context map passes
+     * the zoom threshold.  Enables all tier buttons.
+     */
+    enableTiers() {
+        this._tiersEnabled = true;
+        this.$el.querySelectorAll('.zoom-gated-tier').forEach(btn => {
+            btn.disabled = false;
+        });
+        // Restore input placeholder
+        if (this._input) {
+            this._input.disabled = false;
+            if (isUnTier(this._currentTier)) {
+                this._input.placeholder = this._currentTier === 'continental'
+                    ? 'Filter continental regions…'
+                    : 'Filter sub-continental regions…';
+            } else {
+                this._input.placeholder = 'Search for a region…';
+            }
         }
+    }
+
+    /**
+     * Called externally to re-engage the zoom gate (on full clear).
+     */
+    disableTiers() {
+        this._tiersEnabled = false;
+        this.$el.querySelectorAll('.zoom-gated-tier').forEach(btn => {
+            btn.disabled = true;
+        });
+        if (this._input) {
+            this._input.placeholder = 'Zoom the map first…';
+        }
+    }
+
+    /* ── clearAll (public — called from the "clear all" link) ── */
+
+    clearAll() {
+        this._clearAllSelections();
+        this._currentTier = 'off';
+        // Reset tier toggle to Off
+        this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
+        const offBtn = this.$el.querySelector('.region-tier-toggle .btn[data-tier="off"]');
+        if (offBtn) offBtn.classList.add('active');
+        // Hide input
+        if (this._inputWrap) this._inputWrap.style.display = 'none';
+        filterState.set('spatial.geometry_source', 'none');
     }
 
     /* ── Full clear (called externally on tab switch / clear all) ── */
 
     clear() {
-        this._selectedRegion = null;
-        this._chipArea.innerHTML = '';
-        this._input.value = '';
+        this._clearAllSelections();
         this._currentTier = 'off';
-        this._closeDropdown();
 
         // Reset tier toggle to Off
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
@@ -446,10 +577,11 @@ export default class RegionSelector {
         // Hide input
         if (this._inputWrap) this._inputWrap.style.display = 'none';
 
-        filterState.set('spatial.region_id', null);
+        filterState.set('spatial.region_id', []);
         filterState.set('spatial.geometry_source', 'none');
         filterState.set('spatial.preview_geo', null);
         contextMap.clearOverlay();
+        contextMap.clearSuggestions();
     }
 
     /* ── Geometry fetch (stub) ── */

@@ -81,7 +81,7 @@
                 <button id="clear_search" data-bs-toggle="tooltip" data-title="Clear search input|Nothing to clear" class="btn btn-outline-secondary" type="button">
                     <i class="fas fa-times"></i>
                 </button>
-                <button id="initiate_search" data-bs-toggle="tooltip" data-title="Initiate search|Cannot search without a place name" class="btn btn-outline-secondary btn-success" type="button">
+                <button id="initiate_search" data-bs-toggle="tooltip" data-title="Initiate search|Enter a place name, or select place types with a temporal or spatial constraint" class="btn btn-outline-secondary btn-success" type="button">
                     <i class="fas fa-search"></i>
                 </button>
                 <button id="exact_match_toggle" class="btn btn-outline-secondary" type="button"
@@ -219,6 +219,9 @@
                                         </div>
                                         <div class="filter-header">
                                             <span class="categories">space</span>
+                                            <span class="ms-1 categories">
+                                                <a id="space_clear" href="#" class="small">clear all</a>
+                                            </span>
                                             <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
                                                title="Search for a named region below, or leave empty to use the current map extent as a spatial filter."></i>
                                         </div>

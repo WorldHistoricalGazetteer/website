@@ -6,6 +6,10 @@
  * Results are grouped by spatial_description and show label,
  * year range, spatial description, and authority label.
  * Includes a collapsible authority sub-filter.
+ *
+ * Supports **multi-selection**: selecting a period adds it as a
+ * chip/badge.  Multiple periods can be selected.  The temporal
+ * range is the union (min start, max stop) of all selected periods.
  */
 
 import filterState from './filterState';
@@ -18,7 +22,7 @@ export default class PeriodSelector {
      */
     constructor(container) {
         this.$el = typeof container === 'string' ? document.querySelector(container) : container;
-        this._selectedPeriod = null;
+        this._selectedPeriods = [];   // Array of selected period objects
         this._results = [];
         this._allResults = [];
         this._authorityFilter = null;
@@ -45,7 +49,7 @@ export default class PeriodSelector {
                 <div class="period-chip-area mt-1"></div>
                 <div class="period-info small text-muted mt-1">
                     <i class="fas fa-info-circle"></i>
-                    Select a PeriodO period to set time and (optionally) spatial extent.
+                    Select PeriodO periods to set time and (optionally) spatial extent. Multiple periods can be selected.
                 </div>
             </div>
         `;
@@ -195,16 +199,25 @@ export default class PeriodSelector {
     }
 
     _selectPeriod(item) {
-        this._selectedPeriod = item;
+        // Don't add duplicates
+        const uri = item.uri || item.id;
+        if (this._selectedPeriods.some(p => (p.uri || p.id) === uri)) return;
+
+        this._selectedPeriods.push(item);
         this._input.value = '';
         this._resultsArea.innerHTML = '';
         this._closeDropdown();
 
-        // Set temporal from period
-        filterState.set('temporal.start_year', item.start_year);
-        filterState.set('temporal.stop_year', item.stop_year);
+        // Compute union temporal range (min start, max stop)
+        const starts = this._selectedPeriods.map(p => p.start_year).filter(y => y != null);
+        const stops = this._selectedPeriods.map(p => p.stop_year).filter(y => y != null);
+        const unionStart = starts.length > 0 ? Math.min(...starts) : -2000;
+        const unionStop = stops.length > 0 ? Math.max(...stops) : 2100;
+
+        filterState.set('temporal.start_year', unionStart);
+        filterState.set('temporal.stop_year', unionStop);
         filterState.set('temporal.source', 'period');
-        filterState.set('spatial.period_id', item.uri);
+        filterState.addToList('spatial.period_id', { id: uri, label: item.label });
 
         if (item.spatial_geo) {
             filterState.set('spatial.geometry_source', 'period');
@@ -213,33 +226,67 @@ export default class PeriodSelector {
             contextMap.fitTo(item.spatial_geo);
         }
 
-        this._renderChip(item);
+        this._renderChips();
     }
 
-    _renderChip(item) {
-        const years = this._formatYears(item.start_year, item.stop_year);
-        this._chipArea.innerHTML = `
-            <span class="filter-chip filter-chip--period">
-                <i class="fas fa-clock me-1"></i>
-                ${this._escapeHtml(item.label)}
-                <span class="filter-chip-years">${years}</span>
-                <button type="button" class="filter-chip-dismiss" aria-label="Remove">
-                    <i class="fas fa-times"></i>
-                </button>
-            </span>
-        `;
-        this._chipArea.querySelector('.filter-chip-dismiss').addEventListener('click', () => {
-            this.clear();
+    _removePeriod(uri) {
+        this._selectedPeriods = this._selectedPeriods.filter(p => (p.uri || p.id) !== uri);
+        filterState.removeFromList('spatial.period_id', uri);
+
+        if (this._selectedPeriods.length === 0) {
+            // Revert to defaults
+            filterState.set('temporal.start_year', -2000);
+            filterState.set('temporal.stop_year', 2100);
+            filterState.set('temporal.source', 'manual');
+            filterState.set('spatial.geometry_source', 'none');
+            filterState.set('spatial.preview_geo', null);
+            contextMap.clearOverlay();
+        } else {
+            // Recompute union temporal range
+            const starts = this._selectedPeriods.map(p => p.start_year).filter(y => y != null);
+            const stops = this._selectedPeriods.map(p => p.stop_year).filter(y => y != null);
+            filterState.set('temporal.start_year', starts.length > 0 ? Math.min(...starts) : -2000);
+            filterState.set('temporal.stop_year', stops.length > 0 ? Math.max(...stops) : 2100);
+        }
+
+        this._renderChips();
+    }
+
+    _renderChips() {
+        if (this._selectedPeriods.length === 0) {
+            this._chipArea.innerHTML = '';
+            return;
+        }
+
+        this._chipArea.innerHTML = this._selectedPeriods.map(item => {
+            const years = this._formatYears(item.start_year, item.stop_year);
+            const uri = item.uri || item.id || '';
+            return `
+                <span class="filter-chip filter-chip--period" data-period-uri="${this._escapeHtml(uri)}">
+                    <i class="fas fa-clock me-1"></i>
+                    ${this._escapeHtml(item.label)}
+                    <span class="filter-chip-years">${years}</span>
+                    <button type="button" class="filter-chip-dismiss" aria-label="Remove" data-dismiss-uri="${this._escapeHtml(uri)}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `;
+        }).join(' ');
+
+        this._chipArea.querySelectorAll('.filter-chip-dismiss').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this._removePeriod(btn.dataset.dismissUri);
+            });
         });
     }
 
     clear() {
-        this._selectedPeriod = null;
+        this._selectedPeriods = [];
         this._chipArea.innerHTML = '';
         this._resultsArea.innerHTML = '';
         this._input.value = '';
         this._authorityFilter = null;
-        filterState.set('spatial.period_id', null);
+        filterState.set('spatial.period_id', []);
         filterState.set('spatial.geometry_source', 'none');
         filterState.set('spatial.preview_geo', null);
         filterState.set('temporal.start_year', -2000);

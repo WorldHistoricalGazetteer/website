@@ -3,7 +3,10 @@
  * Polity selector (Tab 3: Polities).
  *
  * Reactive type-ahead searching the polity ES index.
- * Single selection sets both temporal and spatial constraints.
+ * Supports **multi-selection**: selecting a territory adds it as
+ * a chip/badge.  Multiple territories can be selected, even across
+ * datasets.  The temporal range is the union (min start, max stop)
+ * of all selected territories.
  */
 
 import filterState from './filterState';
@@ -22,7 +25,7 @@ export default class PolitySelector {
      */
     constructor(container) {
         this.$el = typeof container === 'string' ? document.querySelector(container) : container;
-        this._selectedPolity = null;
+        this._selectedPolities = [];   // Array of selected polity objects
         this._activeDataset = POLITY_DATASETS[0].value;
         this._results = [];
         this._init();
@@ -46,7 +49,7 @@ export default class PolitySelector {
                 <div class="polity-chip-area mt-1"></div>
                 <div class="polity-info small text-muted mt-1">
                     <i class="fas fa-info-circle"></i>
-                    Select a territory to set time and spatial extent.
+                    Select territories to set time and spatial extent. Multiple territories can be selected.
                 </div>
             </div>
         `;
@@ -56,15 +59,16 @@ export default class PolitySelector {
         this._resultsArea = this.$el.querySelector('.polity-results-area');
         this._chipArea = this.$el.querySelector('.polity-chip-area');
 
-        // Wire dataset toggle buttons — exclusive selection
+        // Wire dataset toggle buttons — switching datasets does NOT clear selections
         this.$el.querySelectorAll('.polity-dataset-toggle .btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 this.$el.querySelectorAll('.polity-dataset-toggle .btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this._activeDataset = btn.dataset.polityDataset;
-                // Clear current selection when switching datasets
-                this.clear();
                 filterState.set('spatial.polity_dataset', this._activeDataset);
+                // Clear search results but keep selections
+                this._input.value = '';
+                this._resultsArea.innerHTML = '';
             });
         });
 
@@ -141,15 +145,23 @@ export default class PolitySelector {
     }
 
     _selectPolity(item) {
-        this._selectedPolity = item;
+        // Don't add duplicates
+        if (this._selectedPolities.some(p => p.id === item.id)) return;
+
+        this._selectedPolities.push(item);
         this._input.value = '';
         this._resultsArea.innerHTML = '';
 
-        // Set temporal + spatial from polity
-        filterState.set('temporal.start_year', item.start_year);
-        filterState.set('temporal.stop_year', item.stop_year);
+        // Compute union temporal range
+        const starts = this._selectedPolities.map(p => p.start_year).filter(y => y != null);
+        const stops = this._selectedPolities.map(p => p.stop_year).filter(y => y != null);
+        const unionStart = starts.length > 0 ? Math.min(...starts) : -2000;
+        const unionStop = stops.length > 0 ? Math.max(...stops) : 2100;
+
+        filterState.set('temporal.start_year', unionStart);
+        filterState.set('temporal.stop_year', unionStop);
         filterState.set('temporal.source', 'polity');
-        filterState.set('spatial.polity_id', item.id);
+        filterState.addToList('spatial.polity_id', { id: item.id, label: item.label });
         filterState.set('spatial.geometry_source', 'polity');
 
         if (item.geometry) {
@@ -158,32 +170,64 @@ export default class PolitySelector {
             contextMap.fitTo(item.geometry);
         }
 
-        this._renderChip(item);
+        this._renderChips();
     }
 
-    _renderChip(item) {
-        const years = this._formatYears(item.start_year, item.stop_year);
-        this._chipArea.innerHTML = `
-            <span class="filter-chip filter-chip--polity">
-                <i class="fas fa-globe-americas me-1"></i>
-                ${this._escapeHtml(item.label)}
-                <span class="filter-chip-years">${years}</span>
-                <button type="button" class="filter-chip-dismiss" aria-label="Remove">
-                    <i class="fas fa-times"></i>
-                </button>
-            </span>
-        `;
-        this._chipArea.querySelector('.filter-chip-dismiss').addEventListener('click', () => {
-            this.clear();
+    _removePolity(id) {
+        this._selectedPolities = this._selectedPolities.filter(p => p.id !== id);
+        filterState.removeFromList('spatial.polity_id', id);
+
+        if (this._selectedPolities.length === 0) {
+            filterState.set('spatial.geometry_source', 'none');
+            filterState.set('spatial.preview_geo', null);
+            filterState.set('temporal.start_year', -2000);
+            filterState.set('temporal.stop_year', 2100);
+            filterState.set('temporal.source', 'manual');
+            contextMap.clearOverlay();
+        } else {
+            // Recompute union temporal range
+            const starts = this._selectedPolities.map(p => p.start_year).filter(y => y != null);
+            const stops = this._selectedPolities.map(p => p.stop_year).filter(y => y != null);
+            filterState.set('temporal.start_year', starts.length > 0 ? Math.min(...starts) : -2000);
+            filterState.set('temporal.stop_year', stops.length > 0 ? Math.max(...stops) : 2100);
+        }
+
+        this._renderChips();
+    }
+
+    _renderChips() {
+        if (this._selectedPolities.length === 0) {
+            this._chipArea.innerHTML = '';
+            return;
+        }
+
+        this._chipArea.innerHTML = this._selectedPolities.map(item => {
+            const years = this._formatYears(item.start_year, item.stop_year);
+            return `
+                <span class="filter-chip filter-chip--polity" data-polity-id="${this._escapeHtml(item.id || '')}">
+                    <i class="fas fa-globe-americas me-1"></i>
+                    ${this._escapeHtml(item.label)}
+                    <span class="filter-chip-years">${years}</span>
+                    <button type="button" class="filter-chip-dismiss" aria-label="Remove" data-dismiss-id="${this._escapeHtml(item.id || '')}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `;
+        }).join(' ');
+
+        this._chipArea.querySelectorAll('.filter-chip-dismiss').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this._removePolity(btn.dataset.dismissId);
+            });
         });
     }
 
     clear() {
-        this._selectedPolity = null;
+        this._selectedPolities = [];
         this._chipArea.innerHTML = '';
         this._resultsArea.innerHTML = '';
         this._input.value = '';
-        filterState.set('spatial.polity_id', null);
+        filterState.set('spatial.polity_id', []);
         filterState.set('spatial.geometry_source', 'none');
         filterState.set('spatial.preview_geo', null);
         filterState.set('spatial.polity_dataset', null);

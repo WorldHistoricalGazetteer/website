@@ -13,6 +13,10 @@ const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
 const OVERLAY_LINE = 'filter-overlay-line';
 
+const SUGGESTION_SOURCE = 'suggestion-markers';
+const SUGGESTION_CIRCLES = 'suggestion-circles';
+const SUGGESTION_LABELS = 'suggestion-labels';
+
 class ContextMap {
     constructor() {
         this.map = null;
@@ -73,6 +77,61 @@ class ContextMap {
                     },
                 });
 
+                // Add suggestion markers source + layers (for region selector map suggestions)
+                this.map.addSource(SUGGESTION_SOURCE, {
+                    type: 'geojson',
+                    data: { type: 'FeatureCollection', features: [] },
+                });
+
+                this.map.addLayer({
+                    id: SUGGESTION_CIRCLES,
+                    type: 'circle',
+                    source: SUGGESTION_SOURCE,
+                    paint: {
+                        'circle-radius': 7,
+                        'circle-color': '#e04040',
+                        'circle-stroke-color': '#fff',
+                        'circle-stroke-width': 2,
+                        'circle-opacity': 0.85,
+                    },
+                });
+
+                this.map.addLayer({
+                    id: SUGGESTION_LABELS,
+                    type: 'symbol',
+                    source: SUGGESTION_SOURCE,
+                    layout: {
+                        'text-field': ['get', 'label'],
+                        'text-font': ['Open Sans Semibold'],
+                        'text-size': 11,
+                        'text-offset': [0, 1.4],
+                        'text-anchor': 'top',
+                        'text-allow-overlap': true,
+                    },
+                    paint: {
+                        'text-color': '#333',
+                        'text-halo-color': '#fff',
+                        'text-halo-width': 1.5,
+                    },
+                });
+
+                // Click handler on suggestion circles: dispatch custom event
+                this.map.on('click', SUGGESTION_CIRCLES, (e) => {
+                    if (e.features && e.features.length > 0) {
+                        const props = e.features[0].properties;
+                        const detail = typeof props === 'string' ? JSON.parse(props) : props;
+                        document.dispatchEvent(new CustomEvent('suggestion-click', { detail }));
+                    }
+                });
+
+                // Cursor change on hover over suggestions
+                this.map.on('mouseenter', SUGGESTION_CIRCLES, () => {
+                    this.map.getCanvas().style.cursor = 'pointer';
+                });
+                this.map.on('mouseleave', SUGGESTION_CIRCLES, () => {
+                    this.map.getCanvas().style.cursor = '';
+                });
+
                 // Update bbox on viewport change
                 this.map.on('moveend', () => {
                     const bounds = this.map.getBounds();
@@ -125,6 +184,30 @@ class ContextMap {
             type: 'FeatureCollection',
             features: [],
         });
+    }
+
+    /**
+     * Display suggestion point markers on the map.
+     * @param {GeoJSON FeatureCollection} fc - features with `label` property
+     */
+    setSuggestions(fc) {
+        if (!this.map) return;
+        try {
+            this.map.getSource(SUGGESTION_SOURCE).setData(fc);
+        } catch (e) {
+            console.warn('contextMap.setSuggestions: source not ready', e);
+        }
+    }
+
+    /** Remove all suggestion markers from the map. */
+    clearSuggestions() {
+        if (!this.map) return;
+        try {
+            this.map.getSource(SUGGESTION_SOURCE).setData({
+                type: 'FeatureCollection',
+                features: [],
+            });
+        } catch (e) { /* source not yet added */ }
     }
 
     /** Fly the map to fit a GeoJSON geometry. */

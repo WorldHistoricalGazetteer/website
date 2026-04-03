@@ -616,6 +616,31 @@
     opacity: 1;
 }
 
+/* Chip areas: wrap multiple chips with consistent spacing */
+.region-chip-area,
+.period-chip-area,
+.polity-chip-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Disabled tier toggle buttons (zoom gate) */
+.region-tier-toggle .btn:disabled,
+.region-tier-toggle .btn.zoom-gated-tier:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: auto; /* Allow tooltip even when disabled */
+}
+
+/* Suggestion markers on the context map */
+.suggestion-marker-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #333;
+    text-shadow: 0 0 3px #fff, 0 0 5px #fff;
+}
+
 /* ===================================================================
    Search / Update button — removed from filters panel (§11.1)
    Search is triggered from the main search bar only.

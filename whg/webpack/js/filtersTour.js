@@ -62,8 +62,11 @@ function getTourSteps() {
                     'The default tab. Use the <strong>dateline slider</strong> to set a year range, ' +
                     'and the <strong>Space</strong> toggle to constrain by region. ' +
                     'Options include <em>Off</em>, <em>Map bounds</em> (use viewport), ' +
-                    'UN <em>Continental</em> and <em>Sub-Continental</em> regions (auto-picks closest to map centre), ' +
-                    'and OSM admin tiers (<em>Country</em>, <em>Region/State</em>, <em>District/County</em>, <em>Municipality</em>). ' +
+                    'UN <em>Continental</em> and <em>Sub-Continental</em> regions ' +
+                    '(shows the 5 closest as suggestions on the map), ' +
+                    'and OSM admin tiers (<em>Country</em>, <em>State</em>, <em>District/County</em>, <em>Municipality</em>). ' +
+                    '<strong>Multiple regions</strong> can be selected — click suggestions on the map or pick from the dropdown. ' +
+                    'Tier buttons are disabled until you zoom the map. ' +
                     'The dateline has three modes: <em>Off</em> (no time filter), ' +
                     '<em>Year range</em> (strict), and <em>Range + undated</em> ' +
                     '(includes places with no temporal attestation).',
@@ -76,10 +79,11 @@ function getTourSteps() {
             popover: {
                 title: 'Period Tab',
                 description:
-                    'Search for a scholarly period definition from <strong>PeriodO</strong> ' +
+                    'Search for scholarly period definitions from <strong>PeriodO</strong> ' +
                     '(e.g. "Iron Age", "Bronze Age"). Selecting a period automatically sets ' +
                     'the time range and, where available, the spatial extent. ' +
-                    'Only one period can be active at a time.',
+                    '<strong>Multiple periods</strong> can be selected — the temporal range becomes ' +
+                    'the union (widest span) of all selected periods.',
                 side: 'bottom',
                 align: 'center',
             },
@@ -92,7 +96,8 @@ function getTourSteps() {
                     'Search historical polities (<strong>Cliopatria</strong>), cultural regions ' +
                     '(<strong>D-PLACE</strong>), or indigenous territories (<strong>NativeLand</strong>). ' +
                     'Selecting a territory sets both the time range and spatial boundary. ' +
-                    'Only one territory dataset can be active at a time.',
+                    '<strong>Multiple territories</strong> can be selected, even across different datasets — ' +
+                    'the temporal range becomes the union of all selected territories.',
                 side: 'bottom',
                 align: 'end',
             },

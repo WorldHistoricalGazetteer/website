@@ -334,49 +334,60 @@ A single `.region-tier-toggle` button group offers eight options
 |------|-------------|-----------|
 | **Off** (default) | `off` | No spatial region constraint. Search input hidden. |
 | **Map bounds** | `mapbounds` | Use the current viewport as an explicit spatial filter. Search input hidden. Sets `geometry_source = 'mapbounds'`. |
-| **Continental** | `continental` | UN M49 continental regions (6). Auto-selects the region whose representative point is closest to the map centre. Search input filters client-side. |
-| **Sub-Continental** | `subcontinental` | UN M49 subregions (22) merged with former intermediary regions (2) = 24 total. Same auto-select-closest behaviour. Search input filters client-side. |
+| **Continental** | `continental` | UN M49 continental regions (6). Shows the 5 closest suggestions on the context map. Search input filters client-side. |
+| **Sub-Continental** | `subcontinental` | UN M49 subregions (22) merged with former intermediary regions (2) = 24 total. Same suggestion behaviour. Search input filters client-side. |
 | **Country** | `country` | OSM admin level 2. Type-ahead backend search. |
-| **Region / State** | `region` | OSM admin levels 3–4. Type-ahead backend search. |
+| **State** | `region` | OSM admin levels 3–4. Type-ahead backend search. |
 | **District / County** | `district` | OSM admin levels 5–6. Type-ahead backend search. |
 | **Municipality** | `municipality` | OSM admin levels 7–8. Type-ahead backend search. |
 
 The toggle follows the same visual model as the temporal mode
-toggle.
+toggle.  **All buttons except "Off" are disabled until the context
+map passes the zoom gate (§5.5).**  Disabled buttons show reduced
+opacity.
 
-#### UN region auto-selection
+#### Zoom gate on tier buttons
 
-When the user selects "Continental" or "Sub-Continental", the
-widget computes which region's representative point (`repr_point`
-in the static `UN_GEOSCHEME` data) is closest to the current map
-centre (squared Euclidean distance) and automatically selects it,
-rendering a chip and setting filter state.  The user can then type
-in the search input to filter and pick a different region.
+All tier buttons carry the class `.zoom-gated-tier` and the HTML
+`disabled` attribute.  When `regionSelector.enableTiers()` is called
+(from `enableSelectorInputs()` in `search.js`), all tier buttons are
+enabled and the search input placeholder is restored.
+`regionSelector.disableTiers()` re-engages the gate on full clear.
 
-#### Type-ahead input
+#### UN region suggestions
 
-- Debounced (250 ms) text search.
-- Hidden when tier is "Off" or "Map bounds".
-- Disabled until the context map passes the zoom gate (§5.5).
-- **For UN tiers:** client-side filtering of the fixed set
-  (matches on label and parent).
-- **For OSM tiers:** backend stub (will POST to CRC FastAPI when
-  connected).
+When the user selects "Continental" or "Sub-Continental", the widget
+draws the 5 entities whose representative points are closest to the
+current map centre **and within the map bounds** as suggestion
+markers on the context map (red circles with labels).  The context
+map's `setSuggestions(featureCollection)` method manages the marker
+layer.  Clicking a suggestion marker dispatches a `suggestion-click`
+CustomEvent, which the RegionSelector listens for and adds the
+region to the chip list.
 
-#### Selection
+#### Multi-selection
 
-- Single region only.
+- **Multiple regions** can be selected (even across tiers).
 - Selecting a region renders a dismissible `.filter-chip` below
-  the input and writes to `filterState.spatial.region_id` /
-  `filterState.spatial.geometry_source`.
-- For UN regions: `region_id = 'un:<M49_code>'`,
-  `geometry_source = 'un_geoscheme'`.
-- For OSM regions: `region_id = '<osm_id>'`,
-  `geometry_source = 'osm'`.
-- Geometry preview will be fetched and displayed on the context
-  map (backend pending).
-- Dismissing the chip clears the selection and removes the overlay
-  but stays on the current tier.
+  the input and calls `filterState.addToList('spatial.region_id', item)`.
+- Items are objects: `{id, label, source, tier}`.
+- For UN regions: `id = 'un:<M49_code>'`, `source = 'un_geoscheme'`.
+- For OSM regions: `id = '<osm_id>'`, `source = 'osm'`.
+- Dismissing a chip removes it from the list via
+  `filterState.removeFromList('spatial.region_id', id)`.
+- **Switching tiers** (except "Off" and "Map bounds") does NOT
+  clear existing selections.  "Off" and "Map bounds" clear all
+  selections.
+- A **"clear all"** link (`#space_clear`) next to the "Space"
+  subtitle clears all selections via `regionSelector.clearAll()`.
+
+#### Clear All link
+
+The "Space" header in the Region tab now includes a "clear all"
+link (`#space_clear`), styled identically to the existing "clear
+all" links on other sections.  Clicking it calls
+`regionSelector.clearAll()`, which resets the tier toggle to "Off",
+clears all selected regions, and removes map suggestions.
 
 The UN geoscheme data (including representative points for each
 region) is compiled into the `regionSelector.js` module as a
@@ -423,16 +434,19 @@ authority filter.
 
 ### 7.5 Selection
 
-- Single selection only.
+- **Multiple periods** can be selected.
 - Selecting a period:
-  - Sets `filterState.temporal.start_year` and `stop_year` from the
-    period's temporal extent.
+  - Appends to `filterState.spatial.period_id` via `addToList()`.
+  - Recomputes the **union temporal range** (min start, max stop)
+    across all selected periods.
   - Sets `filterState.temporal.source = 'period'`.
   - If `spatial_geo` exists, previews it on the context map and
     flies to fit.
-- Renders a yellow-toned `.filter-chip--period` chip.
-- Dismissing the chip clears the period selection and reverts to
-  manual temporal mode.
+- Renders yellow-toned `.filter-chip--period` chips (one per
+  selected period).
+- Dismissing a chip removes that period via `removeFromList()` and
+  recomputes the union temporal range.  If no periods remain, the
+  temporal range reverts to defaults.
 
 ---
 
@@ -454,9 +468,11 @@ switching between three territory datasets:
 | `dplace` | D-PLACE | Cultural and linguistic regions |
 | `nativeland` | NativeLand | Indigenous territories, languages, and treaties |
 
-Default: Cliopatria.  Switching datasets clears the current
-selection (`politySelector.clear()`).  Only one dataset may be
-active at a time.
+Default: Cliopatria.  Switching datasets clears the search
+results but does **not** clear existing territory selections,
+allowing cross-dataset multi-select.  Only one dataset may be
+searched at a time, but selections from different datasets
+accumulate.
 
 ### 8.3 Type-ahead Input
 
@@ -469,14 +485,19 @@ active at a time.
 
 ### 8.4 Selection
 
-- Single selection only.
+- **Multiple territories** can be selected (even across datasets).
 - Selecting a territory:
-  - Sets `filterState.temporal.start_year` and `stop_year`.
+  - Appends to `filterState.spatial.polity_id` via `addToList()`.
+  - Recomputes the **union temporal range** (min start, max stop)
+    across all selected territories.
   - Sets `filterState.temporal.source = 'polity'`.
   - Previews the territory geometry on the context map and flies
     to fit.
-- Renders a green-toned `.filter-chip--polity` chip.
-- Dismissing the chip clears the selection and reverts to manual.
+- Renders green-toned `.filter-chip--polity` chips (one per
+  selected territory).
+- Dismissing a chip removes that territory via `removeFromList()`
+  and recomputes the union temporal range.  If no territories
+  remain, the temporal range reverts to defaults.
 
 ---
 
@@ -521,9 +542,9 @@ instance.
 
     spatial: {
         bbox: null,                     // [west, south, east, north]
-        region_id: null,                // OSM region ID (Tab 1)
-        period_id: null,                // PeriodO URI (Tab 2)
-        polity_id: null,                // Territory ID (Tab 3)
+        region_id: [],                  // Array of {id, label, source, tier} objects (Tab 1, multi-select)
+        period_id: [],                  // Array of {id, label} objects — PeriodO URIs (Tab 2, multi-select)
+        polity_id: [],                  // Array of {id, label} objects — Territory IDs (Tab 3, multi-select)
         geometry_source: 'none',        // 'osm' | 'un_geoscheme' | 'mapbounds' | 'period' | 'polity' | 'none'
         preview_geo: null,              // GeoJSON for map display only
     },
@@ -544,8 +565,10 @@ instance.
 |--------|---------|
 | `get(key?)` | Read full state or a dot-path (e.g. `'spatial.bbox'`) |
 | `set(key, value)` | Write a dot-path key; marks dirty (except bbox changes) |
-| `clearTabState(mode)` | Reset spatial/temporal fields for the given tab |
-| `toSearchPayload()` | Build the search descriptor with geometry references (not GeoJSON) |
+| `addToList(key, item)` | Append an item to an array-valued key (e.g. `spatial.region_id`); deduplicates by `item.id` |
+| `removeFromList(key, id)` | Remove an item from an array-valued key by its `id` |
+| `clearTabState(mode)` | Reset spatial/temporal fields for the given tab (arrays reset to `[]`) |
+| `toSearchPayload()` | Build the search descriptor with `geometry_refs` array (not GeoJSON) |
 | `reset()` | Restore all defaults |
 | `subscribe(fn)` | Observer pattern; returns unsubscribe function |
 
@@ -638,10 +661,10 @@ When the backend is updated to accept the new format:
   "mode": "timespan",
   "spatial": {
     "bbox": [-10.5, 35.2, 45.0, 60.1],
-    "geometry_ref": {
-      "index": "osm_admin_polygons",
-      "id": "osm:relation/123456"
-    }
+    "geometry_refs": [
+      { "index": "osm_admin_polygons", "id": "un:150" },
+      { "index": "osm_admin_polygons", "id": "osm:relation/62149" }
+    ]
   },
   "temporal": {
     "start_year": -1200,
@@ -651,8 +674,12 @@ When the backend is updated to accept the new format:
 }
 ```
 
-Geometry is always referenced by index + ID — never sent as
-GeoJSON.  The FastAPI fetches the geometry server-side.
+Geometries are always referenced by index + ID — never sent as
+GeoJSON.  The FastAPI fetches the geometries server-side.
+Multiple references are sent as an array; the backend applies a
+`bool/should` query with `geo_shape intersects` for each ref
+(union semantics: a place matching any of the referenced
+geometries is included).
 
 ---
 
@@ -662,9 +689,9 @@ The badge on the Filters toggle button (`#active_filters_badge`)
 counts active non-default filter dimensions:
 
 1. Place types selected (any).
-2. A period selected.
-3. A territory selected.
-4. A region selected.
+2. One or more periods selected (array length > 0).
+3. One or more territories selected (array length > 0).
+4. One or more regions selected (array length > 0).
 5. Temporal mode is not "off".
 6. Context map has been zoomed (viewport differs from default).
 7. Authority selection differs from defaults.

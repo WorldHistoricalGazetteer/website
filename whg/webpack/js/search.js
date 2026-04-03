@@ -65,9 +65,9 @@ function updateActiveFiltersBadge() {
     let count = 0;
     if (typeTree && typeTree.selectionCount() > 0) count++;
     const state = filterState.get();
-    if (state.mode === 'period' && state.spatial.period_id) count++;
-    if (state.mode === 'polity' && state.spatial.polity_id) count++;
-    if (state.mode === 'timespan' && (state.spatial.region_id || state.spatial.geometry_source === 'mapbounds')) count++;
+    if (state.mode === 'period' && state.spatial.period_id.length > 0) count++;
+    if (state.mode === 'polity' && state.spatial.polity_id.length > 0) count++;
+    if (state.mode === 'timespan' && (state.spatial.region_id.length > 0 || state.spatial.geometry_source === 'mapbounds')) count++;
     // Temporal filter counts when mode is not 'off'
     if (temporalMode !== 'off') count++;
     // Spatial viewport counts when the map has been zoomed in
@@ -93,9 +93,9 @@ function hasFilterOnlySearchCriteria() {
     const state = filterState.get();
     // Temporal filter is active when mode is not 'off'
     const hasTemporal = temporalMode !== 'off';
-    const hasPeriod = state.mode === 'period' && state.spatial.period_id;
-    const hasPolity = state.mode === 'polity' && state.spatial.polity_id;
-    const hasRegion = state.mode === 'timespan' && (state.spatial.region_id || state.spatial.geometry_source === 'mapbounds');
+    const hasPeriod = state.mode === 'period' && state.spatial.period_id.length > 0;
+    const hasPolity = state.mode === 'polity' && state.spatial.polity_id.length > 0;
+    const hasRegion = state.mode === 'timespan' && (state.spatial.region_id.length > 0 || state.spatial.geometry_source === 'mapbounds');
 
     return hasTemporal || hasPeriod || hasPolity || hasRegion;
 }
@@ -319,8 +319,9 @@ Promise.all([
         if (regionSelector) regionSelector.clear();
         if (periodSelector) periodSelector.clear();
         if (politySelector) politySelector.clear();
-        // Clear context map overlay and reset viewport
+        // Clear context map overlay, suggestions, and reset viewport
         contextMap.clearOverlay();
+        contextMap.clearSuggestions();
         if (contextMap.map) contextMap.map.reset();
         // Re-engage zoom gate
         contextMapZoomed = false;
@@ -335,6 +336,14 @@ Promise.all([
             const bsTab = bootstrap.Tab.getOrCreateInstance(regionTab);
             bsTab.show();
         }
+        updateActiveFiltersBadge();
+        toggleButtonState();
+    });
+
+    // --- "Clear all" for the Space section in the Region tab ---
+    $('#space_clear').on('click', function (e) {
+        e.preventDefault();
+        if (regionSelector) regionSelector.clearAll();
         updateActiveFiltersBadge();
         toggleButtonState();
     });
@@ -398,8 +407,9 @@ Promise.all([
             if (politySelector) politySelector.clear();
         }
 
-        // Clear the context map overlay
+        // Clear the context map overlay and suggestions
         contextMap.clearOverlay();
+        contextMap.clearSuggestions();
 
         filterState.set('mode', newMode);
         previousMode = newMode;
@@ -431,6 +441,8 @@ Promise.all([
             }
         });
         document.querySelectorAll('.zoom-gate-notice').forEach(el => el.remove());
+        // Enable region tier buttons
+        if (regionSelector) regionSelector.enableTiers();
     }
 
     function disableSelectorInputs() {
@@ -445,6 +457,8 @@ Promise.all([
                     input.classList.add('zoom-gated-input');
                 }
             });
+            // Disable region tier buttons
+            if (regionSelector) regionSelector.disableTiers();
         }, 100);
     }
 
@@ -589,6 +603,7 @@ function clearResults() {
     resultsMap.getSource('places').setData(resultsMap.nullCollection());
     resultsMap.reset();
     contextMap.clearOverlay();
+    contextMap.clearSuggestions();
     if (contextMap.map) contextMap.map.reset();
     contextMapZoomed = false;
     if (regionSelector) regionSelector.clear();

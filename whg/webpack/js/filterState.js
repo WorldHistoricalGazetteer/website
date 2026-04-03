@@ -16,9 +16,9 @@ const DEFAULT_STATE = {
 
     spatial: {
         bbox: null,           // [minLon, minLat, maxLon, maxLat]
-        region_id: null,      // OSM region ID (Tab 1)
-        period_id: null,      // PeriodO URI (Tab 2)
-        polity_id: null,      // Polity ID (Tab 3)
+        region_id: [],        // Array of region selection objects [{id, label, source, tier}] (Tab 1)
+        period_id: [],        // Array of PeriodO URIs (Tab 2)
+        polity_id: [],        // Array of polity/territory IDs (Tab 3)
         geometry_source: 'none', // 'osm' | 'un_geoscheme' | 'mapbounds' | 'period' | 'polity' | 'none'
         preview_geo: null,    // GeoJSON for map preview (never sent to server)
     },
@@ -98,7 +98,7 @@ class FilterState {
     clearTabState(leavingMode) {
         switch (leavingMode) {
             case 'timespan':
-                this._state.spatial.region_id = null;
+                this._state.spatial.region_id = [];
                 this._state.spatial.geometry_source = 'none';
                 this._state.spatial.preview_geo = null;
                 this._state.temporal = {
@@ -108,7 +108,7 @@ class FilterState {
                 };
                 break;
             case 'period':
-                this._state.spatial.period_id = null;
+                this._state.spatial.period_id = [];
                 this._state.spatial.geometry_source = 'none';
                 this._state.spatial.preview_geo = null;
                 this._state.temporal = {
@@ -118,7 +118,7 @@ class FilterState {
                 };
                 break;
             case 'polity':
-                this._state.spatial.polity_id = null;
+                this._state.spatial.polity_id = [];
                 this._state.spatial.geometry_source = 'none';
                 this._state.spatial.preview_geo = null;
                 this._state.temporal = {
@@ -133,8 +133,43 @@ class FilterState {
     }
 
     /**
+     * Add an item to an array-valued state key. Avoids duplicates by ID.
+     * @param {string} key - dot-separated key (e.g. 'spatial.region_id')
+     * @param {object} item - must have an `id` property
+     */
+    addToList(key, item) {
+        const list = this.get(key);
+        if (!Array.isArray(list)) {
+            console.warn('FilterState.addToList: key is not an array:', key);
+            return;
+        }
+        if (!list.some(existing => existing.id === item.id)) {
+            list.push(item);
+            this._state.dirty = true;
+            this._notify(key, list);
+        }
+    }
+
+    /**
+     * Remove an item from an array-valued state key by its id.
+     * @param {string} key - dot-separated key (e.g. 'spatial.region_id')
+     * @param {string} id - the id of the item to remove
+     */
+    removeFromList(key, id) {
+        const list = this.get(key);
+        if (!Array.isArray(list)) return;
+        const idx = list.findIndex(item => item.id === id);
+        if (idx !== -1) {
+            list.splice(idx, 1);
+            this._state.dirty = true;
+            this._notify(key, list);
+        }
+    }
+
+    /**
      * Build the search payload descriptor (§11.2).
      * Geometries are referenced by ID, never sent as GeoJSON.
+     * Multiple selections are sent as an array of geometry_refs.
      */
     toSearchPayload() {
         const s = this._state;
@@ -144,7 +179,7 @@ class FilterState {
             mode: s.mode,
             spatial: {
                 bbox: s.spatial.bbox,
-                geometry_ref: null,
+                geometry_refs: [],
             },
             temporal: {
                 start_year: s.temporal.start_year,
@@ -153,22 +188,22 @@ class FilterState {
             },
         };
 
-        // Attach geometry reference based on active mode
-        if (s.mode === 'timespan' && s.spatial.region_id) {
-            payload.spatial.geometry_ref = {
-                index: 'places',
-                id: s.spatial.region_id,
-            };
-        } else if (s.mode === 'period' && s.spatial.period_id) {
-            payload.spatial.geometry_ref = {
+        // Attach geometry references based on active mode (now arrays)
+        if (s.mode === 'timespan' && s.spatial.region_id.length > 0) {
+            payload.spatial.geometry_refs = s.spatial.region_id.map(r => ({
+                index: r.source === 'un_geoscheme' ? 'osm_admin_polygons' : 'osm_admin_polygons',
+                id: r.id,
+            }));
+        } else if (s.mode === 'period' && s.spatial.period_id.length > 0) {
+            payload.spatial.geometry_refs = s.spatial.period_id.map(p => ({
                 index: 'periodo_periods',
-                id: s.spatial.period_id,
-            };
-        } else if (s.mode === 'polity' && s.spatial.polity_id) {
-            payload.spatial.geometry_ref = {
-                index: 'polities',
-                id: s.spatial.polity_id,
-            };
+                id: p.id,
+            }));
+        } else if (s.mode === 'polity' && s.spatial.polity_id.length > 0) {
+            payload.spatial.geometry_refs = s.spatial.polity_id.map(t => ({
+                index: 'territories',
+                id: t.id,
+            }));
         }
 
         return payload;
