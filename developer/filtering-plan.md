@@ -116,7 +116,27 @@ explain each source.
 - On "Clear search", defaults are restored (all checked except OSM
   and GB1900).
 
-### 3.4 Planned ES Query Fragment
+### 3.4 Clustering Toggle
+
+Below the authority checkboxes, a titled "Clustering" section
+contains a Bootstrap-style on/off switch (default: on) and an
+`(i)` info icon.
+
+| State | Behaviour |
+|-------|-----------|
+| **On** (default) | Linked place records from different sources are grouped together as a single result, showing a link count badge.  Searches both the `whg` (clustered) and `pub` (unclustered) indices. |
+| **Off** | Every individual place record is returned separately, with no grouping.  Searches only the `pub` index. |
+
+Hovering the `(i)` icon reveals a tooltip: _"When enabled, linked
+place records from different sources are grouped together as a
+single result, showing the number of linked attestations.  When
+disabled, every individual place record is returned separately."_
+
+The clustering state is passed to the backend as `cluster: true|false`
+in the search payload and stored in `filterState.clustering`.
+The toggle is reset to "on" on "Clear search".
+
+### 3.5 Planned ES Query Fragment
 
 ```json
 { "terms": { "authority": ["gn", "wd", "tgn", "pl", "iv", "whg"] } }
@@ -294,7 +314,7 @@ Toggle buttons use the shared `.temporal-mode-toggle .btn` styling:
 inactive is `#f8f9fa` bg; active is `#e8f0fe` bg with `#1a56db`
 text and `#a0b8e8` border.
 
-### 6.3 OSM Region Selector
+### 6.3 Region Selector
 
 Widget: `RegionSelector` class (`regionSelector.js`), mounted in
 `#region_selector_container`.
@@ -305,30 +325,64 @@ An `(i)` icon on the "Space" subtitle line shows a tooltip on
 hover: _"Search for a named region below, or leave empty to use
 the current map extent as a spatial filter."_
 
-#### Admin tier toggle
+#### Unified tier toggle
 
-A `.region-tier-toggle` button group offers four tiers:
-Country, Region/State, District/County, Municipality.
-Default: Country.  Follows the same visual model as the temporal
-mode toggle.
+A single `.region-tier-toggle` button group offers eight options
+(with `flex-wrap` for two-row layout):
+
+| Tier | `data-tier` | Behaviour |
+|------|-------------|-----------|
+| **Off** (default) | `off` | No spatial region constraint. Search input hidden. |
+| **Map bounds** | `mapbounds` | Use the current viewport as an explicit spatial filter. Search input hidden. Sets `geometry_source = 'mapbounds'`. |
+| **Continental** | `continental` | UN M49 continental regions (6). Auto-selects the region whose representative point is closest to the map centre. Search input filters client-side. |
+| **Sub-Continental** | `subcontinental` | UN M49 subregions (22) merged with former intermediary regions (2) = 24 total. Same auto-select-closest behaviour. Search input filters client-side. |
+| **Country** | `country` | OSM admin level 2. Type-ahead backend search. |
+| **Region / State** | `region` | OSM admin levels 3–4. Type-ahead backend search. |
+| **District / County** | `district` | OSM admin levels 5–6. Type-ahead backend search. |
+| **Municipality** | `municipality` | OSM admin levels 7–8. Type-ahead backend search. |
+
+The toggle follows the same visual model as the temporal mode
+toggle.
+
+#### UN region auto-selection
+
+When the user selects "Continental" or "Sub-Continental", the
+widget computes which region's representative point (`repr_point`
+in the static `UN_GEOSCHEME` data) is closest to the current map
+centre (squared Euclidean distance) and automatically selects it,
+rendering a chip and setting filter state.  The user can then type
+in the search input to filter and pick a different region.
 
 #### Type-ahead input
 
 - Debounced (250 ms) text search.
+- Hidden when tier is "Off" or "Map bounds".
 - Disabled until the context map passes the zoom gate (§5.5).
-- **Backend stub:** currently displays a "Backend not yet connected"
-  placeholder.  When connected, will POST to the CRC FastAPI with
-  the query string, selected admin tier, and viewport bbox.
+- **For UN tiers:** client-side filtering of the fixed set
+  (matches on label and parent).
+- **For OSM tiers:** backend stub (will POST to CRC FastAPI when
+  connected).
 
 #### Selection
 
 - Single region only.
 - Selecting a region renders a dismissible `.filter-chip` below
   the input and writes to `filterState.spatial.region_id` /
-  `filterState.spatial.geometry_source = 'osm'`.
+  `filterState.spatial.geometry_source`.
+- For UN regions: `region_id = 'un:<M49_code>'`,
+  `geometry_source = 'un_geoscheme'`.
+- For OSM regions: `region_id = '<osm_id>'`,
+  `geometry_source = 'osm'`.
 - Geometry preview will be fetched and displayed on the context
   map (backend pending).
-- Dismissing the chip clears the selection and removes the overlay.
+- Dismissing the chip clears the selection and removes the overlay
+  but stays on the current tier.
+
+The UN geoscheme data (including representative points for each
+region) is compiled into the `regionSelector.js` module as a
+static constant (`UN_GEOSCHEME`), not fetched from the server.
+The former "Intermediary" tier (Sub-Saharan Africa, Latin America
+and the Caribbean) has been merged into the sub-continental tier.
 
 ---
 
@@ -461,6 +515,7 @@ instance.
 {
     authorities: ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'],
     place_types: [],                    // AAT identifier arrays
+    clustering: true,                   // Group linked records (default on)
 
     mode: 'timespan',                   // 'timespan' | 'period' | 'polity'
 
@@ -469,7 +524,7 @@ instance.
         region_id: null,                // OSM region ID (Tab 1)
         period_id: null,                // PeriodO URI (Tab 2)
         polity_id: null,                // Territory ID (Tab 3)
-        geometry_source: 'none',        // 'osm' | 'period' | 'polity' | 'none'
+        geometry_source: 'none',        // 'osm' | 'un_geoscheme' | 'mapbounds' | 'period' | 'polity' | 'none'
         preview_geo: null,              // GeoJSON for map display only
     },
 
@@ -528,8 +583,8 @@ crosshairs icon and the label "Exact".
 
 | State | Appearance | Behaviour |
 |-------|-----------|-----------|
-| **Off** (default) | Outline, grey | Phonetic/fuzzy matching — includes similar-sounding names (e.g. "Krakow" finds "Cracow", "Kraków") |
-| **On** | Solid `#993333` background, white text | Exact spelling match only |
+| **Off** (default) | Pale neutral grey background (`#eef0f2`), muted text (`#777`) | Phonetic/fuzzy matching — includes similar-sounding names (e.g. "Krakow" finds "Cracow", "Kraków") |
+| **On** | Muted teal-blue background (`#6b8ea4`), white text | Exact spelling match only |
 
 The state is passed to the backend as `exact: true|false` in the
 search payload.  The toggle is reset on "Clear search".
@@ -549,13 +604,14 @@ The `gatherOptions()` function assembles:
 {
     qstr: '<toponym>',
     idx: '<es_index>',
-    fclasses: '<comma-separated AAT IDs>',
-    tree_selections: [<AAT IDs>],
+    fclasses: '<comma-separated AAT IDs>',  // Legacy — retained for backward compatibility
+    types: [<AAT IDs>],
     temporal: true|false,           // whether temporal mode is active
     start: <from_year>,
     end: <to_year>,
     undated: true|false,            // whether to include undated records
     exact: true|false,              // whether to require exact spelling match
+    cluster: true|false,            // whether to group linked records
     // Legacy-compatible empty fields
     bounds: { type: 'GeometryCollection', geometries: [] },
     regions: [],
@@ -692,7 +748,7 @@ dependency) to walk users through the filter interface.
 | Step | Target | Title | Focus |
 |------|--------|-------|-------|
 | 1 | `#filters_panel` | Search Filters | Overview of three-panel layout |
-| 2 | `.filter-col--authorities` | Data Sources | Explains gazetteer sources, noisy defaults |
+| 2 | `.filter-col--authorities` | Data Sources | Explains gazetteer sources, noisy defaults, and clustering toggle |
 | 3 | `.filter-col--timespace` | Time & Space | Introduces the context map and tabbed controls |
 | 4 | `#tab-timespan` | Region Tab | Dateline slider modes + region selector |
 | 5 | `#tab-periods` | Period Tab | PeriodO period search |

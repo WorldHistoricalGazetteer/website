@@ -41,21 +41,22 @@
 
 /* --- Exact-match toggle button --- */
 #exact_match_toggle {
-    border-color: #ced4da;
-    color: #555;
+    border-color: #d5d8dc;
+    background-color: #eef0f2;
+    color: #777;
 }
 #exact_match_toggle:hover {
-    background-color: #e9ecef;
-    color: #333;
+    background-color: #e2e5e9;
+    color: #555;
 }
 #exact_match_toggle.active {
-    background-color: #993333;
-    border-color: #993333;
+    background-color: #6b8ea4;
+    border-color: #5a7d93;
     color: #fff;
 }
 #exact_match_toggle.active:hover {
-    background-color: #7a2929;
-    border-color: #7a2929;
+    background-color: #5a7d93;
+    border-color: #4c6d82;
 }
 
 /* --- Collapsible filters panel --- */
@@ -124,6 +125,22 @@
 }
 .authority-item .form-check-label {
     font-size: 0.82rem;
+}
+
+/* --- Clustering toggle --- */
+.filter-col--authorities .form-switch {
+    padding-left: 2.5em;
+}
+.filter-col--authorities .form-switch .form-check-label {
+    font-size: 0.78rem;
+    color: #555;
+}
+.filter-col--authorities .form-switch .form-check-input {
+    cursor: pointer;
+}
+.filter-col--authorities .form-switch .form-check-input:checked {
+    background-color: #6b8ea4;
+    border-color: #5a7d93;
 }
 
 /* ===================================================================
@@ -251,7 +268,8 @@
 .region-tier-toggle,
 .polity-dataset-toggle {
     display: flex;
-    gap: 0;
+    flex-wrap: wrap;
+    gap: 2px 0;
     margin-bottom: 6px;
 }
 .region-tier-toggle .btn,
@@ -419,6 +437,7 @@
 .region-search-input {
     font-size: 0.82rem;
 }
+
 .region-dropdown {
     display: none;
     position: absolute;

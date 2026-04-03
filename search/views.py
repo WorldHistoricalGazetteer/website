@@ -262,9 +262,13 @@ class SearchViewV3(View):
         filters = q['query']['bool']['filter']
 
         # --- 1. AAT TYPE CATEGORIES ---
-        if params.get("fclasses"):
-            # fclasses param now contains comma-separated AAT identifiers (e.g. "aat:300008347,aat:300000809")
-            type_ids = [t.strip() for t in params["fclasses"].split(',') if t.strip()]
+        # Accept "types" (new) or "fclasses" (legacy) — both carry AAT identifiers
+        type_param = params.get("types") or params.get("fclasses")
+        if type_param:
+            if isinstance(type_param, list):
+                type_ids = [t.strip() for t in type_param if t.strip()]
+            else:
+                type_ids = [t.strip() for t in type_param.split(',') if t.strip()]
             if type_ids:
                 filters.append({"terms": {"types.identifier": type_ids}})
 

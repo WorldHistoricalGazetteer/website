@@ -29,6 +29,7 @@ let politySelector = null;
 let temporalMode = 'off'; // 'off' | 'range' | 'undated'
 let contextMapZoomed = false;
 let exactMatch = false; // When true, disable phonetic/fuzzy matching
+let clusterResults = true; // When true, group linked records; when false, return individual records
 
 // Load window.ccode_hash and window.regions
 const countryParents = new CountryParents();
@@ -66,7 +67,7 @@ function updateActiveFiltersBadge() {
     const state = filterState.get();
     if (state.mode === 'period' && state.spatial.period_id) count++;
     if (state.mode === 'polity' && state.spatial.polity_id) count++;
-    if (state.mode === 'timespan' && state.spatial.region_id) count++;
+    if (state.mode === 'timespan' && (state.spatial.region_id || state.spatial.geometry_source === 'mapbounds')) count++;
     // Temporal filter counts when mode is not 'off'
     if (temporalMode !== 'off') count++;
     // Spatial viewport counts when the map has been zoomed in
@@ -94,7 +95,7 @@ function hasFilterOnlySearchCriteria() {
     const hasTemporal = temporalMode !== 'off';
     const hasPeriod = state.mode === 'period' && state.spatial.period_id;
     const hasPolity = state.mode === 'polity' && state.spatial.polity_id;
-    const hasRegion = state.mode === 'timespan' && state.spatial.region_id;
+    const hasRegion = state.mode === 'timespan' && (state.spatial.region_id || state.spatial.geometry_source === 'mapbounds');
 
     return hasTemporal || hasPeriod || hasPolity || hasRegion;
 }
@@ -358,6 +359,13 @@ Promise.all([
             : 'Exact match: off — currently including phonetically similar names. Click to require exact spelling.');
     });
 
+    // --- Wire clustering toggle ---
+    $('#clustering_toggle').on('change', function () {
+        clusterResults = this.checked;
+        updateActiveFiltersBadge();
+        toggleButtonState();
+    });
+
     // --- Tab switching: mutual exclusion of temporal authority (§10) ---
     const tabEl = document.getElementById('timespaceTab');
     let previousMode = 'timespan';
@@ -593,6 +601,11 @@ function clearResults() {
     exactMatch = false;
     $('#exact_match_toggle').removeClass('active').attr('aria-pressed', 'false')
         .attr('title', 'Exact match: off — currently including phonetically similar names. Click to require exact spelling.');
+
+    // Reset clustering toggle
+    clusterResults = true;
+    const clusterToggle = document.getElementById('clustering_toggle');
+    if (clusterToggle) clusterToggle.checked = true;
 
     $('#search_content')
         .toggleClass('initial', true)
@@ -884,13 +897,14 @@ function gatherOptions() {
     const options = {
         qstr: $('#search_input').val(),
         idx: eswhg,
-        fclasses: treeIds.join(','),
-        tree_selections: treeIds,
+        fclasses: treeIds.join(','),  // Legacy field name — retained for backward compatibility
+        types: treeIds,
         temporal: temporalMode !== 'off',
         start: window.dateline ? window.dateline.fromValue : '',
         end: window.dateline ? window.dateline.toValue : '',
         undated: temporalMode === 'undated',
         exact: exactMatch,
+        cluster: clusterResults,
         // Legacy-compatible empty fields (no drawing, no country/region select2)
         bounds: { type: 'GeometryCollection', geometries: [] },
         regions: [],

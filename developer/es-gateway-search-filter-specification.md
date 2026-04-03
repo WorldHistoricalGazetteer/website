@@ -34,22 +34,61 @@ search filter system.
 
 ### 2.1 `places` / `toponyms` (existing)
 
-Already documented.  Mapping lives in `es_mappings_whg.json`.
-Key fields used by the filter system:
+Already documented.  Mappings live in the indexing repository:
+`schemas/places.json` and `schemas/toponyms.json`.
+
+#### `places` index
+
+4 shards, sorted by `place_id`.  Key fields used by the filter
+system:
 
 | Field | ES Type | Notes |
 |-------|---------|-------|
-| `title` | `keyword` (normalised) | Primary toponym |
-| `searchy` | `keyword` (normalised) | Lowercased variant list |
-| `names.toponym` | `keyword` (normalised) | All name variants |
+| `place_id` | `keyword` | Namespaced identifier (e.g. `gn:745044`, `osm:n12345`) |
+| `namespace` | `keyword` | Source namespace code (e.g. `gn`, `wd`, `osm`) |
+| `title` | `text` (+ `keyword` sub-field) | Primary toponym |
+| `toponyms` | `nested` | Array of `{toponym_id, label, timespans}` |
+| `toponyms.toponym_id` | `keyword` | Name+lang composite key (e.g. `İstanbul@tr`) |
+| `toponyms.label` | `text` (+ `keyword`) | Toponym string |
+| `toponyms.timespans` | `nested` | `{start: {in}, end: {in}}` attestation ranges |
+| `geometries` | `nested` | Array of `{geom, repr_point, timespans}` |
+| `geometries.geom` | `geo_shape` | Place geometry (Point, Polygon, etc.) |
+| `geometries.repr_point` | `geo_point` | Representative point |
+| `types` | `nested` | Array of `{identifier, label, sourceLabel}` |
+| `types.identifier` | `keyword` | AAT identifier (e.g. `aat:300008347`) or raw value |
+| `types.sourceLabel` | `keyword` | Source-original type label (e.g. `place=city`) |
 | `ccodes` | `keyword` | ISO-3166 country codes |
-| `types.identifier` | `keyword` | AAT identifiers (e.g. `aat:300008347`) |
-| `timespans` | `integer_range` | `{gte, lte}` year ranges |
-| `geoms.location` | `geo_shape` | Place geometries |
-| `fclasses` | `keyword` | Legacy GeoNames feature classes |
-| `whg_id` | `long` | WHG cluster identifier |
+| `population` | `long` | Population (where available) |
+| `elevation` | `integer` | Elevation in metres |
+| `relations` | `nested` | `{relation_type, related_place_id, label, timespans}` |
+| `links` | `nested` | `{type, identifier}` — e.g. `{closeMatch, wd:Q406}` |
+| `descriptions` | `nested` | `{value, lang}` |
+| `depictions` | `nested` | `{@id, title, license}` |
+| `indexed_at` | `date` | Indexing timestamp |
 
-No changes are required to this index.
+#### `toponyms` index
+
+4 shards.  One document per unique toponym string, cross-referencing
+all places that attest it.  Supports phonetic and prefix search via
+dense-vector embeddings.
+
+| Field | ES Type | Notes |
+|-------|---------|-------|
+| `toponym_id` | `keyword` | Same composite key as `places.toponyms.toponym_id` |
+| `name` | `text` (+ `keyword`, `raw`, `prefix` sub-fields) | Toponym string; `prefix` uses edge-ngram |
+| `name_romanized` | `text` (+ `keyword`, `prefix`) | Romanized form |
+| `lang` | `keyword` | ISO 639 language code |
+| `lang_variant` | `keyword` | Language variant |
+| `script` | `keyword` | Script code |
+| `namespaces` | `keyword` | All source namespaces that attest this toponym |
+| `primary_namespace` | `keyword` | Most authoritative namespace |
+| `attestations` | `keyword` | Place IDs attesting this toponym |
+| `panphon_embedding` | `dense_vector` (192, cosine) | Phonetic embedding for fuzzy matching |
+| `embedding` | `dense_vector` (128, byte, cosine) | Semantic/character embedding |
+| `embedding_version` | `integer` | Embedding model version |
+| `indexed_at` | `date` | Indexing timestamp |
+
+No changes are required to these indexes.
 
 ---
 
@@ -174,16 +213,19 @@ and `stop_year` fields use the most inclusive interpretation:
 ### 2.3 `territories` (new)
 
 A single index holding polity/territory records from three datasets,
-distinguished by a `dataset` keyword field.  This avoids maintaining
+distinguished by a `namespace` keyword field.  This avoids maintaining
 three separate mappings while allowing independent update cycles via
-`delete_by_query` on the `dataset` field.
+`delete_by_query` on the `namespace` field.
+
+Short namespace codes are used for consistency with the `places`
+index convention (e.g. `gn`, `wd`, `osm`).
 
 #### 2.3.1 Document Schema
 
 ```json
 {
-  "id":            "cliopatria:roman_empire_117",
-  "dataset":       "cliopatria",
+  "id":            "cp:roman_empire_117",
+  "namespace":     "cp",
   "label":         "Roman Empire",
   "alt_labels":    ["Imperium Romanum"],
   "start_year":    -27,
@@ -197,11 +239,11 @@ three separate mappings while allowing independent update cycles via
 
 #### 2.3.2 Datasets
 
-| `dataset` value | Source | Description |
-|-----------------|--------|-------------|
-| `cliopatria` | Cliopatria project | Historical polities and empires |
-| `dplace` | D-PLACE database | Cultural and linguistic regions |
-| `nativeland` | Native-Land.ca | Indigenous territories, languages, treaties |
+| `namespace` value | Source | Description |
+|-------------------|--------|-------------|
+| `cp` | Cliopatria project | Historical polities and empires |
+| `dp` | D-PLACE database | Cultural and linguistic regions |
+| `nl` | Native-Land.ca | Indigenous territories, languages, treaties |
 
 #### 2.3.3 Mapping
 
@@ -222,7 +264,7 @@ three separate mappings while allowing independent update cycles via
   "mappings": {
     "properties": {
       "id":           { "type": "keyword" },
-      "dataset":      { "type": "keyword" },
+      "namespace":    { "type": "keyword" },
       "label":        {
         "type": "text",
         "analyzer": "label_ngram",
@@ -408,7 +450,7 @@ viewport spatial filtering.
 ### 3.3 `POST /api/territories/search` (new)
 
 Search the `territories` index.  Supports label typeahead filtered
-by `dataset` and viewport bbox.
+by `namespace` and viewport bbox.
 
 ### 3.4 `POST /api/regions/search` (new)
 
@@ -423,6 +465,41 @@ selected region, period, or territory on the context map.
 
 **Allowed indexes:** `periodo_periods`, `territories`, `osm_admin_polygons`.
 The `places` index is NOT exposed via this endpoint.
+
+### 3.6 UN Geoscheme Regions (client-side, no endpoint)
+
+The front-end Region selector includes UN geoscheme (M49) regions
+as two tiers in its unified tier toggle:
+
+- **Continental** (6): Africa, Americas, Asia, Europe, Oceania,
+  Antarctica.
+- **Sub-Continental** (24): the 22 geographical subregions merged
+  with the 2 former intermediary regions (Sub-Saharan Africa, Latin
+  America and the Caribbean).
+
+These are compiled into the client-side `regionSelector.js` module
+as static data with representative points for each region — no API
+endpoint is required for listing them.  When the user selects a UN
+tier, the region whose representative point is closest to the
+current map centre is automatically selected.
+
+When a UN geoscheme region is selected, the front-end sets
+`filter_geometry.index` to `osm_admin_polygons` and
+`filter_geometry.id` to `un:<M49_code>` (e.g. `un:002` for Africa).
+The gateway must resolve this to the corresponding geometry.  This
+requires either:
+
+1. **Pre-computed UN region geometries** stored in the
+   `osm_admin_polygons` index as documents with `id = "un:002"` etc.,
+   containing the dissolved geometry of all constituent countries; or
+2. **On-the-fly geometry union** where the gateway fetches the
+   constituent country polygons and computes the union at query time
+   (less efficient, not recommended for production).
+
+**Recommendation:** Add the 30 UN geoscheme region documents to the
+`osm_admin_polygons` index during the OSM regions ingestion pipeline
+(§5.3), with `tier = "un_continental"` / `"un_subcontinental"` to
+distinguish them from OSM admin boundaries.
 
 ---
 
@@ -443,9 +520,10 @@ The `places` index is NOT exposed via this endpoint.
   "end_year":           1500,
   "undated":            false,
   "exact":              false,
+  "cluster":            true,
   "geom":               "full",
   "authorities":        ["gn", "wd", "tgn", "pl", "iv", "whg"],
-  "fclasses":           ["aat:300008347", "aat:300008389"],
+  "types":              ["aat:300008347", "aat:300008389"],
   "filter_geometry": {
     "index":            "osm_admin_polygons",
     "id":               "osm:relation/62149"
@@ -455,7 +533,7 @@ The `places` index is NOT exposed via this endpoint.
 
 | Field | Type | Required | Default | Notes |
 |-------|------|----------|---------|-------|
-| `query` | string | No* | — | Toponym search text. *Required unless `fclasses` + spatial/temporal filters are sufficient |
+| `query` | string | No* | — | Toponym search text. *Required unless `types` + spatial/temporal filters are sufficient |
 | `mode` | string | No | `"fuzzy"` | `"fuzzy"`, `"exact"`, `"prefix"` |
 | `size` | int | No | 100 | Max results |
 | `ccodes` | string[] | No | — | ISO country code filter |
@@ -464,9 +542,10 @@ The `places` index is NOT exposed via this endpoint.
 | `end_year` | int | No | — | Temporal filter end |
 | `undated` | bool | No | false | Include records with no temporal data |
 | `exact` | bool | No | false | Require exact spelling match |
+| `cluster` | bool | No | true | When true, return clustered/linked results from the `whg` index; when false, return individual unclustered records from `pub` only |
 | `geom` | string | No | `"full"` | `"full"` or `"repr_point"` |
 | `authorities` | string[] | No | all | Filter to specific source namespaces |
-| `fclasses` | string[] | No | — | AAT type identifier filter |
+| `types` | string[] | No | — | AAT type identifier filter |
 | `filter_geometry` | object | No | — | Reference to a geometry in another index for `geo_shape intersects` |
 
 When `filter_geometry` is provided, the gateway fetches the geometry
@@ -492,12 +571,11 @@ No change from the existing response shape:
       "score":       87.5,
       "children":    [],
       "whg_id":      null,
-      "dataset":     "",
+      "namespace":   "gn",
       "links":       [{"identifier": "wd:Q406", "type": "closeMatch"}],
       "descriptions": [{"value": "...", "lang": "en"}],
       "depictions":  [],
       "relations":   [],
-      "fclasses":    ["P"],
       "src_id":      "745044",
       "uri":         "https://www.geonames.org/745044"
     }
@@ -584,7 +662,7 @@ user selects a specific period.
 ```json
 {
   "query":    "Roman",
-  "dataset":  "cliopatria",
+  "namespace":"cp",
   "bbox":     [-10.5, 30.0, 45.0, 60.0],
   "size":     20
 }
@@ -593,14 +671,14 @@ user selects a specific period.
 | Field | Type | Required | Default | Notes |
 |-------|------|----------|---------|-------|
 | `query` | string | Yes | — | Label prefix (min 2 chars) |
-| `dataset` | string | Yes | — | `"cliopatria"`, `"dplace"`, or `"nativeland"` |
+| `namespace` | string | Yes | — | `"cp"`, `"dp"`, or `"nl"` |
 | `bbox` | number[4] | No | — | Viewport filter |
 | `size` | int | No | 20 | Max results |
 
 The ES query logic:
 
 1. `multi_match` on `label` + `alt_labels`.
-2. `term` filter on `dataset`.
+2. `term` filter on `namespace`.
 3. If `bbox`: `geo_shape` `intersects` on `geometry`.
 4. Sort by `_score` descending.
 
@@ -610,7 +688,7 @@ The ES query logic:
 {
   "results": [
     {
-      "id":            "cliopatria:roman_empire_117",
+      "id":            "cp:roman_empire_117",
       "label":         "Roman Empire",
       "start_year":    -27,
       "stop_year":     476,
@@ -731,7 +809,9 @@ script submitted via a Slurm `.sbatch` job.  Scripts use the
 6. **Compute per-period aggregates:**
    - Union all spatial coverage geometries → `geometry`.
    - Compute bounding box → `bbox`.
-   - Intersect with a countries GeoJSON to derive `ccodes`.
+   - Derive `ccodes` by querying the `osm_admin_polygons` index
+     (tier=country, `geo_shape` `intersects` on the unioned geometry)
+     and collecting the `iso_alpha2` values of matching countries.
 7. **Bulk-index** into `periodo_periods` (delete-and-recreate).
 
 **Slurm job:**
@@ -751,33 +831,38 @@ python ingest_periodo.py --es-url $ES_URL --es-api-key $ES_API_KEY
 
 Three sub-pipelines, one per dataset.  Each produces documents
 conforming to the §2.3.1 schema and indexes into the `territories`
-index with the appropriate `dataset` value.
+index with the appropriate `namespace` value.
 
 **General steps per dataset:**
 
 1. **Download** source data.
 2. **Parse** into the common schema: `id`, `label`, `alt_labels`,
-   `dataset`, `start_year`, `stop_year`, `geometry`, `ccodes`.
+   `namespace`, `start_year`, `stop_year`, `geometry`, `ccodes`.
 3. **Clean geometries** per §6.
-4. **Delete** existing documents for this dataset:
-   `POST /territories/_delete_by_query {"query":{"term":{"dataset":"<value>"}}}`.
+4. **Delete** existing documents for this namespace:
+   `POST /territories/_delete_by_query {"query":{"term":{"namespace":"<value>"}}}`.
 5. **Bulk-index** new documents.
 
 **Dataset-specific notes:**
 
-- **Cliopatria:** Download from the Cliopatria project.  Records have
-  temporal extents and polygon geometries.
-- **D-PLACE:** Download from the D-PLACE database.  Cultural regions;
-  some may lack temporal extents (set `start_year`/`stop_year` to
-  `null`).
-- **NativeLand:** Download from the Native-Land.ca API.  Indigenous
-  territories; temporal extents vary.
+- **Cliopatria** (`namespace: "cp"`): Download from the Cliopatria
+  project.  Records have temporal extents and polygon geometries.
+- **D-PLACE** (`namespace: "dp"`): Download from the D-PLACE
+  database.  Cultural regions; some may lack temporal extents (set
+  `start_year`/`stop_year` to `null`).
+- **NativeLand** (`namespace: "nl"`): Download from the
+  Native-Land.ca API.  Indigenous territories; temporal extents vary.
 
 ### 5.3 OSM Regions Pipeline
 
-**Source:** OpenStreetMap administrative boundary extracts (GeoJSON),
-typically from a pre-processed global admin boundaries dataset (e.g.
-GADM, geoBoundaries, or direct OSM Overpass exports).
+**Source:** The same `planet-latest.osm.pbf` file already downloaded
+for the `osm-places.py` pipeline.  The existing `OSMHandler` class
+(using the `osmium` library) reads relations and extracts
+multipolygon geometries via `WKBFactory.create_multipolygon()`.  The
+admin boundaries pipeline extends this codebase by adding a handler
+that accepts relations where `boundary=administrative` and
+`admin_level` is in `{2,3,4,5,6,7,8}` — see §2.4 "Existing code
+for OSM extraction" for details.
 
 **Steps:**
 
@@ -863,17 +948,26 @@ if not polygons:
 merged = unary_union(polygons)
 ```
 
-### Rule 4: Reject remaining GeometryCollections
+### Rule 4: Extract polygons from residual GeometryCollections
 
 If `unary_union` returns a `GeometryCollection` (e.g., because a
-polygon union produced a mix of polygon and line artefacts), reject
-the entire geometry.  Do NOT store `GeometryCollection` in ES — the
-`geo_shape` field handles only homogeneous types cleanly.
+polygon union produced a mix of polygon and line artefacts), do NOT
+reject the entire geometry.  Instead, re-apply polygon extraction
+(Rule 2) to keep only `Polygon`/`MultiPolygon` components and
+discard point and line artefacts.  If no polygons remain after
+extraction, only then reject the geometry.
 
 ```python
 if merged.geom_type == "GeometryCollection":
-    log.warning(f"Union returned GeometryCollection for {feature_id}; rejected")
-    return None
+    # Salvage polygon components; discard point/line artefacts
+    polygons = list(extract_polygons(merged))
+    if not polygons:
+        log.warning(f"Union returned GeometryCollection with no polygons for {feature_id}; rejected")
+        return None
+    merged = unary_union(polygons)
+    if merged.geom_type == "GeometryCollection":
+        log.warning(f"Double-extraction still GeometryCollection for {feature_id}; rejected")
+        return None
 ```
 
 ### Rule 5: Normalise to MultiPolygon
@@ -1001,6 +1095,32 @@ function) to determine country codes from point geometries during
 place ingestion.  This must be migrated to use the
 `osm_admin_polygons` index (a `geo_shape` `intersects` query against
 tier=country documents) before the `Country` model can be removed.
+
+#### Existing code for OSM extraction
+
+The existing `osm-places.py` ingestion script (in the indexing
+repository at `authorities/osm-places.py`) already performs a
+single-pass read of the full `planet-latest.osm.pbf` file using
+the `osmium` library.  Its `OSMHandler.relation()` method extracts
+multipolygon geometries via `WKBFactory.create_multipolygon()`.
+Currently, the `process_tags()` gate rejects relations that lack a
+`place`, `natural`, `water`, `waterway`, `historic`, or `landuse`
+tag — which excludes `boundary=administrative` features.
+
+The `osm_admin_polygons` pipeline should **reuse and extend** this
+codebase rather than starting from scratch:
+
+- Add a parallel handler (or a second pass) that accepts relations
+  where `boundary=administrative` and `admin_level` is in `2–8`.
+- Reuse the existing `stage_file_to_scratch()`, `ProgressTracker`,
+  `parallel_bulk` buffering, signal handling, and Slurm job
+  infrastructure.
+- The original named-places functionality must be preserved — the
+  admin boundary extraction is an addition, not a replacement.
+
+This approach avoids downloading the ~85 GB PBF file twice and
+ensures both pipelines benefit from the same checkpoint/resume
+and performance optimisations.
 
 ---
 

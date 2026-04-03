@@ -10,6 +10,7 @@
 const DEFAULT_STATE = {
     authorities: ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'],
     place_types: [],
+    clustering: true,               // When true, linked records are grouped
 
     mode: 'timespan', // 'timespan' | 'period' | 'polity'
 
@@ -18,7 +19,7 @@ const DEFAULT_STATE = {
         region_id: null,      // OSM region ID (Tab 1)
         period_id: null,      // PeriodO URI (Tab 2)
         polity_id: null,      // Polity ID (Tab 3)
-        geometry_source: 'none', // 'osm' | 'period' | 'polity' | 'none'
+        geometry_source: 'none', // 'osm' | 'un_geoscheme' | 'mapbounds' | 'period' | 'polity' | 'none'
         preview_geo: null,    // GeoJSON for map preview (never sent to server)
     },
 

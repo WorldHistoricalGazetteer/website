@@ -60,7 +60,10 @@ function getTourSteps() {
                 title: 'Region Tab',
                 description:
                     'The default tab. Use the <strong>dateline slider</strong> to set a year range, ' +
-                    'and optionally search for a named administrative region (country, state, district). ' +
+                    'and the <strong>Space</strong> toggle to constrain by region. ' +
+                    'Options include <em>Off</em>, <em>Map bounds</em> (use viewport), ' +
+                    'UN <em>Continental</em> and <em>Sub-Continental</em> regions (auto-picks closest to map centre), ' +
+                    'and OSM admin tiers (<em>Country</em>, <em>Region/State</em>, <em>District/County</em>, <em>Municipality</em>). ' +
                     'The dateline has three modes: <em>Off</em> (no time filter), ' +
                     '<em>Year range</em> (strict), and <em>Range + undated</em> ' +
                     '(includes places with no temporal attestation).',
