@@ -47,7 +47,7 @@
                 },
                 "namespaceTermNarrow": {
                     "type": "string",
-                    "pattern": "^(bnf|cerl|dbp|gn|gnd|gov|loc|pl|tgn|viaf|wd|wp):[^\\s]+$"
+                    "pattern": "^(bnf|cerl|dbp|gn|gnd|gov|indias|loc|pl|tgn|viaf|wd|wp):[^\\s]+$"
                 },
                 "validURL": {
                     "type": "string",
