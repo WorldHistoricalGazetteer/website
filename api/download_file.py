@@ -1,8 +1,8 @@
-import gzip
 import json
 import logging
 import os
 import time
+import zlib
 
 import redis
 from celery import shared_task
@@ -160,20 +160,24 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
     logger.info(f"Starting live stream for {filetype.upper()} {obj_type}:{getattr(obj, 'pk', obj)} (cache={'yes' if cache_filepath else 'no'})")
 
-    # Helper that compresses a UTF-8 string into a gzip member and yields/writes it
+    # Single continuous gzip stream (wbits=31 = 15 + 16 for gzip encoding)
+    compressor = zlib.compressobj(level=6, wbits=31)
+
+    # Helper that compresses a UTF-8 string into the gzip stream and yields/writes it
     def emit_chunk(text: str):
         if not text:
             return
         data_bytes = text.encode('utf-8')
-        compressed = gzip.compress(data_bytes)
-        if cache_file:
-            cache_file.write(compressed)
-            # keep partial cache visible during long streams
-            try:
-                cache_file.flush()
-            except Exception:
-                pass
-        yield compressed
+        compressed = compressor.compress(data_bytes)
+        compressed += compressor.flush(zlib.Z_SYNC_FLUSH)
+        if compressed:
+            if cache_file:
+                cache_file.write(compressed)
+                try:
+                    cache_file.flush()
+                except Exception:
+                    pass
+            yield compressed
 
     def lpf_feature_from_serialized(feature):
         """
@@ -214,7 +218,12 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
             citation = getattr(obj, "citation_csl", None)
             if citation:
-                yield from emit_chunk(',"citation":' + json.dumps(citation))
+                # citation_csl returns a JSON string; embed it directly
+                # to avoid double-encoding
+                if isinstance(citation, str):
+                    yield from emit_chunk(',"citation":' + citation)
+                else:
+                    yield from emit_chunk(',"citation":' + json.dumps(citation))
 
             licence_text = (
                 "Unless specified otherwise, all content created for or uploaded to the World Historical Gazetteer — "
@@ -460,7 +469,13 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
             logger.info(f"Completed streaming LPF {obj_type}:{getattr(obj, 'pk', obj)} - total features: {feature_count}")
         else:
             logger.info(f"Completed streaming TSV {obj_type}:{getattr(obj, 'pk', obj)} - total rows: {row_count}")
-        return
+
+        # Finalize the gzip stream (write the gzip trailer)
+        final = compressor.flush(zlib.Z_FINISH)
+        if final:
+            if cache_file:
+                cache_file.write(final)
+            yield final
 
     finally:
         if cache_file:

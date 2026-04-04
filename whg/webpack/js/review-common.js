@@ -236,7 +236,7 @@ function setupExternalLinkHandlers() {
     $('.ext').on('click', function(e) {
         e.preventDefault();
         const str = $(this).text().trim();
-        const re = /(http|bnf|cerl|dbp|gn|gnd|gov|loc|pl|tgn|viaf|wd|wdlocal|whg|wp):(.*?)$/;
+        const re = /(http|bnf|cerl|dbp|gn|gnd|gov|indias|loc|pl|tgn|viaf|wd|wdlocal|whg|wp):(.*?)$/;
         const match = str.match(re);
         const url = match[1] === 'http' ? str : base_urls[match[1]] + match[2];
         console.log('str, url', str, url);
