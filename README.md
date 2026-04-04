@@ -42,12 +42,12 @@ Complete documentation is available at **[docs.whgazetteer.org](https://docs.whg
 We welcome contributions from the community! Whether you're fixing bugs, adding features, or improving documentation, your help is appreciated.
 
 **Before contributing:**
-- Check existing [issues](https://github.com/WorldHistoricalGazetteer/website/issues) or open a new one to discuss your idea
+- Check existing [issues](https://github.com/WorldHistoricalGazetteer/place/issues) or open a new one to discuss your idea
 - Review our contribution guidelines (if available)
 - Follow PEP 8 and Django conventions for code style
 
 **Ways to contribute:**
-- 🐛 Report bugs and suggest features via [GitHub Issues](https://github.com/WorldHistoricalGazetteer/website/issues)
+- 🐛 Report bugs and suggest features via [GitHub Issues](https://github.com/WorldHistoricalGazetteer/place/issues)
 - 💻 Submit pull requests with bug fixes or new features
 - 📖 Improve documentation and examples
 - 📊 Contribute historical place datasets
@@ -63,5 +63,5 @@ This project is licensed under the BSD 3-Clause License. See [LICENSE](./LICENSE
 ---
 
 <p align="center">
-  <strong>World Historical Gazetteer</strong> | <a href="https://whgazetteer.org">Website</a> | <a href="https://docs.whgazetteer.org">Documentation</a> | <a href="https://github.com/WorldHistoricalGazetteer/website/issues">Issues</a>
+  <strong>World Historical Gazetteer</strong> | <a href="https://whgazetteer.org">Website</a> | <a href="https://docs.whgazetteer.org">Documentation</a> | <a href="https://github.com/WorldHistoricalGazetteer/place/issues">Issues</a>
 </p>
