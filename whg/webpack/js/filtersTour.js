@@ -139,7 +139,7 @@ function getTourSteps() {
                     '(e.g. searching "Krakow" also finds "Cracow" and "Kraków"). ' +
                     'Click this button to toggle <strong>exact spelling</strong> mode, which requires ' +
                     'results to match your search term precisely. ' +
-                    'The button turns <span style="color:#993333;font-weight:600">red</span> when exact mode is active.',
+                    'The button is <span style="color:#6b8ea4;font-weight:600">highlighted</span> when exact mode is active.',
                 side: 'bottom',
                 align: 'center',
             },

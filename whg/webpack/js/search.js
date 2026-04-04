@@ -358,14 +358,19 @@ Promise.all([
     });
 
     // --- Wire exact-match toggle ---
+    const exactMatchMessages = {
+        off: 'Exact match: off — currently including phonetically similar names. Click to require exact spelling.',
+        on:  'Exact match: on — requiring exact spelling. Click to include phonetically similar names.',
+    };
+    const exactBtn = document.getElementById('exact_match_toggle');
+    const exactTooltip = new bootstrap.Tooltip(exactBtn, { title: exactMatchMessages.off });
     $('#exact_match_toggle').on('click', function () {
         exactMatch = !exactMatch;
         const $btn = $(this);
         $btn.toggleClass('active', exactMatch);
         $btn.attr('aria-pressed', exactMatch);
-        $btn.attr('title', exactMatch
-            ? 'Exact match: on — requiring exact spelling. Click to include phonetically similar names.'
-            : 'Exact match: off — currently including phonetically similar names. Click to require exact spelling.');
+        exactTooltip.hide();
+        exactBtn.setAttribute('data-bs-original-title', exactMatch ? exactMatchMessages.on : exactMatchMessages.off);
     });
 
     // --- Wire clustering toggle ---
@@ -614,8 +619,8 @@ function clearResults() {
 
     // Reset exact-match toggle
     exactMatch = false;
-    $('#exact_match_toggle').removeClass('active').attr('aria-pressed', 'false')
-        .attr('title', 'Exact match: off — currently including phonetically similar names. Click to require exact spelling.');
+    $('#exact_match_toggle').removeClass('active').attr('aria-pressed', 'false');
+    exactBtn.setAttribute('data-bs-original-title', exactMatchMessages.off);
 
     // Reset clustering toggle
     clusterResults = true;

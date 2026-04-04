@@ -454,6 +454,11 @@ STANDARD_FIELDS = [
     "names.toponym.edge_ngram",  # Substring/suggestion matching (default boost 1.0)
 ]
 
+# Human-friendly labels for the search landing page.  Update after major
+# re-indexes.  (Current counts from ES _count API as of 2026-03-25.)
+INDEX_PLACES_LABEL = "more than 47 million"
+INDEX_TOPONYMS_LABEL = "nearly 67 million"
+
 OIDC_RP_SCOPES = "openid"  # ORCiD base url and credentials must be set in `env_template.py`
 ORCID_BASE_URL = os.environ.get("ORCID_BASE")
 OIDC_RP_CLIENT_ID = os.environ.get("ORCID_CLIENT_ID")

@@ -85,8 +85,6 @@
                     <i class="fas fa-search"></i>
                 </button>
                 <button id="exact_match_toggle" class="btn btn-outline-secondary" type="button"
-                        data-bs-toggle="tooltip"
-                        title="Exact match: off — currently including phonetically similar names. Click to require exact spelling."
                         aria-pressed="false">
                     <i class="fas fa-crosshairs"></i>
                     <span class="d-none d-md-inline ms-1">Exact</span>
@@ -270,9 +268,12 @@
                         <div class="filter-section">
                             <div class="filter-header">
                                 <span class="categories">place types</span>
-                                <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                                <a href="https://www.getty.edu/research/tools/vocabularies/aat/" target="_blank" rel="noopener noreferrer"
                                    data-bs-toggle="tooltip"
-                                   title="Select types to filter results. Selecting a parent category includes all its children. Results matching your selected types exactly are ranked highest; broader matches appear below."></i>
+                                   data-bs-html="true"
+                                   title="<b>Place types</b> come from the <em>Getty Art &amp; Architecture Thesaurus</em> (AAT).<br><br><b>Parent categories</b> include all their children.<br><b>Exact matches</b> are ranked highest; broader matches appear below.<br><br>Click to learn more about AAT.">
+                                    <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"></i>
+                                </a>
                                 <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
                                 <span class="ms-1 categories">
                                     <a id="tree_clear" href="#" class="small">clear all</a>
@@ -294,7 +295,7 @@
             <div class="landing-inner mx-auto">
                 <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="landing-logo mb-3">
                 <p class="lead text-muted mb-1">Search across historical gazetteers</p>
-                <p class="text-muted small">Enter a place name above to search, or open <strong>Filters</strong> to refine by data source, place type, time range, region, historical period, or named territory. You can also search by filters alone — select at least one place type together with a temporal or spatial constraint. <a href="#" id="start_tour_link" class="text-decoration-underline">Take a tour</a> of the filters to learn more.</p>
+                <p class="text-muted small">Our index currently holds <strong>{{ index_places }}</strong> place records and <strong>{{ index_toponyms }}</strong> unique toponyms across multiple gazetteers and authorities, so filters are recommended to narrow results. Enter a place name above to search, or open <strong>Filters</strong> to refine by data source, place type, time range, region, historical period, or named territory. You can also search by filters alone — select at least one place type together with a temporal or spatial constraint. <a href="#" id="start_tour_link" class="text-decoration-underline">Take a tour</a> of the filters to learn more.</p>
             </div>
         </div>
 

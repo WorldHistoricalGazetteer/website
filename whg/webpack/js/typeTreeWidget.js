@@ -74,7 +74,7 @@ export default class TypeTreeWidget {
                 <div class="tt-search">
                     <div class="tt-search-input-wrap">
                         <input type="text" class="tt-search-input form-control form-control-sm"
-                               placeholder="Browse or search AAT place types…" autocomplete="off" spellcheck="false">
+                               placeholder="Search place types…" autocomplete="off" spellcheck="false">
                         <span class="tt-search-clear" title="Clear">&times;</span>
                     </div>
                 </div>
@@ -101,6 +101,9 @@ export default class TypeTreeWidget {
                     $li.children('.tt-children').stop(true, true).show();
                 }
             }
+
+            // Initialise Bootstrap tooltips on all badges rendered so far
+            this._initTooltips(this.$el);
         } catch (err) {
             console.error('TypeTreeWidget: failed to load root nodes', err);
             this.$el.html(
@@ -175,8 +178,11 @@ export default class TypeTreeWidget {
         const badges = (node.fclasses || []).map(
             f => {
                 const key = f.toUpperCase();
-                const title = FCLASS_LABELS[key] || key;
-                return `<span class="tt-badge tt-badge-${f.toLowerCase()}" title="${title}">${f}</span>`;
+                const label = FCLASS_LABELS[key] || key;
+                const tip = `<b>GeoNames class <em>${this._esc(key)}</em></b><br>${this._esc(label)}`;
+                return `<span class="tt-badge tt-badge-${f.toLowerCase()}"
+                    data-bs-toggle="tooltip" data-bs-html="true"
+                    data-bs-title="${tip}">${f}</span>`;
             }
         ).join('');
 
@@ -255,6 +261,8 @@ export default class TypeTreeWidget {
                     $children.append($child);
                 });
                 $li.data('loaded', true);
+                // Initialise Bootstrap tooltips on newly loaded children
+                this._initTooltips($children);
             } catch (err) {
                 console.error('TypeTreeWidget: load failed for', aatId, err);
             }
@@ -490,6 +498,16 @@ export default class TypeTreeWidget {
         const d = document.createElement('div');
         d.textContent = str;
         return d.innerHTML;
+    }
+
+    /** Activate Bootstrap 5 tooltips on [data-bs-toggle="tooltip"] inside $container. */
+    _initTooltips($container) {
+        if (typeof bootstrap === 'undefined' || !bootstrap.Tooltip) return;
+        $container.find('[data-bs-toggle="tooltip"]').each(function () {
+            if (!bootstrap.Tooltip.getInstance(this)) {
+                new bootstrap.Tooltip(this);
+            }
+        });
     }
 }
 

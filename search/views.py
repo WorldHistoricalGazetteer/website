@@ -72,6 +72,10 @@ class SearchPageView(TemplateView):
         # context['bboxes'] = bboxes
         context['dropdown_data'] = get_regions_countries()  # Used for spatial filter
 
+        # Human-friendly index scale for the landing blurb
+        context['index_places'] = getattr(settings, 'INDEX_PLACES_LABEL', 'millions of')
+        context['index_toponyms'] = getattr(settings, 'INDEX_TOPONYMS_LABEL', 'millions of')
+
 
         user_areas = []
         if self.request.user.is_authenticated:
