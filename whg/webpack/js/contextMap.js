@@ -257,7 +257,9 @@ class ContextMap {
             // Rotate westward (subtract); wrap longitude to [-180, 180]
             let lng = center.lng - degreesPerSecond * dt;
             if (lng < -180) lng += 360;
-            this.map.setCenter([lng, center.lat]);
+
+            // Use jumpTo to avoid triggering animated move events
+            this.map.jumpTo({ center: [lng, center.lat] });
 
             this._spinRAF = requestAnimationFrame(tick);
         };

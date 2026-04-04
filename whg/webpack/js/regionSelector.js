@@ -162,13 +162,13 @@ export default class RegionSelector {
                 <div class="region-tier-toggle btn-group btn-group-sm flex-wrap mb-2" role="group" aria-label="Spatial region tier">
                     ${ALL_TIERS.map((t, i) => `
                         <button type="button" class="btn${i === 0 ? ' active' : ''}${isZoomGatedTier(t.value) ? ' zoom-gated-tier' : ''}"
-                                data-tier="${t.value}" title="${t.label}"
+                                data-tier="${t.value}" data-bs-toggle="tooltip" title="${t.label}"
                                 ${isZoomGatedTier(t.value) ? 'disabled' : ''}>${t.label}</button>
                     `).join('')}
                 </div>
-                <div class="region-input-wrap position-relative" style="display:none;">
+                <div class="region-input-wrap position-relative">
                     <input type="text" class="form-control form-control-sm region-search-input"
-                           placeholder="Zoom the map first…"
+                           placeholder="Zoom the map first to constrain your search area" disabled
                            autocomplete="off" spellcheck="false">
                     <div class="region-dropdown"></div>
                 </div>
@@ -217,12 +217,18 @@ export default class RegionSelector {
         this._currentTier = tier;
 
         if (tier === 'off') {
-            this._inputWrap.style.display = 'none';
+            // Hide the input only if tiers are enabled (map zoomed);
+            // otherwise keep it visible-but-disabled with the zoom msg.
+            if (this._tiersEnabled) {
+                this._inputWrap.style.display = 'none';
+            }
             this._clearAllSelections();
             contextMap.clearSuggestions();
             filterState.set('spatial.geometry_source', 'none');
         } else if (tier === 'mapbounds') {
-            this._inputWrap.style.display = 'none';
+            if (this._tiersEnabled) {
+                this._inputWrap.style.display = 'none';
+            }
             this._clearAllSelections();
             contextMap.clearSuggestions();
             filterState.set('spatial.geometry_source', 'mapbounds');
@@ -523,14 +529,19 @@ export default class RegionSelector {
         this.$el.querySelectorAll('.zoom-gated-tier').forEach(btn => {
             btn.disabled = false;
         });
-        // Restore input placeholder
+        // Now that tiers are enabled, hide the input if we're on off/mapbounds
+        // (it was kept visible only to show the zoom-gate placeholder)
+        if (this._currentTier === 'off' || this._currentTier === 'mapbounds') {
+            this._inputWrap.style.display = 'none';
+        }
+        // Restore input placeholder and enable it for active search tiers
         if (this._input) {
             this._input.disabled = false;
             if (isUnTier(this._currentTier)) {
                 this._input.placeholder = this._currentTier === 'continental'
                     ? 'Filter continental regions…'
                     : 'Filter sub-continental regions…';
-            } else {
+            } else if (isOsmTier(this._currentTier)) {
                 this._input.placeholder = 'Search for a region…';
             }
         }
@@ -546,6 +557,11 @@ export default class RegionSelector {
         });
         if (this._input) {
             this._input.placeholder = 'Zoom the map first…';
+            this._input.disabled = true;
+        }
+        // Show the input wrap so the zoom-gate placeholder is visible
+        if (this._inputWrap) {
+            this._inputWrap.style.display = '';
         }
     }
 
@@ -558,8 +574,11 @@ export default class RegionSelector {
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
         const offBtn = this.$el.querySelector('.region-tier-toggle .btn[data-tier="off"]');
         if (offBtn) offBtn.classList.add('active');
-        // Hide input
-        if (this._inputWrap) this._inputWrap.style.display = 'none';
+        // Hide input only if tiers are enabled (map zoomed);
+        // otherwise keep it visible for the zoom-gate placeholder
+        if (this._inputWrap && this._tiersEnabled) {
+            this._inputWrap.style.display = 'none';
+        }
         filterState.set('spatial.geometry_source', 'none');
     }
 
@@ -574,8 +593,11 @@ export default class RegionSelector {
         const offBtn = this.$el.querySelector('.region-tier-toggle .btn[data-tier="off"]');
         if (offBtn) offBtn.classList.add('active');
 
-        // Hide input
-        if (this._inputWrap) this._inputWrap.style.display = 'none';
+        // Hide input only if tiers are enabled (map zoomed);
+        // otherwise keep it visible for the zoom-gate placeholder
+        if (this._inputWrap && this._tiersEnabled) {
+            this._inputWrap.style.display = 'none';
+        }
 
         filterState.set('spatial.region_id', []);
         filterState.set('spatial.geometry_source', 'none');

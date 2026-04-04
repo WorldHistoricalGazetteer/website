@@ -105,9 +105,9 @@ export default class Dateline {
 				<div class="form_control">
 					<div class="control_container from"> 
 						<button class="year_button">${this.fromValue}</button>
-						${this.includeUndated !== null ? `<button class="undated_button" title="Include features without temporal data."><input type="checkbox" id="undated_checkbox"${this.includeUndated ? ' checked' : ''} /><label for="undated_checkbox">Undated</label></button>` : ''}
-						${this.epochs ? '<button class="epochs_button" title="Set range from a defined epoch.">Epochs</button>' : ''}
-						${this.automate ? '<button class="automate_button" title="Automate slider movement.">Automate</button>' : ''}
+					${this.includeUndated !== null ? `<button class="undated_button" data-bs-toggle="tooltip" title="Include features without temporal data."><input type="checkbox" id="undated_checkbox"${this.includeUndated ? ' checked' : ''} /><label for="undated_checkbox">Undated</label></button>` : ''}
+					${this.epochs ? '<button class="epochs_button" data-bs-toggle="tooltip" title="Set range from a defined epoch.">Epochs</button>' : ''}
+					${this.automate ? '<button class="automate_button" data-bs-toggle="tooltip" title="Automate slider movement.">Automate</button>' : ''}
 					</div>
 					<div class="control_container to">
 						<button class="year_button">${this.toValue}</button>

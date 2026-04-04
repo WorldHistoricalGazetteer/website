@@ -69,8 +69,8 @@ system:
 #### `toponyms` index
 
 4 shards.  One document per unique toponym string, cross-referencing
-all places that attest it.  Supports phonetic and prefix search via
-dense-vector embeddings.
+all places that attest it.  Supports phonetic search via Symphonym
+dense-vector embeddings (and legacy panphon embeddings).
 
 | Field | ES Type | Notes |
 |-------|---------|-------|
@@ -83,8 +83,9 @@ dense-vector embeddings.
 | `namespaces` | `keyword` | All source namespaces that attest this toponym |
 | `primary_namespace` | `keyword` | Most authoritative namespace |
 | `attestations` | `keyword` | Place IDs attesting this toponym |
-| `panphon_embedding` | `dense_vector` (192, cosine) | Phonetic embedding for fuzzy matching |
-| `embedding` | `dense_vector` (128, byte, cosine) | Semantic/character embedding |
+| `ipa` | `keyword` (not indexed) | IPA transcription used to generate panphon embedding |
+| `panphon_embedding` | `dense_vector` (192, cosine) | Legacy panphon IPA-based phonetic embedding |
+| `embedding` | `dense_vector` (128, byte, cosine) | Symphonym phonetic embedding for fuzzy matching |
 | `embedding_version` | `integer` | Embedding model version |
 | `indexed_at` | `date` | Indexing timestamp |
 
@@ -534,14 +535,14 @@ distinguish them from OSM admin boundaries.
 | Field | Type | Required | Default | Notes |
 |-------|------|----------|---------|-------|
 | `query` | string | No* | — | Toponym search text. *Required unless `types` + spatial/temporal filters are sufficient |
-| `mode` | string | No | `"fuzzy"` | `"fuzzy"`, `"exact"`, `"prefix"` |
+| `mode` | string | No | `"fuzzy"` | `"fuzzy"` (phonetic matching via Symphonym embeddings), `"exact"` (exact spelling only) |
 | `size` | int | No | 100 | Max results |
 | `ccodes` | string[] | No | — | ISO country code filter |
 | `bounds` | GeoJSON | No | — | Viewport bounding box as GeoJSON geometry |
 | `start_year` | int | No | — | Temporal filter start |
 | `end_year` | int | No | — | Temporal filter end |
 | `undated` | bool | No | false | Include records with no temporal data |
-| `exact` | bool | No | false | Require exact spelling match |
+| `exact` | bool | No | false | Shorthand: when `true`, equivalent to `mode: "exact"`. If both `mode` and `exact` are supplied, `exact: true` takes precedence |
 | `cluster` | bool | No | true | When true, return clustered/linked results from the `whg` index; when false, return individual unclustered records from `pub` only |
 | `geom` | string | No | `"full"` | `"full"` or `"repr_point"` |
 | `authorities` | string[] | No | all | Filter to specific source namespaces |

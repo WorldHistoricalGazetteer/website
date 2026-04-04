@@ -174,16 +174,15 @@
 }
 
 /* ===================================================================
-   Context map (§5) — square, desaturated basemap, drives panel height
+   Context map (§5) — square, space-themed backdrop, drives panel height
    =================================================================== */
 #context_map_wrap {
     position: relative;
     aspect-ratio: 1;
     width: 100%;
-    border: 1px solid #dee2e6;
+    border: 1px solid #ccc;
     border-radius: 4px;
     overflow: hidden;
-    background: #daecf1;
 }
 
 #context_map {
@@ -193,10 +192,10 @@
     height: 100%;
 }
 
-/* Desaturated basemap (§5.1) */
 #context_map .maplibregl-canvas {
     filter: saturate(0.3) brightness(1.05);
 }
+
 
 /* ===================================================================
    Time & Space tabs

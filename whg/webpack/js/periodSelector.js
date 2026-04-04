@@ -49,7 +49,7 @@ export default class PeriodSelector {
                 <div class="period-chip-area mt-1"></div>
                 <div class="period-info small text-muted mt-1">
                     <i class="fas fa-info-circle"></i>
-                    Select PeriodO periods to set time and (optionally) spatial extent. Multiple periods can be selected.
+                    Select <a href="https://perio.do" target="_blank" data-bs-toggle="tooltip" title="Learn about PeriodO">PeriodO</a> periods to set time and (optionally) spatial extent. Multiple periods can be selected.
                 </div>
             </div>
         `;

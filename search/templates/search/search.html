@@ -85,6 +85,7 @@
                     <i class="fas fa-search"></i>
                 </button>
                 <button id="exact_match_toggle" class="btn btn-outline-secondary" type="button"
+                        data-bs-toggle="tooltip"
                         title="Exact match: off — currently including phonetically similar names. Click to require exact spelling."
                         aria-pressed="false">
                     <i class="fas fa-crosshairs"></i>
@@ -93,6 +94,7 @@
                 <button id="toggle_filters" class="btn btn-outline-secondary" type="button"
                         data-bs-toggle="collapse" data-bs-target="#search_filters"
                         aria-expanded="false" aria-controls="search_filters"
+                        rel="tooltip"
                         title="Show/hide search filters">
                     <i class="fas fa-sliders-h"></i>
                     <span class="d-none d-md-inline ms-1">Filters</span>
@@ -113,41 +115,49 @@
                         </div>
                         <div class="authority-list">
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="GeoNames geographical database — ~12 million features with coordinates, names, and types sourced from national mapping agencies and other authoritative sources">
                                 <input class="form-check-input authority-cb" type="checkbox" value="gn" checked>
                                 <span class="form-check-label">GeoNames</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="Wikidata knowledge graph — ~8 million places with structured data, links to Wikipedia, identifiers for external authorities, and multilingual labels">
                                 <input class="form-check-input authority-cb" type="checkbox" value="wd" checked>
                                 <span class="form-check-label">Wikidata</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="Getty Thesaurus of Geographic Names (TGN) — ~3 million scholarly place name records maintained by the Getty Research Institute">
                                 <input class="form-check-input authority-cb" type="checkbox" value="tgn" checked>
                                 <span class="form-check-label">TGN</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="Pleiades gazetteer of ancient places — ~37,000 places from the classical world, maintained by the ancient-studies community">
                                 <input class="form-check-input authority-cb" type="checkbox" value="pl" checked>
                                 <span class="form-check-label">Pleiades</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="Index Villaris 1680 — ~24,000 English and Welsh place names from a 17th-century gazetteer, linked to modern identifiers">
                                 <input class="form-check-input authority-cb" type="checkbox" value="iv" checked>
                                 <span class="form-check-label">IndexVillaris</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="Contributed historical gazetteer datasets curated by WHG researchers and projects — includes attestations with temporal scoping and rich metadata">
                                 <input class="form-check-input authority-cb" type="checkbox" value="whg" checked>
                                 <span class="form-check-label">WHG datasets</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="OpenStreetMap community mapping data — comprehensive global coverage but very noisy: includes individual buildings, bus stops, businesses, and other micro-features alongside meaningful places">
                                 <input class="form-check-input authority-cb" type="checkbox" value="osm">
                                 <span class="form-check-label">OpenStreetMap</span>
                             </label>
                             <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
                                    title="GB1900 gazetteer — British place names 1888–1914 from Ordnance Survey maps. Very noisy: ~800,000 text labels including field names, minor features, and annotations">
                                 <input class="form-check-input authority-cb" type="checkbox" value="gb">
                                 <span class="form-check-label">GB1900</span>
@@ -156,6 +166,7 @@
                         <div class="filter-header d-flex align-items-center">
                             <span class="categories">clustering</span>
                             <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                               data-bs-toggle="tooltip"
                                title="When enabled, linked place records from different sources are grouped together as a single result, showing the number of linked attestations. When disabled, every individual place record is returned separately."></i>
                         </div>
                         <div class="form-check form-switch mt-1 mb-1">
@@ -211,9 +222,9 @@
                                         <div class="filter-header"><span class="categories">time</span></div>
                                         <div id="dateline_container" class="temporal-off">
                                             <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
-                                                <button type="button" class="btn active" data-temporal-mode="off" title="No temporal filtering — return places from all periods">Off</button>
-                                                <button type="button" class="btn" data-temporal-mode="range" title="Restrict results to places attested within the selected year range">Year range</button>
-                                                <button type="button" class="btn" data-temporal-mode="undated" title="Restrict to year range, but also include places with no temporal attestation">Range + undated</button>
+                                                <button type="button" class="btn active" data-temporal-mode="off" data-bs-toggle="tooltip" title="No temporal filtering — return places from all periods">Off</button>
+                                                <button type="button" class="btn" data-temporal-mode="range" data-bs-toggle="tooltip" title="Restrict results to places attested within the selected year range">Year range</button>
+                                                <button type="button" class="btn" data-temporal-mode="undated" data-bs-toggle="tooltip" title="Restrict to year range, but also include places with no temporal attestation">Range + undated</button>
                                             </div>
                                             <div id="dateline"></div>
                                         </div>
@@ -223,6 +234,7 @@
                                                 <a id="space_clear" href="#" class="small">clear all</a>
                                             </span>
                                             <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                                               data-bs-toggle="tooltip"
                                                title="Search for a named region below, or leave empty to use the current map extent as a spatial filter."></i>
                                         </div>
                                         <div id="region_selector_container"></div>
@@ -230,12 +242,6 @@
 
                                     <!-- Tab 2: Periods -->
                                     <div class="tab-pane fade p-2" id="pane-periods" role="tabpanel" aria-labelledby="tab-periods">
-                                        <div class="filter-header mb-1">
-                                            <span class="categories small">PeriodO period search</span>
-                                            <a href="https://perio.do" target="_blank" class="small ms-1" data-bs-toggle="tooltip" title="Learn about PeriodO">
-                                                <i class="fas fa-external-link-alt"></i>
-                                            </a>
-                                        </div>
                                         <div id="period_selector_container"></div>
                                     </div>
 
@@ -265,6 +271,7 @@
                             <div class="filter-header">
                                 <span class="categories">place types</span>
                                 <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
+                                   data-bs-toggle="tooltip"
                                    title="Select types to filter results. Selecting a parent category includes all its children. Results matching your selected types exactly are ranked highest; broader matches appear below."></i>
                                 <span id="tree_selection_badge" class="badge bg-info ms-1" style="display:none"></span>
                                 <span class="ms-1 categories">

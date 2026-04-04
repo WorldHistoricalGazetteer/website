@@ -36,7 +36,7 @@ export default class PolitySelector {
             <div class="polity-selector">
                 <div class="polity-dataset-toggle btn-group btn-group-sm mb-2" role="group" aria-label="Polity dataset">
                     ${POLITY_DATASETS.map((ds, i) => `
-                        <button type="button" class="btn${i === 0 ? ' active' : ''}" data-polity-dataset="${ds.value}" title="${ds.title}">${ds.label}</button>
+                        <button type="button" class="btn${i === 0 ? ' active' : ''}" data-polity-dataset="${ds.value}" data-bs-toggle="tooltip" title="${ds.title}">${ds.label}</button>
                     `).join('')}
                 </div>
                 <div class="polity-input-wrap position-relative mb-2">
