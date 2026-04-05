@@ -726,40 +726,69 @@ def get_mapping_stats():
     """
     Return mapping coverage statistics.
 
-    Totals come from local data files (instant); mapped counts from
-    the cached get_current_mappings() call.
+    Each vocabulary returns both **term-based** counts (how many distinct
+    source codes are mapped) and a **record-count-based** coverage
+    percentage (``count_pct``).  The latter answers: "what fraction of
+    actual place records in the ES ``places`` index are covered by the
+    types we have already mapped?"
 
-    OSM and OHM are reported as a single combined ``osm_ohm`` entry
-    (deduplicated by source_id).
+    Picking off high-count types first means ``count_pct`` can reach
+    95 % long before every obscure code is mapped.
     """
     gn_map, wd_map, osm_map, ohm_map = get_current_mappings()
 
+    # ------------------------------------------------------------------
+    # GeoNames — counts from ES places aggregation on types.sourceLabel
+    # ------------------------------------------------------------------
     gn_labels = _load_geonames_labels()
-    gn_total = len(gn_labels) if gn_labels else 680
-    gn_mapped = len(gn_map)
+    gn_total_terms = len(gn_labels) if gn_labels else 680
+    gn_mapped_terms = len(gn_map)
 
-    # Combined OSM/OHM: union of source_ids from both data files
-    osm_data = _load_osm_data()
-    ohm_data = _load_ohm_data()
-    all_source_ids = set()
-    for tag_key, tag_data in osm_data.items():
-        if isinstance(tag_data, dict):
-            for entry in tag_data.get("values", []):
-                all_source_ids.add(f"{tag_key}={entry['value']}")
-    for tag_key, tag_data in ohm_data.items():
-        if isinstance(tag_data, dict):
-            for entry in tag_data.get("values", []):
-                all_source_ids.add(f"{tag_key}={entry['value']}")
-    osm_ohm_total = len(all_source_ids)
+    gn_total_records = 0
+    gn_mapped_records = 0
+    try:
+        es = settings.ES_CONN
+        resp = es.search(
+            index="places",
+            size=0,
+            query={"match_all": {}},
+            aggs={
+                "source_labels": {
+                    "nested": {"path": "types"},
+                    "aggs": {
+                        "by_label": {
+                            "terms": {
+                                "field": "types.sourceLabel",
+                                "size": 2000,
+                            }
+                        }
+                    },
+                },
+            },
+            request_timeout=8,
+        )
+        for bucket in resp["aggregations"]["source_labels"]["by_label"]["buckets"]:
+            sl = bucket["key"]
+            if "." in sl and sl.split(".")[0] in GN_FCLASSES:
+                cnt = bucket["doc_count"]
+                gn_total_records += cnt
+                if sl in gn_map:
+                    gn_mapped_records += cnt
+            elif sl in GN_FCLASSES:
+                cnt = bucket["doc_count"]
+                gn_total_records += cnt
+                if sl in gn_map:
+                    gn_mapped_records += cnt
+    except Exception as e:
+        logger.info("GeoNames record counts from ES unavailable: %s", e)
 
-    # Mapped = union of source_ids that appear in either osm_map or ohm_map
-    mapped_ids = set(osm_map.keys()) | set(ohm_map.keys())
-    osm_ohm_mapped = len(mapped_ids)
-
-    wd_mapped = len(wd_map)
-
-    # Count total Wikidata Q-items from ES places aggregation
-    wd_total = 0
+    # ------------------------------------------------------------------
+    # Wikidata — counts from ES places aggregation on types.identifier
+    # ------------------------------------------------------------------
+    wd_mapped_terms = len(wd_map)
+    wd_total_terms = 0
+    wd_total_records = 0
+    wd_mapped_records = 0
     try:
         es = settings.ES_CONN
         resp = es.search(
@@ -782,18 +811,80 @@ def get_mapping_stats():
             },
             request_timeout=8,
         )
-        wd_total = len(resp["aggregations"]["qid_agg"]["by_ident"]["buckets"])
+        for bucket in resp["aggregations"]["qid_agg"]["by_ident"]["buckets"]:
+            qid = bucket["key"]
+            if qid.startswith("Q"):
+                cnt = bucket["doc_count"]
+                wd_total_terms += 1
+                wd_total_records += cnt
+                if qid in wd_map:
+                    wd_mapped_records += cnt
     except Exception as e:
-        logger.info("Wikidata total count from ES unavailable: %s", e)
-    # Ensure total is at least as large as the mapped count
-    wd_total = max(wd_total, wd_mapped)
+        logger.info("Wikidata counts from ES unavailable: %s", e)
+    wd_total_terms = max(wd_total_terms, wd_mapped_terms)
 
-    def _pct(mapped, total):
-        return round(100 * mapped / total, 1) if total else 0
+    # ------------------------------------------------------------------
+    # OSM / OHM (merged) — counts from static JSON data files
+    # ------------------------------------------------------------------
+    osm_data = _load_osm_data()
+    ohm_data = _load_ohm_data()
+
+    # Build a merged dict: source_id → total count (same logic as
+    # get_osm_ohm_types but we only need the counts)
+    osm_ohm_counts = {}  # source_id → int
+    for tag_key, tag_data in osm_data.items():
+        if isinstance(tag_data, dict):
+            for entry in tag_data.get("values", []):
+                sid = f"{tag_key}={entry['value']}"
+                osm_ohm_counts[sid] = osm_ohm_counts.get(sid, 0) + (entry.get("count") or 0)
+    for tag_key, tag_data in ohm_data.items():
+        if isinstance(tag_data, dict):
+            for entry in tag_data.get("values", []):
+                sid = f"{tag_key}={entry['value']}"
+                osm_ohm_counts[sid] = osm_ohm_counts.get(sid, 0) + (entry.get("count") or 0)
+
+    osm_ohm_total_terms = len(osm_ohm_counts)
+    mapped_ids = set(osm_map.keys()) | set(ohm_map.keys())
+    osm_ohm_mapped_terms = len(mapped_ids)
+
+    osm_ohm_total_records = sum(osm_ohm_counts.values())
+    osm_ohm_mapped_records = sum(
+        osm_ohm_counts.get(sid, 0) for sid in mapped_ids
+    )
+
+    # ------------------------------------------------------------------
+    # Build response
+    # ------------------------------------------------------------------
+    def _pct(num, denom):
+        return round(100 * num / denom, 1) if denom else 0
 
     return {
-        "geonames": {"total": gn_total, "mapped": gn_mapped, "unmapped": gn_total - gn_mapped, "pct": _pct(gn_mapped, gn_total)},
-        "wikidata": {"total": wd_total, "mapped": wd_mapped, "unmapped": max(0, wd_total - wd_mapped), "pct": _pct(wd_mapped, wd_total)},
-        "osm_ohm": {"total": osm_ohm_total, "mapped": osm_ohm_mapped, "unmapped": max(0, osm_ohm_total - osm_ohm_mapped), "pct": _pct(osm_ohm_mapped, osm_ohm_total)},
+        "geonames": {
+            "total": gn_total_terms,
+            "mapped": gn_mapped_terms,
+            "unmapped": gn_total_terms - gn_mapped_terms,
+            "pct": _pct(gn_mapped_terms, gn_total_terms),
+            "total_records": gn_total_records,
+            "mapped_records": gn_mapped_records,
+            "count_pct": _pct(gn_mapped_records, gn_total_records),
+        },
+        "wikidata": {
+            "total": wd_total_terms,
+            "mapped": wd_mapped_terms,
+            "unmapped": max(0, wd_total_terms - wd_mapped_terms),
+            "pct": _pct(wd_mapped_terms, wd_total_terms),
+            "total_records": wd_total_records,
+            "mapped_records": wd_mapped_records,
+            "count_pct": _pct(wd_mapped_records, wd_total_records),
+        },
+        "osm_ohm": {
+            "total": osm_ohm_total_terms,
+            "mapped": osm_ohm_mapped_terms,
+            "unmapped": max(0, osm_ohm_total_terms - osm_ohm_mapped_terms),
+            "pct": _pct(osm_ohm_mapped_terms, osm_ohm_total_terms),
+            "total_records": osm_ohm_total_records,
+            "mapped_records": osm_ohm_mapped_records,
+            "count_pct": _pct(osm_ohm_mapped_records, osm_ohm_total_records),
+        },
     }
 

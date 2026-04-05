@@ -181,9 +181,15 @@
                 const el = document.getElementById(`tab-stat-${vocab}`);
                 if (el && stats[vocab]) {
                     const s = stats[vocab];
-                    const pct = s.pct != null ? s.pct : (s.total ? Math.round(1000 * s.mapped / s.total) / 10 : 0);
+                    // Show record-count-based % (count_pct) — this reflects
+                    // how many actual place records are covered by mapped types.
+                    const pct = s.count_pct != null ? s.count_pct
+                        : (s.total_records ? Math.round(1000 * s.mapped_records / s.total_records) / 10 : 0);
                     el.textContent = `(${pct}%)`;
-                    el.title = `${formatCount(s.mapped)} of ${formatCount(s.total)} mapped`;
+                    // Tooltip: show both term counts and record counts
+                    const termInfo = `${formatCount(s.mapped)}/${formatCount(s.total)} terms mapped`;
+                    const recInfo = `${formatCount(s.mapped_records)}/${formatCount(s.total_records)} records covered`;
+                    el.title = `${recInfo}\n${termInfo}`;
                 }
             });
         }).catch(err => {

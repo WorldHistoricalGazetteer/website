@@ -20,47 +20,56 @@
       {
         "value": "village",
         "count": 3784,
-        "fraction": 0.7568
+        "fraction": 0.7568,
+        "description": "A smaller distinct settlement, smaller than a town with few facilities available with people traveling to nearby towns to access these."
       },
       {
         "value": "town",
         "count": 542,
-        "fraction": 0.1084
+        "fraction": 0.1084,
+        "description": "An important urban centre, between a village and a city in size."
       },
       {
         "value": "locality",
         "count": 340,
-        "fraction": 0.068
+        "fraction": 0.068,
+        "description": "A named place that has no population."
       },
       {
         "value": "city",
         "count": 175,
-        "fraction": 0.035
+        "fraction": 0.035,
+        "description": "The largest urban settlement or settlements within the territory."
       },
       {
         "value": "hamlet",
         "count": 82,
-        "fraction": 0.0164
+        "fraction": 0.0164,
+        "description": "A smaller rural community, typically with fewer than 100-200 inhabitants, and little infrastructure."
       },
       {
         "value": "island",
         "count": 23,
-        "fraction": 0.0046
+        "fraction": 0.0046,
+        "description": "Any piece of land that is completely surrounded by water and isolated from other significant landmasses (bigger than 1 km²)."
       },
       {
         "value": "suburb",
         "count": 20,
-        "fraction": 0.004
+        "fraction": 0.004,
+        "description": "A part of a town or city with a well-known name and often a distinct identity."
       },
       {
         "value": "islet",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A very small island (smaller than 1 km²)."
       },
       {
         "value": "neighbourhood",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A neighbourhood is a smaller named, geographically localised place within a suburb of a larger city or within a town or village"
       },
       {
         "value": "point",
@@ -70,7 +79,8 @@
       {
         "value": "isolated_dwelling",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "The smallest kind of settlement (1-2 households)."
       },
       {
         "value": "yes",
@@ -90,7 +100,8 @@
       {
         "value": "farm",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An individually named farm."
       }
     ]
   },
@@ -115,47 +126,56 @@
       {
         "value": "boundary_stone",
         "count": 1163,
-        "fraction": 0.2326
+        "fraction": 0.2326,
+        "description": "A historic physical marker that identifies a boundary"
       },
       {
         "value": "castle",
         "count": 717,
-        "fraction": 0.1434
+        "fraction": 0.1434,
+        "description": "Used for various kinds of castles, palaces, fortresses, manors, stately homes, kremlins, shiros and other."
       },
       {
         "value": "memorial",
         "count": 605,
-        "fraction": 0.121
+        "fraction": 0.121,
+        "description": "Small memorials, usually remembering special persons, people who lost their lives in the wars, past events or missing places."
       },
       {
         "value": "city_gate",
         "count": 585,
-        "fraction": 0.117
+        "fraction": 0.117,
+        "description": "A city gate within a city wall."
       },
       {
         "value": "monument",
         "count": 279,
-        "fraction": 0.0558
+        "fraction": 0.0558,
+        "description": "A memorial object, which is especially large, built to remember, show respect to a person or group of people or to commemorate an event."
       },
       {
         "value": "archaeological_site",
         "count": 184,
-        "fraction": 0.0368
+        "fraction": 0.0368,
+        "description": "A place in which evidence of past activity is preserved."
       },
       {
         "value": "fort",
         "count": 174,
-        "fraction": 0.0348
+        "fraction": 0.0348,
+        "description": "A military fort, a stand-alone defensive structure which differs from a castle in that there is no permanent residence."
       },
       {
         "value": "manor",
         "count": 163,
-        "fraction": 0.0326
+        "fraction": 0.0326,
+        "description": "Historic manors/mansions having different use today"
       },
       {
         "value": "mine",
         "count": 155,
-        "fraction": 0.031
+        "fraction": 0.031,
+        "description": "Location of historic underground mine workings for minerals such as coal or lead."
       },
       {
         "value": "crash_site",
@@ -165,22 +185,26 @@
       {
         "value": "yes",
         "count": 112,
-        "fraction": 0.0224
+        "fraction": 0.0224,
+        "description": "Used to add the historic significance of the objects described by other tags."
       },
       {
         "value": "ruins",
         "count": 97,
-        "fraction": 0.0194
+        "fraction": 0.0194,
+        "description": "Remains of structures that were once complete, but have fallen into partial or complete disrepair."
       },
       {
         "value": "building",
         "count": 87,
-        "fraction": 0.0174
+        "fraction": 0.0174,
+        "description": "Unspecified historic building."
       },
       {
         "value": "ship",
         "count": 53,
-        "fraction": 0.0106
+        "fraction": 0.0106,
+        "description": "A decommissioned ship/submarine which generally remains in one place"
       },
       {
         "value": "roman_road",
@@ -190,7 +214,8 @@
       {
         "value": "church",
         "count": 44,
-        "fraction": 0.0088
+        "fraction": 0.0088,
+        "description": "A church with a historical value."
       },
       {
         "value": "trail",
@@ -200,12 +225,14 @@
       {
         "value": "tomb",
         "count": 32,
-        "fraction": 0.0064
+        "fraction": 0.0064,
+        "description": "A structure where somebody has been buried."
       },
       {
         "value": "heritage",
         "count": 32,
-        "fraction": 0.0064
+        "fraction": 0.0064,
+        "description": "A building/area/site/monument officially recognized for its historic or cultural value."
       },
       {
         "value": "bunker",
@@ -215,22 +242,26 @@
       {
         "value": "citywalls",
         "count": 28,
-        "fraction": 0.0056
+        "fraction": 0.0056,
+        "description": "A citywall is a fortification used to defend a city."
       },
       {
         "value": "road",
         "count": 20,
-        "fraction": 0.004
+        "fraction": 0.004,
+        "description": "A road or street that is of historical importance."
       },
       {
         "value": "mine_shaft",
         "count": 19,
-        "fraction": 0.0038
+        "fraction": 0.0038,
+        "description": "Vertical shaft of a historic mine."
       },
       {
         "value": "tower",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "This property distinguishes a tower as historic"
       },
       {
         "value": "bridge",
@@ -240,12 +271,14 @@
       {
         "value": "wayside_shrine",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A shrine often showing a religious depiction. Tag is used also for modern shrines."
       },
       {
         "value": "wayside_cross",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A historical cross along a way, symbol of Christian faith."
       },
       {
         "value": "construction",
@@ -255,12 +288,14 @@
       {
         "value": "battlefield",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "The site of a battle or military skirmish in the past."
       },
       {
         "value": "wreck",
         "count": 12,
-        "fraction": 0.0024
+        "fraction": 0.0024,
+        "description": "A nautical craft that has been sunk or destroyed."
       },
       {
         "value": "fortress",
@@ -270,12 +305,14 @@
       {
         "value": "railway",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "Denotes an active or disused railway, or a railway feature of important historic value."
       },
       {
         "value": "monastery",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "Building/place that is a historically significant monastery."
       },
       {
         "value": "maritime",
@@ -285,7 +322,8 @@
       {
         "value": "pillory",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A pillory."
       },
       {
         "value": "town",
@@ -295,12 +333,14 @@
       {
         "value": "house",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A historic house."
       },
       {
         "value": "stone",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A stone shaped or placed by man with historical value."
       },
       {
         "value": "exhibit",
@@ -315,7 +355,8 @@
       {
         "value": "cemetery",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A cemetery with historic significance."
       },
       {
         "value": "romain town",
@@ -335,12 +376,14 @@
       {
         "value": "district",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A designated historic district."
       },
       {
         "value": "gallows",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Remains of a gallows."
       },
       {
         "value": "chapel",
@@ -360,12 +403,14 @@
       {
         "value": "cannon",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A historic/retired cannon. Usually found on forts or battlefields."
       },
       {
         "value": "aqueduct",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A historic structure to convey water"
       },
       {
         "value": "ancient_road",
@@ -380,7 +425,8 @@
       {
         "value": "temple",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "An ancient pagan temple in_situ and in various degree of preservation, such as Ziggurat, Egyptian temple, Mithraeum, Erechtheion, Buddhist, Meso-American and other ancient religious and rituals' temples, with a historical and archaeological value."
       },
       {
         "value": "theatre",
@@ -410,7 +456,8 @@
       {
         "value": "warehouse",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A historic warehouse, a building to store bulk produce or goods for commercial purposes."
       },
       {
         "value": "still some signes visible in the current  function",
@@ -425,7 +472,8 @@
       {
         "value": "milestone",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A historic marker that shows the distance to important destinations."
       },
       {
         "value": "gate",
@@ -445,7 +493,8 @@
       {
         "value": "railway_station",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Denotes either a historic railway station building or the reminders of former railway."
       },
       {
         "value": "prison",
@@ -500,12 +549,14 @@
       {
         "value": "farm",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A historical farm, kept in its original state."
       },
       {
         "value": "locomotive",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A decommissioned locomotive which generally remains in one place"
       },
       {
         "value": "fortification",
@@ -520,7 +571,8 @@
       {
         "value": "granary",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A historic storage building for grain."
       },
       {
         "value": "viaduct",
@@ -550,22 +602,26 @@
       {
         "value": "administrative",
         "count": 3311,
-        "fraction": 0.6622
+        "fraction": 0.6622,
+        "description": "An administrative boundary recognised by governments for administrative purposes."
       },
       {
         "value": "marker",
         "count": 889,
-        "fraction": 0.1778
+        "fraction": 0.1778,
+        "description": "A physical marker that identifies a boundary"
       },
       {
         "value": "religious_administration",
         "count": 347,
-        "fraction": 0.0694
+        "fraction": 0.0694,
+        "description": "Administrative boundaries of institutionalised religions."
       },
       {
         "value": "national_park",
         "count": 236,
-        "fraction": 0.0472
+        "fraction": 0.0472,
+        "description": "The boundary of a national park, an area of natural beauty, set aside for conservation and for recreation"
       },
       {
         "value": "civil_parish",
@@ -580,17 +636,20 @@
       {
         "value": "protected_area",
         "count": 26,
-        "fraction": 0.0052
+        "fraction": 0.0052,
+        "description": "Used to mark boundaries of protected areas including national parks, wilderness, marine protection areas, heritage sites and other, similar areas."
       },
       {
         "value": "political",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "Political boundary, such as an electoral ward or parliamentary constituency."
       },
       {
         "value": "census",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "A census-designated boundary delineating a statistical area, not necessarily observable on the ground."
       },
       {
         "value": "landuse",
@@ -605,7 +664,8 @@
       {
         "value": "postal_code",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A postal code boundary"
       },
       {
         "value": "historic_county",
@@ -650,52 +710,62 @@
       {
         "value": "peak",
         "count": 2167,
-        "fraction": 0.4334
+        "fraction": 0.4334,
+        "description": "The top (summit) of a hill or mountain."
       },
       {
         "value": "coastline",
         "count": 889,
-        "fraction": 0.1778
+        "fraction": 0.1778,
+        "description": "The line between sea and land indicating mean high water (springs): the water lies on the right side of the way."
       },
       {
         "value": "cape",
         "count": 476,
-        "fraction": 0.0952
+        "fraction": 0.0952,
+        "description": "A piece of elevated land sticking out into the sea or large lake."
       },
       {
         "value": "spring",
         "count": 322,
-        "fraction": 0.0644
+        "fraction": 0.0644,
+        "description": "A place where ground water flows naturally from the ground"
       },
       {
         "value": "water",
         "count": 308,
-        "fraction": 0.0616
+        "fraction": 0.0616,
+        "description": "Any inland body of water, from natural such as a lake or pond to artificial like a moat or canal."
       },
       {
         "value": "saddle",
         "count": 165,
-        "fraction": 0.033
+        "fraction": 0.033,
+        "description": "The lowest point along a ridge or between two mountain tops."
       },
       {
         "value": "tree",
         "count": 152,
-        "fraction": 0.0304
+        "fraction": 0.0304,
+        "description": "A single tree."
       },
       {
         "value": "bay",
         "count": 142,
-        "fraction": 0.0284
+        "fraction": 0.0284,
+        "description": "Named area of water mostly surrounded by land but with level connection to the ocean or a lake."
       },
       {
         "value": "cave_entrance",
         "count": 80,
-        "fraction": 0.016
+        "fraction": 0.016,
+        "description": "An entrance to a cave: a natural underground space large enough for a human to enter"
       },
       {
         "value": "beach",
         "count": 71,
-        "fraction": 0.0142
+        "fraction": 0.0142,
+        "description": "Landform along a body of water which consists of sand, shingle or other loose material."
       },
       {
         "value": "waterfall",
@@ -705,7 +775,8 @@
       {
         "value": "cliff",
         "count": 39,
-        "fraction": 0.0078
+        "fraction": 0.0078,
+        "description": "A vertical or almost vertical natural drop in terrain, usually with a bare rock surface. The bottom of the cliff is on the right side of the way."
       },
       {
         "value": "point",
@@ -715,42 +786,50 @@
       {
         "value": "peninsula",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "A piece of land projecting into water from a larger land mass, nearly surrounded by water"
       },
       {
         "value": "hill",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A hill is a landform that is elevated above the surrounding terrain, but is smaller than a mountain."
       },
       {
         "value": "volcano",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "An opening exposed on the earth's surface where volcanic material is emitted."
       },
       {
         "value": "rock",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A notable rock or group of rocks attached to the underlying bedrock"
       },
       {
         "value": "reef",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A feature (rock, sandbar, coral, etc) lying permanently beneath the surface of the water."
       },
       {
         "value": "strait",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A narrow area of water surrounded by land on two sides and by water on two other sides."
       },
       {
         "value": "land",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "Using this tag is discouraged, use multipolygon relation for islands in lakes and rivers or tag:natural=coastline and tag:place=island for islands in the sea instead."
       },
       {
         "value": "geyser",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A spring characterized by intermittent discharge of water ejected turbulently and accompanied by steam"
       },
       {
         "value": "rocks",
@@ -760,12 +839,14 @@
       {
         "value": "wood",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Tree-covered area (a 'forest' or 'wood')"
       },
       {
         "value": "valley",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A natural depression flanked by ridges or ranges of mountains or hills"
       },
       {
         "value": "drainage_divide",
@@ -775,32 +856,38 @@
       {
         "value": "stone",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A single notable freestanding rock, which may differ from the composition of the terrain it lies in."
       },
       {
         "value": "hot_spring",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A spring of geothermally heated groundwater"
       },
       {
         "value": "scree",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Unconsolidated angular stones formed by rockfall and weathering from adjacent rock faces."
       },
       {
         "value": "bare_rock",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "An area with sparse or no vegetation, so that the bedrock becomes visible"
       },
       {
         "value": "tree_stump",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A base remaining from a cut down or broken tree."
       },
       {
         "value": "wetland",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A natural area subject to inundation or with waterlogged ground"
       },
       {
         "value": "island",
@@ -815,7 +902,8 @@
       {
         "value": "gorge",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A narrow valley with steep, rocky walls"
       },
       {
         "value": "cave",
@@ -825,7 +913,8 @@
       {
         "value": "mountain_range",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A mountain range, a series of high ridges and mountain peaks ranged in a line and connected by high ground."
       },
       {
         "value": "mesa",
@@ -840,12 +929,14 @@
       {
         "value": "shrub",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A small to medium-sized single shrub, usually less than 6 meters tall."
       },
       {
         "value": "sinkhole",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A natural depression or hole in the surface topography."
       }
     ]
   },
@@ -870,32 +961,38 @@
       {
         "value": "river",
         "count": 3105,
-        "fraction": 0.621
+        "fraction": 0.621,
+        "description": "The linear flow of a river, in flow direction."
       },
       {
         "value": "lock_gate",
         "count": 627,
-        "fraction": 0.1254
+        "fraction": 0.1254,
+        "description": "A gate of a lock"
       },
       {
         "value": "waterfall",
         "count": 537,
-        "fraction": 0.1074
+        "fraction": 0.1074,
+        "description": "A place where water flows over a vertical drop or a series of drops in the course of a stream or river."
       },
       {
         "value": "weir",
         "count": 434,
-        "fraction": 0.0868
+        "fraction": 0.0868,
+        "description": "A barrier built across a river to control water speed and depth. Designed to let water flow over the top all the time or at least in specific conditions."
       },
       {
         "value": "dam",
         "count": 96,
-        "fraction": 0.0192
+        "fraction": 0.0192,
+        "description": "A barrier built across a river or stream to block and regulate the flow of the river."
       },
       {
         "value": "rapids",
         "count": 52,
-        "fraction": 0.0104
+        "fraction": 0.0104,
+        "description": "A fast-flowing and turbulent section of a waterway which is not a waterfall."
       },
       {
         "value": "lock",
@@ -905,17 +1002,20 @@
       {
         "value": "dock",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "An enclosed area for ships or boats within which the height of the water can be managed, or a dry dock."
       },
       {
         "value": "riverbank",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "Using this tag is discouraged, use tag:natural=water + tag:water=river instead."
       },
       {
         "value": "stream",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A naturally-forming waterway that is too narrow to be classed as a river."
       },
       {
         "value": "drawbridge",
@@ -925,22 +1025,26 @@
       {
         "value": "canal",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "An artificial open flow waterway used to carry useful water for transportation, waterpower, or irrigation."
       },
       {
         "value": "boatyard",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A place for constructing, repairing and storing vessels out of the water."
       },
       {
         "value": "milestone",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A landmark of stone or metal to indicate the distance traveled along a watercourse."
       },
       {
         "value": "security_lock",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A security lock is a specific type of floodgate."
       },
       {
         "value": "cave_of_debouchement",
@@ -975,7 +1079,8 @@
       {
         "value": "sluice_gate",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A gate that can be moved up and down to control the flow of water."
       },
       {
         "value": "lift",
@@ -1025,7 +1130,8 @@
       {
         "value": "spillway",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A structure allowing the controlled release of water from a waterbody (reservoir, canal, river)"
       },
       {
         "value": "yes",
@@ -1035,7 +1141,8 @@
       {
         "value": "ditch",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A small artificial drainage waterway, usually unlined."
       }
     ]
   },
@@ -1060,32 +1167,38 @@
       {
         "value": "post_office",
         "count": 2122,
-        "fraction": 0.4244
+        "fraction": 0.4244,
+        "description": "A place where letters and parcels may be sent or collected."
       },
       {
         "value": "ferry_terminal",
         "count": 710,
-        "fraction": 0.142
+        "fraction": 0.142,
+        "description": "A place where people, cars etc. can board and leave a ferry."
       },
       {
         "value": "place_of_worship",
         "count": 467,
-        "fraction": 0.0934
+        "fraction": 0.0934,
+        "description": "A place where religious services are conducted."
       },
       {
         "value": "school",
         "count": 329,
-        "fraction": 0.0658
+        "fraction": 0.0658,
+        "description": "A primary or secondary school (pupils typically aged 6 to 18)."
       },
       {
         "value": "restaurant",
         "count": 181,
-        "fraction": 0.0362
+        "fraction": 0.0362,
+        "description": "A restaurant sells full sit-down meals with servers, and may sell alcohol."
       },
       {
         "value": "theatre",
         "count": 131,
-        "fraction": 0.0262
+        "fraction": 0.0262,
+        "description": "A place where live performances occur, such as plays, musicals and formal concerts."
       },
       {
         "value": "pub",
@@ -1095,92 +1208,110 @@
       {
         "value": "bank",
         "count": 85,
-        "fraction": 0.017
+        "fraction": 0.017,
+        "description": "A financial establishment where customers can, among other services, deposit money and take loans."
       },
       {
         "value": "hospital",
         "count": 76,
-        "fraction": 0.0152
+        "fraction": 0.0152,
+        "description": "A hospital providing in-patient medical treatment."
       },
       {
         "value": "cinema",
         "count": 69,
-        "fraction": 0.0138
+        "fraction": 0.0138,
+        "description": "A movie theater, a place showing movies."
       },
       {
         "value": "fuel",
         "count": 48,
-        "fraction": 0.0096
+        "fraction": 0.0096,
+        "description": "A retail facility for refueling motor vehicles"
       },
       {
         "value": "cafe",
         "count": 47,
-        "fraction": 0.0094
+        "fraction": 0.0094,
+        "description": "A generally informal place with sit-down facilities selling beverages and light meals and/or snacks."
       },
       {
         "value": "townhall",
         "count": 46,
-        "fraction": 0.0092
+        "fraction": 0.0092,
+        "description": "A townhall serves as a community administrative center or meeting place."
       },
       {
         "value": "fast_food",
         "count": 39,
-        "fraction": 0.0078
+        "fraction": 0.0078,
+        "description": "A place which offers self-service and take-away food."
       },
       {
         "value": "library",
         "count": 39,
-        "fraction": 0.0078
+        "fraction": 0.0078,
+        "description": "A place to read and/or borrow books."
       },
       {
         "value": "nightclub",
         "count": 35,
-        "fraction": 0.007
+        "fraction": 0.007,
+        "description": "A place to dance and drink at night. Also known as a disco."
       },
       {
         "value": "pharmacy",
         "count": 31,
-        "fraction": 0.0062
+        "fraction": 0.0062,
+        "description": "A shop where a pharmacist sells medications."
       },
       {
         "value": "courthouse",
         "count": 29,
-        "fraction": 0.0058
+        "fraction": 0.0058,
+        "description": "A building which is home to a court of law, which administers justice according to the rule of law."
       },
       {
         "value": "police",
         "count": 28,
-        "fraction": 0.0056
+        "fraction": 0.0056,
+        "description": "A police station is a facility where police officers patrol from and that is a first point of contact for civilians."
       },
       {
         "value": "fire_station",
         "count": 24,
-        "fraction": 0.0048
+        "fraction": 0.0048,
+        "description": "A station from which a fire brigade operates."
       },
       {
         "value": "post_box",
         "count": 24,
-        "fraction": 0.0048
+        "fraction": 0.0048,
+        "description": "A box to deposit outgoing postal items."
       },
       {
         "value": "fountain",
         "count": 23,
-        "fraction": 0.0046
+        "fraction": 0.0046,
+        "description": "A fountain with cultural, decorational or historical significance or which serves a recreational purpose."
       },
       {
         "value": "marketplace",
         "count": 23,
-        "fraction": 0.0046
+        "fraction": 0.0046,
+        "description": "A marketplace where goods and services are traded daily or weekly."
       },
       {
         "value": "bus_station",
         "count": 21,
-        "fraction": 0.0042
+        "fraction": 0.0042,
+        "description": "A bus station would usually be a terminus where many routes stop / start, and where you can change between routes, etc."
       },
       {
         "value": "prison",
         "count": 21,
-        "fraction": 0.0042
+        "fraction": 0.0042,
+        "description": "A prison or jail where people are incarcerated before trial or after conviction"
       },
       {
         "value": "bar",
@@ -1190,12 +1321,14 @@
       {
         "value": "college",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A place for further education, a post-secondary education institution which is not a University"
       },
       {
         "value": "university",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "An educational institution designed for instruction, examination, or both, of students in many branches of advanced learning."
       },
       {
         "value": "saloon",
@@ -1205,97 +1338,116 @@
       {
         "value": "monastery",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "An active monastery or convent, occupied by a community of monks or nuns living under religious vows."
       },
       {
         "value": "community_centre",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A place mostly used for local events, festivities and group activities."
       },
       {
         "value": "drinking_water",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "A drinking water source which provides potable water for consumption."
       },
       {
         "value": "doctors",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A doctor's office, a place to get medical attention or a check up from a physician."
       },
       {
         "value": "social_facility",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A facility that provides social services."
       },
       {
         "value": "arts_centre",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "An arts centre. A venue where a variety of arts are performed or conducted"
       },
       {
         "value": "archive",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "Archive."
       },
       {
         "value": "studio",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A studio used for creating radio or television programmes and broadcasting them. It can also be used to mark a music recording studio."
       },
       {
         "value": "parking",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A place for parking cars."
       },
       {
         "value": "public_bath",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A facility for communal bathing that is open to the public."
       },
       {
         "value": "clock",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A publicly visible clock"
       },
       {
         "value": "childcare",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A place where children are looked after which is not a kindergarten."
       },
       {
         "value": "events_centre",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A large, multi-purpose building used to hold events"
       },
       {
         "value": "public_building",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Using this tag is discouraged, use tag:building=public or tag:building=civic or a feature tag like tag:office=government, tag:amenity=townhall instead."
       },
       {
         "value": "dentist",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A dentist practice / surgery."
       },
       {
         "value": "music_school",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Music school, an educational institution specialized in the study, training, and research of music"
       },
       {
         "value": "kindergarten",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A place for looking after preschool children and (typically) giving early education."
       },
       {
         "value": "clinic",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A clinic is a medical centre, with more staff than a doctor's office, that does not admit inpatients."
       },
       {
         "value": "parking_entrance",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An entrance to an underground or multi storey parking facility."
       },
       {
         "value": "undertaker",
@@ -1305,12 +1457,14 @@
       {
         "value": "bench",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A place for people to sit, allowing room for one or more people."
       },
       {
         "value": "casino",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A gambling venue with at least one table game."
       },
       {
         "value": "bakery",
@@ -1320,7 +1474,8 @@
       {
         "value": "social_centre",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A centre of fraternities, sororities, professional societies, union halls and other nonprofit organizations."
       },
       {
         "value": "workhouse",
@@ -1335,22 +1490,26 @@
       {
         "value": "crematorium",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A tag for crematorium, where bodies are burned."
       },
       {
         "value": "recycling",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A container or centre that accepts waste material for reuse or recycling."
       },
       {
         "value": "post_depot",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A distribution centre or sorting office for letters and parcels."
       },
       {
         "value": "events_venue",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A place that provides facilities for events such as banquets, weddings etc."
       },
       {
         "value": "Schadewinkel",
@@ -1370,7 +1529,8 @@
       {
         "value": "shelter",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A small structure for protection against bad weather conditions"
       },
       {
         "value": "general store",
@@ -1385,7 +1545,8 @@
       {
         "value": "car_rental",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A place from which cars can be rented."
       },
       {
         "value": "tailor",
@@ -1405,52 +1566,62 @@
       {
         "value": "yes",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Generic amenity. Use a more specific tag when possible."
       },
       {
         "value": "language_school",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An educational institution where one studies a foreign language."
       },
       {
         "value": "animal_shelter",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shelter for animal recovery."
       },
       {
         "value": "embassy",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Formerly used tag to map a representation of a country in another country."
       },
       {
         "value": "driving_school",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A school to learn to drive a motor vehicle."
       },
       {
         "value": "conference_centre",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A conference centre is a large building used to hold a convention"
       },
       {
         "value": "car_wash",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A facility used to clean the exterior of motor vehicles"
       },
       {
         "value": "love_hotel",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A love hotel is a type of short-stay hotel operated primarily for the purpose of allowing guests privacy for sexual activities."
       },
       {
         "value": "toilets",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Indicates publicly accessible toilets."
       },
       {
         "value": "ice_cream",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A place that sells ice cream and/or frozen yoghurt over the counter."
       },
       {
         "value": "religious_college",
@@ -1465,17 +1636,20 @@
       {
         "value": "grave_yard",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A place where people (or sometimes animals) are buried, usually close to a place of worship."
       },
       {
         "value": "research_institute",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A research institute is an establishment endowed for doing research."
       },
       {
         "value": "planetarium",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A theatre built for presenting educational and entertaining shows about astronomy and the night sky, or for training in celestial navigation"
       },
       {
         "value": "Uszpelken",
@@ -1485,12 +1659,14 @@
       {
         "value": "food_court",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A place with sit-down facilities shared by multiple self-service food vendors."
       },
       {
         "value": "charging_station",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A location where battery electric vehicles can be charged."
       }
     ]
   },
@@ -1515,52 +1691,62 @@
       {
         "value": "hotel",
         "count": 1618,
-        "fraction": 0.3236
+        "fraction": 0.3236,
+        "description": "Hotel – an establishment that provides paid lodging."
       },
       {
         "value": "guest_house",
         "count": 892,
-        "fraction": 0.1784
+        "fraction": 0.1784,
+        "description": "Accommodation smaller than a hotel and typically owner-operated, such as bed&breakfasts etc."
       },
       {
         "value": "camp_site",
         "count": 803,
-        "fraction": 0.1606
+        "fraction": 0.1606,
+        "description": "An area where people can camp overnight using tents, camper vans, or caravans."
       },
       {
         "value": "museum",
         "count": 574,
-        "fraction": 0.1148
+        "fraction": 0.1148,
+        "description": "A museum: an institution with exhibitions on scientific, historical, cultural topics"
       },
       {
         "value": "artwork",
         "count": 457,
-        "fraction": 0.0914
+        "fraction": 0.0914,
+        "description": "A public piece of art."
       },
       {
         "value": "attraction",
         "count": 338,
-        "fraction": 0.0676
+        "fraction": 0.0676,
+        "description": "An object of interest for a tourist, or a purpose-built tourist attraction"
       },
       {
         "value": "information",
         "count": 89,
-        "fraction": 0.0178
+        "fraction": 0.0178,
+        "description": "Information for tourists and visitors, including information offices"
       },
       {
         "value": "gallery",
         "count": 77,
-        "fraction": 0.0154
+        "fraction": 0.0154,
+        "description": "An area or building that displays a variety of visual art exhibitions."
       },
       {
         "value": "viewpoint",
         "count": 46,
-        "fraction": 0.0092
+        "fraction": 0.0092,
+        "description": "A place worth visiting, often high, with a good view of surrounding countryside or notable buildings."
       },
       {
         "value": "hostel",
         "count": 19,
-        "fraction": 0.0038
+        "fraction": 0.0038,
+        "description": "Cheap accommodation with shared bedrooms."
       },
       {
         "value": "sightseeing",
@@ -1570,57 +1756,68 @@
       {
         "value": "apartment",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "A furnished apartment or flat with cooking and bathroom facilities that can be rented for holiday vacations."
       },
       {
         "value": "theme_park",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "An amusement park where entertainment is provided by rides, games, concessions."
       },
       {
         "value": "motel",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "Short term accommodation, particularly for people travelling by car."
       },
       {
         "value": "yes",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A general tourist attraction."
       },
       {
         "value": "aquarium",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A facility with living aquatic animals for public viewing."
       },
       {
         "value": "camp_pitch",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A tent or caravan pitch location within a campsite or caravan site."
       },
       {
         "value": "picnic_site",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A locality that is suitable for outdoors eating, with facilities to aid a picnic such as tables and benches."
       },
       {
         "value": "zoo",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A zoological garden, where animals are confined for viewing by the public."
       },
       {
         "value": "wilderness_hut",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A remote building, typically unserviced, providing temporary shelter and sleeping accommodation."
       },
       {
         "value": "alpine_hut",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A remote building located in the mountains intended to provide board and lodging."
       },
       {
         "value": "wine_cellar",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A wine cellar, a storage room for wine in bottles or barrels."
       },
       {
         "value": "camp_site;caravan_site;attraction",
@@ -1630,7 +1827,8 @@
       {
         "value": "spa_resort",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An establishment offering relaxing treatment for health and beauty, the types that are called spa-treatments. Should involve some kind of bathing."
       }
     ]
   },
@@ -1655,142 +1853,170 @@
       {
         "value": "park",
         "count": 2706,
-        "fraction": 0.5412
+        "fraction": 0.5412,
+        "description": "A park, usually in an urban (municipal) setting, created for recreation and relaxation."
       },
       {
         "value": "nature_reserve",
         "count": 483,
-        "fraction": 0.0966
+        "fraction": 0.0966,
+        "description": "A protected area of importance for wildlife, flora, fauna or features of geological or other special interest."
       },
       {
         "value": "garden",
         "count": 352,
-        "fraction": 0.0704
+        "fraction": 0.0704,
+        "description": "A place where flowers and other plants are grown in a decorative and structured manner or for scientific purposes."
       },
       {
         "value": "sports_centre",
         "count": 211,
-        "fraction": 0.0422
+        "fraction": 0.0422,
+        "description": "A sports centre is a distinct facility where sports take place within an enclosed area."
       },
       {
         "value": "stadium",
         "count": 205,
-        "fraction": 0.041
+        "fraction": 0.041,
+        "description": "A major sports facility with substantial tiered seating."
       },
       {
         "value": "pitch",
         "count": 185,
-        "fraction": 0.037
+        "fraction": 0.037,
+        "description": "An area designed for practising sport, normally designated with appropriate markings."
       },
       {
         "value": "slipway",
         "count": 123,
-        "fraction": 0.0246
+        "fraction": 0.0246,
+        "description": "A slipway: a ramp for launching a boat into water"
       },
       {
         "value": "amusement_arcade",
         "count": 93,
-        "fraction": 0.0186
+        "fraction": 0.0186,
+        "description": "A venue with pay-to-play games."
       },
       {
         "value": "marina",
         "count": 82,
-        "fraction": 0.0164
+        "fraction": 0.0164,
+        "description": "A facility for mooring leisure yachts and motor boats."
       },
       {
         "value": "sports_hall",
         "count": 69,
-        "fraction": 0.0138
+        "fraction": 0.0138,
+        "description": "A sufficiently large single room that is suitable for practising sports indoors and does not have a \"centre\" character."
       },
       {
         "value": "golf_course",
         "count": 68,
-        "fraction": 0.0136
+        "fraction": 0.0136,
+        "description": "A golf course"
       },
       {
         "value": "swimming_pool",
         "count": 57,
-        "fraction": 0.0114
+        "fraction": 0.0114,
+        "description": "A swimming pool (water area only)"
       },
       {
         "value": "playground",
         "count": 57,
-        "fraction": 0.0114
+        "fraction": 0.0114,
+        "description": "A playground: an area designed for children to play."
       },
       {
         "value": "fitness_centre",
         "count": 51,
-        "fraction": 0.0102
+        "fraction": 0.0102,
+        "description": "Fitness centre, health club or gym with exercise machines, fitness classes or both, for exercise."
       },
       {
         "value": "track",
         "count": 30,
-        "fraction": 0.006
+        "fraction": 0.006,
+        "description": "A track for running, cycling and other non-motorised racing such as horses, greyhounds."
       },
       {
         "value": "bowling_alley",
         "count": 29,
-        "fraction": 0.0058
+        "fraction": 0.0058,
+        "description": "A facility that is equipped to play the game of bowling."
       },
       {
         "value": "dance",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "A dance venue or dance hall."
       },
       {
         "value": "ice_rink",
         "count": 22,
-        "fraction": 0.0044
+        "fraction": 0.0044,
+        "description": "An artificially created place where you can skate and play bandy or ice hockey."
       },
       {
         "value": "adult_gaming_centre",
         "count": 21,
-        "fraction": 0.0042
+        "fraction": 0.0042,
+        "description": "A venue with gambling machines, usually with a minimum age requirement."
       },
       {
         "value": "social_club",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A member's club which typically provides facilities similar to pub."
       },
       {
         "value": "water_park",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "An amusement park with features like water slides, recreational pools (e.g. wave pools) or lazy rivers."
       },
       {
         "value": "resort",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A place used for relaxation or recreation, attracting visitors for vacations, tourism and/or going swimming in a pool and/or a nearby body of water."
       },
       {
         "value": "bandstand",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A bandstand is an open structure where musical bands can perform concerts"
       },
       {
         "value": "common",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "Identify land over which the public has general rights of use for certain leisure activities."
       },
       {
         "value": "miniature_golf",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A place or area where you can play miniature golf."
       },
       {
         "value": "hackerspace",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A place where people with common interests (science, technology, ...) meet."
       },
       {
         "value": "dog_park",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A designated area, with or without a fenced boundary, where dog-owners are permitted to exercise their pets unrestrained."
       },
       {
         "value": "fishing",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A public or private place for fishing."
       },
       {
         "value": "proposed",
@@ -1800,47 +2026,56 @@
       {
         "value": "horse_riding",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A facility where people practise horse riding, usually in their spare time, e.g. a riding centre. For a riding arena use tag:leisure=pitch + tag:sport=equestrian."
       },
       {
         "value": "recreation_ground",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "The open-air recreational space."
       },
       {
         "value": "shooting_ground",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A place where shooting enthusiasts can practice a range of disciplines."
       },
       {
         "value": "summer_camp",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A place for supervised recreation camps for children or teenagers."
       },
       {
         "value": "sauna",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A room or object designed as a place to heat a wet or dry body."
       },
       {
         "value": "bathing_place",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "An outdoor location without significant facilities that is commonly used for bathing; a wild swimming spot."
       },
       {
         "value": "beach_resort",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A managed beach, including within the boundary any associated facilities. Entry may also require payment of a fee."
       },
       {
         "value": "bleachers",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Raised, tiered rows of benches found at spectator events."
       },
       {
         "value": "beach",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A purposely built structure on the shore for recreational purposes."
       },
       {
         "value": "Traditional Crag",
@@ -1850,7 +2085,8 @@
       {
         "value": "indoor_play",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A indoor play area, offering play facilities and event hosting for children."
       },
       {
         "value": "pool_hall",
@@ -1860,12 +2096,14 @@
       {
         "value": "hot_tub",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A very small pool with hot water and often air jets, intended for few people and no movement."
       },
       {
         "value": "trampoline_park",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A leisure facility consisting of many interlinked trampolines."
       },
       {
         "value": "local_knowledge",
@@ -1885,7 +2123,8 @@
       {
         "value": "swimming_area",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An area for swimming within a larger body of water (such as a river, lake or the sea) that is marked by a rope, buoys or similar"
       }
     ]
   },
@@ -1910,67 +2149,80 @@
       {
         "value": "works",
         "count": 1486,
-        "fraction": 0.2972
+        "fraction": 0.2972,
+        "description": "A factory or industrial production plant."
       },
       {
         "value": "tower",
         "count": 823,
-        "fraction": 0.1646
+        "fraction": 0.1646,
+        "description": "A tower is a free-standing structure which is higher than it is wide."
       },
       {
         "value": "bridge",
         "count": 814,
-        "fraction": 0.1628
+        "fraction": 0.1628,
+        "description": "The outline of a bridge, grouping together all features for that bridge."
       },
       {
         "value": "mineshaft",
         "count": 309,
-        "fraction": 0.0618
+        "fraction": 0.0618,
+        "description": "A vertical tunnel into a mine where minerals are extracted."
       },
       {
         "value": "pier",
         "count": 250,
-        "fraction": 0.05
+        "fraction": 0.05,
+        "description": "Raised walkway over water supported by pillars or floating and secured."
       },
       {
         "value": "windmill",
         "count": 172,
-        "fraction": 0.0344
+        "fraction": 0.0344,
+        "description": "A traditional windmill, historically used to mill grain with wind power."
       },
       {
         "value": "watermill",
         "count": 152,
-        "fraction": 0.0304
+        "fraction": 0.0304,
+        "description": "A mill driven by water power."
       },
       {
         "value": "adit",
         "count": 84,
-        "fraction": 0.0168
+        "fraction": 0.0168,
+        "description": "A type of entrance to an underground mine which is horizontal or nearly horizontal."
       },
       {
         "value": "lighthouse",
         "count": 82,
-        "fraction": 0.0164
+        "fraction": 0.0164,
+        "description": "Tower that emits light to serve as a navigational aid at sea or on inland waterway"
       },
       {
         "value": "geoglyph",
         "count": 71,
-        "fraction": 0.0142
+        "fraction": 0.0142,
+        "description": "Large design or motif produced on the ground and typically formed by clastic rocks or similarly durable elements of the landscape."
       },
       {
         "value": "survey_point",
         "count": 60,
-        "fraction": 0.012
+        "fraction": 0.012,
+        "description": "A triangulation pillar, geodetic vertex, or other piece of fixed equipment used by topographers."
       },
       {
         "value": "pipeline",
         "count": 53,
-        "fraction": 0.0106
+        "fraction": 0.0106,
+        "description": "A major pipeline carrying gas, water, oil, etc."
       },
       {
         "value": "water_well",
         "count": 42,
-        "fraction": 0.0084
+        "fraction": 0.0084,
+        "description": "A structural facility to access ground water, created by digging or drilling."
       },
       {
         "value": "riverbank",
@@ -1980,62 +2232,74 @@
       {
         "value": "water_tower",
         "count": 36,
-        "fraction": 0.0072
+        "fraction": 0.0072,
+        "description": "Structure with a water tank at an altitude to increase pressure in water network"
       },
       {
         "value": "dyke",
         "count": 33,
-        "fraction": 0.0066
+        "fraction": 0.0066,
+        "description": "An embankment built to restrict the flow of water or other liquids"
       },
       {
         "value": "pumping_station",
         "count": 31,
-        "fraction": 0.0062
+        "fraction": 0.0062,
+        "description": "Pumping station: a facility including pumps and equipment for pumping fluids from one place to another"
       },
       {
         "value": "reservoir_covered",
         "count": 29,
-        "fraction": 0.0058
+        "fraction": 0.0058,
+        "description": "A covered reservoir is a large man-made tank for holding fresh water"
       },
       {
         "value": "water_works",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "A facility where water is treated to make it suitable for human consumption."
       },
       {
         "value": "storage_tank",
         "count": 24,
-        "fraction": 0.0048
+        "fraction": 0.0048,
+        "description": "A container that holds liquids or compressed gases."
       },
       {
         "value": "observatory",
         "count": 23,
-        "fraction": 0.0046
+        "fraction": 0.0046,
+        "description": "Observatory: a location used for observing terrestrial or celestial events."
       },
       {
         "value": "surveillance",
         "count": 22,
-        "fraction": 0.0044
+        "fraction": 0.0044,
+        "description": "A surveillance camera or other type of surveillance equipment."
       },
       {
         "value": "obelisk",
         "count": 19,
-        "fraction": 0.0038
+        "fraction": 0.0038,
+        "description": "Tall, narrow, four-sided, tapered monument which usually ends in a pyramid-like shape at the top."
       },
       {
         "value": "wastewater_plant",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A wastewater plant is a facility used to treat wastewater."
       },
       {
         "value": "yes",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "Use tag:anthropogenic=yes or key:man_made instead."
       },
       {
         "value": "telescope",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "Telescope: an instrument that aids in the observation of remote objects by collecting light or radio waves"
       },
       {
         "value": "fort",
@@ -2045,32 +2309,38 @@
       {
         "value": "monitoring_station",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A station that monitors something."
       },
       {
         "value": "beacon",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A structure for signalling on land and sea"
       },
       {
         "value": "breakwater",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A man-made structure designed to protect a shore or harbour from the sea and waves."
       },
       {
         "value": "silo",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A storage container for bulk material, often grains such as corn or wheat."
       },
       {
         "value": "cross",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "Cross, especially one with little historical value"
       },
       {
         "value": "quay",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "A man-made structure alongside navigable water used for loading and unloading vessels."
       },
       {
         "value": "waterway",
@@ -2080,7 +2350,8 @@
       {
         "value": "crane",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A stationary, permanent crane."
       },
       {
         "value": "measurement_station",
@@ -2090,27 +2361,32 @@
       {
         "value": "mast",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A mast is a vertical structure built to hold, for example, antennas."
       },
       {
         "value": "tunnel",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "Indicate the outline of a tunnel and group together all features for that tunnel"
       },
       {
         "value": "chimney",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A tall distinctive vertical conduit for venting hot gases or smoke, normally found near power stations or large factories."
       },
       {
         "value": "embankment",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "An artificial steep slope. Lower side to right (arrows side)."
       },
       {
         "value": "kiln",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A thermally insulated chamber used for processes such as burning, hardening, drying, or smelting."
       },
       {
         "value": "lake",
@@ -2125,7 +2401,8 @@
       {
         "value": "flagpole",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A long pole built to hold a flag"
       },
       {
         "value": "island",
@@ -2140,7 +2417,8 @@
       {
         "value": "communications_tower",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A huge tower for transmitting radio applications"
       },
       {
         "value": "jetty",
@@ -2150,22 +2428,26 @@
       {
         "value": "gasometer",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A large container in which natural gas or town gas is stored near atmospheric pressure at ambient temperatures"
       },
       {
         "value": "antenna",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An antenna to transmit and/or receive wireless signals."
       },
       {
         "value": "courtyard",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An area that is usually enclosed by walls or buildings."
       },
       {
         "value": "bunker_silo",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An open-sided structure without a roof that can be used with vehicles to fill and empty them"
       },
       {
         "value": "fish_passage",
@@ -2200,7 +2482,8 @@
       {
         "value": "cutline",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A straight line cut in a forest."
       },
       {
         "value": "sluice",
@@ -2220,7 +2503,8 @@
       {
         "value": "culvert",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A tag used to map the outline of culverts."
       },
       {
         "value": "statue",
@@ -2240,7 +2524,8 @@
       {
         "value": "cairn",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A mound of stones, usually conical or pyramidal, raised as a landmark or to designate a point of importance in surveying."
       },
       {
         "value": "tar_kiln",
@@ -2275,7 +2560,8 @@
       {
         "value": "pump",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A device in charge of moving or raising the level of liquids."
       },
       {
         "value": "pond",
@@ -2295,7 +2581,8 @@
       {
         "value": "groyne",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A rigid structure built from a shoreline or riverbank that interrupts water flow and limits the movement of sediment."
       },
       {
         "value": "storage",
@@ -2310,7 +2597,8 @@
       {
         "value": "ceremonial_gate",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Traditional symbolic gates with cultural, ceremonial, or religious significance. Common in East Asia and other regions."
       }
     ]
   },
@@ -2340,27 +2628,32 @@
       {
         "value": "barracks",
         "count": 150,
-        "fraction": 0.1507537688442211
+        "fraction": 0.1507537688442211,
+        "description": "Buildings where military personnel live and sleep."
       },
       {
         "value": "base",
         "count": 147,
-        "fraction": 0.14773869346733667
+        "fraction": 0.14773869346733667,
+        "description": "A facility where military personnel and equipment are based."
       },
       {
         "value": "bunker",
         "count": 102,
-        "fraction": 0.10251256281407035
+        "fraction": 0.10251256281407035,
+        "description": "A military installation capable of withstanding an attack, which is currently used as a bunker."
       },
       {
         "value": "trench",
         "count": 101,
-        "fraction": 0.10150753768844221
+        "fraction": 0.10150753768844221,
+        "description": "A military trench is an excavation in the ground that is generally deeper than it is wide, dug into the ground as a barrier for military purposes (e.g. trench warfare)."
       },
       {
         "value": "airfield",
         "count": 100,
-        "fraction": 0.10050251256281408
+        "fraction": 0.10050251256281408,
+        "description": "A place where military planes take off and land."
       },
       {
         "value": "ohm:military:GunEmplacement",
@@ -2370,17 +2663,20 @@
       {
         "value": "office",
         "count": 33,
-        "fraction": 0.033165829145728645
+        "fraction": 0.033165829145728645,
+        "description": "Military offices, e.g. general staff office, military recruitment office etc"
       },
       {
         "value": "training_area",
         "count": 14,
-        "fraction": 0.01407035175879397
+        "fraction": 0.01407035175879397,
+        "description": "A military training area/proving ground"
       },
       {
         "value": "range",
         "count": 12,
-        "fraction": 0.012060301507537688
+        "fraction": 0.012060301507537688,
+        "description": "Where military personnel practice with their weapons (firing, bombing, artillery, ...)."
       },
       {
         "value": "cupola",
@@ -2395,7 +2691,8 @@
       {
         "value": "academy",
         "count": 10,
-        "fraction": 0.010050251256281407
+        "fraction": 0.010050251256281407,
+        "description": "A training establishment for military service members"
       },
       {
         "value": "fort",
@@ -2425,7 +2722,8 @@
       {
         "value": "ammunition",
         "count": 5,
-        "fraction": 0.005025125628140704
+        "fraction": 0.005025125628140704,
+        "description": "Military ammunition storage area."
       },
       {
         "value": "armory",
@@ -2435,22 +2733,26 @@
       {
         "value": "danger_area",
         "count": 3,
-        "fraction": 0.003015075376884422
+        "fraction": 0.003015075376884422,
+        "description": "A danger area is a restricted area posing a threat to life or property."
       },
       {
         "value": "nuclear_explosion_site",
         "count": 3,
-        "fraction": 0.003015075376884422
+        "fraction": 0.003015075376884422,
+        "description": "Nuclear weapons test site"
       },
       {
         "value": "naval_base",
         "count": 2,
-        "fraction": 0.0020100502512562816
+        "fraction": 0.0020100502512562816,
+        "description": "Using this tag is discouraged, use tag:military=base and tag:military_service=navy instead."
       },
       {
         "value": "school",
         "count": 2,
-        "fraction": 0.0020100502512562816
+        "fraction": 0.0020100502512562816,
+        "description": "A school for children run as part of a country's military"
       },
       {
         "value": "field_headquarters",
@@ -2505,102 +2807,122 @@
       {
         "value": "residential",
         "count": 979,
-        "fraction": 0.1958
+        "fraction": 0.1958,
+        "description": "A portion of land predominantly used for residential purposes."
       },
       {
         "value": "highway",
         "count": 761,
-        "fraction": 0.1522
+        "fraction": 0.1522,
+        "description": "A land used for a highway, including all auxiliary areas like associated footways and verges, ditches, etc."
       },
       {
         "value": "military",
         "count": 641,
-        "fraction": 0.1282
+        "fraction": 0.1282,
+        "description": "Area used for military purposes."
       },
       {
         "value": "cemetery",
         "count": 442,
-        "fraction": 0.0884
+        "fraction": 0.0884,
+        "description": "A place where people, or sometimes animals are buried that isn't part of a place of worship"
       },
       {
         "value": "industrial",
         "count": 347,
-        "fraction": 0.0694
+        "fraction": 0.0694,
+        "description": "An area with predominantly workshops, factories or warehouses."
       },
       {
         "value": "forest",
         "count": 288,
-        "fraction": 0.0576
+        "fraction": 0.0576,
+        "description": "Forest or woodland, sometimes considered to be restricted to managed woodlands or tree plantations."
       },
       {
         "value": "meadow",
         "count": 239,
-        "fraction": 0.0478
+        "fraction": 0.0478,
+        "description": "An area of meadow or pasture: land primarily vegetated by grass and other non-woody plants, mainly used for hay or grazing."
       },
       {
         "value": "farmland",
         "count": 174,
-        "fraction": 0.0348
+        "fraction": 0.0348,
+        "description": "Area of farmland used mainly for tillage (annual crops)."
       },
       {
         "value": "construction",
         "count": 147,
-        "fraction": 0.0294
+        "fraction": 0.0294,
+        "description": "An area being built on."
       },
       {
         "value": "reservoir",
         "count": 109,
-        "fraction": 0.0218
+        "fraction": 0.0218,
+        "description": "Using this tag is discouraged; use tag:natural=water + tag:water=reservoir instead."
       },
       {
         "value": "commercial",
         "count": 94,
-        "fraction": 0.0188
+        "fraction": 0.0188,
+        "description": "A commercial zone, predominantly offices or services."
       },
       {
         "value": "depot",
         "count": 83,
-        "fraction": 0.0166
+        "fraction": 0.0166,
+        "description": "An area used as a depot for trains, buses, trams, containers or other objects."
       },
       {
         "value": "quarry",
         "count": 65,
-        "fraction": 0.013
+        "fraction": 0.013,
+        "description": "An area of land used for surface extraction (open-pit mining)."
       },
       {
         "value": "grass",
         "count": 64,
-        "fraction": 0.0128
+        "fraction": 0.0128,
+        "description": "A smaller area of grass, usually mown and managed."
       },
       {
         "value": "allotments",
         "count": 58,
-        "fraction": 0.0116
+        "fraction": 0.0116,
+        "description": "allotment gardens with multiple land parcels assigned to individuals or families for gardening."
       },
       {
         "value": "recreation_ground",
         "count": 57,
-        "fraction": 0.0114
+        "fraction": 0.0114,
+        "description": "An open green space for general recreation, which often includes formal or informal pitches, nets and so on. Often municipally owned, sometimes part of colleges / companies or commercially operated."
       },
       {
         "value": "orchard",
         "count": 54,
-        "fraction": 0.0108
+        "fraction": 0.0108,
+        "description": "Used to mark intentional planting of trees or shrubs maintained for food production"
       },
       {
         "value": "farmyard",
         "count": 51,
-        "fraction": 0.0102
+        "fraction": 0.0102,
+        "description": "Area of land with farm buildings (farmhouse, sheds, stables, barns, etc.)."
       },
       {
         "value": "religious",
         "count": 46,
-        "fraction": 0.0092
+        "fraction": 0.0092,
+        "description": "An area used for religious purposes."
       },
       {
         "value": "railway",
         "count": 40,
-        "fraction": 0.008
+        "fraction": 0.008,
+        "description": "An area of land dedicated to train operation or support, including areas around tracks, rail corridors, yards, sidings, station complexes, and ancillary man-made objects along the tracks."
       },
       {
         "value": "conservation",
@@ -2610,12 +2932,14 @@
       {
         "value": "retail",
         "count": 31,
-        "fraction": 0.0062
+        "fraction": 0.0062,
+        "description": "An area that encloses predominantly shops."
       },
       {
         "value": "education",
         "count": 26,
-        "fraction": 0.0052
+        "fraction": 0.0052,
+        "description": "An area used by educational facilities."
       },
       {
         "value": "zone_of_alienation",
@@ -2625,17 +2949,20 @@
       {
         "value": "basin",
         "count": 22,
-        "fraction": 0.0044
+        "fraction": 0.0044,
+        "description": "An area of land artificially graded to hold water. Includes also structures typically without water."
       },
       {
         "value": "farm",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "Using this tag is discouraged, use tag:landuse=farmyard or tag:landuse=farmland instead."
       },
       {
         "value": "landfill",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A site for permanent or long term storage of waste materials."
       },
       {
         "value": "island",
@@ -2645,12 +2972,14 @@
       {
         "value": "greenfield",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "Undeveloped land scheduled to turn into a construction site"
       },
       {
         "value": "village_green",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A village green is a distinctive area of grassy public land in a village centre. Not a generic tag for urban greenery."
       },
       {
         "value": "proposed",
@@ -2660,32 +2989,38 @@
       {
         "value": "brownfield",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "Land which was developed which is no longer in use."
       },
       {
         "value": "harbour",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "The harbour land, consisting of queys, wharfs, piers, warehouses, storage areas, stockpiles, service roads, railway tracks, and much more. Often behind a fence with its own access control."
       },
       {
         "value": "vineyard",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "Used to tag vineyards, a piece of land where grapes are grown."
       },
       {
         "value": "plant_nursery",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "Represents land that is used solely for plant nurseries, which grow live plants."
       },
       {
         "value": "aquaculture",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An area on land or water that is used to farm aquatic organisms."
       },
       {
         "value": "winter_sports",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "An area dedicated to winter sports (e.g. skiing)"
       },
       {
         "value": "water",
@@ -2695,7 +3030,8 @@
       {
         "value": "churchyard",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Area surrounding a church or chapel — Deprecated: consider tag:landuse=religious instead."
       },
       {
         "value": "road",
@@ -2720,7 +3056,8 @@
       {
         "value": "wood",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Using this tag is discouraged, use tag:natural=wood or tag:landuse=forest instead."
       },
       {
         "value": "rock",
@@ -2775,12 +3112,14 @@
       {
         "value": "animal_keeping",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An area of land that is used to keep animals"
       },
       {
         "value": "fairground",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A site where the fair takes place."
       }
     ]
   },
@@ -2805,22 +3144,26 @@
       {
         "value": "tram_stop",
         "count": 2328,
-        "fraction": 0.4656
+        "fraction": 0.4656,
+        "description": "A tram stop is a place where a passenger can embark or disembark a tram."
       },
       {
         "value": "station",
         "count": 1889,
-        "fraction": 0.3778
+        "fraction": 0.3778,
+        "description": "A railway station."
       },
       {
         "value": "halt",
         "count": 318,
-        "fraction": 0.0636
+        "fraction": 0.0636,
+        "description": "A small station, may not have a platform, trains may only stop on request."
       },
       {
         "value": "stop",
         "count": 252,
-        "fraction": 0.0504
+        "fraction": 0.0504,
+        "description": "The spot on a railway track where a train stops at a station."
       },
       {
         "value": "site",
@@ -2830,52 +3173,62 @@
       {
         "value": "service_station",
         "count": 63,
-        "fraction": 0.0126
+        "fraction": 0.0126,
+        "description": "A railway station only used by railway employees"
       },
       {
         "value": "junction",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A junction where railways diverge or converge."
       },
       {
         "value": "switch",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A railway switch, turnout or points: where trains can change from one track to another track."
       },
       {
         "value": "yard",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A rail yard or freight station"
       },
       {
         "value": "signal",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A railway signal"
       },
       {
         "value": "subway_entrance",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "The entrance point of a subway."
       },
       {
         "value": "milestone",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A stone or metal marker along a railway denoting the distance traveled."
       },
       {
         "value": "spur_junction",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Industrial spur junctions."
       },
       {
         "value": "signal_box",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A railway facility from which signals and points are controlled."
       },
       {
         "value": "crossing",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Marks the spot where pedestrians can cross a railway."
       },
       {
         "value": "block_post",
@@ -2910,42 +3263,50 @@
       {
         "value": "yes",
         "count": 3311,
-        "fraction": 0.6622
+        "fraction": 0.6622,
+        "description": "A building of an unspecified type."
       },
       {
         "value": "residential",
         "count": 392,
-        "fraction": 0.0784
+        "fraction": 0.0784,
+        "description": "A general tag for a building constructed primarily for residential purposes."
       },
       {
         "value": "church",
         "count": 239,
-        "fraction": 0.0478
+        "fraction": 0.0478,
+        "description": "A building that was built as a church."
       },
       {
         "value": "commercial",
         "count": 219,
-        "fraction": 0.0438
+        "fraction": 0.0438,
+        "description": "A building constructed for non-specific commercial activities to take place there."
       },
       {
         "value": "house",
         "count": 148,
-        "fraction": 0.0296
+        "fraction": 0.0296,
+        "description": "A single dwelling unit usually inhabited by one family."
       },
       {
         "value": "public",
         "count": 114,
-        "fraction": 0.0228
+        "fraction": 0.0228,
+        "description": "A building constructed as accessible to the public (town hall, police station, court house)."
       },
       {
         "value": "university",
         "count": 74,
-        "fraction": 0.0148
+        "fraction": 0.0148,
+        "description": "A university building."
       },
       {
         "value": "school",
         "count": 52,
-        "fraction": 0.0104
+        "fraction": 0.0104,
+        "description": "A building originally built as a school building."
       },
       {
         "value": "commercial; residential",
@@ -2955,22 +3316,26 @@
       {
         "value": "warehouse",
         "count": 36,
-        "fraction": 0.0072
+        "fraction": 0.0072,
+        "description": "A building that was originally built as a commercial building for storage of goods."
       },
       {
         "value": "industrial",
         "count": 33,
-        "fraction": 0.0066
+        "fraction": 0.0066,
+        "description": "A building constructed to house some manufacturing process"
       },
       {
         "value": "chapel",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "Building built as chapel."
       },
       {
         "value": "apartments",
         "count": 22,
-        "fraction": 0.0044
+        "fraction": 0.0044,
+        "description": "A building arranged into individual dwellings, often on separate floors. May also have retail outlets on the ground floor."
       },
       {
         "value": "public; residential",
@@ -2980,87 +3345,104 @@
       {
         "value": "hospital",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A building which forms part of a hospital."
       },
       {
         "value": "train_station",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "A train station building"
       },
       {
         "value": "transportation",
         "count": 17,
-        "fraction": 0.0034
+        "fraction": 0.0034,
+        "description": "A building related to the public transportation."
       },
       {
         "value": "cathedral",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A building that was built as a cathedral."
       },
       {
         "value": "retail",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A building that was originally built as a retail building for selling goods to the public."
       },
       {
         "value": "office",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A building that was originally built as an office building which contains spaces mainly designed to be used for offices."
       },
       {
         "value": "hotel",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "A building designed with separate rooms available for overnight accommodation."
       },
       {
         "value": "bunker",
         "count": 12,
-        "fraction": 0.0024
+        "fraction": 0.0024,
+        "description": "A hardened military building."
       },
       {
         "value": "temple",
         "count": 12,
-        "fraction": 0.0024
+        "fraction": 0.0024,
+        "description": "A building that was built as a temple"
       },
       {
         "value": "college",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A building constructed to house a college."
       },
       {
         "value": "religious",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A building that was built as a religious building."
       },
       {
         "value": "tower",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A tower which is a building."
       },
       {
         "value": "civic",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A building originally built as civic building to hosting any civic amenity (town hall, library, swimming pool etc.)."
       },
       {
         "value": "terrace",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "The outline of a linear row of residential dwellings, each of which normally has its own entrance, which form a terrace (\"row-house\" or \"townhouse\" in North American English)."
       },
       {
         "value": "stadium",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A building which was built as stadium."
       },
       {
         "value": "farm",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A farmhouse is the main building of a farm"
       },
       {
         "value": "castle",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A building constructed as a castle."
       },
       {
         "value": "commercial; public",
@@ -3070,7 +3452,8 @@
       {
         "value": "construction",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A building under construction"
       },
       {
         "value": "no",
@@ -3080,27 +3463,32 @@
       {
         "value": "shed",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A small, simple structure used as storage or workshop."
       },
       {
         "value": "windmill",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A building constructed as a traditional windmill, historically used to mill grain with wind power."
       },
       {
         "value": "stable",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A building constructed as a stable for horses"
       },
       {
         "value": "ruins",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Frequently used to mark ruined buildings. However, this usage conflicts with general use of building tag. In theory it should only be used for buildings constructed to look like ruins."
       },
       {
         "value": "mosque",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A building that was built as a mosque."
       },
       {
         "value": "courthouse",
@@ -3110,12 +3498,14 @@
       {
         "value": "detached",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A detached house: a free-standing residential building usually housing a single family."
       },
       {
         "value": "ship",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A decommissioned ship/submarine which stays in one place."
       },
       {
         "value": "industrial building",
@@ -3125,7 +3515,8 @@
       {
         "value": "synagogue",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A building that was built as a synagogue."
       },
       {
         "value": "public; religious",
@@ -3140,12 +3531,14 @@
       {
         "value": "guardhouse",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A small building constructed to house guard(s)."
       },
       {
         "value": "roof",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A building open on at least two sides."
       },
       {
         "value": "basilica",
@@ -3155,7 +3548,8 @@
       {
         "value": "lighthouse",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A lighthouse building - note that it is distinct from marking active light."
       },
       {
         "value": "mausoleum",
@@ -3165,7 +3559,8 @@
       {
         "value": "monastery",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A building constructed as monastery"
       },
       {
         "value": "stables",
@@ -3175,12 +3570,14 @@
       {
         "value": "gatehouse",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "An entry control point building, spanning over a highway that enters a city or compound."
       },
       {
         "value": "shrine",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A building that was built as a shrine"
       },
       {
         "value": "shack",
@@ -3190,12 +3587,14 @@
       {
         "value": "hut",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A small and crude shelter."
       },
       {
         "value": "farm_auxiliary",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A building on a farm that is not a dwelling."
       },
       {
         "value": "pyramid",
@@ -3215,7 +3614,8 @@
       {
         "value": "kindergarten",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A generic kindergarten building."
       },
       {
         "value": "Socony Mobil",
@@ -3225,27 +3625,32 @@
       {
         "value": "greenhouse",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A building in which plants are grown"
       },
       {
         "value": "bakehouse",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Building for baking bread."
       },
       {
         "value": "dormitory",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Sleeping and living quarters provided by an institution."
       },
       {
         "value": "parking",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Structure purpose-built for parking cars."
       },
       {
         "value": "grandstand",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A grandstand at racecourse or sports ground."
       }
     ]
   },
@@ -3270,137 +3675,164 @@
       {
         "value": "hairdresser",
         "count": 507,
-        "fraction": 0.1014
+        "fraction": 0.1014,
+        "description": "A hairdressers or barbers shop, where hair is cut"
       },
       {
         "value": "clothes",
         "count": 417,
-        "fraction": 0.0834
+        "fraction": 0.0834,
+        "description": "A shop which primarily sells clothing"
       },
       {
         "value": "supermarket",
         "count": 367,
-        "fraction": 0.0734
+        "fraction": 0.0734,
+        "description": "A large shop selling groceries, fresh produce, and other goods."
       },
       {
         "value": "convenience",
         "count": 296,
-        "fraction": 0.0592
+        "fraction": 0.0592,
+        "description": "A small local shop carrying a variety of everyday products, such as packaged food and hygiene products."
       },
       {
         "value": "department_store",
         "count": 237,
-        "fraction": 0.0474
+        "fraction": 0.0474,
+        "description": "A large store with multiple clothing and other general merchandise departments."
       },
       {
         "value": "car_repair",
         "count": 201,
-        "fraction": 0.0402
+        "fraction": 0.0402,
+        "description": "A business where cars are repaired."
       },
       {
         "value": "bakery",
         "count": 186,
-        "fraction": 0.0372
+        "fraction": 0.0372,
+        "description": "A shop selling bread"
       },
       {
         "value": "books",
         "count": 186,
-        "fraction": 0.0372
+        "fraction": 0.0372,
+        "description": "A store specializing in the sale of books, although it may also sell other printed publications, such as newspapers and magazines."
       },
       {
         "value": "shoes",
         "count": 100,
-        "fraction": 0.02
+        "fraction": 0.02,
+        "description": "A shop selling shoes"
       },
       {
         "value": "laundry",
         "count": 98,
-        "fraction": 0.0196
+        "fraction": 0.0196,
+        "description": "A shop to wash clothes and bedding, generally self-service and unattended."
       },
       {
         "value": "yes",
         "count": 97,
-        "fraction": 0.0194
+        "fraction": 0.0194,
+        "description": "A shop of unspecified type or an indicator that a feature such as a fuel station has a shop."
       },
       {
         "value": "car",
         "count": 90,
-        "fraction": 0.018
+        "fraction": 0.018,
+        "description": "A place that primarily sells cars (automobiles)"
       },
       {
         "value": "chemist",
         "count": 84,
-        "fraction": 0.0168
+        "fraction": 0.0168,
+        "description": "A shop selling articles of personal hygiene, cosmetics, and household cleaning products."
       },
       {
         "value": "alcohol",
         "count": 83,
-        "fraction": 0.0166
+        "fraction": 0.0166,
+        "description": "A shop selling alcoholic drinks"
       },
       {
         "value": "furniture",
         "count": 81,
-        "fraction": 0.0162
+        "fraction": 0.0162,
+        "description": "A shop selling furniture."
       },
       {
         "value": "tailor",
         "count": 80,
-        "fraction": 0.016
+        "fraction": 0.016,
+        "description": "A place where clothing is made, repaired, or altered professionally, especially suits and men's clothing."
       },
       {
         "value": "hardware",
         "count": 64,
-        "fraction": 0.0128
+        "fraction": 0.0128,
+        "description": "Shop selling primarily metal fasteners and tools, sometimes also other workshop and homeware products."
       },
       {
         "value": "jewelry",
         "count": 63,
-        "fraction": 0.0126
+        "fraction": 0.0126,
+        "description": "A shop that sells rings, necklaces, earrings, watches, etc."
       },
       {
         "value": "mall",
         "count": 59,
-        "fraction": 0.0118
+        "fraction": 0.0118,
+        "description": "A group of stores, typically associated with a single building structure."
       },
       {
         "value": "variety_store",
         "count": 58,
-        "fraction": 0.0116
+        "fraction": 0.0116,
+        "description": "A variety store or price-point retailer is a retail shop that sells inexpensive items."
       },
       {
         "value": "beauty",
         "count": 56,
-        "fraction": 0.0112
+        "fraction": 0.0112,
+        "description": "A non-hairdresser beauty shop, spa, nail salon, etc."
       },
       {
         "value": "video",
         "count": 50,
-        "fraction": 0.01
+        "fraction": 0.01,
+        "description": "A shop that sells or rents out videos/DVDs"
       },
       {
         "value": "music",
         "count": 50,
-        "fraction": 0.01
+        "fraction": 0.01,
+        "description": "A store that primarily sells recorded music (typically vinyl/CDs)."
       },
       {
         "value": "butcher",
         "count": 48,
-        "fraction": 0.0096
+        "fraction": 0.0096,
+        "description": "A shop selling meat or meat products."
       },
       {
         "value": "electronics",
         "count": 47,
-        "fraction": 0.0094
+        "fraction": 0.0094,
+        "description": "A shop selling consumer electronics such as TVs, radios and fridges."
       },
       {
         "value": "optician",
         "count": 44,
-        "fraction": 0.0088
+        "fraction": 0.0088,
+        "description": "A shop that sells, fits, and repairs prescription eyeglasses and contact lenses."
       },
       {
         "value": "general",
         "count": 43,
-        "fraction": 0.0086
+        "fraction": 0.0086,
+        "description": "A general store. Small shop selling variety of different products."
       },
       {
         "value": "colonial goods",
@@ -3410,27 +3842,32 @@
       {
         "value": "gift",
         "count": 41,
-        "fraction": 0.0082
+        "fraction": 0.0082,
+        "description": "Shop selling gifts, greeting cards, or tourist gifts (souvenirs)."
       },
       {
         "value": "bicycle",
         "count": 36,
-        "fraction": 0.0072
+        "fraction": 0.0072,
+        "description": "A store where you can buy and/or repair your bike and buy accessories."
       },
       {
         "value": "funeral_directors",
         "count": 36,
-        "fraction": 0.0072
+        "fraction": 0.0072,
+        "description": "A shop that provides services related to funeral arrangements, may also be known as a \"funeral parlour\" or \"undertakers\"."
       },
       {
         "value": "trade",
         "count": 36,
-        "fraction": 0.0072
+        "fraction": 0.0072,
+        "description": "A place of business that sells to a particular trade or trades, but normally also retails to normal consumers."
       },
       {
         "value": "houseware",
         "count": 34,
-        "fraction": 0.0068
+        "fraction": 0.0068,
+        "description": "A shop selling small household items"
       },
       {
         "value": "auto_repair",
@@ -3440,7 +3877,8 @@
       {
         "value": "car_parts",
         "count": 30,
-        "fraction": 0.006
+        "fraction": 0.006,
+        "description": "A place selling auto parts, auto accessories, motor oil, car chemicals, etc."
       },
       {
         "value": "store",
@@ -3450,227 +3888,272 @@
       {
         "value": "tobacco",
         "count": 27,
-        "fraction": 0.0054
+        "fraction": 0.0054,
+        "description": "A shop selling tobacco, and possibly other convenience items"
       },
       {
         "value": "confectionery",
         "count": 27,
-        "fraction": 0.0054
+        "fraction": 0.0054,
+        "description": "A shop selling sweets and candies."
       },
       {
         "value": "pastry",
         "count": 26,
-        "fraction": 0.0052
+        "fraction": 0.0052,
+        "description": "A shop where sweet bakery products are sold."
       },
       {
         "value": "stationery",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "A shop selling office supplies."
       },
       {
         "value": "sports",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "A shop selling sports equipment and clothing."
       },
       {
         "value": "antiques",
         "count": 25,
-        "fraction": 0.005
+        "fraction": 0.005,
+        "description": "A shop where you can buy antiques."
       },
       {
         "value": "mobile_phone",
         "count": 24,
-        "fraction": 0.0048
+        "fraction": 0.0048,
+        "description": "A shop that primarily sells mobile phones and accessories."
       },
       {
         "value": "wholesale",
         "count": 24,
-        "fraction": 0.0048
+        "fraction": 0.0048,
+        "description": "A store that sells items in bulk."
       },
       {
         "value": "doityourself",
         "count": 22,
-        "fraction": 0.0044
+        "fraction": 0.0044,
+        "description": "A Do-it-Yourself-store, a large hardware and home improvement shop"
       },
       {
         "value": "greengrocer",
         "count": 21,
-        "fraction": 0.0042
+        "fraction": 0.0042,
+        "description": "A shop which sells fruits and vegetables"
       },
       {
         "value": "toys",
         "count": 21,
-        "fraction": 0.0042
+        "fraction": 0.0042,
+        "description": "A shop focussed on selling children's toys."
       },
       {
         "value": "florist",
         "count": 20,
-        "fraction": 0.004
+        "fraction": 0.004,
+        "description": "A shop selling bouquets of flowers."
       },
       {
         "value": "second_hand",
         "count": 20,
-        "fraction": 0.004
+        "fraction": 0.004,
+        "description": "A shop selling second hand goods."
       },
       {
         "value": "musical_instrument",
         "count": 19,
-        "fraction": 0.0038
+        "fraction": 0.0038,
+        "description": "Shop selling musical instruments, lyrics, scores."
       },
       {
         "value": "photo",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A shop dealing with photos or video in any way."
       },
       {
         "value": "dry_cleaning",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A shop or kiosk offering a clothes dry cleaning service."
       },
       {
         "value": "grocery",
         "count": 18,
-        "fraction": 0.0036
+        "fraction": 0.0036,
+        "description": "A retail store that specializes in selling non-perishable food."
       },
       {
         "value": "carpet",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A shop selling carpets."
       },
       {
         "value": "charity",
         "count": 16,
-        "fraction": 0.0032
+        "fraction": 0.0032,
+        "description": "A shop operated by a charity"
       },
       {
         "value": "deli",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A delicatessen store"
       },
       {
         "value": "pet",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "A shop selling pets and/or pet supplies"
       },
       {
         "value": "seafood",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A shop selling fish/seafood."
       },
       {
         "value": "paint",
         "count": 14,
-        "fraction": 0.0028
+        "fraction": 0.0028,
+        "description": "A shop where you can buy paints."
       },
       {
         "value": "fashion_accessories",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "A shop focused on selling fashion accessories."
       },
       {
         "value": "tyres",
         "count": 13,
-        "fraction": 0.0026
+        "fraction": 0.0026,
+        "description": "A shop selling tyres."
       },
       {
         "value": "outdoor",
         "count": 12,
-        "fraction": 0.0024
+        "fraction": 0.0024,
+        "description": "A shop selling trekking, climbing, camping equipment."
       },
       {
         "value": "appliance",
         "count": 12,
-        "fraction": 0.0024
+        "fraction": 0.0024,
+        "description": "Shop selling white goods (fridges, ovens, dishwashers, washing machines etc.)."
       },
       {
         "value": "coffee",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop selling primarily packaged coffee."
       },
       {
         "value": "garden_centre",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop selling potted plants, seedlings for planting, and related items."
       },
       {
         "value": "art",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop which sells works of art."
       },
       {
         "value": "dairy",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop selling dairy products."
       },
       {
         "value": "bed",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop that specialises in selling mattresses and other bedding products."
       },
       {
         "value": "anime",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop that sells anime, manga, clothes for cosplay and related items."
       },
       {
         "value": "sewing",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop that sells sewing supplies (fabric, thread, yarn, knitting needles, sewing machines, etc.)."
       },
       {
         "value": "craft",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A place where customers can buy supplies for making art and crafts."
       },
       {
         "value": "travel_agency",
         "count": 11,
-        "fraction": 0.0022
+        "fraction": 0.0022,
+        "description": "A shop selling travel related products and services"
       },
       {
         "value": "computer",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "A shop selling computers, peripherals, software, ..."
       },
       {
         "value": "kiosk",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "A small shop on the pavement that sells magazines, tobacco, newspapers, sweets and stamps."
       },
       {
         "value": "storage_rental",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "Paid storage of household goods, i.e. self storage."
       },
       {
         "value": "wine",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "Shop selling bottled wine."
       },
       {
         "value": "cosmetics",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "Shop primarily selling cosmetics."
       },
       {
         "value": "collector",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "A shop that focuses on selling collector's items, like stamps, coins, action figures, etc."
       },
       {
         "value": "fabric",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A shop that sells fabric"
       },
       {
         "value": "ticket",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A shop selling tickets for concerts, events, public transport, etc."
       },
       {
         "value": "motorcycle",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "A shop that sells motorcycles and/or related accessories and services."
       },
       {
         "value": "pharmacy",
@@ -3680,117 +4163,140 @@
       {
         "value": "leather",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A shop for products made of leather."
       },
       {
         "value": "food",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "A shop selling food."
       },
       {
         "value": "weapons",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "Shop focused on selling weapons like knives, guns, etc."
       },
       {
         "value": "interior_decoration",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "Shop focused on selling interior decorations"
       },
       {
         "value": "hifi",
         "count": 8,
-        "fraction": 0.0016
+        "fraction": 0.0016,
+        "description": "Shop selling high fidelity audio components"
       },
       {
         "value": "kitchen",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A shop where you can plan and buy your kitchen."
       },
       {
         "value": "pawnbroker",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A business that offers secured loans against items of personal property as collateral."
       },
       {
         "value": "camera",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A shop mainly selling cameras and lenses."
       },
       {
         "value": "medical_supply",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A store where you can buy medical equipment for private persons."
       },
       {
         "value": "baby_goods",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A shop where you can buy objects for babies, like clothes, prams, cots or baby's baths."
       },
       {
         "value": "money_lender",
         "count": 7,
-        "fraction": 0.0014
+        "fraction": 0.0014,
+        "description": "A shop offering small personal loans at high rates of interest."
       },
       {
         "value": "electrical",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "Shop selling electrical supplies and devices."
       },
       {
         "value": "watches",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A shop that sells watches."
       },
       {
         "value": "copyshop",
         "count": 6,
-        "fraction": 0.0012
+        "fraction": 0.0012,
+        "description": "A shop that offers photocopying and printing services."
       },
       {
         "value": "tea",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A shop selling tea, mostly loose-leaf, by weight."
       },
       {
         "value": "agrarian",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "Shop selling agricultural inputs such as pesticides, fertilizers, certified seed, feeds, agri tools, parts for agricultural machines etc:"
       },
       {
         "value": "video_games",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "Shop selling video games."
       },
       {
         "value": "flooring",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A shop which sells a variety of floorings"
       },
       {
         "value": "newsagent",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "A shop selling newspapers and magazines."
       },
       {
         "value": "perfumery",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A shop selling perfumes."
       },
       {
         "value": "printing",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A shop for printing on specific supports."
       },
       {
         "value": "party",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Shop selling party supplies like decorations, invitations and costumes."
       },
       {
         "value": "beverages",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Shop focused on selling beverages and drinks, possibly including alcoholic and non-alcoholic ones."
       },
       {
         "value": "hobby",
@@ -3800,27 +4306,32 @@
       {
         "value": "curtain",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A shop that specialises in selling curtains or drapes."
       },
       {
         "value": "rental",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A shop that rents different kinds vehicles or (sport) equipment."
       },
       {
         "value": "religion",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "A shop selling merchandise related to religion"
       },
       {
         "value": "radiotechnics",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Shop focused on selling electronic components, electrical products, radio measuring devices, supplies for radio and electronics."
       },
       {
         "value": "photography",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Using this tag is discouraged, use tag:shop=photo, tag:shop=camera or tag:craft=photographer instead."
       },
       {
         "value": "liquor",
@@ -3830,7 +4341,8 @@
       {
         "value": "health_food",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A health food shop; selling wholefoods, vitamins, nutrition supplements and meat and dairy alternatives."
       },
       {
         "value": "catalogue",
@@ -3840,47 +4352,56 @@
       {
         "value": "massage",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Massage shop"
       },
       {
         "value": "swimming_pool",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A store that sells swimming pool equipment and supplies"
       },
       {
         "value": "fireplace",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A shop selling fireplaces."
       },
       {
         "value": "vacuum_cleaner",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A shop that specalises in the sale of vacuum cleaners and associated products."
       },
       {
         "value": "shoe_repair",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A place where one may have shoes repaired or altered."
       },
       {
         "value": "games",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Shop selling board games, card games, battle games, RPGs."
       },
       {
         "value": "farm",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A shop at a farm, selling farm produce."
       },
       {
         "value": "bag",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "A shop selling bags."
       },
       {
         "value": "delicatessen",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "Using this tag is discouraged, use tag:shop=deli instead."
       },
       {
         "value": "horses",
@@ -3890,7 +4411,8 @@
       {
         "value": "model",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop selling scale models."
       },
       {
         "value": "drugstore",
@@ -3910,67 +4432,80 @@
       {
         "value": "bathroom_furnishing",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop selling mainly bathroom equipment and bathroom accessories."
       },
       {
         "value": "erotic",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop selling erotic products such as sex toys, erotic lingerie, fetish clothing, safe sex products, erotic games and gifts, and pornographic films and magazines."
       },
       {
         "value": "nutrition_supplements",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Shops that sells nutritional supplements different types of purified proteins, fats, vitamins, minerals and/or herbs."
       },
       {
         "value": "boat",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A boat shop, may also offer further services."
       },
       {
         "value": "doors",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A place that specializes in selling only or mainly doors."
       },
       {
         "value": "tiles",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A store that sells tiles."
       },
       {
         "value": "cheese",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop mainly selling cheese."
       },
       {
         "value": "tattoo",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A place where people can get permanent tattoos"
       },
       {
         "value": "repair",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A general repair shop. More precise tagging should be used where appropriate."
       },
       {
         "value": "glass",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Using this tag is discouraged, use tag:craft=glaziery or tag:shop=glaziery instead."
       },
       {
         "value": "bicycle_repair",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "Deprecated, consider using tag:shop=bicycle + tag:service:bicycle:repair=yes instead."
       },
       {
         "value": "e-cigarette",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop selling electronic cigarettes."
       },
       {
         "value": "spices",
         "count": 2,
-        "fraction": 0.0004
+        "fraction": 0.0004,
+        "description": "A shop selling spices"
       },
       {
         "value": "coal",
@@ -3980,7 +4515,8 @@
       {
         "value": "boutique",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A small shop that sells expensive or designer clothing and/or accessories. Often misused due to its use in many different contexts."
       },
       {
         "value": "cigars",
@@ -4010,12 +4546,14 @@
       {
         "value": "window_blind",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop that sells window blinds."
       },
       {
         "value": "lighting",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop selling lighting fixtures and lamps."
       },
       {
         "value": "ice",
@@ -4030,27 +4568,32 @@
       {
         "value": "military_surplus",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Shop selling used military equipment"
       },
       {
         "value": "locksmith",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop where you can get keys cut. May also sell new locks and related services."
       },
       {
         "value": "frame",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop where you can buy frames, or bring artwork/pictures to be framed."
       },
       {
         "value": "candles",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Shop focused on selling candles and candle accessories (holders, etc)"
       },
       {
         "value": "pyrotechnics",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Shop selling consumer pyrotechnics: fireworks, firecrackers, sparklers etc."
       },
       {
         "value": "tofu",
@@ -4060,17 +4603,20 @@
       {
         "value": "pet_grooming",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop offering grooming services for pets (most frequently dogs)"
       },
       {
         "value": "hearing_aids",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop specialized in selling hearing aids devices."
       },
       {
         "value": "printer_ink",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop that sells or refills printer ink cartridges."
       },
       {
         "value": "convenience;seafood",
@@ -4080,7 +4626,8 @@
       {
         "value": "fuel",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop selling fuels."
       },
       {
         "value": "clock_repair",
@@ -4090,12 +4637,14 @@
       {
         "value": "tools",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop that sells tools."
       },
       {
         "value": "discount",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Unclear value not documenting what is sold in the store. Please use more specific key:shop value."
       },
       {
         "value": "organiser",
@@ -4110,62 +4659,74 @@
       {
         "value": "hairdresser_supply",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop where you can buy hairdressing supplies"
       },
       {
         "value": "telecommunication",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop of a telecommunications company."
       },
       {
         "value": "cannabis",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop primarily and openly selling cannabis products."
       },
       {
         "value": "psychic",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A business that offers to predict the future for hire: fortune-telling, tarot, palmistry, tea-leaf reading, etc."
       },
       {
         "value": "gun",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Shop which is selling primarily firearms."
       },
       {
         "value": "shopping_centre",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shopping centre: a collection of shops facing a parking lot"
       },
       {
         "value": "estate_agent",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop which sells and/or rents property."
       },
       {
         "value": "fishing",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Store where you can buy fishing equipment."
       },
       {
         "value": "bookmaker",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop that takes bets on sporting and other events at agreed upon odds."
       },
       {
         "value": "pottery",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A place where earthenware, stoneware and porcelain and other ceramic ware are sold."
       },
       {
         "value": "maps",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "A shop selling primarily maps."
       },
       {
         "value": "vacant",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Shop that is currently not being used."
       }
     ]
   },
@@ -4190,162 +4751,194 @@
       {
         "value": "government",
         "count": 523,
-        "fraction": 0.28377645143787306
+        "fraction": 0.28377645143787306,
+        "description": "An office of a (supra)national, regional or local government agency or department"
       },
       {
         "value": "yes",
         "count": 247,
-        "fraction": 0.13402061855670103
+        "fraction": 0.13402061855670103,
+        "description": "Generic tag for unspecified office type."
       },
       {
         "value": "diplomatic",
         "count": 164,
-        "fraction": 0.08898534997287032
+        "fraction": 0.08898534997287032,
+        "description": "An embassy, diplomatic mission, consulate or liaison office of a foreign government or parastatal entity in a host country."
       },
       {
         "value": "company",
         "count": 132,
-        "fraction": 0.0716223548562127
+        "fraction": 0.0716223548562127,
+        "description": "An office of a private company."
       },
       {
         "value": "newspaper",
         "count": 115,
-        "fraction": 0.062398263700488336
+        "fraction": 0.062398263700488336,
+        "description": "An office of a newspaper"
       },
       {
         "value": "insurance",
         "count": 70,
-        "fraction": 0.03798155181768855
+        "fraction": 0.03798155181768855,
+        "description": "An office at which you can take out insurance policies."
       },
       {
         "value": "it",
         "count": 68,
-        "fraction": 0.03689636462289745
+        "fraction": 0.03689636462289745,
+        "description": "An office for an IT company."
       },
       {
         "value": "association",
         "count": 51,
-        "fraction": 0.027672273467173086
+        "fraction": 0.027672273467173086,
+        "description": "An office of a non-profit organisation, society, e.g. student, sport, consumer, automobile, bike association, etc."
       },
       {
         "value": "lawyer",
         "count": 51,
-        "fraction": 0.027672273467173086
+        "fraction": 0.027672273467173086,
+        "description": "An office for a lawyer."
       },
       {
         "value": "estate_agent",
         "count": 50,
-        "fraction": 0.027129679869777535
+        "fraction": 0.027129679869777535,
+        "description": "A place where you can rent or buy a house."
       },
       {
         "value": "ngo",
         "count": 31,
-        "fraction": 0.016820401519262073
+        "fraction": 0.016820401519262073,
+        "description": "An office for a non-profit, non-governmental organisation (NGO)."
       },
       {
         "value": "construction_company",
         "count": 28,
-        "fraction": 0.015192620727075421
+        "fraction": 0.015192620727075421,
+        "description": "An office of a building construction company."
       },
       {
         "value": "political_party",
         "count": 26,
-        "fraction": 0.01410743353228432
+        "fraction": 0.01410743353228432,
+        "description": "An office of a political party"
       },
       {
         "value": "religion",
         "count": 25,
-        "fraction": 0.013564839934888768
+        "fraction": 0.013564839934888768,
+        "description": "An office of a community of faith."
       },
       {
         "value": "telecommunication",
         "count": 23,
-        "fraction": 0.012479652740097666
+        "fraction": 0.012479652740097666,
+        "description": "An office for a telecommunication company."
       },
       {
         "value": "educational_institution",
         "count": 23,
-        "fraction": 0.012479652740097666
+        "fraction": 0.012479652740097666,
+        "description": "An office for an educational institution."
       },
       {
         "value": "architect",
         "count": 20,
-        "fraction": 0.010851871947911014
+        "fraction": 0.010851871947911014,
+        "description": "An office for an architect or group of architects."
       },
       {
         "value": "research",
         "count": 19,
-        "fraction": 0.010309278350515464
+        "fraction": 0.010309278350515464,
+        "description": "An office for research and development"
       },
       {
         "value": "financial",
         "count": 15,
-        "fraction": 0.008138903960933261
+        "fraction": 0.008138903960933261,
+        "description": "An office of a company in the financial sector."
       },
       {
         "value": "charity",
         "count": 13,
-        "fraction": 0.00705371676614216
+        "fraction": 0.00705371676614216,
+        "description": "An office of a charitable organization"
       },
       {
         "value": "tax_advisor",
         "count": 13,
-        "fraction": 0.00705371676614216
+        "fraction": 0.00705371676614216,
+        "description": "An office for a financial expert specially trained in tax law"
       },
       {
         "value": "engineer",
         "count": 12,
-        "fraction": 0.0065111231687466084
+        "fraction": 0.0065111231687466084,
+        "description": "An office for an engineer or group of engineers."
       },
       {
         "value": "foundation",
         "count": 11,
-        "fraction": 0.005968529571351058
+        "fraction": 0.005968529571351058,
+        "description": "An office of a foundation"
       },
       {
         "value": "employment_agency",
         "count": 9,
-        "fraction": 0.0048833423765599565
+        "fraction": 0.0048833423765599565,
+        "description": "An office for an employment service."
       },
       {
         "value": "advertising_agency",
         "count": 9,
-        "fraction": 0.0048833423765599565
+        "fraction": 0.0048833423765599565,
+        "description": "A service-based business dedicated to creating, planning, and handling advertising."
       },
       {
         "value": "union",
         "count": 8,
-        "fraction": 0.004340748779164406
+        "fraction": 0.004340748779164406,
+        "description": "An office of a trade union, an association of workers forming a bargaining unit."
       },
       {
         "value": "coworking",
         "count": 8,
-        "fraction": 0.004340748779164406
+        "fraction": 0.004340748779164406,
+        "description": "An office where people can go to work (typically requires a fee); not limited to a single employer."
       },
       {
         "value": "energy_supplier",
         "count": 6,
-        "fraction": 0.0032555615843733042
+        "fraction": 0.0032555615843733042,
+        "description": "An office for an energy supplier."
       },
       {
         "value": "healthcare",
         "count": 6,
-        "fraction": 0.0032555615843733042
+        "fraction": 0.0032555615843733042,
+        "description": "An office of the health-care company."
       },
       {
         "value": "publisher",
         "count": 6,
-        "fraction": 0.0032555615843733042
+        "fraction": 0.0032555615843733042,
+        "description": "An office of a publisher."
       },
       {
         "value": "graphic_design",
         "count": 5,
-        "fraction": 0.0027129679869777536
+        "fraction": 0.0027129679869777536,
+        "description": "An office of a graphic designer."
       },
       {
         "value": "water_utility",
         "count": 4,
-        "fraction": 0.002170374389582203
+        "fraction": 0.002170374389582203,
+        "description": "The office for a water utility company or water board."
       },
       {
         "value": "auctioneer",
@@ -4355,17 +4948,20 @@
       {
         "value": "accountant",
         "count": 3,
-        "fraction": 0.0016277807921866521
+        "fraction": 0.0016277807921866521,
+        "description": "An office for an accountant."
       },
       {
         "value": "moving_company",
         "count": 3,
-        "fraction": 0.0016277807921866521
+        "fraction": 0.0016277807921866521,
+        "description": "An office which offers a relocation service."
       },
       {
         "value": "consulting",
         "count": 3,
-        "fraction": 0.0016277807921866521
+        "fraction": 0.0016277807921866521,
+        "description": "An office for a consulting firm, providing expert professional advice to other companies or organisations."
       },
       {
         "value": "mortgage",
@@ -4375,37 +4971,44 @@
       {
         "value": "transport",
         "count": 3,
-        "fraction": 0.0016277807921866521
+        "fraction": 0.0016277807921866521,
+        "description": "An office of a freight forwarder or transport company."
       },
       {
         "value": "forestry",
         "count": 3,
-        "fraction": 0.0016277807921866521
+        "fraction": 0.0016277807921866521,
+        "description": "A forestry office"
       },
       {
         "value": "logistics",
         "count": 2,
-        "fraction": 0.0010851871947911015
+        "fraction": 0.0010851871947911015,
+        "description": "An office for a company offering logistics."
       },
       {
         "value": "university",
         "count": 2,
-        "fraction": 0.0010851871947911015
+        "fraction": 0.0010851871947911015,
+        "description": "An office providing services to university students or staff, or the office of a department / faculty in a university."
       },
       {
         "value": "therapist",
         "count": 2,
-        "fraction": 0.0010851871947911015
+        "fraction": 0.0010851871947911015,
+        "description": "An office of a therapist."
       },
       {
         "value": "politician",
         "count": 2,
-        "fraction": 0.0010851871947911015
+        "fraction": 0.0010851871947911015,
+        "description": "A politician's office."
       },
       {
         "value": "harbour_master",
         "count": 2,
-        "fraction": 0.0010851871947911015
+        "fraction": 0.0010851871947911015,
+        "description": "The Harbourmaster's office."
       },
       {
         "value": "event_planner",
@@ -4415,7 +5018,8 @@
       {
         "value": "administrative",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "Using this tag is discouraged, use tag:office=government instead."
       },
       {
         "value": "shipping_agent",
@@ -4430,7 +5034,8 @@
       {
         "value": "tutoring",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "An office of tutor or tutoring centre."
       },
       {
         "value": "armored_car_service",
@@ -4455,22 +5060,26 @@
       {
         "value": "courier",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "A courier delivery service, which is neither a post office nor a national post."
       },
       {
         "value": "financial_advisor",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "A professional who offers financial planning and sells financial services to clients."
       },
       {
         "value": "event_management",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "An office offering support for event planning and management"
       },
       {
         "value": "chamber",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "Seat of a professional chamber, such as bar associations or chambers of commerce."
       },
       {
         "value": "Rail Road",
@@ -4490,7 +5099,8 @@
       {
         "value": "broadcaster",
         "count": 1,
-        "fraction": 0.0005425935973955507
+        "fraction": 0.0005425935973955507,
+        "description": "A radio or television broadcasting station."
       },
       {
         "value": "mill",
@@ -4530,32 +5140,38 @@
       {
         "value": "viaduct",
         "count": 76,
-        "fraction": 0.0152
+        "fraction": 0.0152,
+        "description": "A long rail, road, or other bridge made up of many short spans."
       },
       {
         "value": "aqueduct",
         "count": 59,
-        "fraction": 0.0118
+        "fraction": 0.0118,
+        "description": "A bridge which conveys an artificial waterway over a road, valley or waterway."
       },
       {
         "value": "movable",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "Movable span of a bridge (draw, bascule, lift...)."
       },
       {
         "value": "boardwalk",
         "count": 15,
-        "fraction": 0.003
+        "fraction": 0.003,
+        "description": "Plank walkway"
       },
       {
         "value": "trestle",
         "count": 9,
-        "fraction": 0.0018
+        "fraction": 0.0018,
+        "description": "Trestle"
       },
       {
         "value": "cantilever",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "Cantilever bridge"
       },
       {
         "value": "abandoned",
@@ -4600,7 +5216,8 @@
       {
         "value": "culvert",
         "count": 560,
-        "fraction": 0.112
+        "fraction": 0.112,
+        "description": "For a stream/drain/ditch/river passing under a road. Use it on the section of waterway passing under the road."
       },
       {
         "value": "true",
@@ -4645,62 +5262,74 @@
       {
         "value": "aerodrome",
         "count": 387,
-        "fraction": 0.460166468489893
+        "fraction": 0.460166468489893,
+        "description": "An aerodrome, airport or airfield"
       },
       {
         "value": "taxiway",
         "count": 192,
-        "fraction": 0.22829964328180738
+        "fraction": 0.22829964328180738,
+        "description": "A route where airplanes manouevre between runways and parking areas within an aerodrome"
       },
       {
         "value": "terminal",
         "count": 144,
-        "fraction": 0.17122473246135553
+        "fraction": 0.17122473246135553,
+        "description": "An airport passenger building"
       },
       {
         "value": "runway",
         "count": 47,
-        "fraction": 0.0558858501783591
+        "fraction": 0.0558858501783591,
+        "description": "A designated strip of surface on which aircrafts can take off and land."
       },
       {
         "value": "hangar",
         "count": 32,
-        "fraction": 0.03804994054696789
+        "fraction": 0.03804994054696789,
+        "description": "A large airport building with extensive floor area that is used for housing aircraft or spacecraft."
       },
       {
         "value": "helipad",
         "count": 12,
-        "fraction": 0.014268727705112961
+        "fraction": 0.014268727705112961,
+        "description": "A landing area or platform designed for helicopters. It might be part of an aerodrome, heliport, hospital, hotel etc."
       },
       {
         "value": "navigationaid",
         "count": 11,
-        "fraction": 0.013079667063020214
+        "fraction": 0.013079667063020214,
+        "description": "A facility that supports visual navigation for aircraft"
       },
       {
         "value": "tower",
         "count": 6,
-        "fraction": 0.007134363852556481
+        "fraction": 0.007134363852556481,
+        "description": "A tall, windowed structure common at airports used to control aircraft for take-off, landing, and ground movements."
       },
       {
         "value": "apron",
         "count": 5,
-        "fraction": 0.005945303210463734
+        "fraction": 0.005945303210463734,
+        "description": "An area of an airport where planes are parked, unloaded, loaded, refueled, or boarded."
       },
       {
         "value": "spaceport",
         "count": 2,
-        "fraction": 0.0023781212841854932
+        "fraction": 0.0023781212841854932,
+        "description": "A spaceport or cosmodrome: a site for launching or receiving spacecraft"
       },
       {
         "value": "parking_position",
         "count": 2,
-        "fraction": 0.0023781212841854932
+        "fraction": 0.0023781212841854932,
+        "description": "A location where an airplane can park."
       },
       {
         "value": "jet_bridge",
         "count": 1,
-        "fraction": 0.0011890606420927466
+        "fraction": 0.0011890606420927466,
+        "description": "An enclosed, movable connector that extends from an airport terminal to an airplane"
       }
     ]
   },
@@ -4730,37 +5359,44 @@
       {
         "value": "generator",
         "count": 183,
-        "fraction": 0.2264851485148515
+        "fraction": 0.2264851485148515,
+        "description": "A device which converts one form of energy to another, for example, an electrical generator."
       },
       {
         "value": "plant",
         "count": 178,
-        "fraction": 0.2202970297029703
+        "fraction": 0.2202970297029703,
+        "description": "An industrial facility where power (electricity, useful heat, biogas) is produced by individual power generator units."
       },
       {
         "value": "line",
         "count": 124,
-        "fraction": 0.15346534653465346
+        "fraction": 0.15346534653465346,
+        "description": "High-voltage power lines used for power transmission, usually supported by towers or pylons"
       },
       {
         "value": "substation",
         "count": 80,
-        "fraction": 0.09900990099009901
+        "fraction": 0.09900990099009901,
+        "description": "A facility which controls the flow of electricity in a power network with transformers, switchgear or compensators."
       },
       {
         "value": "tower",
         "count": 48,
-        "fraction": 0.0594059405940594
+        "fraction": 0.0594059405940594,
+        "description": "A tower or pylon carrying high voltage electricity cables. Often constructed from steel latticework but tubular or solid pylons are also used."
       },
       {
         "value": "station",
         "count": 2,
-        "fraction": 0.0024752475247524753
+        "fraction": 0.0024752475247524753,
+        "description": "Using this tag is discouraged, use tag:power=substation for substations, tag:power=plant for power plants (power stations) or tag:power=generator for power generating equipment instead."
       },
       {
         "value": "minor_line",
         "count": 2,
-        "fraction": 0.0024752475247524753
+        "fraction": 0.0024752475247524753,
+        "description": "Minor power lines forming the distribution grid, usually carried by poles."
       },
       {
         "value": "plant;substation",
@@ -4770,12 +5406,14 @@
       {
         "value": "transformer",
         "count": 1,
-        "fraction": 0.0012376237623762376
+        "fraction": 0.0012376237623762376,
+        "description": "A device for stepping up or down electric voltage. Large power transformers are typically located inside substations"
       },
       {
         "value": "cable",
         "count": 1,
-        "fraction": 0.0012376237623762376
+        "fraction": 0.0012376237623762376,
+        "description": "An insulated cable carrying electrical power, such as transmission or distribution cables located underground and undersea cables"
       }
     ]
   },
@@ -4800,92 +5438,110 @@
       {
         "value": "hospital",
         "count": 487,
-        "fraction": 0.4840954274353877
+        "fraction": 0.4840954274353877,
+        "description": "A hospital providing in-patient medical treatment, used in addition to tag:amenity=hospital."
       },
       {
         "value": "pharmacy",
         "count": 202,
-        "fraction": 0.20079522862823063
+        "fraction": 0.20079522862823063,
+        "description": "A shop where a pharmacist sells prescription medications. Used in addition to tag:amenity=pharmacy."
       },
       {
         "value": "doctor",
         "count": 89,
-        "fraction": 0.08846918489065607
+        "fraction": 0.08846918489065607,
+        "description": "A place to get medical attention or a check up from a physician. Used in addition to tag:amenity=doctors."
       },
       {
         "value": "clinic",
         "count": 77,
-        "fraction": 0.07654075546719682
+        "fraction": 0.07654075546719682,
+        "description": "A medical facility, with more staff than a doctor's office, that does not admit inpatients. Used in addition to tag:amenity=clinic."
       },
       {
         "value": "dentist",
         "count": 55,
-        "fraction": 0.05467196819085487
+        "fraction": 0.05467196819085487,
+        "description": "A dentist practice / surgery. Used in addition to amenity=dentist"
       },
       {
         "value": "yes",
         "count": 24,
-        "fraction": 0.02385685884691849
+        "fraction": 0.02385685884691849,
+        "description": "Unspecific healthcare object. Usage without further specification is discouraged."
       },
       {
         "value": "alternative",
         "count": 14,
-        "fraction": 0.013916500994035786
+        "fraction": 0.013916500994035786,
+        "description": "A facility where alternative or complementary medicine is practiced: e.g. acupuncture, chiropractic, naturopathy, etc."
       },
       {
         "value": "optometrist",
         "count": 12,
-        "fraction": 0.011928429423459244
+        "fraction": 0.011928429423459244,
+        "description": "An optometrist's office"
       },
       {
         "value": "hospice",
         "count": 8,
-        "fraction": 0.007952286282306162
+        "fraction": 0.007952286282306162,
+        "description": "A facility which provides palliative care to terminally ill people and support to their relatives."
       },
       {
         "value": "laboratory",
         "count": 7,
-        "fraction": 0.006958250497017893
+        "fraction": 0.006958250497017893,
+        "description": "A medical laboratory, a place which performs analysis and diagnostics on body fluids."
       },
       {
         "value": "rehabilitation",
         "count": 6,
-        "fraction": 0.005964214711729622
+        "fraction": 0.005964214711729622,
+        "description": "Medical rehabilitation facility, usually inpatient or residential"
       },
       {
         "value": "physiotherapist",
         "count": 5,
-        "fraction": 0.004970178926441352
+        "fraction": 0.004970178926441352,
+        "description": "A facility where a physiotherapist practices physical therapy (kinesiology, exercise, mobilization, etc)."
       },
       {
         "value": "counselling",
         "count": 4,
-        "fraction": 0.003976143141153081
+        "fraction": 0.003976143141153081,
+        "description": "A facility where health counselling is provided, e.g. dietitian, nutrition, addiction."
       },
       {
         "value": "birthing_centre",
         "count": 4,
-        "fraction": 0.003976143141153081
+        "fraction": 0.003976143141153081,
+        "description": "An outpatient birthing centre operated primarily by midwives, where pregnant mothers in labor can deliver their babies."
       },
       {
         "value": "blood_donation",
         "count": 3,
-        "fraction": 0.002982107355864811
+        "fraction": 0.002982107355864811,
+        "description": "Facility where you can donate blood, plasma and/or platelets, and possibly have stem cell samples taken"
       },
       {
         "value": "midwife",
         "count": 3,
-        "fraction": 0.002982107355864811
+        "fraction": 0.002982107355864811,
+        "description": "A facility where healthcare is provided by a midwife, a health professional who cares for mothers and newborns around childbirth"
       },
       {
         "value": "podiatrist",
         "count": 2,
-        "fraction": 0.0019880715705765406
+        "fraction": 0.0019880715705765406,
+        "description": "The office of a podiatrist for the treatment of disorders of the foot, ankle, and lower extremities."
       },
       {
         "value": "psychotherapist",
         "count": 1,
-        "fraction": 0.0009940357852882703
+        "fraction": 0.0009940357852882703,
+        "description": "An office of a psychotherapist or clinical psychologist."
       },
       {
         "value": "infirmary",
@@ -4895,12 +5551,14 @@
       {
         "value": "dialysis",
         "count": 1,
-        "fraction": 0.0009940357852882703
+        "fraction": 0.0009940357852882703,
+        "description": "Facility where people can get dialysis."
       },
       {
         "value": "centre",
         "count": 1,
-        "fraction": 0.0009940357852882703
+        "fraction": 0.0009940357852882703,
+        "description": "Unspecific healthcare facility. Usage without further specification is discouraged."
       }
     ]
   },
@@ -4930,17 +5588,20 @@
       {
         "value": "outcrop",
         "count": 3,
-        "fraction": 0.25
+        "fraction": 0.25,
+        "description": "A place where the bedrock or superficial deposits previously covered under the soil have become locally exposed"
       },
       {
         "value": "volcanic_vent",
         "count": 2,
-        "fraction": 0.16666666666666666
+        "fraction": 0.16666666666666666,
+        "description": "A hole through which the lava erupts."
       },
       {
         "value": "palaeontological_site",
         "count": 1,
-        "fraction": 0.08333333333333333
+        "fraction": 0.08333333333333333,
+        "description": "A place with fossils."
       },
       {
         "value": "esker",
