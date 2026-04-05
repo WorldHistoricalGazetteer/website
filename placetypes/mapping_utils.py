@@ -667,7 +667,36 @@ def get_mapping_stats():
     ohm_mapped = len(ohm_map)
 
     wd_mapped = len(wd_map)
-    wd_total = max(wd_mapped, 0)
+
+    # Count total Wikidata Q-items from ES places aggregation
+    wd_total = 0
+    try:
+        es = settings.ES_CONN
+        resp = es.search(
+            index="places",
+            size=0,
+            query={"match_all": {}},
+            aggs={
+                "qid_agg": {
+                    "nested": {"path": "types"},
+                    "aggs": {
+                        "by_ident": {
+                            "terms": {
+                                "field": "types.identifier",
+                                "include": "Q.*",
+                                "size": 10000,
+                            },
+                        }
+                    },
+                }
+            },
+            request_timeout=8,
+        )
+        wd_total = len(resp["aggregations"]["qid_agg"]["by_ident"]["buckets"])
+    except Exception as e:
+        logger.info("Wikidata total count from ES unavailable: %s", e)
+    # Ensure total is at least as large as the mapped count
+    wd_total = max(wd_total, wd_mapped)
 
     return {
         "geonames": {"total": gn_total, "mapped": gn_mapped, "unmapped": gn_total - gn_mapped},

@@ -107,25 +107,27 @@
     const VOCAB_CONFIG = {
         geonames: {
             tableId: 'gn-table', filterId: 'gn-filter', loadingId: 'gn-loading',
-            countLabelId: 'gn-count-label',
+            countLabelId: 'gn-count-label', hideMappedId: 'gn-hide-mapped',
             columns: ['source_id', 'label', 'description', 'count', 'mapping'],
             hasTagKey: false,
         },
         wikidata: {
             tableId: 'wd-table', filterId: 'wd-filter', loadingId: 'wd-loading',
-            countLabelId: 'wd-count-label',
+            countLabelId: 'wd-count-label', hideMappedId: 'wd-hide-mapped',
             columns: ['source_id', 'label', 'count', 'mapping'],
             hasTagKey: false,
         },
         osm: {
             tableId: 'osm-table', filterId: 'osm-filter', loadingId: 'osm-loading',
             countLabelId: 'osm-count-label', tagKeyFilterId: 'osm-tag-key-filter',
+            hideMappedId: 'osm-hide-mapped',
             columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
             hasTagKey: true,
         },
         ohm: {
             tableId: 'ohm-table', filterId: 'ohm-filter', loadingId: 'ohm-loading',
             countLabelId: 'ohm-count-label', tagKeyFilterId: 'ohm-tag-key-filter',
+            hideMappedId: 'ohm-hide-mapped',
             columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
             hasTagKey: true,
         },
@@ -136,14 +138,12 @@
     // -----------------------------------------------------------------------
     function loadStats() {
         fetchJSON(API.stats).then(stats => {
-            document.getElementById('stat-gn-mapped').textContent = formatCount(stats.geonames?.mapped);
-            document.getElementById('stat-gn-total').textContent = formatCount(stats.geonames?.total);
-            document.getElementById('stat-wd-mapped').textContent = formatCount(stats.wikidata?.mapped);
-            document.getElementById('stat-wd-total').textContent = formatCount(stats.wikidata?.total);
-            document.getElementById('stat-osm-mapped').textContent = formatCount(stats.osm?.mapped);
-            document.getElementById('stat-osm-total').textContent = formatCount(stats.osm?.total);
-            document.getElementById('stat-ohm-mapped').textContent = formatCount(stats.ohm?.mapped);
-            document.getElementById('stat-ohm-total').textContent = formatCount(stats.ohm?.total);
+            ['geonames', 'wikidata', 'osm', 'ohm'].forEach(vocab => {
+                const el = document.getElementById(`tab-stat-${vocab}`);
+                if (el && stats[vocab]) {
+                    el.textContent = `(${formatCount(stats[vocab].mapped)}/${formatCount(stats[vocab].total)})`;
+                }
+            });
         }).catch(err => {
             console.warn('Failed to load stats:', err);
         });
@@ -197,9 +197,13 @@
         const tagKeyFilter = cfg.hasTagKey
             ? document.getElementById(cfg.tagKeyFilterId).value
             : '';
+        const hideMapped = document.getElementById(cfg.hideMappedId).checked;
 
         let filtered = data;
 
+        if (hideMapped) {
+            filtered = filtered.filter(d => !d.mapping);
+        }
         if (tagKeyFilter) {
             filtered = filtered.filter(d => d.tag_key === tagKeyFilter);
         }
@@ -373,6 +377,18 @@
         document.getElementById('aat-no-results').classList.add('d-none');
         document.getElementById('aat-select-btn').disabled = true;
 
+        // Reset tree selection UI
+        const treeEl = document.getElementById('modal-aat-type-tree');
+        treeEl.querySelectorAll('.tt-node-selected').forEach(el => el.classList.remove('tt-node-selected'));
+        document.getElementById('tree-selection-info').classList.add('d-none');
+
+        // Switch back to Search tab
+        const searchTab = document.getElementById('aat-search-tab');
+        if (searchTab) {
+            const bsTab = bootstrap.Tab.getOrCreateInstance(searchTab);
+            bsTab.show();
+        }
+
         // Pre-populate search with the label
         if (label && label.length >= 2) {
             document.getElementById('aat-search-input').value = label;
@@ -523,6 +539,12 @@
                 });
             }
 
+            // Hide matched switch
+            document.getElementById(cfg.hideMappedId).addEventListener('change', function () {
+                applyFilters(vocab);
+                renderTable(vocab);
+            });
+
             // Column sorting
             document.getElementById(cfg.tableId).querySelectorAll('th.sortable').forEach(th => {
                 th.addEventListener('click', function () {
@@ -603,6 +625,10 @@
             state.selectedAatId = parseInt(item.dataset.aatId, 10);
             state.selectedAatTerm = item.dataset.aatTerm;
             document.getElementById('aat-select-btn').disabled = false;
+
+            // Clear tree selection if any
+            document.getElementById('modal-aat-type-tree').querySelectorAll('.tt-node-selected').forEach(el => el.classList.remove('tt-node-selected'));
+            document.getElementById('tree-selection-info').classList.add('d-none');
         });
 
         // Save Mapping button (in modal)
@@ -662,6 +688,176 @@
                     this.innerHTML = origHtml;
                 });
             });
+        }
+
+        // -----------------------------------------------------------------
+        // Modal Type Tree tab: lazy-load tree on first tab show
+        // -----------------------------------------------------------------
+        let modalTreeLoaded = false;
+
+        document.getElementById('aat-tree-tab').addEventListener('shown.bs.tab', function () {
+            if (modalTreeLoaded) return;
+            modalTreeLoaded = true;
+            loadModalTypeTree();
+        });
+
+        function loadModalTypeTree() {
+            const treeEl = document.getElementById('modal-aat-type-tree');
+            treeEl.innerHTML = '<div class="text-center py-3"><div class="spinner-border spinner-border-sm text-secondary" role="status"></div> <span class="text-muted">Loading type tree…</span></div>';
+
+            fetchJSON('/types/tree/').then(nodes => {
+                treeEl.innerHTML = '';
+                if (!nodes.length) {
+                    treeEl.innerHTML = '<div class="text-muted py-2">No place types found.</div>';
+                    return;
+                }
+                const ul = document.createElement('ul');
+                ul.className = 'tt-root';
+                nodes.forEach(n => ul.appendChild(renderTreeNode(n)));
+                treeEl.appendChild(ul);
+
+                // Auto-expand root nodes
+                ul.querySelectorAll(':scope > .tt-node').forEach(li => {
+                    const childUl = li.querySelector(':scope > .tt-children');
+                    if (childUl) {
+                        expandTreeNode(li);
+                    }
+                });
+            }).catch(err => {
+                treeEl.innerHTML = `<div class="text-danger py-2">Error loading tree: ${escapeHtml(err.message)}</div>`;
+            });
+        }
+
+        function renderTreeNode(node) {
+            const li = document.createElement('li');
+            li.className = 'tt-node';
+            li.dataset.aatId = node.aat_id;
+
+            const hasChildren = node.children === true;
+            const isGuide = !!node.guide;
+
+            if (isGuide) li.classList.add('tt-guide');
+
+            // Toggle arrow
+            const toggle = document.createElement('span');
+            toggle.className = hasChildren ? 'tt-toggle' : 'tt-toggle tt-leaf';
+            if (hasChildren) toggle.innerHTML = '<i class="fas fa-caret-right"></i>';
+            li.appendChild(toggle);
+
+            // Label
+            const label = document.createElement('span');
+            label.className = 'tt-label';
+            label.textContent = node.text;
+            li.appendChild(document.createTextNode(' '));
+            li.appendChild(label);
+
+            // fclass badges
+            if (node.fclasses) {
+                node.fclasses.forEach(f => {
+                    const badge = document.createElement('span');
+                    badge.className = `tt-badge tt-badge-${f.toLowerCase()}`;
+                    badge.textContent = f;
+                    li.appendChild(document.createTextNode(' '));
+                    li.appendChild(badge);
+                });
+            }
+
+            if (hasChildren) {
+                const childUl = document.createElement('ul');
+                childUl.className = 'tt-children';
+                childUl.style.display = 'none';
+                li.appendChild(childUl);
+                li.dataset.loaded = 'false';
+            }
+
+            // Click toggle to expand/collapse
+            toggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (hasChildren) toggleTreeNode(li);
+            });
+
+            // Click label to select (non-guide nodes only)
+            if (!isGuide) {
+                label.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    selectTreeNode(node.aat_id, node.text);
+                });
+                label.style.cursor = 'pointer';
+            } else {
+                // Guide nodes: click label to expand/collapse
+                label.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (hasChildren) toggleTreeNode(li);
+                });
+            }
+
+            return li;
+        }
+
+        function toggleTreeNode(li) {
+            const childUl = li.querySelector(':scope > .tt-children');
+            const icon = li.querySelector(':scope > .tt-toggle > i');
+            if (!childUl) return;
+
+            if (childUl.style.display !== 'none') {
+                childUl.style.display = 'none';
+                if (icon) { icon.classList.remove('fa-caret-down'); icon.classList.add('fa-caret-right'); }
+                return;
+            }
+
+            if (li.dataset.loaded === 'false') {
+                expandTreeNode(li);
+            } else {
+                childUl.style.display = '';
+                if (icon) { icon.classList.remove('fa-caret-right'); icon.classList.add('fa-caret-down'); }
+            }
+        }
+
+        function expandTreeNode(li) {
+            const aatId = li.dataset.aatId;
+            const childUl = li.querySelector(':scope > .tt-children');
+            const icon = li.querySelector(':scope > .tt-toggle > i');
+
+            if (icon) { icon.classList.remove('fa-caret-right'); icon.classList.add('fa-spinner', 'fa-spin'); }
+
+            fetchJSON(`/types/tree/${aatId}/`).then(nodes => {
+                if (icon) { icon.classList.remove('fa-spinner', 'fa-spin'); }
+                if (nodes.length === 0) {
+                    li.querySelector(':scope > .tt-toggle').classList.add('tt-leaf');
+                    if (icon) icon.remove();
+                    li.dataset.loaded = 'true';
+                    return;
+                }
+                nodes.forEach(n => childUl.appendChild(renderTreeNode(n)));
+                li.dataset.loaded = 'true';
+                childUl.style.display = '';
+                if (icon) { icon.classList.add('fa-caret-down'); }
+            }).catch(err => {
+                if (icon) { icon.classList.remove('fa-spinner', 'fa-spin'); icon.classList.add('fa-caret-right'); }
+                console.error('Tree load failed for', aatId, err);
+            });
+        }
+
+        function selectTreeNode(aatId, term) {
+            // Update selection state
+            state.selectedAatId = aatId;
+            state.selectedAatTerm = term;
+            document.getElementById('aat-select-btn').disabled = false;
+
+            // Highlight selected node in tree
+            const treeEl = document.getElementById('modal-aat-type-tree');
+            treeEl.querySelectorAll('.tt-node-selected').forEach(el => el.classList.remove('tt-node-selected'));
+            const target = treeEl.querySelector(`[data-aat-id="${aatId}"]`);
+            if (target) target.classList.add('tt-node-selected');
+
+            // Show selection info
+            const infoEl = document.getElementById('tree-selection-info');
+            infoEl.classList.remove('d-none');
+            document.getElementById('tree-selected-term').textContent = term;
+            document.getElementById('tree-selected-id').textContent = ` (aat:${aatId})`;
+
+            // Also deselect any search result selection
+            document.querySelectorAll('#aat-results-list .aat-result.selected').forEach(el => el.classList.remove('selected'));
         }
     }
 
