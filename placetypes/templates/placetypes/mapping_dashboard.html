@@ -51,6 +51,12 @@
         OHM <span class="tab-stats text-muted small" id="tab-stat-ohm"></span>
       </button>
     </li>
+    <li class="nav-item ms-auto d-flex align-items-center pe-2">
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="global-hide-mapped">
+        <label class="form-check-label small" for="global-hide-mapped">Hide matched</label>
+      </div>
+    </li>
   </ul>
 
   <div class="tab-content border border-top-0 rounded-bottom p-3" id="vocabTabContent">
@@ -60,10 +66,6 @@
       <div class="d-flex gap-2 mb-2 align-items-center">
         <input type="text" class="form-control form-control-sm" style="max-width:300px"
                placeholder="Filter feature codes…" id="gn-filter" aria-label="Filter GeoNames feature codes">
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input hide-mapped-switch" type="checkbox" id="gn-hide-mapped" data-vocab="geonames">
-          <label class="form-check-label small" for="gn-hide-mapped">Hide matched</label>
-        </div>
         <span class="text-muted small" id="gn-count-label"></span>
       </div>
       <div class="table-responsive" style="max-height:600px; overflow-y:auto">
@@ -92,10 +94,6 @@
       <div class="d-flex gap-2 mb-2 align-items-center">
         <input type="text" class="form-control form-control-sm" style="max-width:300px"
                placeholder="Filter Q-items…" id="wd-filter" aria-label="Filter Wikidata Q-items">
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input hide-mapped-switch" type="checkbox" id="wd-hide-mapped" data-vocab="wikidata">
-          <label class="form-check-label small" for="wd-hide-mapped">Hide matched</label>
-        </div>
         <span class="text-muted small" id="wd-count-label"></span>
       </div>
       <div class="table-responsive" style="max-height:600px; overflow-y:auto">
@@ -126,10 +124,6 @@
         <select class="form-select form-select-sm" style="max-width:180px" id="osm-tag-key-filter" aria-label="Filter by OSM tag key">
           <option value="">All tag keys</option>
         </select>
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input hide-mapped-switch" type="checkbox" id="osm-hide-mapped" data-vocab="osm">
-          <label class="form-check-label small" for="osm-hide-mapped">Hide matched</label>
-        </div>
         <span class="text-muted small" id="osm-count-label"></span>
       </div>
       <div class="table-responsive" style="max-height:600px; overflow-y:auto">
@@ -166,10 +160,6 @@
                 title="Copy all OSM mappings to OHM for matching tag values">
           <i class="fas fa-copy"></i> Copy OSM → OHM
         </button>
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input hide-mapped-switch" type="checkbox" id="ohm-hide-mapped" data-vocab="ohm">
-          <label class="form-check-label small" for="ohm-hide-mapped">Hide matched</label>
-        </div>
         <span class="text-muted small" id="ohm-count-label"></span>
       </div>
       <div class="table-responsive" style="max-height:600px; overflow-y:auto">

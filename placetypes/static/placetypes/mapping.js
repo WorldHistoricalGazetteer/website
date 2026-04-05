@@ -107,27 +107,25 @@
     const VOCAB_CONFIG = {
         geonames: {
             tableId: 'gn-table', filterId: 'gn-filter', loadingId: 'gn-loading',
-            countLabelId: 'gn-count-label', hideMappedId: 'gn-hide-mapped',
+            countLabelId: 'gn-count-label',
             columns: ['source_id', 'label', 'description', 'count', 'mapping'],
             hasTagKey: false,
         },
         wikidata: {
             tableId: 'wd-table', filterId: 'wd-filter', loadingId: 'wd-loading',
-            countLabelId: 'wd-count-label', hideMappedId: 'wd-hide-mapped',
+            countLabelId: 'wd-count-label',
             columns: ['source_id', 'label', 'count', 'mapping'],
             hasTagKey: false,
         },
         osm: {
             tableId: 'osm-table', filterId: 'osm-filter', loadingId: 'osm-loading',
             countLabelId: 'osm-count-label', tagKeyFilterId: 'osm-tag-key-filter',
-            hideMappedId: 'osm-hide-mapped',
             columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
             hasTagKey: true,
         },
         ohm: {
             tableId: 'ohm-table', filterId: 'ohm-filter', loadingId: 'ohm-loading',
             countLabelId: 'ohm-count-label', tagKeyFilterId: 'ohm-tag-key-filter',
-            hideMappedId: 'ohm-hide-mapped',
             columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
             hasTagKey: true,
         },
@@ -197,7 +195,7 @@
         const tagKeyFilter = cfg.hasTagKey
             ? document.getElementById(cfg.tagKeyFilterId).value
             : '';
-        const hideMapped = document.getElementById(cfg.hideMappedId).checked;
+        const hideMapped = document.getElementById('global-hide-mapped').checked;
 
         let filtered = data;
 
@@ -434,13 +432,20 @@
                     f => `<span class="fclass-badge">${escapeHtml(f)}</span>`
                 ).join('');
                 return `<a href="#" class="list-group-item list-group-item-action aat-result"
-                    data-aat-id="${r.aat_id}" data-aat-term="${escapeHtml(r.term)}">
+                    data-aat-id="${r.aat_id}" data-aat-term="${escapeHtml(r.term)}" data-path="${escapeHtml(r.path || '')}">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
                             <strong>${escapeHtml(r.term)}</strong>
                             ${fclassBadges}
                         </div>
-                        <span class="aat-id">aat:${r.aat_id}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="aat-id">aat:${r.aat_id}</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm btn-show-in-tree py-0 px-1"
+                                    data-aat-id="${r.aat_id}" data-path="${escapeHtml(r.path || '')}"
+                                    title="Show in tree">
+                              <i class="fas fa-sitemap" style="font-size:0.7em"></i>
+                            </button>
+                        </div>
                     </div>
                     ${r.note ? `<div class="aat-note">${escapeHtml(r.note)}</div>` : ''}
                 </a>`;
@@ -539,18 +544,22 @@
                 });
             }
 
-            // Hide matched switch
-            document.getElementById(cfg.hideMappedId).addEventListener('change', function () {
-                applyFilters(vocab);
-                renderTable(vocab);
-            });
-
             // Column sorting
             document.getElementById(cfg.tableId).querySelectorAll('th.sortable').forEach(th => {
                 th.addEventListener('click', function () {
                     sortData(vocab, this.dataset.col);
                     renderTable(vocab);
                 });
+            });
+        });
+
+        // Global hide-matched switch — applies to all tabs
+        document.getElementById('global-hide-mapped').addEventListener('change', function () {
+            Object.keys(VOCAB_CONFIG).forEach(vocab => {
+                if (state.data[vocab] !== null) {
+                    applyFilters(vocab);
+                    renderTable(vocab);
+                }
             });
         });
 
@@ -614,6 +623,9 @@
 
         // AAT result selection (in modal)
         document.getElementById('aat-results-list').addEventListener('click', function (e) {
+            // Ignore clicks on the "show in tree" button
+            if (e.target.closest('.btn-show-in-tree')) return;
+
             e.preventDefault();
             const item = e.target.closest('.aat-result');
             if (!item) return;
@@ -629,6 +641,29 @@
             // Clear tree selection if any
             document.getElementById('modal-aat-type-tree').querySelectorAll('.tt-node-selected').forEach(el => el.classList.remove('tt-node-selected'));
             document.getElementById('tree-selection-info').classList.add('d-none');
+        });
+
+        // "Show in tree" button in search results
+        document.getElementById('aat-results-list').addEventListener('click', function (e) {
+            const btn = e.target.closest('.btn-show-in-tree');
+            if (!btn) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const aatId = btn.dataset.aatId;
+            const path = btn.dataset.path || '';
+
+            // Also select this result
+            const resultItem = btn.closest('.aat-result');
+            if (resultItem) {
+                this.querySelectorAll('.aat-result.selected').forEach(el => el.classList.remove('selected'));
+                resultItem.classList.add('selected');
+                state.selectedAatId = parseInt(resultItem.dataset.aatId, 10);
+                state.selectedAatTerm = resultItem.dataset.aatTerm;
+                document.getElementById('aat-select-btn').disabled = false;
+            }
+
+            revealInTree(aatId, path);
         });
 
         // Save Mapping button (in modal)
@@ -858,6 +893,126 @@
 
             // Also deselect any search result selection
             document.querySelectorAll('#aat-results-list .aat-result.selected').forEach(el => el.classList.remove('selected'));
+        }
+
+        /**
+         * Switch to the Browse Tree tab and expand the ancestor path to
+         * reveal and highlight the node with the given aatId.
+         * @param {string} aatId  — target AAT ID
+         * @param {string} path   — dot-separated ancestor IDs (e.g. "300264550.300008346.300008347")
+         */
+        function revealInTree(aatId, path) {
+            // 1. Ensure tree is loaded, then switch tab
+            const treeTab = document.getElementById('aat-tree-tab');
+            const bsTab = bootstrap.Tab.getOrCreateInstance(treeTab);
+
+            function doReveal() {
+                if (!path) {
+                    // No path info — just scroll to the node if it's already visible
+                    scrollToTreeNode(aatId);
+                    return;
+                }
+                const ids = path.split('.').filter(Boolean);
+                expandPathSequentially(ids, 0, function () {
+                    scrollToTreeNode(aatId);
+                });
+            }
+
+            if (!modalTreeLoaded) {
+                // Tree not loaded yet — listen for tab shown, it will trigger load
+                treeTab.addEventListener('shown.bs.tab', function onRevealReady() {
+                    treeTab.removeEventListener('shown.bs.tab', onRevealReady);
+                    // Wait a tick for the tree to finish rendering
+                    setTimeout(doReveal, 200);
+                });
+                bsTab.show();
+            } else {
+                bsTab.show();
+                // Small delay so the tab pane is visible before scrolling
+                setTimeout(doReveal, 50);
+            }
+        }
+
+        /**
+         * Expand tree nodes along a path of ancestor AAT IDs, one at a time.
+         */
+        function expandPathSequentially(ids, index, callback) {
+            if (index >= ids.length) {
+                callback();
+                return;
+            }
+            const currentId = ids[index];
+            const treeEl = document.getElementById('modal-aat-type-tree');
+            const li = treeEl.querySelector(`li.tt-node[data-aat-id="${currentId}"]`);
+
+            if (!li) {
+                // Node not in the tree yet — skip and try next
+                expandPathSequentially(ids, index + 1, callback);
+                return;
+            }
+
+            const childUl = li.querySelector(':scope > .tt-children');
+            if (!childUl) {
+                // Leaf node or no children container — continue
+                expandPathSequentially(ids, index + 1, callback);
+                return;
+            }
+
+            // Already expanded
+            if (childUl.style.display !== 'none' && li.dataset.loaded === 'true') {
+                expandPathSequentially(ids, index + 1, callback);
+                return;
+            }
+
+            // Need to expand — use expandTreeNode and observe for children to appear
+            if (li.dataset.loaded === 'false') {
+                // Watch for children being loaded
+                const observer = new MutationObserver(function (mutations, obs) {
+                    if (li.dataset.loaded === 'true') {
+                        obs.disconnect();
+                        expandPathSequentially(ids, index + 1, callback);
+                    }
+                });
+                observer.observe(li, {attributes: true, attributeFilter: ['data-loaded']});
+                expandTreeNode(li);
+            } else {
+                // Already loaded, just show
+                childUl.style.display = '';
+                const icon = li.querySelector(':scope > .tt-toggle > i');
+                if (icon) { icon.classList.remove('fa-caret-right'); icon.classList.add('fa-caret-down'); }
+                expandPathSequentially(ids, index + 1, callback);
+            }
+        }
+
+        /**
+         * Scroll the tree container to the node with the given aatId and
+         * highlight it as selected.
+         */
+        function scrollToTreeNode(aatId) {
+            const treeEl = document.getElementById('modal-aat-type-tree');
+            const target = treeEl.querySelector(`li.tt-node[data-aat-id="${aatId}"]`);
+            if (!target) return;
+
+            // Highlight it
+            treeEl.querySelectorAll('.tt-node-selected').forEach(el => el.classList.remove('tt-node-selected'));
+            target.classList.add('tt-node-selected');
+
+            // Update selection info
+            const label = target.querySelector(':scope > .tt-label');
+            if (label) {
+                const term = label.textContent;
+                state.selectedAatId = parseInt(aatId, 10);
+                state.selectedAatTerm = term;
+                document.getElementById('aat-select-btn').disabled = false;
+                const infoEl = document.getElementById('tree-selection-info');
+                infoEl.classList.remove('d-none');
+                document.getElementById('tree-selected-term').textContent = term;
+                document.getElementById('tree-selected-id').textContent = ` (aat:${aatId})`;
+            }
+
+            // Scroll into view
+            const container = document.getElementById('modal-type-tree-container');
+            target.scrollIntoView({behavior: 'smooth', block: 'center'});
         }
     }
 

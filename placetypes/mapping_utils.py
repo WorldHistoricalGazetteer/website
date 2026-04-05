@@ -6,17 +6,18 @@ All mapping data is read from and written to the ES `types` index
 via `settings.ES_CONN`.  Source type inventories come from static
 JSON/TXT data files in placetypes/data/.
 
-Key design: get_current_mappings() is cached in memory for 60 s so
-that multiple AJAX calls on the same page load don't each wait for ES.
+Key design: get_current_mappings() is cached via Django's cache
+framework (shared across workers) for 60 s so that multiple AJAX
+calls on the same page load don't each wait for ES.
 """
 
 import json
 import logging
-import threading
 import time as _time
 from pathlib import Path
 
 from django.conf import settings
+from django.core.cache import cache as django_cache
 
 logger = logging.getLogger(__name__)
 
@@ -35,37 +36,31 @@ GN_FCLASSES = {"A", "H", "L", "P", "R", "S", "T", "U", "V"}
 
 
 # ---------------------------------------------------------------------------
-# Thread-safe in-memory cache for current mappings
+# Mappings cache (Django cache framework — shared across workers)
 # ---------------------------------------------------------------------------
-_mappings_cache = {
-    "data": None,       # (gn_map, wd_map, osm_map, ohm_map) or None
-    "expires": 0,       # epoch timestamp
-    "lock": threading.Lock(),
-}
+_MAPPINGS_CACHE_KEY = "placetypes:current_mappings"
 _MAPPINGS_TTL = 60  # seconds
 
 
 def _invalidate_mappings_cache():
     """Force the next get_current_mappings() call to re-query ES."""
-    with _mappings_cache["lock"]:
-        _mappings_cache["data"] = None
-        _mappings_cache["expires"] = 0
+    django_cache.delete(_MAPPINGS_CACHE_KEY)
 
 
 def get_current_mappings():
     """
     Query the ES `types` index for all documents with cross-vocabulary
-    mapping fields populated.  Results are cached for 60 s.
+    mapping fields populated.  Results are cached for 60 s via Django's
+    cache framework (shared across all workers).
 
     Returns (gn_map, wd_map, osm_map, ohm_map) — four dicts mapping
     source IDs to {"aat_id": int, "aat_term": str}.
     """
-    now = _time.time()
-    with _mappings_cache["lock"]:
-        if _mappings_cache["data"] is not None and now < _mappings_cache["expires"]:
-            return _mappings_cache["data"]
+    cached = django_cache.get(_MAPPINGS_CACHE_KEY)
+    if cached is not None:
+        return cached
 
-    # Query ES (outside the lock to avoid blocking other threads)
+    # Query ES
     gn_map, wd_map, osm_map, ohm_map = {}, {}, {}, {}
     try:
         es = settings.ES_CONN
@@ -103,9 +98,7 @@ def get_current_mappings():
         logger.warning("get_current_mappings ES error (returning empty): %s", e)
 
     result = (gn_map, wd_map, osm_map, ohm_map)
-    with _mappings_cache["lock"]:
-        _mappings_cache["data"] = result
-        _mappings_cache["expires"] = _time.time() + _MAPPINGS_TTL
+    django_cache.set(_MAPPINGS_CACHE_KEY, result, _MAPPINGS_TTL)
     return result
 
 
@@ -540,12 +533,14 @@ def save_mapping(source_vocab, source_id, aat_id):
                         """,
                         "params": {"val": source_id},
                     },
+                    refresh=True,
                     request_timeout=8,
                 )
     except Exception as e:
         logger.warning("Error removing old mapping for %s: %s", source_id, e)
 
-    # 2. Add to target AAT concept
+    # 2. Add to target AAT concept (refresh=True so the change is
+    #    immediately visible to subsequent search queries)
     es.update(
         index="types",
         id=f"aat:{aat_id}",
@@ -558,6 +553,7 @@ def save_mapping(source_vocab, source_id, aat_id):
             """,
             "params": {"val": source_id},
         },
+        refresh=True,
         request_timeout=8,
     )
 
@@ -591,6 +587,7 @@ def remove_mapping(source_vocab, source_id, aat_id):
             """,
             "params": {"val": source_id},
         },
+        refresh=True,
         request_timeout=8,
     )
     _invalidate_mappings_cache()
@@ -641,6 +638,13 @@ def copy_osm_to_ohm():
             skipped += 1
 
     _invalidate_mappings_cache()
+
+    # Flush so all updates are immediately searchable
+    try:
+        es.indices.refresh(index="types")
+    except Exception as e:
+        logger.warning("Index refresh after copy_osm_to_ohm failed: %s", e)
+
     return {"status": "ok", "copied": copied, "skipped": skipped}
 
 

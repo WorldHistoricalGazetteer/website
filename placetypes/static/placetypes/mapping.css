@@ -78,6 +78,18 @@
     margin-left: 4px;
 }
 
+/* "Show in tree" button within search results */
+.aat-result .btn-show-in-tree {
+    font-size: 0.72em;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.aat-result:hover .btn-show-in-tree,
+.aat-result .btn-show-in-tree:focus {
+    opacity: 1;
+}
+
 /* Sticky table headers within scrollable container */
 .mapping-table thead.sticky-top th {
     position: sticky;
