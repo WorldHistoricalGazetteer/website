@@ -209,7 +209,8 @@
       {
         "value": "roman_road",
         "count": 48,
-        "fraction": 0.0096
+        "fraction": 0.0096,
+        "description": "A road that was built at the time of Roman Empire."
       },
       {
         "value": "church",
@@ -834,7 +835,8 @@
       {
         "value": "rocks",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "natural=rock describes a notable rock feature or small group of rocks, attached to the underlying bedrock, mostly used on a single node element."
       },
       {
         "value": "wood",
@@ -851,7 +853,8 @@
       {
         "value": "drainage_divide",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "This page collects all information about watershed relations."
       },
       {
         "value": "stone",
@@ -908,7 +911,8 @@
       {
         "value": "cave",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Map the approximate extents of caves and objects inside them similar to Proposed features/man_made=tunnel."
       },
       {
         "value": "mountain_range",
@@ -919,7 +923,8 @@
       {
         "value": "mesa",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "natural=mesa is used to map a mesa: an flat-topped landform that is elevated above the surrounding terrain and surrounded by cliffs."
       },
       {
         "value": "storks_nest",
@@ -1203,7 +1208,8 @@
       {
         "value": "pub",
         "count": 119,
-        "fraction": 0.0238
+        "fraction": 0.0238,
+        "description": "A pub or public house is an establishment that sells alcoholic drinks that can be consumed on, or off, the premises."
       },
       {
         "value": "bank",
@@ -1316,7 +1322,8 @@
       {
         "value": "bar",
         "count": 20,
-        "fraction": 0.004
+        "fraction": 0.004,
+        "description": "The tag amenity=bar is used to map a bar: a purpose-built commercial establishment that sells alcoholic drinks to be consumed on the premises."
       },
       {
         "value": "college",
@@ -2356,7 +2363,8 @@
       {
         "value": "measurement_station",
         "count": 10,
-        "fraction": 0.002
+        "fraction": 0.002,
+        "description": "There is a large variety of monitoring stations."
       },
       {
         "value": "mast",
@@ -2423,7 +2431,8 @@
       {
         "value": "jetty",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "This tag is considered deprecated and is not rendered on the main map views."
       },
       {
         "value": "gasometer",
@@ -2927,7 +2936,8 @@
       {
         "value": "conservation",
         "count": 34,
-        "fraction": 0.0068
+        "fraction": 0.0068,
+        "description": "Status and meaning is not clear"
       },
       {
         "value": "retail",
@@ -3168,7 +3178,8 @@
       {
         "value": "site",
         "count": 109,
-        "fraction": 0.0218
+        "fraction": 0.0218,
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "service_station",
@@ -3238,7 +3249,8 @@
       {
         "value": "proposed",
         "count": 1,
-        "fraction": 0.0002
+        "fraction": 0.0002,
+        "description": "Major road and rail planning schemes typically take years until actual construction begins."
       }
     ]
   },
@@ -3458,7 +3470,8 @@
       {
         "value": "no",
         "count": 5,
-        "fraction": 0.001
+        "fraction": 0.001,
+        "description": "This tag combination is sometimes used to tag inexisting buildings."
       },
       {
         "value": "shed",
@@ -4301,7 +4314,8 @@
       {
         "value": "hobby",
         "count": 4,
-        "fraction": 0.0008
+        "fraction": 0.0008,
+        "description": "Many things are hobbies:"
       },
       {
         "value": "curtain",
@@ -4347,7 +4361,8 @@
       {
         "value": "catalogue",
         "count": 3,
-        "fraction": 0.0006
+        "fraction": 0.0006,
+        "description": "This shop type is distinguished by (1) having wide variety of goods not fitting any specific shop category, likely with focus on durable ones that can be stored and wait for a client (2) client…"
       },
       {
         "value": "massage",
@@ -5135,7 +5150,8 @@
       {
         "value": "yes",
         "count": 4815,
-        "fraction": 0.963
+        "fraction": 0.963,
+        "description": "The key bridge=* is a property to describe that a way is on a bridge."
       },
       {
         "value": "viaduct",
@@ -5211,7 +5227,8 @@
       {
         "value": "yes",
         "count": 4425,
-        "fraction": 0.885
+        "fraction": 0.885,
+        "description": "tunnel=* is used for roads, railway line, canals, etc."
       },
       {
         "value": "culvert",
@@ -5583,7 +5600,8 @@
       {
         "value": "volcanic_geyser",
         "count": 5,
-        "fraction": 0.4166666666666667
+        "fraction": 0.4166666666666667,
+        "description": "Originally proposed by MikeCollinson here: Talk:Tag:natural=lava#New proposal"
       },
       {
         "value": "outcrop",

@@ -137,7 +137,7 @@
         "count": 4311,
         "fraction": 0.0005,
         "in_wiki": true,
-        "description": null
+        "description": "place=civil_parish is proposed as a way to tag a central node for an administrative division below municipality level."
       },
       {
         "value": "district",
@@ -284,7 +284,7 @@
         "count": 77,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "An Atoll is a coral reef including a coral rim with cays (waterless sandy islets) that encircles a lagoon ; it is vestige of an ancient volcanic island."
       },
       {
         "value": "abandoned:isolated_dwelling",
@@ -627,7 +627,7 @@
         "count": 8,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "The content of this proposal has been marked as archived to avoid confusion with the current version of the documentation."
       },
       {
         "value": "dispersed_settlement",
@@ -781,7 +781,7 @@
         "count": 6,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "The location of an abandoned mountain pasture or summer mountain farm."
       },
       {
         "value": "historic_urban_district",
@@ -851,7 +851,7 @@
         "count": 4,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Used to indicate that a particular location is known by a particular name, to indicate what sort of \"place\" it is."
       },
       {
         "value": "pole",
@@ -1068,7 +1068,7 @@
         "count": 3,
         "fraction": 0.0,
         "in_wiki": false,
-        "description": ""
+        "description": "Use the tag place=city_block to identify city (or urban) blocks, possibly with a corresponding name=* or ref=*."
       },
       {
         "value": "yard",
@@ -1903,7 +1903,7 @@
         "count": 536,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Mapping of the edge of river terraces."
       },
       {
         "value": "anthill",
@@ -1966,7 +1966,7 @@
         "count": 290,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Map the approximate extents of caves and objects inside them similar to Proposed features/man_made=tunnel."
       },
       {
         "value": "divide",
@@ -2176,7 +2176,7 @@
         "count": 143,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "natural=rock describes a notable rock feature or small group of rocks, attached to the underlying bedrock, mostly used on a single node element."
       },
       {
         "value": "garden",
@@ -2365,7 +2365,7 @@
         "count": 75,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "natural=mesa is used to map a mesa: an flat-topped landform that is elevated above the surrounding terrain and surrounded by cliffs."
       },
       {
         "value": "blowhole",
@@ -2512,7 +2512,7 @@
         "count": 44,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page collects all information about watershed relations."
       },
       {
         "value": "wadi",
@@ -3081,7 +3081,7 @@
         "count": 216,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Use waterway=ditch for simple narrow artificial waterways, mapped as way, used to drain nearby land, to remove storm-water or similar."
       },
       {
         "value": "natural",
@@ -3571,7 +3571,7 @@
         "count": 12,
         "fraction": 0.0,
         "in_wiki": false,
-        "description": ""
+        "description": "The tag water=reflecting pool is used with natural=water to map a reflecting pool: a water feature found in gardens, squares, and at memorial sites, which consists of a shallow pool of water,…"
       },
       {
         "value": "sand_extraction",
@@ -4462,7 +4462,7 @@
         "count": 1031,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Check dams are sufficiently different from dams and weirs in form and function to warrant their own tag."
       },
       {
         "value": "riverbank",
@@ -4560,7 +4560,7 @@
         "count": 281,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This key is mostly used together with the tags building=construction, highway=construction, landuse=construction or railway=construction to describe the type of the feature which is currently under…"
       },
       {
         "value": "pumping_station",
@@ -4588,7 +4588,7 @@
         "count": 159,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag is proposed to describe the area of the riverbed together with other optional tags defining the Landcover."
       },
       {
         "value": "man_hole",
@@ -4672,7 +4672,7 @@
         "count": 99,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "A center node or a closed way representing an offshore oil or gas field."
       },
       {
         "value": "source",
@@ -4791,7 +4791,7 @@
         "count": 45,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Used instead of route=ferry on ways but primarily without tags."
       },
       {
         "value": "waste_disposal",
@@ -5864,7 +5864,7 @@
         "count": 4139,
         "fraction": 0.0019,
         "in_wiki": true,
-        "description": null
+        "description": "A road that was built at the time of Roman Empire."
       },
       {
         "value": "tower",
@@ -7322,7 +7322,7 @@
         "count": 4995,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "Status and meaning is not clear"
       },
       {
         "value": "traffic_island",
@@ -7434,14 +7434,14 @@
         "count": 1031,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag was marked as abandonned in the proposal, but it is more and more used, and has some synonyms."
       },
       {
         "value": "school",
         "count": 1001,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "It was used to map school grounds; it has been replaced by landuse=education."
       },
       {
         "value": "mine",
@@ -7525,7 +7525,7 @@
         "count": 529,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This is a proposal for the tag landuse=wasteland, which is an area of land with no current or planned future use, and is not maintained or with public access."
       },
       {
         "value": "livestock",
@@ -7581,7 +7581,7 @@
         "count": 359,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "allotments=plot will be a sub-tag of landuse=allotments."
       },
       {
         "value": "garden",
@@ -7728,7 +7728,7 @@
         "count": 193,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Used to tag an area of grassland used for grazing."
       },
       {
         "value": "grassland",
@@ -7756,7 +7756,7 @@
         "count": 163,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page summarizes the tags describing winter sport Error creating thumbnail: pistes in the broad sense, from downhill skiing through cross-country skiing to sleds – and the related infrastructure…"
       },
       {
         "value": "abandoned",
@@ -7791,7 +7791,7 @@
         "count": 149,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag is used for a cemetery that isn't part of a place of worship."
       },
       {
         "value": "special_use",
@@ -7805,7 +7805,7 @@
         "count": 143,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag is in proposal/RFC state, no definitive definition of the tag is found yet."
       },
       {
         "value": "urban_green",
@@ -7994,7 +7994,7 @@
         "count": 61,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "The tag landuse=research has been used to tag an area used for research."
       },
       {
         "value": "schoolyard",
@@ -8414,7 +8414,7 @@
         "count": 29,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This is an undocumented and less used equivalent to industrial=communication."
       },
       {
         "value": "greenland",
@@ -8626,7 +8626,7 @@
         "count": 238637,
         "fraction": 0.0072,
         "in_wiki": true,
-        "description": null
+        "description": "The tag amenity=bar is used to map a bar: a purpose-built commercial establishment that sells alcoholic drinks to be consumed on the premises."
       },
       {
         "value": "atm",
@@ -8675,7 +8675,7 @@
         "count": 197390,
         "fraction": 0.006,
         "in_wiki": true,
-        "description": null
+        "description": "A pub or public house is an establishment that sells alcoholic drinks that can be consumed on, or off, the premises."
       },
       {
         "value": "fountain",
@@ -9662,7 +9662,7 @@
         "count": 870,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag has been used to tag trash cans (waste baskets) that have two separate chambers so that recyclable waste can be collected separately (see photo)."
       },
       {
         "value": "library_dropoff",
@@ -9683,7 +9683,7 @@
         "count": 762,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Used to tag shops or other features that provide ski rental."
       },
       {
         "value": "social_club",
@@ -10063,7 +10063,7 @@
         "count": 462,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "\"A lean-to is a shed with typically three walls located in the countryside intended to provide shelter.\""
       },
       {
         "value": "resort",
@@ -10077,7 +10077,7 @@
         "count": 423,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This tag indicates a checkpoint where tourists can"
       },
       {
         "value": "giant_furniture",
@@ -10343,7 +10343,7 @@
         "count": 20,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "An office (usually operated by a private company) where tourists can go to book holiday houses (chalets), collect keys etc."
       },
       {
         "value": "farm",
@@ -11759,7 +11759,7 @@
         "count": 176,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "An area filled with footways that are separated by walls, hedges, corn plants, or other barriers."
       },
       {
         "value": "construction",
@@ -11801,7 +11801,7 @@
         "count": 118,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "New tag for multi-use paths that are not cycleways."
       },
       {
         "value": "picnic_platform",
@@ -11899,7 +11899,7 @@
         "count": 65,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "A water slide (also referred to as a flume, or water chute) is a type of slide designed for warm-weather or indoor recreational use."
       },
       {
         "value": "music_venue",
@@ -11990,7 +11990,7 @@
         "count": 49,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "A picnic site is a place suitable for eating outdoors and may have additional facilities to have a picnic: toilets, water tap, BBQ, benches, table with benches and covered pavilions for bad weather."
       },
       {
         "value": "offroad_driving",
@@ -12466,7 +12466,7 @@
         "count": 16,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "An area of concentrated prostitution and adult services."
       },
       {
         "value": "plaza",
@@ -13434,7 +13434,7 @@
         "count": 1919,
         "fraction": 0.0002,
         "in_wiki": true,
-        "description": null
+        "description": "man_made=pumping_rig was deprecated by Deprecating proposal and proposed to be replaced it with man_made=petroleum_well or man_made=water_well and pump_mechanism=* (mainly with rotating driver and…"
       },
       {
         "value": "chiller",
@@ -13518,7 +13518,7 @@
         "count": 1281,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "Use of this tag is discouraged: The tag man_made=petroleum_well is much more frequently used for both oil and gas wells."
       },
       {
         "value": "guard_stone",
@@ -13693,7 +13693,7 @@
         "count": 873,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "Marine navigation explains how to map the many natural and man-made features associated with the safe movement of ships and boats on the sea."
       },
       {
         "value": "slurry_basin",
@@ -13882,7 +13882,7 @@
         "count": 480,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "Currently tombstones are marked as tomb=tombstone, which is incorrect, because they are not a kind of tomb."
       },
       {
         "value": "oil_tank",
@@ -13910,7 +13910,7 @@
         "count": 434,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "Often a pipe or a hole used to exchange air between different locations, for example from a sewage tank or an underground parking lot."
       },
       {
         "value": "chinese_fishing_net",
@@ -14164,7 +14164,7 @@
         "count": 12820,
         "fraction": 0.005,
         "in_wiki": true,
-        "description": null
+        "description": "Health boundaries appear to be different from administrative boundaries in a significant number of countries."
       },
       {
         "value": "religious_administration",
@@ -14507,7 +14507,7 @@
         "count": 222,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "Vice counties in Britain and Ireland are subdivisions of Great Britain and Ireland used largely for the purposes of biological recording and other scientific data-gathering."
       },
       {
         "value": "rc_parish",
@@ -15713,7 +15713,7 @@
         "count": 103,
         "fraction": 0.0005,
         "in_wiki": true,
-        "description": null
+        "description": "Consider using historic=bomb_crater instead which is more widely used and not missing space between words."
       },
       {
         "value": "range_marker",
@@ -16028,7 +16028,7 @@
         "count": 7,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag represents storage facilities for military Error creating thumbnail: Missiles, see taginfo."
       },
       {
         "value": "radar_dome",
@@ -17066,7 +17066,7 @@
         "count": 752,
         "fraction": 0.0007,
         "in_wiki": true,
-        "description": null
+        "description": "Ground markings are a prominent feature on most aerodromes."
       },
       {
         "value": "aircraft_crossing",
@@ -17164,7 +17164,7 @@
         "count": 70,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "A facility responsible for controlling aircraft en route in a particular volume of airspace (a Flight Information Region) at high altitudes between airport approaches and departures."
       },
       {
         "value": "check-in",
@@ -17514,7 +17514,7 @@
         "count": 6,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "A section of a aeroway=runway tagged with runway=displaced_threshold marks the area behind a displaced threshold, which is the part of runway that may be used for taxiing, take-off, and landing…"
       },
       {
         "value": "displace_treshold",
@@ -18496,7 +18496,7 @@
         "count": 22043,
         "fraction": 0.0027,
         "in_wiki": true,
-        "description": null
+        "description": "Major road and rail planning schemes typically take years until actual construction begins."
       },
       {
         "value": "facility",
@@ -18566,14 +18566,14 @@
         "count": 4293,
         "fraction": 0.0005,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "radio",
         "count": 4195,
         "fraction": 0.0005,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "turntable",
@@ -18594,7 +18594,7 @@
         "count": 3386,
         "fraction": 0.0004,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "spur_junction",
@@ -18608,7 +18608,7 @@
         "count": 2961,
         "fraction": 0.0004,
         "in_wiki": true,
-        "description": null
+        "description": "The tags railway=razed, railway=dismantled and railway=historic are used to tag a former railway, where mostly all evidence of the line has been removed."
       },
       {
         "value": "funicular",
@@ -18650,7 +18650,7 @@
         "count": 1714,
         "fraction": 0.0002,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "owner_change",
@@ -18671,7 +18671,7 @@
         "count": 1571,
         "fraction": 0.0002,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "platform_marker",
@@ -18685,14 +18685,14 @@
         "count": 1436,
         "fraction": 0.0002,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "loading_ramp",
         "count": 1244,
         "fraction": 0.0002,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "hirail_access",
@@ -18706,7 +18706,7 @@
         "count": 746,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "traverser",
@@ -18755,7 +18755,7 @@
         "count": 605,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "wash",
@@ -18769,7 +18769,7 @@
         "count": 547,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "border",
@@ -18783,14 +18783,14 @@
         "count": 435,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "track_scale",
         "count": 421,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "station_crossing",
@@ -18811,7 +18811,7 @@
         "count": 316,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "interlocking",
@@ -18874,7 +18874,7 @@
         "count": 204,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "demolished",
@@ -18888,7 +18888,7 @@
         "count": 191,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "The tag railway=historic may refer to:"
       },
       {
         "value": "car_shuttle",
@@ -18902,14 +18902,14 @@
         "count": 184,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "blockpost",
         "count": 182,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "disused_station",
@@ -18972,7 +18972,7 @@
         "count": 135,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "unloading_hole",
@@ -18993,7 +18993,7 @@
         "count": 115,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "museum",
@@ -19007,7 +19007,7 @@
         "count": 101,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "no",
@@ -19028,7 +19028,7 @@
         "count": 78,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "level_crossing;crossing",
@@ -19049,7 +19049,7 @@
         "count": 67,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "watchmans_house",
@@ -19091,14 +19091,14 @@
         "count": 53,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "waste_disposal",
         "count": 47,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "emergency_exit",
@@ -19217,7 +19217,7 @@
         "count": 29,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "loading_dock",
@@ -19350,7 +19350,7 @@
         "count": 17,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "request_stop",
@@ -19434,7 +19434,7 @@
         "count": 15,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This page describes OpenRailwayMap tagging scheme."
       },
       {
         "value": "stop_position",
@@ -20045,7 +20045,7 @@
         "count": 7,
         "fraction": 0.0005,
         "in_wiki": false,
-        "description": ""
+        "description": "A columnar jointing Columnar jointing is regular rocks looking like hexagonal columns."
       },
       {
         "value": "glacial_lake",
@@ -20129,7 +20129,7 @@
         "count": 2,
         "fraction": 0.0001,
         "in_wiki": false,
-        "description": ""
+        "description": "A volcano crater rim is a large cauldron-like hollow that forms shortly after the emptying of a magma chamber in a volcanic eruption."
       },
       {
         "value": "monocline",
@@ -20171,7 +20171,7 @@
         "count": 2,
         "fraction": 0.0001,
         "in_wiki": true,
-        "description": null
+        "description": "A lava tube is a natural conduit formed by flowing lava from a volcanic vent that moves beneath the hardened surface of a lava flow."
       },
       {
         "value": "glacial_cirque",
@@ -20388,7 +20388,7 @@
         "count": 1,
         "fraction": 0.0001,
         "in_wiki": false,
-        "description": ""
+        "description": "A lava flow is an outpouring of molten or partially molten rock during an effusive volcanic eruption."
       },
       {
         "value": "cave",
@@ -20943,7 +20943,7 @@
         "count": 101,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This proposal is designed to set up a good tagging model and best practices to allow routing on power grids mapped on OSM."
       },
       {
         "value": "meter",
@@ -22499,7 +22499,7 @@
         "count": 12232,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag combination is sometimes used to tag inexisting buildings."
       },
       {
         "value": "stadium",
@@ -22758,7 +22758,7 @@
         "count": 3501,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "This tag combination is sometimes used to tag inexisting, only proposed buildings."
       },
       {
         "value": "government_office",
@@ -22884,7 +22884,7 @@
         "count": 2107,
         "fraction": 0.0,
         "in_wiki": true,
-        "description": null
+        "description": "There is no value whatsoever in using building=other instead of building=yes."
       },
       {
         "value": "community_group_office",

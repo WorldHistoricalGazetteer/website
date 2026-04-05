@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Fetch missing tag descriptions from the taginfo API and write them
-back into osm.json and ohm.json.
+Fetch missing tag descriptions for osm.json and ohm.json using two sources:
 
-The taginfo API endpoint ``/api/4/tag/wiki_pages`` returns pre-extracted
-descriptions from the OSM wiki for each ``key=value`` tag, keyed by
-language.  We pick the ``lang=="en"`` entry.
+1. **taginfo API** — ``/api/4/tag/wiki_pages`` returns pre-extracted
+   descriptions from the OSM wiki ``ValueDescription`` infobox template.
+   Fast and clean, but many tags have an empty ``description`` field.
 
-This is more reliable (and faster) than scraping the wiki directly,
-because taginfo has already parsed the ValueDescription infobox and
-returns a clean plaintext description.
+2. **OSM wiki parsed HTML** — ``action=parse&prop=text`` renders the full
+   wiki page.  The first ``<p>`` paragraph usually contains a usable
+   description.  Used as a fallback when taginfo returns nothing.
 
 Usage:
     cd placetypes/data
@@ -17,11 +16,12 @@ Usage:
     python fetch_taginfo_descriptions.py --dry-run   # show what would be fetched
     python fetch_taginfo_descriptions.py --file osm  # osm only
 
-Rate-limited to ~5 req/s to be polite to the taginfo server.
+Rate-limited to ~5 req/s to be polite to the servers.
 """
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -30,17 +30,46 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError
 
 TAGINFO_API = "https://taginfo.openstreetmap.org/api/4"
+WIKI_API = "https://wiki.openstreetmap.org/w/api.php"
 USER_AGENT = "WHG/3.5 type-mapping-dashboard (https://whgazetteer.org)"
 RATE_LIMIT = 0.2  # seconds between requests
 
+# ── HTML / wikitext cleanup ──────────────────────────────────────────
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+MULTI_SPACE_RE = re.compile(r"\s+")
+
+
+def _strip_html(html: str) -> str:
+    """Strip HTML tags, entities, and normalise whitespace."""
+    text = HTML_TAG_RE.sub("", html)
+    # Common HTML entities
+    text = text.replace("&nbsp;", " ").replace("&amp;", "&")
+    text = text.replace("&lt;", "<").replace("&gt;", ">")
+    text = text.replace("&quot;", '"').replace("&#39;", "'")
+    text = MULTI_SPACE_RE.sub(" ", text).strip()
+    return text
+
+
+def _truncate_sentence(text: str, max_len: int = 200) -> str:
+    """Truncate to the first sentence or max_len characters."""
+    for end in (".  ", ". ", ".\n"):
+        pos = text.find(end)
+        if 0 < pos < max_len:
+            return text[: pos + 1].strip()
+    if len(text) > max_len:
+        cut = text.rfind(" ", 0, max_len)
+        if cut > 40:
+            return text[:cut].strip() + "…"
+        return text[:max_len].strip() + "…"
+    return text.strip()
+
+
+# ── Source 1: taginfo API ────────────────────────────────────────────
 
 def fetch_taginfo_description(key: str, value: str) -> str | None:
     """
     Fetch the English description for ``key=value`` from the taginfo
     wiki_pages endpoint.
-
-    Returns the description string, or None if no English wiki page
-    exists.
     """
     url = (
         f"{TAGINFO_API}/tag/wiki_pages"
@@ -52,7 +81,7 @@ def fetch_taginfo_description(key: str, value: str) -> str | None:
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read())
     except (URLError, json.JSONDecodeError, OSError) as e:
-        print(f"  ⚠ HTTP error for {key}={value}: {e}", file=sys.stderr)
+        print(f"  ⚠ taginfo error for {key}={value}: {e}", file=sys.stderr)
         return None
 
     for item in data.get("data", []):
@@ -63,11 +92,65 @@ def fetch_taginfo_description(key: str, value: str) -> str | None:
     return None
 
 
+# ── Source 2: OSM wiki parsed HTML ───────────────────────────────────
+
+def fetch_wiki_html_description(key: str, value: str) -> str | None:
+    """
+    Fetch the rendered HTML of the wiki page ``Tag:<key>=<value>`` and
+    extract the first meaningful ``<p>`` paragraph as a description.
+    """
+    page = f"Tag:{key}={value}"
+    url = (
+        f"{WIKI_API}?action=parse"
+        f"&page={quote(page, safe='')}"
+        f"&prop=text&format=json"
+        f"&redirects=1"
+    )
+    req = Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except (URLError, json.JSONDecodeError, OSError) as e:
+        return None
+
+    if "error" in data:
+        return None
+
+    html = data.get("parse", {}).get("text", {}).get("*", "")
+    if not html:
+        return None
+
+    for m in re.finditer(r"<p>(.*?)</p>", html, re.DOTALL):
+        text = _strip_html(m.group(1))
+        if len(text) < 20:
+            continue
+        if text.lower().startswith(("see also", "this article", "redirect")):
+            continue
+        return _truncate_sentence(text)
+
+    return None
+
+
+# ── Combined fetcher ─────────────────────────────────────────────────
+
+def fetch_description(key: str, value: str) -> str | None:
+    """
+    Try taginfo first; fall back to wiki HTML parsing.
+    """
+    desc = fetch_taginfo_description(key, value)
+    if desc:
+        return desc
+
+    time.sleep(RATE_LIMIT)
+
+    desc = fetch_wiki_html_description(key, value)
+    return desc
+
+
+# ── Helpers ──────────────────────────────────────────────────────────
+
 def collect_missing(data: dict) -> list[tuple[str, int]]:
-    """
-    Return a list of (tag_key, value_index) for entries missing a
-    description in an osm/ohm JSON structure.
-    """
+    """Return (tag_key, value_index) for entries missing a description."""
     missing = []
     for tag_key, tag_data in data.items():
         if not isinstance(tag_data, dict):
@@ -78,9 +161,11 @@ def collect_missing(data: dict) -> list[tuple[str, int]]:
     return missing
 
 
+# ── Main ─────────────────────────────────────────────────────────────
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Fetch missing tag descriptions from the taginfo API."
+        description="Fetch missing tag descriptions from taginfo + OSM wiki."
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -140,12 +225,11 @@ def main():
             entry = data[tag_key]["values"][idx]
             value = entry["value"]
 
-            # Skip values that are clearly not real tag values
             if len(value) > 60:
                 not_found += 1
                 continue
 
-            desc = fetch_taginfo_description(tag_key, value)
+            desc = fetch_description(tag_key, value)
             total_fetched += 1
 
             if desc:
@@ -158,7 +242,6 @@ def main():
                 not_found += 1
                 total_missing += 1
 
-            # Progress
             if (i + 1) % 100 == 0:
                 print(f"  ... processed {i+1}/{min(limit, len(missing))} "
                       f"(found {found}, not found {not_found})")
@@ -169,7 +252,6 @@ def main():
         print(f"    Found: {found}")
         print(f"    Not found: {not_found}")
 
-        # Write back
         with open(fpath, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print(f"  ✓ Written to {fpath.name}")
