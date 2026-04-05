@@ -19,12 +19,10 @@ urlpatterns = [
     # Mapping API (AJAX)
     path('mapping/api/geonames/', views_mapping.api_geonames_types, name='mapping-api-geonames'),
     path('mapping/api/wikidata/', views_mapping.api_wikidata_types, name='mapping-api-wikidata'),
-    path('mapping/api/osm/', views_mapping.api_osm_types, name='mapping-api-osm'),
-    path('mapping/api/ohm/', views_mapping.api_ohm_types, name='mapping-api-ohm'),
+    path('mapping/api/osm-ohm/', views_mapping.api_osm_ohm_types, name='mapping-api-osm-ohm'),
     path('mapping/api/search/', views_mapping.api_aat_search, name='mapping-api-search'),
     path('mapping/api/save/', views_mapping.api_save_mapping, name='mapping-api-save'),
     path('mapping/api/remove/', views_mapping.api_remove_mapping, name='mapping-api-remove'),
-    path('mapping/api/copy-osm-to-ohm/', views_mapping.api_copy_osm_to_ohm, name='mapping-api-copy-osm-ohm'),
     path('mapping/api/stats/', views_mapping.api_mapping_stats, name='mapping-api-stats'),
 ]
 

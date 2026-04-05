@@ -13,13 +13,39 @@
   {# Page header #}
   <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
-      <h4 class="mb-0">Type Mapping Dashboard</h4>
+      <h4 class="mb-0">Place Type Mapping Dashboard</h4>
       <small class="text-muted">
         Map source vocabulary types to AAT concepts in the ES <code>types</code> index.
       </small>
     </div>
   </div>
 
+
+  {# Instructions panel — open by default unless previously dismissed #}
+  <div id="mapping-instructions-wrapper" class="mb-3">
+    <div class="alert alert-light border shadow-sm mb-0 position-relative" id="mapping-instructions" role="alert">
+      <button type="button" class="btn-close position-absolute top-0 end-0 m-2"
+              id="dismiss-instructions" aria-label="Close"></button>
+      <h6 class="alert-heading mb-1"><i class="fas fa-info-circle text-primary me-1"></i> How to use this dashboard</h6>
+      <ul class="mb-1 small" style="padding-left:1.2rem">
+        <li>Each tab lists place-type values from a source vocabulary (GeoNames feature codes, Wikidata Q-items, OSM/OHM tags).</li>
+        <li><strong>Count</strong> shows how many records in the WHG <code>places</code> index use that type.</li>
+        <li>Click <strong>Map</strong> on an unmapped row to search for and assign an AAT concept; click <strong>Remove</strong> to clear one.</li>
+        <li>Use the filter box and <em>Hide matched</em> toggle to focus on unmapped types.</li>
+        <li>Rows are sorted by count so the highest-impact types appear first.</li>
+      </ul>
+      <p class="mb-0 small text-muted">
+        <i class="fas fa-bullseye me-1"></i>
+        <strong>Goal:</strong> once each vocabulary reaches <strong>95&nbsp;% coverage by record count</strong>,
+        the complete mapping table will be published as an open dataset on
+        <a href="https://zenodo.org" target="_blank" rel="noopener">Zenodo</a>
+        for reuse by other projects.
+      </p>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary mt-1 d-none" id="show-instructions">
+      <i class="fas fa-info-circle me-1"></i>Show instructions
+    </button>
+  </div>
 
   {# Vocabulary tabs #}
   <ul class="nav nav-tabs" id="vocabTabs" role="tablist">
@@ -38,17 +64,10 @@
       </button>
     </li>
     <li class="nav-item" role="presentation">
-      <button class="nav-link" id="osm-tab" data-bs-toggle="tab"
-              data-bs-target="#osm-pane" type="button" role="tab"
-              aria-controls="osm-pane" aria-selected="false">
-        OSM <span class="tab-stats text-muted small" id="tab-stat-osm"></span>
-      </button>
-    </li>
-    <li class="nav-item" role="presentation">
-      <button class="nav-link" id="ohm-tab" data-bs-toggle="tab"
-              data-bs-target="#ohm-pane" type="button" role="tab"
-              aria-controls="ohm-pane" aria-selected="false">
-        OHM <span class="tab-stats text-muted small" id="tab-stat-ohm"></span>
+      <button class="nav-link" id="osm-ohm-tab" data-bs-toggle="tab"
+              data-bs-target="#osm-ohm-pane" type="button" role="tab"
+              aria-controls="osm-ohm-pane" aria-selected="false">
+        OSM / OHM <span class="tab-stats text-muted small" id="tab-stat-osm_ohm"></span>
       </button>
     </li>
     <li class="nav-item ms-auto d-flex align-items-center pe-2">
@@ -116,18 +135,24 @@
       </div>
     </div>
 
-    {# ── OSM pane ── #}
-    <div class="tab-pane fade" id="osm-pane" role="tabpanel" aria-labelledby="osm-tab">
+    {# ── OSM / OHM pane (merged) ── #}
+    <div class="tab-pane fade" id="osm-ohm-pane" role="tabpanel" aria-labelledby="osm-ohm-tab">
       <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
         <input type="text" class="form-control form-control-sm" style="max-width:250px"
-               placeholder="Filter tag values…" id="osm-filter" aria-label="Filter OSM tag values">
-        <select class="form-select form-select-sm" style="max-width:180px" id="osm-tag-key-filter" aria-label="Filter by OSM tag key">
+               placeholder="Filter tag values…" id="osm-ohm-filter" aria-label="Filter OSM/OHM tag values">
+        <select class="form-select form-select-sm" style="max-width:180px" id="osm-ohm-tag-key-filter" aria-label="Filter by tag key">
           <option value="">All tag keys</option>
         </select>
-        <span class="text-muted small" id="osm-count-label"></span>
+        <select class="form-select form-select-sm" style="max-width:160px" id="osm-ohm-source-filter" aria-label="Filter by source">
+          <option value="">All sources</option>
+          <option value="osm">OSM only</option>
+          <option value="ohm">OHM only</option>
+          <option value="both">Both</option>
+        </select>
+        <span class="text-muted small" id="osm-ohm-count-label"></span>
       </div>
       <div class="table-responsive" style="max-height:600px; overflow-y:auto">
-        <table class="table table-sm table-hover mapping-table" id="osm-table">
+        <table class="table table-sm table-hover mapping-table" id="osm-ohm-table">
           <thead class="table-light sticky-top">
             <tr>
               <th class="sortable" data-col="source_id">Tag</th>
@@ -135,6 +160,7 @@
               <th class="sortable" data-col="label">Value</th>
               <th class="sortable" data-col="description" style="min-width:180px">Description</th>
               <th class="sortable" data-col="count">Count</th>
+              <th>Sources</th>
               <th class="sortable" data-col="mapping">AAT Mapping</th>
               <th>Actions</th>
             </tr>
@@ -142,45 +168,9 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="text-center py-4 d-none" id="osm-loading">
+      <div class="text-center py-4 d-none" id="osm-ohm-loading">
         <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-        <span class="text-muted ms-2">Loading OSM types…</span>
-      </div>
-    </div>
-
-    {# ── OHM pane ── #}
-    <div class="tab-pane fade" id="ohm-pane" role="tabpanel" aria-labelledby="ohm-tab">
-      <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
-        <input type="text" class="form-control form-control-sm" style="max-width:250px"
-               placeholder="Filter tag values…" id="ohm-filter" aria-label="Filter OHM tag values">
-        <select class="form-select form-select-sm" style="max-width:180px" id="ohm-tag-key-filter" aria-label="Filter by OHM tag key">
-          <option value="">All tag keys</option>
-        </select>
-        <button class="btn btn-sm btn-outline-primary" id="copy-osm-to-ohm-btn"
-                title="Copy all OSM mappings to OHM for matching tag values">
-          <i class="fas fa-copy"></i> Copy OSM → OHM
-        </button>
-        <span class="text-muted small" id="ohm-count-label"></span>
-      </div>
-      <div class="table-responsive" style="max-height:600px; overflow-y:auto">
-        <table class="table table-sm table-hover mapping-table" id="ohm-table">
-          <thead class="table-light sticky-top">
-            <tr>
-              <th class="sortable" data-col="source_id">Tag</th>
-              <th class="sortable" data-col="tag_key">Key</th>
-              <th class="sortable" data-col="label">Value</th>
-              <th class="sortable" data-col="description" style="min-width:180px">Description</th>
-              <th class="sortable" data-col="count">Count</th>
-              <th class="sortable" data-col="mapping">AAT Mapping</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="text-center py-4 d-none" id="ohm-loading">
-        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
-        <span class="text-muted ms-2">Loading OHM types…</span>
+        <span class="text-muted ms-2">Loading OSM / OHM types…</span>
       </div>
     </div>
 

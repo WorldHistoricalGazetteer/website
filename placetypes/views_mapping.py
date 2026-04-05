@@ -15,12 +15,10 @@ from django.views.decorators.http import require_GET, require_POST
 from .mapping_utils import (
     get_geonames_types,
     get_wikidata_types,
-    get_osm_types,
-    get_ohm_types,
+    get_osm_ohm_types,
     search_aat_types,
     save_mapping,
     remove_mapping,
-    copy_osm_to_ohm,
     get_mapping_stats,
 )
 from .models import TypeMappingLog
@@ -60,27 +58,14 @@ def api_wikidata_types(request):
 
 @login_required
 @require_GET
-def api_osm_types(request):
-    """Return all OSM tag values with current mappings."""
+def api_osm_ohm_types(request):
+    """Return all OSM + OHM tag values (merged) with current mappings."""
     try:
         tag_key = request.GET.get('tag_key')
-        types = get_osm_types(tag_key_filter=tag_key)
+        types = get_osm_ohm_types(tag_key_filter=tag_key)
         return JsonResponse(types, safe=False)
     except Exception as e:
-        logger.exception("Error loading OSM types")
-        return JsonResponse({"error": str(e)}, status=500)
-
-
-@login_required
-@require_GET
-def api_ohm_types(request):
-    """Return all OHM tag values with current mappings."""
-    try:
-        tag_key = request.GET.get('tag_key')
-        types = get_ohm_types(tag_key_filter=tag_key)
-        return JsonResponse(types, safe=False)
-    except Exception as e:
-        logger.exception("Error loading OHM types")
+        logger.exception("Error loading OSM/OHM types")
         return JsonResponse({"error": str(e)}, status=500)
 
 
@@ -114,7 +99,7 @@ def api_save_mapping(request):
 
     if not all([source_vocab, source_id, aat_id]):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
-    if source_vocab not in ('geonames', 'wikidata', 'osm', 'ohm'):
+    if source_vocab not in ('geonames', 'wikidata', 'osm', 'ohm', 'osm_ohm'):
         return JsonResponse({'error': 'Invalid source_vocab'}, status=400)
 
     try:
@@ -184,23 +169,5 @@ def api_mapping_stats(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-@login_required
-@require_POST
-def api_copy_osm_to_ohm(request):
-    """Copy all OSM mappings to OHM for overlapping tag values."""
-    try:
-        result = copy_osm_to_ohm()
-        TypeMappingLog.objects.create(
-            user=request.user,
-            action='copy',
-            source_vocab='ohm',
-            source_id='*',
-            note=f"Bulk copy OSM→OHM: {result.get('copied', 0)} copied, {result.get('skipped', 0)} skipped",
-        )
-        logger.info("User %s copied OSM→OHM mappings: %s", request.user, result)
-        return JsonResponse(result)
-    except Exception as e:
-        logger.exception("Error copying OSM→OHM mappings")
-        return JsonResponse({'error': str(e)}, status=500)
 
 

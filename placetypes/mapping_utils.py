@@ -182,8 +182,14 @@ def get_geonames_types():
     all_codes = set(gn_labels.keys()) | set(gn_map.keys()) | set(code_counts.keys())
     items = []
     for code in sorted(all_codes):
-        fclass = code.split(".")[0] if "." in code else ""
-        if fclass and fclass not in GN_FCLASSES:
+        if "." in code:
+            fclass = code.split(".")[0]
+            if fclass not in GN_FCLASSES:
+                continue
+        elif code in GN_FCLASSES:
+            # Standalone fclass code (A, H, L, P, R, S, T, U, V)
+            fclass = code
+        else:
             continue
         info = gn_labels.get(code, {})
         items.append({
@@ -434,6 +440,105 @@ def get_ohm_types(tag_key_filter=None):
     return _build_tag_items(data, ohm_map, tag_key_filter)
 
 
+def get_osm_ohm_types(tag_key_filter=None):
+    """
+    Return a merged list of OSM + OHM tag values.
+
+    Tags that appear in both vocabularies are unified into a single row.
+    Descriptions are taken from OSM (which has wiki-sourced descriptions)
+    when the OHM entry lacks one.  For OHM-only tags whose *value*
+    appears in OSM under a different key, the OSM description for that
+    value is used as a fallback (OHM reuses the OSM tagging scheme).
+
+    A ``sources`` list on each item indicates whether the tag comes from
+    OSM, OHM, or both.  Mappings are resolved from *either* ``osm_tags``
+    or ``ohm_tags`` on the AAT document (they are kept in sync by
+    dual-write in save_mapping).
+    """
+    osm_data = _load_osm_data()
+    ohm_data = _load_ohm_data()
+    _, _, osm_map, ohm_map = get_current_mappings()
+
+    # Build a cross-key description lookup: value → first non-empty
+    # description found in any OSM key.  This lets OHM-only tags like
+    # "shop=bakery" pick up the description from "amenity=bakery" etc.
+    _osm_desc_by_value = {}
+    for tag_key, tag_data in osm_data.items():
+        if not isinstance(tag_data, dict):
+            continue
+        for entry in tag_data.get("values", []):
+            v = entry.get("value", "")
+            d = entry.get("description", "")
+            if d and v not in _osm_desc_by_value:
+                _osm_desc_by_value[v] = d
+
+    # Build lookup dicts keyed by source_id → entry dict
+    # Each entry: {tag_key, label, description, osm_count, ohm_count, sources}
+    merged = {}  # source_id → dict
+
+    for tag_key, tag_data in osm_data.items():
+        if not isinstance(tag_data, dict):
+            continue
+        if tag_key_filter and tag_key != tag_key_filter:
+            continue
+        for entry in tag_data.get("values", []):
+            sid = f"{tag_key}={entry['value']}"
+            merged[sid] = {
+                "source_id": sid,
+                "tag_key": tag_key,
+                "label": entry.get("value", ""),
+                "description": entry.get("description", ""),
+                "osm_count": entry.get("count", 0),
+                "ohm_count": 0,
+                "sources": ["osm"],
+                "in_wiki": entry.get("in_wiki", False),
+            }
+
+    for tag_key, tag_data in ohm_data.items():
+        if not isinstance(tag_data, dict):
+            continue
+        if tag_key_filter and tag_key != tag_key_filter:
+            continue
+        for entry in tag_data.get("values", []):
+            sid = f"{tag_key}={entry['value']}"
+            if sid in merged:
+                # Exists in OSM already — add OHM count and mark both sources
+                merged[sid]["ohm_count"] = entry.get("count", 0)
+                merged[sid]["sources"].append("ohm")
+                # Use OHM description if OSM is blank
+                if not merged[sid]["description"] and entry.get("description"):
+                    merged[sid]["description"] = entry["description"]
+            else:
+                # OHM-only tag — use its own description, falling back to
+                # the cross-key OSM lookup (same value under a different key)
+                desc = entry.get("description", "")
+                if not desc:
+                    desc = _osm_desc_by_value.get(entry.get("value", ""), "")
+                merged[sid] = {
+                    "source_id": sid,
+                    "tag_key": tag_key,
+                    "label": entry.get("value", ""),
+                    "description": desc,
+                    "osm_count": 0,
+                    "ohm_count": entry.get("count", 0),
+                    "sources": ["ohm"],
+                    "in_wiki": entry.get("in_wiki", False),
+                }
+
+    # Attach mapping (check both maps — they should be kept in sync)
+    items = []
+    for sid, info in merged.items():
+        mapping = osm_map.get(sid) or ohm_map.get(sid)
+        items.append({
+            **info,
+            "count": info["osm_count"] + info["ohm_count"],
+            "mapping": mapping,
+        })
+
+    items.sort(key=lambda x: (-x["count"], x["source_id"]))
+    return items
+
+
 # ---------------------------------------------------------------------------
 # AAT concept search
 # ---------------------------------------------------------------------------
@@ -504,58 +609,66 @@ def save_mapping(source_vocab, source_id, aat_id):
     2. Add source_id to the target AAT concept's array.
     3. Invalidate the mappings cache.
     4. Return {"status": "ok", "aat_id": ..., "aat_term": ...}.
+
+    For ``source_vocab='osm_ohm'``, writes to both ``osm_tags`` *and*
+    ``ohm_tags`` so the two ES fields stay in sync.
     """
     es = settings.ES_CONN
-    field = VOCAB_FIELD_MAP[source_vocab]
 
-    # 1. Remove from any existing AAT concept
-    try:
-        old_resp = es.search(
+    # Determine which ES fields to write to
+    if source_vocab == "osm_ohm":
+        fields = ["osm_tags", "ohm_tags"]
+    else:
+        fields = [VOCAB_FIELD_MAP[source_vocab]]
+
+    for field in fields:
+        # 1. Remove from any existing AAT concept
+        try:
+            old_resp = es.search(
+                index="types",
+                query={"term": {field: source_id}},
+                _source=["aat_id"],
+                size=10,
+                request_timeout=8,
+            )
+            for hit in old_resp["hits"]["hits"]:
+                old_aat_id = hit["_source"]["aat_id"]
+                if old_aat_id != aat_id:
+                    es.update(
+                        index="types",
+                        id=hit["_id"],
+                        script={
+                            "source": f"""
+                                if (ctx._source.{field} != null) {{
+                                    ctx._source.{field}.remove(
+                                        ctx._source.{field}.indexOf(params.val)
+                                    );
+                                }}
+                            """,
+                            "params": {"val": source_id},
+                        },
+                        refresh=True,
+                        request_timeout=8,
+                    )
+        except Exception as e:
+            logger.warning("Error removing old mapping for %s in %s: %s", source_id, field, e)
+
+        # 2. Add to target AAT concept
+        es.update(
             index="types",
-            query={"term": {field: source_id}},
-            _source=["aat_id"],
-            size=10,
+            id=f"aat:{aat_id}",
+            script={
+                "source": f"""
+                    if (ctx._source.{field} == null) ctx._source.{field} = [];
+                    if (!ctx._source.{field}.contains(params.val)) {{
+                        ctx._source.{field}.add(params.val);
+                    }}
+                """,
+                "params": {"val": source_id},
+            },
+            refresh=True,
             request_timeout=8,
         )
-        for hit in old_resp["hits"]["hits"]:
-            old_aat_id = hit["_source"]["aat_id"]
-            if old_aat_id != aat_id:
-                es.update(
-                    index="types",
-                    id=hit["_id"],
-                    script={
-                        "source": f"""
-                            if (ctx._source.{field} != null) {{
-                                ctx._source.{field}.remove(
-                                    ctx._source.{field}.indexOf(params.val)
-                                );
-                            }}
-                        """,
-                        "params": {"val": source_id},
-                    },
-                    refresh=True,
-                    request_timeout=8,
-                )
-    except Exception as e:
-        logger.warning("Error removing old mapping for %s: %s", source_id, e)
-
-    # 2. Add to target AAT concept (refresh=True so the change is
-    #    immediately visible to subsequent search queries)
-    es.update(
-        index="types",
-        id=f"aat:{aat_id}",
-        script={
-            "source": f"""
-                if (ctx._source.{field} == null) ctx._source.{field} = [];
-                if (!ctx._source.{field}.contains(params.val)) {{
-                    ctx._source.{field}.add(params.val);
-                }}
-            """,
-            "params": {"val": source_id},
-        },
-        refresh=True,
-        request_timeout=8,
-    )
 
     # 3. Invalidate cache
     _invalidate_mappings_cache()
@@ -570,82 +683,39 @@ def save_mapping(source_vocab, source_id, aat_id):
 
 
 def remove_mapping(source_vocab, source_id, aat_id):
-    """Remove a source type -> AAT concept mapping from ES."""
-    es = settings.ES_CONN
-    field = VOCAB_FIELD_MAP[source_vocab]
+    """
+    Remove a source type -> AAT concept mapping from ES.
 
-    es.update(
-        index="types",
-        id=f"aat:{aat_id}",
-        script={
-            "source": f"""
-                if (ctx._source.{field} != null) {{
-                    ctx._source.{field}.remove(
-                        ctx._source.{field}.indexOf(params.val)
-                    );
-                }}
-            """,
-            "params": {"val": source_id},
-        },
-        refresh=True,
-        request_timeout=8,
-    )
+    For ``source_vocab='osm_ohm'``, removes from both ``osm_tags``
+    and ``ohm_tags``.
+    """
+    es = settings.ES_CONN
+
+    if source_vocab == "osm_ohm":
+        fields = ["osm_tags", "ohm_tags"]
+    else:
+        fields = [VOCAB_FIELD_MAP[source_vocab]]
+
+    for field in fields:
+        es.update(
+            index="types",
+            id=f"aat:{aat_id}",
+            script={
+                "source": f"""
+                    if (ctx._source.{field} != null) {{
+                        ctx._source.{field}.remove(
+                            ctx._source.{field}.indexOf(params.val)
+                        );
+                    }}
+                """,
+                "params": {"val": source_id},
+            },
+            refresh=True,
+            request_timeout=8,
+        )
+
     _invalidate_mappings_cache()
     return {"status": "ok"}
-
-
-# ---------------------------------------------------------------------------
-# Copy OSM -> OHM
-# ---------------------------------------------------------------------------
-
-def copy_osm_to_ohm():
-    """Copy all OSM tag mappings to OHM for matching tag values."""
-    ohm_data = _load_ohm_data()
-    ohm_source_ids = set()
-    for tag_key, tag_data in ohm_data.items():
-        if isinstance(tag_data, dict):
-            for entry in tag_data.get("values", []):
-                ohm_source_ids.add(f"{tag_key}={entry['value']}")
-
-    _, _, osm_map, ohm_map = get_current_mappings()
-
-    es = settings.ES_CONN
-    copied = 0
-    skipped = 0
-
-    for source_id, osm_info in osm_map.items():
-        if source_id not in ohm_source_ids or source_id in ohm_map:
-            skipped += 1
-            continue
-        try:
-            es.update(
-                index="types",
-                id=f"aat:{osm_info['aat_id']}",
-                script={
-                    "source": """
-                        if (ctx._source.ohm_tags == null) ctx._source.ohm_tags = [];
-                        if (!ctx._source.ohm_tags.contains(params.val)) {
-                            ctx._source.ohm_tags.add(params.val);
-                        }
-                    """,
-                    "params": {"val": source_id},
-                },
-                request_timeout=8,
-            )
-            copied += 1
-        except Exception as e:
-            logger.warning("Error copying OSM->OHM for %s: %s", source_id, e)
-            skipped += 1
-
-    _invalidate_mappings_cache()
-
-    # Flush so all updates are immediately searchable
-    try:
-        es.indices.refresh(index="types")
-    except Exception as e:
-        logger.warning("Index refresh after copy_osm_to_ohm failed: %s", e)
-
-    return {"status": "ok", "copied": copied, "skipped": skipped}
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +728,9 @@ def get_mapping_stats():
 
     Totals come from local data files (instant); mapped counts from
     the cached get_current_mappings() call.
+
+    OSM and OHM are reported as a single combined ``osm_ohm`` entry
+    (deduplicated by source_id).
     """
     gn_map, wd_map, osm_map, ohm_map = get_current_mappings()
 
@@ -665,10 +738,23 @@ def get_mapping_stats():
     gn_total = len(gn_labels) if gn_labels else 680
     gn_mapped = len(gn_map)
 
-    osm_total = _count_tag_values(_load_osm_data())
-    ohm_total = _count_tag_values(_load_ohm_data())
-    osm_mapped = len(osm_map)
-    ohm_mapped = len(ohm_map)
+    # Combined OSM/OHM: union of source_ids from both data files
+    osm_data = _load_osm_data()
+    ohm_data = _load_ohm_data()
+    all_source_ids = set()
+    for tag_key, tag_data in osm_data.items():
+        if isinstance(tag_data, dict):
+            for entry in tag_data.get("values", []):
+                all_source_ids.add(f"{tag_key}={entry['value']}")
+    for tag_key, tag_data in ohm_data.items():
+        if isinstance(tag_data, dict):
+            for entry in tag_data.get("values", []):
+                all_source_ids.add(f"{tag_key}={entry['value']}")
+    osm_ohm_total = len(all_source_ids)
+
+    # Mapped = union of source_ids that appear in either osm_map or ohm_map
+    mapped_ids = set(osm_map.keys()) | set(ohm_map.keys())
+    osm_ohm_mapped = len(mapped_ids)
 
     wd_mapped = len(wd_map)
 
@@ -702,10 +788,12 @@ def get_mapping_stats():
     # Ensure total is at least as large as the mapped count
     wd_total = max(wd_total, wd_mapped)
 
+    def _pct(mapped, total):
+        return round(100 * mapped / total, 1) if total else 0
+
     return {
-        "geonames": {"total": gn_total, "mapped": gn_mapped, "unmapped": gn_total - gn_mapped},
-        "wikidata": {"total": wd_total, "mapped": wd_mapped, "unmapped": max(0, wd_total - wd_mapped)},
-        "osm": {"total": osm_total, "mapped": osm_mapped, "unmapped": max(0, osm_total - osm_mapped)},
-        "ohm": {"total": ohm_total, "mapped": ohm_mapped, "unmapped": max(0, ohm_total - ohm_mapped)},
+        "geonames": {"total": gn_total, "mapped": gn_mapped, "unmapped": gn_total - gn_mapped, "pct": _pct(gn_mapped, gn_total)},
+        "wikidata": {"total": wd_total, "mapped": wd_mapped, "unmapped": max(0, wd_total - wd_mapped), "pct": _pct(wd_mapped, wd_total)},
+        "osm_ohm": {"total": osm_ohm_total, "mapped": osm_ohm_mapped, "unmapped": max(0, osm_ohm_total - osm_ohm_mapped), "pct": _pct(osm_ohm_mapped, osm_ohm_total)},
     }
 

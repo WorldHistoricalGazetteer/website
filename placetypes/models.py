@@ -94,7 +94,6 @@ class TypeMappingLog(models.Model):
     ACTION_CHOICES = [
         ('save', 'Save mapping'),
         ('remove', 'Remove mapping'),
-        ('copy', 'Copy OSM → OHM'),
     ]
 
     user = models.ForeignKey(
@@ -106,7 +105,7 @@ class TypeMappingLog(models.Model):
     action = models.CharField(max_length=10, choices=ACTION_CHOICES)
     source_vocab = models.CharField(
         max_length=20,
-        help_text='Source vocabulary: geonames, wikidata, osm, ohm',
+        help_text='Source vocabulary: geonames, wikidata, osm_ohm',
     )
     source_id = models.CharField(
         max_length=120,

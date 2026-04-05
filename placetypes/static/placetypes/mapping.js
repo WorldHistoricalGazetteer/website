@@ -14,13 +14,11 @@
     const API = {
         geonames: '/types/mapping/api/geonames/',
         wikidata: '/types/mapping/api/wikidata/',
-        osm: '/types/mapping/api/osm/',
-        ohm: '/types/mapping/api/ohm/',
+        osm_ohm: '/types/mapping/api/osm-ohm/',
         search: '/types/mapping/api/search/',
         save: '/types/mapping/api/save/',
         remove: '/types/mapping/api/remove/',
         stats: '/types/mapping/api/stats/',
-        copyOsmToOhm: '/types/mapping/api/copy-osm-to-ohm/',
     };
 
     // Low-value tag values to de-emphasise
@@ -39,11 +37,11 @@
     // State
     // -----------------------------------------------------------------------
     const state = {
-        data: {geonames: null, wikidata: null, osm: null, ohm: null},
-        filtered: {geonames: null, wikidata: null, osm: null, ohm: null},
+        data: {geonames: null, wikidata: null, osm_ohm: null},
+        filtered: {geonames: null, wikidata: null, osm_ohm: null},
         sort: {geonames: {col: 'count', dir: 'desc'}, wikidata: {col: 'count', dir: 'desc'},
-               osm: {col: 'count', dir: 'desc'}, ohm: {col: 'count', dir: 'desc'}},
-        tagKeys: {osm: [], ohm: []},
+               osm_ohm: {col: 'count', dir: 'desc'}},
+        tagKeys: {osm_ohm: []},
         activeTab: 'geonames',
         // Modal state
         modalSourceVocab: null,
@@ -94,14 +92,62 @@
         };
     }
 
+    /**
+     * Simple English pluraliser — handles common regular forms.
+     * Returns the original word unchanged if it already looks plural or
+     * falls into an irregular pattern we can't handle reliably.
+     */
+    function simplePlural(word) {
+        if (!word || word.length < 3) return word;
+        const w = word.toLowerCase();
+        // Already looks plural
+        if (w.endsWith('ses') || w.endsWith('xes') || w.endsWith('zes') ||
+            w.endsWith('ches') || w.endsWith('shes') || w.endsWith('ies')) return word;
+        // Sibilant endings → +es
+        if (/(?:s|x|z|ch|sh)$/.test(w)) return word + 'es';
+        // Consonant + y → -ies
+        if (/[^aeiou]y$/.test(w)) return word.slice(0, -1) + 'ies';
+        // -f / -fe → -ves  (leaf→leaves, knife→knives)
+        if (w.endsWith('fe')) return word.slice(0, -2) + 'ves';
+        if (w.endsWith('f') && !w.endsWith('ff')) return word.slice(0, -1) + 'ves';
+        // Already ends in 's' — assume already plural
+        if (w.endsWith('s')) return word;
+        // Default: +s
+        return word + 's';
+    }
+
+    /**
+     * Derive a useful AAT search term for a mapping row.
+     *
+     * For OSM/OHM tags of the form <key>=yes (or other low-value values),
+     * the tag key is a better search term than "yes".  The term is also
+     * pluralised, because AAT concepts tend to use plural forms
+     * (e.g. "cities" not "city").
+     */
+    function deriveSearchTerm(vocab, label, tagKey) {
+        let term = label || '';
+        // For OSM/OHM: if the label is a low-value value, prefer the tag key
+        if (vocab === 'osm_ohm' && LOW_VALUE_VALUES.has(term.toLowerCase()) && tagKey) {
+            term = tagKey;
+        }
+        // Clean up: replace underscores/hyphens with spaces, trim
+        term = term.replace(/[_-]/g, ' ').trim();
+        // Pluralise the last word (AAT prefers plural forms)
+        if (term) {
+            const parts = term.split(/\s+/);
+            parts[parts.length - 1] = simplePlural(parts[parts.length - 1]);
+            term = parts.join(' ');
+        }
+        return term;
+    }
+
     // -----------------------------------------------------------------------
     // Tab ↔ vocab mapping
     // -----------------------------------------------------------------------
     const TAB_VOCAB = {
         'geonames-tab': 'geonames',
         'wikidata-tab': 'wikidata',
-        'osm-tab': 'osm',
-        'ohm-tab': 'ohm',
+        'osm-ohm-tab': 'osm_ohm',
     };
 
     const VOCAB_CONFIG = {
@@ -109,25 +155,20 @@
             tableId: 'gn-table', filterId: 'gn-filter', loadingId: 'gn-loading',
             countLabelId: 'gn-count-label',
             columns: ['source_id', 'label', 'description', 'count', 'mapping'],
-            hasTagKey: false,
+            hasTagKey: false, hasSourceFilter: false,
         },
         wikidata: {
             tableId: 'wd-table', filterId: 'wd-filter', loadingId: 'wd-loading',
             countLabelId: 'wd-count-label',
             columns: ['source_id', 'label', 'count', 'mapping'],
-            hasTagKey: false,
+            hasTagKey: false, hasSourceFilter: false,
         },
-        osm: {
-            tableId: 'osm-table', filterId: 'osm-filter', loadingId: 'osm-loading',
-            countLabelId: 'osm-count-label', tagKeyFilterId: 'osm-tag-key-filter',
-            columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
-            hasTagKey: true,
-        },
-        ohm: {
-            tableId: 'ohm-table', filterId: 'ohm-filter', loadingId: 'ohm-loading',
-            countLabelId: 'ohm-count-label', tagKeyFilterId: 'ohm-tag-key-filter',
-            columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'mapping'],
-            hasTagKey: true,
+        osm_ohm: {
+            tableId: 'osm-ohm-table', filterId: 'osm-ohm-filter', loadingId: 'osm-ohm-loading',
+            countLabelId: 'osm-ohm-count-label', tagKeyFilterId: 'osm-ohm-tag-key-filter',
+            sourceFilterId: 'osm-ohm-source-filter',
+            columns: ['source_id', 'tag_key', 'label', 'description', 'count', 'sources', 'mapping'],
+            hasTagKey: true, hasSourceFilter: true,
         },
     };
 
@@ -136,10 +177,13 @@
     // -----------------------------------------------------------------------
     function loadStats() {
         fetchJSON(API.stats).then(stats => {
-            ['geonames', 'wikidata', 'osm', 'ohm'].forEach(vocab => {
+            ['geonames', 'wikidata', 'osm_ohm'].forEach(vocab => {
                 const el = document.getElementById(`tab-stat-${vocab}`);
                 if (el && stats[vocab]) {
-                    el.textContent = `(${formatCount(stats[vocab].mapped)}/${formatCount(stats[vocab].total)})`;
+                    const s = stats[vocab];
+                    const pct = s.pct != null ? s.pct : (s.total ? Math.round(1000 * s.mapped / s.total) / 10 : 0);
+                    el.textContent = `(${pct}%)`;
+                    el.title = `${formatCount(s.mapped)} of ${formatCount(s.total)} mapped`;
                 }
             });
         }).catch(err => {
@@ -195,6 +239,9 @@
         const tagKeyFilter = cfg.hasTagKey
             ? document.getElementById(cfg.tagKeyFilterId).value
             : '';
+        const sourceFilter = cfg.hasSourceFilter
+            ? document.getElementById(cfg.sourceFilterId).value
+            : '';
         const hideMapped = document.getElementById('global-hide-mapped').checked;
 
         let filtered = data;
@@ -204,6 +251,15 @@
         }
         if (tagKeyFilter) {
             filtered = filtered.filter(d => d.tag_key === tagKeyFilter);
+        }
+        if (sourceFilter) {
+            filtered = filtered.filter(d => {
+                const s = d.sources || [];
+                if (sourceFilter === 'both') return s.includes('osm') && s.includes('ohm');
+                if (sourceFilter === 'osm') return s.includes('osm') && !s.includes('ohm');
+                if (sourceFilter === 'ohm') return s.includes('ohm') && !s.includes('osm');
+                return true;
+            });
         }
         if (textFilter) {
             filtered = filtered.filter(d => {
@@ -294,12 +350,13 @@
                    <small class="ms-1">${escapeHtml(item.mapping.aat_term)}</small>`
                 : `<span class="badge badge-unmapped bg-warning text-dark">unmapped</span>`;
 
+            const tagKeyAttr = item.tag_key ? ` data-tag-key="${escapeHtml(item.tag_key)}"` : '';
             const actionBtn = mapped
                 ? `<button class="btn btn-sm btn-outline-primary me-1 btn-map"
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
                      data-label="${escapeHtml(item.label)}"
-                     data-desc="${escapeHtml(item.description || '')}">Change</button>
+                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}>Change</button>
                    <button class="btn btn-sm btn-outline-danger btn-remove"
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
@@ -309,7 +366,7 @@
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
                      data-label="${escapeHtml(item.label)}"
-                     data-desc="${escapeHtml(item.description || '')}">Map</button>`;
+                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}>Map</button>`;
 
             let cells = '';
             for (const col of cfg.columns) {
@@ -328,6 +385,14 @@
                         break;
                     case 'count':
                         cells += `<td class="count-cell">${formatCount(item.count)}</td>`;
+                        break;
+                    case 'sources':
+                        cells += '<td class="text-nowrap">';
+                        (item.sources || []).forEach(s => {
+                            const cls = s === 'osm' ? 'bg-info bg-opacity-75' : 'bg-secondary bg-opacity-50';
+                            cells += `<span class="badge ${cls} text-dark me-1">${escapeHtml(s.toUpperCase())}</span>`;
+                        });
+                        cells += '</td>';
                         break;
                     case 'mapping':
                         cells += `<td>${mappingCell}</td>`;
@@ -359,7 +424,7 @@
     // -----------------------------------------------------------------------
     let aatModal = null;
 
-    function openMappingModal(vocab, sourceId, label, desc) {
+    function openMappingModal(vocab, sourceId, label, desc, tagKey) {
         state.modalSourceVocab = vocab;
         state.modalSourceId = sourceId;
         state.modalSourceLabel = label;
@@ -387,10 +452,11 @@
             bsTab.show();
         }
 
-        // Pre-populate search with the label
-        if (label && label.length >= 2) {
-            document.getElementById('aat-search-input').value = label;
-            performAatSearch(label);
+        // Pre-populate search with a derived term (handles key=yes → key, pluralisation)
+        const searchTerm = deriveSearchTerm(vocab, label, tagKey);
+        if (searchTerm && searchTerm.length >= 2) {
+            document.getElementById('aat-search-input').value = searchTerm;
+            performAatSearch(searchTerm);
         }
 
         if (!aatModal) {
@@ -510,6 +576,27 @@
     // Event binding
     // -----------------------------------------------------------------------
     function init() {
+        // Instructions panel — dismiss / reopen with localStorage
+        const INSTR_KEY = 'whg_mapping_instructions_dismissed';
+        const instrPanel = document.getElementById('mapping-instructions');
+        const instrShowBtn = document.getElementById('show-instructions');
+        const instrDismissBtn = document.getElementById('dismiss-instructions');
+
+        if (localStorage.getItem(INSTR_KEY) === '1') {
+            instrPanel.classList.add('d-none');
+            instrShowBtn.classList.remove('d-none');
+        }
+        instrDismissBtn.addEventListener('click', function () {
+            instrPanel.classList.add('d-none');
+            instrShowBtn.classList.remove('d-none');
+            localStorage.setItem(INSTR_KEY, '1');
+        });
+        instrShowBtn.addEventListener('click', function () {
+            instrPanel.classList.remove('d-none');
+            instrShowBtn.classList.add('d-none');
+            localStorage.removeItem(INSTR_KEY);
+        });
+
         // Load stats on page load
         loadStats();
 
@@ -544,6 +631,14 @@
                 });
             }
 
+            // Source filter (OSM/OHM merged tab)
+            if (cfg.hasSourceFilter) {
+                document.getElementById(cfg.sourceFilterId).addEventListener('change', function () {
+                    applyFilters(vocab);
+                    renderTable(vocab);
+                });
+            }
+
             // Column sorting
             document.getElementById(cfg.tableId).querySelectorAll('th.sortable').forEach(th => {
                 th.addEventListener('click', function () {
@@ -572,7 +667,8 @@
                 const sourceId = mapBtn.dataset.sourceId;
                 const label = mapBtn.dataset.label;
                 const desc = mapBtn.dataset.desc;
-                openMappingModal(vocab, sourceId, label, desc);
+                const tagKey = mapBtn.dataset.tagKey || '';
+                openMappingModal(vocab, sourceId, label, desc, tagKey);
             }
         });
 
@@ -696,34 +792,6 @@
                 });
         });
 
-        // Copy OSM → OHM button
-        const copyBtn = document.getElementById('copy-osm-to-ohm-btn');
-        if (copyBtn) {
-            copyBtn.addEventListener('click', function () {
-                if (!confirm('Copy all OSM tag mappings to OHM for matching tag values?\n\nThis will not overwrite existing OHM mappings.')) return;
-
-                this.disabled = true;
-                const origHtml = this.innerHTML;
-                this.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Copying…';
-
-                postJSON(API.copyOsmToOhm, {}).then(result => {
-                    if (result.status === 'ok') {
-                        alert(`Done! Copied ${result.copied} mappings, skipped ${result.skipped}.`);
-                        // Reload OHM data
-                        state.data.ohm = null;
-                        loadVocabData('ohm');
-                        loadStats();
-                    } else {
-                        alert('Error: ' + (result.error || 'Unknown error'));
-                    }
-                }).catch(err => {
-                    alert('Error: ' + err.message);
-                }).finally(() => {
-                    this.disabled = false;
-                    this.innerHTML = origHtml;
-                });
-            });
-        }
 
         // -----------------------------------------------------------------
         // Modal Type Tree tab: lazy-load tree on first tab show
