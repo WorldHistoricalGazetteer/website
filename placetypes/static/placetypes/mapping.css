@@ -19,16 +19,16 @@
     background: #e9ecef;
 }
 .mapping-table th.sortable::after {
-    content: ' ⇅';
+    content: ' \21C5';
     opacity: 0.3;
     font-size: 0.75em;
 }
 .mapping-table th.sortable.sort-asc::after {
-    content: ' ↑';
+    content: ' \2191';
     opacity: 0.8;
 }
 .mapping-table th.sortable.sort-desc::after {
-    content: ' ↓';
+    content: ' \2193';
     opacity: 0.8;
 }
 

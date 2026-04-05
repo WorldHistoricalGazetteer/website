@@ -2,29 +2,25 @@
 """
 Elasticsearch query helpers for the type mapping UI.
 
-All data is read from and written to the production ES `types` index
-via `settings.ES_CONN`.  No Django models are used for mapping storage.
+All mapping data is read from and written to the ES `types` index
+via `settings.ES_CONN`.  Source type inventories come from static
+JSON/TXT data files in placetypes/data/.
 
-Functions:
-    get_current_mappings()     — build reverse lookups from ES types index
-    get_geonames_types()       — GeoNames feature codes + counts from ES places
-    get_wikidata_types()       — Wikidata Q-items + counts from ES places
-    get_osm_types()            — OSM tag values from static JSON + mappings
-    get_ohm_types()            — OHM tag values from static JSON + mappings
-    search_aat_types()         — search AAT concepts in the types index
-    save_mapping()             — add a source→AAT mapping in ES
-    remove_mapping()           — remove a source→AAT mapping in ES
-    copy_osm_to_ohm()         — bulk-copy OSM mappings to OHM
-    get_mapping_stats()        — mapping coverage statistics
+Key design: get_current_mappings() is cached in memory for 60 s so
+that multiple AJAX calls on the same page load don't each wait for ES.
 """
 
 import json
 import logging
+import threading
+import time as _time
 from pathlib import Path
 
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(__file__).parent / "data"
 
 # Map from vocabulary name to ES field on AAT type documents
 VOCAB_FIELD_MAP = {
@@ -37,33 +33,42 @@ VOCAB_FIELD_MAP = {
 # GeoNames feature class letters
 GN_FCLASSES = {"A", "H", "L", "P", "R", "S", "T", "U", "V"}
 
-# GeoNames feature codes URL (for label lookup)
-GN_FEATURE_CODES_URL = "https://download.geonames.org/export/dump/featureCodes_en.txt"
-
 
 # ---------------------------------------------------------------------------
-# Current mappings from ES types index
+# Thread-safe in-memory cache for current mappings
 # ---------------------------------------------------------------------------
+_mappings_cache = {
+    "data": None,       # (gn_map, wd_map, osm_map, ohm_map) or None
+    "expires": 0,       # epoch timestamp
+    "lock": threading.Lock(),
+}
+_MAPPINGS_TTL = 60  # seconds
+
+
+def _invalidate_mappings_cache():
+    """Force the next get_current_mappings() call to re-query ES."""
+    with _mappings_cache["lock"]:
+        _mappings_cache["data"] = None
+        _mappings_cache["expires"] = 0
+
 
 def get_current_mappings():
     """
     Query the ES `types` index for all documents with cross-vocabulary
-    mapping fields populated.  Build four reverse-lookup dicts:
+    mapping fields populated.  Results are cached for 60 s.
 
-        gn_map:  "P.PPL"        → {"aat_id": 300008347, "aat_term": "inhabited places"}
-        wd_map:  "Q515"         → {"aat_id": 300008389, "aat_term": "cities"}
-        osm_map: "place=city"   → {"aat_id": 300008389, "aat_term": "cities"}
-        ohm_map: "place=city"   → {"aat_id": 300008389, "aat_term": "cities"}
-
-    Returns (gn_map, wd_map, osm_map, ohm_map).
+    Returns (gn_map, wd_map, osm_map, ohm_map) — four dicts mapping
+    source IDs to {"aat_id": int, "aat_term": str}.
     """
-    es = settings.ES_CONN
-    gn_map = {}
-    wd_map = {}
-    osm_map = {}
-    ohm_map = {}
+    now = _time.time()
+    with _mappings_cache["lock"]:
+        if _mappings_cache["data"] is not None and now < _mappings_cache["expires"]:
+            return _mappings_cache["data"]
 
+    # Query ES (outside the lock to avoid blocking other threads)
+    gn_map, wd_map, osm_map, ohm_map = {}, {}, {}, {}
     try:
+        es = settings.ES_CONN
         resp = es.search(
             index="types",
             query={
@@ -79,45 +84,54 @@ def get_current_mappings():
             },
             _source=["aat_id", "term", "gn_fcodes", "wd_qids", "osm_tags", "ohm_tags"],
             size=10000,
+            request_timeout=8,
         )
+        for hit in resp["hits"]["hits"]:
+            src = hit["_source"]
+            aat_id = src["aat_id"]
+            aat_term = src.get("term", "")
+            info = {"aat_id": aat_id, "aat_term": aat_term}
+            for fc in src.get("gn_fcodes") or []:
+                gn_map[fc] = info
+            for qid in src.get("wd_qids") or []:
+                wd_map[qid] = info
+            for tag in src.get("osm_tags") or []:
+                osm_map[tag] = info
+            for tag in src.get("ohm_tags") or []:
+                ohm_map[tag] = info
     except Exception as e:
-        logger.exception("Error fetching current mappings from ES")
-        return gn_map, wd_map, osm_map, ohm_map
+        logger.warning("get_current_mappings ES error (returning empty): %s", e)
 
-    for hit in resp["hits"]["hits"]:
-        src = hit["_source"]
-        aat_id = src["aat_id"]
-        aat_term = src.get("term", "")
-        info = {"aat_id": aat_id, "aat_term": aat_term}
-
-        for fc in src.get("gn_fcodes") or []:
-            gn_map[fc] = info
-        for qid in src.get("wd_qids") or []:
-            wd_map[qid] = info
-        for tag in src.get("osm_tags") or []:
-            osm_map[tag] = info
-        for tag in src.get("ohm_tags") or []:
-            ohm_map[tag] = info
-
-    return gn_map, wd_map, osm_map, ohm_map
+    result = (gn_map, wd_map, osm_map, ohm_map)
+    with _mappings_cache["lock"]:
+        _mappings_cache["data"] = result
+        _mappings_cache["expires"] = _time.time() + _MAPPINGS_TTL
+    return result
 
 
 # ---------------------------------------------------------------------------
 # GeoNames feature codes
 # ---------------------------------------------------------------------------
 
+# Module-level cache for the labels file (loaded once)
+_gn_labels_cache = None
+
+
 def _load_geonames_labels():
     """
-    Load GeoNames feature code labels from a local cache file,
-    or return an empty dict if unavailable.
+    Load GeoNames feature code labels from featureCodes_en.txt.
 
-    The file format (featureCodes_en.txt) is tab-separated:
-        A.ADM1<TAB>first-order administrative division<TAB>description...
+    File format (tab-separated):
+        A.ADM1<TAB>first-order administrative division<TAB>long description…
     """
-    cache_path = Path(__file__).parent / "data" / "featureCodes_en.txt"
+    global _gn_labels_cache
+    if _gn_labels_cache is not None:
+        return _gn_labels_cache
+
     labels = {}
-    if cache_path.exists():
-        with open(cache_path, encoding="utf-8") as f:
+    fpath = DATA_DIR / "featureCodes_en.txt"
+    if fpath.exists():
+        with open(fpath, encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split("\t")
                 if len(parts) >= 2:
@@ -125,34 +139,31 @@ def _load_geonames_labels():
                     label = parts[1].strip()
                     desc = parts[2].strip() if len(parts) >= 3 else ""
                     labels[code] = {"label": label, "description": desc}
+    _gn_labels_cache = labels
     return labels
 
 
 def get_geonames_types():
     """
-    Return a list of GeoNames feature codes with counts and AAT mappings.
+    Return a list of GeoNames feature codes with labels, descriptions,
+    and any existing AAT mappings.
 
-    Tries to aggregate from ES `places` index first; if that fails,
-    returns only the codes that have existing AAT mappings.
+    Source of truth for the code inventory: featureCodes_en.txt
+    (downloaded from geonames.org).  ES `places` aggregation is attempted
+    for place counts but is optional.
     """
-    gn_map, _, _, _ = get_current_mappings()
+    gn_map = get_current_mappings()[0]
     gn_labels = _load_geonames_labels()
-    es = settings.ES_CONN
 
-    # Try to get counts from ES places index
+    # Try to get counts from ES places index (optional — may timeout)
     code_counts = {}
     try:
+        es = settings.ES_CONN
         resp = es.search(
             index="places",
             size=0,
             query={"match_all": {}},
             aggs={
-                "fcode_counts": {
-                    "terms": {
-                        "field": "fclasses",
-                        "size": 10,
-                    }
-                },
                 "source_labels": {
                     "nested": {"path": "types"},
                     "aggs": {
@@ -165,17 +176,17 @@ def get_geonames_types():
                     },
                 },
             },
+            request_timeout=8,
         )
         for bucket in resp["aggregations"]["source_labels"]["by_label"]["buckets"]:
             sl = bucket["key"]
-            # GeoNames sourceLabels look like "P.PPL" or "A.ADM1"
             if "." in sl and sl.split(".")[0] in GN_FCLASSES:
                 code_counts[sl] = bucket["doc_count"]
     except Exception as e:
-        logger.warning("Could not aggregate GeoNames types from ES places: %s", e)
+        logger.info("GeoNames counts from ES unavailable: %s", e)
 
-    # Build result list from the union of known codes + mapped codes
-    all_codes = set(code_counts.keys()) | set(gn_map.keys()) | set(gn_labels.keys())
+    # Build from the labels file (authoritative inventory), plus any mapped codes
+    all_codes = set(gn_labels.keys()) | set(gn_map.keys()) | set(code_counts.keys())
     items = []
     for code in sorted(all_codes):
         fclass = code.split(".")[0] if "." in code else ""
@@ -191,7 +202,6 @@ def get_geonames_types():
             "mapping": gn_map.get(code),
         })
 
-    # Sort by count descending, then by code
     items.sort(key=lambda x: (-x["count"], x["source_id"]))
     return items
 
@@ -200,19 +210,89 @@ def get_geonames_types():
 # Wikidata Q-items
 # ---------------------------------------------------------------------------
 
+_WD_LABELS_CACHE_FILE = DATA_DIR / "wikidata_labels.json"
+
+
+def _load_wikidata_label_cache():
+    """Load cached Wikidata labels from a JSON file."""
+    if _WD_LABELS_CACHE_FILE.exists():
+        try:
+            with open(_WD_LABELS_CACHE_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_wikidata_label_cache(cache):
+    """Save Wikidata labels to a JSON file."""
+    try:
+        with open(_WD_LABELS_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=1)
+    except Exception as e:
+        logger.warning("Could not save Wikidata label cache: %s", e)
+
+
+def _fetch_wikidata_labels(qids, batch_size=50):
+    """
+    Fetch English labels + descriptions for a list of Wikidata Q-IDs
+    from the Wikidata API (wbgetentities), in batches of 50.
+
+    Returns a dict: { "Q515": {"label": "city", "description": "large settlement"}, ... }
+    """
+    import requests as http_requests
+
+    result = {}
+    qid_list = list(qids)
+
+    for i in range(0, len(qid_list), batch_size):
+        batch = qid_list[i:i + batch_size]
+        try:
+            resp = http_requests.get(
+                "https://www.wikidata.org/w/api.php",
+                params={
+                    "action": "wbgetentities",
+                    "ids": "|".join(batch),
+                    "props": "labels|descriptions",
+                    "languages": "en",
+                    "format": "json",
+                },
+                timeout=10,
+                headers={"User-Agent": "WHG/3.5 (https://whgazetteer.org)"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            for qid, entity in data.get("entities", {}).items():
+                label = entity.get("labels", {}).get("en", {}).get("value", qid)
+                desc = entity.get("descriptions", {}).get("en", {}).get("value", "")
+                result[qid] = {"label": label, "description": desc}
+        except Exception as e:
+            logger.warning("Wikidata API error for batch %d: %s", i, e)
+            for qid in batch:
+                if qid not in result:
+                    result[qid] = {"label": qid, "description": ""}
+
+        # Brief pause between batches to be polite
+        if i + batch_size < len(qid_list):
+            _time.sleep(0.2)
+
+    return result
+
+
 def get_wikidata_types():
     """
-    Return a list of Wikidata Q-items with counts and AAT mappings.
+    Return a list of Wikidata Q-items with labels, descriptions,
+    and any existing AAT mappings.
 
-    Tries to aggregate from ES `places` index; falls back to just
-    listing currently-mapped Q-items.
+    Labels are fetched from Wikidata API on first load and cached
+    to a local JSON file for instant subsequent loads.
     """
-    _, wd_map, _, _ = get_current_mappings()
-    es = settings.ES_CONN
+    wd_map = get_current_mappings()[1]
 
+    # Try to get Q-item counts from ES places index
     qid_counts = {}
-    qid_labels = {}
     try:
+        es = settings.ES_CONN
         resp = es.search(
             index="places",
             size=0,
@@ -227,37 +307,40 @@ def get_wikidata_types():
                                 "include": "Q.*",
                                 "size": 10000,
                             },
-                            "aggs": {
-                                "label": {
-                                    "terms": {
-                                        "field": "types.sourceLabel",
-                                        "size": 1,
-                                    }
-                                }
-                            },
                         }
                     },
                 }
             },
+            request_timeout=8,
         )
         for bucket in resp["aggregations"]["qid_agg"]["by_ident"]["buckets"]:
             qid = bucket["key"]
             if qid.startswith("Q"):
                 qid_counts[qid] = bucket["doc_count"]
-                label_buckets = bucket.get("label", {}).get("buckets", [])
-                if label_buckets:
-                    qid_labels[qid] = label_buckets[0]["key"]
     except Exception as e:
-        logger.warning("Could not aggregate Wikidata types from ES places: %s", e)
+        logger.info("Wikidata counts from ES unavailable: %s", e)
 
-    # Build result from union of aggregated + mapped Q-items
+    # All known Q-IDs: from ES aggregation + from existing mappings
     all_qids = set(qid_counts.keys()) | set(wd_map.keys())
+    if not all_qids:
+        return []
+
+    # Load cached labels, fetch any missing from Wikidata API
+    label_cache = _load_wikidata_label_cache()
+    missing = [q for q in all_qids if q not in label_cache]
+    if missing:
+        logger.info("Fetching %d Wikidata labels from API...", len(missing))
+        new_labels = _fetch_wikidata_labels(missing)
+        label_cache.update(new_labels)
+        _save_wikidata_label_cache(label_cache)
+
     items = []
     for qid in sorted(all_qids):
+        info = label_cache.get(qid, {})
         items.append({
             "source_id": qid,
-            "label": qid_labels.get(qid, qid),
-            "description": "",
+            "label": info.get("label", qid),
+            "description": info.get("description", ""),
             "count": qid_counts.get(qid, 0),
             "mapping": wd_map.get(qid),
         })
@@ -267,73 +350,53 @@ def get_wikidata_types():
 
 
 # ---------------------------------------------------------------------------
-# OSM tag values
+# OSM / OHM tag values
 # ---------------------------------------------------------------------------
 
-def get_osm_types(tag_key_filter=None):
-    """
-    Load OSM tag values from `placetypes/data/osm.json` and merge
-    with current AAT mappings.
+# Module-level caches for static JSON data files
+_osm_data_cache = None
+_ohm_data_cache = None
 
-    Args:
-        tag_key_filter: Optional tag key to filter by (e.g. "place", "natural")
 
-    Returns:
-        List of dicts with source_id, tag_key, label, description, count,
-        in_wiki, mapping.
-    """
-    data_path = Path(__file__).parent / "data" / "osm.json"
+def _load_osm_data():
+    """Load and cache OSM tag data from the JSON file."""
+    global _osm_data_cache
+    if _osm_data_cache is not None:
+        return _osm_data_cache
     try:
-        with open(data_path, encoding="utf-8") as f:
-            data = json.load(f)
+        with open(DATA_DIR / "osm.json", encoding="utf-8") as f:
+            _osm_data_cache = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         logger.warning("Could not load OSM data file: %s", e)
-        return []
-
-    _, _, osm_map, _ = get_current_mappings()
-
-    items = []
-    for tag_key, tag_data in data.items():
-        if not isinstance(tag_data, dict):
-            continue
-        if tag_key_filter and tag_key != tag_key_filter:
-            continue
-        for entry in tag_data.get("values", []):
-            source_id = f"{tag_key}={entry['value']}"
-            items.append({
-                "source_id": source_id,
-                "tag_key": tag_key,
-                "label": entry.get("value", ""),
-                "description": entry.get("description", ""),
-                "count": entry.get("count", 0),
-                "in_wiki": entry.get("in_wiki", False),
-                "mapping": osm_map.get(source_id),
-            })
-
-    # Sort: mapped items first, then by count descending
-    items.sort(key=lambda x: (-x["count"], x["source_id"]))
-    return items
+        _osm_data_cache = {}
+    return _osm_data_cache
 
 
-# ---------------------------------------------------------------------------
-# OHM tag values
-# ---------------------------------------------------------------------------
-
-def get_ohm_types(tag_key_filter=None):
-    """
-    Load OHM tag values from `placetypes/data/ohm.json` and merge
-    with current AAT mappings.
-    """
-    data_path = Path(__file__).parent / "data" / "ohm.json"
+def _load_ohm_data():
+    """Load and cache OHM tag data from the JSON file."""
+    global _ohm_data_cache
+    if _ohm_data_cache is not None:
+        return _ohm_data_cache
     try:
-        with open(data_path, encoding="utf-8") as f:
-            data = json.load(f)
+        with open(DATA_DIR / "ohm.json", encoding="utf-8") as f:
+            _ohm_data_cache = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         logger.warning("Could not load OHM data file: %s", e)
-        return []
+        _ohm_data_cache = {}
+    return _ohm_data_cache
 
-    _, _, _, ohm_map = get_current_mappings()
 
+def _count_tag_values(data):
+    """Count total tag values in an OSM/OHM data dict."""
+    total = 0
+    for tag_data in data.values():
+        if isinstance(tag_data, dict):
+            total += len(tag_data.get("values", []))
+    return total
+
+
+def _build_tag_items(data, mapping_dict, tag_key_filter=None):
+    """Build the items list from an OSM/OHM data dict + mapping dict."""
     items = []
     for tag_key, tag_data in data.items():
         if not isinstance(tag_data, dict):
@@ -349,11 +412,24 @@ def get_ohm_types(tag_key_filter=None):
                 "description": entry.get("description", ""),
                 "count": entry.get("count", 0),
                 "in_wiki": entry.get("in_wiki", False),
-                "mapping": ohm_map.get(source_id),
+                "mapping": mapping_dict.get(source_id),
             })
-
     items.sort(key=lambda x: (-x["count"], x["source_id"]))
     return items
+
+
+def get_osm_types(tag_key_filter=None):
+    """Return all OSM tag values with current AAT mappings."""
+    data = _load_osm_data()
+    osm_map = get_current_mappings()[2]
+    return _build_tag_items(data, osm_map, tag_key_filter)
+
+
+def get_ohm_types(tag_key_filter=None):
+    """Return all OHM tag values with current AAT mappings."""
+    data = _load_ohm_data()
+    ohm_map = get_current_mappings()[3]
+    return _build_tag_items(data, ohm_map, tag_key_filter)
 
 
 # ---------------------------------------------------------------------------
@@ -364,10 +440,8 @@ def search_aat_types(query, limit=20):
     """
     Search the ES `types` index for AAT concepts matching the query.
 
-    Uses a boosted bool/should query across term.keyword, term.folded,
-    and note fields.  Only returns is_place_type=True documents.
-
-    Returns a list of dicts: aat_id, term, note (truncated), fclasses, path, score.
+    Uses a boosted bool/should query across term, term.folded, and note.
+    Only returns is_place_type=True documents.
     """
     es = settings.ES_CONN
     clean = query.replace("_", " ")
@@ -396,6 +470,7 @@ def search_aat_types(query, limit=20):
                 }
             },
             _source=["aat_id", "term", "note", "fclasses", "path"],
+            request_timeout=8,
         )
     except Exception as e:
         logger.exception("Error searching AAT types in ES")
@@ -421,22 +496,24 @@ def search_aat_types(query, limit=20):
 
 def save_mapping(source_vocab, source_id, aat_id):
     """
-    Save a source type → AAT concept mapping in the ES types index.
+    Save a source type -> AAT concept mapping in the ES types index.
 
     1. Remove source_id from any other AAT concept's array (if re-mapping).
     2. Add source_id to the target AAT concept's array.
-    3. Return {"status": "ok", "aat_id": ..., "aat_term": ...}.
+    3. Invalidate the mappings cache.
+    4. Return {"status": "ok", "aat_id": ..., "aat_term": ...}.
     """
     es = settings.ES_CONN
     field = VOCAB_FIELD_MAP[source_vocab]
 
-    # 1. Find and remove from any existing AAT concept
+    # 1. Remove from any existing AAT concept
     try:
         old_resp = es.search(
             index="types",
             query={"term": {field: source_id}},
             _source=["aat_id"],
             size=10,
+            request_timeout=8,
         )
         for hit in old_resp["hits"]["hits"]:
             old_aat_id = hit["_source"]["aat_id"]
@@ -454,11 +531,12 @@ def save_mapping(source_vocab, source_id, aat_id):
                         """,
                         "params": {"val": source_id},
                     },
+                    request_timeout=8,
                 )
     except Exception as e:
         logger.warning("Error removing old mapping for %s: %s", source_id, e)
 
-    # 2. Add to the target AAT concept
+    # 2. Add to target AAT concept
     es.update(
         index="types",
         id=f"aat:{aat_id}",
@@ -471,9 +549,13 @@ def save_mapping(source_vocab, source_id, aat_id):
             """,
             "params": {"val": source_id},
         },
+        request_timeout=8,
     )
 
-    # 3. Fetch the updated doc to return the term
+    # 3. Invalidate cache
+    _invalidate_mappings_cache()
+
+    # 4. Return updated info
     doc = es.get(index="types", id=f"aat:{aat_id}", _source=["aat_id", "term"])
     return {
         "status": "ok",
@@ -483,9 +565,7 @@ def save_mapping(source_vocab, source_id, aat_id):
 
 
 def remove_mapping(source_vocab, source_id, aat_id):
-    """
-    Remove a source type → AAT concept mapping from the ES types index.
-    """
+    """Remove a source type -> AAT concept mapping from ES."""
     es = settings.ES_CONN
     field = VOCAB_FIELD_MAP[source_vocab]
 
@@ -502,37 +582,25 @@ def remove_mapping(source_vocab, source_id, aat_id):
             """,
             "params": {"val": source_id},
         },
+        request_timeout=8,
     )
+    _invalidate_mappings_cache()
     return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
-# Copy OSM → OHM
+# Copy OSM -> OHM
 # ---------------------------------------------------------------------------
 
 def copy_osm_to_ohm():
-    """
-    Copy all OSM tag mappings to OHM for tag values that appear in both
-    vocabularies.
-
-    Returns {"status": "ok", "copied": N, "skipped": N}.
-    """
-    # Load OHM tag values to build a set of valid OHM source_ids
-    ohm_data_path = Path(__file__).parent / "data" / "ohm.json"
-    try:
-        with open(ohm_data_path, encoding="utf-8") as f:
-            ohm_data = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {"status": "error", "error": "Could not load OHM data file"}
-
+    """Copy all OSM tag mappings to OHM for matching tag values."""
+    ohm_data = _load_ohm_data()
     ohm_source_ids = set()
     for tag_key, tag_data in ohm_data.items():
-        if not isinstance(tag_data, dict):
-            continue
-        for entry in tag_data.get("values", []):
-            ohm_source_ids.add(f"{tag_key}={entry['value']}")
+        if isinstance(tag_data, dict):
+            for entry in tag_data.get("values", []):
+                ohm_source_ids.add(f"{tag_key}={entry['value']}")
 
-    # Get current mappings
     _, _, osm_map, ohm_map = get_current_mappings()
 
     es = settings.ES_CONN
@@ -540,18 +608,13 @@ def copy_osm_to_ohm():
     skipped = 0
 
     for source_id, osm_info in osm_map.items():
-        if source_id not in ohm_source_ids:
+        if source_id not in ohm_source_ids or source_id in ohm_map:
             skipped += 1
             continue
-        if source_id in ohm_map:
-            skipped += 1
-            continue
-
-        aat_id = osm_info["aat_id"]
         try:
             es.update(
                 index="types",
-                id=f"aat:{aat_id}",
+                id=f"aat:{osm_info['aat_id']}",
                 script={
                     "source": """
                         if (ctx._source.ohm_tags == null) ctx._source.ohm_tags = [];
@@ -561,12 +624,14 @@ def copy_osm_to_ohm():
                     """,
                     "params": {"val": source_id},
                 },
+                request_timeout=8,
             )
             copied += 1
         except Exception as e:
-            logger.warning("Error copying OSM→OHM for %s: %s", source_id, e)
+            logger.warning("Error copying OSM->OHM for %s: %s", source_id, e)
             skipped += 1
 
+    _invalidate_mappings_cache()
     return {"status": "ok", "copied": copied, "skipped": skipped}
 
 
@@ -576,53 +641,29 @@ def copy_osm_to_ohm():
 
 def get_mapping_stats():
     """
-    Return mapping coverage statistics for all four vocabularies.
+    Return mapping coverage statistics.
 
-    Uses a single call to get_current_mappings() for mapped counts,
-    and counts totals from data files / cached data to avoid redundant
-    ES queries.
+    Totals come from local data files (instant); mapped counts from
+    the cached get_current_mappings() call.
     """
     gn_map, wd_map, osm_map, ohm_map = get_current_mappings()
 
-    # Count total source types from data files (cheap, no ES needed)
-    osm_total = 0
-    osm_path = Path(__file__).parent / "data" / "osm.json"
-    try:
-        with open(osm_path, encoding="utf-8") as f:
-            osm_data = json.load(f)
-        for tag_key, tag_data in osm_data.items():
-            if isinstance(tag_data, dict):
-                osm_total += len(tag_data.get("values", []))
-    except Exception:
-        pass
-
-    ohm_total = 0
-    ohm_path = Path(__file__).parent / "data" / "ohm.json"
-    try:
-        with open(ohm_path, encoding="utf-8") as f:
-            ohm_data = json.load(f)
-        for tag_key, tag_data in ohm_data.items():
-            if isinstance(tag_data, dict):
-                ohm_total += len(tag_data.get("values", []))
-    except Exception:
-        pass
-
-    # GeoNames and Wikidata totals include both mapped codes and any from ES
-    # For stats, we'll use mapped count as a lower bound for total
+    gn_labels = _load_geonames_labels()
+    gn_total = len(gn_labels) if gn_labels else 680
     gn_mapped = len(gn_map)
-    wd_mapped = len(wd_map)
+
+    osm_total = _count_tag_values(_load_osm_data())
+    ohm_total = _count_tag_values(_load_ohm_data())
     osm_mapped = len(osm_map)
     ohm_mapped = len(ohm_map)
 
-    # For GN/WD, we don't have reliable totals without ES — use mapped as minimum
-    gn_total = max(gn_mapped, 680)  # ~680 known GeoNames feature codes
-    wd_total = max(wd_mapped, 0)  # Unknown without ES aggregation
+    wd_mapped = len(wd_map)
+    wd_total = max(wd_mapped, 0)
 
     return {
         "geonames": {"total": gn_total, "mapped": gn_mapped, "unmapped": gn_total - gn_mapped},
-        "wikidata": {"total": wd_total, "mapped": wd_mapped, "unmapped": wd_total - wd_mapped},
+        "wikidata": {"total": wd_total, "mapped": wd_mapped, "unmapped": max(0, wd_total - wd_mapped)},
         "osm": {"total": osm_total, "mapped": osm_mapped, "unmapped": max(0, osm_total - osm_mapped)},
         "ohm": {"total": ohm_total, "mapped": ohm_mapped, "unmapped": max(0, ohm_total - ohm_mapped)},
     }
-
 

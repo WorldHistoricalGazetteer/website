@@ -160,6 +160,7 @@
         loading.classList.remove('d-none');
 
         fetchJSON(API[vocab]).then(data => {
+            loading.classList.add('d-none');
             state.data[vocab] = data;
             state.filtered[vocab] = data;
 
@@ -181,9 +182,8 @@
             renderTable(vocab);
         }).catch(err => {
             console.error(`Failed to load ${vocab} data:`, err);
+            loading.classList.remove('d-none');
             loading.innerHTML = `<span class="text-danger">Error loading data: ${escapeHtml(err.message)}</span>`;
-        }).finally(() => {
-            loading.classList.add('d-none');
         });
     }
 
