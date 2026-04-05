@@ -828,8 +828,8 @@ the WHG palette:
 
 The backend — ES indexes, gateway API endpoints, request/response
 contracts, data ingestion pipelines, and geometry cleaning rules —
-is specified in the companion document **`specification.md`** in
-this directory.  That document is the authoritative reference for
+is specified in the companion document **`search-system-architecture.md`** in
+the `indexing` repository.  That document is the authoritative reference for
 the CRC Gateway VM codebase.
 
 ---

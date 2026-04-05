@@ -1,0 +1,244 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block title %}<title>WHG — Type Mapping</title>{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'placetypes/mapping.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-3 mb-5">
+
+  {# Page header #}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h4 class="mb-0">Type Mapping Dashboard</h4>
+      <small class="text-muted">
+        Map source vocabulary types to AAT concepts in the ES <code>types</code> index.
+      </small>
+    </div>
+  </div>
+
+  {# Summary stats cards #}
+  <div class="row g-3 mb-4" id="stats-cards">
+    <div class="col-sm-6 col-lg-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-2">
+          <div class="text-muted small">GeoNames</div>
+          <span id="stat-gn-mapped" class="fw-bold text-success">–</span>
+          <span class="text-muted">/</span>
+          <span id="stat-gn-total" class="fw-bold">–</span>
+          <div class="text-muted small">mapped</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-2">
+          <div class="text-muted small">Wikidata</div>
+          <span id="stat-wd-mapped" class="fw-bold text-success">–</span>
+          <span class="text-muted">/</span>
+          <span id="stat-wd-total" class="fw-bold">–</span>
+          <div class="text-muted small">mapped</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-2">
+          <div class="text-muted small">OSM</div>
+          <span id="stat-osm-mapped" class="fw-bold text-success">–</span>
+          <span class="text-muted">/</span>
+          <span id="stat-osm-total" class="fw-bold">–</span>
+          <div class="text-muted small">mapped</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="card text-center border-0 shadow-sm">
+        <div class="card-body py-2">
+          <div class="text-muted small">OHM</div>
+          <span id="stat-ohm-mapped" class="fw-bold text-success">–</span>
+          <span class="text-muted">/</span>
+          <span id="stat-ohm-total" class="fw-bold">–</span>
+          <div class="text-muted small">mapped</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# Vocabulary tabs #}
+  <ul class="nav nav-tabs" id="vocabTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="geonames-tab" data-bs-toggle="tab"
+              data-bs-target="#geonames-pane" type="button" role="tab"
+              aria-controls="geonames-pane" aria-selected="true">
+        GeoNames
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="wikidata-tab" data-bs-toggle="tab"
+              data-bs-target="#wikidata-pane" type="button" role="tab"
+              aria-controls="wikidata-pane" aria-selected="false">
+        Wikidata
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="osm-tab" data-bs-toggle="tab"
+              data-bs-target="#osm-pane" type="button" role="tab"
+              aria-controls="osm-pane" aria-selected="false">
+        OSM
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="ohm-tab" data-bs-toggle="tab"
+              data-bs-target="#ohm-pane" type="button" role="tab"
+              aria-controls="ohm-pane" aria-selected="false">
+        OHM
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content border border-top-0 rounded-bottom p-3" id="vocabTabContent">
+
+    {# ── GeoNames pane ── #}
+    <div class="tab-pane fade show active" id="geonames-pane" role="tabpanel" aria-labelledby="geonames-tab">
+      <div class="d-flex gap-2 mb-2 align-items-center">
+        <input type="text" class="form-control form-control-sm" style="max-width:300px"
+               placeholder="Filter feature codes…" id="gn-filter" aria-label="Filter GeoNames feature codes">
+        <span class="text-muted small" id="gn-count-label"></span>
+      </div>
+      <div class="table-responsive" style="max-height:600px; overflow-y:auto">
+        <table class="table table-sm table-hover mapping-table" id="gn-table">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th class="sortable" data-col="source_id">Code</th>
+              <th class="sortable" data-col="label">Name</th>
+              <th class="sortable" data-col="description" style="min-width:200px">Description</th>
+              <th class="sortable" data-col="count">Count</th>
+              <th class="sortable" data-col="mapping">AAT Mapping</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="text-center py-4 d-none" id="gn-loading">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        <span class="text-muted ms-2">Loading GeoNames types…</span>
+      </div>
+    </div>
+
+    {# ── Wikidata pane ── #}
+    <div class="tab-pane fade" id="wikidata-pane" role="tabpanel" aria-labelledby="wikidata-tab">
+      <div class="d-flex gap-2 mb-2 align-items-center">
+        <input type="text" class="form-control form-control-sm" style="max-width:300px"
+               placeholder="Filter Q-items…" id="wd-filter" aria-label="Filter Wikidata Q-items">
+        <span class="text-muted small" id="wd-count-label"></span>
+      </div>
+      <div class="table-responsive" style="max-height:600px; overflow-y:auto">
+        <table class="table table-sm table-hover mapping-table" id="wd-table">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th class="sortable" data-col="source_id">Q-item</th>
+              <th class="sortable" data-col="label">Label</th>
+              <th class="sortable" data-col="count">Count</th>
+              <th class="sortable" data-col="mapping">AAT Mapping</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="text-center py-4 d-none" id="wd-loading">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        <span class="text-muted ms-2">Loading Wikidata types…</span>
+      </div>
+    </div>
+
+    {# ── OSM pane ── #}
+    <div class="tab-pane fade" id="osm-pane" role="tabpanel" aria-labelledby="osm-tab">
+      <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+        <input type="text" class="form-control form-control-sm" style="max-width:250px"
+               placeholder="Filter tag values…" id="osm-filter" aria-label="Filter OSM tag values">
+        <select class="form-select form-select-sm" style="max-width:180px" id="osm-tag-key-filter" aria-label="Filter by OSM tag key">
+          <option value="">All tag keys</option>
+        </select>
+        <span class="text-muted small" id="osm-count-label"></span>
+      </div>
+      <div class="table-responsive" style="max-height:600px; overflow-y:auto">
+        <table class="table table-sm table-hover mapping-table" id="osm-table">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th class="sortable" data-col="source_id">Tag</th>
+              <th class="sortable" data-col="tag_key">Key</th>
+              <th class="sortable" data-col="label">Value</th>
+              <th class="sortable" data-col="description" style="min-width:180px">Description</th>
+              <th class="sortable" data-col="count">Count</th>
+              <th class="sortable" data-col="mapping">AAT Mapping</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="text-center py-4 d-none" id="osm-loading">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        <span class="text-muted ms-2">Loading OSM types…</span>
+      </div>
+    </div>
+
+    {# ── OHM pane ── #}
+    <div class="tab-pane fade" id="ohm-pane" role="tabpanel" aria-labelledby="ohm-tab">
+      <div class="d-flex gap-2 mb-2 align-items-center flex-wrap">
+        <input type="text" class="form-control form-control-sm" style="max-width:250px"
+               placeholder="Filter tag values…" id="ohm-filter" aria-label="Filter OHM tag values">
+        <select class="form-select form-select-sm" style="max-width:180px" id="ohm-tag-key-filter" aria-label="Filter by OHM tag key">
+          <option value="">All tag keys</option>
+        </select>
+        <button class="btn btn-sm btn-outline-primary" id="copy-osm-to-ohm-btn"
+                title="Copy all OSM mappings to OHM for matching tag values">
+          <i class="fas fa-copy"></i> Copy OSM → OHM
+        </button>
+        <span class="text-muted small" id="ohm-count-label"></span>
+      </div>
+      <div class="table-responsive" style="max-height:600px; overflow-y:auto">
+        <table class="table table-sm table-hover mapping-table" id="ohm-table">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th class="sortable" data-col="source_id">Tag</th>
+              <th class="sortable" data-col="tag_key">Key</th>
+              <th class="sortable" data-col="label">Value</th>
+              <th class="sortable" data-col="description" style="min-width:180px">Description</th>
+              <th class="sortable" data-col="count">Count</th>
+              <th class="sortable" data-col="mapping">AAT Mapping</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="text-center py-4 d-none" id="ohm-loading">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+        <span class="text-muted ms-2">Loading OHM types…</span>
+      </div>
+    </div>
+
+  </div>{# /tab-content #}
+</div>{# /container #}
+
+{% include "placetypes/mapping_modal.html" %}
+
+{% endblock content %}
+
+{% block deferredScripts %}
+  var scripts = [
+    { src: '{% static "placetypes/mapping.js" %}' }
+  ];
+{% endblock %}
+
+
+
+
+

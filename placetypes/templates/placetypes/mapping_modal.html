@@ -1,0 +1,59 @@
+{# placetypes/templates/placetypes/mapping_modal.html #}
+{# AAT concept search & selection modal — included in mapping_dashboard.html #}
+
+<div class="modal fade" id="aatSearchModal" tabindex="-1" aria-labelledby="aatSearchModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="aatSearchModalLabel">Select AAT Concept</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {# Source type info #}
+        <div class="mb-3 p-2 bg-light rounded" id="modal-source-info">
+          <div class="d-flex align-items-center gap-2">
+            <strong>Mapping:</strong>
+            <code id="modal-source-id"></code>
+            <span class="text-muted" id="modal-source-label"></span>
+          </div>
+          <small class="text-muted" id="modal-source-desc"></small>
+        </div>
+
+        {# AAT search input #}
+        <div class="input-group mb-3">
+          <span class="input-group-text"><i class="fas fa-search"></i></span>
+          <input type="text" class="form-control" id="aat-search-input"
+                 placeholder="Search AAT concepts (e.g. city, castle, river…)"
+                 autocomplete="off" aria-label="Search AAT concepts">
+          <button class="btn btn-outline-secondary" type="button" id="aat-search-clear"
+                  title="Clear search">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        {# Search results #}
+        <div id="aat-search-results">
+          <div class="text-muted text-center py-3" id="aat-search-placeholder">
+            Type at least 2 characters to search AAT concepts.
+          </div>
+          <div class="text-center py-3 d-none" id="aat-search-spinner">
+            <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+            <span class="text-muted ms-2">Searching…</span>
+          </div>
+          <div class="list-group" id="aat-results-list"></div>
+          <div class="text-muted text-center py-3 d-none" id="aat-no-results">
+            No matching AAT concepts found.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="aat-select-btn" disabled>
+          Save Mapping
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
