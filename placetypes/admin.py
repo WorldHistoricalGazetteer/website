@@ -2,7 +2,7 @@
 from django.contrib import admin
 
 from main.choices import FEATURE_CLASSES
-from .models import Type
+from .models import Type, TypeMappingLog
 
 
 class FclassFilter(admin.SimpleListFilter):
@@ -32,3 +32,11 @@ class TypeAdmin(admin.ModelAdmin):
         return ', '.join(obj.fclasses) if obj.fclasses else '-'
 
 
+@admin.register(TypeMappingLog)
+class TypeMappingLogAdmin(admin.ModelAdmin):
+    list_display = ('created', 'user', 'action', 'source_vocab', 'source_id', 'aat_id', 'aat_term')
+    list_filter = ('action', 'source_vocab')
+    search_fields = ('source_id', 'aat_term', 'user__username')
+    readonly_fields = ('user', 'action', 'source_vocab', 'source_id', 'aat_id', 'aat_term', 'note', 'created')
+    ordering = ('-created',)
+    date_hierarchy = 'created'

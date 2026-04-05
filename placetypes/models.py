@@ -7,6 +7,7 @@ The db_table remains 'types' for full backward compatibility with the
 existing database; no data migration is needed.
 """
 
+from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
@@ -81,3 +82,62 @@ class Type(models.Model):
             models.Index(fields=['is_place_type']),
             models.Index(fields=['depth', 'is_place_type']),
         ]
+
+
+class TypeMappingLog(models.Model):
+    """
+    Audit trail for mapping decisions.
+
+    Each save, remove, or bulk-copy action on the ES types index is
+    recorded here so we know who changed what and when.
+    """
+    ACTION_CHOICES = [
+        ('save', 'Save mapping'),
+        ('remove', 'Remove mapping'),
+        ('copy', 'Copy OSM → OHM'),
+    ]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='type_mapping_logs',
+    )
+    action = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    source_vocab = models.CharField(
+        max_length=20,
+        help_text='Source vocabulary: geonames, wikidata, osm, ohm',
+    )
+    source_id = models.CharField(
+        max_length=120,
+        help_text='Source identifier, e.g. P.PPL, Q515, place=city',
+    )
+    aat_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='Target AAT concept ID',
+    )
+    aat_term = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text='AAT term at the time of this action',
+    )
+    note = models.TextField(
+        blank=True, default='',
+        help_text='Optional context (e.g. bulk copy summary)',
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'type_mapping_log'
+        ordering = ['-created']
+        indexes = [
+            models.Index(fields=['-created']),
+            models.Index(fields=['source_vocab', 'source_id']),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.get_action_display()} {self.source_vocab}:{self.source_id}"
+            f" → aat:{self.aat_id} by {self.user} @ {self.created}"
+        )
+
+

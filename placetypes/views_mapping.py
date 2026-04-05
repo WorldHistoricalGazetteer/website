@@ -23,6 +23,7 @@ from .mapping_utils import (
     copy_osm_to_ohm,
     get_mapping_stats,
 )
+from .models import TypeMappingLog
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,14 @@ def api_save_mapping(request):
 
     try:
         result = save_mapping(source_vocab, source_id, int(aat_id))
+        TypeMappingLog.objects.create(
+            user=request.user,
+            action='save',
+            source_vocab=source_vocab,
+            source_id=source_id,
+            aat_id=result.get('aat_id'),
+            aat_term=result.get('aat_term', ''),
+        )
         logger.info(
             "User %s mapped %s:%s → aat:%s",
             request.user, source_vocab, source_id, aat_id,
@@ -146,6 +155,13 @@ def api_remove_mapping(request):
 
     try:
         result = remove_mapping(source_vocab, source_id, int(aat_id))
+        TypeMappingLog.objects.create(
+            user=request.user,
+            action='remove',
+            source_vocab=source_vocab,
+            source_id=source_id,
+            aat_id=int(aat_id),
+        )
         logger.info(
             "User %s removed mapping %s:%s from aat:%s",
             request.user, source_vocab, source_id, aat_id,
@@ -174,6 +190,13 @@ def api_copy_osm_to_ohm(request):
     """Copy all OSM mappings to OHM for overlapping tag values."""
     try:
         result = copy_osm_to_ohm()
+        TypeMappingLog.objects.create(
+            user=request.user,
+            action='copy',
+            source_vocab='ohm',
+            source_id='*',
+            note=f"Bulk copy OSM→OHM: {result.get('copied', 0)} copied, {result.get('skipped', 0)} skipped",
+        )
         logger.info("User %s copied OSM→OHM mappings: %s", request.user, result)
         return JsonResponse(result)
     except Exception as e:
