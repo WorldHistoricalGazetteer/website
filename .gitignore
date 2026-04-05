@@ -136,3 +136,4 @@ package-lock.json
 # Ignore all config.json files in server-configuration
 server-configuration/secret.yaml
 /cliopatria/
+placetypes/data/wikidata_labels.json

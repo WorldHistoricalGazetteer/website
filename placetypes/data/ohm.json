@@ -1,0 +1,4958 @@
+{
+  "place": {
+    "tier": "tier1_place",
+    "total_named_features": 131257,
+    "by_element_type": {
+      "nodes": 87050,
+      "ways": 17054,
+      "relations": 27153,
+      "total": 131257
+    },
+    "sampled": 5000,
+    "with_start_date": 636,
+    "with_end_date": 308,
+    "with_any_temporal": 685,
+    "temporal_pct": 13.7,
+    "start_date_pct": 12.7,
+    "end_date_pct": 6.2,
+    "distinct_values": 15,
+    "values": [
+      {
+        "value": "village",
+        "count": 3784,
+        "fraction": 0.7568
+      },
+      {
+        "value": "town",
+        "count": 542,
+        "fraction": 0.1084
+      },
+      {
+        "value": "locality",
+        "count": 340,
+        "fraction": 0.068
+      },
+      {
+        "value": "city",
+        "count": 175,
+        "fraction": 0.035
+      },
+      {
+        "value": "hamlet",
+        "count": 82,
+        "fraction": 0.0164
+      },
+      {
+        "value": "island",
+        "count": 23,
+        "fraction": 0.0046
+      },
+      {
+        "value": "suburb",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "islet",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "neighbourhood",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "point",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "isolated_dwelling",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "yes",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "rock",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "confluence",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "farm",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "historic": {
+    "tier": "tier1_place",
+    "total_named_features": 5998,
+    "by_element_type": {
+      "nodes": 3400,
+      "ways": 2102,
+      "relations": 496,
+      "total": 5998
+    },
+    "sampled": 5000,
+    "with_start_date": 3384,
+    "with_end_date": 1431,
+    "with_any_temporal": 3468,
+    "temporal_pct": 69.4,
+    "start_date_pct": 67.7,
+    "end_date_pct": 28.6,
+    "distinct_values": 83,
+    "values": [
+      {
+        "value": "boundary_stone",
+        "count": 1163,
+        "fraction": 0.2326
+      },
+      {
+        "value": "castle",
+        "count": 717,
+        "fraction": 0.1434
+      },
+      {
+        "value": "memorial",
+        "count": 605,
+        "fraction": 0.121
+      },
+      {
+        "value": "city_gate",
+        "count": 585,
+        "fraction": 0.117
+      },
+      {
+        "value": "monument",
+        "count": 279,
+        "fraction": 0.0558
+      },
+      {
+        "value": "archaeological_site",
+        "count": 184,
+        "fraction": 0.0368
+      },
+      {
+        "value": "fort",
+        "count": 174,
+        "fraction": 0.0348
+      },
+      {
+        "value": "manor",
+        "count": 163,
+        "fraction": 0.0326
+      },
+      {
+        "value": "mine",
+        "count": 155,
+        "fraction": 0.031
+      },
+      {
+        "value": "crash_site",
+        "count": 115,
+        "fraction": 0.023
+      },
+      {
+        "value": "yes",
+        "count": 112,
+        "fraction": 0.0224
+      },
+      {
+        "value": "ruins",
+        "count": 97,
+        "fraction": 0.0194
+      },
+      {
+        "value": "building",
+        "count": 87,
+        "fraction": 0.0174
+      },
+      {
+        "value": "ship",
+        "count": 53,
+        "fraction": 0.0106
+      },
+      {
+        "value": "roman_road",
+        "count": 48,
+        "fraction": 0.0096
+      },
+      {
+        "value": "church",
+        "count": 44,
+        "fraction": 0.0088
+      },
+      {
+        "value": "trail",
+        "count": 40,
+        "fraction": 0.008
+      },
+      {
+        "value": "tomb",
+        "count": 32,
+        "fraction": 0.0064
+      },
+      {
+        "value": "heritage",
+        "count": 32,
+        "fraction": 0.0064
+      },
+      {
+        "value": "bunker",
+        "count": 29,
+        "fraction": 0.0058
+      },
+      {
+        "value": "citywalls",
+        "count": 28,
+        "fraction": 0.0056
+      },
+      {
+        "value": "road",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "mine_shaft",
+        "count": 19,
+        "fraction": 0.0038
+      },
+      {
+        "value": "tower",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "bridge",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "wayside_shrine",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "wayside_cross",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "construction",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "battlefield",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "wreck",
+        "count": 12,
+        "fraction": 0.0024
+      },
+      {
+        "value": "fortress",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "railway",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "monastery",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "maritime",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "pillory",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "town",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "house",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "stone",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "exhibit",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "tramway",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "cemetery",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "romain town",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "raceway",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "marker",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "district",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "gallows",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "chapel",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "city",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "artwork",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "cannon",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "aqueduct",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "ancient_road",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "ancient_street",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "temple",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "theatre",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "factory",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "wall",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "path",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "palais",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "warehouse",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "still some signes visible in the current  function",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "homestead",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "milestone",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gate",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "statue",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "settlement",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "railway_station",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "prison",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Райволанйоки",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "palace",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Drehort \"Der Gehülfe\" von Thomas Koerfer, Roman von Robert Walser",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "administrative",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "replica",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "villa",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "attraction",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "fountain",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "drinking_fountain",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "farm",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "locomotive",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "fortification",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "sportsway",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "granary",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "viaduct",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "boundary": {
+    "tier": "tier1_place",
+    "total_named_features": 87802,
+    "by_element_type": {
+      "nodes": 1366,
+      "ways": 13508,
+      "relations": 72928,
+      "total": 87802
+    },
+    "sampled": 5000,
+    "with_start_date": 601,
+    "with_end_date": 355,
+    "with_any_temporal": 601,
+    "temporal_pct": 12.0,
+    "start_date_pct": 12.0,
+    "end_date_pct": 7.1,
+    "distinct_values": 16,
+    "values": [
+      {
+        "value": "administrative",
+        "count": 3311,
+        "fraction": 0.6622
+      },
+      {
+        "value": "marker",
+        "count": 889,
+        "fraction": 0.1778
+      },
+      {
+        "value": "religious_administration",
+        "count": 347,
+        "fraction": 0.0694
+      },
+      {
+        "value": "national_park",
+        "count": 236,
+        "fraction": 0.0472
+      },
+      {
+        "value": "civil_parish",
+        "count": 118,
+        "fraction": 0.0236
+      },
+      {
+        "value": "fix_administrative",
+        "count": 31,
+        "fraction": 0.0062
+      },
+      {
+        "value": "protected_area",
+        "count": 26,
+        "fraction": 0.0052
+      },
+      {
+        "value": "political",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "census",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "landuse",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "country_border",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "postal_code",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "historic_county",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "native_reservation",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "marker_decorative",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "land",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "natural": {
+    "tier": "tier1_place",
+    "total_named_features": 53272,
+    "by_element_type": {
+      "nodes": 4010,
+      "ways": 43536,
+      "relations": 5726,
+      "total": 53272
+    },
+    "sampled": 5000,
+    "with_start_date": 408,
+    "with_end_date": 263,
+    "with_any_temporal": 451,
+    "temporal_pct": 9.0,
+    "start_date_pct": 8.2,
+    "end_date_pct": 5.3,
+    "distinct_values": 40,
+    "values": [
+      {
+        "value": "peak",
+        "count": 2167,
+        "fraction": 0.4334
+      },
+      {
+        "value": "coastline",
+        "count": 889,
+        "fraction": 0.1778
+      },
+      {
+        "value": "cape",
+        "count": 476,
+        "fraction": 0.0952
+      },
+      {
+        "value": "spring",
+        "count": 322,
+        "fraction": 0.0644
+      },
+      {
+        "value": "water",
+        "count": 308,
+        "fraction": 0.0616
+      },
+      {
+        "value": "saddle",
+        "count": 165,
+        "fraction": 0.033
+      },
+      {
+        "value": "tree",
+        "count": 152,
+        "fraction": 0.0304
+      },
+      {
+        "value": "bay",
+        "count": 142,
+        "fraction": 0.0284
+      },
+      {
+        "value": "cave_entrance",
+        "count": 80,
+        "fraction": 0.016
+      },
+      {
+        "value": "beach",
+        "count": 71,
+        "fraction": 0.0142
+      },
+      {
+        "value": "waterfall",
+        "count": 40,
+        "fraction": 0.008
+      },
+      {
+        "value": "cliff",
+        "count": 39,
+        "fraction": 0.0078
+      },
+      {
+        "value": "point",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "peninsula",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "hill",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "volcano",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "rock",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "reef",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "strait",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "land",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "geyser",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "rocks",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "wood",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "valley",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "drainage_divide",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "stone",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "hot_spring",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "scree",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bare_rock",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "tree_stump",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "wetland",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "island",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "rapid",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gorge",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cave",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mountain_range",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mesa",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "storks_nest",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "shrub",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "sinkhole",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "waterway": {
+    "tier": "tier1_place",
+    "total_named_features": 546757,
+    "by_element_type": {
+      "nodes": 4104,
+      "ways": 532956,
+      "relations": 9697,
+      "total": 546757
+    },
+    "sampled": 5000,
+    "with_start_date": 53,
+    "with_end_date": 12,
+    "with_any_temporal": 57,
+    "temporal_pct": 1.1,
+    "start_date_pct": 1.1,
+    "end_date_pct": 0.2,
+    "distinct_values": 34,
+    "values": [
+      {
+        "value": "river",
+        "count": 3105,
+        "fraction": 0.621
+      },
+      {
+        "value": "lock_gate",
+        "count": 627,
+        "fraction": 0.1254
+      },
+      {
+        "value": "waterfall",
+        "count": 537,
+        "fraction": 0.1074
+      },
+      {
+        "value": "weir",
+        "count": 434,
+        "fraction": 0.0868
+      },
+      {
+        "value": "dam",
+        "count": 96,
+        "fraction": 0.0192
+      },
+      {
+        "value": "rapids",
+        "count": 52,
+        "fraction": 0.0104
+      },
+      {
+        "value": "lock",
+        "count": 34,
+        "fraction": 0.0068
+      },
+      {
+        "value": "dock",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "riverbank",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "stream",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "drawbridge",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "canal",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "boatyard",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "milestone",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "security_lock",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "cave_of_debouchement",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "mooring",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "source",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "pumping_station",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "sluice",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "quay",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "sluice_gate",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "lift",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "bifurcation",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "water_divide",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "unknown",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "crossing",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "rivermouth",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "low_weir",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gate",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "ford",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "spillway",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "yes",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "ditch",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "amenity": {
+    "tier": "tier2_high",
+    "total_named_features": 55607,
+    "by_element_type": {
+      "nodes": 43077,
+      "ways": 11233,
+      "relations": 1297,
+      "total": 55607
+    },
+    "sampled": 5000,
+    "with_start_date": 3886,
+    "with_end_date": 1237,
+    "with_any_temporal": 3934,
+    "temporal_pct": 78.7,
+    "start_date_pct": 77.7,
+    "end_date_pct": 24.7,
+    "distinct_values": 87,
+    "values": [
+      {
+        "value": "post_office",
+        "count": 2122,
+        "fraction": 0.4244
+      },
+      {
+        "value": "ferry_terminal",
+        "count": 710,
+        "fraction": 0.142
+      },
+      {
+        "value": "place_of_worship",
+        "count": 467,
+        "fraction": 0.0934
+      },
+      {
+        "value": "school",
+        "count": 329,
+        "fraction": 0.0658
+      },
+      {
+        "value": "restaurant",
+        "count": 181,
+        "fraction": 0.0362
+      },
+      {
+        "value": "theatre",
+        "count": 131,
+        "fraction": 0.0262
+      },
+      {
+        "value": "pub",
+        "count": 119,
+        "fraction": 0.0238
+      },
+      {
+        "value": "bank",
+        "count": 85,
+        "fraction": 0.017
+      },
+      {
+        "value": "hospital",
+        "count": 76,
+        "fraction": 0.0152
+      },
+      {
+        "value": "cinema",
+        "count": 69,
+        "fraction": 0.0138
+      },
+      {
+        "value": "fuel",
+        "count": 48,
+        "fraction": 0.0096
+      },
+      {
+        "value": "cafe",
+        "count": 47,
+        "fraction": 0.0094
+      },
+      {
+        "value": "townhall",
+        "count": 46,
+        "fraction": 0.0092
+      },
+      {
+        "value": "fast_food",
+        "count": 39,
+        "fraction": 0.0078
+      },
+      {
+        "value": "library",
+        "count": 39,
+        "fraction": 0.0078
+      },
+      {
+        "value": "nightclub",
+        "count": 35,
+        "fraction": 0.007
+      },
+      {
+        "value": "pharmacy",
+        "count": 31,
+        "fraction": 0.0062
+      },
+      {
+        "value": "courthouse",
+        "count": 29,
+        "fraction": 0.0058
+      },
+      {
+        "value": "police",
+        "count": 28,
+        "fraction": 0.0056
+      },
+      {
+        "value": "fire_station",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "post_box",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "fountain",
+        "count": 23,
+        "fraction": 0.0046
+      },
+      {
+        "value": "marketplace",
+        "count": 23,
+        "fraction": 0.0046
+      },
+      {
+        "value": "bus_station",
+        "count": 21,
+        "fraction": 0.0042
+      },
+      {
+        "value": "prison",
+        "count": 21,
+        "fraction": 0.0042
+      },
+      {
+        "value": "bar",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "college",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "university",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "saloon",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "monastery",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "community_centre",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "drinking_water",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "doctors",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "social_facility",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "arts_centre",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "archive",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "studio",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "parking",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "public_bath",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "clock",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "childcare",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "events_centre",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "public_building",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "dentist",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "music_school",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "kindergarten",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "clinic",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "parking_entrance",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "undertaker",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bench",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "casino",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bakery",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "social_centre",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "workhouse",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "cemetery",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "crematorium",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "recycling",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "post_depot",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "events_venue",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "Schadewinkel",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "ferry_depot",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "swimming_pool",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "shelter",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "general store",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "slaughterhouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "car_rental",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "tailor",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "washhouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "auction house",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "yes",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "language_school",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "animal_shelter",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "embassy",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "driving_school",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "conference_centre",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "car_wash",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "love_hotel",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "toilets",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "ice_cream",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "religious_college",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cafe,fuel",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "grave_yard",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "research_institute",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "planetarium",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Uszpelken",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "food_court",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "charging_station",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "tourism": {
+    "tier": "tier2_high",
+    "total_named_features": 8847,
+    "by_element_type": {
+      "nodes": 5857,
+      "ways": 2629,
+      "relations": 361,
+      "total": 8847
+    },
+    "sampled": 5000,
+    "with_start_date": 4606,
+    "with_end_date": 3580,
+    "with_any_temporal": 4616,
+    "temporal_pct": 92.3,
+    "start_date_pct": 92.1,
+    "end_date_pct": 71.6,
+    "distinct_values": 24,
+    "values": [
+      {
+        "value": "hotel",
+        "count": 1618,
+        "fraction": 0.3236
+      },
+      {
+        "value": "guest_house",
+        "count": 892,
+        "fraction": 0.1784
+      },
+      {
+        "value": "camp_site",
+        "count": 803,
+        "fraction": 0.1606
+      },
+      {
+        "value": "museum",
+        "count": 574,
+        "fraction": 0.1148
+      },
+      {
+        "value": "artwork",
+        "count": 457,
+        "fraction": 0.0914
+      },
+      {
+        "value": "attraction",
+        "count": 338,
+        "fraction": 0.0676
+      },
+      {
+        "value": "information",
+        "count": 89,
+        "fraction": 0.0178
+      },
+      {
+        "value": "gallery",
+        "count": 77,
+        "fraction": 0.0154
+      },
+      {
+        "value": "viewpoint",
+        "count": 46,
+        "fraction": 0.0092
+      },
+      {
+        "value": "hostel",
+        "count": 19,
+        "fraction": 0.0038
+      },
+      {
+        "value": "sightseeing",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "apartment",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "theme_park",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "motel",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "yes",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "aquarium",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "camp_pitch",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "picnic_site",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "zoo",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "wilderness_hut",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "alpine_hut",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "wine_cellar",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "camp_site;caravan_site;attraction",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "spa_resort",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "leisure": {
+    "tier": "tier2_high",
+    "total_named_features": 6909,
+    "by_element_type": {
+      "nodes": 687,
+      "ways": 5635,
+      "relations": 587,
+      "total": 6909
+    },
+    "sampled": 5000,
+    "with_start_date": 3973,
+    "with_end_date": 969,
+    "with_any_temporal": 3993,
+    "temporal_pct": 79.9,
+    "start_date_pct": 79.5,
+    "end_date_pct": 19.4,
+    "distinct_values": 47,
+    "values": [
+      {
+        "value": "park",
+        "count": 2706,
+        "fraction": 0.5412
+      },
+      {
+        "value": "nature_reserve",
+        "count": 483,
+        "fraction": 0.0966
+      },
+      {
+        "value": "garden",
+        "count": 352,
+        "fraction": 0.0704
+      },
+      {
+        "value": "sports_centre",
+        "count": 211,
+        "fraction": 0.0422
+      },
+      {
+        "value": "stadium",
+        "count": 205,
+        "fraction": 0.041
+      },
+      {
+        "value": "pitch",
+        "count": 185,
+        "fraction": 0.037
+      },
+      {
+        "value": "slipway",
+        "count": 123,
+        "fraction": 0.0246
+      },
+      {
+        "value": "amusement_arcade",
+        "count": 93,
+        "fraction": 0.0186
+      },
+      {
+        "value": "marina",
+        "count": 82,
+        "fraction": 0.0164
+      },
+      {
+        "value": "sports_hall",
+        "count": 69,
+        "fraction": 0.0138
+      },
+      {
+        "value": "golf_course",
+        "count": 68,
+        "fraction": 0.0136
+      },
+      {
+        "value": "swimming_pool",
+        "count": 57,
+        "fraction": 0.0114
+      },
+      {
+        "value": "playground",
+        "count": 57,
+        "fraction": 0.0114
+      },
+      {
+        "value": "fitness_centre",
+        "count": 51,
+        "fraction": 0.0102
+      },
+      {
+        "value": "track",
+        "count": 30,
+        "fraction": 0.006
+      },
+      {
+        "value": "bowling_alley",
+        "count": 29,
+        "fraction": 0.0058
+      },
+      {
+        "value": "dance",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "ice_rink",
+        "count": 22,
+        "fraction": 0.0044
+      },
+      {
+        "value": "adult_gaming_centre",
+        "count": 21,
+        "fraction": 0.0042
+      },
+      {
+        "value": "social_club",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "water_park",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "resort",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "bandstand",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "common",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "miniature_golf",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "hackerspace",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "dog_park",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "fishing",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "proposed",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "horse_riding",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "recreation_ground",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "shooting_ground",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "summer_camp",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "sauna",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bathing_place",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "beach_resort",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bleachers",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "beach",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Traditional Crag",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "indoor_play",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pool_hall",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "hot_tub",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "trampoline_park",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "local_knowledge",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "artificial_turf",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "field",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "swimming_area",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "man_made": {
+    "tier": "tier2_high",
+    "total_named_features": 5524,
+    "by_element_type": {
+      "nodes": 2231,
+      "ways": 3112,
+      "relations": 181,
+      "total": 5524
+    },
+    "sampled": 5000,
+    "with_start_date": 4310,
+    "with_end_date": 2526,
+    "with_any_temporal": 4373,
+    "temporal_pct": 87.5,
+    "start_date_pct": 86.2,
+    "end_date_pct": 50.5,
+    "distinct_values": 81,
+    "values": [
+      {
+        "value": "works",
+        "count": 1486,
+        "fraction": 0.2972
+      },
+      {
+        "value": "tower",
+        "count": 823,
+        "fraction": 0.1646
+      },
+      {
+        "value": "bridge",
+        "count": 814,
+        "fraction": 0.1628
+      },
+      {
+        "value": "mineshaft",
+        "count": 309,
+        "fraction": 0.0618
+      },
+      {
+        "value": "pier",
+        "count": 250,
+        "fraction": 0.05
+      },
+      {
+        "value": "windmill",
+        "count": 172,
+        "fraction": 0.0344
+      },
+      {
+        "value": "watermill",
+        "count": 152,
+        "fraction": 0.0304
+      },
+      {
+        "value": "adit",
+        "count": 84,
+        "fraction": 0.0168
+      },
+      {
+        "value": "lighthouse",
+        "count": 82,
+        "fraction": 0.0164
+      },
+      {
+        "value": "geoglyph",
+        "count": 71,
+        "fraction": 0.0142
+      },
+      {
+        "value": "survey_point",
+        "count": 60,
+        "fraction": 0.012
+      },
+      {
+        "value": "pipeline",
+        "count": 53,
+        "fraction": 0.0106
+      },
+      {
+        "value": "water_well",
+        "count": 42,
+        "fraction": 0.0084
+      },
+      {
+        "value": "riverbank",
+        "count": 41,
+        "fraction": 0.0082
+      },
+      {
+        "value": "water_tower",
+        "count": 36,
+        "fraction": 0.0072
+      },
+      {
+        "value": "dyke",
+        "count": 33,
+        "fraction": 0.0066
+      },
+      {
+        "value": "pumping_station",
+        "count": 31,
+        "fraction": 0.0062
+      },
+      {
+        "value": "reservoir_covered",
+        "count": 29,
+        "fraction": 0.0058
+      },
+      {
+        "value": "water_works",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "storage_tank",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "observatory",
+        "count": 23,
+        "fraction": 0.0046
+      },
+      {
+        "value": "surveillance",
+        "count": 22,
+        "fraction": 0.0044
+      },
+      {
+        "value": "obelisk",
+        "count": 19,
+        "fraction": 0.0038
+      },
+      {
+        "value": "wastewater_plant",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "yes",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "telescope",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "fort",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "monitoring_station",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "beacon",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "breakwater",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "silo",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "cross",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "quay",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "waterway",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "crane",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "measurement_station",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "mast",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "tunnel",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "chimney",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "embankment",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "kiln",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "lake",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "spillway",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "flagpole",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "island",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "wharf",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "communications_tower",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "jetty",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "gasometer",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "antenna",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "courtyard",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "bunker_silo",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "fish_passage",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "dam",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "lock",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "torii",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "water_canal",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "Senatsbeschluss",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "cutline",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "sluice",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "milestone",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "slipway",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "culvert",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "statue",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mine",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gas_works",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cairn",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "tar_kiln",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "teleskope",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cistern",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "reservoir",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "lagoon",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pontoon",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pump",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pond",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mill",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "grotto",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "groyne",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "storage",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "arch",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "ceremonial_gate",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "military": {
+    "tier": "tier2_high",
+    "total_named_features": 995,
+    "by_element_type": {
+      "nodes": 165,
+      "ways": 682,
+      "relations": 148,
+      "total": 995
+    },
+    "sampled": 995,
+    "with_start_date": 953,
+    "with_end_date": 668,
+    "with_any_temporal": 960,
+    "temporal_pct": 96.5,
+    "start_date_pct": 95.8,
+    "end_date_pct": 67.1,
+    "distinct_values": 30,
+    "values": [
+      {
+        "value": "tower",
+        "count": 202,
+        "fraction": 0.20301507537688443
+      },
+      {
+        "value": "barracks",
+        "count": 150,
+        "fraction": 0.1507537688442211
+      },
+      {
+        "value": "base",
+        "count": 147,
+        "fraction": 0.14773869346733667
+      },
+      {
+        "value": "bunker",
+        "count": 102,
+        "fraction": 0.10251256281407035
+      },
+      {
+        "value": "trench",
+        "count": 101,
+        "fraction": 0.10150753768844221
+      },
+      {
+        "value": "airfield",
+        "count": 100,
+        "fraction": 0.10050251256281408
+      },
+      {
+        "value": "ohm:military:GunEmplacement",
+        "count": 36,
+        "fraction": 0.036180904522613064
+      },
+      {
+        "value": "office",
+        "count": 33,
+        "fraction": 0.033165829145728645
+      },
+      {
+        "value": "training_area",
+        "count": 14,
+        "fraction": 0.01407035175879397
+      },
+      {
+        "value": "range",
+        "count": 12,
+        "fraction": 0.012060301507537688
+      },
+      {
+        "value": "cupola",
+        "count": 12,
+        "fraction": 0.012060301507537688
+      },
+      {
+        "value": "turret",
+        "count": 11,
+        "fraction": 0.011055276381909548
+      },
+      {
+        "value": "academy",
+        "count": 10,
+        "fraction": 0.010050251256281407
+      },
+      {
+        "value": "fort",
+        "count": 10,
+        "fraction": 0.010050251256281407
+      },
+      {
+        "value": "cordon",
+        "count": 9,
+        "fraction": 0.009045226130653266
+      },
+      {
+        "value": "yes",
+        "count": 8,
+        "fraction": 0.008040201005025126
+      },
+      {
+        "value": "fortification",
+        "count": 7,
+        "fraction": 0.007035175879396985
+      },
+      {
+        "value": "bastion",
+        "count": 6,
+        "fraction": 0.006030150753768844
+      },
+      {
+        "value": "ammunition",
+        "count": 5,
+        "fraction": 0.005025125628140704
+      },
+      {
+        "value": "armory",
+        "count": 4,
+        "fraction": 0.004020100502512563
+      },
+      {
+        "value": "danger_area",
+        "count": 3,
+        "fraction": 0.003015075376884422
+      },
+      {
+        "value": "nuclear_explosion_site",
+        "count": 3,
+        "fraction": 0.003015075376884422
+      },
+      {
+        "value": "naval_base",
+        "count": 2,
+        "fraction": 0.0020100502512562816
+      },
+      {
+        "value": "school",
+        "count": 2,
+        "fraction": 0.0020100502512562816
+      },
+      {
+        "value": "field_headquarters",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      },
+      {
+        "value": "hospital",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      },
+      {
+        "value": "arsenal",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      },
+      {
+        "value": "gun_emplacement",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      },
+      {
+        "value": "guardhouse",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      },
+      {
+        "value": "warehouse",
+        "count": 1,
+        "fraction": 0.0010050251256281408
+      }
+    ]
+  },
+  "landuse": {
+    "tier": "tier2_high",
+    "total_named_features": 10376,
+    "by_element_type": {
+      "nodes": 260,
+      "ways": 9124,
+      "relations": 992,
+      "total": 10376
+    },
+    "sampled": 5000,
+    "with_start_date": 3915,
+    "with_end_date": 1915,
+    "with_any_temporal": 3975,
+    "temporal_pct": 79.5,
+    "start_date_pct": 78.3,
+    "end_date_pct": 38.3,
+    "distinct_values": 56,
+    "values": [
+      {
+        "value": "residential",
+        "count": 979,
+        "fraction": 0.1958
+      },
+      {
+        "value": "highway",
+        "count": 761,
+        "fraction": 0.1522
+      },
+      {
+        "value": "military",
+        "count": 641,
+        "fraction": 0.1282
+      },
+      {
+        "value": "cemetery",
+        "count": 442,
+        "fraction": 0.0884
+      },
+      {
+        "value": "industrial",
+        "count": 347,
+        "fraction": 0.0694
+      },
+      {
+        "value": "forest",
+        "count": 288,
+        "fraction": 0.0576
+      },
+      {
+        "value": "meadow",
+        "count": 239,
+        "fraction": 0.0478
+      },
+      {
+        "value": "farmland",
+        "count": 174,
+        "fraction": 0.0348
+      },
+      {
+        "value": "construction",
+        "count": 147,
+        "fraction": 0.0294
+      },
+      {
+        "value": "reservoir",
+        "count": 109,
+        "fraction": 0.0218
+      },
+      {
+        "value": "commercial",
+        "count": 94,
+        "fraction": 0.0188
+      },
+      {
+        "value": "depot",
+        "count": 83,
+        "fraction": 0.0166
+      },
+      {
+        "value": "quarry",
+        "count": 65,
+        "fraction": 0.013
+      },
+      {
+        "value": "grass",
+        "count": 64,
+        "fraction": 0.0128
+      },
+      {
+        "value": "allotments",
+        "count": 58,
+        "fraction": 0.0116
+      },
+      {
+        "value": "recreation_ground",
+        "count": 57,
+        "fraction": 0.0114
+      },
+      {
+        "value": "orchard",
+        "count": 54,
+        "fraction": 0.0108
+      },
+      {
+        "value": "farmyard",
+        "count": 51,
+        "fraction": 0.0102
+      },
+      {
+        "value": "religious",
+        "count": 46,
+        "fraction": 0.0092
+      },
+      {
+        "value": "railway",
+        "count": 40,
+        "fraction": 0.008
+      },
+      {
+        "value": "conservation",
+        "count": 34,
+        "fraction": 0.0068
+      },
+      {
+        "value": "retail",
+        "count": 31,
+        "fraction": 0.0062
+      },
+      {
+        "value": "education",
+        "count": 26,
+        "fraction": 0.0052
+      },
+      {
+        "value": "zone_of_alienation",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "basin",
+        "count": 22,
+        "fraction": 0.0044
+      },
+      {
+        "value": "farm",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "landfill",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "island",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "greenfield",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "village_green",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "proposed",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "brownfield",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "harbour",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "vineyard",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "plant_nursery",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "aquaculture",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "winter_sports",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "water",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "churchyard",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "road",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Bird Sanctuary",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "heath",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "field",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "wood",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "rock",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cliff",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "nature_rexerve",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "marina",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "scrub",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mine",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "police",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "redidential",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "park",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "civic",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "animal_keeping",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "fairground",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "railway": {
+    "tier": "tier2_high",
+    "total_named_features": 103881,
+    "by_element_type": {
+      "nodes": 25742,
+      "ways": 74632,
+      "relations": 3507,
+      "total": 103881
+    },
+    "sampled": 5000,
+    "with_start_date": 4413,
+    "with_end_date": 2918,
+    "with_any_temporal": 4541,
+    "temporal_pct": 90.8,
+    "start_date_pct": 88.3,
+    "end_date_pct": 58.4,
+    "distinct_values": 17,
+    "values": [
+      {
+        "value": "tram_stop",
+        "count": 2328,
+        "fraction": 0.4656
+      },
+      {
+        "value": "station",
+        "count": 1889,
+        "fraction": 0.3778
+      },
+      {
+        "value": "halt",
+        "count": 318,
+        "fraction": 0.0636
+      },
+      {
+        "value": "stop",
+        "count": 252,
+        "fraction": 0.0504
+      },
+      {
+        "value": "site",
+        "count": 109,
+        "fraction": 0.0218
+      },
+      {
+        "value": "service_station",
+        "count": 63,
+        "fraction": 0.0126
+      },
+      {
+        "value": "junction",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "switch",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "yard",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "signal",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "subway_entrance",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "milestone",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "spur_junction",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "signal_box",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "crossing",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "block_post",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "proposed",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "building": {
+    "tier": "tier3_medium",
+    "total_named_features": 53366,
+    "by_element_type": {
+      "nodes": 1134,
+      "ways": 47459,
+      "relations": 4773,
+      "total": 53366
+    },
+    "sampled": 5000,
+    "with_start_date": 4596,
+    "with_end_date": 1813,
+    "with_any_temporal": 4654,
+    "temporal_pct": 93.1,
+    "start_date_pct": 91.9,
+    "end_date_pct": 36.3,
+    "distinct_values": 68,
+    "values": [
+      {
+        "value": "yes",
+        "count": 3311,
+        "fraction": 0.6622
+      },
+      {
+        "value": "residential",
+        "count": 392,
+        "fraction": 0.0784
+      },
+      {
+        "value": "church",
+        "count": 239,
+        "fraction": 0.0478
+      },
+      {
+        "value": "commercial",
+        "count": 219,
+        "fraction": 0.0438
+      },
+      {
+        "value": "house",
+        "count": 148,
+        "fraction": 0.0296
+      },
+      {
+        "value": "public",
+        "count": 114,
+        "fraction": 0.0228
+      },
+      {
+        "value": "university",
+        "count": 74,
+        "fraction": 0.0148
+      },
+      {
+        "value": "school",
+        "count": 52,
+        "fraction": 0.0104
+      },
+      {
+        "value": "commercial; residential",
+        "count": 50,
+        "fraction": 0.01
+      },
+      {
+        "value": "warehouse",
+        "count": 36,
+        "fraction": 0.0072
+      },
+      {
+        "value": "industrial",
+        "count": 33,
+        "fraction": 0.0066
+      },
+      {
+        "value": "chapel",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "apartments",
+        "count": 22,
+        "fraction": 0.0044
+      },
+      {
+        "value": "public; residential",
+        "count": 19,
+        "fraction": 0.0038
+      },
+      {
+        "value": "hospital",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "train_station",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "transportation",
+        "count": 17,
+        "fraction": 0.0034
+      },
+      {
+        "value": "cathedral",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "retail",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "office",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "hotel",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "bunker",
+        "count": 12,
+        "fraction": 0.0024
+      },
+      {
+        "value": "temple",
+        "count": 12,
+        "fraction": 0.0024
+      },
+      {
+        "value": "college",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "religious",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "tower",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "civic",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "terrace",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "stadium",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "farm",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "castle",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "commercial; public",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "construction",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "no",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "shed",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "windmill",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "stable",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "ruins",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "mosque",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "courthouse",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "detached",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "ship",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "industrial building",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "synagogue",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "public; religious",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "commercial; public; residential",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "guardhouse",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "roof",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "basilica",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "lighthouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mausoleum",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "monastery",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "stables",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gatehouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "shrine",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "shack",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "hut",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "farm_auxiliary",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pyramid",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "stage",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "mansion",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "kindergarten",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "Socony Mobil",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "greenhouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "bakehouse",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "dormitory",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "parking",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "grandstand",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "shop": {
+    "tier": "tier3_medium",
+    "total_named_features": 8396,
+    "by_element_type": {
+      "nodes": 6906,
+      "ways": 1271,
+      "relations": 219,
+      "total": 8396
+    },
+    "sampled": 5000,
+    "with_start_date": 4733,
+    "with_end_date": 3795,
+    "with_any_temporal": 4892,
+    "temporal_pct": 97.8,
+    "start_date_pct": 94.7,
+    "end_date_pct": 75.9,
+    "distinct_values": 180,
+    "values": [
+      {
+        "value": "hairdresser",
+        "count": 507,
+        "fraction": 0.1014
+      },
+      {
+        "value": "clothes",
+        "count": 417,
+        "fraction": 0.0834
+      },
+      {
+        "value": "supermarket",
+        "count": 367,
+        "fraction": 0.0734
+      },
+      {
+        "value": "convenience",
+        "count": 296,
+        "fraction": 0.0592
+      },
+      {
+        "value": "department_store",
+        "count": 237,
+        "fraction": 0.0474
+      },
+      {
+        "value": "car_repair",
+        "count": 201,
+        "fraction": 0.0402
+      },
+      {
+        "value": "bakery",
+        "count": 186,
+        "fraction": 0.0372
+      },
+      {
+        "value": "books",
+        "count": 186,
+        "fraction": 0.0372
+      },
+      {
+        "value": "shoes",
+        "count": 100,
+        "fraction": 0.02
+      },
+      {
+        "value": "laundry",
+        "count": 98,
+        "fraction": 0.0196
+      },
+      {
+        "value": "yes",
+        "count": 97,
+        "fraction": 0.0194
+      },
+      {
+        "value": "car",
+        "count": 90,
+        "fraction": 0.018
+      },
+      {
+        "value": "chemist",
+        "count": 84,
+        "fraction": 0.0168
+      },
+      {
+        "value": "alcohol",
+        "count": 83,
+        "fraction": 0.0166
+      },
+      {
+        "value": "furniture",
+        "count": 81,
+        "fraction": 0.0162
+      },
+      {
+        "value": "tailor",
+        "count": 80,
+        "fraction": 0.016
+      },
+      {
+        "value": "hardware",
+        "count": 64,
+        "fraction": 0.0128
+      },
+      {
+        "value": "jewelry",
+        "count": 63,
+        "fraction": 0.0126
+      },
+      {
+        "value": "mall",
+        "count": 59,
+        "fraction": 0.0118
+      },
+      {
+        "value": "variety_store",
+        "count": 58,
+        "fraction": 0.0116
+      },
+      {
+        "value": "beauty",
+        "count": 56,
+        "fraction": 0.0112
+      },
+      {
+        "value": "video",
+        "count": 50,
+        "fraction": 0.01
+      },
+      {
+        "value": "music",
+        "count": 50,
+        "fraction": 0.01
+      },
+      {
+        "value": "butcher",
+        "count": 48,
+        "fraction": 0.0096
+      },
+      {
+        "value": "electronics",
+        "count": 47,
+        "fraction": 0.0094
+      },
+      {
+        "value": "optician",
+        "count": 44,
+        "fraction": 0.0088
+      },
+      {
+        "value": "general",
+        "count": 43,
+        "fraction": 0.0086
+      },
+      {
+        "value": "colonial goods",
+        "count": 43,
+        "fraction": 0.0086
+      },
+      {
+        "value": "gift",
+        "count": 41,
+        "fraction": 0.0082
+      },
+      {
+        "value": "bicycle",
+        "count": 36,
+        "fraction": 0.0072
+      },
+      {
+        "value": "funeral_directors",
+        "count": 36,
+        "fraction": 0.0072
+      },
+      {
+        "value": "trade",
+        "count": 36,
+        "fraction": 0.0072
+      },
+      {
+        "value": "houseware",
+        "count": 34,
+        "fraction": 0.0068
+      },
+      {
+        "value": "auto_repair",
+        "count": 31,
+        "fraction": 0.0062
+      },
+      {
+        "value": "car_parts",
+        "count": 30,
+        "fraction": 0.006
+      },
+      {
+        "value": "store",
+        "count": 28,
+        "fraction": 0.0056
+      },
+      {
+        "value": "tobacco",
+        "count": 27,
+        "fraction": 0.0054
+      },
+      {
+        "value": "confectionery",
+        "count": 27,
+        "fraction": 0.0054
+      },
+      {
+        "value": "pastry",
+        "count": 26,
+        "fraction": 0.0052
+      },
+      {
+        "value": "stationery",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "sports",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "antiques",
+        "count": 25,
+        "fraction": 0.005
+      },
+      {
+        "value": "mobile_phone",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "wholesale",
+        "count": 24,
+        "fraction": 0.0048
+      },
+      {
+        "value": "doityourself",
+        "count": 22,
+        "fraction": 0.0044
+      },
+      {
+        "value": "greengrocer",
+        "count": 21,
+        "fraction": 0.0042
+      },
+      {
+        "value": "toys",
+        "count": 21,
+        "fraction": 0.0042
+      },
+      {
+        "value": "florist",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "second_hand",
+        "count": 20,
+        "fraction": 0.004
+      },
+      {
+        "value": "musical_instrument",
+        "count": 19,
+        "fraction": 0.0038
+      },
+      {
+        "value": "photo",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "dry_cleaning",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "grocery",
+        "count": 18,
+        "fraction": 0.0036
+      },
+      {
+        "value": "carpet",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "charity",
+        "count": 16,
+        "fraction": 0.0032
+      },
+      {
+        "value": "deli",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "pet",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "seafood",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "paint",
+        "count": 14,
+        "fraction": 0.0028
+      },
+      {
+        "value": "fashion_accessories",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "tyres",
+        "count": 13,
+        "fraction": 0.0026
+      },
+      {
+        "value": "outdoor",
+        "count": 12,
+        "fraction": 0.0024
+      },
+      {
+        "value": "appliance",
+        "count": 12,
+        "fraction": 0.0024
+      },
+      {
+        "value": "coffee",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "garden_centre",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "art",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "dairy",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "bed",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "anime",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "sewing",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "craft",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "travel_agency",
+        "count": 11,
+        "fraction": 0.0022
+      },
+      {
+        "value": "computer",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "kiosk",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "storage_rental",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "wine",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "cosmetics",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "collector",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "fabric",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "ticket",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "motorcycle",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "pharmacy",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "leather",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "food",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "weapons",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "interior_decoration",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "hifi",
+        "count": 8,
+        "fraction": 0.0016
+      },
+      {
+        "value": "kitchen",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "pawnbroker",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "camera",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "medical_supply",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "baby_goods",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "money_lender",
+        "count": 7,
+        "fraction": 0.0014
+      },
+      {
+        "value": "electrical",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "watches",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "copyshop",
+        "count": 6,
+        "fraction": 0.0012
+      },
+      {
+        "value": "tea",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "agrarian",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "video_games",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "flooring",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "newsagent",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "perfumery",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "printing",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "party",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "beverages",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "hobby",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "curtain",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "rental",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "religion",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "radiotechnics",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "photography",
+        "count": 4,
+        "fraction": 0.0008
+      },
+      {
+        "value": "liquor",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "health_food",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "catalogue",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "massage",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "swimming_pool",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "fireplace",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "vacuum_cleaner",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "shoe_repair",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "games",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "farm",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "bag",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "delicatessen",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "horses",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "model",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "drugstore",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "dry goods",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "second-hand store",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bathroom_furnishing",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "erotic",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "nutrition_supplements",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "boat",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "doors",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "tiles",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "cheese",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "tattoo",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "repair",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "glass",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "bicycle_repair",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "e-cigarette",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "spices",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "coal",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "boutique",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cigars",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "photo gallery",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "hat",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "sewing machines",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "picture frames",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "window_blind",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "lighting",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "ice",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "tv",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "military_surplus",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "locksmith",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "frame",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "candles",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pyrotechnics",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "tofu",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pet_grooming",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "hearing_aids",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "printer_ink",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "convenience;seafood",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "fuel",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "clock_repair",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "tools",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "discount",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "organiser",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "bubble_tea",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "hairdresser_supply",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "telecommunication",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "cannabis",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "psychic",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "gun",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "shopping_centre",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "estate_agent",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "fishing",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "bookmaker",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "pottery",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "maps",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "vacant",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "office": {
+    "tier": "tier3_medium",
+    "total_named_features": 1843,
+    "by_element_type": {
+      "nodes": 1162,
+      "ways": 546,
+      "relations": 135,
+      "total": 1843
+    },
+    "sampled": 1843,
+    "with_start_date": 1742,
+    "with_end_date": 1047,
+    "with_any_temporal": 1780,
+    "temporal_pct": 96.6,
+    "start_date_pct": 94.5,
+    "end_date_pct": 56.8,
+    "distinct_values": 63,
+    "values": [
+      {
+        "value": "government",
+        "count": 523,
+        "fraction": 0.28377645143787306
+      },
+      {
+        "value": "yes",
+        "count": 247,
+        "fraction": 0.13402061855670103
+      },
+      {
+        "value": "diplomatic",
+        "count": 164,
+        "fraction": 0.08898534997287032
+      },
+      {
+        "value": "company",
+        "count": 132,
+        "fraction": 0.0716223548562127
+      },
+      {
+        "value": "newspaper",
+        "count": 115,
+        "fraction": 0.062398263700488336
+      },
+      {
+        "value": "insurance",
+        "count": 70,
+        "fraction": 0.03798155181768855
+      },
+      {
+        "value": "it",
+        "count": 68,
+        "fraction": 0.03689636462289745
+      },
+      {
+        "value": "association",
+        "count": 51,
+        "fraction": 0.027672273467173086
+      },
+      {
+        "value": "lawyer",
+        "count": 51,
+        "fraction": 0.027672273467173086
+      },
+      {
+        "value": "estate_agent",
+        "count": 50,
+        "fraction": 0.027129679869777535
+      },
+      {
+        "value": "ngo",
+        "count": 31,
+        "fraction": 0.016820401519262073
+      },
+      {
+        "value": "construction_company",
+        "count": 28,
+        "fraction": 0.015192620727075421
+      },
+      {
+        "value": "political_party",
+        "count": 26,
+        "fraction": 0.01410743353228432
+      },
+      {
+        "value": "religion",
+        "count": 25,
+        "fraction": 0.013564839934888768
+      },
+      {
+        "value": "telecommunication",
+        "count": 23,
+        "fraction": 0.012479652740097666
+      },
+      {
+        "value": "educational_institution",
+        "count": 23,
+        "fraction": 0.012479652740097666
+      },
+      {
+        "value": "architect",
+        "count": 20,
+        "fraction": 0.010851871947911014
+      },
+      {
+        "value": "research",
+        "count": 19,
+        "fraction": 0.010309278350515464
+      },
+      {
+        "value": "financial",
+        "count": 15,
+        "fraction": 0.008138903960933261
+      },
+      {
+        "value": "charity",
+        "count": 13,
+        "fraction": 0.00705371676614216
+      },
+      {
+        "value": "tax_advisor",
+        "count": 13,
+        "fraction": 0.00705371676614216
+      },
+      {
+        "value": "engineer",
+        "count": 12,
+        "fraction": 0.0065111231687466084
+      },
+      {
+        "value": "foundation",
+        "count": 11,
+        "fraction": 0.005968529571351058
+      },
+      {
+        "value": "employment_agency",
+        "count": 9,
+        "fraction": 0.0048833423765599565
+      },
+      {
+        "value": "advertising_agency",
+        "count": 9,
+        "fraction": 0.0048833423765599565
+      },
+      {
+        "value": "union",
+        "count": 8,
+        "fraction": 0.004340748779164406
+      },
+      {
+        "value": "coworking",
+        "count": 8,
+        "fraction": 0.004340748779164406
+      },
+      {
+        "value": "energy_supplier",
+        "count": 6,
+        "fraction": 0.0032555615843733042
+      },
+      {
+        "value": "healthcare",
+        "count": 6,
+        "fraction": 0.0032555615843733042
+      },
+      {
+        "value": "publisher",
+        "count": 6,
+        "fraction": 0.0032555615843733042
+      },
+      {
+        "value": "graphic_design",
+        "count": 5,
+        "fraction": 0.0027129679869777536
+      },
+      {
+        "value": "water_utility",
+        "count": 4,
+        "fraction": 0.002170374389582203
+      },
+      {
+        "value": "auctioneer",
+        "count": 4,
+        "fraction": 0.002170374389582203
+      },
+      {
+        "value": "accountant",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "moving_company",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "consulting",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "mortgage",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "transport",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "forestry",
+        "count": 3,
+        "fraction": 0.0016277807921866521
+      },
+      {
+        "value": "logistics",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "university",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "therapist",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "politician",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "harbour_master",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "event_planner",
+        "count": 2,
+        "fraction": 0.0010851871947911015
+      },
+      {
+        "value": "administrative",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "shipping_agent",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "labor_union",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "tutoring",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "armored_car_service",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "marketing",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "investment",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "taxi",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "courier",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "financial_advisor",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "event_management",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "chamber",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "Rail Road",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "printing_plant",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "design",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "broadcaster",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "mill",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      },
+      {
+        "value": "weighbridge",
+        "count": 1,
+        "fraction": 0.0005425935973955507
+      }
+    ]
+  },
+  "bridge": {
+    "tier": "tier3_medium",
+    "total_named_features": 68215,
+    "by_element_type": {
+      "nodes": 17,
+      "ways": 67589,
+      "relations": 609,
+      "total": 68215
+    },
+    "sampled": 5000,
+    "with_start_date": 4621,
+    "with_end_date": 722,
+    "with_any_temporal": 4638,
+    "temporal_pct": 92.8,
+    "start_date_pct": 92.4,
+    "end_date_pct": 14.4,
+    "distinct_values": 10,
+    "values": [
+      {
+        "value": "yes",
+        "count": 4815,
+        "fraction": 0.963
+      },
+      {
+        "value": "viaduct",
+        "count": 76,
+        "fraction": 0.0152
+      },
+      {
+        "value": "aqueduct",
+        "count": 59,
+        "fraction": 0.0118
+      },
+      {
+        "value": "movable",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "boardwalk",
+        "count": 15,
+        "fraction": 0.003
+      },
+      {
+        "value": "trestle",
+        "count": 9,
+        "fraction": 0.0018
+      },
+      {
+        "value": "cantilever",
+        "count": 5,
+        "fraction": 0.001
+      },
+      {
+        "value": "abandoned",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "no",
+        "count": 2,
+        "fraction": 0.0004
+      },
+      {
+        "value": "basin",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "tunnel": {
+    "tier": "tier3_medium",
+    "total_named_features": 24113,
+    "by_element_type": {
+      "nodes": 2,
+      "ways": 24014,
+      "relations": 97,
+      "total": 24113
+    },
+    "sampled": 5000,
+    "with_start_date": 73,
+    "with_end_date": 3,
+    "with_any_temporal": 75,
+    "temporal_pct": 1.5,
+    "start_date_pct": 1.5,
+    "end_date_pct": 0.1,
+    "distinct_values": 6,
+    "values": [
+      {
+        "value": "yes",
+        "count": 4425,
+        "fraction": 0.885
+      },
+      {
+        "value": "culvert",
+        "count": 560,
+        "fraction": 0.112
+      },
+      {
+        "value": "true",
+        "count": 10,
+        "fraction": 0.002
+      },
+      {
+        "value": "no",
+        "count": 3,
+        "fraction": 0.0006
+      },
+      {
+        "value": "private",
+        "count": 1,
+        "fraction": 0.0002
+      },
+      {
+        "value": "undefined",
+        "count": 1,
+        "fraction": 0.0002
+      }
+    ]
+  },
+  "aeroway": {
+    "tier": "tier3_medium",
+    "total_named_features": 841,
+    "by_element_type": {
+      "nodes": 158,
+      "ways": 620,
+      "relations": 63,
+      "total": 841
+    },
+    "sampled": 841,
+    "with_start_date": 820,
+    "with_end_date": 305,
+    "with_any_temporal": 822,
+    "temporal_pct": 97.7,
+    "start_date_pct": 97.5,
+    "end_date_pct": 36.3,
+    "distinct_values": 12,
+    "values": [
+      {
+        "value": "aerodrome",
+        "count": 387,
+        "fraction": 0.460166468489893
+      },
+      {
+        "value": "taxiway",
+        "count": 192,
+        "fraction": 0.22829964328180738
+      },
+      {
+        "value": "terminal",
+        "count": 144,
+        "fraction": 0.17122473246135553
+      },
+      {
+        "value": "runway",
+        "count": 47,
+        "fraction": 0.0558858501783591
+      },
+      {
+        "value": "hangar",
+        "count": 32,
+        "fraction": 0.03804994054696789
+      },
+      {
+        "value": "helipad",
+        "count": 12,
+        "fraction": 0.014268727705112961
+      },
+      {
+        "value": "navigationaid",
+        "count": 11,
+        "fraction": 0.013079667063020214
+      },
+      {
+        "value": "tower",
+        "count": 6,
+        "fraction": 0.007134363852556481
+      },
+      {
+        "value": "apron",
+        "count": 5,
+        "fraction": 0.005945303210463734
+      },
+      {
+        "value": "spaceport",
+        "count": 2,
+        "fraction": 0.0023781212841854932
+      },
+      {
+        "value": "parking_position",
+        "count": 2,
+        "fraction": 0.0023781212841854932
+      },
+      {
+        "value": "jet_bridge",
+        "count": 1,
+        "fraction": 0.0011890606420927466
+      }
+    ]
+  },
+  "power": {
+    "tier": "tier3_medium",
+    "total_named_features": 808,
+    "by_element_type": {
+      "nodes": 225,
+      "ways": 536,
+      "relations": 47,
+      "total": 808
+    },
+    "sampled": 808,
+    "with_start_date": 652,
+    "with_end_date": 177,
+    "with_any_temporal": 657,
+    "temporal_pct": 81.3,
+    "start_date_pct": 80.7,
+    "end_date_pct": 21.9,
+    "distinct_values": 11,
+    "values": [
+      {
+        "value": "minor_underground_cable",
+        "count": 187,
+        "fraction": 0.23143564356435645
+      },
+      {
+        "value": "generator",
+        "count": 183,
+        "fraction": 0.2264851485148515
+      },
+      {
+        "value": "plant",
+        "count": 178,
+        "fraction": 0.2202970297029703
+      },
+      {
+        "value": "line",
+        "count": 124,
+        "fraction": 0.15346534653465346
+      },
+      {
+        "value": "substation",
+        "count": 80,
+        "fraction": 0.09900990099009901
+      },
+      {
+        "value": "tower",
+        "count": 48,
+        "fraction": 0.0594059405940594
+      },
+      {
+        "value": "station",
+        "count": 2,
+        "fraction": 0.0024752475247524753
+      },
+      {
+        "value": "minor_line",
+        "count": 2,
+        "fraction": 0.0024752475247524753
+      },
+      {
+        "value": "plant;substation",
+        "count": 2,
+        "fraction": 0.0024752475247524753
+      },
+      {
+        "value": "transformer",
+        "count": 1,
+        "fraction": 0.0012376237623762376
+      },
+      {
+        "value": "cable",
+        "count": 1,
+        "fraction": 0.0012376237623762376
+      }
+    ]
+  },
+  "healthcare": {
+    "tier": "tier3_medium",
+    "total_named_features": 1006,
+    "by_element_type": {
+      "nodes": 563,
+      "ways": 399,
+      "relations": 44,
+      "total": 1006
+    },
+    "sampled": 1006,
+    "with_start_date": 948,
+    "with_end_date": 525,
+    "with_any_temporal": 961,
+    "temporal_pct": 95.5,
+    "start_date_pct": 94.2,
+    "end_date_pct": 52.2,
+    "distinct_values": 21,
+    "values": [
+      {
+        "value": "hospital",
+        "count": 487,
+        "fraction": 0.4840954274353877
+      },
+      {
+        "value": "pharmacy",
+        "count": 202,
+        "fraction": 0.20079522862823063
+      },
+      {
+        "value": "doctor",
+        "count": 89,
+        "fraction": 0.08846918489065607
+      },
+      {
+        "value": "clinic",
+        "count": 77,
+        "fraction": 0.07654075546719682
+      },
+      {
+        "value": "dentist",
+        "count": 55,
+        "fraction": 0.05467196819085487
+      },
+      {
+        "value": "yes",
+        "count": 24,
+        "fraction": 0.02385685884691849
+      },
+      {
+        "value": "alternative",
+        "count": 14,
+        "fraction": 0.013916500994035786
+      },
+      {
+        "value": "optometrist",
+        "count": 12,
+        "fraction": 0.011928429423459244
+      },
+      {
+        "value": "hospice",
+        "count": 8,
+        "fraction": 0.007952286282306162
+      },
+      {
+        "value": "laboratory",
+        "count": 7,
+        "fraction": 0.006958250497017893
+      },
+      {
+        "value": "rehabilitation",
+        "count": 6,
+        "fraction": 0.005964214711729622
+      },
+      {
+        "value": "physiotherapist",
+        "count": 5,
+        "fraction": 0.004970178926441352
+      },
+      {
+        "value": "counselling",
+        "count": 4,
+        "fraction": 0.003976143141153081
+      },
+      {
+        "value": "birthing_centre",
+        "count": 4,
+        "fraction": 0.003976143141153081
+      },
+      {
+        "value": "blood_donation",
+        "count": 3,
+        "fraction": 0.002982107355864811
+      },
+      {
+        "value": "midwife",
+        "count": 3,
+        "fraction": 0.002982107355864811
+      },
+      {
+        "value": "podiatrist",
+        "count": 2,
+        "fraction": 0.0019880715705765406
+      },
+      {
+        "value": "psychotherapist",
+        "count": 1,
+        "fraction": 0.0009940357852882703
+      },
+      {
+        "value": "infirmary",
+        "count": 1,
+        "fraction": 0.0009940357852882703
+      },
+      {
+        "value": "dialysis",
+        "count": 1,
+        "fraction": 0.0009940357852882703
+      },
+      {
+        "value": "centre",
+        "count": 1,
+        "fraction": 0.0009940357852882703
+      }
+    ]
+  },
+  "geological": {
+    "tier": "tier4_low",
+    "total_named_features": 12,
+    "by_element_type": {
+      "nodes": 9,
+      "ways": 3,
+      "relations": 0,
+      "total": 12
+    },
+    "sampled": 12,
+    "with_start_date": 3,
+    "with_end_date": 0,
+    "with_any_temporal": 3,
+    "temporal_pct": 25.0,
+    "start_date_pct": 25.0,
+    "end_date_pct": 0.0,
+    "distinct_values": 5,
+    "values": [
+      {
+        "value": "volcanic_geyser",
+        "count": 5,
+        "fraction": 0.4166666666666667
+      },
+      {
+        "value": "outcrop",
+        "count": 3,
+        "fraction": 0.25
+      },
+      {
+        "value": "volcanic_vent",
+        "count": 2,
+        "fraction": 0.16666666666666666
+      },
+      {
+        "value": "palaeontological_site",
+        "count": 1,
+        "fraction": 0.08333333333333333
+      },
+      {
+        "value": "esker",
+        "count": 1,
+        "fraction": 0.08333333333333333
+      }
+    ]
+  },
+  "_global": {
+    "total_named": 1673368,
+    "nodes": 245378,
+    "ways": 1308559,
+    "relations": 119431
+  }
+}

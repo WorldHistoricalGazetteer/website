@@ -284,9 +284,12 @@ def get_wikidata_types():
     Return a list of Wikidata Q-items with labels, descriptions,
     and any existing AAT mappings.
 
-    Labels are fetched from Wikidata API on first load and cached
-    to a local JSON file for instant subsequent loads.
+    Labels are fetched from Wikidata API and cached to a local JSON file.
+    To avoid blocking requests, at most MAX_FETCH_PER_REQUEST labels are
+    fetched per call; subsequent page loads progressively fill the cache.
     """
+    MAX_FETCH_PER_REQUEST = 200  # 4 batches of 50
+
     wd_map = get_current_mappings()[1]
 
     # Try to get Q-item counts from ES places index
@@ -325,12 +328,18 @@ def get_wikidata_types():
     if not all_qids:
         return []
 
-    # Load cached labels, fetch any missing from Wikidata API
+    # Load cached labels, fetch a limited batch of missing ones
     label_cache = _load_wikidata_label_cache()
     missing = [q for q in all_qids if q not in label_cache]
     if missing:
-        logger.info("Fetching %d Wikidata labels from API...", len(missing))
-        new_labels = _fetch_wikidata_labels(missing)
+        # Prioritise high-count items so the most important labels arrive first
+        missing.sort(key=lambda q: -qid_counts.get(q, 0))
+        fetch_batch = missing[:MAX_FETCH_PER_REQUEST]
+        logger.info(
+            "Fetching %d of %d missing Wikidata labels from API...",
+            len(fetch_batch), len(missing),
+        )
+        new_labels = _fetch_wikidata_labels(fetch_batch)
         label_cache.update(new_labels)
         _save_wikidata_label_cache(label_cache)
 
