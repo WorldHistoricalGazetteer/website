@@ -37,6 +37,9 @@ VALID_CONFIDENCES = {"exact", "close", "review"}
 # GeoNames feature class letters
 GN_FCLASSES = {"A", "H", "L", "P", "R", "S", "T", "U", "V"}
 
+# Dot-form fclass codes as used in the places index (e.g. "S.", "H.")
+GN_FCLASS_DOT_FORMS = {f"{fc}." for fc in GN_FCLASSES}
+
 
 # ---------------------------------------------------------------------------
 # Mappings cache (Django cache framework — shared across workers)
@@ -197,9 +200,6 @@ def get_geonames_types():
             fclass = code.split(".")[0]
             if fclass not in GN_FCLASSES:
                 continue
-        elif code in GN_FCLASSES:
-            # Standalone fclass code (A, H, L, P, R, S, T, U, V)
-            fclass = code
         else:
             continue
         info = gn_labels.get(code, {})
@@ -797,11 +797,6 @@ def get_mapping_stats():
         for bucket in resp["aggregations"]["source_labels"]["by_label"]["buckets"]:
             sl = bucket["key"]
             if "." in sl and sl.split(".")[0] in GN_FCLASSES:
-                cnt = bucket["doc_count"]
-                gn_total_records += cnt
-                if sl in gn_map:
-                    gn_mapped_records += cnt
-            elif sl in GN_FCLASSES:
                 cnt = bucket["doc_count"]
                 gn_total_records += cnt
                 if sl in gn_map:

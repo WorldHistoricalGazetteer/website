@@ -1,12 +1,12 @@
-A	Administrative Boundary Features	country, state, region, and other administrative boundary features
-H	Hydrographic Features	stream, lake, river, and other water-related features
-L	Area Features	parks, areas, and other land-use features
-P	Populated Place Features	city, town, village, and other populated place features
-R	Road / Railroad Features	road, railroad, and other transport route features
-S	Spot Features	building, farm, church, and other point-of-interest features
-T	Hypsographic Features	mountain, hill, rock, and other terrain features
-U	Undersea Features	undersea mountains, valleys, ridges, and other subaqueous features
-V	Vegetation Features	forest, heath, scrubland, and other vegetation features
+A.	Administrative Boundary Features	country, state, region, and other administrative boundary features
+H.	Hydrographic Features	stream, lake, river, and other water-related features
+L.	Area Features	parks, areas, and other land-use features
+P.	Populated Place Features	city, town, village, and other populated place features
+R.	Road / Railroad Features	road, railroad, and other transport route features
+S.	Spot Features	building, farm, church, and other point-of-interest features
+T.	Hypsographic Features	mountain, hill, rock, and other terrain features
+U.	Undersea Features	undersea mountains, valleys, ridges, and other subaqueous features
+V.	Vegetation Features	forest, heath, scrubland, and other vegetation features
 A.ADM1	first-order administrative division	a primary administrative division of a country, such as a state in the United States
 A.ADM1H	historical first-order administrative division	a former first-order administrative division
 A.ADM2	second-order administrative division	a subdivision of a first-order administrative division
