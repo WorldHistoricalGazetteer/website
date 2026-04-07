@@ -93,6 +93,24 @@ const ALL_TIERS = [
     { value: 'municipality',   label: 'Municipality' },
 ];
 
+/**
+ * Map each OSM tier value to the max admin_level to display.
+ * Used to filter the `boundaries` vector tile layer.
+ */
+const TIER_ADMIN_LEVELS = {
+    country:      2,
+    region:       4,   // admin levels 2–4
+    district:     6,   // admin levels 2–6
+    municipality: 8,   // admin levels 2–8
+};
+
+/** Namespace options for the source toggle (OSM vs OHM). */
+const NAMESPACE_OPTIONS = [
+    { value: '',    label: 'All' },
+    { value: 'osm', label: 'OSM' },
+    { value: 'ohm', label: 'OHM' },
+];
+
 /* ───── Helpers ───── */
 
 /** Squared Euclidean distance between two [lng, lat] points. */
@@ -150,6 +168,7 @@ export default class RegionSelector {
         this._selectedRegions = [];   // Array of {id, label, source, tier}
         this._results = [];
         this._currentTier = 'off';
+        this._currentNamespace = '';  // '' = all, 'osm', 'ohm'
         this._tiersEnabled = false;   // Zoom gate state
         this._init();
     }
@@ -166,6 +185,12 @@ export default class RegionSelector {
                                 ${isZoomGatedTier(t.value) ? 'disabled' : ''}>${t.label}</button>
                     `).join('')}
                 </div>
+                <div class="region-namespace-toggle btn-group btn-group-sm mb-2 d-none" role="group" aria-label="Boundary source">
+                    ${NAMESPACE_OPTIONS.map((o, i) => `
+                        <button type="button" class="btn${i === 0 ? ' active' : ''}"
+                                data-namespace="${o.value}">${o.label}</button>
+                    `).join('')}
+                </div>
                 <div class="region-input-wrap position-relative">
                     <input type="text" class="form-control form-control-sm region-search-input"
                            placeholder="Zoom the map first to constrain your search area" disabled
@@ -176,10 +201,11 @@ export default class RegionSelector {
             </div>
         `;
 
-        this._input     = this.$el.querySelector('.region-search-input');
-        this._inputWrap = this.$el.querySelector('.region-input-wrap');
-        this._dropdown  = this.$el.querySelector('.region-dropdown');
-        this._chipArea  = this.$el.querySelector('.region-chip-area');
+        this._input        = this.$el.querySelector('.region-search-input');
+        this._inputWrap    = this.$el.querySelector('.region-input-wrap');
+        this._dropdown     = this.$el.querySelector('.region-dropdown');
+        this._chipArea     = this.$el.querySelector('.region-chip-area');
+        this._nsToggle     = this.$el.querySelector('.region-namespace-toggle');
 
         // Wire tier toggle buttons
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(btn => {
@@ -188,6 +214,16 @@ export default class RegionSelector {
                 this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 this._onTierChange(btn.dataset.tier);
+            });
+        });
+
+        // Wire namespace toggle buttons
+        this.$el.querySelectorAll('.region-namespace-toggle .btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.$el.querySelectorAll('.region-namespace-toggle .btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this._currentNamespace = btn.dataset.namespace;
+                this._updateBoundaryFilter();
             });
         });
 
@@ -222,15 +258,19 @@ export default class RegionSelector {
             if (this._tiersEnabled) {
                 this._inputWrap.style.display = 'none';
             }
+            this._nsToggle.classList.add('d-none');
             this._clearAllSelections();
             contextMap.clearSuggestions();
+            contextMap.hideBoundaries();
             filterState.set('spatial.geometry_source', 'none');
         } else if (tier === 'mapbounds') {
             if (this._tiersEnabled) {
                 this._inputWrap.style.display = 'none';
             }
+            this._nsToggle.classList.add('d-none');
             this._clearAllSelections();
             contextMap.clearSuggestions();
+            contextMap.hideBoundaries();
             filterState.set('spatial.geometry_source', 'mapbounds');
         } else if (isUnTier(tier)) {
             this._inputWrap.style.display = '';
@@ -239,16 +279,39 @@ export default class RegionSelector {
                 : 'Filter sub-continental regions…';
             this._input.value = '';
             this._closeDropdown();
+            this._nsToggle.classList.add('d-none');
+            contextMap.hideBoundaries();
             // Show suggestions on the map
             this._showSuggestions(tier);
         } else {
-            // OSM tier — type-ahead backend search
+            // OSM/OHM tier — show boundaries + namespace toggle + type-ahead
             this._inputWrap.style.display = '';
             this._input.placeholder = 'Search for a region…';
             this._input.value = '';
             this._closeDropdown();
+            this._nsToggle.classList.remove('d-none');
             contextMap.clearSuggestions();
+            this._updateBoundaryFilter();
         }
+    }
+
+    /* ── Build and apply the boundary filter for the current tier + namespace ── */
+
+    _updateBoundaryFilter() {
+        const tier = this._currentTier;
+        if (!isOsmTier(tier)) {
+            contextMap.hideBoundaries();
+            return;
+        }
+
+        const maxLevel = TIER_ADMIN_LEVELS[tier];
+        const filters = ['all', ['<=', ['get', 'admin_level'], maxLevel]];
+
+        if (this._currentNamespace) {
+            filters.push(['==', ['get', 'namespace'], this._currentNamespace]);
+        }
+
+        contextMap.showBoundaries(filters);
     }
 
     /* ── Map suggestions ── */
@@ -311,6 +374,7 @@ export default class RegionSelector {
         filterState.set('spatial.preview_geo', null);
         contextMap.clearOverlay();
         contextMap.clearSuggestions();
+        contextMap.hideBoundaries();
     }
 
     _addUnRegion(region, tier) {
@@ -570,10 +634,16 @@ export default class RegionSelector {
     clearAll() {
         this._clearAllSelections();
         this._currentTier = 'off';
+        this._currentNamespace = '';
         // Reset tier toggle to Off
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
         const offBtn = this.$el.querySelector('.region-tier-toggle .btn[data-tier="off"]');
         if (offBtn) offBtn.classList.add('active');
+        // Reset namespace toggle
+        this.$el.querySelectorAll('.region-namespace-toggle .btn').forEach(b => b.classList.remove('active'));
+        const allNsBtn = this.$el.querySelector('.region-namespace-toggle .btn[data-namespace=""]');
+        if (allNsBtn) allNsBtn.classList.add('active');
+        this._nsToggle.classList.add('d-none');
         // Hide input only if tiers are enabled (map zoomed);
         // otherwise keep it visible for the zoom-gate placeholder
         if (this._inputWrap && this._tiersEnabled) {
@@ -587,11 +657,18 @@ export default class RegionSelector {
     clear() {
         this._clearAllSelections();
         this._currentTier = 'off';
+        this._currentNamespace = '';
 
         // Reset tier toggle to Off
         this.$el.querySelectorAll('.region-tier-toggle .btn').forEach(b => b.classList.remove('active'));
         const offBtn = this.$el.querySelector('.region-tier-toggle .btn[data-tier="off"]');
         if (offBtn) offBtn.classList.add('active');
+
+        // Reset namespace toggle
+        this.$el.querySelectorAll('.region-namespace-toggle .btn').forEach(b => b.classList.remove('active'));
+        const allNsBtn = this.$el.querySelector('.region-namespace-toggle .btn[data-namespace=""]');
+        if (allNsBtn) allNsBtn.classList.add('active');
+        this._nsToggle.classList.add('d-none');
 
         // Hide input only if tiers are enabled (map zoomed);
         // otherwise keep it visible for the zoom-gate placeholder
