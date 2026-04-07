@@ -31,6 +31,9 @@ VOCAB_FIELD_MAP = {
     "ohm": "ohm_tags",
 }
 
+# Valid confidence values for mapping quality flags
+VALID_CONFIDENCES = {"exact", "close", "review"}
+
 # GeoNames feature class letters
 GN_FCLASSES = {"A", "H", "L", "P", "R", "S", "T", "U", "V"}
 
@@ -54,7 +57,10 @@ def get_current_mappings():
     cache framework (shared across all workers).
 
     Returns (gn_map, wd_map, osm_map, ohm_map) — four dicts mapping
-    source IDs to {"aat_id": int, "aat_term": str}.
+    source IDs to {"aat_id": int, "aat_term": str, "confidence": str}.
+
+    Confidence is read from the ``mapping_conf`` object on each AAT
+    document and defaults to ``"exact"`` for entries without one.
     """
     cached = django_cache.get(_MAPPINGS_CACHE_KEY)
     if cached is not None:
@@ -77,7 +83,7 @@ def get_current_mappings():
                     "minimum_should_match": 1,
                 }
             },
-            _source=["aat_id", "term", "gn_fcodes", "wd_qids", "osm_tags", "ohm_tags"],
+            _source=["aat_id", "term", "gn_fcodes", "wd_qids", "osm_tags", "ohm_tags", "mapping_conf"],
             size=10000,
             request_timeout=8,
         )
@@ -85,15 +91,20 @@ def get_current_mappings():
             src = hit["_source"]
             aat_id = src["aat_id"]
             aat_term = src.get("term", "")
-            info = {"aat_id": aat_id, "aat_term": aat_term}
+            conf_data = src.get("mapping_conf") or {}
+
             for fc in src.get("gn_fcodes") or []:
-                gn_map[fc] = info
+                conf = (conf_data.get("gn_fcodes") or {}).get(fc, "exact")
+                gn_map[fc] = {"aat_id": aat_id, "aat_term": aat_term, "confidence": conf}
             for qid in src.get("wd_qids") or []:
-                wd_map[qid] = info
+                conf = (conf_data.get("wd_qids") or {}).get(qid, "exact")
+                wd_map[qid] = {"aat_id": aat_id, "aat_term": aat_term, "confidence": conf}
             for tag in src.get("osm_tags") or []:
-                osm_map[tag] = info
+                conf = (conf_data.get("osm_tags") or {}).get(tag, "exact")
+                osm_map[tag] = {"aat_id": aat_id, "aat_term": aat_term, "confidence": conf}
             for tag in src.get("ohm_tags") or []:
-                ohm_map[tag] = info
+                conf = (conf_data.get("ohm_tags") or {}).get(tag, "exact")
+                ohm_map[tag] = {"aat_id": aat_id, "aat_term": aat_term, "confidence": conf}
     except Exception as e:
         logger.warning("get_current_mappings ES error (returning empty): %s", e)
 
@@ -601,19 +612,23 @@ def search_aat_types(query, limit=20):
 # Save / remove mappings
 # ---------------------------------------------------------------------------
 
-def save_mapping(source_vocab, source_id, aat_id):
+def save_mapping(source_vocab, source_id, aat_id, confidence="exact"):
     """
     Save a source type -> AAT concept mapping in the ES types index.
 
     1. Remove source_id from any other AAT concept's array (if re-mapping).
     2. Add source_id to the target AAT concept's array.
-    3. Invalidate the mappings cache.
-    4. Return {"status": "ok", "aat_id": ..., "aat_term": ...}.
+    3. Write the confidence value to ``mapping_conf.<field>.<source_id>``.
+    4. Invalidate the mappings cache.
+    5. Return {"status": "ok", "aat_id": ..., "aat_term": ..., "confidence": ...}.
 
     For ``source_vocab='osm_ohm'``, writes to both ``osm_tags`` *and*
     ``ohm_tags`` so the two ES fields stay in sync.
     """
     es = settings.ES_CONN
+
+    if confidence not in VALID_CONFIDENCES:
+        confidence = "exact"
 
     # Determine which ES fields to write to
     if source_vocab == "osm_ohm":
@@ -622,7 +637,7 @@ def save_mapping(source_vocab, source_id, aat_id):
         fields = [VOCAB_FIELD_MAP[source_vocab]]
 
     for field in fields:
-        # 1. Remove from any existing AAT concept
+        # 1. Remove from any existing AAT concept (both array and mapping_conf)
         try:
             old_resp = es.search(
                 index="types",
@@ -644,6 +659,10 @@ def save_mapping(source_vocab, source_id, aat_id):
                                         ctx._source.{field}.indexOf(params.val)
                                     );
                                 }}
+                                if (ctx._source.mapping_conf != null &&
+                                    ctx._source.mapping_conf.{field} != null) {{
+                                    ctx._source.mapping_conf.{field}.remove(params.val);
+                                }}
                             """,
                             "params": {"val": source_id},
                         },
@@ -653,7 +672,7 @@ def save_mapping(source_vocab, source_id, aat_id):
         except Exception as e:
             logger.warning("Error removing old mapping for %s in %s: %s", source_id, field, e)
 
-        # 2. Add to target AAT concept
+        # 2. Add to target AAT concept's array + write confidence
         es.update(
             index="types",
             id=f"aat:{aat_id}",
@@ -663,8 +682,11 @@ def save_mapping(source_vocab, source_id, aat_id):
                     if (!ctx._source.{field}.contains(params.val)) {{
                         ctx._source.{field}.add(params.val);
                     }}
+                    if (ctx._source.mapping_conf == null) ctx._source.mapping_conf = [:];
+                    if (ctx._source.mapping_conf.{field} == null) ctx._source.mapping_conf.{field} = [:];
+                    ctx._source.mapping_conf.{field}[params.val] = params.conf;
                 """,
-                "params": {"val": source_id},
+                "params": {"val": source_id, "conf": confidence},
             },
             refresh=True,
             request_timeout=8,
@@ -679,6 +701,7 @@ def save_mapping(source_vocab, source_id, aat_id):
         "status": "ok",
         "aat_id": aat_id,
         "aat_term": doc["_source"].get("term", ""),
+        "confidence": confidence,
     }
 
 
@@ -687,7 +710,7 @@ def remove_mapping(source_vocab, source_id, aat_id):
     Remove a source type -> AAT concept mapping from ES.
 
     For ``source_vocab='osm_ohm'``, removes from both ``osm_tags``
-    and ``ohm_tags``.
+    and ``ohm_tags``.  Also cleans up the ``mapping_conf`` entry.
     """
     es = settings.ES_CONN
 
@@ -706,6 +729,10 @@ def remove_mapping(source_vocab, source_id, aat_id):
                         ctx._source.{field}.remove(
                             ctx._source.{field}.indexOf(params.val)
                         );
+                    }}
+                    if (ctx._source.mapping_conf != null &&
+                        ctx._source.mapping_conf.{field} != null) {{
+                        ctx._source.mapping_conf.{field}.remove(params.val);
                     }}
                 """,
                 "params": {"val": source_id},

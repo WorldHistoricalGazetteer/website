@@ -49,6 +49,7 @@
         modalSourceLabel: null,
         selectedAatId: null,
         selectedAatTerm: null,
+        modalConfidence: 'exact',
     };
 
     // -----------------------------------------------------------------------
@@ -386,17 +387,24 @@
             ].join(' ');
 
             const mappingCell = mapped
-                ? `<span class="aat-badge badge bg-success bg-opacity-75">aat:${item.mapping.aat_id}</span>
-                   <small class="ms-1">${escapeHtml(item.mapping.aat_term)}</small>`
+                ? (() => {
+                    const conf = item.mapping.confidence || 'exact';
+                    const confBadge = conf !== 'exact'
+                        ? ` <span class="badge confidence-${conf}">${conf}</span>`
+                        : '';
+                    return `<span class="aat-badge badge bg-success bg-opacity-75">aat:${item.mapping.aat_id}</span>
+                       <small class="ms-1">${escapeHtml(item.mapping.aat_term)}</small>${confBadge}`;
+                  })()
                 : `<span class="badge badge-unmapped bg-warning text-dark">unmapped</span>`;
 
             const tagKeyAttr = item.tag_key ? ` data-tag-key="${escapeHtml(item.tag_key)}"` : '';
+            const confAttr = mapped ? ` data-confidence="${escapeHtml(item.mapping.confidence || 'exact')}"` : '';
             const actionBtn = mapped
                 ? `<button class="btn btn-sm btn-outline-primary me-1 btn-map"
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
                      data-label="${escapeHtml(item.label)}"
-                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}>Change</button>
+                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}${confAttr}>Change</button>
                    <button class="btn btn-sm btn-outline-danger btn-remove"
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
@@ -406,7 +414,7 @@
                      data-source-id="${escapeHtml(item.source_id)}"
                      data-vocab="${vocab}"
                      data-label="${escapeHtml(item.label)}"
-                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}>Map</button>`;
+                     data-desc="${escapeHtml(item.description || '')}"${tagKeyAttr}${confAttr}>Map</button>`;
 
             let cells = '';
             for (const col of cfg.columns) {
@@ -464,12 +472,13 @@
     // -----------------------------------------------------------------------
     let aatModal = null;
 
-    function openMappingModal(vocab, sourceId, label, desc, tagKey) {
+    function openMappingModal(vocab, sourceId, label, desc, tagKey, currentConfidence) {
         state.modalSourceVocab = vocab;
         state.modalSourceId = sourceId;
         state.modalSourceLabel = label;
         state.selectedAatId = null;
         state.selectedAatTerm = null;
+        state.modalConfidence = currentConfidence || 'exact';
 
         document.getElementById('modal-source-id').textContent = sourceId;
         document.getElementById('modal-source-label').textContent = label || '';
@@ -479,6 +488,11 @@
         document.getElementById('aat-search-placeholder').classList.remove('d-none');
         document.getElementById('aat-no-results').classList.add('d-none');
         document.getElementById('aat-select-btn').disabled = true;
+
+        // Reset confidence radio to existing value or default
+        const confValue = state.modalConfidence;
+        const confRadio = document.querySelector(`input[name="mapping-confidence"][value="${confValue}"]`);
+        if (confRadio) confRadio.checked = true;
 
         // Reset tree selection UI
         const treeEl = document.getElementById('modal-aat-type-tree');
@@ -570,11 +584,12 @@
     // -----------------------------------------------------------------------
     // Save & Remove handlers
     // -----------------------------------------------------------------------
-    function saveMapping(vocab, sourceId, aatId) {
+    function saveMapping(vocab, sourceId, aatId, confidence) {
         return postJSON(API.save, {
             source_vocab: vocab,
             source_id: sourceId,
             aat_id: aatId,
+            confidence: confidence || 'exact',
         });
     }
 
@@ -586,12 +601,12 @@
         });
     }
 
-    function updateRowAfterSave(vocab, sourceId, aatId, aatTerm) {
+    function updateRowAfterSave(vocab, sourceId, aatId, aatTerm, confidence) {
         const data = state.data[vocab];
         if (data) {
             const item = data.find(d => d.source_id === sourceId);
             if (item) {
-                item.mapping = {aat_id: aatId, aat_term: aatTerm};
+                item.mapping = {aat_id: aatId, aat_term: aatTerm, confidence: confidence || 'exact'};
             }
         }
         applyFilters(vocab);
@@ -708,7 +723,8 @@
                 const label = mapBtn.dataset.label;
                 const desc = mapBtn.dataset.desc;
                 const tagKey = mapBtn.dataset.tagKey || '';
-                openMappingModal(vocab, sourceId, label, desc, tagKey);
+                const confidence = mapBtn.dataset.confidence || '';
+                openMappingModal(vocab, sourceId, label, desc, tagKey, confidence);
             }
         });
 
@@ -806,17 +822,22 @@
         document.getElementById('aat-select-btn').addEventListener('click', function () {
             if (!state.selectedAatId || !state.modalSourceVocab || !state.modalSourceId) return;
 
+            // Read confidence from the radio buttons
+            const confRadio = document.querySelector('input[name="mapping-confidence"]:checked');
+            const confidence = confRadio ? confRadio.value : 'exact';
+
             this.disabled = true;
             this.textContent = 'Saving…';
 
-            saveMapping(state.modalSourceVocab, state.modalSourceId, state.selectedAatId)
+            saveMapping(state.modalSourceVocab, state.modalSourceId, state.selectedAatId, confidence)
                 .then(result => {
                     if (result.status === 'ok') {
                         updateRowAfterSave(
                             state.modalSourceVocab,
                             state.modalSourceId,
                             result.aat_id,
-                            result.aat_term
+                            result.aat_term,
+                            result.confidence || confidence
                         );
                         aatModal.hide();
                     } else {

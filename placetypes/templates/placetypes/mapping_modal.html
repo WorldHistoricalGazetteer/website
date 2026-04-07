@@ -88,6 +88,23 @@
         </div>{# /tab-content #}
       </div>
       <div class="modal-footer">
+        <div class="me-auto d-flex align-items-center gap-1">
+          <small class="text-muted me-1">Confidence:</small>
+          <div class="btn-group btn-group-sm" role="group" aria-label="Mapping confidence">
+            <input type="radio" class="btn-check" name="mapping-confidence" id="conf-exact" value="exact" checked autocomplete="off">
+            <label class="btn btn-outline-success" for="conf-exact" title="Direct, unambiguous match">
+              <i class="fas fa-check-circle me-1"></i>Exact
+            </label>
+            <input type="radio" class="btn-check" name="mapping-confidence" id="conf-close" value="close" autocomplete="off">
+            <label class="btn btn-outline-primary" for="conf-close" title="Best available but imperfect (e.g. source type spans multiple AAT concepts)">
+              <i class="fas fa-adjust me-1"></i>Close
+            </label>
+            <input type="radio" class="btn-check" name="mapping-confidence" id="conf-review" value="review" autocomplete="off">
+            <label class="btn btn-outline-warning" for="conf-review" title="Uncertain — needs expert review">
+              <i class="fas fa-question-circle me-1"></i>Review
+            </label>
+          </div>
+        </div>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="aat-select-btn" disabled>
           Save Mapping

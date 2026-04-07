@@ -96,14 +96,17 @@ def api_save_mapping(request):
     source_vocab = data.get('source_vocab')
     source_id = data.get('source_id')
     aat_id = data.get('aat_id')
+    confidence = data.get('confidence', 'exact')
 
     if not all([source_vocab, source_id, aat_id]):
         return JsonResponse({'error': 'Missing required fields'}, status=400)
     if source_vocab not in ('geonames', 'wikidata', 'osm', 'ohm', 'osm_ohm'):
         return JsonResponse({'error': 'Invalid source_vocab'}, status=400)
+    if confidence not in ('exact', 'close', 'review'):
+        confidence = 'exact'
 
     try:
-        result = save_mapping(source_vocab, source_id, int(aat_id))
+        result = save_mapping(source_vocab, source_id, int(aat_id), confidence=confidence)
         TypeMappingLog.objects.create(
             user=request.user,
             action='save',
@@ -111,10 +114,11 @@ def api_save_mapping(request):
             source_id=source_id,
             aat_id=result.get('aat_id'),
             aat_term=result.get('aat_term', ''),
+            confidence=confidence,
         )
         logger.info(
-            "User %s mapped %s:%s → aat:%s",
-            request.user, source_vocab, source_id, aat_id,
+            "User %s mapped %s:%s → aat:%s (confidence=%s)",
+            request.user, source_vocab, source_id, aat_id, confidence,
         )
         return JsonResponse(result)
     except Exception as e:

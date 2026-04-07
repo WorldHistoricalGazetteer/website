@@ -96,6 +96,12 @@ class TypeMappingLog(models.Model):
         ('remove', 'Remove mapping'),
     ]
 
+    CONFIDENCE_CHOICES = [
+        ('exact', 'Exact match'),
+        ('close', 'Close match'),
+        ('review', 'Needs review'),
+    ]
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -118,6 +124,11 @@ class TypeMappingLog(models.Model):
     aat_term = models.CharField(
         max_length=200, blank=True, default='',
         help_text='AAT term at the time of this action',
+    )
+    confidence = models.CharField(
+        max_length=10, blank=True, default='',
+        choices=CONFIDENCE_CHOICES,
+        help_text='Mapping confidence: exact, close, or review',
     )
     note = models.TextField(
         blank=True, default='',

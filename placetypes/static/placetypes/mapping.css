@@ -45,6 +45,22 @@
     font-weight: 500;
 }
 
+/* Confidence badges (shown next to AAT mapping) */
+.confidence-close {
+    font-size: 0.7em;
+    font-weight: 500;
+    background-color: #0d6efd;
+    color: #fff;
+    vertical-align: middle;
+}
+.confidence-review {
+    font-size: 0.7em;
+    font-weight: 500;
+    background-color: #fd7e14;
+    color: #fff;
+    vertical-align: middle;
+}
+
 /* Modal AAT search result items */
 .aat-result {
     cursor: pointer;
