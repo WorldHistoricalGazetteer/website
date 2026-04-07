@@ -8,7 +8,7 @@
  */
 
 const DEFAULT_STATE = {
-    authorities: ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'],
+    authorities: ['gn', 'iv', 'ohm', 'pl', 'tgn', 'tm', 'wd', 'whg'],
     place_types: [],
     clustering: true,               // When true, linked records are grouped
 

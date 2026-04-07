@@ -73,7 +73,7 @@ function updateActiveFiltersBadge() {
     // Spatial viewport counts when the map has been zoomed in
     if (contextMapZoomed) count++;
     // Count non-default authorities
-    const defaultAuth = ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'];
+    const defaultAuth = ['gn', 'iv', 'ohm', 'pl', 'tgn', 'tm', 'wd', 'whg'];
     const currentAuth = [...state.authorities].sort().join(',');
     if (currentAuth !== defaultAuth.sort().join(',')) count++;
 
@@ -635,7 +635,7 @@ function clearResults() {
 
     // Re-check default authorities
     document.querySelectorAll('.authority-cb').forEach(cb => {
-        cb.checked = ['gn', 'wd', 'tgn', 'pl', 'iv', 'whg'].includes(cb.value);
+        cb.checked = ['gn', 'iv', 'ohm', 'pl', 'tgn', 'tm', 'wd', 'whg'].includes(cb.value);
     });
 
     searchDisabled = false;
