@@ -153,12 +153,23 @@
         // Clean up: replace underscores/hyphens with spaces, trim
         term = term.replace(/[_-]/g, ' ').trim();
         // Expand parenthesised plurals in all words, e.g. "cave(s)" → "caves",
-        // then pluralise the last word (AAT prefers plural forms)
+        // then pluralise the last word (AAT prefers plural forms).
+        // Skip simplePlural for words already expanded from a paren form — they
+        // are already plural (e.g. "caves" from "cave(s)").
         if (term) {
-            const parts = term.split(/\s+/).map(w =>
-                w.replace(/^(.+?)\(([a-zA-Z]+)\)$/, '$1$2')
-            );
-            parts[parts.length - 1] = simplePlural(parts[parts.length - 1]);
+            const parenRe = /^(.+?)\(([a-zA-Z]+)\)$/;
+            const parts = term.split(/\s+/);
+            let lastExpanded = false;
+            for (let i = 0; i < parts.length; i++) {
+                const m = parts[i].match(parenRe);
+                if (m) {
+                    parts[i] = m[1] + m[2];
+                    if (i === parts.length - 1) lastExpanded = true;
+                }
+            }
+            if (!lastExpanded) {
+                parts[parts.length - 1] = simplePlural(parts[parts.length - 1]);
+            }
             term = parts.join(' ');
         }
         return term;
