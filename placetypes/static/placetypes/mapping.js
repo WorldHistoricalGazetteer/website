@@ -96,9 +96,29 @@
      * Simple English pluraliser — handles common regular forms.
      * Returns the original word unchanged if it already looks plural or
      * falls into an irregular pattern we can't handle reliably.
+     *
+     * Also handles parenthesised plural hints such as:
+     *   cave(s) → caves,  church(es) → churches,
+     *   cit(ies) → cities,  kni(ves) → knives
      */
     function simplePlural(word) {
         if (!word || word.length < 3) return word;
+
+        // Expand parenthesised plural suffixes first, e.g. "cave(s)" → "caves"
+        // Pattern: optional letters before '(' that may need trimming, then suffix in parens
+        // Examples: cave(s), church(es), cit(ies), librar(ies), kni(ves), whar(ves)
+        const parenMatch = word.match(/^(.+?)\(([a-zA-Z]+)\)$/);
+        if (parenMatch) {
+            const base = parenMatch[1];
+            const suffix = parenMatch[2];
+            // For replacive suffixes like (ies)/(ves), the base typically ends
+            // with the consonant before the replaced letter(s):
+            //   "cit(ies)" → base="cit", suffix="ies"  → "cities"
+            //   "kni(ves)" → base="kni", suffix="ves"  → "knives"
+            //   "cave(s)"  → base="cave", suffix="s"   → "caves"
+            return base + suffix;
+        }
+
         const w = word.toLowerCase();
         // Already looks plural
         if (w.endsWith('ses') || w.endsWith('xes') || w.endsWith('zes') ||
@@ -132,9 +152,12 @@
         }
         // Clean up: replace underscores/hyphens with spaces, trim
         term = term.replace(/[_-]/g, ' ').trim();
-        // Pluralise the last word (AAT prefers plural forms)
+        // Expand parenthesised plurals in all words, e.g. "cave(s)" → "caves",
+        // then pluralise the last word (AAT prefers plural forms)
         if (term) {
-            const parts = term.split(/\s+/);
+            const parts = term.split(/\s+/).map(w =>
+                w.replace(/^(.+?)\(([a-zA-Z]+)\)$/, '$1$2')
+            );
             parts[parts.length - 1] = simplePlural(parts[parts.length - 1]);
             term = parts.join(' ');
         }
