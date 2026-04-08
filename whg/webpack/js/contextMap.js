@@ -17,11 +17,12 @@ const SUGGESTION_SOURCE = 'suggestion-markers';
 const SUGGESTION_CIRCLES = 'suggestion-circles';
 const SUGGESTION_LABELS = 'suggestion-labels';
 
-/* ── Admin boundaries from mbtiles (vector tiles) ── */
-const BOUNDARIES_SOURCE = 'admin-boundaries';
-const BOUNDARIES_LAYER  = 'boundaries';        // source-layer name inside mbtiles
-const BOUNDARIES_FILL   = 'boundaries-fill';
-const BOUNDARIES_LINE   = 'boundaries-line';
+/* ── Admin boundaries from the whg-context style ──
+ * The 'whg-context' style already includes a `boundaries` source
+ * with fill and line layers.  We discover their IDs at load time
+ * so we can toggle visibility, set filters, and wire click/hover.
+ */
+const BOUNDARIES_SOURCE_LAYER = 'boundaries';  // source-layer name inside the vector tiles
 
 class ContextMap {
     constructor() {
@@ -33,6 +34,8 @@ class ContextMap {
         this._spinRAF = null;
         this._spinStopped = false; // Once stopped, never auto-restart
         this._boundaryFilter = null; // Current MapLibre filter expression for boundaries
+        this._boundaryLayerIds = [];  // Discovered at load time
+        this._boundaryFillId = null;  // The fill layer (for click/hover)
     }
 
     /**
@@ -46,7 +49,7 @@ class ContextMap {
             this.map = new whg_maplibre.Map({
                 container: 'context_map',
                 maxZoom: 14,
-                style: ['WHG'],
+                style: ['whg-context'],
                 fullscreenControl: false,
                 downloadMapControl: false,
                 drawingControl: false,
@@ -139,8 +142,8 @@ class ContextMap {
                     this.map.getCanvas().style.cursor = '';
                 });
 
-                // ── Admin boundaries from vector tiles ──
-                this._addBoundaryLayers();
+                // ── Discover boundary layers from the whg-context style ──
+                this._initBoundaryLayers();
 
                 // Update bbox on viewport change
                 this.map.on('moveend', () => {
@@ -313,81 +316,52 @@ class ContextMap {
     // --- Admin boundary layers -------------------------------------------
 
     /**
-     * Add the boundaries vector tile source and fill/line layers.
-     * Initially hidden (visibility: 'none'); the region selector
-     * shows them when an appropriate tier is selected.
+     * Discover boundary layers already present in the whg-context style
+     * and wire up click/hover on the fill layer.
+     *
+     * The style's line and label layers have their own per-admin-level
+     * filters and visibility — we never touch them.  Only the fill
+     * layer (`boundary-fill`) is used for region-selector interaction:
+     * its filter is set/cleared by showBoundaries / hideBoundaries.
      * @private
      */
-    _addBoundaryLayers() {
-        // TileJSON endpoint served by the tile server
-        const tileJsonUrl = `${process.env.TILEBOSS}/data/boundaries.json`;
+    _initBoundaryLayers() {
+        const style = this.map.getStyle();
+        if (!style || !style.layers) return;
 
-        this.map.addSource(BOUNDARIES_SOURCE, {
-            type: 'vector',
-            url: tileJsonUrl,
-        });
+        // Collect all layers whose source-layer is 'boundaries'
+        this._boundaryLayerIds = style.layers
+            .filter(l => l['source-layer'] === BOUNDARIES_SOURCE_LAYER)
+            .map(l => l.id);
 
-        // Fill layer — very subtle polygons
-        this.map.addLayer({
-            id: BOUNDARIES_FILL,
-            type: 'fill',
-            source: BOUNDARIES_SOURCE,
-            'source-layer': BOUNDARIES_LAYER,
-            layout: { visibility: 'none' },
-            paint: {
-                'fill-color': [
-                    'match', ['get', 'namespace'],
-                    'osm', 'rgba(65, 135, 200, 0.06)',
-                    'ohm', 'rgba(180, 90, 50, 0.06)',
-                    'rgba(100, 100, 100, 0.04)',
-                ],
-                'fill-opacity': [
-                    'interpolate', ['linear'], ['zoom'],
-                    2, 0.3,
-                    8, 0.15,
-                ],
-            },
-        });
+        if (this._boundaryLayerIds.length === 0) {
+            console.warn('contextMap: no boundary layers found in style');
+            return;
+        }
 
-        // Line layer — boundary outlines, width scaled by admin_level
-        this.map.addLayer({
-            id: BOUNDARIES_LINE,
-            type: 'line',
-            source: BOUNDARIES_SOURCE,
-            'source-layer': BOUNDARIES_LAYER,
-            layout: { visibility: 'none' },
-            paint: {
-                'line-color': [
-                    'match', ['get', 'namespace'],
-                    'osm', 'rgba(65, 135, 200, 0.55)',
-                    'ohm', 'rgba(180, 90, 50, 0.55)',
-                    'rgba(100, 100, 100, 0.4)',
-                ],
-                'line-width': [
-                    'interpolate', ['linear'], ['get', 'admin_level'],
-                    2, 1.8,
-                    4, 1.2,
-                    6, 0.7,
-                    8, 0.4,
-                ],
-                'line-opacity': [
-                    'interpolate', ['linear'], ['zoom'],
-                    2, 0.5,
-                    8, 0.8,
-                ],
-            },
-        });
+        console.log('contextMap: discovered boundary layers:', this._boundaryLayerIds);
 
-        // Hover: pointer cursor on boundaries
-        this.map.on('mouseenter', BOUNDARIES_FILL, () => {
+        // Identify the fill layer (for click/hover + filter control)
+        this._boundaryFillId = this._boundaryLayerIds.find(id => {
+            const layer = this.map.getLayer(id);
+            return layer && layer.type === 'fill';
+        }) || this._boundaryLayerIds[0];
+
+        // NOTE: We do NOT hide any layers here — the style defines their
+        // default visibility and per-layer filters.  The fill layer is
+        // always visible and provides subtle polygon shading as part of
+        // the base map context.
+
+        // Hover: pointer cursor on the fill layer
+        this.map.on('mouseenter', this._boundaryFillId, () => {
             this.map.getCanvas().style.cursor = 'pointer';
         });
-        this.map.on('mouseleave', BOUNDARIES_FILL, () => {
+        this.map.on('mouseleave', this._boundaryFillId, () => {
             this.map.getCanvas().style.cursor = '';
         });
 
         // Click: dispatch event so the region selector can pick it up
-        this.map.on('click', BOUNDARIES_FILL, (e) => {
+        this.map.on('click', this._boundaryFillId, (e) => {
             if (!e.features || e.features.length === 0) return;
             const props = e.features[0].properties || {};
             document.dispatchEvent(new CustomEvent('boundary-click', {
@@ -402,8 +376,10 @@ class ContextMap {
     }
 
     /**
-     * Set a MapLibre filter expression on the boundary layers.
-     * Pass `null` to clear all filters (show everything).
+     * Set a MapLibre filter expression on the boundary fill layer.
+     * Only the fill layer is filtered — line and label layers keep
+     * their style-defined filters untouched.
+     * Pass `null` to clear (show all boundaries).
      *
      * Example: setBoundaryFilter(['all',
      *   ['<=', ['get', 'admin_level'], 4],
@@ -413,41 +389,35 @@ class ContextMap {
      * @param {Array|null} filter — MapLibre filter expression
      */
     setBoundaryFilter(filter) {
-        if (!this.map) return;
+        if (!this.map || !this._boundaryFillId) return;
         this._boundaryFilter = filter;
         try {
-            this.map.setFilter(BOUNDARIES_FILL, filter);
-            this.map.setFilter(BOUNDARIES_LINE, filter);
+            this.map.setFilter(this._boundaryFillId, filter);
         } catch (e) {
             console.warn('contextMap.setBoundaryFilter: layer not ready', e);
         }
     }
 
     /**
-     * Show the boundary layers on the map (make them visible).
-     * Optionally applies a filter at the same time.
+     * Activate boundary interaction for the given filter.
+     * Applies the filter to the fill layer so only matching polygons
+     * are rendered (and therefore clickable).  Line and label layers
+     * are left untouched — they follow the style's own filters.
      * @param {Array|null} [filter] — optional filter expression
      */
     showBoundaries(filter) {
-        if (!this.map) return;
-        try {
-            this.map.setLayoutProperty(BOUNDARIES_FILL, 'visibility', 'visible');
-            this.map.setLayoutProperty(BOUNDARIES_LINE, 'visibility', 'visible');
-        } catch (e) {
-            console.warn('contextMap.showBoundaries: layer not ready', e);
-        }
         if (filter !== undefined) {
             this.setBoundaryFilter(filter);
         }
     }
 
-    /** Hide the boundary layers. */
+    /**
+     * Deactivate boundary interaction — clear any custom filter on
+     * the fill layer, restoring it to its style default (show all).
+     * Line and label layers are never touched.
+     */
     hideBoundaries() {
-        if (!this.map) return;
-        try {
-            this.map.setLayoutProperty(BOUNDARIES_FILL, 'visibility', 'none');
-            this.map.setLayoutProperty(BOUNDARIES_LINE, 'visibility', 'none');
-        } catch (e) { /* layers not yet added */ }
+        this.setBoundaryFilter(null);
     }
 
     // -------------------------------------------------------------------
