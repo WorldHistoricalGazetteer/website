@@ -17,6 +17,10 @@ const SUGGESTION_SOURCE = 'suggestion-markers';
 const SUGGESTION_CIRCLES = 'suggestion-circles';
 const SUGGESTION_LABELS = 'suggestion-labels';
 
+const HOVER_SOURCE = 'boundary-hover';
+const HOVER_FILL = 'boundary-hover-fill';
+const HOVER_LINE = 'boundary-hover-line';
+
 /* ── Admin boundaries from the whg-context style ──
  * The 'whg-context' style already includes a `boundaries` source
  * with fill and line layers.  We discover their IDs at load time
@@ -36,6 +40,8 @@ class ContextMap {
         this._boundaryFilter = null; // Current MapLibre filter expression for boundaries
         this._boundaryLayerIds = [];  // Discovered at load time
         this._boundaryFillId = null;  // The fill layer (for click/hover)
+        this._boundarySourceId = null; // Source ID for the boundary tiles
+        this._hoverTooltip = null;     // Floating tooltip element for hovered boundaries
     }
 
     /**
@@ -319,10 +325,11 @@ class ContextMap {
      * Discover boundary layers already present in the whg-context style
      * and wire up click/hover on the fill layer.
      *
-     * The style's line and label layers have their own per-admin-level
-     * filters and visibility — we never touch them.  Only the fill
-     * layer (`boundary-fill`) is used for region-selector interaction:
-     * its filter is set/cleared by showBoundaries / hideBoundaries.
+     * The fill layer is hidden initially — showBoundaries() makes it
+     * visible when the user selects an admin-level tier.
+     *
+     * Adds a hover highlight layer and a floating tooltip so the user
+     * gets visual feedback before clicking.
      * @private
      */
     _initBoundaryLayers() {
@@ -347,29 +354,88 @@ class ContextMap {
             return layer && layer.type === 'fill';
         }) || this._boundaryLayerIds[0];
 
-        // NOTE: We do NOT hide any layers here — the style defines their
-        // default visibility and per-layer filters.  The fill layer is
-        // always visible and provides subtle polygon shading as part of
-        // the base map context.
+        // Discover the source ID from the fill layer definition
+        const fillLayerDef = style.layers.find(l => l.id === this._boundaryFillId);
+        this._boundarySourceId = fillLayerDef ? fillLayerDef.source : null;
 
-        // Hover: pointer cursor on the fill layer
-        this.map.on('mouseenter', this._boundaryFillId, () => {
+        // ── Hide the fill layer initially — polygons only show
+        //    when an admin-level tier is selected.
+        try {
+            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'none');
+        } catch (e) {
+            console.warn('contextMap: could not hide boundary fill layer', e);
+        }
+
+        // ── Add hover highlight source + layers ──
+        this.map.addSource(HOVER_SOURCE, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+        });
+        this.map.addLayer({
+            id: HOVER_FILL,
+            type: 'fill',
+            source: HOVER_SOURCE,
+            paint: {
+                'fill-color': '#fbbf24',
+                'fill-opacity': 0.30,
+            },
+        });
+        this.map.addLayer({
+            id: HOVER_LINE,
+            type: 'line',
+            source: HOVER_SOURCE,
+            paint: {
+                'line-color': '#f59e0b',
+                'line-width': 2.5,
+                'line-opacity': 0.9,
+            },
+        });
+
+        // ── Create floating tooltip for boundary names ──
+        this._hoverTooltip = document.createElement('div');
+        this._hoverTooltip.className = 'boundary-hover-tooltip';
+        this._hoverTooltip.style.display = 'none';
+        document.body.appendChild(this._hoverTooltip);
+
+        // ── Hover: highlight + tooltip on mousemove over the fill layer ──
+        this.map.on('mousemove', this._boundaryFillId, (e) => {
             this.map.getCanvas().style.cursor = 'pointer';
+            if (e.features && e.features.length > 0) {
+                const feature = e.features[0];
+                try {
+                    this.map.getSource(HOVER_SOURCE).setData({
+                        type: 'Feature',
+                        geometry: feature.geometry,
+                        properties: feature.properties || {},
+                    });
+                } catch (err) { /* source not ready */ }
+
+                const name = feature.properties?.name;
+                if (name && this._hoverTooltip) {
+                    this._hoverTooltip.textContent = name;
+                    this._hoverTooltip.style.display = 'block';
+                    this._hoverTooltip.style.left = (e.originalEvent.pageX + 12) + 'px';
+                    this._hoverTooltip.style.top = (e.originalEvent.pageY - 28) + 'px';
+                }
+            }
         });
         this.map.on('mouseleave', this._boundaryFillId, () => {
             this.map.getCanvas().style.cursor = '';
+            this.clearBoundaryHover();
         });
 
-        // Click: dispatch event so the region selector can pick it up
+        // ── Click: dispatch event so the region selector can pick it up ──
         this.map.on('click', this._boundaryFillId, (e) => {
             if (!e.features || e.features.length === 0) return;
-            const props = e.features[0].properties || {};
+            const feature = e.features[0];
+            const props = feature.properties || {};
             document.dispatchEvent(new CustomEvent('boundary-click', {
                 detail: {
+                    id: props.osm_id || props.id || feature.id || '',
                     name: props.name || '',
                     admin_level: props.admin_level,
                     namespace: props.namespace || '',
-                    geometry: e.features[0].geometry,
+                    geometry: feature.geometry,
                 },
             }));
         });
@@ -400,24 +466,91 @@ class ContextMap {
 
     /**
      * Activate boundary interaction for the given filter.
-     * Applies the filter to the fill layer so only matching polygons
-     * are rendered (and therefore clickable).  Line and label layers
-     * are left untouched — they follow the style's own filters.
+     * Makes the fill layer visible and applies the filter so only
+     * matching polygons are rendered (and therefore clickable).
      * @param {Array|null} [filter] — optional filter expression
      */
     showBoundaries(filter) {
+        if (!this.map || !this._boundaryFillId) return;
+        try {
+            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'visible');
+        } catch (e) { /* layer not ready */ }
         if (filter !== undefined) {
             this.setBoundaryFilter(filter);
         }
     }
 
     /**
-     * Deactivate boundary interaction — clear any custom filter on
-     * the fill layer, restoring it to its style default (show all).
-     * Line and label layers are never touched.
+     * Deactivate boundary interaction — hide the fill layer,
+     * clear the filter, and remove any hover highlight.
      */
     hideBoundaries() {
+        if (!this.map || !this._boundaryFillId) return;
         this.setBoundaryFilter(null);
+        try {
+            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'none');
+        } catch (e) { /* layer not ready */ }
+        this.clearBoundaryHover();
+    }
+
+    /** Clear the hover highlight and tooltip. */
+    clearBoundaryHover() {
+        if (!this.map) return;
+        try {
+            this.map.getSource(HOVER_SOURCE).setData({
+                type: 'FeatureCollection',
+                features: [],
+            });
+        } catch (e) { /* source not yet added */ }
+        if (this._hoverTooltip) {
+            this._hoverTooltip.style.display = 'none';
+        }
+    }
+
+    /**
+     * Search for boundary features by name within currently loaded tiles.
+     *
+     * @param {string} query — text to match against the `name` property
+     * @param {number} adminLevel — exact admin_level to match
+     * @param {string} [namespace] — 'osm' or 'ohm' (empty → all)
+     * @param {number} [limit=20] — max results
+     * @returns {Array} matching MapLibre features (deduplicated by name)
+     */
+    searchBoundaryFeatures(query, adminLevel, namespace, limit = 20) {
+        if (!this.map || !this._boundarySourceId) return [];
+
+        const filter = ['all', ['==', ['get', 'admin_level'], adminLevel]];
+        if (namespace) {
+            filter.push(['==', ['get', 'namespace'], namespace]);
+        }
+
+        let features;
+        try {
+            features = this.map.querySourceFeatures(this._boundarySourceId, {
+                sourceLayer: BOUNDARIES_SOURCE_LAYER,
+                filter: filter,
+            });
+        } catch (e) {
+            console.warn('contextMap.searchBoundaryFeatures: query failed', e);
+            return [];
+        }
+
+        const lowerQuery = query.toLowerCase();
+        const seen = new Set();
+        const results = [];
+
+        for (const f of features) {
+            const name = (f.properties?.name || '').toLowerCase();
+            if (!name || !name.includes(lowerQuery)) continue;
+            // Deduplicate by name + namespace
+            const key = `${f.properties.name}|${f.properties.namespace || ''}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            results.push(f);
+            if (results.length >= limit) break;
+        }
+
+        return results;
     }
 
     // -------------------------------------------------------------------

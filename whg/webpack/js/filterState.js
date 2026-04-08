@@ -19,7 +19,7 @@ const DEFAULT_STATE = {
         region_id: [],        // Array of region selection objects [{id, label, source, tier}] (Tab 1)
         period_id: [],        // Array of PeriodO URIs (Tab 2)
         polity_id: [],        // Array of polity/territory IDs (Tab 3)
-        geometry_source: 'none', // 'osm' | 'un_geoscheme' | 'mapbounds' | 'period' | 'polity' | 'none'
+        geometry_source: 'none', // 'osm' | 'ohm' | 'mapbounds' | 'period' | 'polity' | 'none'
         preview_geo: null,    // GeoJSON for map preview (never sent to server)
     },
 

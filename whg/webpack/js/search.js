@@ -914,6 +914,16 @@ function gatherOptions() {
     const state = filterState.get();
     const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
 
+    // Build bounds from selected region geometries (for spatial containment)
+    const regionIds = state.spatial.region_id || [];
+    const regionGeometries = regionIds
+        .filter(r => r.geometry)
+        .map(r => r.geometry);
+
+    const bounds = regionGeometries.length > 0
+        ? { type: 'GeometryCollection', geometries: regionGeometries }
+        : { type: 'GeometryCollection', geometries: [] };
+
     const options = {
         qstr: $('#search_input').val(),
         idx: eswhg,
@@ -925,12 +935,11 @@ function gatherOptions() {
         undated: temporalMode === 'undated',
         exact: exactMatch,
         cluster: clusterResults,
-        // Legacy-compatible empty fields (no drawing, no country/region select2)
-        bounds: { type: 'GeometryCollection', geometries: [] },
+        bounds: bounds,
         regions: [],
         countries: [],
         userareas: [],
-        spatial: 'none',
+        spatial: regionGeometries.length > 0 ? 'region' : 'none',
         // New filter state payload for when backend is updated
         filter_state: state,
     };
