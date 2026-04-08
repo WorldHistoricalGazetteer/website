@@ -58,6 +58,9 @@ services:
     volumes:
       - {{ BASE_DIR }}:/app
     entrypoint: ["/app/entrypoints/entrypoint-webpack.sh"]
+    cpus: 1.5
+    mem_limit: 2048m
+    memswap_limit: 2048m
     restart: unless-stopped
 {% endif %}
 

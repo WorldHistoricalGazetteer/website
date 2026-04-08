@@ -48,7 +48,44 @@ git config --global core.fileMode false
 # and enable execution of relevant scripts
 python3 ./server-admin/load_env.py
 ```
-- (Re-)start the Docker network:
+
+### Running Webpack
+
+Webpack bundles the project's JavaScript and CSS. You can either run it inside Docker (the default) or directly on the host machine. **Running on the host is strongly recommended** — the Docker webpack container uses filesystem polling over volume mounts, which is CPU-intensive and can make your machine unresponsive.
+
+#### Option A: Webpack on the host (recommended)
+
+This runs webpack natively on your machine, where it can use the OS filesystem events instead of polling, and avoids Docker's volume mount overhead entirely.
+
+**Prerequisites:** Node.js 18+ and npm (`node --version` to check; install from [nodejs.org](https://nodejs.org/) or via your package manager).
+
+1. Install dependencies (one-time, or after `package.json` changes):
+```sh
+npm install
+```
+
+2. Run a one-shot build:
+```sh
+npm run build
+```
+
+3. Or run in watch mode (rebuilds automatically when you save a file):
+```sh
+npm run watch
+```
+
+4. Start the Docker network **without the webpack container**:
+```sh
+docker compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d --scale webpack=0
+```
+
+> **Note:** The `.env/.env` file must exist before running webpack (it is loaded by the `dotenv-webpack` plugin). Run `python3 ./server-admin/load_env.py` first if you haven't already.
+
+#### Option B: Webpack in Docker
+
+This is the default behaviour — the webpack container starts automatically with the network. No host-side Node.js is required, but it will consume more CPU and memory.
+
+- (Re-)start the Docker network (webpack included):
 ```sh
 docker compose -f docker-compose-autocontext.yml --env-file ./.env/.env down && \
 docker compose -f docker-compose-autocontext.yml --env-file ./.env/.env up -d && \

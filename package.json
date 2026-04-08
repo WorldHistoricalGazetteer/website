@@ -4,9 +4,9 @@
   "description": "Webpack configuration for WHG project",
   "main": "webpack.config.js",
   "scripts": {
-    "build": "webpack",
+    "build": "webpack --no-watch",
     "watch": "webpack --watch",
-    "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack"
+    "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack --no-watch"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",

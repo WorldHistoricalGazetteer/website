@@ -24,10 +24,12 @@ const isProduction = process.env.ENV_CONTEXT === 'whgazetteer-org';
 
 module.exports = {
 	mode: isProduction ? 'production' : 'development', // Use production mode for staging
-    devtool: isProduction ? 'source-map' : 'eval-source-map',
+    devtool: isProduction ? 'source-map' : 'eval-cheap-module-source-map',
 	watch: !isProduction,
 	watchOptions: {
-		poll: 1000, // Check for changes every second
+		poll: 3000, // Check for changes every 3 seconds (reduces Docker CPU load)
+		aggregateTimeout: 1000, // Delay rebuild 1s after the last change (batches rapid saves)
+		ignored: /node_modules/,
 	},
 	entry: {
 		areas: './whg/webpack/js/areas.js',
@@ -77,12 +79,14 @@ module.exports = {
 		new MiniCssExtractPlugin({
 			filename: '[name].bundle.css',
 		}),
-		new BundleAnalyzerPlugin({
-			analyzerMode: 'static', // `server` option is very slow
-			reportFilename: 'webpackReport.html',
-			generateStatsFile: true,
-			statsFilename: 'stats.json',
-		}),
+		...(isProduction ? [
+			new BundleAnalyzerPlugin({
+				analyzerMode: 'static', // `server` option is very slow
+				reportFilename: 'webpackReport.html',
+				generateStatsFile: true,
+				statsFilename: 'stats.json',
+			}),
+		] : []),
 		new CopyWebpackPlugin({
 	      	patterns: [
 		        {
