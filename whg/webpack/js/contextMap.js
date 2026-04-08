@@ -537,6 +537,8 @@ class ContextMap {
             try {
                 this.map.setPaintProperty(this._boundaryFillId, 'fill-color', [
                     'match', ['get', 'admin_level'],
+                    0, 'rgba(80, 110, 160, 0.06)',
+                    1, 'rgba(90, 120, 165, 0.05)',
                     2, 'rgba(100, 130, 170, 0.05)',
                     3, 'rgba(120, 150, 185, 0.04)',
                     4, 'rgba(120, 150, 185, 0.04)',

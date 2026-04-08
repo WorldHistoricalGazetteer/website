@@ -919,10 +919,13 @@ class BoundarySearchView(View):
     """
     Search the `boundaries` ES index for admin regions by name.
 
+    Searches across name, name_local, and alt_names.* fields so that
+    regions can be found by their name in any language.
+
     GET parameters:
         q           — name prefix (min 2 chars)
-        admin_level — exact admin level (2-10), optional
-        namespace   — 'osm' or 'ohm', optional (default: all)
+        admin_level — exact admin level (0-10), optional
+        namespace   — 'osm', 'ohm', or comma-separated e.g. 'osm,m49'; optional
         limit       — max results (default 20, max 50)
 
     Returns JSON: { results: [ {id, name, name_local, admin_level,
@@ -943,14 +946,37 @@ class BoundarySearchView(View):
         if not q or len(q) < 2:
             return JsonResponse({'results': []})
 
-        must = [{'match_phrase_prefix': {'name': {'query': q, 'max_expansions': 20}}}]
-        if admin_level:
+        # Search across name, name_local, and all alt_names.* sub-fields
+        name_query = {
+            'bool': {
+                'should': [
+                    {'match_phrase_prefix': {'name': {'query': q, 'max_expansions': 20, 'boost': 3}}},
+                    {'match_phrase_prefix': {'name_local': {'query': q, 'max_expansions': 20, 'boost': 2}}},
+                    {'multi_match': {
+                        'query': q,
+                        'type': 'phrase_prefix',
+                        'fields': ['alt_names.*'],
+                        'max_expansions': 20,
+                    }},
+                ],
+                'minimum_should_match': 1,
+            }
+        }
+
+        must = [name_query]
+        if admin_level is not None and admin_level != '':
             try:
                 must.append({'term': {'admin_level': int(admin_level)}})
             except (ValueError, TypeError):
                 pass
+
+        # Support comma-separated namespace values (e.g. 'osm,m49')
         if namespace:
-            must.append({'term': {'namespace': namespace}})
+            ns_values = [v.strip() for v in namespace.split(',') if v.strip()]
+            if len(ns_values) == 1:
+                must.append({'term': {'namespace': ns_values[0]}})
+            elif len(ns_values) > 1:
+                must.append({'terms': {'namespace': ns_values}})
 
         body = {
             'query': {'bool': {'must': must}},

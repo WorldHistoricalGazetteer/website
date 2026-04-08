@@ -21,8 +21,8 @@
  * Tiers:
  *   Off              — no spatial region constraint
  *   Map bounds       — use current viewport as explicit spatial filter
- *   Continental      — placeholder (no boundary data yet)
- *   Sub-Continental  — placeholder (no boundary data yet)
+ *   Continental      — admin level 0 (M49 regions + Antarctica)
+ *   Sub-Continental  — admin level 1 (M49 sub-regions)
  *   Country          — admin level 2
  *   State            — admin level 3
  *   Province         — admin level 4
@@ -44,8 +44,8 @@ import debounce from 'lodash/debounce';
 const ALL_TIERS = [
     { value: 'off',            label: 'Off' },
     { value: 'mapbounds',      label: 'Map bounds' },
-    { value: 'continental',    label: 'Continental',     placeholder: true },
-    { value: 'subcontinental', label: 'Sub-Continental', placeholder: true },
+    { value: 'admin0',         label: 'Continental',     adminLevel: 0 },
+    { value: 'admin1',         label: 'Sub-Continental', adminLevel: 1 },
     { value: 'admin2',         label: 'Country',         adminLevel: 2 },
     { value: 'admin3',         label: 'State',           adminLevel: 3 },
     { value: 'admin4',         label: 'Province',        adminLevel: 4 },
@@ -104,18 +104,14 @@ export default class RegionSelector {
                 <div class="region-tier-toggle btn-group btn-group-sm flex-wrap mb-2" role="group" aria-label="Spatial region tier">
                     ${ALL_TIERS.map((t, i) => {
                         const isActive = i === 0;
-                        const isPlaceholder = !!t.placeholder;
-                        const isZoomGated = !isPlaceholder && isZoomGatedTier(t.value);
-                        const disabled = isPlaceholder || isZoomGated;
-                        const tooltip = isPlaceholder
-                            ? 'Not yet available \u2014 boundary data pending'
-                            : t.adminLevel
-                                ? `Admin level ${t.adminLevel}`
-                                : t.label;
+                        const isZoomGated = isZoomGatedTier(t.value);
+                        const disabled = isZoomGated;
+                        const tooltip = t.adminLevel != null
+                            ? `Admin level ${t.adminLevel}`
+                            : t.label;
                         const classes = ['btn'];
                         if (isActive) classes.push('active');
                         if (isZoomGated) classes.push('zoom-gated-tier');
-                        if (isPlaceholder) classes.push('placeholder-tier');
                         return `<button type="button" class="${classes.join(' ')}"
                             data-tier="${t.value}" data-bs-toggle="tooltip" title="${tooltip}"
                             ${disabled ? 'disabled' : ''}>${t.label}</button>`;
@@ -214,8 +210,6 @@ export default class RegionSelector {
             this._closeDropdown();
             this._updateBoundaryFilter();
         }
-        // Placeholder tiers (continental, subcontinental) are disabled
-        // and cannot be clicked, so no handler needed.
     }
 
     /* ── Build and apply the boundary filter for the current tier + namespace ── */
@@ -228,7 +222,7 @@ export default class RegionSelector {
         }
 
         const adminLevel = getAdminLevel(tier);
-        if (!adminLevel) {
+        if (adminLevel == null) {
             contextMap.hideBoundaries();
             return;
         }
@@ -237,7 +231,15 @@ export default class RegionSelector {
         const filters = ['all', ['==', ['get', 'admin_level'], adminLevel]];
 
         if (this._currentNamespace) {
-            filters.push(['==', ['get', 'namespace'], this._currentNamespace]);
+            if (this._currentNamespace === 'osm' && adminLevel <= 1) {
+                // Levels 0-1: Modern includes both 'osm' (Antarctica) and 'm49' (assembled regions)
+                filters.push(['any',
+                    ['==', ['get', 'namespace'], 'osm'],
+                    ['==', ['get', 'namespace'], 'm49'],
+                ]);
+            } else {
+                filters.push(['==', ['get', 'namespace'], this._currentNamespace]);
+            }
         }
 
         contextMap.showBoundaries(filters);
@@ -381,25 +383,7 @@ export default class RegionSelector {
         if (isAdminTier(tier)) {
             const adminLevel = getAdminLevel(tier);
 
-            // 1. Try tile-based search first (fast, works offline)
-            const tileFeatures = contextMap.searchBoundaryFeatures(
-                query, adminLevel, this._currentNamespace
-            );
-
-            if (tileFeatures.length > 0) {
-                this._results = tileFeatures.map(f => ({
-                    id: `boundary:${f.properties.namespace || 'osm'}:${f.properties.osm_id || f.properties.id || f.properties.name}`,
-                    label: f.properties.name || 'Unnamed',
-                    sublabel: `Level ${f.properties.admin_level || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
-                    geometry: f.geometry,
-                    properties: f.properties,
-                    _boundary: true,
-                }));
-                this._renderDropdown(this._results);
-                return;
-            }
-
-            // 2. Fall back to ES index search (broader than loaded tiles)
+            // 1. Query the ES boundaries index (searches all regions in all languages)
             try {
                 const params = new URLSearchParams({
                     q: query,
@@ -407,7 +391,12 @@ export default class RegionSelector {
                     limit: '20',
                 });
                 if (this._currentNamespace) {
-                    params.set('namespace', this._currentNamespace);
+                    if (this._currentNamespace === 'osm' && adminLevel <= 1) {
+                        // Levels 0-1: Modern includes both 'osm' and 'm49'
+                        params.set('namespace', 'osm,m49');
+                    } else {
+                        params.set('namespace', this._currentNamespace);
+                    }
                 }
                 const resp = await fetch(`/search/boundaries/?${params}`);
                 if (resp.ok) {
@@ -433,7 +422,25 @@ export default class RegionSelector {
                     }
                 }
             } catch (e) {
-                console.warn('RegionSelector: ES boundary search failed, falling back', e);
+                console.warn('RegionSelector: ES boundary search failed, falling back to tiles', e);
+            }
+
+            // 2. Fall back to tile-based search (only finds loaded/rendered features)
+            const tileFeatures = contextMap.searchBoundaryFeatures(
+                query, adminLevel, this._currentNamespace
+            );
+
+            if (tileFeatures.length > 0) {
+                this._results = tileFeatures.map(f => ({
+                    id: `boundary:${f.properties.namespace || 'osm'}:${f.properties.osm_id || f.properties.id || f.properties.name}`,
+                    label: f.properties.name || 'Unnamed',
+                    sublabel: `Level ${f.properties.admin_level || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
+                    geometry: f.geometry,
+                    properties: f.properties,
+                    _boundary: true,
+                }));
+                this._renderDropdown(this._results);
+                return;
             }
 
             // 3. No results from either source
@@ -542,7 +549,6 @@ export default class RegionSelector {
     /**
      * Called externally (from search.js) when the context map passes
      * the zoom threshold.  Enables all zoom-gated tier buttons.
-     * Placeholder tiers (Continental, Sub-Continental) remain disabled.
      */
     enableTiers() {
         this._tiersEnabled = true;
