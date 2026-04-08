@@ -3,7 +3,7 @@ from django.urls import path  # , include
 
 from search.views import (
     SearchPageView, FeatureContextView, TraceGeomView,
-    SearchDatabaseView, CollectionGeomView,
+    SearchDatabaseView, CollectionGeomView, BoundarySearchView,
 )
 from search.views_crc import SearchView, TypeaheadSuggestions
 
@@ -14,6 +14,9 @@ urlpatterns = [
     # generic search view, renders search.html w/results
     path('index/', SearchView.as_view(), name='search'),
     path('suggestions/', TypeaheadSuggestions, name='typeahead_suggestions'),
+
+    # boundary name search (ES-backed, for the region selector)
+    path('boundaries/', BoundarySearchView.as_view(), name='boundary_search'),
 
     path('db/', SearchDatabaseView.as_view(), name='search-db'),  # executes database search
     path('context/', FeatureContextView.as_view(), name='feature_context'),  # place portal context

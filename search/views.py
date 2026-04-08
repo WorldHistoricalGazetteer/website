@@ -422,7 +422,6 @@ class SearchView(View):
             [string] idx: index to be queried
             [int] year: filter for timespans including this
             [string[]] fclasses: filter on geonames class (A,H,L,P,S,T)
-            [string] temporal: text of boolean for temporal filtering
             [int] start: filter for timespans
             [int] end: filter for timespans
             [string] undated: text of boolean for inclusion of undated results
@@ -914,3 +913,74 @@ class TraceGeomView(View):
 
         return JsonResponse(geoms, safe=False, json_dumps_params={'ensure_ascii': False, 'indent': 2})
         # return JsonResponse(geoms, safe=False)
+
+
+class BoundarySearchView(View):
+    """
+    Search the `boundaries` ES index for admin regions by name.
+
+    GET parameters:
+        q           — name prefix (min 2 chars)
+        admin_level — exact admin level (2-10), optional
+        namespace   — 'osm' or 'ohm', optional (default: all)
+        limit       — max results (default 20, max 50)
+
+    Returns JSON: { results: [ {id, name, name_local, admin_level,
+                                 namespace, bounds, repr_point, ccodes} ] }
+    """
+
+    BOUNDARIES_INDEX = 'boundaries'
+
+    def get(self, request):
+        q = request.GET.get('q', '').strip()
+        admin_level = request.GET.get('admin_level')
+        namespace = request.GET.get('namespace', '').strip()
+        try:
+            limit = min(int(request.GET.get('limit', 20)), 50)
+        except (ValueError, TypeError):
+            limit = 20
+
+        if not q or len(q) < 2:
+            return JsonResponse({'results': []})
+
+        must = [{'match_phrase_prefix': {'name': {'query': q, 'max_expansions': 20}}}]
+        if admin_level:
+            try:
+                must.append({'term': {'admin_level': int(admin_level)}})
+            except (ValueError, TypeError):
+                pass
+        if namespace:
+            must.append({'term': {'namespace': namespace}})
+
+        body = {
+            'query': {'bool': {'must': must}},
+            'size': limit,
+            '_source': [
+                'boundary_id', 'name', 'name_local', 'admin_level',
+                'namespace', 'bounds', 'repr_point', 'ccodes',
+            ],
+        }
+
+        try:
+            es = settings.ES_CONN
+            result = es.search(index=self.BOUNDARIES_INDEX, body=body)
+        except Exception as exc:
+            logger.warning('BoundarySearchView: ES query failed: %s', exc)
+            return JsonResponse({'results': [], 'error': str(exc)}, status=200)
+
+        results = []
+        for hit in result.get('hits', {}).get('hits', []):
+            src = hit['_source']
+            results.append({
+                'id': src.get('boundary_id', ''),
+                'name': src.get('name', ''),
+                'name_local': src.get('name_local'),
+                'admin_level': src.get('admin_level'),
+                'namespace': src.get('namespace', ''),
+                'bounds': src.get('bounds'),
+                'repr_point': src.get('repr_point'),
+                'ccodes': src.get('ccodes', []),
+            })
+
+        return JsonResponse({'results': results})
+

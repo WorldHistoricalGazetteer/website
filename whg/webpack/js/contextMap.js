@@ -37,10 +37,10 @@ class ContextMap {
         this._spinning = false;
         this._spinRAF = null;
         this._spinStopped = false; // Once stopped, never auto-restart
-        this._boundaryFilter = null; // Current MapLibre filter expression for boundaries
-        this._boundaryLayerIds = [];  // Discovered at load time
-        this._boundaryFillId = null;  // The fill layer (for click/hover)
+        this._boundaryLayerIds = [];   // Discovered at load time
+        this._boundaryFillId = null;   // The fill layer (for click/hover)
         this._boundarySourceId = null; // Source ID for the boundary tiles
+        this._originalFilters = {};    // Snapshot of each boundary layer's original filter
         this._hoverTooltip = null;     // Floating tooltip element for hovered boundaries
     }
 
@@ -325,8 +325,11 @@ class ContextMap {
      * Discover boundary layers already present in the whg-context style
      * and wire up click/hover on the fill layer.
      *
-     * The fill layer is hidden initially — showBoundaries() makes it
-     * visible when the user selects an admin-level tier.
+     * ALL boundary layers (fill, line, label) are hidden initially —
+     * showBoundaries() makes them visible when the user selects an
+     * admin-level tier.  Each layer's original filter is saved so that
+     * showBoundaries() can combine it with the new admin-level/namespace
+     * constraint, and hideBoundaries() can restore it.
      *
      * Adds a hover highlight layer and a floating tooltip so the user
      * gets visual feedback before clicking.
@@ -348,6 +351,15 @@ class ContextMap {
 
         console.log('contextMap: discovered boundary layers:', this._boundaryLayerIds);
 
+        // Snapshot each layer's original filter (deep copy)
+        this._originalFilters = {};
+        for (const layerId of this._boundaryLayerIds) {
+            const layerDef = style.layers.find(l => l.id === layerId);
+            this._originalFilters[layerId] = layerDef?.filter
+                ? JSON.parse(JSON.stringify(layerDef.filter))
+                : null;
+        }
+
         // Identify the fill layer (for click/hover + filter control)
         this._boundaryFillId = this._boundaryLayerIds.find(id => {
             const layer = this.map.getLayer(id);
@@ -358,12 +370,14 @@ class ContextMap {
         const fillLayerDef = style.layers.find(l => l.id === this._boundaryFillId);
         this._boundarySourceId = fillLayerDef ? fillLayerDef.source : null;
 
-        // ── Hide the fill layer initially — polygons only show
-        //    when an admin-level tier is selected.
-        try {
-            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'none');
-        } catch (e) {
-            console.warn('contextMap: could not hide boundary fill layer', e);
+        // ── Ensure ALL boundary layers are hidden initially ──
+        // (The style already sets visibility: none, but this is belt-and-suspenders)
+        for (const layerId of this._boundaryLayerIds) {
+            try {
+                this.map.setLayoutProperty(layerId, 'visibility', 'none');
+            } catch (e) {
+                console.warn(`contextMap: could not hide boundary layer ${layerId}`, e);
+            }
         }
 
         // ── Add hover highlight source + layers ──
@@ -442,54 +456,96 @@ class ContextMap {
     }
 
     /**
-     * Set a MapLibre filter expression on the boundary fill layer.
-     * Only the fill layer is filtered — line and label layers keep
-     * their style-defined filters untouched.
-     * Pass `null` to clear (show all boundaries).
+     * Combine two MapLibre filter expressions into a single compound.
+     * Flattens nested `['all', ...]` wrappers so the result is clean.
      *
-     * Example: setBoundaryFilter(['all',
-     *   ['<=', ['get', 'admin_level'], 4],
-     *   ['==', ['get', 'namespace'], 'osm']
-     * ]);
-     *
-     * @param {Array|null} filter — MapLibre filter expression
+     * @param {Array|null} original — the layer's style-defined filter
+     * @param {Array|null} extra    — the new constraint to add
+     * @returns {Array|null} merged filter expression
+     * @private
      */
-    setBoundaryFilter(filter) {
-        if (!this.map || !this._boundaryFillId) return;
-        this._boundaryFilter = filter;
-        try {
-            this.map.setFilter(this._boundaryFillId, filter);
-        } catch (e) {
-            console.warn('contextMap.setBoundaryFilter: layer not ready', e);
-        }
+    _combineFilters(original, extra) {
+        if (!original && !extra) return null;
+        if (!original) return extra;
+        if (!extra) return original;
+
+        const origParts = (Array.isArray(original) && original[0] === 'all')
+            ? original.slice(1) : [original];
+        const extraParts = (Array.isArray(extra) && extra[0] === 'all')
+            ? extra.slice(1) : [extra];
+        return ['all', ...origParts, ...extraParts];
     }
 
     /**
-     * Activate boundary interaction for the given filter.
-     * Makes the fill layer visible and applies the filter so only
-     * matching polygons are rendered (and therefore clickable).
-     * @param {Array|null} [filter] — optional filter expression
+     * Activate boundary display for the given filter.
+     *
+     * Shows ALL boundary layers (fill, line, label) with their original
+     * style-defined filters combined with the new filter.  This ensures
+     * that only layers whose admin-level range overlaps the requested
+     * level will actually render features — e.g. asking for admin_level 2
+     * will show features on `boundary-line-country` (original filter ==2)
+     * but nothing on `boundary-line-state` (original filter >=3 && <5,
+     * combined with ==2 yields an impossible condition).
+     *
+     * The fill layer opacity is boosted so polygons are clearly visible
+     * for hover/click interaction.
+     *
+     * @param {Array|null} [filter] — MapLibre filter expression
+     *   e.g. ['all', ['==', ['get', 'admin_level'], 2], ['==', ['get', 'namespace'], 'osm']]
      */
     showBoundaries(filter) {
-        if (!this.map || !this._boundaryFillId) return;
-        try {
-            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'visible');
-        } catch (e) { /* layer not ready */ }
-        if (filter !== undefined) {
-            this.setBoundaryFilter(filter);
+        if (!this.map || this._boundaryLayerIds.length === 0) return;
+
+        for (const layerId of this._boundaryLayerIds) {
+            try {
+                const original = this._originalFilters[layerId];
+                const combined = this._combineFilters(original, filter);
+                this.map.setFilter(layerId, combined);
+                this.map.setLayoutProperty(layerId, 'visibility', 'visible');
+            } catch (e) {
+                console.warn(`contextMap.showBoundaries: error on layer ${layerId}`, e);
+            }
+        }
+
+        // Boost fill opacity so polygons are visible for interaction
+        // (the style default is 0.03-0.05, which is nearly invisible)
+        if (this._boundaryFillId) {
+            try {
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', 'rgba(100, 140, 190, 0.12)');
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', 'rgba(50, 80, 120, 0.35)');
+            } catch (e) { /* not critical */ }
         }
     }
 
     /**
-     * Deactivate boundary interaction — hide the fill layer,
-     * clear the filter, and remove any hover highlight.
+     * Deactivate boundary display — hide ALL boundary layers,
+     * restore their original filters, and clear any hover highlight.
      */
     hideBoundaries() {
-        if (!this.map || !this._boundaryFillId) return;
-        this.setBoundaryFilter(null);
-        try {
-            this.map.setLayoutProperty(this._boundaryFillId, 'visibility', 'none');
-        } catch (e) { /* layer not ready */ }
+        if (!this.map || this._boundaryLayerIds.length === 0) return;
+
+        for (const layerId of this._boundaryLayerIds) {
+            try {
+                // Restore the layer's original filter
+                this.map.setFilter(layerId, this._originalFilters[layerId] || null);
+                this.map.setLayoutProperty(layerId, 'visibility', 'none');
+            } catch (e) { /* layer may not exist yet */ }
+        }
+
+        // Restore original fill paint (data-driven match expression)
+        if (this._boundaryFillId) {
+            try {
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', [
+                    'match', ['get', 'admin_level'],
+                    2, 'rgba(100, 130, 170, 0.05)',
+                    3, 'rgba(120, 150, 185, 0.04)',
+                    4, 'rgba(120, 150, 185, 0.04)',
+                    'rgba(140, 160, 195, 0.03)',
+                ]);
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', 'rgba(0, 0, 0, 0)');
+            } catch (e) { /* not critical */ }
+        }
+
         this.clearBoundaryHover();
     }
 

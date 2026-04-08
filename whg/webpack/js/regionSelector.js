@@ -339,11 +339,28 @@ export default class RegionSelector {
         if (!item) return;
 
         if (item._boundary) {
+            // If result came from ES index search (no geometry), zoom to bounds
+            // so the user can then click the polygon on the map.
+            if (item._fromIndex && !item.geometry && item.bounds) {
+                const [west, south, east, north] = item.bounds;
+                try {
+                    contextMap.map.fitBounds([[west, south], [east, north]], {
+                        padding: 40,
+                        maxZoom: 8,
+                    });
+                } catch (e) {
+                    console.warn('RegionSelector: could not zoom to bounds', e);
+                }
+                this._input.value = '';
+                this._closeDropdown();
+                return;
+            }
+
             this._addBoundaryRegion({
                 id: item.id,
                 label: item.label,
-                admin_level: item.properties?.admin_level,
-                namespace: item.properties?.namespace || 'osm',
+                admin_level: item.properties?.admin_level || item.admin_level,
+                namespace: item.properties?.namespace || item.namespace || 'osm',
                 geometry: item.geometry,
             });
             return;
@@ -363,29 +380,69 @@ export default class RegionSelector {
 
         if (isAdminTier(tier)) {
             const adminLevel = getAdminLevel(tier);
-            const features = contextMap.searchBoundaryFeatures(
+
+            // 1. Try tile-based search first (fast, works offline)
+            const tileFeatures = contextMap.searchBoundaryFeatures(
                 query, adminLevel, this._currentNamespace
             );
 
-            if (features.length === 0) {
-                this._results = [];
-                this._renderDropdown([{
-                    _stub: true,
-                    label: 'No matching regions in current map view',
-                    sublabel: 'Try panning or zooming to load more tiles',
-                }]);
+            if (tileFeatures.length > 0) {
+                this._results = tileFeatures.map(f => ({
+                    id: `boundary:${f.properties.namespace || 'osm'}:${f.properties.osm_id || f.properties.id || f.properties.name}`,
+                    label: f.properties.name || 'Unnamed',
+                    sublabel: `Level ${f.properties.admin_level || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
+                    geometry: f.geometry,
+                    properties: f.properties,
+                    _boundary: true,
+                }));
+                this._renderDropdown(this._results);
                 return;
             }
 
-            this._results = features.map(f => ({
-                id: `boundary:${f.properties.namespace || 'osm'}:${f.properties.osm_id || f.properties.id || f.properties.name}`,
-                label: f.properties.name || 'Unnamed',
-                sublabel: `Level ${f.properties.admin_level || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
-                geometry: f.geometry,
-                properties: f.properties,
-                _boundary: true,
-            }));
-            this._renderDropdown(this._results);
+            // 2. Fall back to ES index search (broader than loaded tiles)
+            try {
+                const params = new URLSearchParams({
+                    q: query,
+                    admin_level: String(adminLevel),
+                    limit: '20',
+                });
+                if (this._currentNamespace) {
+                    params.set('namespace', this._currentNamespace);
+                }
+                const resp = await fetch(`/search/boundaries/?${params}`);
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.results && data.results.length > 0) {
+                        this._results = data.results.map(r => ({
+                            id: r.id || `boundary:${r.namespace}:${r.name}`,
+                            label: r.name,
+                            sublabel: `Level ${r.admin_level} \u00b7 ${(r.namespace || 'osm').toUpperCase()}`
+                                + (r.ccodes && r.ccodes.length ? ` \u00b7 ${r.ccodes.join(', ')}` : ''),
+                            bounds: r.bounds,
+                            repr_point: r.repr_point,
+                            admin_level: r.admin_level,
+                            namespace: r.namespace || 'osm',
+                            // geometry not available from ES search (too heavy);
+                            // user must zoom to the area and click the polygon
+                            geometry: null,
+                            _boundary: true,
+                            _fromIndex: true,
+                        }));
+                        this._renderDropdown(this._results);
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('RegionSelector: ES boundary search failed, falling back', e);
+            }
+
+            // 3. No results from either source
+            this._results = [];
+            this._renderDropdown([{
+                _stub: true,
+                label: 'No matching regions found',
+                sublabel: 'Try a different name or zoom/pan the map',
+            }]);
             return;
         }
 
