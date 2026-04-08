@@ -8,6 +8,7 @@
  */
 
 import filterState from './filterState';
+import { decodeBoundaryId } from './boundaryId';
 
 const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
@@ -16,10 +17,6 @@ const OVERLAY_LINE = 'filter-overlay-line';
 const SUGGESTION_SOURCE = 'suggestion-markers';
 const SUGGESTION_CIRCLES = 'suggestion-circles';
 const SUGGESTION_LABELS = 'suggestion-labels';
-
-const HOVER_SOURCE = 'boundary-hover';
-const HOVER_FILL = 'boundary-hover-fill';
-const HOVER_LINE = 'boundary-hover-line';
 
 /* ── Admin boundaries from the whg-context style ──
  * The 'whg-context' style already includes a `boundaries` source
@@ -42,6 +39,8 @@ class ContextMap {
         this._boundarySourceId = null; // Source ID for the boundary tiles
         this._originalFilters = {};    // Snapshot of each boundary layer's original filter
         this._hoverTooltip = null;     // Floating tooltip element for hovered boundaries
+        this._hoveredBoundaryId = null;   // Packed integer ID of currently hovered boundary
+        this._selectedBoundaryId = null;  // Packed integer ID of currently selected boundary
     }
 
     /**
@@ -331,8 +330,15 @@ class ContextMap {
      * showBoundaries() can combine it with the new admin-level/namespace
      * constraint, and hideBoundaries() can restore it.
      *
-     * Adds a hover highlight layer and a floating tooltip so the user
-     * gets visual feedback before clicking.
+     * Hover and selection highlighting are driven entirely by MapLibre's
+     * feature-state mechanism:  showBoundaries() installs paint
+     * expressions that respond to `hover` and `selected` feature-state
+     * properties.  Because setFeatureState propagates to ALL tile
+     * fragments sharing the same MVT feature ID (our packed boundary ID),
+     * highlighting is seamless across tile boundaries with zero
+     * JavaScript geometry work on each mousemove.
+     *
+     * A floating tooltip is also created for boundary name display.
      * @private
      */
     _initBoundaryLayers() {
@@ -381,29 +387,11 @@ class ContextMap {
         }
 
         // ── Add hover highlight source + layers ──
-        this.map.addSource(HOVER_SOURCE, {
-            type: 'geojson',
-            data: { type: 'FeatureCollection', features: [] },
-        });
-        this.map.addLayer({
-            id: HOVER_FILL,
-            type: 'fill',
-            source: HOVER_SOURCE,
-            paint: {
-                'fill-color': '#fbbf24',
-                'fill-opacity': 0.30,
-            },
-        });
-        this.map.addLayer({
-            id: HOVER_LINE,
-            type: 'line',
-            source: HOVER_SOURCE,
-            paint: {
-                'line-color': '#f59e0b',
-                'line-width': 2.5,
-                'line-opacity': 0.9,
-            },
-        });
+        // ── Hover + selection: driven by feature-state on the existing fill layer ──
+        // MapLibre's setFeatureState propagates to ALL tile fragments sharing the
+        // same MVT feature ID (our packed boundary ID), so hover/selection paint
+        // is seamless across tile boundaries with zero geometry work in JS.
+        // The feature-state-driven paint expressions are installed by showBoundaries().
 
         // ── Create floating tooltip for boundary names ──
         this._hoverTooltip = document.createElement('div');
@@ -411,18 +399,35 @@ class ContextMap {
         this._hoverTooltip.style.display = 'none';
         document.body.appendChild(this._hoverTooltip);
 
-        // ── Hover: highlight + tooltip on mousemove over the fill layer ──
+        // ── Hover: feature-state highlight + tooltip on mousemove over the fill layer ──
+        // setFeatureState propagates to ALL tile fragments with the same packed ID,
+        // so the entire boundary highlights seamlessly across tile edges.
+        this._hoveredBoundaryId = null;
         this.map.on('mousemove', this._boundaryFillId, (e) => {
             this.map.getCanvas().style.cursor = 'pointer';
             if (e.features && e.features.length > 0) {
                 const feature = e.features[0];
-                try {
-                    this.map.getSource(HOVER_SOURCE).setData({
-                        type: 'Feature',
-                        geometry: feature.geometry,
-                        properties: feature.properties || {},
-                    });
-                } catch (err) { /* source not ready */ }
+                const featureId = feature.id;
+
+                // Only update feature-state when the hovered feature changes
+                if (featureId != null && featureId !== this._hoveredBoundaryId) {
+                    // Clear previous hover state
+                    if (this._hoveredBoundaryId != null) {
+                        try {
+                            this.map.removeFeatureState(
+                                { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._hoveredBoundaryId },
+                                'hover'
+                            );
+                        } catch (err) { /* source not ready */ }
+                    }
+                    this._hoveredBoundaryId = featureId;
+                    try {
+                        this.map.setFeatureState(
+                            { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: featureId },
+                            { hover: true }
+                        );
+                    } catch (err) { /* source not ready */ }
+                }
 
                 const name = feature.properties?.name;
                 if (name && this._hoverTooltip) {
@@ -435,24 +440,107 @@ class ContextMap {
         });
         this.map.on('mouseleave', this._boundaryFillId, () => {
             this.map.getCanvas().style.cursor = '';
+            this._hoveredBoundaryId = null;
             this.clearBoundaryHover();
         });
 
-        // ── Click: dispatch event so the region selector can pick it up ──
+        // ── Click: set selection feature-state, collect fragments for geometry, dispatch event ──
         this.map.on('click', this._boundaryFillId, (e) => {
             if (!e.features || e.features.length === 0) return;
             const feature = e.features[0];
             const props = feature.properties || {};
+
+            // Clear previous selection, set new one via feature-state
+            this.clearBoundarySelection();
+            if (feature.id != null) {
+                this._selectedBoundaryId = feature.id;
+                try {
+                    this.map.setFeatureState(
+                        { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: feature.id },
+                        { selected: true }
+                    );
+                } catch (err) { /* source not ready */ }
+            }
+
+            // Collect all tile fragments to build a complete geometry
+            // (still needed for the boundary-click event's geometry payload)
+            const fc = this._collectBoundaryFragments(feature);
+            let geometry = feature.geometry;
+            if (fc && fc.features.length > 0) {
+                // Combine into a GeometryCollection so the full extent is covered
+                if (fc.features.length === 1) {
+                    geometry = fc.features[0].geometry;
+                } else {
+                    geometry = {
+                        type: 'GeometryCollection',
+                        geometries: fc.features.map(f => f.geometry),
+                    };
+                }
+            }
+
+            // Decode the packed integer MVT feature ID
+            const decoded = decodeBoundaryId(feature.id);
+
             document.dispatchEvent(new CustomEvent('boundary-click', {
                 detail: {
-                    id: props.osm_id || props.id || feature.id || '',
+                    id: `${decoded.namespace}:r${decoded.relationId}`,
                     name: props.name || '',
                     admin_level: props.admin_level,
-                    namespace: props.namespace || '',
-                    geometry: feature.geometry,
+                    namespace: decoded.namespace,
+                    geometry,
                 },
             }));
         });
+    }
+
+    /**
+     * Collect all tile fragments for the same boundary feature.
+     *
+     * Vector tiles clip polygons at tile edges, so a large admin region
+     * may be split across many tiles.  This queries all loaded tiles for
+     * fragments sharing the same packed integer feature ID and returns
+     * them as a FeatureCollection.
+     *
+     * Note: this is only used during click to assemble a complete
+     * geometry for the `boundary-click` event payload.  Hover and
+     * selection visual feedback use feature-state instead (which
+     * MapLibre applies to all fragments automatically).
+     *
+     * @param {Object} feature — a MapLibre feature from the fill layer
+     * @returns {Object|null} GeoJSON FeatureCollection, or null on failure
+     * @private
+     */
+    _collectBoundaryFragments(feature) {
+        if (feature.id == null || !this._boundarySourceId) return null;
+
+        try {
+            const allFragments = this.map.querySourceFeatures(this._boundarySourceId, {
+                sourceLayer: BOUNDARIES_SOURCE_LAYER,
+                filter: ['==', ['id'], feature.id],
+            });
+
+            if (allFragments.length === 0) return null;
+
+            // Deduplicate by serialised coordinates (tiles can return
+            // the same fragment from overlapping tile buffers)
+            const seen = new Set();
+            const features = [];
+            for (const f of allFragments) {
+                const key = JSON.stringify(f.geometry.coordinates);
+                if (seen.has(key)) continue;
+                seen.add(key);
+                features.push({
+                    type: 'Feature',
+                    geometry: f.geometry,
+                    properties: f.properties || {},
+                });
+            }
+
+            return { type: 'FeatureCollection', features };
+        } catch (e) {
+            console.warn('contextMap._collectBoundaryFragments: query failed', e);
+            return null;
+        }
     }
 
     /**
@@ -507,12 +595,28 @@ class ContextMap {
             }
         }
 
-        // Boost fill opacity so polygons are visible for interaction
-        // (the style default is 0.03-0.05, which is nearly invisible)
+        // Set feature-state-driven paint on the fill layer so that
+        // hover and selection highlighting work across tile boundaries
+        // without any JavaScript geometry collection.
         if (this._boundaryFillId) {
             try {
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', 'rgba(100, 140, 190, 0.12)');
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', 'rgba(50, 80, 120, 0.35)');
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', [
+                    'case',
+                    ['boolean', ['feature-state', 'selected'], false], '#4a90d9',
+                    ['boolean', ['feature-state', 'hover'], false], '#fbbf24',
+                    'rgb(100, 140, 190)',
+                ]);
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-opacity', [
+                    'case',
+                    ['boolean', ['feature-state', 'selected'], false], 0.25,
+                    ['boolean', ['feature-state', 'hover'], false], 0.30,
+                    0.12,
+                ]);
+                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', [
+                    'case',
+                    ['boolean', ['feature-state', 'selected'], false], '#2563eb',
+                    'rgba(50, 80, 120, 0.35)',
+                ]);
             } catch (e) { /* not critical */ }
         }
     }
@@ -531,6 +635,17 @@ class ContextMap {
                 this.map.setLayoutProperty(layerId, 'visibility', 'none');
             } catch (e) { /* layer may not exist yet */ }
         }
+
+        // Clear ALL feature-state (hover + selected) from the boundary source
+        if (this._boundarySourceId) {
+            try {
+                this.map.removeFeatureState(
+                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER }
+                );
+            } catch (e) { /* source not ready */ }
+        }
+        this._hoveredBoundaryId = null;
+        this._selectedBoundaryId = null;
 
         // Restore original fill paint (data-driven match expression)
         if (this._boundaryFillId) {
@@ -551,17 +666,34 @@ class ContextMap {
         this.clearBoundaryHover();
     }
 
-    /** Clear the hover highlight and tooltip. */
+    /** Clear the hover highlight (via feature-state) and tooltip. */
     clearBoundaryHover() {
         if (!this.map) return;
-        try {
-            this.map.getSource(HOVER_SOURCE).setData({
-                type: 'FeatureCollection',
-                features: [],
-            });
-        } catch (e) { /* source not yet added */ }
+        if (this._hoveredBoundaryId != null && this._boundarySourceId) {
+            try {
+                this.map.removeFeatureState(
+                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._hoveredBoundaryId },
+                    'hover'
+                );
+            } catch (e) { /* source not ready */ }
+            this._hoveredBoundaryId = null;
+        }
         if (this._hoverTooltip) {
             this._hoverTooltip.style.display = 'none';
+        }
+    }
+
+    /** Clear the selection highlight (via feature-state). */
+    clearBoundarySelection() {
+        if (!this.map) return;
+        if (this._selectedBoundaryId != null && this._boundarySourceId) {
+            try {
+                this.map.removeFeatureState(
+                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._selectedBoundaryId },
+                    'selected'
+                );
+            } catch (e) { /* source not ready */ }
+            this._selectedBoundaryId = null;
         }
     }
 
