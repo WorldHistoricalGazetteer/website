@@ -51,13 +51,14 @@
     top: 12px;
     left: 12px;
     z-index: 10;
-    max-width: 420px;
+    max-width: 580px;
     width: calc(100% - 24px);
 }
 
 .floating-search-inner {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 6px;
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
@@ -98,19 +99,20 @@
     font-size: 0.8rem;
 }
 
-/* Toponym-mode controls */
-.toponym-mode-controls {
+/* Atlas control buttons (Layers, Sources, Categories) */
+.atlas-control-buttons {
     display: flex;
     gap: 4px;
+    flex-shrink: 0;
 }
-.toponym-mode-controls .btn {
+.atlas-control-buttons .btn {
     font-size: 0.7rem;
     white-space: nowrap;
     background: rgba(44, 62, 80, 0.8);
     border-color: rgba(44, 62, 80, 0.6);
     color: #fff;
 }
-.toponym-mode-controls .btn:hover {
+.atlas-control-buttons .btn:hover {
     background: rgba(44, 62, 80, 1);
 }
 
@@ -300,26 +302,9 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Layer Sources palette (below temporal control, inside floating search)
+   Layer Sources panel (inside offcanvas body)
    ═══════════════════════════════════════════════════════════════════ */
 
-#layer_sources_palette {
-    margin-top: 6px;
-}
-.layer-sources-btn {
-    font-size: 0.72rem;
-    border-radius: 6px;
-    padding: 3px 8px;
-}
-.layer-sources-panel {
-    margin-top: 4px;
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-radius: 8px;
-    padding: 6px 10px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
-}
 .layer-source-item {
     display: flex;
     align-items: center;
@@ -439,10 +424,10 @@
    Offcanvas styling overrides
    ═══════════════════════════════════════════════════════════════════ */
 
-#sources_offcanvas,
-#categories_offcanvas {
+.atlas-offcanvas {
     width: 300px;
-    z-index: 20;
+    /* Bootstrap defaults: z-index 1045 for offcanvas, 1040 for backdrop.
+       No override needed since panels are outside .explorer-layout. */
 }
 #sources_offcanvas .authority-item {
     padding: 3px 0;
@@ -591,7 +576,7 @@
 }
 
 @media (max-width: 576px) {
-    .toponym-mode-controls {
+    .atlas-control-buttons {
         width: 100%;
         justify-content: center;
         margin-top: 4px;

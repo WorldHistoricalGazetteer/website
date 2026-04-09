@@ -180,9 +180,9 @@ Promise.all([
     // ── Start globe spin on load ──
     heroMap.startSpin();
 
-    // ── Initialise Layer Sources palette ──
+    // ── Initialise Layer Sources palette (inside offcanvas) ──
     layerPalette = new LayerSourcesPalette(
-        '#layer_sources_panel', '#layer_sources_toggle',
+        '#layer_sources_panel', null,
         typeof available_sources !== 'undefined' ? available_sources : []
     );
 
@@ -357,11 +357,11 @@ function updateTreeBadge() {
 function switchSearchMode(mode) {
     searchMode = mode;
     const input = document.getElementById('atlas_search_input');
-    const toponymControls = document.querySelector('.toponym-mode-controls');
+    const toponymBtns = document.querySelectorAll('.toponym-only-btn');
 
     if (mode === 'areas') {
         input.placeholder = buildAreasPlaceholder();
-        toponymControls.style.display = 'none';
+        toponymBtns.forEach(btn => btn.style.display = 'none');
         hideResultsPanel();
         heroMap.clearResultFeatures();
 
@@ -372,7 +372,7 @@ function switchSearchMode(mode) {
         input.placeholder = chipLabels
             ? `Search within ${chipLabels}…`
             : 'Search for place names…';
-        toponymControls.style.display = 'flex';
+        toponymBtns.forEach(btn => btn.style.display = '');
     }
     input.value = '';
     closeAreaDropdown();

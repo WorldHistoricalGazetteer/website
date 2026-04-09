@@ -52,12 +52,11 @@ const SOURCE_TOOLTIPS = {
 export default class LayerSourcesPalette {
     /**
      * @param {string} panelSelector  – CSS selector for the panel container
-     * @param {string} toggleSelector – CSS selector for the toggle button
+     * @param {string} _toggleSelector – (unused, kept for API compat)
      * @param {Array}  sources        – [{id, label, enabled, coming_soon?}]
      */
-    constructor(panelSelector, toggleSelector, sources) {
+    constructor(panelSelector, _toggleSelector, sources) {
         this._panel = document.querySelector(panelSelector);
-        this._toggleBtn = document.querySelector(toggleSelector);
         this._sources = sources || [];
 
         // With radio buttons only one source is active at a time
@@ -129,11 +128,6 @@ export default class LayerSourcesPalette {
             new bootstrap.Tooltip(el, { trigger: 'hover' });
         });
 
-        // ── Wire toggle button (expand / collapse panel) ──
-        this._toggleBtn.addEventListener('click', () => {
-            const isVisible = this._panel.style.display !== 'none';
-            this._panel.style.display = isVisible ? 'none' : 'block';
-        });
 
         // ── Wire source radio buttons ──
         this._panel.querySelectorAll('.layer-source-radio').forEach(radio => {
@@ -195,13 +189,6 @@ export default class LayerSourcesPalette {
 
         // ── Setup zoom-based auto-switching ──
         this._setupZoomAutoSwitch();
-
-        // ── Close panel on outside click ──
-        document.addEventListener('click', (e) => {
-            if (!this._panel.contains(e.target) && !this._toggleBtn.contains(e.target)) {
-                this._panel.style.display = 'none';
-            }
-        });
     }
 
     /* ──────────────────────────────────────────────────────────────── */
