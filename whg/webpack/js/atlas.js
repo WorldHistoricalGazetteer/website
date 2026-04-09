@@ -2,11 +2,10 @@
 // WHG Atlas — Hero Map Explorer + Toponymic Search
 //
 // New entry point for /atlas/ page. Reuses existing modules
-// (filterState, Dateline, TypeTreeWidget, etc.) but wires them
+// (filterState, TypeTreeWidget, etc.) but wires them
 // into the hero-map layout instead of the three-column search layout.
 
 import { errorModal } from './error-modal.js';
-import Dateline from './dateline';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
 import { geomsGeoJSON } from './utilities';
@@ -18,7 +17,6 @@ import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
-import '../css/dateline.css';
 import '../css/atlas.css';
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -35,25 +33,15 @@ let temporalMode = 'off';       // 'off' | 'range' | 'undated'
 let searchMode = 'areas';       // 'areas' | 'toponyms'
 let exactMatch = false;
 let clusterResults = true;
-let currentAdminLevel = null;    // null = auto/off
-let currentNamespace = 'osm';    // 'osm' | 'ohm'
 let selectedRegions = [];        // Array of {id, label, admin_level, namespace, geometry}
 let areaSearchResults = [];      // Current area search dropdown results
 let areaDropdownIndex = -1;
 
-/* ── Admin tier definitions ── */
-const ADMIN_TIERS = [
-    { value: 'off', label: 'Off', adminLevel: null },
-    { value: 'admin0', label: 'Continental', adminLevel: 0 },
-    { value: 'admin1', label: 'Sub-Cont.', adminLevel: 1 },
-    { value: 'admin2', label: 'Country', adminLevel: 2 },
-    { value: 'admin3', label: 'State', adminLevel: 3 },
-    { value: 'admin4', label: 'Province', adminLevel: 4 },
-    { value: 'admin5', label: 'District', adminLevel: 5 },
-    { value: 'admin6', label: 'County', adminLevel: 6 },
-    { value: 'admin7', label: 'City', adminLevel: 7 },
-    { value: 'admin8', label: 'Ward', adminLevel: 8 },
-];
+/* ── Temporal range state ── */
+let temporalFrom = 800;
+let temporalTo = 1800;
+const TEMPORAL_MIN = -2000;
+const TEMPORAL_MAX = 2100;
 
 /* ═══════════════════════════════════════════════════════════════════
    Init: Load data dependencies
@@ -63,15 +51,93 @@ const countryParents = new CountryParents();
 await countryParents.dataLoaded;
 
 /* ═══════════════════════════════════════════════════════════════════
-   Dateline temporal slider
+   Custom temporal range control
    ═══════════════════════════════════════════════════════════════════ */
 
-let dateRangeChanged = throttle(() => {
-    if (window.dateline) {
-        filterState.set('temporal.start_year', window.dateline.fromValue);
-        filterState.set('temporal.stop_year', window.dateline.toValue);
-    }
+let temporalRangeChanged = throttle(() => {
+    filterState.set('temporal.start_year', temporalFrom);
+    filterState.set('temporal.stop_year', temporalTo);
 }, 300);
+
+function fillTemporalSlider() {
+    const fromSlider = document.getElementById('temporal_from_slider');
+    const toSlider = document.getElementById('temporal_to_slider');
+    if (!fromSlider || !toSlider) return;
+    const range = TEMPORAL_MAX - TEMPORAL_MIN;
+    const fromPct = ((temporalFrom - TEMPORAL_MIN) / range) * 100;
+    const toPct = ((temporalTo - TEMPORAL_MIN) / range) * 100;
+    toSlider.style.background = `linear-gradient(to right,
+        #b0bec5 0%, #b0bec5 ${fromPct}%,
+        #546e7a ${fromPct}%, #546e7a ${toPct}%,
+        #b0bec5 ${toPct}%, #b0bec5 100%)`;
+}
+
+function updateTemporalLabels() {
+    const fromLabel = document.getElementById('temporal_from_label');
+    const toLabel = document.getElementById('temporal_to_label');
+    if (fromLabel) fromLabel.textContent = temporalFrom;
+    if (toLabel) toLabel.textContent = temporalTo;
+}
+
+function wireTemporalControl() {
+    const fromSlider = document.getElementById('temporal_from_slider');
+    const toSlider = document.getElementById('temporal_to_slider');
+    if (!fromSlider || !toSlider) return;
+
+    fromSlider.addEventListener('input', () => {
+        temporalFrom = parseInt(fromSlider.value);
+        if (temporalFrom >= temporalTo) {
+            temporalTo = temporalFrom;
+            toSlider.value = temporalTo;
+        }
+        updateTemporalLabels();
+        fillTemporalSlider();
+        temporalRangeChanged();
+    });
+
+    toSlider.addEventListener('input', () => {
+        temporalTo = parseInt(toSlider.value);
+        if (temporalTo <= temporalFrom) {
+            temporalFrom = temporalTo;
+            fromSlider.value = temporalFrom;
+        }
+        updateTemporalLabels();
+        fillTemporalSlider();
+        temporalRangeChanged();
+    });
+
+    // Temporal mode toggle
+    document.querySelectorAll('#temporal_control .temporal-mode-toggle .btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#temporal_control .temporal-mode-toggle .btn')
+                .forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            temporalMode = btn.dataset.temporalMode;
+            const tc = document.getElementById('temporal_control');
+            tc.classList.toggle('temporal-off', temporalMode === 'off');
+        });
+    });
+
+    // Initial fill
+    fillTemporalSlider();
+}
+
+function resetTemporalControl() {
+    temporalFrom = 800;
+    temporalTo = 1800;
+    temporalMode = 'off';
+    const fromSlider = document.getElementById('temporal_from_slider');
+    const toSlider = document.getElementById('temporal_to_slider');
+    if (fromSlider) fromSlider.value = temporalFrom;
+    if (toSlider) toSlider.value = temporalTo;
+    updateTemporalLabels();
+    fillTemporalSlider();
+    document.querySelectorAll('#temporal_control .temporal-mode-toggle .btn')
+        .forEach(b => b.classList.remove('active'));
+    const offBtn = document.querySelector('#temporal_control .temporal-mode-toggle .btn[data-temporal-mode="off"]');
+    if (offBtn) offBtn.classList.add('active');
+    document.getElementById('temporal_control')?.classList.add('temporal-off');
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Map init
@@ -123,80 +189,8 @@ Promise.all([
     // ── Initialise Area Search Router ──
     areaRouter = new AreaSearchRouter(layerPalette);
 
-    // ── Initialise Dateline (always visible in temporal overlay) ──
-    window.dateline = new Dateline({
-        fromValue: 800,
-        toValue: 1800,
-        minValue: -2000,
-        maxValue: 2100,
-        open: true,
-        includeUndated: null,
-        epochs: null,
-        automate: null,
-        onChange: dateRangeChanged,
-        onClick: () => {},
-    });
-
-    // ── Wire temporal mode toggle ──
-    document.querySelectorAll('#temporal_overlay .temporal-mode-toggle .btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('#temporal_overlay .temporal-mode-toggle .btn')
-                .forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            temporalMode = btn.dataset.temporalMode;
-            const dl = document.getElementById('dateline');
-            dl.classList.toggle('temporal-off', temporalMode === 'off');
-        });
-    });
-
-    // ── Build admin tier buttons ──
-    const tierContainer = document.querySelector('.admin-tier-buttons');
-    tierContainer.innerHTML = ADMIN_TIERS.map(t => `
-        <button type="button" class="btn${t.value === 'off' ? ' active' : ''}"
-                data-tier="${t.value}"
-                data-admin-level="${t.adminLevel ?? ''}"
-                data-bs-toggle="tooltip" title="${t.label}">
-            ${t.label}
-        </button>
-    `).join('');
-
-    // Namespace toggle (Modern / Historical)
-    const tierInner = document.querySelector('.admin-tier-inner');
-    const nsHtml = `
-        <div class="namespace-toggle-atlas btn-group btn-group-sm mt-1" role="group">
-            <button type="button" class="btn active" data-ns="osm">Modern</button>
-            <button type="button" class="btn" data-ns="ohm">Historical</button>
-        </div>
-    `;
-    tierInner.insertAdjacentHTML('beforeend', nsHtml);
-
-    // Wire namespace toggle
-    document.querySelectorAll('.namespace-toggle-atlas .btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.namespace-toggle-atlas .btn')
-                .forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentNamespace = btn.dataset.ns;
-            if (currentAdminLevel !== null) updateBoundaryFilter();
-        });
-    });
-
-    // Wire tier buttons
-    tierContainer.querySelectorAll('.btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            tierContainer.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const tier = btn.dataset.tier;
-            if (tier === 'off') {
-                currentAdminLevel = null;
-                heroMap.hideBoundaries();
-            } else {
-                const def = ADMIN_TIERS.find(t => t.value === tier);
-                currentAdminLevel = def ? def.adminLevel : null;
-                updateBoundaryFilter();
-            }
-        });
-    });
+    // ── Initialise custom temporal range control ──
+    wireTemporalControl();
 
     // ── Wire boundary click events ──
     document.addEventListener('boundary-click', (e) => {
@@ -385,29 +379,12 @@ function switchSearchMode(mode) {
 }
 
 function buildAreasPlaceholder() {
-    if (currentAdminLevel !== null) {
-        const tier = ADMIN_TIERS.find(t => t.adminLevel === currentAdminLevel);
-        return `Search for ${tier ? tier.label.toLowerCase() + '-level' : ''} areas…`;
+    if (layerPalette && layerPalette.getAdminLevel() !== null) {
+        return `Search for areas…`;
     }
     return 'Search for areas…';
 }
 
-function updateBoundaryFilter() {
-    if (currentAdminLevel === null) {
-        heroMap.hideBoundaries();
-        return;
-    }
-    const filters = ['all', ['==', ['get', 'admin_level'], currentAdminLevel]];
-    if (currentNamespace === 'osm' && currentAdminLevel <= 1) {
-        filters.push(['any',
-            ['==', ['get', 'namespace'], 'osm'],
-            ['==', ['get', 'namespace'], 'm49'],
-        ]);
-    } else {
-        filters.push(['==', ['get', 'namespace'], currentNamespace]);
-    }
-    heroMap.showBoundaries(filters);
-}
 
 /* ── Area search (Explorer mode) ── */
 
@@ -419,8 +396,8 @@ async function performAreaSearch() {
     }
 
     const results = await areaRouter.search(query, {
-        adminLevel: currentAdminLevel,
-        namespace: currentNamespace,
+        adminLevel: layerPalette ? layerPalette.getAdminLevel() : null,
+        namespace: layerPalette ? layerPalette.getNamespace() : 'osm',
     });
 
     areaSearchResults = results;
@@ -646,8 +623,8 @@ function gatherToponymOptions(qstr) {
         fclasses: treeIds.join(','),
         types: treeIds,
         temporal: temporalMode !== 'off',
-        start: window.dateline ? window.dateline.fromValue : '',
-        end: window.dateline ? window.dateline.toValue : '',
+        start: temporalFrom,
+        end: temporalTo,
         undated: temporalMode === 'undated',
         exact: exactMatch,
         cluster: clusterResults,
@@ -776,20 +753,10 @@ function clearAll() {
     heroMap.clearResultFeatures();
 
     // Reset temporal
-    temporalMode = 'off';
-    document.querySelectorAll('#temporal_overlay .temporal-mode-toggle .btn')
-        .forEach(b => b.classList.remove('active'));
-    const offBtn = document.querySelector('#temporal_overlay .temporal-mode-toggle .btn[data-temporal-mode="off"]');
-    if (offBtn) offBtn.classList.add('active');
-    document.getElementById('dateline').classList.add('temporal-off');
-    if (window.dateline) window.dateline.reset(800, 1800);
+    resetTemporalControl();
 
-    // Reset admin tier
-    currentAdminLevel = null;
-    document.querySelectorAll('.admin-tier-buttons .btn').forEach(b => b.classList.remove('active'));
-    const offTier = document.querySelector('.admin-tier-buttons .btn[data-tier="off"]');
-    if (offTier) offTier.classList.add('active');
-    heroMap.hideBoundaries();
+    // Reset admin level (via layer palette)
+    if (layerPalette) layerPalette.resetAdminLevel();
 
     // Reset type tree
     if (typeTree) {

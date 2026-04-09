@@ -52,14 +52,16 @@ class HeroMap {
         this._readyPromise = new Promise((resolve) => {
             this.map = new whg_maplibre.Map({
                 container: 'hero_map',
-                zoom: 1.5,
+                zoom: 2,
+                minZoom: 0.5,
                 maxZoom: 14,
+                maxBounds: undefined,
                 style: ['whg-context'],
                 fullscreenControl: false,
                 downloadMapControl: false,
                 drawingControl: false,
                 temporalControl: false,
-                navigationControl: true,
+                navigationControl: {position: 'top-right', showZoom: true, showCompass: false, visualizePitch: false},
                 globeControl: true,
                 globeMode: true,
             });

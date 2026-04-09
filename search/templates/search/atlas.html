@@ -79,30 +79,34 @@
 
         <!-- Spatial selection chips -->
         <div id="selection_chips"></div>
-    </div>
 
-    <!-- Admin tier control (left side, above temporal overlay) -->
-    <div id="admin_tier_control">
-        <div class="admin-tier-inner">
-            <span class="admin-tier-label small">Admin Level</span>
-            <div class="admin-tier-buttons btn-group btn-group-sm" role="group" aria-label="Admin tier">
-                <!-- Populated by JS -->
+        <!-- Temporal range control (below search bar, matching width) -->
+        <div id="temporal_control" class="temporal-off">
+            <div class="temporal-header">
+                <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
+                    <button type="button" class="btn active" data-temporal-mode="off">Off</button>
+                    <button type="button" class="btn" data-temporal-mode="range">Range</button>
+                    <button type="button" class="btn" data-temporal-mode="undated">+Undated</button>
+                </div>
+                <div class="temporal-year-labels">
+                    <span id="temporal_from_label">800</span>
+                    <span style="color:#90a4ae; font-weight:400; font-size:0.65rem">to</span>
+                    <span id="temporal_to_label">1800</span>
+                </div>
             </div>
-        </div>
-    </div>
-
-    <!-- Temporal scrubber overlay (always visible, bottom of map) -->
-    <div id="temporal_overlay">
-        <div class="temporal-overlay-inner">
-            <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
-                <button type="button" class="btn active" data-temporal-mode="off"
-                        data-bs-toggle="tooltip" title="No temporal filtering">Off</button>
-                <button type="button" class="btn" data-temporal-mode="range"
-                        data-bs-toggle="tooltip" title="Filter to year range">Range</button>
-                <button type="button" class="btn" data-temporal-mode="undated"
-                        data-bs-toggle="tooltip" title="Range + include undated">+Undated</button>
+            <div class="temporal-slider-wrap">
+                <input type="range" class="temporal-from" id="temporal_from_slider"
+                       min="-2000" max="2100" value="800">
+                <input type="range" class="temporal-to" id="temporal_to_slider"
+                       min="-2000" max="2100" value="1800">
             </div>
-            <div id="dateline" class="temporal-off"></div>
+            <div class="temporal-scale">
+                <span>2000 BCE</span>
+                <span>1000 BCE</span>
+                <span>1 CE</span>
+                <span>1000</span>
+                <span>2000</span>
+            </div>
         </div>
     </div>
 
