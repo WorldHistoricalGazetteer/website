@@ -786,4 +786,30 @@ span.twitter-typeahead .tt-suggestion {
     transform: scale(1.1);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   Tour active state — z-index & interaction blocking
+   During the guided tour, offcanvas panels are opened automatically
+   as demos. They need to appear above the driver.js overlay (z-index
+   10000) so their contents are clearly visible rather than dimmed.
+   Pointer events are blocked on them so the user can't accidentally
+   interact with controls during the tour.
+   ═══════════════════════════════════════════════════════════════════ */
+
+body.atlas-tour-active .offcanvas.show,
+body.atlas-tour-active .offcanvas.showing {
+    z-index: 10001 !important;
+    pointer-events: none !important;
+}
+
+/* Ensure child elements also can't receive clicks */
+body.atlas-tour-active .offcanvas.show *,
+body.atlas-tour-active .offcanvas.showing * {
+    pointer-events: none !important;
+}
+
+/* Suppress Bootstrap offcanvas backdrop during tour */
+body.atlas-tour-active .offcanvas-backdrop {
+    display: none !important;
+}
+
 
