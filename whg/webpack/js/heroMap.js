@@ -245,7 +245,7 @@ class HeroMap {
 
     // ── Globe spin ──
 
-    startSpin(degreesPerSecond = 6) {
+    startSpin(degreesPerSecond = 1) {
         if (this._spinStopped || this._spinning || !this.map) return;
         this._spinning = true;
         let lastTime = performance.now();

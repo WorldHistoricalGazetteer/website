@@ -16,13 +16,32 @@ const TOUR_SEEN_KEY = 'whg_atlas_tour_seen';
 function getTourSteps() {
     return [
         {
+            element: '#hero_map',
+            popover: {
+                title: 'Welcome to the WHG Atlas',
+                description:
+                    'The Atlas is an <strong>interactive historical atlas</strong> of the world through time. ' +
+                    'The map is your primary interface — explore geographic boundaries first, then search ' +
+                    'for historical place names within those areas.<br><br>' +
+                    'Zoom, pan, and rotate the globe to navigate. ' +
+                    '<strong>Click on any boundary polygon</strong> to select a region. ' +
+                    'Use the corner controls to switch between globe and flat projections.',
+                side: 'top',
+                align: 'center',
+            },
+        },
+        {
             element: '.search-mode-toggle',
             popover: {
-                title: 'Search Modes',
+                title: 'Two Exploration Modes',
                 description:
-                    'The Atlas has two modes. <strong>Areas</strong> mode lets you explore geographic ' +
-                    'boundaries — countries, states, historical territories. ' +
-                    '<strong>Toponyms</strong> mode searches for place names within selected areas.',
+                    'The Atlas has two complementary modes:<br><br>' +
+                    '<strong>Areas</strong> — explore geographic boundaries: modern countries (from OpenStreetMap), ' +
+                    'historical territories (from OpenHistoricalMap), and more. ' +
+                    'Type a name to find regions, or click directly on the map.<br><br>' +
+                    '<strong>Toponyms</strong> — search the WHG index of <strong>47 million+ place records</strong> ' +
+                    'from GeoNames, Wikidata, Pleiades, TGN, and other gazetteers. ' +
+                    'Results are automatically constrained to any areas you\'ve selected.',
                 side: 'bottom',
                 align: 'start',
             },
@@ -32,9 +51,13 @@ function getTourSteps() {
             popover: {
                 title: 'Search Input',
                 description:
-                    'Type here to search. In <strong>Areas</strong> mode, matching boundaries appear ' +
-                    'as a dropdown — click one to select it. In <strong>Toponyms</strong> mode, ' +
-                    'press <strong>Enter</strong> or click the search button to query place names.',
+                    'Type here to search. Behaviour depends on which mode is active:<br><br>' +
+                    'In <strong>Areas</strong> mode, matching boundaries appear as a dropdown as you type ' +
+                    '— select one to highlight it on the map and add it as a spatial constraint. ' +
+                    'Try typing "France" or "Ottoman".<br><br>' +
+                    'In <strong>Toponyms</strong> mode, press <strong>Enter</strong> or click the ' +
+                    '<i class="fas fa-search"></i> button to search the gazetteer index. ' +
+                    'A results panel will slide in alongside the map.',
                 side: 'bottom',
                 align: 'center',
             },
@@ -42,10 +65,13 @@ function getTourSteps() {
         {
             element: '#atlas_exact_match',
             popover: {
-                title: 'Exact Match',
+                title: 'Exact / Fuzzy Match',
                 description:
-                    'Toggle between <strong>fuzzy</strong> (phonetically similar) and <strong>exact</strong> ' +
-                    '(precise spelling) matching. Useful when you know the exact form of a place name.',
+                    'Toggle between matching modes for toponym searches:<br><br>' +
+                    '<strong>Fuzzy</strong> (default) — finds phonetically similar names. ' +
+                    'Searching "Konstantinopolis" will also find "Constantinople", "Kostantiniyye", etc.<br><br>' +
+                    '<strong>Exact</strong> — precise spelling match only. ' +
+                    'Use this when you know the exact form of a place name and want to avoid false positives.',
                 side: 'bottom',
                 align: 'center',
             },
@@ -55,9 +81,14 @@ function getTourSteps() {
             popover: {
                 title: 'Control Panels',
                 description:
-                    '<strong>Layers</strong> configures map tile sources and boundary display settings. ' +
-                    'In Toponyms mode, <strong>Sources</strong> filters by data source (GeoNames, Wikidata, etc.) ' +
-                    'and <strong>Categories</strong> filters by place type using the AAT hierarchy.',
+                    'Three off-canvas panels give you fine-grained control:<br><br>' +
+                    '<strong><i class="fas fa-layer-group"></i> Layers</strong> (Areas mode) — ' +
+                    'configure map tile sources, choose modern or historical boundaries, and set the ' +
+                    'administrative level (country, state, province, etc.).<br><br>' +
+                    '<strong><i class="fas fa-database"></i> Sources</strong> (Toponyms mode) — ' +
+                    'filter results by data source: GeoNames, Wikidata, Pleiades, TGN, and more.<br><br>' +
+                    '<strong><i class="fas fa-sitemap"></i> Categories</strong> (Toponyms mode) — ' +
+                    'filter by place type using the Getty AAT hierarchy (e.g. settlements, temples, rivers).',
                 side: 'bottom',
                 align: 'end',
             },
@@ -67,8 +98,11 @@ function getTourSteps() {
             popover: {
                 title: 'Selected Areas',
                 description:
-                    'Areas you\'ve selected appear here as chips. You can select <strong>multiple areas</strong> — ' +
-                    'toponym searches will look within all of them. Click the × on a chip to remove it.',
+                    'Every area you select — whether by clicking the map or choosing from the search dropdown ' +
+                    '— appears here as a chip. You can <strong>select multiple areas</strong> to build up ' +
+                    'a composite study region.<br><br>' +
+                    'When you switch to <strong>Toponyms</strong> mode, your search is automatically constrained ' +
+                    'to the union of all selected areas. Click the <strong>×</strong> on any chip to remove it.',
                 side: 'bottom',
                 align: 'start',
             },
@@ -78,24 +112,27 @@ function getTourSteps() {
             popover: {
                 title: 'Temporal Filter',
                 description:
-                    'Constrain results by time period. Choose <strong>Date Range</strong> to set a year span, ' +
-                    'or <strong>+Undated</strong> to also include places without temporal information. ' +
-                    'Drag the slider handles to adjust the range.',
+                    'Constrain results to a specific time period. Three modes:<br><br>' +
+                    '<strong>Off</strong> — no temporal filtering (default).<br>' +
+                    '<strong>Date Range</strong> — only show places attested within the selected year span. ' +
+                    'Drag the two slider handles to set a range, e.g. 1200–1500 CE.<br>' +
+                    '<strong>+Undated</strong> — same as Date Range, but also includes places that have ' +
+                    'no temporal information at all.<br><br>' +
+                    'The slider covers 2000 BCE to 2100 CE.',
                 side: 'bottom',
                 align: 'start',
             },
         },
         {
-            element: '#hero_map',
+            element: '#atlas_tour_btn',
             popover: {
-                title: 'The Map',
+                title: 'Re-take This Tour',
                 description:
-                    'The full-screen map displays boundaries, search results, and overlays. ' +
-                    'In Areas mode, <strong>click directly on a boundary</strong> to select it. ' +
-                    'In Toponyms mode, click a result marker to highlight it in the results panel. ' +
-                    'Use the controls in the corners to zoom, rotate, and switch projections.',
-                side: 'top',
-                align: 'center',
+                    'You can re-launch this guided tour at any time by clicking this ' +
+                    '<strong><i class="fas fa-map-signs"></i></strong> button in the bottom-left corner of the map. ' +
+                    'The tour only auto-starts on your first visit.',
+                side: 'right',
+                align: 'end',
             },
         },
     ];
