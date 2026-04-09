@@ -87,7 +87,7 @@ span.twitter-typeahead .tt-suggestion {
 .explorer-layout {
     position: relative;
     width: 100%;
-    height: calc(100vh - 60px);   /* viewport minus header height */
+    height: calc(100vh - 110px);  /* viewport minus header + footer */
     min-height: 400px;
     overflow: hidden;
 }
@@ -272,18 +272,19 @@ span.twitter-typeahead .tt-suggestion {
 
 /* Year labels */
 .temporal-year-labels {
-    flex: 1;
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
+    gap: 4px;
     font-family: 'REM', 'Segoe UI', system-ui, sans-serif;
     font-size: 0.75rem;
     color: #37474f;
     font-weight: 600;
     padding: 0 2px;
+    white-space: nowrap;
 }
 .temporal-year-labels span {
-    min-width: 40px;
+    min-width: 30px;
     text-align: center;
 }
 
@@ -314,7 +315,8 @@ span.twitter-typeahead .tt-suggestion {
 }
 .temporal-slider-wrap input[type="range"].temporal-from {
     z-index: 3;
-    height: 0;
+    height: 4px;
+    background: transparent;
 }
 
 /* Thumbs */
