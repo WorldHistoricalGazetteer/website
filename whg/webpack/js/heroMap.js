@@ -52,7 +52,7 @@ class HeroMap {
         this._readyPromise = new Promise((resolve) => {
             this.map = new whg_maplibre.Map({
                 container: 'hero_map',
-                zoom: 2,
+                zoom: 2.5,
                 minZoom: 0.5,
                 maxZoom: 14,
                 maxBounds: undefined,

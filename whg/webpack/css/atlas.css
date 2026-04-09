@@ -607,9 +607,9 @@
     z-index: 12;
     width: 420px;
     max-width: calc(100% - 40px);
-    background: rgba(255, 255, 255, 0.88);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: 16px;
     padding: 28px 32px 24px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -685,7 +685,7 @@
 
 .atlas-tour-btn {
     position: absolute;
-    bottom: 36px;
+    bottom: 12px;
     left: 12px;
     z-index: 10;
     width: 36px;

@@ -355,6 +355,9 @@ Promise.all([
             '#atlas_initiate_search',
             '#atlas_exact_match',
             '#atlas_clear_search',
+            '.maplibregl-ctrl-zoom-in',
+            '.maplibregl-ctrl-zoom-out',
+            '.maplibregl-ctrl-globe',
         ];
         controlSelectors.forEach(sel => {
             document.querySelectorAll(sel).forEach(el => {
