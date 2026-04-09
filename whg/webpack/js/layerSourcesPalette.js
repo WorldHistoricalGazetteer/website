@@ -2,133 +2,176 @@
 /**
  * Layer Sources palette for the Atlas page.
  *
- * Renders toggleable source switches (OSM, OHM, PeriodO, etc.)
- * and admin-level boundary controls with zoom-based auto-switching.
- * Persists state in filterState.active_sources.
+ * Renders radio-button source selector (OSM, OHM, PeriodO, etc.)
+ * and a compact boundary-level dropdown (visible only when a
+ * boundary source — OSM or OHM — is selected).
+ *
+ * Namespace (osm/ohm) is inferred from the selected source,
+ * eliminating the separate Modern / Historical toggle.
  */
 
 import heroMap from './heroMap';
 
 /* ── Admin tier definitions ── */
 const ADMIN_TIERS = [
-    { value: 'off', label: 'Off', adminLevel: null },
-    { value: 'admin0', label: 'Continental', adminLevel: 0, minZoom: 0 },
-    { value: 'admin1', label: 'Sub-Cont.', adminLevel: 1, minZoom: 0 },
-    { value: 'admin2', label: 'Country', adminLevel: 2, minZoom: 2 },
-    { value: 'admin3', label: 'State', adminLevel: 3, minZoom: 3.5 },
-    { value: 'admin4', label: 'Province', adminLevel: 4, minZoom: 4.5 },
-    { value: 'admin5', label: 'District', adminLevel: 5, minZoom: 5.5 },
-    { value: 'admin6', label: 'County', adminLevel: 6, minZoom: 6.5 },
-    { value: 'admin7', label: 'City', adminLevel: 7, minZoom: 7.5 },
-    { value: 'admin8', label: 'Ward', adminLevel: 8, minZoom: 8.5 },
+    { value: 'off', label: 'Off',          adminLevel: null },
+    { value: '0',   label: 'Continental',   adminLevel: 0 },
+    { value: '1',   label: 'Sub-Cont.',     adminLevel: 1 },
+    { value: '2',   label: 'Country',       adminLevel: 2 },
+    { value: '3',   label: 'State',         adminLevel: 3 },
+    { value: '4',   label: 'Province',      adminLevel: 4 },
+    { value: '5',   label: 'District',      adminLevel: 5 },
+    { value: '6',   label: 'County',        adminLevel: 6 },
+    { value: '7',   label: 'City',          adminLevel: 7 },
+    { value: '8',   label: 'Ward',          adminLevel: 8 },
 ];
 
 /* Zoom thresholds for auto admin-level switching */
 const ZOOM_THRESHOLDS = [
-    { maxZoom: 2.5, adminLevel: 2 },
-    { maxZoom: 4,   adminLevel: 3 },
-    { maxZoom: 5.5, adminLevel: 4 },
-    { maxZoom: 7,   adminLevel: 6 },
-    { maxZoom: 9,   adminLevel: 7 },
+    { maxZoom: 2.5,      adminLevel: 2 },
+    { maxZoom: 4,        adminLevel: 3 },
+    { maxZoom: 5.5,      adminLevel: 4 },
+    { maxZoom: 7,        adminLevel: 6 },
+    { maxZoom: 9,        adminLevel: 7 },
     { maxZoom: Infinity, adminLevel: 8 },
 ];
 
+/* Sources that support boundary display */
+const BOUNDARY_SOURCES = new Set(['osm', 'ohm']);
+
+/* Tooltip descriptions for known sources */
+const SOURCE_TOOLTIPS = {
+    osm:        'OpenStreetMap — modern administrative boundaries and geographic features',
+    ohm:        'OpenHistoricalMap — community-contributed historical boundaries and features',
+    periodo:    'PeriodO — periods, events, and temporalities',
+    cliopatria: 'Cliopatria — historical political entities',
+    dplace:     'D-PLACE — cross-cultural linguistic and geographic datasets',
+    nativeland: 'NativeLand — indigenous territories and languages',
+};
+
 export default class LayerSourcesPalette {
     /**
-     * @param {string} panelSelector - CSS selector for the panel container
-     * @param {string} toggleSelector - CSS selector for the toggle button
-     * @param {Array} sources - [{id, label, enabled, coming_soon?}]
+     * @param {string} panelSelector  – CSS selector for the panel container
+     * @param {string} toggleSelector – CSS selector for the toggle button
+     * @param {Array}  sources        – [{id, label, enabled, coming_soon?}]
      */
     constructor(panelSelector, toggleSelector, sources) {
         this._panel = document.querySelector(panelSelector);
         this._toggleBtn = document.querySelector(toggleSelector);
         this._sources = sources || [];
-        this._activeSources = this._sources
-            .filter(s => s.enabled)
-            .map(s => s.id);
+
+        // With radio buttons only one source is active at a time
+        const enabledSource = this._sources.find(s => s.enabled);
+        this._activeSource = enabledSource ? enabledSource.id : (this._sources[0]?.id || 'osm');
+        this._activeSources = [this._activeSource];
+
+        // Namespace is inferred from the selected source
+        this._currentNamespace = this._activeSource === 'ohm' ? 'ohm' : 'osm';
+
         this._currentAdminLevel = null;
-        this._currentNamespace = 'osm';
         this._autoAdmin = true;
         this._boundariesVisible = false;
+
         this._init();
     }
 
-    _init() {
-        // Render source toggles
-        let html = this._sources.map(s => `
-            <div class="layer-source-item">
-                <div class="form-check form-switch">
-                    <input class="form-check-input layer-source-cb" type="checkbox"
-                           id="layer_src_${s.id}" value="${s.id}"
-                           ${s.enabled ? 'checked' : ''}
-                           ${s.coming_soon ? 'disabled' : ''}>
-                    <label class="form-check-label" for="layer_src_${s.id}">
-                        ${s.label}
-                        ${s.coming_soon ? '<span class="coming-soon">(coming soon)</span>' : ''}
-                    </label>
-                </div>
-            </div>
-        `).join('');
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Init                                                           */
+    /* ──────────────────────────────────────────────────────────────── */
 
-        // Add admin-level section
+    _init() {
+        // ── Source radio buttons ──
+        let html = '<span class="layer-panel-section-label">Source</span>';
+
+        this._sources.forEach(s => {
+            const tooltip = SOURCE_TOOLTIPS[s.id] || s.label;
+            const checked = s.id === this._activeSource ? 'checked' : '';
+            const disabled = s.coming_soon ? 'disabled' : '';
+            html += `
+                <div class="layer-source-item">
+                    <div class="form-check">
+                        <input class="form-check-input layer-source-radio" type="radio"
+                               name="layer_source" id="layer_src_${s.id}" value="${s.id}"
+                               ${checked} ${disabled}>
+                        <label class="form-check-label" for="layer_src_${s.id}"
+                               data-bs-toggle="tooltip" data-bs-placement="right"
+                               title="${tooltip}">
+                            ${s.label}
+                            ${s.coming_soon ? '<span class="coming-soon">(coming soon)</span>' : ''}
+                        </label>
+                    </div>
+                </div>`;
+        });
+
+        // ── Boundary level section (hidden by default, shown for OSM/OHM) ──
         html += `
-            <hr class="layer-panel-divider">
-            <span class="layer-panel-section-label">Boundaries</span>
-            <div class="admin-level-group btn-group btn-group-sm" role="group">
-                ${ADMIN_TIERS.map(t => `
-                    <button type="button"
-                            class="btn${t.value === 'off' ? ' active' : ''}"
-                            data-tier="${t.value}"
-                            data-admin-level="${t.adminLevel ?? ''}"
-                            title="${t.label}">
-                        ${t.label}
-                    </button>
-                `).join('')}
-            </div>
-            <div class="namespace-toggle-panel btn-group btn-group-sm" role="group">
-                <button type="button" class="btn active" data-ns="osm">Modern</button>
-                <button type="button" class="btn" data-ns="ohm">Historical</button>
-            </div>
-            <div class="admin-auto-toggle">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="admin_auto_zoom" checked>
-                    <label class="form-check-label" for="admin_auto_zoom">Auto by zoom</label>
+            <div id="boundary_level_section"
+                 style="${BOUNDARY_SOURCES.has(this._activeSource) ? '' : 'display:none'}">
+                <hr class="layer-panel-divider">
+                <span class="layer-panel-section-label">Boundaries</span>
+                <select id="boundary_level_select" class="form-select form-select-sm">
+                    ${ADMIN_TIERS.map(t =>
+                        `<option value="${t.value}">${t.label}${t.adminLevel != null ? ' (' + t.adminLevel + ')' : ''}</option>`
+                    ).join('')}
+                </select>
+                <div class="admin-auto-toggle">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="admin_auto_zoom" checked>
+                        <label class="form-check-label" for="admin_auto_zoom">Auto by zoom</label>
+                    </div>
                 </div>
-            </div>
-        `;
+            </div>`;
 
         this._panel.innerHTML = html;
 
-        // Wire toggle button
+        // ── Initialise Bootstrap tooltips ──
+        this._panel.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+            new bootstrap.Tooltip(el, { trigger: 'hover' });
+        });
+
+        // ── Wire toggle button (expand / collapse panel) ──
         this._toggleBtn.addEventListener('click', () => {
             const isVisible = this._panel.style.display !== 'none';
             this._panel.style.display = isVisible ? 'none' : 'block';
         });
 
-        // Wire source checkboxes
-        this._panel.querySelectorAll('.layer-source-cb').forEach(cb => {
-            cb.addEventListener('change', () => {
-                this._activeSources = Array.from(
-                    this._panel.querySelectorAll('.layer-source-cb:checked')
-                ).map(el => el.value);
+        // ── Wire source radio buttons ──
+        this._panel.querySelectorAll('.layer-source-radio').forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (!radio.checked) return;
+                this._activeSource = radio.value;
+                this._activeSources = [this._activeSource];
+                this._currentNamespace = this._activeSource === 'ohm' ? 'ohm' : 'osm';
+
+                // Show/hide boundary section
+                const boundarySection = this._panel.querySelector('#boundary_level_section');
+                if (boundarySection) {
+                    const show = BOUNDARY_SOURCES.has(this._activeSource);
+                    boundarySection.style.display = show ? '' : 'none';
+                    if (!show && this._boundariesVisible) {
+                        this._currentAdminLevel = null;
+                        this._boundariesVisible = false;
+                        heroMap.hideBoundaries();
+                    } else if (show && this._autoAdmin) {
+                        this._applyZoomAutoLevel();
+                    }
+                }
+
                 this._onSourcesChange();
             });
         });
 
-        // Wire admin tier buttons
-        this._panel.querySelectorAll('.admin-level-group .btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this._panel.querySelectorAll('.admin-level-group .btn')
-                    .forEach(b => b.classList.remove('active', 'auto-selected'));
-                btn.classList.add('active');
-                const tier = btn.dataset.tier;
-                if (tier === 'off') {
+        // ── Wire boundary level dropdown ──
+        const select = this._panel.querySelector('#boundary_level_select');
+        if (select) {
+            select.addEventListener('change', () => {
+                const val = select.value;
+                if (val === 'off') {
                     this._currentAdminLevel = null;
                     this._boundariesVisible = false;
                     heroMap.hideBoundaries();
                 } else {
-                    const def = ADMIN_TIERS.find(t => t.value === tier);
-                    this._currentAdminLevel = def ? def.adminLevel : null;
+                    this._currentAdminLevel = parseInt(val, 10);
                     this._boundariesVisible = true;
                     this._updateBoundaryFilter();
                 }
@@ -137,20 +180,9 @@ export default class LayerSourcesPalette {
                 const autoCheck = this._panel.querySelector('#admin_auto_zoom');
                 if (autoCheck) autoCheck.checked = false;
             });
-        });
+        }
 
-        // Wire namespace toggle
-        this._panel.querySelectorAll('.namespace-toggle-panel .btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this._panel.querySelectorAll('.namespace-toggle-panel .btn')
-                    .forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                this._currentNamespace = btn.dataset.ns;
-                if (this._currentAdminLevel !== null) this._updateBoundaryFilter();
-            });
-        });
-
-        // Wire auto-zoom toggle
+        // ── Wire auto-zoom toggle ──
         const autoCheck = this._panel.querySelector('#admin_auto_zoom');
         if (autoCheck) {
             autoCheck.addEventListener('change', () => {
@@ -161,10 +193,10 @@ export default class LayerSourcesPalette {
             });
         }
 
-        // Setup zoom-based auto-switching
+        // ── Setup zoom-based auto-switching ──
         this._setupZoomAutoSwitch();
 
-        // Close panel on outside click
+        // ── Close panel on outside click ──
         document.addEventListener('click', (e) => {
             if (!this._panel.contains(e.target) && !this._toggleBtn.contains(e.target)) {
                 this._panel.style.display = 'none';
@@ -172,12 +204,18 @@ export default class LayerSourcesPalette {
         });
     }
 
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Boundary filter                                                */
+    /* ──────────────────────────────────────────────────────────────── */
+
     _updateBoundaryFilter() {
         if (this._currentAdminLevel === null) {
             heroMap.hideBoundaries();
             return;
         }
         const filters = ['all', ['==', ['get', 'admin_level'], this._currentAdminLevel]];
+
+        // For admin levels 0–1 with OSM, include m49 namespace
         if (this._currentNamespace === 'osm' && this._currentAdminLevel <= 1) {
             filters.push(['any',
                 ['==', ['get', 'namespace'], 'osm'],
@@ -189,10 +227,14 @@ export default class LayerSourcesPalette {
         heroMap.showBoundaries(filters);
     }
 
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Auto zoom-level switching                                      */
+    /* ──────────────────────────────────────────────────────────────── */
+
     _setupZoomAutoSwitch() {
         heroMap.init().then(() => {
             heroMap.map.on('zoomend', () => {
-                if (this._autoAdmin) {
+                if (this._autoAdmin && BOUNDARY_SOURCES.has(this._activeSource)) {
                     this._applyZoomAutoLevel();
                 }
             });
@@ -201,6 +243,8 @@ export default class LayerSourcesPalette {
 
     _applyZoomAutoLevel() {
         if (!heroMap.map) return;
+        if (!BOUNDARY_SOURCES.has(this._activeSource)) return;
+
         const zoom = heroMap.map.getZoom();
         let targetLevel = null;
         for (const t of ZOOM_THRESHOLDS) {
@@ -209,37 +253,41 @@ export default class LayerSourcesPalette {
                 break;
             }
         }
+
         if (targetLevel !== this._currentAdminLevel) {
             this._currentAdminLevel = targetLevel;
             this._boundariesVisible = targetLevel !== null;
 
-            // Update button highlight
-            this._panel.querySelectorAll('.admin-level-group .btn')
-                .forEach(b => b.classList.remove('active', 'auto-selected'));
+            // Update dropdown to reflect auto-selected level
+            const select = this._panel.querySelector('#boundary_level_select');
+            if (select) {
+                select.value = targetLevel !== null ? String(targetLevel) : 'off';
+            }
+
             if (targetLevel !== null) {
-                const tier = ADMIN_TIERS.find(t => t.adminLevel === targetLevel);
-                if (tier) {
-                    const btn = this._panel.querySelector(`.admin-level-group .btn[data-tier="${tier.value}"]`);
-                    if (btn) btn.classList.add('auto-selected');
-                }
                 this._updateBoundaryFilter();
             } else {
-                const offBtn = this._panel.querySelector('.admin-level-group .btn[data-tier="off"]');
-                if (offBtn) offBtn.classList.add('active');
                 heroMap.hideBoundaries();
             }
         }
     }
 
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Source change callback                                         */
+    /* ──────────────────────────────────────────────────────────────── */
+
     _onSourcesChange() {
         heroMap.setActiveSources(this._activeSources);
-        // Dispatch custom event so other components can react
         document.dispatchEvent(new CustomEvent('layer-sources-change', {
             detail: { activeSources: this._activeSources },
         }));
     }
 
-    /** Get currently active source IDs. */
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Public API                                                     */
+    /* ──────────────────────────────────────────────────────────────── */
+
+    /** Get currently active source IDs (single-element array). */
     getActiveSources() {
         return [...this._activeSources];
     }
@@ -249,33 +297,32 @@ export default class LayerSourcesPalette {
         return this._activeSources.includes(sourceId);
     }
 
-    /** Get current admin level. */
+    /** Get current admin level (number or null). */
     getAdminLevel() {
         return this._currentAdminLevel;
     }
 
-    /** Get current namespace. */
+    /** Get current namespace (inferred from selected source). */
     getNamespace() {
         return this._currentNamespace;
     }
 
-    /** Reset admin level to off. */
+    /** Reset admin level to off, re-enable auto. */
     resetAdminLevel() {
         this._currentAdminLevel = null;
         this._boundariesVisible = false;
         this._autoAdmin = true;
         heroMap.hideBoundaries();
-        this._panel.querySelectorAll('.admin-level-group .btn')
-            .forEach(b => b.classList.remove('active', 'auto-selected'));
-        const offBtn = this._panel.querySelector('.admin-level-group .btn[data-tier="off"]');
-        if (offBtn) offBtn.classList.add('active');
+
+        const select = this._panel.querySelector('#boundary_level_select');
+        if (select) select.value = 'off';
         const autoCheck = this._panel.querySelector('#admin_auto_zoom');
         if (autoCheck) autoCheck.checked = true;
     }
 
     /**
      * Get the namespace value(s) for boundary queries.
-     * Maps active sources to namespace values used by the boundary tiles.
+     * Maps active source to namespace used by boundary tiles.
      */
     getActiveNamespaces() {
         const nsMap = { osm: 'osm', ohm: 'ohm' };

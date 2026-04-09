@@ -43,17 +43,16 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Floating search input (top-centre)
+   Floating search + controls panel (top-left)
    ═══════════════════════════════════════════════════════════════════ */
 
 #floating_search {
     position: absolute;
     top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
+    left: 12px;
     z-index: 10;
-    max-width: 680px;
-    width: 90vw;
+    max-width: 420px;
+    width: calc(100% - 24px);
 }
 
 .floating-search-inner {
@@ -163,7 +162,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 10px;
-    padding: 6px 12px 10px;
+    padding: 6px 12px 4px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 
@@ -301,46 +300,48 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Layer Sources palette (bottom-left)
+   Layer Sources palette (below temporal control, inside floating search)
    ═══════════════════════════════════════════════════════════════════ */
 
 #layer_sources_palette {
-    position: absolute;
-    bottom: 12px;
-    left: 12px;
-    z-index: 10;
+    margin-top: 6px;
 }
 .layer-sources-btn {
-    font-size: 0.75rem;
-    border-radius: 8px;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+    font-size: 0.72rem;
+    border-radius: 6px;
+    padding: 3px 8px;
 }
 .layer-sources-panel {
-    background: rgba(255, 255, 255, 0.94);
+    margin-top: 4px;
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-radius: 8px;
-    padding: 8px 10px;
-    margin-bottom: 4px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
-    min-width: 180px;
+    padding: 6px 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
 }
 .layer-source-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 2px 0;
+    gap: 5px;
+    padding: 1px 0;
 }
 .layer-source-item label {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     color: #333;
     cursor: pointer;
     margin: 0;
 }
 .layer-source-item .form-check-input {
     margin-top: 0;
+    width: 0.85em;
+    height: 0.85em;
+}
+.layer-source-item .form-check-input:disabled + label {
+    color: #999;
 }
 .layer-source-item .coming-soon {
-    font-size: 0.6rem;
+    font-size: 0.58rem;
     color: #999;
     font-style: italic;
 }
@@ -513,13 +514,13 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Admin-level section inside layer panel
+   Boundary level dropdown inside layer panel
    ═══════════════════════════════════════════════════════════════════ */
 
 .layer-panel-divider {
     border: 0;
     border-top: 1px solid #dee2e6;
-    margin: 6px 0;
+    margin: 4px 0;
 }
 
 .layer-panel-section-label {
@@ -529,50 +530,20 @@
     font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
 }
 
-.admin-level-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
+#boundary_level_section {
+    margin-top: 2px;
+    padding-top: 4px;
+    border-top: 1px solid #dee2e6;
 }
-.admin-level-group .btn {
-    font-size: 0.6rem;
-    padding: 1px 5px;
-    border-color: #ced4da;
-    color: #555;
-    background: #f8f9fa;
-    white-space: nowrap;
+
+#boundary_level_select {
+    font-size: 0.72rem;
+    padding: 2px 24px 2px 6px;
+    height: auto;
     line-height: 1.4;
-}
-.admin-level-group .btn.active {
-    background: #546e7a;
-    border-color: #455a64;
-    color: #fff;
-}
-.admin-level-group .btn.auto-selected {
-    background: #78909c;
-    border-color: #607d8b;
-    color: #fff;
-}
-
-.namespace-toggle-panel {
-    display: flex;
-    gap: 1px;
-    margin-top: 4px;
-}
-.namespace-toggle-panel .btn {
-    font-size: 0.58rem;
-    padding: 1px 6px;
-    border-color: #ced4da;
-    color: #555;
-    background: #f8f9fa;
-}
-.namespace-toggle-panel .btn.active {
-    background: #546e7a;
-    border-color: #455a64;
-    color: #fff;
 }
 
 .admin-auto-toggle {
@@ -585,6 +556,8 @@
 }
 .admin-auto-toggle .form-check-input {
     margin-top: 0;
+    width: 1.8em;
+    height: 1em;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -594,7 +567,9 @@
 @media (max-width: 768px) {
     #floating_search {
         top: 8px;
-        width: 95%;
+        left: 8px;
+        width: calc(100% - 16px);
+        max-width: none;
     }
     .floating-search-inner {
         flex-wrap: wrap;

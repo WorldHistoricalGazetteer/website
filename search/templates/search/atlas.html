@@ -27,7 +27,7 @@
     <!-- Hero map: fills explorer container -->
     <div id="hero_map"></div>
 
-    <!-- Floating search input + mode toggle (top-centre) -->
+    <!-- Floating search input + controls (top-left) -->
     <div id="floating_search">
         <div class="floating-search-inner">
             <!-- Mode toggle: Areas / Toponyms -->
@@ -108,17 +108,17 @@
                 <span>2000</span>
             </div>
         </div>
-    </div>
 
-    <!-- Layer Sources palette (bottom-left, expandable) -->
-    <div id="layer_sources_palette">
-        <button id="layer_sources_toggle" class="btn btn-sm btn-dark layer-sources-btn"
-                data-bs-toggle="tooltip" title="Toggle layer sources">
-            <i class="fas fa-layer-group"></i>
-            <span class="d-none d-md-inline ms-1">Layers</span>
-        </button>
-        <div id="layer_sources_panel" class="layer-sources-panel" style="display:none;">
-            <!-- Populated by JS from available_sources context -->
+        <!-- Layer Sources palette (below temporal, expands downward) -->
+        <div id="layer_sources_palette">
+            <button id="layer_sources_toggle" class="btn btn-sm btn-dark layer-sources-btn"
+                    data-bs-toggle="tooltip" title="Toggle layer settings">
+                <i class="fas fa-layer-group"></i>
+                <span class="ms-1">Layers</span>
+            </button>
+            <div id="layer_sources_panel" class="layer-sources-panel" style="display:none;">
+                <!-- Populated by JS -->
+            </div>
         </div>
     </div>
 
