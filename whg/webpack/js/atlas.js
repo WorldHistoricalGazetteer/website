@@ -15,6 +15,7 @@ import filterState from './filterState';
 import heroMap from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
+import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -331,6 +332,73 @@ Promise.all([
         setTimeout(() => initiateToponymSearch(), 300);
     }
 
+    // ── Welcome panel: fade out on control interaction ──
+    const welcomePanel = document.getElementById('atlas_welcome');
+    if (welcomePanel) {
+        const fadeOutWelcome = () => {
+            welcomePanel.classList.add('atlas-welcome-hidden');
+            welcomePanel.addEventListener('transitionend', () => {
+                welcomePanel.style.display = 'none';
+            }, { once: true });
+        };
+
+        // Dismiss button
+        const dismissBtn = document.getElementById('atlas_welcome_dismiss');
+        if (dismissBtn) dismissBtn.addEventListener('click', fadeOutWelcome);
+
+        // Fade when any control receives focus/click
+        const controlSelectors = [
+            '#atlas_search_input',
+            '.search-mode-toggle .btn',
+            '.atlas-control-buttons .btn',
+            '#temporal_control',
+            '#atlas_initiate_search',
+            '#atlas_exact_match',
+            '#atlas_clear_search',
+        ];
+        controlSelectors.forEach(sel => {
+            document.querySelectorAll(sel).forEach(el => {
+                el.addEventListener('focus', fadeOutWelcome, { once: true });
+                el.addEventListener('click', fadeOutWelcome, { once: true });
+            });
+        });
+
+        // Also fade on map interaction
+        heroMap.map.on('mousedown', fadeOutWelcome);
+        heroMap.map.on('touchstart', fadeOutWelcome);
+
+        // Tour link inside welcome panel
+        const tourLink = document.getElementById('atlas_start_tour_link');
+        if (tourLink) {
+            tourLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                fadeOutWelcome();
+                setTimeout(() => startAtlasTour(), 400);
+            });
+        }
+    }
+
+    // ── Tour relaunch button (bottom-left) ──
+    const tourBtn = document.getElementById('atlas_tour_btn');
+    if (tourBtn) {
+        tourBtn.addEventListener('click', () => startAtlasTour());
+    }
+
+    // ── Auto-start tour on first visit ──
+    if (!hasSeenAtlasTour() && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+        // Delay slightly to let the map finish rendering
+        setTimeout(() => {
+            const wp = document.getElementById('atlas_welcome');
+            if (wp) {
+                wp.classList.add('atlas-welcome-hidden');
+                wp.addEventListener('transitionend', () => {
+                    wp.style.display = 'none';
+                }, { once: true });
+            }
+            startAtlasTour();
+        }, 1500);
+    }
+
     // ── Close area dropdown on outside click ──
     document.addEventListener('click', (e) => {
         const dropdown = document.querySelector('.atlas-region-dropdown');
@@ -358,10 +426,12 @@ function switchSearchMode(mode) {
     searchMode = mode;
     const input = document.getElementById('atlas_search_input');
     const toponymBtns = document.querySelectorAll('.toponym-only-btn');
+    const areasBtns = document.querySelectorAll('.areas-only-btn');
 
     if (mode === 'areas') {
         input.placeholder = buildAreasPlaceholder();
         toponymBtns.forEach(btn => btn.style.display = 'none');
+        areasBtns.forEach(btn => btn.style.display = '');
         hideResultsPanel();
         heroMap.clearResultFeatures();
 
@@ -373,6 +443,7 @@ function switchSearchMode(mode) {
             ? `Search within ${chipLabels}…`
             : 'Search for place names…';
         toponymBtns.forEach(btn => btn.style.display = '');
+        areasBtns.forEach(btn => btn.style.display = 'none');
     }
     input.value = '';
     closeAreaDropdown();

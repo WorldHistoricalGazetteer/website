@@ -62,9 +62,9 @@
                 </button>
             </div>
 
-            <!-- Control buttons (Layers always visible; Sources & Categories toponym-only) -->
+            <!-- Control buttons (Layers areas-only; Sources & Categories toponym-only) -->
             <div class="atlas-control-buttons">
-                <button class="btn btn-sm"
+                <button class="btn btn-sm areas-only-btn"
                         data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
                         title="Layer sources and boundary settings">
                     <i class="fas fa-layer-group me-1"></i>Layers
@@ -92,7 +92,7 @@
             <div class="temporal-header">
                 <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
                     <button type="button" class="btn active" data-temporal-mode="off">Off</button>
-                    <button type="button" class="btn" data-temporal-mode="range">Range</button>
+                    <button type="button" class="btn" data-temporal-mode="range">Date Range</button>
                     <button type="button" class="btn" data-temporal-mode="undated">+Undated</button>
                 </div>
                 <div class="temporal-year-labels">
@@ -133,6 +133,30 @@
             <div id="atlas_search_results"></div>
         </div>
     </div>
+
+    <!-- Welcome / landing panel (centered on map, fades on interaction) -->
+    <div id="atlas_welcome" class="atlas-welcome">
+        <button id="atlas_welcome_dismiss" class="atlas-welcome-close" aria-label="Dismiss">
+            <i class="fas fa-times"></i>
+        </button>
+        <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="atlas-welcome-logo">
+        <h5 class="atlas-welcome-title">Welcome to the WHG Atlas</h5>
+        <p class="atlas-welcome-text">
+            Explore historical boundaries and search across millions of place records.
+            Start in <strong>Areas</strong> mode to select geographic regions, then switch
+            to <strong>Toponyms</strong> to search for place names within them.
+            Use <strong>Layers</strong>, <strong>Sources</strong>, and <strong>Categories</strong>
+            to refine your view.
+        </p>
+        <a href="#" id="atlas_start_tour_link" class="atlas-welcome-tour-link">
+            <i class="fas fa-route me-1"></i>Take a guided tour
+        </a>
+    </div>
+
+    <!-- Tour relaunch button (bottom-left) -->
+    <button id="atlas_tour_btn" class="atlas-tour-btn" title="Take a guided tour">
+        <i class="fas fa-route"></i>
+    </button>
 
 </div><!-- #explorer -->
 </div><!-- .container -->

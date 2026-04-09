@@ -35,6 +35,11 @@
     margin: 0;
 }
 
+/*!******************************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./node_modules/driver.js/dist/driver.css ***!
+  \******************************************************************************************/
+.driver-active .driver-overlay,.driver-active *{pointer-events:none}.driver-active .driver-active-element,.driver-active .driver-active-element *,.driver-popover,.driver-popover *{pointer-events:auto}@keyframes animate-fade-in{0%{opacity:0}to{opacity:1}}.driver-fade .driver-overlay{animation:animate-fade-in .2s ease-in-out}.driver-fade .driver-popover{animation:animate-fade-in .2s}.driver-popover{all:unset;box-sizing:border-box;color:#2d2d2d;margin:0;padding:15px;border-radius:5px;min-width:250px;max-width:300px;box-shadow:0 1px 10px #0006;z-index:1000000000;position:fixed;top:0;right:0;background-color:#fff}.driver-popover *{font-family:Helvetica Neue,Inter,ui-sans-serif,"Apple Color Emoji",Helvetica,Arial,sans-serif}.driver-popover-title{font:19px/normal sans-serif;font-weight:700;display:block;position:relative;line-height:1.5;zoom:1;margin:0}.driver-popover-close-btn{all:unset;position:absolute;top:0;right:0;width:32px;height:28px;cursor:pointer;font-size:18px;font-weight:500;color:#d2d2d2;z-index:1;text-align:center;transition:color;transition-duration:.2s}.driver-popover-close-btn:hover,.driver-popover-close-btn:focus{color:#2d2d2d}.driver-popover-title[style*=block]+.driver-popover-description{margin-top:5px}.driver-popover-description{margin-bottom:0;font:14px/normal sans-serif;line-height:1.5;font-weight:400;zoom:1}.driver-popover-footer{margin-top:15px;text-align:right;zoom:1;display:flex;align-items:center;justify-content:space-between}.driver-popover-progress-text{font-size:13px;font-weight:400;color:#727272;zoom:1}.driver-popover-footer button{all:unset;display:inline-block;box-sizing:border-box;padding:3px 7px;text-decoration:none;text-shadow:1px 1px 0 #fff;background-color:#fff;color:#2d2d2d;font:12px/normal sans-serif;cursor:pointer;outline:0;zoom:1;line-height:1.3;border:1px solid #ccc;border-radius:3px}.driver-popover-footer .driver-popover-btn-disabled{opacity:.5;pointer-events:none}:not(body):has(>.driver-active-element){overflow:hidden!important}.driver-no-interaction,.driver-no-interaction *{pointer-events:none!important}.driver-popover-footer button:hover,.driver-popover-footer button:focus{background-color:#f7f7f7}.driver-popover-navigation-btns{display:flex;flex-grow:1;justify-content:flex-end}.driver-popover-navigation-btns button+button{margin-left:4px}.driver-popover-arrow{content:"";position:absolute;border:5px solid #fff}.driver-popover-arrow-side-over{display:none}.driver-popover-arrow-side-left{left:100%;border-right-color:transparent;border-bottom-color:transparent;border-top-color:transparent}.driver-popover-arrow-side-right{right:100%;border-left-color:transparent;border-bottom-color:transparent;border-top-color:transparent}.driver-popover-arrow-side-top{top:100%;border-right-color:transparent;border-bottom-color:transparent;border-left-color:transparent}.driver-popover-arrow-side-bottom{bottom:100%;border-left-color:transparent;border-top-color:transparent;border-right-color:transparent}.driver-popover-arrow-side-center{display:none}.driver-popover-arrow-side-left.driver-popover-arrow-align-start,.driver-popover-arrow-side-right.driver-popover-arrow-align-start{top:15px}.driver-popover-arrow-side-top.driver-popover-arrow-align-start,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-start{left:15px}.driver-popover-arrow-align-end.driver-popover-arrow-side-left,.driver-popover-arrow-align-end.driver-popover-arrow-side-right{bottom:15px}.driver-popover-arrow-side-top.driver-popover-arrow-align-end,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-end{right:15px}.driver-popover-arrow-side-left.driver-popover-arrow-align-center,.driver-popover-arrow-side-right.driver-popover-arrow-align-center{top:50%;margin-top:-5px}.driver-popover-arrow-side-top.driver-popover-arrow-align-center,.driver-popover-arrow-side-bottom.driver-popover-arrow-align-center{left:50%;margin-left:-5px}.driver-popover-arrow-none{display:none}
+
 /*!*********************************************************************************!*\
   !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/typeahead.css ***!
   \*********************************************************************************/
@@ -647,6 +652,18 @@ span.twitter-typeahead .tt-suggestion {
     #atlas_results_panel.atlas-results-hidden {
         transform: translateY(100%);
     }
+    .atlas-welcome {
+        width: calc(100% - 32px) !important;
+        max-width: none !important;
+        left: 16px !important;
+        right: 16px !important;
+        transform: translate(0, -50%) !important;
+    }
+    .atlas-welcome.atlas-welcome-hidden {
+        opacity: 0;
+        transform: translate(0, -50%) scale(0.95) !important;
+        pointer-events: none;
+    }
 }
 
 @media (max-width: 576px) {
@@ -655,6 +672,118 @@ span.twitter-typeahead .tt-suggestion {
         justify-content: center;
         margin-top: 4px;
     }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Welcome / Landing panel (centered on map)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-welcome {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12;
+    width: 420px;
+    max-width: calc(100% - 40px);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 16px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    text-align: center;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.atlas-welcome.atlas-welcome-hidden {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+    pointer-events: none;
+}
+
+.atlas-welcome-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+.atlas-welcome-close:hover {
+    color: #2c3e50;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.atlas-welcome-logo {
+    width: 80px;
+    margin-bottom: 12px;
+    opacity: 0.9;
+}
+
+.atlas-welcome-title {
+    font-family: 'REM', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.atlas-welcome-text {
+    font-size: 0.82rem;
+    color: #555;
+    line-height: 1.55;
+    margin-bottom: 14px;
+}
+
+.atlas-welcome-tour-link {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #2980b9;
+    text-decoration: none;
+    padding: 6px 16px;
+    border: 1px solid #2980b9;
+    border-radius: 20px;
+    transition: background 0.2s, color 0.2s;
+}
+.atlas-welcome-tour-link:hover {
+    background: #2980b9;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tour relaunch button (bottom-left)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-tour-btn {
+    position: absolute;
+    bottom: 36px;
+    left: 12px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(44, 62, 80, 0.85);
+    color: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+}
+.atlas-tour-btn:hover {
+    background: rgba(44, 62, 80, 1);
+    transform: scale(1.1);
 }
 
 

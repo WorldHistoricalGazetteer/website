@@ -573,6 +573,18 @@
     #atlas_results_panel.atlas-results-hidden {
         transform: translateY(100%);
     }
+    .atlas-welcome {
+        width: calc(100% - 32px) !important;
+        max-width: none !important;
+        left: 16px !important;
+        right: 16px !important;
+        transform: translate(0, -50%) !important;
+    }
+    .atlas-welcome.atlas-welcome-hidden {
+        opacity: 0;
+        transform: translate(0, -50%) scale(0.95) !important;
+        pointer-events: none;
+    }
 }
 
 @media (max-width: 576px) {
@@ -581,5 +593,117 @@
         justify-content: center;
         margin-top: 4px;
     }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Welcome / Landing panel (centered on map)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-welcome {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12;
+    width: 420px;
+    max-width: calc(100% - 40px);
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-radius: 16px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    text-align: center;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.atlas-welcome.atlas-welcome-hidden {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+    pointer-events: none;
+}
+
+.atlas-welcome-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+.atlas-welcome-close:hover {
+    color: #2c3e50;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.atlas-welcome-logo {
+    width: 80px;
+    margin-bottom: 12px;
+    opacity: 0.9;
+}
+
+.atlas-welcome-title {
+    font-family: 'REM', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.atlas-welcome-text {
+    font-size: 0.82rem;
+    color: #555;
+    line-height: 1.55;
+    margin-bottom: 14px;
+}
+
+.atlas-welcome-tour-link {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #2980b9;
+    text-decoration: none;
+    padding: 6px 16px;
+    border: 1px solid #2980b9;
+    border-radius: 20px;
+    transition: background 0.2s, color 0.2s;
+}
+.atlas-welcome-tour-link:hover {
+    background: #2980b9;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tour relaunch button (bottom-left)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-tour-btn {
+    position: absolute;
+    bottom: 36px;
+    left: 12px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(44, 62, 80, 0.85);
+    color: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+}
+.atlas-tour-btn:hover {
+    background: rgba(44, 62, 80, 1);
+    transform: scale(1.1);
 }
 
