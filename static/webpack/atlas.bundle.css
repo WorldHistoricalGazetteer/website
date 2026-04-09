@@ -393,13 +393,19 @@ input[type=range].slider.to::-moz-range-thumb {
 /* WHG Atlas — Hero Map Explorer Layout */
 
 /* ═══════════════════════════════════════════════════════════════════
-   Full-viewport hero map layout
+   Container-constrained hero map layout
    ═══════════════════════════════════════════════════════════════════ */
+
+.explorer-container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
 
 .explorer-layout {
     position: relative;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: calc(100vh - 60px);   /* viewport minus header height */
+    min-height: 400px;
     overflow: hidden;
 }
 
@@ -606,12 +612,12 @@ input[type=range].slider.to::-moz-range-thumb {
 }
 
 /* Dateline container within temporal overlay */
-#atlas_dateline {
+#dateline {
     flex: 1;
     min-width: 200px;
 }
-#atlas_dateline.temporal-off .dateline-track,
-#atlas_dateline.temporal-off .dateline-labels {
+#dateline.temporal-off .range_container,
+#dateline.temporal-off .dateline-button {
     opacity: 0.3;
     pointer-events: none;
 }
@@ -857,7 +863,7 @@ input[type=range].slider.to::-moz-range-thumb {
 @media (max-width: 768px) {
     #floating_search {
         top: 8px;
-        width: 95vw;
+        width: 95%;
     }
     .floating-search-inner {
         flex-wrap: wrap;
