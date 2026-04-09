@@ -99,6 +99,54 @@ class SearchPageView(TemplateView):
         return context
 
 
+class AtlasPageView(TemplateView):
+    """
+    The Atlas (Explorer) page — a hero-map spatio-temporal explorer
+    served at /atlas/, parallel to the existing /search/ page.
+    """
+    template_name = 'search/atlas.html'
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        context['toponym'] = kwargs.get('toponym', None)
+        context['media_url'] = settings.MEDIA_URL
+        context['es_whg'] = settings.ES_WHG
+        context['dropdown_data'] = get_regions_countries()
+        context['index_places'] = getattr(settings, 'INDEX_PLACES_LABEL', 'millions of')
+        context['index_toponyms'] = getattr(settings, 'INDEX_TOPONYMS_LABEL', 'millions of')
+
+        # Available spatial data sources for the Layer Sources palette
+        context['available_sources'] = json.dumps([
+            {'id': 'osm', 'label': 'OSM (Modern)', 'enabled': True},
+            {'id': 'ohm', 'label': 'OHM (Historical)', 'enabled': True},
+            {'id': 'periodo', 'label': 'PeriodO', 'enabled': False, 'coming_soon': True},
+            {'id': 'cliopatria', 'label': 'Cliopatria', 'enabled': False, 'coming_soon': True},
+            {'id': 'dplace', 'label': 'D-PLACE', 'enabled': False, 'coming_soon': True},
+            {'id': 'nativeland', 'label': 'NativeLand', 'enabled': False, 'coming_soon': True},
+        ])
+
+        user_areas = []
+        if self.request.user.is_authenticated:
+            qs = Area.objects.filter(
+                owner=self.request.user,
+                type__in=['ccodes', 'copied', 'drawn'],
+            ).values('id', 'title', 'type', 'description', 'geojson')
+            for a in qs:
+                feature = {
+                    "type": "Feature",
+                    "properties": {
+                        "id": a['id'], "title": a['title'],
+                        "type": a['type'], "description": a['description'],
+                    },
+                    "geometry": a['geojson'],
+                }
+                user_areas.append(feature)
+
+        context['has_areas'] = len(user_areas) > 0
+        context['user_areas'] = user_areas
+        return context
+
+
 def fetchArea(request):
     aid = request.GET.get('pk')
     area = Area.objects.filter(id=aid)

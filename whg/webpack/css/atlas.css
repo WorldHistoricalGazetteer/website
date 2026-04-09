@@ -1,0 +1,506 @@
+/* /whg/webpack/css/atlas.css */
+/* WHG Atlas — Hero Map Explorer Layout */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Full-viewport hero map layout
+   ═══════════════════════════════════════════════════════════════════ */
+
+.explorer-layout {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#hero_map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Floating search input (top-centre)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#floating_search {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    max-width: 680px;
+    width: 90vw;
+}
+
+.floating-search-inner {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 10px;
+    padding: 6px 10px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+
+/* Search mode toggle */
+.search-mode-toggle .btn {
+    font-size: 0.75rem;
+    padding: 3px 10px;
+    border-color: #bdc3c7;
+    color: #555;
+    background: #f0f0f0;
+    white-space: nowrap;
+}
+.search-mode-toggle .btn.active {
+    background: #2c3e50;
+    border-color: #2c3e50;
+    color: #fff;
+}
+.search-mode-toggle .btn:hover:not(.active) {
+    background: #e0e0e0;
+}
+
+/* Search input group */
+.search-input-group {
+    flex: 1;
+    min-width: 0;
+}
+.search-input-group .form-control {
+    border-radius: 6px 0 0 6px;
+    font-size: 0.85rem;
+}
+.search-input-group .btn {
+    font-size: 0.8rem;
+}
+
+/* Toponym-mode controls */
+.toponym-mode-controls {
+    display: flex;
+    gap: 4px;
+}
+.toponym-mode-controls .btn {
+    font-size: 0.7rem;
+    white-space: nowrap;
+    background: rgba(44, 62, 80, 0.8);
+    border-color: rgba(44, 62, 80, 0.6);
+    color: #fff;
+}
+.toponym-mode-controls .btn:hover {
+    background: rgba(44, 62, 80, 1);
+}
+
+/* Selection chips */
+#selection_chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    max-width: 100%;
+}
+#selection_chips:empty {
+    display: none;
+}
+#selection_chips .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid #bdc3c7;
+    border-radius: 16px;
+    padding: 2px 10px 2px 8px;
+    font-size: 0.75rem;
+    color: #2c3e50;
+    line-height: 1.4;
+}
+#selection_chips .filter-chip-meta {
+    color: #7f8c8d;
+    font-size: 0.65rem;
+}
+#selection_chips .filter-chip-dismiss {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Admin tier control (left side)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#admin_tier_control {
+    position: absolute;
+    left: 12px;
+    bottom: 80px;
+    z-index: 10;
+}
+.admin-tier-inner {
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    border-radius: 8px;
+    padding: 6px 8px;
+    box-shadow: 0 1px 8px rgba(0, 0, 0, 0.15);
+}
+.admin-tier-label {
+    display: block;
+    color: #7f8c8d;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.admin-tier-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+.admin-tier-buttons .btn {
+    font-size: 0.65rem;
+    padding: 2px 8px;
+    border-color: #ced4da;
+    color: #555;
+    background: #f8f9fa;
+    text-align: left;
+    white-space: nowrap;
+}
+.admin-tier-buttons .btn.active {
+    background: #2c3e50;
+    border-color: #2c3e50;
+    color: #fff;
+}
+.admin-tier-buttons .btn:disabled {
+    opacity: 0.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Temporal scrubber overlay (bottom edge)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#temporal_overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    pointer-events: none;
+}
+.temporal-overlay-inner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(10px);
+    padding: 6px 16px;
+    pointer-events: auto;
+}
+
+/* Temporal mode toggle */
+#temporal_overlay .temporal-mode-toggle .btn {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-color: #bdc3c7;
+    color: #555;
+    background: #f0f0f0;
+}
+#temporal_overlay .temporal-mode-toggle .btn.active {
+    background: #6b8ea4;
+    border-color: #5a7d93;
+    color: #fff;
+}
+
+/* Dateline container within temporal overlay */
+#atlas_dateline {
+    flex: 1;
+    min-width: 200px;
+}
+#atlas_dateline.temporal-off .dateline-track,
+#atlas_dateline.temporal-off .dateline-labels {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Layer Sources palette (bottom-left)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#layer_sources_palette {
+    position: absolute;
+    bottom: 56px;
+    left: 12px;
+    z-index: 10;
+}
+.layer-sources-btn {
+    font-size: 0.75rem;
+    border-radius: 8px;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.15);
+}
+.layer-sources-panel {
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(12px);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+}
+.layer-source-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+}
+.layer-source-item label {
+    font-size: 0.75rem;
+    color: #333;
+    cursor: pointer;
+    margin: 0;
+}
+.layer-source-item .form-check-input {
+    margin-top: 0;
+}
+.layer-source-item .coming-soon {
+    font-size: 0.6rem;
+    color: #999;
+    font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Results panel (slides in from right)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_results_panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 380px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    overflow: hidden;
+}
+#atlas_results_panel.atlas-results-hidden {
+    transform: translateX(100%);
+    pointer-events: none;
+}
+
+.results-panel-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #dee2e6;
+    flex-shrink: 0;
+}
+
+#atlas_result_container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+}
+
+/* Result items (reuse existing search result styles) */
+#atlas_search_results .result {
+    padding: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+#atlas_search_results .result:hover {
+    background: #f0f4f8;
+}
+#atlas_search_results .result.selected {
+    background: #e3ecf6;
+    border-color: #4a90d9;
+}
+#atlas_search_results .result .red-head {
+    font-weight: 600;
+    color: #c0392b;
+}
+#atlas_search_results .result p {
+    margin: 2px 0;
+    font-size: 0.8rem;
+    color: #555;
+}
+#atlas_search_results .portal-link {
+    font-size: 0.7rem;
+}
+#atlas_search_results .result-dataset-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    background: #e9ecef;
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-top: 2px;
+    color: #666;
+}
+#atlas_search_results .result-description {
+    font-size: 0.78rem;
+    color: #666;
+}
+
+/* Flash animation for map-clicked results */
+@keyframes atlas-flash-border {
+    0%, 100% { border-color: #e9ecef; }
+    50% { border-color: #e74c3c; }
+}
+#atlas_search_results .result.flash-border {
+    animation: atlas-flash-border 0.6s ease 3;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Offcanvas styling overrides
+   ═══════════════════════════════════════════════════════════════════ */
+
+#sources_offcanvas,
+#categories_offcanvas {
+    width: 300px;
+    z-index: 20;
+}
+#sources_offcanvas .authority-item {
+    padding: 3px 0;
+}
+#sources_offcanvas .form-check-label {
+    font-size: 0.85rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Region selector overrides (when mounted in atlas layout)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Region search dropdown (positioned below floating search) */
+.atlas-region-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 20;
+}
+.atlas-region-dropdown .region-result {
+    padding: 6px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+.atlas-region-dropdown .region-result:hover,
+.atlas-region-dropdown .region-result.region-result--active {
+    background: #f0f4f8;
+}
+.atlas-region-dropdown .region-result-label {
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+.atlas-region-dropdown .region-result-sublabel {
+    font-size: 0.7rem;
+    color: #999;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Existing widget styles (boundary hover tooltip)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.boundary-hover-tooltip {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Exact-match toggle
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_exact_match.active {
+    background-color: #6b8ea4;
+    border-color: #5a7d93;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Namespace toggle (Modern / Historical) in admin tier
+   ═══════════════════════════════════════════════════════════════════ */
+
+.namespace-toggle-atlas {
+    display: flex;
+    gap: 1px;
+    margin-top: 4px;
+}
+.namespace-toggle-atlas .btn {
+    font-size: 0.6rem;
+    padding: 1px 6px;
+    border-color: #ced4da;
+    color: #555;
+    background: #f8f9fa;
+}
+.namespace-toggle-atlas .btn.active {
+    background: #5a7d93;
+    border-color: #4c6d82;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    #floating_search {
+        top: 8px;
+        width: 95vw;
+    }
+    .floating-search-inner {
+        flex-wrap: wrap;
+    }
+    .search-mode-toggle {
+        width: 100%;
+        margin-bottom: 4px;
+    }
+    #atlas_results_panel {
+        width: 100%;
+        height: 50vh;
+        top: auto;
+        bottom: 0;
+        border-radius: 16px 16px 0 0;
+    }
+    #atlas_results_panel.atlas-results-hidden {
+        transform: translateY(100%);
+    }
+    #admin_tier_control {
+        bottom: auto;
+        top: 80px;
+        left: 6px;
+    }
+    .admin-tier-buttons {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+}
+
+@media (max-width: 576px) {
+    .toponym-mode-controls {
+        width: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+}
+

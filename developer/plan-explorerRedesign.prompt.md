@@ -104,15 +104,11 @@ Clearing search results or switching the input back to Areas mode returns to the
 
 ## File-by-File Implementation Plan
 
-### 1. Template: `search/templates/search/search.html`
+### 1. Template: `search/templates/search/atlas.html` (new file, parallel to `search.html`)
 
-**Current:** Bootstrap container layout with `#search_bar`, collapsible `#search_filters` (3-column grid), `#landing`, `#content_area` (map + results).
+**Note:** The existing `search/templates/search/search.html` is NOT modified. This is an entirely new template served at `/atlas/`.
 
-**Changes:**
-- Remove the `<main class="container container-md">` wrapper. The map must be full-bleed (edge-to-edge), not constrained to a Bootstrap container.
-- Remove the three-column `.filters-grid` entirely. Remove `#search_filters` as a collapsible panel.
-- Remove the `#landing` block (logo + description text). The hero map replaces it.
-- Replace with a structure like:
+**Layout:**
 
 ```html
 <div id="explorer" class="explorer-layout">
@@ -352,8 +348,11 @@ No changes to the widget itself. It is mounted into `#temporal_overlay` instead 
 ### 16. URL routing: `whg/urls.py`
 
 **Changes:**
-- Consider making `/search/` the home page (replace the current `Home30a` view at `/`). The Explorer IS the landing experience. The old home page content (carousel of featured datasets, announcements) could move to a `/about/` or `/discover/` page, or be integrated as an overlay/panel on the Explorer.
-- Alternatively, keep `/` as a lightweight landing page that has a prominent "Explore" CTA linking to `/search/`.
+- The Explorer is published at `/atlas/` as a parallel route alongside the existing `/search/` page. This preserves `/search/` intact for colleague comparison and allows the new UI to be evaluated independently.
+- Add `path('atlas/', include('search.urls_atlas'))` to `whg/urls.py`.
+- Create `search/urls_atlas.py` with patterns: `''` → `AtlasPageView` and `'<str:toponym>'` → `AtlasPageView`.
+- The atlas page reuses the existing search API endpoints (`/search/index/`, `/search/boundaries/`, `/search/suggestions/`, etc.) — no API URL duplication needed.
+- Once the atlas UI is validated and approved, it can replace the home page or `/search/` in a future release.
 
 ### 17. Webpack config: `webpack.config.js`
 
