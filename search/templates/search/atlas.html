@@ -21,9 +21,10 @@
 {% endblock %}
 
 {% block content %}
+<div class="container explorer-container">
 <div id="explorer" class="explorer-layout">
 
-    <!-- Hero map: full viewport -->
+    <!-- Hero map: fills explorer container -->
     <div id="hero_map"></div>
 
     <!-- Floating search input + mode toggle (top-centre) -->
@@ -101,7 +102,7 @@
                 <button type="button" class="btn" data-temporal-mode="undated"
                         data-bs-toggle="tooltip" title="Range + include undated">+Undated</button>
             </div>
-            <div id="atlas_dateline" class="temporal-off"></div>
+            <div id="dateline" class="temporal-off"></div>
         </div>
     </div>
 
@@ -234,6 +235,7 @@
     </div>
 
 </div><!-- #explorer -->
+</div><!-- .container -->
 
 {% csrf_token %}
 <script type="text/javascript">

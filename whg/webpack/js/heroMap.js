@@ -52,6 +52,7 @@ class HeroMap {
         this._readyPromise = new Promise((resolve) => {
             this.map = new whg_maplibre.Map({
                 container: 'hero_map',
+                zoom: 1.5,
                 maxZoom: 14,
                 style: ['whg-context'],
                 fullscreenControl: false,
@@ -565,6 +566,18 @@ class HeroMap {
         // For now, this just controls the namespace filter applied to boundary layers
         // When additional tile sources exist, this will show/hide their layer groups
         console.log('heroMap.setActiveSources:', sources);
+    }
+
+    /**
+     * Ensure the whg-context style is active (used when entering area search mode).
+     * Re-initialises boundary layers if they were lost during a style switch.
+     */
+    ensureContextStyle() {
+        if (!this.map) return;
+        // Re-scan boundary layers in case style was switched
+        if (this._boundaryLayerIds.length === 0) {
+            this._initBoundaryLayers();
+        }
     }
 
     _emitViewportChange(bbox) {

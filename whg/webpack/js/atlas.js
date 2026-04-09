@@ -144,7 +144,7 @@ Promise.all([
                 .forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             temporalMode = btn.dataset.temporalMode;
-            const dl = document.getElementById('atlas_dateline');
+            const dl = document.getElementById('dateline');
             dl.classList.toggle('temporal-off', temporalMode === 'off');
         });
     });
@@ -370,6 +370,9 @@ function switchSearchMode(mode) {
         toponymControls.style.display = 'none';
         hideResultsPanel();
         heroMap.clearResultFeatures();
+
+        // Ensure whg-context style is active for area search
+        heroMap.ensureContextStyle();
     } else {
         const chipLabels = selectedRegions.map(r => r.label).join(', ');
         input.placeholder = chipLabels
@@ -778,7 +781,7 @@ function clearAll() {
         .forEach(b => b.classList.remove('active'));
     const offBtn = document.querySelector('#temporal_overlay .temporal-mode-toggle .btn[data-temporal-mode="off"]');
     if (offBtn) offBtn.classList.add('active');
-    document.getElementById('atlas_dateline').classList.add('temporal-off');
+    document.getElementById('dateline').classList.add('temporal-off');
     if (window.dateline) window.dateline.reset(800, 1800);
 
     // Reset admin tier
