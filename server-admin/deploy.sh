@@ -107,10 +107,19 @@ fi
 
 # ─── Pull ────────────────────────────────────────────────────────────────────
 
-echo "── Pulling $BRANCH..."
+echo "── Fetching origin..."
 git fetch origin
-git checkout "$BRANCH" 2>/dev/null || true
-git pull origin "$BRANCH" --rebase
+
+CURRENT=$(git branch --show-current 2>/dev/null || echo "")
+if [ "$CURRENT" != "$BRANCH" ]; then
+    echo "── Switching from ${CURRENT:-detached} to $BRANCH..."
+    # Clean untracked files that would block the checkout (e.g. stale webpack bundles)
+    git clean -fd -- static/webpack/ 2>/dev/null || true
+    git checkout -f "$BRANCH"
+fi
+
+echo "── Resetting to origin/$BRANCH..."
+git reset --hard "origin/$BRANCH"
 echo ""
 
 if [ "$ACTION" = "pull" ]; then
