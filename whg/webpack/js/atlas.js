@@ -264,6 +264,7 @@ Promise.all([
 
     // ── Wire viewport constraint toggle ──
     const viewportBtn = document.getElementById('atlas_viewport_btn');
+    const viewportWrap = document.getElementById('atlas_viewport_wrap');
     if (viewportBtn) {
         viewportBtn.addEventListener('click', function () {
             if (this.disabled) return;
@@ -276,6 +277,21 @@ Promise.all([
                 heroMap.hideBoundaries();
             } else if (layerPalette) {
                 layerPalette.refreshBoundaries();
+            }
+        });
+    }
+    // Click on the wrapper when the button is disabled → switch to flat map
+    if (viewportWrap) {
+        viewportWrap.addEventListener('click', function () {
+            if (viewportBtn && viewportBtn.disabled && heroMap.isGlobeMode()) {
+                heroMap.map.setProjection({ type: 'mercator' });
+                // The projection-change listener will enable the button;
+                // give it a moment then activate viewport constraint.
+                setTimeout(() => {
+                    if (viewportBtn && !viewportBtn.disabled) {
+                        viewportBtn.click();
+                    }
+                }, 350);
             }
         });
     }

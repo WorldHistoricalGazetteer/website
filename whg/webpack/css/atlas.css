@@ -598,11 +598,11 @@
 }
 #atlas_viewport_btn:disabled {
     opacity: 0.45;
-    cursor: not-allowed;
+    cursor: pointer;
+    pointer-events: none;
 }
-/* The <span> wrapper around Viewport breaks Bootstrap btn-group rounding.
-   Force the left-pill shape on wrapper+button, square on the right. */
 #atlas_viewport_wrap {
+    cursor: pointer;
     border-radius: var(--bs-border-radius-sm) 0 0 var(--bs-border-radius-sm);
 }
 #atlas_viewport_wrap #atlas_viewport_btn {
