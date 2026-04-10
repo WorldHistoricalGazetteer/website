@@ -31,17 +31,20 @@ Action (default: restart):
   status      Show running containers
 
 Options:
+  --branch=<name>  Override the dev branch (default: staging; prod always uses main)
   --celery    Also restart celery worker and beat (with 'restart')
   --migrate   Run Django migrations after deploy
   --logs      Tail web container logs after deploy
 
 Examples:
-  deploy                    # dev, restart web
-  deploy prod               # prod, restart web
-  deploy dev pull           # dev, pull only
-  deploy prod full          # prod, restart all
-  deploy restart --celery   # dev, restart web + celery
+  deploy                              # dev, restart web (staging branch)
+  deploy prod                         # prod, restart web
+  deploy dev pull                     # dev, pull only
+  deploy prod full                    # prod, restart all
+  deploy restart --celery             # dev, restart web + celery
   deploy prod recreate --migrate
+  deploy --branch=api/crc-gateway     # dev, deploy a feature branch
+  deploy pull --branch=api/crc-gateway  # dev, pull a feature branch only
 EOF
     exit 0
 }
@@ -50,6 +53,7 @@ EOF
 
 ENV="dev"
 ACTION="restart"
+BRANCH_OVERRIDE=""
 WITH_CELERY=false
 WITH_MIGRATE=false
 WITH_LOGS=false
@@ -58,6 +62,7 @@ for arg in "$@"; do
     case "$arg" in
         dev|prod)     ENV="$arg" ;;
         pull|restart|full|recreate|status) ACTION="$arg" ;;
+        --branch=*)   BRANCH_OVERRIDE="${arg#--branch=}" ;;
         --celery)     WITH_CELERY=true ;;
         --migrate)    WITH_MIGRATE=true ;;
         --logs)       WITH_LOGS=true ;;
@@ -69,12 +74,16 @@ done
 # ─── Set environment-specific variables ──────────────────────────────────────
 
 if [ "$ENV" = "prod" ]; then
+    if [ -n "$BRANCH_OVERRIDE" ]; then
+        echo "Error: --branch is not allowed for production (always uses $PROD_BRANCH)."
+        exit 1
+    fi
     SITE_DIR="$PROD_DIR"
     BRANCH="$PROD_BRANCH"
     PREFIX="$PROD_CONTAINER_PREFIX"
 else
     SITE_DIR="$DEV_DIR"
-    BRANCH="$DEV_BRANCH"
+    BRANCH="${BRANCH_OVERRIDE:-$DEV_BRANCH}"
     PREFIX="$DEV_CONTAINER_PREFIX"
 fi
 
