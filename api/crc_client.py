@@ -14,10 +14,10 @@ All calls are fail-safe: on timeout, connection error, or HTTP error,
 a warning is logged and an empty list is returned.  Legacy results are
 always returned regardless of CRC availability.
 
-Access is gated by the ``SiteSetting.crc_gateway_mode`` admin setting:
-  - ``disabled``   → never call the gateway
-  - ``admin_only`` → only for staff / superuser requests (useful for testing)
-  - ``all_users``  → every authenticated request
+Access is environment-controlled:
+  - ``CRC_GATEWAY_URL`` must be set (e.g. in env vars or local_settings).
+  - The requesting user must be authenticated.
+  - To test before going live, configure the URL only on the dev server.
 """
 
 import logging
@@ -28,36 +28,25 @@ from django.conf import settings
 logger = logging.getLogger("reconciliation")
 
 
-def _is_enabled_for_user(user) -> bool:
+def _is_enabled(user=None) -> bool:
     """
-    Check whether CRC gateway integration should fire for *this* user.
+    Check whether CRC gateway integration is active.
 
-    Reads the ``SiteSetting.crc_gateway_mode`` value from the database
-    (auto-created on first access) and compares against the user object.
+    The gateway is enabled when:
+    1. ``CRC_GATEWAY_URL`` is configured in settings (env var or local_settings).
+    2. The user is authenticated.
+
+    This keeps gating purely environment-based: configure the URL on dev
+    for testing, leave it unset on production until ready to go live.
     """
-    # Must have a gateway URL configured at all
-    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+    gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")
+    if not gateway_url:
         return False
 
-    # Import here to avoid circular imports at module level
-    from main.models import SiteSetting
-
-    try:
-        mode = SiteSetting.load().crc_gateway_mode
-    except Exception:
-        # DB not migrated yet, table missing, etc. — fail safe
+    if user is None or not user.is_authenticated:
         return False
 
-    if mode == "disabled":
-        return False
-
-    if mode == "admin_only":
-        return user is not None and user.is_authenticated and (user.is_staff or user.is_superuser)
-
-    if mode == "all_users":
-        return user is not None and user.is_authenticated
-
-    return False
+    return True
 
 
 def _gateway_url() -> str:
@@ -95,7 +84,7 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
         ``{"_id": ..., "_score": ..., "_source": {...}}``, ready for
         ``make_candidate()``.  Returns ``[]`` on any error.
     """
-    if not _is_enabled_for_user(user):
+    if not _is_enabled(user):
         return []
 
     # Build the gateway request body from the normalised query
@@ -128,12 +117,15 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
         body["end_year"] = int(end)
 
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway /api/reconcile response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except requests.Timeout:
@@ -161,7 +153,7 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=
     Returns:
         List of adapted ES-style hit dicts.
     """
-    if not _is_enabled_for_user(user):
+    if not _is_enabled(user):
         return []
 
     body = {
@@ -171,12 +163,15 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=
     }
 
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway suggest POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway suggest response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -231,10 +226,41 @@ def _adapt_hits(data: dict) -> list[dict]:
         if title and title.lower() not in searchy:
             searchy.append(title.lower())
 
-        # Build geoms in legacy format
+        # Build geoms in legacy format — prefer full geometries,
+        # fall back to repr_point.  The gateway may return any of:
+        #   • {type, coordinates}  — full GeoJSON geometry
+        #   • {location: {type, coordinates}}  — ES-style wrapper
+        #   • {repr_point: [lon, lat]}  — centroid only
         geoms = []
         for g in geometries:
-            rp = g.get("repr_point")
+            if isinstance(g, dict):
+                # Full GeoJSON geometry object
+                if g.get("type") and g.get("coordinates"):
+                    geoms.append({
+                        "location": {
+                            "type": g["type"],
+                            "coordinates": g["coordinates"],
+                        }
+                    })
+                # ES-style wrapper
+                elif isinstance(g.get("location"), dict):
+                    loc = g["location"]
+                    if loc.get("type") and loc.get("coordinates"):
+                        geoms.append({"location": loc})
+                # Legacy repr_point inside a geometries entry
+                else:
+                    rp = g.get("repr_point")
+                    if rp and len(rp) == 2:
+                        geoms.append({
+                            "location": {
+                                "type": "Point",
+                                "coordinates": rp,
+                            }
+                        })
+
+        # Fall back to top-level repr_point when no full geometries exist
+        if not geoms:
+            rp = hit.get("repr_point")
             if rp and len(rp) == 2:
                 geoms.append({
                     "location": {
@@ -259,4 +285,3 @@ def _adapt_hits(data: dict) -> list[dict]:
         })
 
     return adapted
-
