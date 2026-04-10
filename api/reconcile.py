@@ -32,10 +32,10 @@ from rest_framework.views import APIView
 from periods.models import Period, Chrononym
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
-from .crc_client import crc_reconcile_search, crc_suggest_search
+from .crc_client import crc_reconcile_search, crc_suggest_search, crc_fetch_places
 from .querysets import place_feature_queryset, period_public_queryset
-from .reconcile_helpers import make_candidate, format_extend_row, es_search, extract_entity_type, \
-    create_type_guessing_dummies, parse_schema
+from .reconcile_helpers import make_candidate, format_extend_row, format_crc_extend_row, es_search, \
+    extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema
 from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema
 from .serializers_api import PeriodPreviewSerializer
 
@@ -177,15 +177,37 @@ class ReconciliationView(APIView):
 
             properties = extend.get("properties", [])
 
+            rows = {}
+
             if entity_type == "place":
-                qs = place_feature_queryset(request.user).filter(id__in=ids)
+                # Partition into legacy (numeric) and CRC (namespaced) IDs
+                legacy_ids = [raw_id for raw_id in ids if not is_crc_place_id(raw_id)]
+                crc_ids = [raw_id for raw_id in ids if is_crc_place_id(raw_id)]
+
+                # Legacy places — fetch from Django ORM
+                if legacy_ids:
+                    qs = place_feature_queryset(request.user).filter(id__in=legacy_ids)
+                    for obj in qs:
+                        rows[f"place:{obj.id}"] = format_extend_row(obj, properties, request=request)
+
+                # CRC places — fetch from CRC gateway
+                if crc_ids:
+                    crc_places = crc_fetch_places(crc_ids, user=request.user)
+                    for crc_id in crc_ids:
+                        crc_data = crc_places.get(crc_id)
+                        if crc_data:
+                            rows[f"place:{crc_id}"] = format_crc_extend_row(crc_data, properties)
+                        else:
+                            # Return empty cells so OpenRefine doesn't break
+                            rows[f"place:{crc_id}"] = {
+                                (p.get("id") if isinstance(p, dict) else p): []
+                                for p in properties
+                            }
+
             else:  # period
                 qs = period_public_queryset(request.user).filter(id__in=ids)
-
-            rows = {
-                f"{entity_type}:{obj.id}": format_extend_row(obj, properties, request=request)
-                for obj in qs
-            }
+                for obj in qs:
+                    rows[f"period:{obj.id}"] = format_extend_row(obj, properties, request=request)
 
             # Meta block required by OpenRefine
             meta = [

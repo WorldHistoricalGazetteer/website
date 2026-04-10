@@ -240,13 +240,16 @@ def test_place_reconciliation(s: requests.Session, base: str, token: str, schema
           all(0 <= sc <= 100 for sc in all_scores),
           f"min={min(all_scores)}, max={max(all_scores)}" if all_scores else "no scores")
 
-    # Return a known LEGACY place ID for extension test (CRC IDs won't work)
+    # Return a place ID for the extension test (prefer legacy, but accept CRC)
+    first_place_id = None
     first_legacy_id = None
     for r in results:
-        if re.match(r"place:\d+$", r.get("id", "")):
-            first_legacy_id = r["id"]
-            break
-    return first_legacy_id
+        rid = r.get("id", "")
+        if not first_place_id and rid.startswith("place:"):
+            first_place_id = rid
+        if not first_legacy_id and re.match(r"place:\d+$", rid):
+            first_legacy_id = rid
+    return first_legacy_id or first_place_id
 
 
 def test_type_guessing(s: requests.Session, base: str, token: str, schema_space: str):
@@ -308,23 +311,24 @@ def test_period_reconciliation(s: requests.Session, base: str, token: str, schem
 def test_data_extension(s: requests.Session, base: str, token: str, place_id: str | None, schema_space: str):
     section("5. Data Extension (POST /reconcile with extend)")
 
-    # If no legacy ID from earlier, try a targeted query
+    # If no ID from earlier, try a targeted query
     if not place_id:
-        print("    ℹ️  No legacy ID from earlier test; running bootstrap query...")
+        print("    ℹ️  No place ID from earlier test; running bootstrap query...")
         place_type = f"{schema_space}#Place"
         resp0 = s.post(f"{base}/reconcile", params={"token": token},
                        json={"queries": {"q0": {"query": "London", "type": place_type, "limit": 50}}})
         if resp0.status_code == 200:
             for r in resp0.json().get("q0", {}).get("result", []):
-                if re.match(r"place:\d+$", r.get("id", "")):
+                if r.get("id", "").startswith("place:"):
                     place_id = r["id"]
                     break
 
     if not place_id:
-        print("  ⚠️  Skipping — no legacy place ID available")
+        print("  ⚠️  Skipping — no place ID available")
         return
 
-    print(f"    ℹ️  Using place ID: {place_id}")
+    is_crc = not re.match(r"place:\d+$", place_id)
+    print(f"    ℹ️  Using place ID: {place_id} ({'CRC' if is_crc else 'legacy'})")
 
     extend_payload = {
         "ids": [place_id],
@@ -610,6 +614,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
