@@ -469,7 +469,7 @@ function switchSearchMode(mode) {
     } else {
         const chipLabels = selectedRegions.map(r => r.label).join(', ');
         if (useViewport && !heroMap.isGlobeMode()) {
-            input.placeholder = 'Search within current viewport…';
+            input.placeholder = 'Search within viewport…';
         } else if (chipLabels) {
             input.placeholder = `Search within ${chipLabels}…`;
         } else {
