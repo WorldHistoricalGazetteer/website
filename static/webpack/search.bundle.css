@@ -1442,8 +1442,10 @@ input[type=range].slider.to::-moz-range-thumb {
 /* Checkbox */
 .tt-cb {
     vertical-align: middle;
-    margin: 0 3px 0 0;
+    margin: 0 3px 0 3px;
     cursor: pointer;
+    position: relative;
+    top: 2px;
 }
 
 /* Label */
@@ -1511,6 +1513,7 @@ input[type=range].slider.to::-moz-range-thumb {
     z-index: 2;
     background: #fdfdfd;
     padding: 2px 0 4px;
+    margin-bottom: 0.5rem;
 }
 .tt-search-input {
     font-size: 0.78rem;
