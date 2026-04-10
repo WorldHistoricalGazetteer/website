@@ -52,6 +52,26 @@ git merge --ff-only main
 git push origin staging
 ```
 
+### Feature Branch Testing
+
+To test a feature branch on `dev.whgazetteer.org` without merging it into
+`staging`, use the `--branch` option of the deploy script:
+
+```bash
+# On the DO server:
+deploy --branch=api/crc-gateway          # deploy feature branch to dev
+deploy --branch=api/crc-gateway --logs   # deploy and tail logs
+```
+
+When finished testing, return dev to the `staging` branch:
+
+```bash
+deploy                                   # reverts dev to staging (default)
+```
+
+**Note:** `--branch` is only allowed for the `dev` environment. Production
+always deploys `main`.
+
 ---
 
 ## Deploy Script
@@ -65,7 +85,7 @@ A single script on the DO server handles all deployment operations:
 ### Quick Reference
 
 ```bash
-deploy                           # dev, restart web
+deploy                           # dev, restart web (staging branch)
 deploy prod                      # prod, restart web
 deploy pull                      # dev, pull only
 deploy prod full                 # prod, restart all containers
@@ -73,6 +93,8 @@ deploy restart --celery          # dev, restart web + celery
 deploy prod recreate --migrate   # prod, full recreation + migrations
 deploy status                    # dev, show containers
 deploy prod status               # prod, show containers
+deploy --branch=api/crc-gateway  # dev, deploy a feature branch
+deploy pull --branch=api/crc-gateway  # dev, pull a feature branch only
 ```
 
 ### Arguments
@@ -86,6 +108,7 @@ deploy prod status               # prod, show containers
 | `full` | Pull + regenerate config + restart all containers |
 | `recreate` | Pull + regenerate config + tear down + recreate all |
 | `status` | Show running containers |
+| `--branch=<name>` | Override the dev branch (default: `staging`; not allowed for prod) |
 | `--celery` | Also restart celery worker and beat (with `restart`) |
 | `--migrate` | Run Django migrations after deploy |
 | `--logs` | Tail web container logs after deploy |
