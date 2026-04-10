@@ -26,7 +26,6 @@ from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from geopy.distance import geodesic
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -130,6 +129,11 @@ def json_error(message, status=400):
 @method_decorator(csrf_exempt, name="dispatch")
 @reconcile_schema()
 class ReconciliationView(APIView):
+    # GET (service metadata) is public; POST requires authentication.
+    # Authentication classes must be set at class level for DRF to use them.
+    # Anonymous requests will still work for GET; POST checks explicitly below.
+    authentication_classes = [TokenQueryOrBearerAuthentication, SessionAuthentication]
+
     def get(self, request, *args, **kwargs):
 
         token = request.GET.get("token")
@@ -149,9 +153,10 @@ class ReconciliationView(APIView):
 
         return JsonResponse(metadata)
 
-    @authentication_classes([TokenQueryOrBearerAuthentication, SessionAuthentication])
-    @permission_classes([IsAuthenticated])
     def post(self, request, *args, **kwargs):
+
+        if not request.user or not request.user.is_authenticated:
+            return json_error("Authentication required. Provide a valid API token.", status=401)
 
         try:
             payload = parse_request_payload(request)
