@@ -29,9 +29,8 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    /* Match the dark ocean colour used by the globe projection */
     background: rgb(218, 236, 241);
-    transition: opacity 2.0s ease;
+    transition: opacity 2.5s ease;
     pointer-events: none;
 }
 .map-loading-overlay.fade-out {

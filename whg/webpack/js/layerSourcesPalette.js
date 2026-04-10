@@ -26,15 +26,18 @@ const ADMIN_TIERS = [
     { value: '8',   label: 'Ward',          adminLevel: 8 },
 ];
 
-/* Zoom thresholds for auto admin-level switching */
+/* Zoom thresholds for auto admin-level switching.
+ * Globe projection uses lower zoom numbers — Continental features
+ * need to be visible at typical globe-view zooms (~2–3), not only
+ * when fully zoomed out. */
 const ZOOM_THRESHOLDS = [
-    { maxZoom: 1.2,      adminLevel: 0 },
-    { maxZoom: 2.0,      adminLevel: 1 },
-    { maxZoom: 2.5,      adminLevel: 2 },
-    { maxZoom: 4,        adminLevel: 3 },
-    { maxZoom: 5.5,      adminLevel: 4 },
-    { maxZoom: 7,        adminLevel: 6 },
-    { maxZoom: 9,        adminLevel: 7 },
+    { maxZoom: 2.5,      adminLevel: 0 },
+    { maxZoom: 3.2,      adminLevel: 1 },
+    { maxZoom: 4.0,      adminLevel: 2 },
+    { maxZoom: 5.0,      adminLevel: 3 },
+    { maxZoom: 6.5,      adminLevel: 4 },
+    { maxZoom: 8,        adminLevel: 6 },
+    { maxZoom: 10,       adminLevel: 7 },
     { maxZoom: Infinity, adminLevel: 8 },
 ];
 
