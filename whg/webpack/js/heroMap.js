@@ -87,6 +87,19 @@ class HeroMap {
 
                 this._wireSpinStop();
                 this._wireProjectionDetection();
+
+                // Fade out the loading overlay once the map is idle
+                // (globe projection has finished its initial render)
+                this.map.once('idle', () => {
+                    const overlay = document.getElementById('map_loading_overlay');
+                    if (overlay) {
+                        overlay.classList.add('fade-out');
+                        overlay.addEventListener('transitionend', () => {
+                            overlay.style.display = 'none';
+                        }, { once: true });
+                    }
+                });
+
                 this._ready = true;
                 resolve(this.map);
             });

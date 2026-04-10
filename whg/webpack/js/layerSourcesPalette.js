@@ -28,6 +28,8 @@ const ADMIN_TIERS = [
 
 /* Zoom thresholds for auto admin-level switching */
 const ZOOM_THRESHOLDS = [
+    { maxZoom: 1.2,      adminLevel: 0 },
+    { maxZoom: 2.0,      adminLevel: 1 },
     { maxZoom: 2.5,      adminLevel: 2 },
     { maxZoom: 4,        adminLevel: 3 },
     { maxZoom: 5.5,      adminLevel: 4 },

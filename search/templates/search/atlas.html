@@ -27,6 +27,9 @@
     <!-- Hero map: fills explorer container -->
     <div id="hero_map"></div>
 
+    <!-- Opaque overlay that hides the map until globe mode has fully rendered -->
+    <div id="map_loading_overlay" class="map-loading-overlay"></div>
+
     <!-- Floating search input + controls (top-left) -->
     <div id="floating_search">
         <div class="floating-search-inner">
@@ -151,12 +154,12 @@
             <i class="fas fa-times"></i>
         </button>
         <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="atlas-welcome-logo">
-        <h5 class="atlas-welcome-title">Welcome to the WHG Atlas</h5>
+        <h5 class="atlas-welcome-title">WHG Atlas</h5>
         <p class="atlas-welcome-text">
-            The Atlas is a visualisation tool for the World Historical Gazetteer —
+            The WHG Atlas is a visualisation tool for the World Historical Gazetteer —
             {{ index_places }} place records and {{ index_toponyms }}
-            toponyms drawn from GeoNames, Wikidata, Pleiades, TGN, and other sources.
-            At this scale, spatial and temporal scoping of searches is essential.
+            distinct toponyms drawn from GeoNames, Wikidata, Pleiades, TGN, and other sources.
+            At this scale, spatial and temporal scoping of searches is highly-desirable.
         </p>
         <p class="atlas-welcome-text" style="margin-bottom: 14px;">
             Start in <strong>Areas</strong> mode to select geographic regions, then

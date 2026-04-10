@@ -24,6 +24,20 @@
     z-index: 0;
 }
 
+/* Opaque overlay that covers the map until globe projection has rendered */
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    /* Match the dark ocean colour used by the globe projection */
+    background: #171d26;
+    transition: opacity 0.8s ease;
+    pointer-events: none;
+}
+.map-loading-overlay.fade-out {
+    opacity: 0;
+}
+
 /* Force all MapLibre controls to stay inside the map container */
 #hero_map .maplibregl-control-container {
     position: absolute !important;
@@ -98,6 +112,7 @@
 }
 .search-input-group .btn {
     font-size: 0.8rem;
+    border-color: #ced4da;
 }
 
 /* Atlas control buttons (Layers, Sources, Categories) */

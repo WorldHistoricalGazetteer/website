@@ -388,6 +388,10 @@ function createTourDriver() {
         progressText: '{{current}} of {{total}}',
         // Block all user interaction with highlighted elements
         disableActiveInteraction: true,
+        // Clicking the shaded overlay advances to the next step instead
+        // of cancelling the tour (which was too easy to trigger accidentally
+        // when offcanvas panels or the backdrop were open).
+        overlayClickBehavior: 'nextStep',
         onDestroyed: () => {
             tourCleanup();
             localStorage.setItem(TOUR_SEEN_KEY, 'true');
