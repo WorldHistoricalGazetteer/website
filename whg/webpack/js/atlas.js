@@ -270,6 +270,13 @@ Promise.all([
             useViewport = !useViewport;
             this.classList.toggle('active', useViewport);
             updateViewportTooltip();
+
+            // Hide boundaries when viewport mode is active; restore when deactivated
+            if (useViewport) {
+                heroMap.hideBoundaries();
+            } else if (layerPalette) {
+                layerPalette.refreshBoundaries();
+            }
         });
     }
 
@@ -490,31 +497,37 @@ function updateViewportButtonState(isGlobe) {
     if (isGlobe) {
         // Disable viewport in globe mode
         btn.disabled = true;
+        btn.style.pointerEvents = 'none';
         if (useViewport) {
             useViewport = false;
             btn.classList.remove('active');
+            // Restore boundaries when viewport is auto-disabled
+            if (layerPalette) layerPalette.refreshBoundaries();
         }
     } else {
         btn.disabled = false;
+        btn.style.pointerEvents = '';
     }
     updateViewportTooltip();
 }
 
 function updateViewportTooltip() {
     const btn = document.getElementById('atlas_viewport_btn');
-    if (!btn) return;
+    const wrap = document.getElementById('atlas_viewport_wrap');
+    if (!btn || !wrap) return;
     let text;
     if (btn.disabled) {
         text = 'Switch to flat map projection to enable viewport constraint';
     } else if (btn.classList.contains('active')) {
         text = 'Viewport constraint active — search will be limited to the visible map area. Click to disable.';
     } else {
-        text = 'Constrain search to the current map viewport';
+        text = 'Constrain search to the current map viewport (clears any selected areas)';
     }
-    btn.setAttribute('title', text);
-    // Update Bootstrap tooltip if initialised
+    wrap.setAttribute('title', text);
+    wrap.setAttribute('data-bs-original-title', text);
+    // Update Bootstrap tooltip if initialised on the wrapper
     try {
-        const tt = bootstrap.Tooltip.getInstance(btn);
+        const tt = bootstrap.Tooltip.getInstance(wrap);
         if (tt) tt.setContent({'.tooltip-inner': text});
     } catch (e) { /* */ }
 }

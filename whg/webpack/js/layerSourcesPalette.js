@@ -108,6 +108,10 @@ export default class LayerSourcesPalette {
                  style="${BOUNDARY_SOURCES.has(this._activeSource) ? '' : 'display:none'}">
                 <hr class="layer-panel-divider">
                 <span class="layer-panel-section-label">Boundaries</span>
+                <p class="layer-panel-help-text">
+                    Set the administrative level of boundaries displayed on the map.
+                    Click a boundary polygon to select it as a region constraint.
+                </p>
                 <select id="boundary_level_select" class="form-select form-select-sm">
                     ${ADMIN_TIERS.map(t =>
                         `<option value="${t.value}">${t.label}${t.adminLevel != null ? ' (' + t.adminLevel + ')' : ''}</option>`
@@ -119,6 +123,11 @@ export default class LayerSourcesPalette {
                         <label class="form-check-label" for="admin_auto_zoom">Auto by zoom</label>
                     </div>
                 </div>
+                <p class="layer-panel-help-text" style="margin-top:4px;">
+                    When <em>Auto by zoom</em> is on, the boundary level adjusts
+                    automatically as you zoom in or out — showing countries at
+                    wide zoom, provinces at mid zoom, and districts when zoomed in.
+                </p>
             </div>`;
 
         this._panel.innerHTML = html;
@@ -305,6 +314,11 @@ export default class LayerSourcesPalette {
         if (select) select.value = 'off';
         const autoCheck = this._panel.querySelector('#admin_auto_zoom');
         if (autoCheck) autoCheck.checked = true;
+    }
+
+    /** Re-apply the current boundary filter (show or hide based on current admin level). */
+    refreshBoundaries() {
+        this._updateBoundaryFilter();
     }
 
     /**

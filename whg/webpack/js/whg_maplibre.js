@@ -1322,15 +1322,20 @@ maplibregl.Map = function (options = {}) {
 		if (chosenOptions.globeControl) {
 			mapInstance.addControl(new maplibregl.GlobeControl(), 'top-right');
 			if (chosenOptions.globeMode) mapInstance.setProjection({ type: 'globe' });
-			// MapLibre adds a redundant `title` attribute to the globe control button after first click on it
+			// MapLibre adds a redundant `title` attribute to the globe control button
+			// after every click. Use a MutationObserver to strip it whenever it appears,
+			// so only the Bootstrap tooltip (via data-bs-title) is shown.
 			const globeButton = mapInstance.getContainer().querySelector('.maplibregl-ctrl-globe');
 			if (globeButton) {
 				globeButton.removeAttribute('title');
 				globeButton.setAttribute('data-bs-title', 'Toggle Globe');
-				// Add a click listener to the globe button to remove the title attribute
-				globeButton.addEventListener('click', function() {
-					this.removeAttribute('title');
-				});
+				new MutationObserver((mutations) => {
+					for (const m of mutations) {
+						if (m.type === 'attributes' && m.attributeName === 'title' && globeButton.hasAttribute('title')) {
+							globeButton.removeAttribute('title');
+						}
+					}
+				}).observe(globeButton, { attributes: true, attributeFilter: ['title'] });
 			}
 		}
 		if (chosenOptions.terrainControl) mapInstance.addControl(new CustomTerrainControl({source: 'terrarium-aws'}), 'top-right');

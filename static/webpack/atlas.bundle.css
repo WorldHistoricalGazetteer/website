@@ -145,6 +145,7 @@ span.twitter-typeahead .tt-suggestion {
     border-radius: 10px;
     padding: 6px 10px;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    max-width: 626px;
 }
 
 /* Search mode toggle */
@@ -187,6 +188,8 @@ span.twitter-typeahead .tt-suggestion {
 .atlas-control-buttons .btn {
     font-size: 0.7rem;
     white-space: nowrap;
+    padding-top: 5px;
+    padding-bottom: 5px;
     background: rgba(44, 62, 80, 0.8);
     border-color: rgba(44, 62, 80, 0.6);
     color: #fff;
@@ -239,6 +242,7 @@ span.twitter-typeahead .tt-suggestion {
 
 #temporal_control {
     margin-top: 6px;
+    width: 300px;
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -508,11 +512,62 @@ span.twitter-typeahead .tt-suggestion {
     /* Bootstrap defaults: z-index 1045 for offcanvas, 1040 for backdrop.
        No override needed since panels are outside .explorer-layout. */
 }
+
+/* Help / explanatory text inside offcanvas panels */
+.offcanvas-help-text {
+    font-size: 0.74rem;
+    color: #666;
+    line-height: 1.45;
+    margin: 0 0 10px 0;
+}
+
+/* Help text inside layer sources panel */
+.layer-panel-help-text {
+    font-size: 0.68rem;
+    color: #777;
+    line-height: 1.4;
+    margin: 2px 0 6px 0;
+    font-style: italic;
+}
+
 #sources_offcanvas .authority-item {
     padding: 3px 0;
 }
 #sources_offcanvas .form-check-label {
     font-size: 0.85rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Type tree overrides for atlas offcanvas
+   — remove bullet points, reduce font size
+   ═══════════════════════════════════════════════════════════════════ */
+
+#categories_offcanvas .tt-root,
+#categories_offcanvas .tt-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+#categories_offcanvas .tt-children {
+    padding-left: 14px;
+}
+#categories_offcanvas .tt-node {
+    list-style: none;
+    padding: 0;
+    line-height: 1.25;
+}
+#categories_offcanvas .tt-label {
+    font-size: 0.72rem;
+}
+#categories_offcanvas .tt-guide > .tt-label {
+    font-size: 0.67rem;
+}
+#categories_offcanvas .tt-toggle {
+    font-size: 0.7rem;
+    width: 12px;
+}
+#categories_offcanvas .tt-badge {
+    font-size: 0.5rem;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -653,18 +708,13 @@ span.twitter-typeahead .tt-suggestion {
    Responsive
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Wide screens: expand floating search panel so the temporal control
-   can sit at 60% width alongside the narrower search bar row */
+/* Wide screens: expand floating search panel */
 @media (min-width: 992px) {
     #floating_search {
         max-width: 980px;
     }
     .floating-search-inner {
-        max-width: 580px;
-    }
-    #temporal_control {
-        width: 60%;
-        min-width: 580px;
+        max-width: 626px;
     }
 }
 

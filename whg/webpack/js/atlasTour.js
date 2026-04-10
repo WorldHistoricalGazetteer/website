@@ -87,12 +87,32 @@ function setTemporalMode(mode) {
    Interaction blocking
    ═══════════════════════════════════════════════════════════════════ */
 
+/**
+ * Capturing-phase click blocker: prevents clicks on offcanvas panels
+ * and their toggle buttons from propagating to driver.js (which would
+ * otherwise interpret them as "outside clicks" and end the tour).
+ */
+function tourClickBlocker(e) {
+    if (e.target.closest('.offcanvas')) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+    if (e.target.closest('[data-bs-toggle="offcanvas"]')) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+}
+
 function blockInteractions() {
     document.body.classList.add(TOUR_ACTIVE_CLASS);
+    document.addEventListener('click', tourClickBlocker, true);
 }
 
 function unblockInteractions() {
     document.body.classList.remove(TOUR_ACTIVE_CLASS);
+    document.removeEventListener('click', tourClickBlocker, true);
 }
 
 /** Full cleanup — called on tour destroy and as a safety net. */
@@ -193,22 +213,22 @@ function getTourSteps() {
             },
         },
 
-        /* ── 5. Viewport + Layers pill (auto-open Layers) ─────────── */
+        /* ── 5. Viewport + Regions pill (auto-open Regions) ─────────── */
         {
             element: '#areas_control_pill',
             popover: {
-                title: 'Viewport & Layers',
+                title: 'Viewport & Regions',
                 description:
                     'These two buttons work together in <strong>Areas</strong> mode:<br><br>' +
                     '<strong><i class="fas fa-crop-alt"></i> Viewport</strong> — when the map ' +
                     'is in flat (non-globe) projection, toggle this to constrain your toponym ' +
                     'search to the <strong>current map viewport</strong> instead of selected ' +
                     'areas. Disabled in globe view.<br><br>' +
-                    '<strong><i class="fas fa-layer-group"></i> Layers</strong> — opens a panel ' +
+                    '<strong><i class="fas fa-globe-americas"></i> Regions</strong> — opens a panel ' +
                     'where you can choose <strong>modern</strong> (OpenStreetMap) or ' +
                     '<strong>historical</strong> (OpenHistoricalMap) boundaries, and set the ' +
                     'administrative level (continent → country → state → province, etc.).<br><br>' +
-                    '<em class="text-muted">The Layers panel is opening now…</em>',
+                    '<em class="text-muted">The Regions panel is opening now…</em>',
                 side: 'bottom',
                 align: 'start',
             },

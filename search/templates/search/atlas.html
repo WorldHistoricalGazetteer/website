@@ -62,20 +62,22 @@
                 </button>
             </div>
 
-            <!-- Control buttons (Viewport+Layers areas-only; Sources & Categories toponym-only) -->
+            <!-- Control buttons (Viewport+Regions areas-only; Sources & Categories toponym-only) -->
             <div class="atlas-control-buttons">
                 <div class="btn-group btn-group-sm areas-only-btn" id="areas_control_pill"
                      role="group" aria-label="Spatial constraint">
-                    <button id="atlas_viewport_btn" class="btn" type="button"
-                            disabled
-                            data-bs-toggle="tooltip"
-                            title="Switch to flat map projection to enable viewport constraint">
-                        <i class="fas fa-crop-alt me-1"></i>Viewport
-                    </button>
+                    <span id="atlas_viewport_wrap" class="d-inline-block" tabindex="0"
+                          data-bs-toggle="tooltip"
+                          title="Switch to flat map projection to enable viewport constraint">
+                        <button id="atlas_viewport_btn" class="btn" type="button"
+                                disabled style="pointer-events: none;">
+                            <i class="fas fa-crop-alt me-1"></i>Viewport
+                        </button>
+                    </span>
                     <button id="atlas_layers_btn" class="btn"
                             data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
-                            title="Layer sources and boundary settings">
-                        <i class="fas fa-layer-group me-1"></i>Layers
+                            title="Region sources and boundary settings">
+                        <i class="fas fa-globe-americas me-1"></i>Regions
                     </button>
                 </div>
                 <button id="open_sources_modal" class="btn btn-sm toponym-only-btn"
@@ -154,7 +156,7 @@
             Explore historical boundaries and search across millions of place records.
             Start in <strong>Areas</strong> mode to select geographic regions, then switch
             to <strong>Toponyms</strong> to search for place names within them.
-            Use <strong>Layers</strong>, <strong>Sources</strong>, and <strong>Categories</strong>
+            Use <strong>Regions</strong>, <strong>Sources</strong>, and <strong>Categories</strong>
             to refine your view.
         </p>
         <a href="#" id="atlas_start_tour_link" class="atlas-welcome-tour-link">
@@ -175,16 +177,22 @@
      not clipped by overflow:hidden and sit above the backdrop.
      ═══════════════════════════════════════════════════════════════════ -->
 
-<!-- Layers offcanvas -->
+<!-- Regions offcanvas -->
 <div id="layers_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
      aria-labelledby="layers_offcanvas_label">
     <div class="offcanvas-header">
         <h6 class="offcanvas-title" id="layers_offcanvas_label">
-            <i class="fas fa-layer-group me-1"></i>Layers
+            <i class="fas fa-globe-americas me-1"></i>Regions
         </h6>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
+        <p class="offcanvas-help-text">
+            Select a <strong>source</strong> for geographic regions such as
+            empires, polities, kingdoms, and administrative territories.
+            Regions selected from the map act as <strong>spatial constraints</strong>
+            for subsequent toponym searches.
+        </p>
         <div id="layer_sources_panel">
             <!-- Populated by JS -->
         </div>
@@ -201,7 +209,12 @@
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
-        <div class="authority-list">
+        <p class="offcanvas-help-text">
+            Choose which data sources to include in your toponym search.
+            Checked sources contribute place records to the results; uncheck
+            any you wish to exclude.
+        </p>
+        <div class="authority-list" style="padding-left: 25px;">
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    title="GB1900 gazetteer — British place names 1888–1914">
@@ -286,6 +299,13 @@
         <button type="button" class="btn-close ms-auto" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
     <div class="offcanvas-body">
+        <p class="offcanvas-help-text">
+            Filter toponym results by place type using the AAT
+            (Art &amp; Architecture Thesaurus) hierarchy. Check one or more
+            categories to restrict your search to specific kinds of place,
+            such as populated places, administrative divisions, or
+            hydrographic features.
+        </p>
         <div id="atlas_type_tree"></div>
     </div>
 </div>
