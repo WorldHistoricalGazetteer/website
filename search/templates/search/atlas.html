@@ -153,9 +153,14 @@
         <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="atlas-welcome-logo">
         <h5 class="atlas-welcome-title">Welcome to the WHG Atlas</h5>
         <p class="atlas-welcome-text">
-            Explore historical boundaries and search across millions of place records.
-            Start in <strong>Areas</strong> mode to select geographic regions, then switch
-            to <strong>Toponyms</strong> to search for place names within them.
+            The Atlas is a visualisation tool for the World Historical Gazetteer —
+            {{ index_places }} place records and {{ index_toponyms }}
+            toponyms drawn from GeoNames, Wikidata, Pleiades, TGN, and other sources.
+            At this scale, spatial and temporal scoping of searches is essential.
+        </p>
+        <p class="atlas-welcome-text" style="margin-bottom: 14px;">
+            Start in <strong>Areas</strong> mode to select geographic regions, then
+            switch to <strong>Toponyms</strong> to search for place names within them.
             Use <strong>Regions</strong>, <strong>Sources</strong>, and <strong>Categories</strong>
             to refine your view.
         </p>

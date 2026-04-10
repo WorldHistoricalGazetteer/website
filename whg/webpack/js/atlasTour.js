@@ -108,11 +108,20 @@ function tourClickBlocker(e) {
 function blockInteractions() {
     document.body.classList.add(TOUR_ACTIVE_CLASS);
     document.addEventListener('click', tourClickBlocker, true);
+    // Mark all offcanvas panels as inert so they cannot receive focus or
+    // pointer events — this prevents accidental interaction from causing
+    // the tour to cancel.
+    document.querySelectorAll('.atlas-offcanvas').forEach(el => {
+        el.inert = true;
+    });
 }
 
 function unblockInteractions() {
     document.body.classList.remove(TOUR_ACTIVE_CLASS);
     document.removeEventListener('click', tourClickBlocker, true);
+    document.querySelectorAll('.atlas-offcanvas').forEach(el => {
+        el.inert = false;
+    });
 }
 
 /** Full cleanup — called on tour destroy and as a safety net. */

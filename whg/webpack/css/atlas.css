@@ -72,7 +72,7 @@
 /* Search mode toggle */
 .search-mode-toggle .btn {
     font-size: 0.75rem;
-    padding: 3px 10px;
+    padding: 5px 10px;
     border-color: #bdc3c7;
     color: #555;
     background: #f0f0f0;
@@ -109,8 +109,8 @@
 .atlas-control-buttons .btn {
     font-size: 0.7rem;
     white-space: nowrap;
-    padding-top: 5px;
-    padding-bottom: 5px;
+    padding-top: 6px;
+    padding-bottom: 6px;
     background: rgba(44, 62, 80, 0.8);
     border-color: rgba(44, 62, 80, 0.6);
     color: #fff;
@@ -494,6 +494,23 @@
     font-size: 0.5rem;
 }
 
+/* Checkbox alignment fix for atlas offcanvas */
+#categories_offcanvas .tt-cb {
+    position: relative;
+    top: 2px;
+    margin-left: 3px;
+}
+
+/* Search box bottom margin */
+#categories_offcanvas .tt-search {
+    margin-bottom: 0.5rem;
+}
+
+/* Hide GeoNames fclass badges in atlas type tree */
+#categories_offcanvas .tt-badge {
+    display: none;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Region selector overrides (when mounted in atlas layout)
    ═══════════════════════════════════════════════════════════════════ */
@@ -814,15 +831,16 @@
    During the guided tour, offcanvas panels are opened automatically
    as demos. They need to appear above the driver.js overlay (z-index
    10000) so their contents are clearly visible rather than dimmed.
-   Pointer events are blocked on them so the user can't accidentally
-   interact with controls during the tour.
+   The `inert` attribute (set by JS) prevents all user interaction
+   and focus within the panels, but CSS `pointer-events: none` on the
+   panel itself is also needed so that clicks fall through to the
+   driver.js overlay rather than being absorbed by the panel backdrop.
    ═══════════════════════════════════════════════════════════════════ */
 
 body.atlas-tour-active .offcanvas.show,
 body.atlas-tour-active .offcanvas.showing {
     z-index: 10001 !important;
-    /* pointer-events stays auto (default) so the panel absorbs clicks
-       rather than letting them pass through to the driver.js overlay */
+    pointer-events: none !important;
 }
 
 /* Block interaction with offcanvas child elements during the tour */
