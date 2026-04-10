@@ -193,18 +193,21 @@ function getTourSteps() {
             },
         },
 
-        /* ── 5. Layers panel (auto-open) ────────────────────────── */
+        /* ── 5. Viewport + Layers pill (auto-open Layers) ─────────── */
         {
-            element: '[data-bs-target="#layers_offcanvas"]',
+            element: '#areas_control_pill',
             popover: {
-                title: 'Layers Panel',
+                title: 'Viewport & Layers',
                 description:
-                    'In <strong>Areas</strong> mode, the ' +
-                    '<strong><i class="fas fa-layer-group"></i> Layers</strong> button ' +
-                    'opens a panel where you can configure map tile sources, choose ' +
-                    '<strong>modern</strong> (OpenStreetMap) or <strong>historical</strong> ' +
-                    '(OpenHistoricalMap) boundaries, and set the administrative level ' +
-                    '(continent → country → state → province, etc.).<br><br>' +
+                    'These two buttons work together in <strong>Areas</strong> mode:<br><br>' +
+                    '<strong><i class="fas fa-crop-alt"></i> Viewport</strong> — when the map ' +
+                    'is in flat (non-globe) projection, toggle this to constrain your toponym ' +
+                    'search to the <strong>current map viewport</strong> instead of selected ' +
+                    'areas. Disabled in globe view.<br><br>' +
+                    '<strong><i class="fas fa-layer-group"></i> Layers</strong> — opens a panel ' +
+                    'where you can choose <strong>modern</strong> (OpenStreetMap) or ' +
+                    '<strong>historical</strong> (OpenHistoricalMap) boundaries, and set the ' +
+                    'administrative level (continent → country → state → province, etc.).<br><br>' +
                     '<em class="text-muted">The Layers panel is opening now…</em>',
                 side: 'bottom',
                 align: 'start',

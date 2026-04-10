@@ -28,6 +28,8 @@ class HeroMap {
     constructor() {
         this.map = null;
         this._viewportListeners = [];
+        this._projectionChangeListeners = [];
+        this._isGlobe = true;
         this._ready = false;
         this._readyPromise = null;
         this._spinning = false;
@@ -84,6 +86,7 @@ class HeroMap {
                 });
 
                 this._wireSpinStop();
+                this._wireProjectionDetection();
                 this._ready = true;
                 resolve(this.map);
             });
@@ -580,6 +583,71 @@ class HeroMap {
         if (this._boundaryLayerIds.length === 0) {
             this._initBoundaryLayers();
         }
+    }
+
+    // ── Projection detection ──
+
+    /**
+     * Check whether the map is currently in globe projection.
+     * @returns {boolean}
+     */
+    isGlobeMode() {
+        if (!this.map) return this._isGlobe;
+        try {
+            if (typeof this.map.getProjection === 'function') {
+                const proj = this.map.getProjection();
+                if (proj) {
+                    if (proj.type === 'mercator') return false;
+                    if (proj.type === 'globe') return true;
+                }
+            }
+        } catch (e) { /* API may not exist */ }
+        return this._isGlobe;
+    }
+
+    /**
+     * Register a callback for projection changes (globe ↔ flat).
+     * @param {function(boolean)} callback — receives `true` if globe, `false` if flat
+     * @returns {function} unsubscribe function
+     */
+    onProjectionChange(callback) {
+        this._projectionChangeListeners.push(callback);
+        return () => {
+            this._projectionChangeListeners =
+                this._projectionChangeListeners.filter(fn => fn !== callback);
+        };
+    }
+
+    /** @private Wire up globe control button click detection. */
+    _wireProjectionDetection() {
+        // Check on every moveend (catches programmatic changes)
+        this.map.on('moveend', () => this._checkProjectionChange());
+        this.map.on('idle', () => this._checkProjectionChange());
+
+        // Also listen for the globe control button click for faster response
+        const container = this.map.getContainer();
+        container.addEventListener('click', (e) => {
+            if (e.target.closest('.maplibregl-ctrl-globe')) {
+                setTimeout(() => this._checkProjectionChange(), 200);
+                setTimeout(() => this._checkProjectionChange(), 500);
+            }
+        });
+    }
+
+    /** @private Check if projection changed and notify listeners. */
+    _checkProjectionChange() {
+        const nowGlobe = this.isGlobeMode();
+        if (nowGlobe !== this._isGlobe) {
+            this._isGlobe = nowGlobe;
+            this._emitProjectionChange(nowGlobe);
+        }
+    }
+
+    /** @private */
+    _emitProjectionChange(isGlobe) {
+        this._projectionChangeListeners.forEach(fn => {
+            try { fn(isGlobe); } catch (e) { console.error('projection listener error', e); }
+        });
     }
 
     _emitViewportChange(bbox) {

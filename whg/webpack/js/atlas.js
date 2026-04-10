@@ -33,6 +33,7 @@ let areaRouter = null;
 let temporalMode = 'off';       // 'off' | 'range' | 'undated'
 let searchMode = 'areas';       // 'areas' | 'toponyms'
 let exactMatch = false;
+let useViewport = false;       // viewport-constraint toggle (non-globe only)
 let clusterResults = true;
 let selectedRegions = [];        // Array of {id, label, admin_level, namespace, geometry}
 let areaSearchResults = [];      // Current area search dropdown results
@@ -261,6 +262,24 @@ Promise.all([
         this.setAttribute('aria-pressed', exactMatch);
     });
 
+    // ── Wire viewport constraint toggle ──
+    const viewportBtn = document.getElementById('atlas_viewport_btn');
+    if (viewportBtn) {
+        viewportBtn.addEventListener('click', function () {
+            if (this.disabled) return;
+            useViewport = !useViewport;
+            this.classList.toggle('active', useViewport);
+            updateViewportTooltip();
+        });
+    }
+
+    // ── Listen for projection changes to enable/disable viewport button ──
+    heroMap.onProjectionChange((isGlobe) => {
+        updateViewportButtonState(isGlobe);
+    });
+    // Set initial state after a short delay (projection may need time to settle)
+    setTimeout(() => updateViewportButtonState(heroMap.isGlobeMode()), 500);
+
     // ── Wire clustering toggle ──
     document.getElementById('atlas_clustering_toggle').addEventListener('change', function () {
         clusterResults = this.checked;
@@ -442,9 +461,13 @@ function switchSearchMode(mode) {
         heroMap.ensureContextStyle();
     } else {
         const chipLabels = selectedRegions.map(r => r.label).join(', ');
-        input.placeholder = chipLabels
-            ? `Search within ${chipLabels}…`
-            : 'Search for place names…';
+        if (useViewport && !heroMap.isGlobeMode()) {
+            input.placeholder = 'Search within current viewport…';
+        } else if (chipLabels) {
+            input.placeholder = `Search within ${chipLabels}…`;
+        } else {
+            input.placeholder = 'Search for place names…';
+        }
         toponymBtns.forEach(btn => btn.style.display = '');
         areasBtns.forEach(btn => btn.style.display = 'none');
     }
@@ -457,6 +480,43 @@ function buildAreasPlaceholder() {
         return `Search for areas…`;
     }
     return 'Search for areas…';
+}
+
+/* ── Viewport constraint helpers ── */
+
+function updateViewportButtonState(isGlobe) {
+    const btn = document.getElementById('atlas_viewport_btn');
+    if (!btn) return;
+    if (isGlobe) {
+        // Disable viewport in globe mode
+        btn.disabled = true;
+        if (useViewport) {
+            useViewport = false;
+            btn.classList.remove('active');
+        }
+    } else {
+        btn.disabled = false;
+    }
+    updateViewportTooltip();
+}
+
+function updateViewportTooltip() {
+    const btn = document.getElementById('atlas_viewport_btn');
+    if (!btn) return;
+    let text;
+    if (btn.disabled) {
+        text = 'Switch to flat map projection to enable viewport constraint';
+    } else if (btn.classList.contains('active')) {
+        text = 'Viewport constraint active — search will be limited to the visible map area. Click to disable.';
+    } else {
+        text = 'Constrain search to the current map viewport';
+    }
+    btn.setAttribute('title', text);
+    // Update Bootstrap tooltip if initialised
+    try {
+        const tt = bootstrap.Tooltip.getInstance(btn);
+        if (tt) tt.setContent({'.tooltip-inner': text});
+    } catch (e) { /* */ }
 }
 
 
@@ -682,14 +742,39 @@ function initiateToponymSearch() {
 function gatherToponymOptions(qstr) {
     const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
 
-    // Build bounds from selected region geometries
-    const regionGeometries = selectedRegions
-        .filter(r => r.geometry)
-        .map(r => r.geometry);
+    // Build spatial constraint: viewport takes precedence over area selections
+    let bounds;
+    let spatialMode;
 
-    const bounds = regionGeometries.length > 0
-        ? { type: 'GeometryCollection', geometries: regionGeometries }
-        : { type: 'GeometryCollection', geometries: [] };
+    if (useViewport && !heroMap.isGlobeMode()) {
+        // Viewport constraint: use current map viewport as a bounding polygon
+        const bb = heroMap.getBBox(); // [west, south, east, north]
+        if (bb) {
+            bounds = {
+                type: 'Polygon',
+                coordinates: [[
+                    [bb[0], bb[1]],
+                    [bb[2], bb[1]],
+                    [bb[2], bb[3]],
+                    [bb[0], bb[3]],
+                    [bb[0], bb[1]],
+                ]],
+            };
+            spatialMode = 'region';
+        } else {
+            bounds = { type: 'GeometryCollection', geometries: [] };
+            spatialMode = 'none';
+        }
+    } else {
+        // Area-selection constraint
+        const regionGeometries = selectedRegions
+            .filter(r => r.geometry)
+            .map(r => r.geometry);
+        bounds = regionGeometries.length > 0
+            ? { type: 'GeometryCollection', geometries: regionGeometries }
+            : { type: 'GeometryCollection', geometries: [] };
+        spatialMode = regionGeometries.length > 0 ? 'region' : 'none';
+    }
 
     return {
         qstr: qstr,
@@ -706,7 +791,7 @@ function gatherToponymOptions(qstr) {
         regions: [],
         countries: [],
         userareas: [],
-        spatial: regionGeometries.length > 0 ? 'region' : 'none',
+        spatial: spatialMode,
     };
 }
 
@@ -843,6 +928,12 @@ function clearAll() {
     exactMatch = false;
     const emBtn = document.getElementById('atlas_exact_match');
     if (emBtn) { emBtn.classList.remove('active'); emBtn.setAttribute('aria-pressed', 'false'); }
+
+    // Reset viewport constraint
+    useViewport = false;
+    const vpBtn = document.getElementById('atlas_viewport_btn');
+    if (vpBtn) { vpBtn.classList.remove('active'); }
+    updateViewportTooltip();
 
     // Reset clustering
     clusterResults = true;

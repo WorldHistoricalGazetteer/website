@@ -62,13 +62,22 @@
                 </button>
             </div>
 
-            <!-- Control buttons (Layers areas-only; Sources & Categories toponym-only) -->
+            <!-- Control buttons (Viewport+Layers areas-only; Sources & Categories toponym-only) -->
             <div class="atlas-control-buttons">
-                <button class="btn btn-sm areas-only-btn"
-                        data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
-                        title="Layer sources and boundary settings">
-                    <i class="fas fa-layer-group me-1"></i>Layers
-                </button>
+                <div class="btn-group btn-group-sm areas-only-btn" id="areas_control_pill"
+                     role="group" aria-label="Spatial constraint">
+                    <button id="atlas_viewport_btn" class="btn" type="button"
+                            disabled
+                            data-bs-toggle="tooltip"
+                            title="Switch to flat map projection to enable viewport constraint">
+                        <i class="fas fa-crop-alt me-1"></i>Viewport
+                    </button>
+                    <button id="atlas_layers_btn" class="btn"
+                            data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
+                            title="Layer sources and boundary settings">
+                        <i class="fas fa-layer-group me-1"></i>Layers
+                    </button>
+                </div>
                 <button id="open_sources_modal" class="btn btn-sm toponym-only-btn"
                         data-bs-toggle="offcanvas" data-bs-target="#sources_offcanvas"
                         title="Filter by data source"

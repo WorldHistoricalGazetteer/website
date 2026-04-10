@@ -499,6 +499,31 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   Viewport constraint button
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_viewport_btn.active {
+    background: #2980b9 !important;
+    border-color: #2471a3 !important;
+    color: #fff !important;
+}
+#atlas_viewport_btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+/* Ensure the pill group items share the control-button style */
+#areas_control_pill .btn {
+    font-size: 0.7rem;
+    white-space: nowrap;
+    background: rgba(44, 62, 80, 0.8);
+    border-color: rgba(44, 62, 80, 0.6);
+    color: #fff;
+}
+#areas_control_pill .btn:hover:not(:disabled):not(.active) {
+    background: rgba(44, 62, 80, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Boundary level dropdown inside layer panel
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -548,6 +573,21 @@
 /* ═══════════════════════════════════════════════════════════════════
    Responsive
    ═══════════════════════════════════════════════════════════════════ */
+
+/* Wide screens: expand floating search panel so the temporal control
+   can sit at 60% width alongside the narrower search bar row */
+@media (min-width: 992px) {
+    #floating_search {
+        max-width: 980px;
+    }
+    .floating-search-inner {
+        max-width: 580px;
+    }
+    #temporal_control {
+        width: 60%;
+        min-width: 580px;
+    }
+}
 
 @media (max-width: 768px) {
     #floating_search {
@@ -719,10 +759,11 @@
 body.atlas-tour-active .offcanvas.show,
 body.atlas-tour-active .offcanvas.showing {
     z-index: 10001 !important;
-    pointer-events: none !important;
+    /* pointer-events stays auto (default) so the panel absorbs clicks
+       rather than letting them pass through to the driver.js overlay */
 }
 
-/* Ensure child elements also can't receive clicks */
+/* Block interaction with offcanvas child elements during the tour */
 body.atlas-tour-active .offcanvas.show *,
 body.atlas-tour-active .offcanvas.showing * {
     pointer-events: none !important;
