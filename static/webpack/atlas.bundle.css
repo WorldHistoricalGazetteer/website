@@ -161,7 +161,8 @@ span.twitter-typeahead .tt-suggestion {
     max-width: 626px;
 }
 
-/* Search mode toggle */
+/* Search mode toggle — primary mode switch uses a burgundy accent
+   to visually distinguish it from other tool buttons.  */
 .search-mode-toggle .btn {
     font-size: 0.75rem;
     padding: 5px 10px;
@@ -169,14 +170,18 @@ span.twitter-typeahead .tt-suggestion {
     color: #555;
     background: #f0f0f0;
     white-space: nowrap;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 .search-mode-toggle .btn.active {
-    background: #2c3e50;
-    border-color: #2c3e50;
+    background: #7b2d3b;
+    border-color: #6b2533;
     color: #fff;
+    box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
 }
 .search-mode-toggle .btn:hover:not(.active) {
-    background: #e0e0e0;
+    background: #f5e6e8;
+    border-color: #c9a0a8;
+    color: #6b2533;
 }
 
 /* Search input group */
