@@ -24,6 +24,84 @@ es = settings.ES_CONN
 
 ALLOWED_TYPES = {"place", "period"}
 
+# The pseudo-namespace for legacy WHG places (numeric IDs stored in local ES/DB).
+WHG_NAMESPACE = "whg"
+
+
+def get_namespace(place_id: str) -> str:
+    """
+    Extract the namespace from a place identifier.
+
+    - Legacy numeric IDs (e.g. ``"12345"``) → ``"whg"``
+    - Namespaced CRC IDs (e.g. ``"gn:745044"``) → ``"gn"``
+    """
+    place_id = str(place_id)
+    if place_id.isdigit():
+        return WHG_NAMESPACE
+    if ":" in place_id:
+        return place_id.split(":", 1)[0].lower()
+    return WHG_NAMESPACE
+
+
+def parse_namespaces(namespaces_param) -> set[str] | None:
+    """
+    Parse a comma-delimited namespace string into a set of lowercase codes.
+
+    Returns ``None`` when the parameter is absent/empty, meaning *all*
+    namespaces (no filtering).  Accepts a string (``"gn,tgn"``) or a
+    list (``["gn", "tgn"]``).
+    """
+    if not namespaces_param:
+        return None
+    if isinstance(namespaces_param, (list, tuple)):
+        codes = {ns.strip().lower() for ns in namespaces_param if isinstance(ns, str) and ns.strip()}
+    else:
+        codes = {ns.strip().lower() for ns in str(namespaces_param).split(",") if ns.strip()}
+    return codes or None
+
+
+def filter_hits_by_namespace(hits: list[dict], namespaces: set[str] | None) -> list[dict]:
+    """
+    Filter ES-style ``hits.hits[]`` dicts by namespace.
+
+    If *namespaces* is ``None`` every hit passes through (no filtering).
+    """
+    if namespaces is None:
+        return hits
+    return [
+        hit for hit in hits
+        if get_namespace(str(hit.get("_source", {}).get("place_id", ""))) in namespaces
+    ]
+
+
+def parse_delimited_param(value, upper=False) -> list[str] | None:
+    """
+    Normalise a filter parameter that may arrive as a JSON list, a
+    comma-delimited string, or ``None``.
+
+    Returns a list of stripped strings (optionally upper-cased), or
+    ``None`` when nothing was provided.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        items = [v.strip() for v in value.split(",") if v.strip()]
+    elif isinstance(value, (list, tuple)):
+        items = [str(v).strip() for v in value if str(v).strip()]
+    else:
+        return None
+    if upper:
+        items = [v.upper() for v in items]
+    return items or None
+
+
+def is_crc_place_id(raw_id: str) -> bool:
+    """
+    Return True if raw_id is a CRC-namespaced place identifier (e.g. ``gn:745044``).
+    Legacy IDs are plain integers (e.g. ``12345``).
+    """
+    return not raw_id.isdigit()
+
 # Property ID to required serializer fields mapping
 PROPERTY_FIELD_MAP = {
     # Place properties
@@ -209,6 +287,13 @@ def build_es_query(params, size=100):
         fclasses.append("X")
         q["query"]["bool"]["must"].append({"terms": {"fclasses": fclasses}})
 
+    # AAT place types (types.identifier)
+    types = params.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        q["query"]["bool"]["must"].append({"terms": {"types.identifier": types}})
+
     # temporal
     if params.get("temporal"):
         current_year = datetime.now().year
@@ -391,6 +476,107 @@ def format_extend_row(entity, properties, request=None):
                 row[pid] = wrap_value(value)
             except Exception as e:
                 logger.warning(f"Error extracting {pid} for {entity_type} {entity.id}: {e}")
+                row[pid] = []
+        else:
+            row[pid] = []
+
+    return row
+
+
+def format_crc_extend_row(crc_place: dict, properties: list) -> dict:
+    """
+    Build an OpenRefine extend row from CRC gateway place data.
+
+    ``crc_place`` has the raw shape returned by the gateway::
+
+        {
+            "place_id": "gn:745044",
+            "title": "Istanbul",
+            "names": [{"label": "Constantinople", "lang": "en"}, ...],
+            "ccodes": ["TR"],
+            "geometries": [{...}],
+            ...
+        }
+
+    Only the properties requested in ``properties`` are extracted.
+    Unknown property IDs produce empty lists (same as the legacy path).
+    """
+    title = crc_place.get("title", "")
+    names_raw = crc_place.get("names", [])
+    ccodes = crc_place.get("ccodes", [])
+    place_id = str(crc_place.get("place_id", ""))
+    geometries = crc_place.get("geometries", [])
+    fclasses = crc_place.get("fclasses", [])
+    types_raw = crc_place.get("types", [])
+
+    # Build toponym list in legacy style
+    toponyms = [n.get("label", "") for n in names_raw if n.get("label")]
+    if title and title not in toponyms:
+        toponyms.insert(0, title)
+
+    # Build basic geometry data
+    geojson_geoms = []
+    centroids = []
+    for g in geometries:
+        if isinstance(g, dict):
+            if g.get("type") and g.get("coordinates"):
+                geojson_geoms.append(g)
+            elif isinstance(g.get("location"), dict):
+                loc = g["location"]
+                if loc.get("type") and loc.get("coordinates"):
+                    geojson_geoms.append(loc)
+    rp = crc_place.get("repr_point")
+    if rp and len(rp) == 2:
+        centroids.append(f"{rp[1]}, {rp[0]}")
+
+    # Build extractors keyed by property ID
+    extractors = {
+        "whg:names_canonical": lambda: title,
+        "whg:names_array": lambda: [{"toponym": t} for t in toponyms],
+        "whg:names_summary": lambda: toponyms,
+        "whg:id_short": lambda: place_id,
+        "whg:id_object": lambda: {"id": place_id, "label": title},
+        "whg:geometry_geojson": lambda: geojson_geoms,
+        "whg:geometry_centroid": lambda: centroids,
+        "whg:geometry_bbox": lambda: [],  # not available from gateway
+        "whg:geometry_wkt": lambda: [],  # not available from gateway
+        "whg:countries_codes": lambda: ccodes,
+        "whg:countries_objects": lambda: [
+            {"code": c, "label": COUNTRY_LABELS.get(c, c)} for c in ccodes
+        ],
+        "whg:classes_codes": lambda: fclasses,
+        "whg:classes_objects": lambda: [
+            FCLASS_MAP.get(fc, {"code": fc, "label": "Unknown", "reference": ""})
+            for fc in fclasses
+        ],
+        "whg:types_objects": lambda: types_raw,
+        "whg:temporal_objects": lambda: [],  # not yet available from gateway
+        "whg:temporal_years": lambda: [],
+        "whg:dataset": lambda: None,
+        "whg:lpf_feature": lambda: {
+            "@context": "https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld",
+            "type": "Feature",
+            "properties": {
+                "id": place_id,
+                "title": title,
+                "ccodes": ccodes,
+                "names": [{"toponym": t} for t in toponyms],
+            },
+            "geometry": geojson_geoms[0] if len(geojson_geoms) == 1 else (
+                {"type": "GeometryCollection", "geometries": geojson_geoms} if geojson_geoms else None
+            ),
+        },
+    }
+
+    row = {}
+    for prop in properties:
+        pid = prop.get("id") if isinstance(prop, dict) else prop
+        extractor = extractors.get(pid)
+        if extractor:
+            try:
+                row[pid] = wrap_value(extractor())
+            except Exception as e:
+                logger.warning("Error extracting %s for CRC place %s: %s", pid, place_id, e)
                 row[pid] = []
         else:
             row[pid] = []

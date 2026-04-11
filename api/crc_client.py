@@ -14,10 +14,10 @@ All calls are fail-safe: on timeout, connection error, or HTTP error,
 a warning is logged and an empty list is returned.  Legacy results are
 always returned regardless of CRC availability.
 
-Access is gated by the ``SiteSetting.crc_gateway_mode`` admin setting:
-  - ``disabled``   → never call the gateway
-  - ``admin_only`` → only for staff / superuser requests (useful for testing)
-  - ``all_users``  → every authenticated request
+Access is environment-controlled:
+  - ``CRC_GATEWAY_URL`` must be set (e.g. in env vars or local_settings).
+  - The requesting user must be authenticated.
+  - To test before going live, configure the URL only on the dev server.
 """
 
 import logging
@@ -28,36 +28,25 @@ from django.conf import settings
 logger = logging.getLogger("reconciliation")
 
 
-def _is_enabled_for_user(user) -> bool:
+def _is_enabled(user=None) -> bool:
     """
-    Check whether CRC gateway integration should fire for *this* user.
+    Check whether CRC gateway integration is active.
 
-    Reads the ``SiteSetting.crc_gateway_mode`` value from the database
-    (auto-created on first access) and compares against the user object.
+    The gateway is enabled when:
+    1. ``CRC_GATEWAY_URL`` is configured in settings (env var or local_settings).
+    2. The user is authenticated.
+
+    This keeps gating purely environment-based: configure the URL on dev
+    for testing, leave it unset on production until ready to go live.
     """
-    # Must have a gateway URL configured at all
-    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+    gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")
+    if not gateway_url:
         return False
 
-    # Import here to avoid circular imports at module level
-    from main.models import SiteSetting
-
-    try:
-        mode = SiteSetting.load().crc_gateway_mode
-    except Exception:
-        # DB not migrated yet, table missing, etc. — fail safe
+    if user is None or not user.is_authenticated:
         return False
 
-    if mode == "disabled":
-        return False
-
-    if mode == "admin_only":
-        return user is not None and user.is_authenticated and (user.is_staff or user.is_superuser)
-
-    if mode == "all_users":
-        return user is not None and user.is_authenticated
-
-    return False
+    return True
 
 
 def _gateway_url() -> str:
@@ -80,7 +69,7 @@ def _headers() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
+def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway ``/api/reconcile`` endpoint.
 
@@ -89,13 +78,17 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
             in reconcile.py.  Keys used: ``query_text``, ``raw`` (original
             params dict), ``bounds``, ``size``.
         user: The Django User instance from ``request.user``.
+        namespaces: Optional set of CRC namespace codes to restrict
+            results to (e.g. ``{"gn", "tgn"}``).  ``None`` means no
+            filtering.  The set should *not* contain ``"whg"`` (legacy
+            places are handled separately).
 
     Returns:
         List of dicts in the same shape as ES ``hits.hits`` entries, i.e.
         ``{"_id": ..., "_score": ..., "_source": {...}}``, ready for
         ``make_candidate()``.  Returns ``[]`` on any error.
     """
-    if not _is_enabled_for_user(user):
+    if not _is_enabled(user):
         return []
 
     # Build the gateway request body from the normalised query
@@ -114,6 +107,20 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
             countries = json.loads(countries)
         body["ccodes"] = countries
 
+    # Feature classes (e.g. ["A", "P"])
+    fclasses = normalised_query.get("fclasses") or raw.get("fclasses")
+    if fclasses:
+        if isinstance(fclasses, str):
+            fclasses = [f.strip() for f in fclasses.split(",") if f.strip()]
+        body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    types = normalised_query.get("types") or raw.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        body["types"] = types
+
     # Spatial bounds
     bounds = normalised_query.get("bounds")
     if bounds:
@@ -127,13 +134,20 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
     if end is not None:
         body["end_year"] = int(end)
 
+    # Namespace filter (e.g. ["gn", "tgn"])
+    if namespaces:
+        body["namespaces"] = sorted(namespaces)
+
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway /api/reconcile response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except requests.Timeout:
@@ -152,16 +166,86 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
     return _adapt_hits(data)
 
 
-def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None) -> list[dict]:
+def crc_fetch_places(place_ids: list[str], user=None) -> dict[str, dict]:
+    """
+    Fetch full place data from the CRC gateway by namespaced IDs.
+
+    Calls ``GET /api/places?ids=gn:745044,gn:123456`` (or POST with body).
+
+    Args:
+        place_ids: List of namespaced CRC place IDs, e.g. ``["gn:745044", "tgn:7010731"]``.
+        user: Django User instance.
+
+    Returns:
+        Dict mapping each place_id to its data dict (with keys like
+        ``title``, ``names``, ``ccodes``, ``geometries``, etc.).
+        Missing/errored IDs are omitted.  Returns ``{}`` on any error.
+    """
+    if not _is_enabled(user):
+        return {}
+
+    if not place_ids:
+        return {}
+
+    try:
+        url = f"{_gateway_url()}/api/places"
+        logger.info("CRC gateway GET %s  ids=%s", url, place_ids)
+        resp = requests.post(
+            url,
+            json={"ids": place_ids},
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        logger.info("CRC gateway /api/places response: %s", resp.status_code)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.Timeout:
+        logger.warning("CRC gateway /api/places timeout after %ss", _timeout())
+        return {}
+    except requests.ConnectionError as e:
+        logger.warning("CRC gateway /api/places connection error: %s", e)
+        return {}
+    except requests.HTTPError as e:
+        logger.warning("CRC gateway /api/places HTTP error: %s — extend unavailable for CRC entities", e)
+        return {}
+    except Exception as e:
+        logger.warning("CRC gateway /api/places unexpected error: %s", e)
+        return {}
+
+    # Expected response: {"places": [{"place_id": "gn:745044", "title": ..., ...}, ...]}
+    result = {}
+    for place in data.get("places", data.get("hits", [])):
+        pid = str(place.get("place_id", ""))
+        if pid:
+            result[pid] = place
+
+    return result
+
+
+def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None,
+                       namespaces: set[str] | None = None,
+                       ccodes: list[str] | None = None,
+                       fclasses: list[str] | None = None,
+                       types: list[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway for suggest/typeahead results.
 
     Uses the same ``/api/reconcile`` endpoint with a small size.
 
+    Args:
+        prefix: The search prefix text.
+        mode: Search mode (``"starts"`` or ``"fuzzy"``).
+        limit: Maximum number of results.
+        user: Django User instance.
+        namespaces: Optional set of CRC namespace codes to filter by.
+        ccodes: Optional list of ISO country codes to filter by.
+        fclasses: Optional list of GeoNames feature classes to filter by.
+        types: Optional list of AAT type identifiers to filter by.
+
     Returns:
         List of adapted ES-style hit dicts.
     """
-    if not _is_enabled_for_user(user):
+    if not _is_enabled(user):
         return []
 
     body = {
@@ -170,13 +254,32 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=
         "size": limit,
     }
 
+    # Namespace filter (e.g. ["gn", "tgn"])
+    if namespaces:
+        body["namespaces"] = sorted(namespaces)
+
+    # Country codes (e.g. ["US", "GB"])
+    if ccodes:
+        body["ccodes"] = ccodes
+
+    # Feature classes (e.g. ["A", "P"])
+    if fclasses:
+        body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    if types:
+        body["types"] = types
+
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway suggest POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway suggest response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -231,10 +334,41 @@ def _adapt_hits(data: dict) -> list[dict]:
         if title and title.lower() not in searchy:
             searchy.append(title.lower())
 
-        # Build geoms in legacy format
+        # Build geoms in legacy format — prefer full geometries,
+        # fall back to repr_point.  The gateway may return any of:
+        #   • {type, coordinates}  — full GeoJSON geometry
+        #   • {location: {type, coordinates}}  — ES-style wrapper
+        #   • {repr_point: [lon, lat]}  — centroid only
         geoms = []
         for g in geometries:
-            rp = g.get("repr_point")
+            if isinstance(g, dict):
+                # Full GeoJSON geometry object
+                if g.get("type") and g.get("coordinates"):
+                    geoms.append({
+                        "location": {
+                            "type": g["type"],
+                            "coordinates": g["coordinates"],
+                        }
+                    })
+                # ES-style wrapper
+                elif isinstance(g.get("location"), dict):
+                    loc = g["location"]
+                    if loc.get("type") and loc.get("coordinates"):
+                        geoms.append({"location": loc})
+                # Legacy repr_point inside a geometries entry
+                else:
+                    rp = g.get("repr_point")
+                    if rp and len(rp) == 2:
+                        geoms.append({
+                            "location": {
+                                "type": "Point",
+                                "coordinates": rp,
+                            }
+                        })
+
+        # Fall back to top-level repr_point when no full geometries exist
+        if not geoms:
+            rp = hit.get("repr_point")
             if rp and len(rp) == 2:
                 geoms.append({
                     "location": {
@@ -259,4 +393,3 @@ def _adapt_hits(data: dict) -> list[dict]:
         })
 
     return adapted
-
