@@ -24,6 +24,76 @@ es = settings.ES_CONN
 
 ALLOWED_TYPES = {"place", "period"}
 
+# The pseudo-namespace for legacy WHG places (numeric IDs stored in local ES/DB).
+WHG_NAMESPACE = "whg"
+
+
+def get_namespace(place_id: str) -> str:
+    """
+    Extract the namespace from a place identifier.
+
+    - Legacy numeric IDs (e.g. ``"12345"``) → ``"whg"``
+    - Namespaced CRC IDs (e.g. ``"gn:745044"``) → ``"gn"``
+    """
+    place_id = str(place_id)
+    if place_id.isdigit():
+        return WHG_NAMESPACE
+    if ":" in place_id:
+        return place_id.split(":", 1)[0].lower()
+    return WHG_NAMESPACE
+
+
+def parse_namespaces(namespaces_param) -> set[str] | None:
+    """
+    Parse a comma-delimited namespace string into a set of lowercase codes.
+
+    Returns ``None`` when the parameter is absent/empty, meaning *all*
+    namespaces (no filtering).  Accepts a string (``"gn,tgn"``) or a
+    list (``["gn", "tgn"]``).
+    """
+    if not namespaces_param:
+        return None
+    if isinstance(namespaces_param, (list, tuple)):
+        codes = {ns.strip().lower() for ns in namespaces_param if isinstance(ns, str) and ns.strip()}
+    else:
+        codes = {ns.strip().lower() for ns in str(namespaces_param).split(",") if ns.strip()}
+    return codes or None
+
+
+def filter_hits_by_namespace(hits: list[dict], namespaces: set[str] | None) -> list[dict]:
+    """
+    Filter ES-style ``hits.hits[]`` dicts by namespace.
+
+    If *namespaces* is ``None`` every hit passes through (no filtering).
+    """
+    if namespaces is None:
+        return hits
+    return [
+        hit for hit in hits
+        if get_namespace(str(hit.get("_source", {}).get("place_id", ""))) in namespaces
+    ]
+
+
+def parse_delimited_param(value, upper=False) -> list[str] | None:
+    """
+    Normalise a filter parameter that may arrive as a JSON list, a
+    comma-delimited string, or ``None``.
+
+    Returns a list of stripped strings (optionally upper-cased), or
+    ``None`` when nothing was provided.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        items = [v.strip() for v in value.split(",") if v.strip()]
+    elif isinstance(value, (list, tuple)):
+        items = [str(v).strip() for v in value if str(v).strip()]
+    else:
+        return None
+    if upper:
+        items = [v.upper() for v in items]
+    return items or None
+
 
 def is_crc_place_id(raw_id: str) -> bool:
     """
@@ -216,6 +286,13 @@ def build_es_query(params, size=100):
             fclasses = fclasses.split(",")
         fclasses.append("X")
         q["query"]["bool"]["must"].append({"terms": {"fclasses": fclasses}})
+
+    # AAT place types (types.identifier)
+    types = params.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        q["query"]["bool"]["must"].append({"terms": {"types.identifier": types}})
 
     # temporal
     if params.get("temporal"):

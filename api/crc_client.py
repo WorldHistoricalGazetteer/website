@@ -69,7 +69,7 @@ def _headers() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
+def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway ``/api/reconcile`` endpoint.
 
@@ -78,6 +78,10 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
             in reconcile.py.  Keys used: ``query_text``, ``raw`` (original
             params dict), ``bounds``, ``size``.
         user: The Django User instance from ``request.user``.
+        namespaces: Optional set of CRC namespace codes to restrict
+            results to (e.g. ``{"gn", "tgn"}``).  ``None`` means no
+            filtering.  The set should *not* contain ``"whg"`` (legacy
+            places are handled separately).
 
     Returns:
         List of dicts in the same shape as ES ``hits.hits`` entries, i.e.
@@ -103,6 +107,20 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
             countries = json.loads(countries)
         body["ccodes"] = countries
 
+    # Feature classes (e.g. ["A", "P"])
+    fclasses = normalised_query.get("fclasses") or raw.get("fclasses")
+    if fclasses:
+        if isinstance(fclasses, str):
+            fclasses = [f.strip() for f in fclasses.split(",") if f.strip()]
+        body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    types = normalised_query.get("types") or raw.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        body["types"] = types
+
     # Spatial bounds
     bounds = normalised_query.get("bounds")
     if bounds:
@@ -115,6 +133,10 @@ def crc_reconcile_search(normalised_query: dict, user=None) -> list[dict]:
         body["start_year"] = int(start)
     if end is not None:
         body["end_year"] = int(end)
+
+    # Namespace filter (e.g. ["gn", "tgn"])
+    if namespaces:
+        body["namespaces"] = sorted(namespaces)
 
     try:
         url = f"{_gateway_url()}/api/reconcile"
@@ -200,11 +222,25 @@ def crc_fetch_places(place_ids: list[str], user=None) -> dict[str, dict]:
     return result
 
 
-def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None) -> list[dict]:
+def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None,
+                       namespaces: set[str] | None = None,
+                       ccodes: list[str] | None = None,
+                       fclasses: list[str] | None = None,
+                       types: list[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway for suggest/typeahead results.
 
     Uses the same ``/api/reconcile`` endpoint with a small size.
+
+    Args:
+        prefix: The search prefix text.
+        mode: Search mode (``"starts"`` or ``"fuzzy"``).
+        limit: Maximum number of results.
+        user: Django User instance.
+        namespaces: Optional set of CRC namespace codes to filter by.
+        ccodes: Optional list of ISO country codes to filter by.
+        fclasses: Optional list of GeoNames feature classes to filter by.
+        types: Optional list of AAT type identifiers to filter by.
 
     Returns:
         List of adapted ES-style hit dicts.
@@ -217,6 +253,22 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=
         "mode": mode,
         "size": limit,
     }
+
+    # Namespace filter (e.g. ["gn", "tgn"])
+    if namespaces:
+        body["namespaces"] = sorted(namespaces)
+
+    # Country codes (e.g. ["US", "GB"])
+    if ccodes:
+        body["ccodes"] = ccodes
+
+    # Feature classes (e.g. ["A", "P"])
+    if fclasses:
+        body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    if types:
+        body["types"] = types
 
     try:
         url = f"{_gateway_url()}/api/reconcile"
