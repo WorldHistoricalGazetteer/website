@@ -16,10 +16,125 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from api.authentication import AuthenticatedAPIView
+from api.crc_client import crc_fetch_places
 from api.download_file import FileCache, stream_live, stream_from_file
+from api.reconcile_helpers import is_crc_place_id
 from api.schemas import entity_schema, TYPE_MAP
 
 logger = logging.getLogger('reconciliation')
+
+
+def _fetch_crc_place(place_id: str, user=None) -> dict | None:
+    """Fetch a single CRC place from the gateway, or return None."""
+    result = crc_fetch_places([place_id], user=user)
+    return result.get(place_id)
+
+
+def _crc_place_to_lpf(crc_place: dict) -> dict:
+    """
+    Convert CRC gateway place data to a Linked Places Format (LPF) feature.
+    """
+    place_id = str(crc_place.get("place_id", ""))
+    title = crc_place.get("title", "")
+    names_raw = crc_place.get("names", [])
+    ccodes = crc_place.get("ccodes", [])
+    fclasses = crc_place.get("fclasses", [])
+    types_raw = crc_place.get("types", [])
+    geometries = crc_place.get("geometries", [])
+
+    # Build names in LPF format
+    names = []
+    for n in names_raw:
+        label = n.get("label", "")
+        if label:
+            name_obj = {"toponym": label}
+            lang = n.get("lang")
+            if lang:
+                name_obj["lang"] = lang
+            names.append(name_obj)
+
+    # Build geometry
+    geojson_geoms = []
+    for g in geometries:
+        if isinstance(g, dict):
+            if g.get("type") and g.get("coordinates"):
+                geojson_geoms.append(g)
+            elif isinstance(g.get("location"), dict):
+                loc = g["location"]
+                if loc.get("type") and loc.get("coordinates"):
+                    geojson_geoms.append(loc)
+    # Fall back to repr_point
+    if not geojson_geoms:
+        rp = crc_place.get("repr_point")
+        if rp and len(rp) == 2:
+            geojson_geoms.append({"type": "Point", "coordinates": rp})
+
+    if len(geojson_geoms) == 1:
+        geometry = geojson_geoms[0]
+    elif geojson_geoms:
+        geometry = {"type": "GeometryCollection", "geometries": geojson_geoms}
+    else:
+        geometry = None
+
+    feature = {
+        "@context": "https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld",
+        "type": "Feature",
+        "properties": {
+            "title": title,
+            "ccodes": ccodes,
+        },
+        "@id": place_id,
+        "names": names,
+        "types": types_raw,
+        "geometry": geometry,
+    }
+
+    if fclasses:
+        feature["properties"]["fclasses"] = fclasses
+
+    return feature
+
+
+def _crc_place_to_preview(crc_place: dict) -> dict:
+    """
+    Convert CRC gateway place data to a dict compatible with the
+    place preview template.
+    """
+    place_id = str(crc_place.get("place_id", ""))
+    title = crc_place.get("title", "")
+    names_raw = crc_place.get("names", [])
+    ccodes = crc_place.get("ccodes", [])
+    fclasses = crc_place.get("fclasses", [])
+    types_raw = crc_place.get("types", [])
+
+    # Build names in the same format as PlacePreviewSerializer
+    names = []
+    for n in names_raw:
+        label = n.get("label", "")
+        if label:
+            names.append({"toponym": label})
+
+    # Build types — match PlaceTypeSerializer output shape
+    types = []
+    for t in types_raw:
+        if isinstance(t, dict):
+            types.append(t)
+        elif isinstance(t, str):
+            types.append({"label": t})
+
+    # Derive namespace label for "dataset" field
+    ns = place_id.split(":", 1)[0] if ":" in place_id else "CRC"
+
+    return {
+        "id": place_id,
+        "title": title,
+        "names": names,
+        "types": types,
+        "ccodes": ccodes,
+        "fclasses": fclasses,
+        "year_ranges": [],
+        "dataset": f"[{ns.upper()}]",
+    }
 
 
 @extend_schema(tags=["Schema"])
@@ -45,6 +160,12 @@ class EntityDetailView(AuthenticatedAPIView):
         config = TYPE_MAP.get(obj_type)
         if not config:
             raise Http404(f"Unsupported object type: {obj_type}")
+
+        # CRC places have no Django detail page — redirect to the feature API
+        if obj_type == "place" and is_crc_place_id(id):
+            return HttpResponseRedirect(
+                reverse("entity-api", kwargs={"entity_id": entity_id})
+            )
 
         # Use the appropriate queryset function, defaulting to all objects
         qs_fn = config.get("detail_queryset") or config.get("preview_queryset") or (
@@ -95,6 +216,16 @@ class EntityFeatureView(AuthenticatedAPIView):
         filetype = request.GET.get('filetype', 'lpf').lower()
         if filetype not in ['lpf', 'tsv']:
             filetype = 'lpf'
+
+        # CRC places — fetch from gateway and return LPF
+        if obj_type == "place" and is_crc_place_id(obj_id):
+            if filetype != 'lpf':
+                raise Http404("TSV export is not available for CRC places.")
+            crc_place = _fetch_crc_place(obj_id, user=request.user)
+            if not crc_place:
+                raise Http404(f"CRC place not found: {obj_id}")
+            lpf = _crc_place_to_lpf(crc_place)
+            return Response(lpf, status=status.HTTP_200_OK)
 
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
         qs = queryset_fn(request.user)
@@ -171,6 +302,19 @@ class EntityPreviewView(AuthenticatedAPIView):
         config = TYPE_MAP.get(obj_type)
         if not config:
             return HttpResponse(f"Unsupported object type: {obj_type}", status=404)
+
+        # CRC places — fetch from gateway and render preview from dict
+        if obj_type == "place" and is_crc_place_id(id):
+            crc_place = _fetch_crc_place(id, user=request.user)
+            if not crc_place:
+                return HttpResponse(f"CRC place not found: {id}", status=404)
+            preview_data = _crc_place_to_preview(crc_place)
+            html = render_to_string(
+                f"preview/{obj_type}.html",
+                {"object": preview_data},
+                request=request,
+            )
+            return HttpResponse(html, content_type="text/html; charset=UTF-8")
 
         queryset_fn = config.get("preview_queryset", lambda user: config["model"].objects)
         qs = queryset_fn(request.user)
