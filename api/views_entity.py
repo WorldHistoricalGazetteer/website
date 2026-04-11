@@ -30,7 +30,7 @@ def _fetch_crc_place(place_id: str, user=None) -> dict | None:
     return result.get(place_id)
 
 
-def _crc_place_to_lpf(crc_place: dict) -> dict:
+def _crc_place_to_lpf(crc_place: dict, request=None) -> dict:
     """
     Convert CRC gateway place data to a Linked Places Format (LPF) feature.
     """
@@ -41,6 +41,13 @@ def _crc_place_to_lpf(crc_place: dict) -> dict:
     fclasses = crc_place.get("fclasses", [])
     types_raw = crc_place.get("types", [])
     geometries = crc_place.get("geometries", [])
+    links_raw = crc_place.get("links", [])
+
+    # Build a proper URI for @id
+    if request is not None:
+        entity_uri = request.build_absolute_uri(f"/entity/place:{place_id}/api")
+    else:
+        entity_uri = place_id
 
     # Build names in LPF format
     names = []
@@ -76,23 +83,102 @@ def _crc_place_to_lpf(crc_place: dict) -> dict:
     else:
         geometry = None
 
+    # Build links in LPF format
+    links = []
+    for link in links_raw:
+        if isinstance(link, dict):
+            links.append(link)
+        elif isinstance(link, str):
+            links.append({"type": "closeMatch", "identifier": link})
+
     feature = {
         "@context": "https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld",
         "type": "Feature",
         "properties": {
             "title": title,
             "ccodes": ccodes,
+            "source_id": place_id,
         },
-        "@id": place_id,
+        "@id": entity_uri,
         "names": names,
         "types": types_raw,
         "geometry": geometry,
+        "links": links,
+        "descriptions": [],
+        "depictions": [],
+        "relations": [],
+        "when": {},
     }
 
     if fclasses:
         feature["properties"]["fclasses"] = fclasses
 
     return feature
+
+
+def _legacy_place_to_lpf(serialized: dict, request=None) -> dict:
+    """
+    Transform PlaceFeatureSerializer output into a proper LPF v1.1 Feature.
+
+    The serializer returns a flat dict with Django model fields; this reshapes
+    it into the Linked Places Format with ``@context``, ``type: "Feature"``,
+    ``@id``, top-level ``names``/``types``/``links``/``when``, and a standard
+    GeoJSON ``geometry``.
+    """
+    place_id = serialized.get("id", "")
+
+    # Build @id as a dereferenceable URI
+    if request is not None:
+        entity_uri = request.build_absolute_uri(f"/entity/place:{place_id}/api")
+    else:
+        entity_uri = serialized.get("url") or f"place:{place_id}"
+
+    # Build geometry from serialized geoms list
+    geojson_geoms = []
+    for g in serialized.get("geoms", []):
+        geojson = g.get("geojson") or g.get("geom")
+        if isinstance(geojson, dict) and geojson.get("type") and geojson.get("coordinates"):
+            geojson_geoms.append(geojson)
+
+    if len(geojson_geoms) == 1:
+        geometry = geojson_geoms[0]
+    elif geojson_geoms:
+        geometry = {"type": "GeometryCollection", "geometries": geojson_geoms}
+    else:
+        geometry = None
+
+    # Build temporal "when" from serialized "whens" list
+    whens = serialized.get("whens", [])
+    when = {}
+    if whens:
+        # Merge all timespan entries into a single "when" object
+        timespans = []
+        for w in whens:
+            timespans.extend(w.get("timespans", []))
+        if timespans:
+            when = {"timespans": timespans}
+
+    return {
+        "@context": "https://raw.githubusercontent.com/LinkedPasts/linked-places/master/linkedplaces-context-v1.1.jsonld",
+        "type": "Feature",
+        "@id": entity_uri,
+        "properties": {
+            "title": serialized.get("title", ""),
+            "ccodes": serialized.get("ccodes", []),
+            "fclasses": serialized.get("fclasses", []),
+            "dataset": serialized.get("dataset", ""),
+            "dataset_id": serialized.get("dataset_id"),
+            "src_id": serialized.get("src_id"),
+        },
+        "geometry": geometry,
+        "names": serialized.get("names", []),
+        "types": serialized.get("types", []),
+        "links": serialized.get("links", []),
+        "relations": serialized.get("related", []),
+        "descriptions": serialized.get("descriptions", []),
+        "depictions": serialized.get("depictions", []),
+        "when": when,
+    }
 
 
 def _crc_place_to_preview(crc_place: dict) -> dict:
@@ -224,7 +310,7 @@ class EntityFeatureView(AuthenticatedAPIView):
             crc_place = _fetch_crc_place(obj_id, user=request.user)
             if not crc_place:
                 raise Http404(f"CRC place not found: {obj_id}")
-            lpf = _crc_place_to_lpf(crc_place)
+            lpf = _crc_place_to_lpf(crc_place, request=request)
             return Response(lpf, status=status.HTTP_200_OK)
 
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
@@ -235,7 +321,11 @@ class EntityFeatureView(AuthenticatedAPIView):
         serializer_class = config.get("feature_serializer", None)
         if serializer_class and filetype == 'lpf':
             serializer = serializer_class(obj, context={"request": request})
-            return Response(serializer.data, status=status.HTTP_200_OK)
+            data = serializer.data
+            # Transform legacy place serializer output into proper LPF
+            if obj_type == "place":
+                data = _legacy_place_to_lpf(data, request=request)
+            return Response(data, status=status.HTTP_200_OK)
 
         # Determine cache path
         cache_path = FileCache.get_cache_path(obj_type, obj_id, filetype=filetype)

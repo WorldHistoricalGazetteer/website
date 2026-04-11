@@ -9,7 +9,7 @@ across Reconcile, Suggest, and Extend endpoints.
 Run against dev before promoting to production.
 
 Usage:
-    python tests/test_reconciliation_filters.py [--base-url URL] [--token TOKEN]
+    python3 tests/test_reconciliation_filters.py [--base-url URL] [--token TOKEN]
 
 Defaults to dev.whgazetteer.org.
 """
@@ -357,7 +357,36 @@ if all_ids:
     r = session.get(f"{base}/entity/{entity_id}/api", params=_params())
     body = check(f"GET /entity/{entity_id}/api  (legacy LPF)", r)
     if body:
-        print(f"           title = {body.get('title', body.get('properties', {}).get('title', ''))}")
+        title = body.get("title", body.get("properties", {}).get("title", ""))
+        print(f"           title = {title}")
+        # Validate LPF structure
+        lpf_issues = []
+        if not body.get("@context"):
+            lpf_issues.append("missing @context")
+        if body.get("type") != "Feature":
+            lpf_issues.append(f"type={body.get('type')} (expected Feature)")
+        if not body.get("@id"):
+            lpf_issues.append("missing @id")
+        if not body.get("properties", {}).get("title"):
+            lpf_issues.append("missing properties.title")
+        if not body.get("names"):
+            lpf_issues.append("missing names")
+        else:
+            for n in body["names"][:3]:
+                if "toponym" not in n:
+                    lpf_issues.append(f"name entry missing 'toponym': {n}")
+                    break
+        geom = body.get("geometry")
+        if geom is not None and not geom.get("type"):
+            lpf_issues.append("geometry present but missing 'type'")
+        if not isinstance(body.get("geometry"), (dict, type(None))):
+            lpf_issues.append(f"geometry is non-standard type: {type(body.get('geometry'))}")
+        if lpf_issues:
+            FAIL += 1
+            PASS -= 1  # undo the check() pass
+            print(f"           LPF ISSUES: {lpf_issues}")
+        else:
+            print(f"           LPF structure: valid ✓")
 else:
     print("  [SKIP]  No place_id — skipping legacy entity feature test")
 
@@ -387,9 +416,35 @@ section("16. Entity API — CRC place feature (LPF)")
 crc_entity_id = "place:gn:745044"  # Istanbul
 r = session.get(f"{base}/entity/{crc_entity_id}/api", params=_params())
 body = check(f"GET /entity/{crc_entity_id}/api  (CRC LPF)", r)
-if body and body.get("@id"):
+if body and body.get("type") == "Feature":
     print(f"           @id = {body.get('@id')}")
     print(f"           title = {body.get('properties', {}).get('title', '')}")
+    # Validate LPF structure
+    lpf_issues = []
+    if not body.get("@context"):
+        lpf_issues.append("missing @context")
+    if body.get("type") != "Feature":
+        lpf_issues.append(f"type={body.get('type')} (expected Feature)")
+    if not body.get("@id"):
+        lpf_issues.append("missing @id")
+    if not body.get("properties", {}).get("title"):
+        lpf_issues.append("missing properties.title")
+    if not body.get("names"):
+        lpf_issues.append("missing names")
+    else:
+        for n in body["names"][:3]:
+            if "toponym" not in n:
+                lpf_issues.append(f"name entry missing 'toponym': {n}")
+                break
+    geom = body.get("geometry")
+    if geom is not None and not geom.get("type"):
+        lpf_issues.append("geometry present but missing 'type'")
+    if lpf_issues:
+        FAIL += 1
+        PASS -= 1  # undo the check() pass
+        print(f"           LPF ISSUES: {lpf_issues}")
+    else:
+        print(f"           LPF structure: valid ✓")
 
 
 # ------------------------------------------------------------------
