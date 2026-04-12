@@ -373,12 +373,9 @@ Promise.all([
         exactBtn.setAttribute('data-bs-original-title', exactMatch ? exactMatchMessages.on : exactMatchMessages.off);
     });
 
-    // --- Wire clustering toggle ---
-    $('#clustering_toggle').on('change', function () {
-        clusterResults = this.checked;
-        updateActiveFiltersBadge();
-        toggleButtonState();
-    });
+    // --- Clustering is now managed via the results panel (similarity threshold slider) ---
+    // The clustering_toggle checkbox has been removed from the filters panel.
+    // clusterResults stays true; dynamic clustering will be controlled post-search.
 
     // --- Tab switching: mutual exclusion of temporal authority (§10) ---
     const tabEl = document.getElementById('timespaceTab');
@@ -622,10 +619,8 @@ function clearResults() {
     $('#exact_match_toggle').removeClass('active').attr('aria-pressed', 'false');
     exactBtn.setAttribute('data-bs-original-title', exactMatchMessages.off);
 
-    // Reset clustering toggle
+    // Reset clustering (always on — managed via results panel)
     clusterResults = true;
-    const clusterToggle = document.getElementById('clustering_toggle');
-    if (clusterToggle) clusterToggle.checked = true;
 
     $('#search_content')
         .toggleClass('initial', true)

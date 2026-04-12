@@ -121,7 +121,6 @@ class AtlasPageView(TemplateView):
             {'id': 'ohm', 'label': 'OHM (Historical)', 'enabled': True},
             {'id': 'periodo', 'label': 'PeriodO', 'enabled': False, 'coming_soon': True},
             {'id': 'cliopatria', 'label': 'Cliopatria', 'enabled': False, 'coming_soon': True},
-            {'id': 'dplace', 'label': 'D-PLACE', 'enabled': False, 'coming_soon': True},
             {'id': 'nativeland', 'label': 'NativeLand', 'enabled': False, 'coming_soon': True},
         ])
 

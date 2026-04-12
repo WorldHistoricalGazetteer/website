@@ -55,10 +55,11 @@ const ALL_TIERS = [
     { value: 'admin8',         label: 'Ward',            adminLevel: 8 },
 ];
 
-/** Namespace options: Modern (OSM) vs Historical (OHM). */
+/** Namespace options: Modern (OSM) vs Historical (OHM) vs Miscellaneous. */
 const NAMESPACE_OPTIONS = [
-    { value: 'osm', label: 'Modern' },
-    { value: 'ohm', label: 'Historical' },
+    { value: 'osm', label: 'Modern', title: 'Modern administrative boundaries from OpenStreetMap' },
+    { value: 'ohm', label: 'Historical', title: 'Historical boundaries from OpenHistoricalMap' },
+    { value: 'osm_misc', label: 'Misc.', title: 'OSM/OHM miscellaneous boundary types — includes aboriginal lands, baronies, civil and political boundaries, climatic zones, geographic regions, historical and obsolete administrative divisions, indigenous territories, parishes, and other non-standard boundary classifications' },
 ];
 
 /* ───── Helpers ───── */
@@ -139,7 +140,8 @@ export default class RegionSelector {
                 <span class="namespace-toggle btn-group" role="group" aria-label="Boundary era">
                     ${NAMESPACE_OPTIONS.map(o => `
                         <button type="button" class="btn${o.value === this._currentNamespace ? ' active' : ''}"
-                                data-namespace="${o.value}">${o.label}</button>
+                                data-namespace="${o.value}"
+                                ${o.title ? `data-bs-toggle="tooltip" title="${o.title}"` : ''}>${o.label}</button>
                     `).join('')}
                 </span>
             `;

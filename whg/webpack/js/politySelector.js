@@ -15,7 +15,6 @@ import debounce from 'lodash/debounce';
 
 const POLITY_DATASETS = [
     { value: 'cliopatria', label: 'Cliopatria', title: 'Cliopatria — historical polities and empires' },
-    { value: 'dplace', label: 'D-PLACE', title: 'D-PLACE — cultural and linguistic regions' },
     { value: 'nativeland', label: 'NativeLand', title: 'NativeLand — indigenous territories, languages, and treaties' },
 ];
 

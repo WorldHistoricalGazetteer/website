@@ -172,16 +172,22 @@
                                 <input class="form-check-input authority-cb" type="checkbox" value="wd" checked>
                                 <span class="form-check-label">Wikidata</span>
                             </label>
+                            <label class="authority-item form-check"
+                                   data-bs-toggle="tooltip"
+                                   title="D-PLACE — cross-cultural dataset linking linguistic, environmental, and cultural data to ~1,400 societies worldwide. Contains point locations only (no polygons).">
+                                <input class="form-check-input authority-cb" type="checkbox" value="dplace">
+                                <span class="form-check-label">D-PLACE</span>
+                            </label>
                         </div>
                         <div class="filter-header d-flex align-items-center">
                             <span class="categories">clustering</span>
                             <i class="fas fa-info-circle ms-1 text-muted" style="font-size:0.75rem; cursor:help"
                                data-bs-toggle="tooltip"
-                               title="When enabled, linked place records from different sources are grouped together as a single result, showing the number of linked attestations. When disabled, every individual place record is returned separately."></i>
+                               title="Linked place records from different sources will be grouped together as a single result. The sensitivity of grouping is controlled using an interactive slider within the search results panel."></i>
                         </div>
-                        <div class="form-check form-switch mt-1 mb-1">
-                            <input class="form-check-input" type="checkbox" role="switch" id="clustering_toggle" checked>
-                            <label class="form-check-label small" for="clustering_toggle">Group linked records</label>
+                        <div class="small text-muted mt-1 mb-1 px-1">
+                            <i class="fas fa-layer-group me-1"></i>
+                            Clustering of linked records will be managed using a similarity threshold control within the returned search results.
                         </div>
                     </div>
                 </div>

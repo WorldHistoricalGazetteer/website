@@ -93,8 +93,8 @@ function getTourSteps() {
             popover: {
                 title: 'Territory Tab',
                 description:
-                    'Search historical polities (<strong>Cliopatria</strong>), cultural regions ' +
-                    '(<strong>D-PLACE</strong>), or indigenous territories (<strong>NativeLand</strong>). ' +
+                    'Search historical polities (<strong>Cliopatria</strong>) ' +
+                    'or indigenous territories (<strong>NativeLand</strong>). ' +
                     'Selecting a territory sets both the time range and spatial boundary. ' +
                     '<strong>Multiple territories</strong> can be selected, even across different datasets — ' +
                     'the temporal range becomes the union of all selected territories.',

@@ -44,8 +44,8 @@ export default class AreaSearchRouter {
             promises.push(this._searchPeriods(query, options));
         }
 
-        // Cliopatria/D-PLACE/NativeLand (future)
-        const polityDatasets = ['cliopatria', 'dplace', 'nativeland']
+        // Cliopatria/NativeLand (future)
+        const polityDatasets = ['cliopatria', 'nativeland']
             .filter(d => activeSources.includes(d));
         if (polityDatasets.length > 0) {
             promises.push(this._searchPolities(query, polityDatasets, options));

@@ -50,7 +50,6 @@ const SOURCE_TOOLTIPS = {
     ohm:        'OpenHistoricalMap — community-contributed historical boundaries and features',
     periodo:    'PeriodO — periods, events, and temporalities',
     cliopatria: 'Cliopatria — historical political entities',
-    dplace:     'D-PLACE — cross-cultural linguistic and geographic datasets',
     nativeland: 'NativeLand — indigenous territories and languages',
 };
 
