@@ -235,7 +235,7 @@ Each hit carries a `query_match.phon_emb` field: the Symphonym 128-d int8 embedd
 
 1. User types a variant in a "Compare name" input (e.g. "Parigi").
 2. The client calls `GET /api/embed?name=Parigi` on the gateway (via the Django proxy), which returns the Symphonym int8 embedding for the new variant (fast — single model inference, ~5 ms). For the *initial* query, `query_emb` from the response is used directly (no extra call needed).
-3. The client computes cosine similarity between the variant embedding and each hit's `query_match.phon_emb` in JavaScript. Int8 dot product on 128 dimensions is trivially fast (~0.01 ms per pair).
+3. The client computes cosine similarity between the variant embedding and each hit's `query_match.phon_emb` in JavaScript. Int8 dot product on 128 dimensions is trivially fast (~0.01 ms per pair). Embeddings are pre-normalised unit vectors quantized to int8; compute `dot(a, b) / (norm(a) × norm(b))` for the similarity value.
 4. Results are re-ranked or highlighted by phonetic proximity to the user's variant.
 
 This enables cross-script and cross-transliteration name comparison directly in the browser — a researcher can type a name in Arabic script and see which Latin-script results are phonetically closest, or compare a medieval spelling variant against modern authority records.
@@ -264,14 +264,18 @@ The precomputed graph will inevitably miss some co-referent pairs — rare alias
 After the main Union-Find pass (§2c Phase 1), the client runs a second pass (§2c Phase 2) over H3 buckets:
 
 1. Group results by `h3` value (centroid at r7 ≈ 1.2 km). Results in the same bucket are spatially proximate.
-2. Within each bucket, for every pair (a, b) not already in the same component, compute `cosine(phon_emb[a], phon_emb[b])`.
-3. If the similarity exceeds `θ_synth` (e.g. 0.85), union them.
+2. Within each bucket, for every pair (a, b) not already in the same component:
+   - **Type constraint:** at least one type must overlap (shared `aat_id`, or both lacking type data). This prevents merging "Central Station" with "Central Park" in the same H3 cell. If both places have typed records, require at least one shared AAT ancestor; if either is untyped, allow the comparison (untyped records are common and should not be excluded).
+   - Compute `cosine(phon_emb[a], phon_emb[b])`.
+3. If the similarity exceeds `θ_synth_eff = max(θ_synth, θ)`, union them.
 
-**Why this is cheap:** H3 bucketing reduces the comparison space from O(n²) to O(Σ |bucket|²). Typical result sets have most H3 buckets containing 1–5 results (different authorities for the same place); dense urban areas might have buckets of ~20. With 500 results across ~200 buckets, total comparisons are a few hundred — each a ~0.01 ms int8 dot product. Total cost: <1 ms.
+**Why `max(θ_synth, θ)`:** this ties the synthetic threshold to the user's main slider. At high θ (conservative grouping), synthetic edges require even higher phonetic similarity, preserving near-monotonic behaviour. At low θ (aggressive grouping), the calibrated floor `θ_synth` (e.g. 0.85) prevents garbage merges. The effective threshold never drops below the calibrated minimum.
+
+**Why this is cheap:** H3 bucketing reduces the comparison space from O(n²) to O(Σ |bucket|²). Typical result sets have most H3 buckets containing 1–5 results (different authorities for the same place); dense urban areas might have buckets of ~20. With 500 results across ~200 buckets, total comparisons are a few hundred — each a ~0.01 ms int8 dot product plus a cheap type-set intersection. Total cost: <1 ms.
 
 **Why H3 gating is essential:** without spatial gating, high phonetic similarity would merge phonetically similar but geographically distant places (e.g. "Springfield" in Illinois vs "Springfield" in Massachusetts). The H3 cell requirement ensures synthetic edges only form between spatially co-located results.
 
-**Threshold `θ_synth` must be high** (0.85+) because synthetic edges lack the multi-facet evidence (spatial distance, type similarity, authority links) that precomputed edges carry. Only very strong phonetic matches justify merging on name evidence alone.
+**Why the type constraint matters:** in dense urban H3 buckets (20+ results), generic names like "Central", "Main", "Station" can produce high phonetic similarity across unrelated place types. The type-overlap requirement prevents this — a railway station will not merge with a park, even if both are named "Central" and share an H3 cell.
 
 All three parameters (`θ_bridge`, `θ_query`, `θ_synth`) are calibrated by the offline pipeline and included in the server response as defaults — the client does not hard-code them.
 
@@ -304,7 +308,7 @@ A continuous slider (θ ∈ [0,1]) in the results panel controls clustering sens
 | θ = 1.0 (rightmost) | No grouping — flat list identical to current behaviour |
 | θ = 0.8 (default) | Conservative grouping — high-confidence co-referents only |
 | θ = 0.5 | Moderate grouping — phonetically similar + spatially proximate |
-| θ = 0.0 (leftmost) | Aggressive grouping — all connected results merged (subject to cluster-size damping) |
+| θ = 0.0 (leftmost) | Aggressive grouping — all connected results merged (subject to cluster-size limiting) |
 
 **Behaviour:**
 - Moving the slider triggers client-side re-clustering (§2c) with no server round-trip.
@@ -347,7 +351,7 @@ When clustering is active (θ < 1.0), the result list displays **cluster cards**
 
 - **Collapsed state** (default): shows the representative place (highest-scoring or preferred-authority member), a count badge ("3 sources"), and the aggregated name list.
 - **Expanded state**: clicking the cluster card expands it to show all member places as sub-cards, each with its own authority badge, names, and metadata.
-- **Map interaction**: clicking a cluster card zooms to the bounding box of all member geometries. Expanded members are shown as individual markers; collapsed clusters show a single marker at the representative's centroid.
+- **Map interaction**: clicking a cluster card zooms to the bounding box of all member geometries. Expanded members are shown as individual markers; collapsed clusters show a single marker at the representative's `repr_point` centroid. For multi-country clusters, the bounding box is the union of all members' `repr_point` coordinates. Dense clusters (≥5 members within a small area) may optionally display a convex hull outline on hover.
 
 ### 3f. Update: Result-facet filters (post-search)
 
@@ -383,9 +387,12 @@ The client-side clustering logic (Union-Find, edge reweighting, threshold applic
 - `function clusterResults(hits, edges, theta, weights, queryScores, params)` — returns a `Map<clusterId, ClusterGroup>`. Runs both Phase 1 (precomputed edges with Rules 1–2) and Phase 2 (synthetic phonetic edges via §2i).
 - `function reweightEdge(edge, weights)` — computes the weighted sum from signal components.
 - `function queryBridgeThreshold(theta)` — computes `θ_bridge` from the user's main threshold (e.g. `θ × 0.6`, floored at 0.3).
-- `function syntheticEdgePass(uf, hits, params)` — H3-bucketed phonetic comparison for edgeless pairs (§2i).
+- `function syntheticEdgePass(uf, hits, params)` — H3-bucketed phonetic comparison for edgeless pairs with type-overlap check (§2i).
+- `function typesOverlap(a, b)` — returns `true` if the two hits share at least one AAT ancestor or if either is untyped. Used as a gate for synthetic edges (§2i).
 - `function cosineSimilarity(a, b)` — int8 dot product for phonetic re-scoring and synthetic edges.
 - `function decodePhonEmb(base64)` — decode base64-encoded int8 embedding to `Int8Array`.
+
+**Lazy embedding decode.** To reduce memory pressure on mobile devices, `phon_emb` values should remain as base64 strings until needed. Decode to `Int8Array` only when: (a) the synthetic edge pass runs, or (b) the user activates phonetic re-scoring. This avoids allocating ~500 `Int8Array` objects (~64 KB) on every search — negligible on desktop but meaningful on memory-constrained mobile browsers.
 
 This module is imported by `search.js` and called on every slider change. It should be pure (no DOM manipulation) — it returns data structures that the rendering layer consumes.
 

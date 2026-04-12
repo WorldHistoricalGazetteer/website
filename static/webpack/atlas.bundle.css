@@ -411,11 +411,17 @@ span.twitter-typeahead .tt-suggestion {
     display: flex;
     align-items: center;
     gap: 5px;
-    padding: 1px 0;
+    padding: 3px 4px;
+    margin: 0 -4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+.layer-source-item:hover {
+    background: rgba(44, 62, 80, 0.04);
 }
 .layer-source-item label {
-    font-size: 0.72rem;
-    color: #333;
+    font-size: 0.74rem;
+    color: #34495e;
     cursor: pointer;
     margin: 0;
 }
@@ -530,33 +536,127 @@ span.twitter-typeahead .tt-suggestion {
    ═══════════════════════════════════════════════════════════════════ */
 
 .atlas-offcanvas {
-    width: 300px;
+    width: 310px;
+    background: linear-gradient(168deg, #f8fafb 0%, #f0f3f6 100%);
+    border-left: 1px solid rgba(44, 62, 80, 0.10);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.10), -1px 0 4px rgba(0, 0, 0, 0.04);
     /* Bootstrap defaults: z-index 1045 for offcanvas, 1040 for backdrop.
        No override needed since panels are outside .explorer-layout. */
+}
+
+.atlas-offcanvas .offcanvas-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #3d566e 100%);
+    color: #fff;
+    padding: 14px 18px;
+    border-bottom: none;
+}
+.atlas-offcanvas .offcanvas-header .offcanvas-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #fff;
+}
+.atlas-offcanvas .offcanvas-header .offcanvas-title i {
+    opacity: 0.7;
+}
+.atlas-offcanvas .offcanvas-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.atlas-offcanvas .offcanvas-header .btn-close:hover {
+    opacity: 1;
+}
+
+.atlas-offcanvas .offcanvas-body {
+    padding: 16px 18px;
+    font-size: 0.8rem;
 }
 
 /* Help / explanatory text inside offcanvas panels */
 .offcanvas-help-text {
     font-size: 0.74rem;
-    color: #666;
-    line-height: 1.45;
-    margin: 0 0 10px 0;
+    color: #5d6d7e;
+    line-height: 1.5;
+    margin: 0 0 12px 0;
+    padding: 8px 10px;
+    background: rgba(44, 62, 80, 0.04);
+    border-left: 3px solid rgba(44, 62, 80, 0.15);
+    border-radius: 0 4px 4px 0;
 }
 
 /* Help text inside layer sources panel */
 .layer-panel-help-text {
     font-size: 0.68rem;
-    color: #777;
+    color: #5d6d7e;
     line-height: 1.4;
     margin: 2px 0 6px 0;
     font-style: italic;
 }
 
+/* Categories header extras — badge & clear link in dark header */
+#categories_offcanvas .offcanvas-header #atlas_tree_badge {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 500;
+}
+#categories_offcanvas .offcanvas-header #atlas_tree_clear {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.68rem;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+#categories_offcanvas .offcanvas-header #atlas_tree_clear:hover {
+    color: #fff;
+}
+
+/* Clustering section header in Sources panel */
+#sources_offcanvas .filter-header .categories {
+    color: #2c3e50;
+    font-size: 0.6rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 2px solid rgba(123, 45, 59, 0.25);
+    padding-bottom: 3px;
+}
+#sources_offcanvas hr {
+    border-color: rgba(44, 62, 80, 0.10);
+}
+
+/* Form controls inside panels — subtle styling */
+.atlas-offcanvas .form-select {
+    background-color: #fff;
+    border-color: rgba(44, 62, 80, 0.15);
+    font-size: 0.74rem;
+}
+.atlas-offcanvas .form-select:focus {
+    border-color: rgba(44, 62, 80, 0.35);
+    box-shadow: 0 0 0 2px rgba(44, 62, 80, 0.08);
+}
+.atlas-offcanvas .form-check-input:checked {
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+}
+.atlas-offcanvas .form-switch .form-check-input:checked {
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+}
+
 #sources_offcanvas .authority-item {
-    padding: 3px 0;
+    padding: 4px 0;
+    transition: background 0.15s;
+    border-radius: 4px;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+#sources_offcanvas .authority-item:hover {
+    background: rgba(44, 62, 80, 0.04);
 }
 #sources_offcanvas .form-check-label {
-    font-size: 0.85rem;
+    font-size: 0.82rem;
+    color: #34495e;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -711,24 +811,26 @@ span.twitter-typeahead .tt-suggestion {
 
 .layer-panel-divider {
     border: 0;
-    border-top: 1px solid #dee2e6;
-    margin: 4px 0;
+    border-top: 1px solid rgba(44, 62, 80, 0.10);
+    margin: 6px 0;
 }
 
 .layer-panel-section-label {
     display: block;
-    color: #7f8c8d;
-    font-weight: 600;
+    color: #2c3e50;
+    font-weight: 700;
     font-size: 0.6rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 3px;
+    letter-spacing: 0.8px;
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+    border-bottom: 2px solid rgba(123, 45, 59, 0.25);
 }
 
 #boundary_level_section {
-    margin-top: 2px;
-    padding-top: 4px;
-    border-top: 1px solid #dee2e6;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(44, 62, 80, 0.10);
 }
 
 #boundary_level_select {
