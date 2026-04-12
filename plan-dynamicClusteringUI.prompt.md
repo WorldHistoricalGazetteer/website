@@ -56,6 +56,7 @@ For each hit, the gateway returns (in addition to existing fields):
   "namespace": "gn",
   "repr_point": [2.3522, 48.8566],
   "h3": "871ea6d75ffffff",
+  "h3_cover": ["871ea6d75ffffff", "851ea6d7fffffff"],
   "temporal_range": [-500, 2026],
   "aat_ids": [300008347],
   "aat_depths": [6],
@@ -76,7 +77,8 @@ For each hit, the gateway returns (in addition to existing fields):
 
 | Field | Type | Purpose |
 |-------|------|---------|
-| `h3` | string | H3 cell ID at resolution 7 for the representative point. Two results sharing an `h3` value are spatially proximate (~1.2 km hex). Used as a clustering signal. |
+| `h3` | string | H3 cell ID at resolution 7 for the representative point. Two results sharing an `h3` value are spatially proximate (~1.2 km hex). Used as the primary clustering spatial signal. |
+| `h3_cover` | string[] | Compacted H3 cell IDs covering the full geometry (multi-resolution). Used for spatial bucketing via cover intersection at r5 (§2i) to catch places whose centroids differ across authorities. For point-only geometries, equals `[h3]`. |
 | `temporal_range` | `[int, int]` or `null` | Flattened temporal extent `[start_year, end_year]` across all timespans. Null if the place has no temporal data. For display only — temporal similarity is precomputed in edge signals. |
 | `aat_ids` | `int[]` | AAT concept IDs from the place's type mappings. For display (type labels, tooltips). |
 | `aat_depths` | `int[]` | AAT hierarchy depths, parallel to `aat_ids`. |
@@ -122,6 +124,8 @@ Only edges between result-set members are included (the gateway prunes the graph
 - query_emb: 172 bytes (negligible)
 - Total: ~490 KB before gzip, ~110–160 KB compressed — within budget.
 
+**Hard cap:** `max_edges = 4000`. The gateway enforces this limit on the `edges` array, selecting edges by highest composite score globally. Without a cap, worst-case scenarios (dense urban + high K + symmetrisation: 500 × 50 / 2 = 12,500 edges ≈ 1.5–2 MB) degrade both transfer and client parsing time. The cap keeps payload under ~750 KB pre-compression in all cases.
+
 For result sets > 500, the gateway caps edges to top-scoring pairs and/or restricts clustering to the top N results.
 
 ---
@@ -156,6 +160,8 @@ Temporal and type facets are weighted lower because many records lack temporal d
 
 **Int8 cosine similarity.** Symphonym embeddings are unit vectors quantized to int8 range [-128, 127]. The client computes `dot(a, b) / (norm(a) × norm(b))` using `Int8Array` arithmetic. Server-side and client-side similarity values are consistent because both use the same quantized vectors.
 
+**Score invariance.** The composite `score` on each edge equals the weighted sum of signal components after null renormalisation under the default (calibrated) weights: `score == Σ (w_i / Σ_nonnull w_j) × s_i`. The client can reconstruct the server's composite score exactly from the `s` breakdown under default weights. This is tested in the offline pipeline and guaranteed as an API invariant — any discrepancy between server and client scores at default weights indicates a bug. When the user adjusts facet weights, the recomputed score intentionally diverges from the precomputed `score` field; only the signal components `s.*` are used.
+
 This approach keeps all expensive similarity computation server-side (in the offline pipeline), while giving the client cheap, instant re-weighting with no server round-trip. The client never recomputes spatial distances, temporal overlaps, or AAT LCA depths — it only applies weight coefficients to precomputed normalised scores.
 
 ### 2b. Comparison pruning
@@ -178,17 +184,26 @@ for each edge (a, b, signals):
         union(a, b)
 
     // Rule 2 — query bridge: relax threshold for query-relevant pairs (§2h)
-    elif S >= θ_bridge AND min(query_score[a], query_score[b]) >= θ_query:
+    elif S >= θ_bridge
+         AND min(query_score[a], query_score[b]) >= θ_query
+         AND (signals.n >= τ_name OR signals.l >= τ_link):   // name/link guard
         union(a, b)
 
-// Phase 2 — synthetic edges for edgeless pairs (§2i)
+// Phase 2a — phonetic synthetic edges for edgeless pairs (§2i)
 θ_synth_eff = max(θ_synth, θ)    // never below calibrated floor or user threshold
-for each H3 bucket (results sharing h3 value):
-    for each pair (a, b) in bucket where find(a) ≠ find(b):
-        if types_overlap(a, b):   // at least one shared type (§2i)
-            sim = cosine(phon_emb[a], phon_emb[b])
-            if sim >= θ_synth_eff:
-                union(a, b)
+for each spatial bucket (results sharing h3 centroid OR h3_cover intersection at r5):
+    for each pair (a, b) in bucket where find(a) ≠ find(b) AND no precomputed edge:
+        if NOT both_high_frequency(name[a], name[b]):  // stoplist guard (§2i)
+            if types_overlap(a, b):   // at least one shared type (§2i)
+                sim = cosine(phon_emb[a], phon_emb[b])
+                if sim >= θ_synth_eff:
+                    union(a, b)
+
+// Phase 2b — structural synthetic edges (§2i)
+for each spatial bucket (same as 2a):
+    for each pair (a, b) in bucket where find(a) ≠ find(b) AND no precomputed edge:
+        if (ccode_overlap(a, b) OR shared_namespace(a, b) OR shared_baseline(a, b)):
+            union at θ_synth_structural (≈ 0.7)
 
 // Phase 3 — post-processing: split oversized clusters (§2f)
 for each component C where |C| > N_max:
@@ -197,17 +212,19 @@ for each component C where |C| > N_max:
 
 Properties:
 - Edge iteration order does not affect the result — Union-Find is applied over all qualifying edges in a single pass (no sorting required). Complexity: O(E·α(n)) ≈ O(E).
-- Rule 2 and Phase 2 can cause **non-monotonic behaviour**: lowering θ may merge clusters that were separate at higher θ due to the bridge and synthetic thresholds. In practice this is rare (bridge fires on <5% of edges, synthetic pass on edgeless pairs only). Tying `θ_synth_eff = max(θ_synth, θ)` limits the effect: at high θ, synthetic edges require even higher phonetic similarity, preserving monotonic feel in the common case.
+- Rule 2 has a **name/link guard** (`signals.n >= τ_name OR signals.l >= τ_link`, where `τ_name ≈ 0.5`, `τ_link ≈ 0.8`) that prevents the bridge from firing on weak edges between places matching generic query terms (e.g. "San", "New", "Central"). Without this guard, two places both matching a common query fragment would merge on a sub-threshold edge with no substantive name or link alignment.
+- Rule 2 and Phases 2a/2b can cause **non-monotonic behaviour**: lowering θ may merge clusters that were separate at higher θ due to the bridge and synthetic thresholds. In practice this is rare (bridge fires on <5% of edges, synthetic passes on edgeless pairs only). Tying `θ_synth_eff = max(θ_synth, θ)` limits the effect: at high θ, synthetic edges require even higher phonetic similarity, preserving monotonic feel in the common case.
 - Union-Find is near-linear and runs in <10 ms for 500 nodes.
 - The query-bridge rule (Rule 2) ensures query-relevant pairs cluster even when their precomputed toponym signal `s.n` is low — see §2h for the full rationale.
-- The synthetic-edge pass (Phase 2) closes the "missing edge" gap for pairs that share spatial proximity, phonetic similarity, and type overlap but were never candidates in the offline pipeline — see §2i.
+- The phonetic synthetic-edge pass (Phase 2a) closes the "missing edge" gap for pairs that share spatial proximity, phonetic similarity, and type overlap but were never candidates in the offline pipeline — see §2i.
+- The structural synthetic-edge pass (Phase 2b) catches same-place records across authorities where phonetics fail (cross-lingual exonyms, sparse names) — see §2i.
 - Oversized clusters are split as a post-processing step (Phase 3), not blocked during union — see §2f.
 
 ### 2d. Baseline cluster bootstrapping
 
 Before applying the user threshold, initialize the Union-Find with baseline clusters (if present): for all results sharing a `baseline_cluster_id`, union them. This provides instant grouping for obvious matches (e.g. GeoNames + Wikidata for the same city) before the user even touches the slider.
 
-**Safety:** baseline clusters are computed offline at θ = 0.9 (near-certain co-referents). Bootstrapping cannot merge two *different* baseline clusters — it only unions results within the same cluster ID. Subsequent edges from Phase 1 may *expand* a baseline cluster by merging additional results into it, but only if those edges pass the user's threshold θ.
+**Safety:** baseline clusters are **link-dominated**: constructed offline using only authority link signals (`s.l`) and very high toponym signals (`s.n ≥ 0.95`), not the full composite score. This ensures they remain valid regardless of how the user tunes facet weights — a user who prioritises spatial proximity over name similarity will not find that baseline clusters contradict their semantic intent. Bootstrapping cannot merge two *different* baseline clusters — it only unions results within the same cluster ID. Subsequent edges from Phase 1 may *expand* a baseline cluster by merging additional results into it, but only if those edges pass the user's threshold θ.
 
 ### 2e. Cluster display
 
@@ -252,32 +269,64 @@ Precomputed edges encode **query-independent** similarity (`place ↔ place`). B
 
 - `θ_bridge = θ × 0.6` (or a configurable floor, e.g. 0.3) — minimum edge quality for bridging.
 - `θ_query = 0.7` — minimum query-match score.
+- `τ_name ≈ 0.5` — minimum toponym signal for name-based bridge qualification.
+- `τ_link ≈ 0.8` — minimum link signal for link-based bridge qualification.
+
+The bridge fires only when `signals.n >= τ_name OR signals.l >= τ_link` (in addition to the score and query conditions). This **name/link guard** prevents the bridge from becoming a semantic shortcut on weak edges between places matching generic query terms ("San", "New", "Central"). Without it, any two results matching a common query fragment could merge on a sub-threshold edge with no substantive identity signal.
 
 **Why `min()` not `max()`:** both endpoints must strongly match the query for the bridge to fire. Using `max()` would let a single strong match pull in weakly-related neighbors indiscriminately. Using `min()` ensures both places are relevant to what the user searched for.
 
 **Why a precomputed edge is required:** merging two places purely because both match the query (without any precomputed edge) is dangerous — "London" would merge London-UK with London-Ohio. The bridge rule only relaxes the *threshold* on existing edges; it does not create edges from nothing.
 
-### 2i. Synthetic phonetic edges (edgeless pairs)
+### 2i. Synthetic edges (edgeless pairs)
 
-The precomputed graph will inevitably miss some co-referent pairs — rare aliases, missing language variants, or places that fell outside the offline blocking thresholds. The `query_match.phon_emb` vectors close this gap by enabling **synthetic edges** between result pairs that have no precomputed edge.
+The precomputed graph will inevitably miss some co-referent pairs — rare aliases, missing language variants, or places that fell outside the offline blocking thresholds. Two complementary synthetic passes close this gap at query time.
 
-After the main Union-Find pass (§2c Phase 1), the client runs a second pass (§2c Phase 2) over H3 buckets:
+#### Synthetic Rule A — Phonetic (§2c Phase 2a)
 
-1. Group results by `h3` value (centroid at r7 ≈ 1.2 km). Results in the same bucket are spatially proximate.
-2. Within each bucket, for every pair (a, b) not already in the same component:
-   - **Type constraint:** at least one type must overlap (shared `aat_id`, or both lacking type data). This prevents merging "Central Station" with "Central Park" in the same H3 cell. If both places have typed records, require at least one shared AAT ancestor; if either is untyped, allow the comparison (untyped records are common and should not be excluded).
+The `query_match.phon_emb` vectors enable **phonetic synthetic edges** between result pairs that have no precomputed edge.
+
+After the main Union-Find pass (§2c Phase 1), the client runs Phase 2a over spatial buckets:
+
+1. Group results by spatial proximity: same `h3` centroid (r7 ≈ 1.2 km) **or** `h3_cover` intersection at coarse resolution (r5 ≈ 8 km). Centroid equality catches point-vs-point matches; cover intersection catches cases where the same place has different centroids across authorities (e.g. Paris polygon vs Paris point, linear features, boundary geometries). The server provides both `h3` (centroid) and `h3_cover` (multi-valued) per hit.
+2. Within each bucket, for every pair (a, b) not already in the same component and with no precomputed edge:
+   - **Stoplist guard:** skip if both `query_match.name` values are in a **high-frequency toponym stoplist** (e.g. "Central", "Station", "Market", "Church", "School", "Main", "Park", "New", "San", "Saint"). Without this guard, high phonetic similarity + same H3 + same type (e.g. "building") produces catastrophic merging in OSM-heavy urban regions. The stoplist is included in the server response metadata.
+   - **Type constraint:** at least one type must overlap (shared `aat_id`, or both lacking type data). If both places have typed records, require at least one shared AAT ancestor; if either is untyped, allow the comparison (untyped records are common and should not be excluded).
    - Compute `cosine(phon_emb[a], phon_emb[b])`.
 3. If the similarity exceeds `θ_synth_eff = max(θ_synth, θ)`, union them.
 
-**Why `max(θ_synth, θ)`:** this ties the synthetic threshold to the user's main slider. At high θ (conservative grouping), synthetic edges require even higher phonetic similarity, preserving near-monotonic behaviour. At low θ (aggressive grouping), the calibrated floor `θ_synth` (e.g. 0.85) prevents garbage merges. The effective threshold never drops below the calibrated minimum.
+**Why `max(θ_synth, θ)`:** this ties the synthetic threshold to the user's main slider. At high θ (conservative grouping), synthetic edges require even higher phonetic similarity, preserving near-monotonic behaviour. At low θ (aggressive grouping), the calibrated floor `θ_synth` (e.g. 0.85) prevents garbage merges.
 
-**Why this is cheap:** H3 bucketing reduces the comparison space from O(n²) to O(Σ |bucket|²). Typical result sets have most H3 buckets containing 1–5 results (different authorities for the same place); dense urban areas might have buckets of ~20. With 500 results across ~200 buckets, total comparisons are a few hundred — each a ~0.01 ms int8 dot product plus a cheap type-set intersection. Total cost: <1 ms.
+#### Synthetic Rule B — Structural (§2c Phase 2b)
 
-**Why H3 gating is essential:** without spatial gating, high phonetic similarity would merge phonetically similar but geographically distant places (e.g. "Springfield" in Illinois vs "Springfield" in Massachusetts). The H3 cell requirement ensures synthetic edges only form between spatially co-located results.
+A second synthetic pass catches same-place records across authorities where phonetics fail entirely — cross-lingual exonyms with weak phonetic alignment, sparse single-attestation records, or type-misaligned authorities (settlement vs admin unit). This pass uses **shared structural identifiers** rather than phonetic similarity:
 
-**Why the type constraint matters:** in dense urban H3 buckets (20+ results), generic names like "Central", "Main", "Station" can produce high phonetic similarity across unrelated place types. The type-overlap requirement prevents this — a railway station will not merge with a park, even if both are named "Central" and share an H3 cell.
+Within the same spatial buckets:
 
-All three parameters (`θ_bridge`, `θ_query`, `θ_synth`) are calibrated by the offline pipeline and included in the server response as defaults — the client does not hard-code them.
+```
+for each pair (a, b) in bucket where find(a) ≠ find(b) AND no precomputed edge:
+    if (ccode_overlap(a, b) OR shared_namespace(a, b) OR shared_baseline(a, b)):
+        union at θ_synth_structural (≈ 0.7)
+```
+
+Rationale:
+- **Country code overlap** catches same-place records from different authorities sharing a country (cheap, high precision when combined with spatial proximity).
+- **Shared authority namespace** catches records from the same source that bypassed blocking (rare but diagnostic).
+- **Shared `baseline_cluster_id`** propagates high-confidence offline groupings to pairs that lost connecting edges during result-set pruning.
+
+This is very cheap (set intersections, no embedding computation), high precision, and catches the dominant failure mode — edge incompleteness for cross-lingual or sparse records.
+
+#### Cost analysis
+
+**Phonetic pass:** H3 bucketing reduces comparisons from O(n²) to O(Σ |bucket|²). Typical result sets have most buckets containing 1–5 results; dense urban areas might have ~20. With 500 results across ~200 buckets, total comparisons are a few hundred — each a ~0.01 ms int8 dot product plus a cheap type-set intersection. Total cost: <1 ms.
+
+**Structural pass:** same bucket structure, set intersections only — even cheaper.
+
+**Why spatial gating is essential:** without it, phonetic similarity would merge geographically distant places (e.g. "Springfield" in Illinois vs Massachusetts).
+
+**Why centroid-only is insufficient:** large polygons can have different centroids across authorities. Using `h3_cover` intersection at r5 catches these without requiring exact centroid alignment.
+
+All parameters (`θ_bridge`, `θ_query`, `θ_synth`, `θ_synth_structural`, `τ_name`, `τ_link`, and the toponym stoplist) are calibrated by the offline pipeline and included in the server response as defaults — the client does not hard-code them.
 
 ---
 
@@ -351,7 +400,7 @@ When clustering is active (θ < 1.0), the result list displays **cluster cards**
 
 - **Collapsed state** (default): shows the representative place (highest-scoring or preferred-authority member), a count badge ("3 sources"), and the aggregated name list.
 - **Expanded state**: clicking the cluster card expands it to show all member places as sub-cards, each with its own authority badge, names, and metadata.
-- **Map interaction**: clicking a cluster card zooms to the bounding box of all member geometries. Expanded members are shown as individual markers; collapsed clusters show a single marker at the representative's `repr_point` centroid. For multi-country clusters, the bounding box is the union of all members' `repr_point` coordinates. Dense clusters (≥5 members within a small area) may optionally display a convex hull outline on hover.
+- **Map interaction**: clicking a cluster card zooms to the bounding box of all member `repr_point` coordinates (not full geometries — those are external and not loaded by default). Expanded members are shown as individual markers at their `repr_point`; collapsed clusters show a single marker at the representative's `repr_point`. Dense clusters (≥5 members within a small area) may optionally display a convex hull outline on hover, computed from member `repr_point` coordinates.
 
 ### 3f. Update: Result-facet filters (post-search)
 
@@ -384,11 +433,14 @@ The existing Data Sources panel lists the authority namespaces available for fil
 The client-side clustering logic (Union-Find, edge reweighting, threshold application) should be implemented as a self-contained ES module (e.g. `whg/webpack/js/clustering.js`) with no external dependencies:
 
 - `class UnionFind` — standard disjoint-set with path compression and union by rank.
-- `function clusterResults(hits, edges, theta, weights, queryScores, params)` — returns a `Map<clusterId, ClusterGroup>`. Runs both Phase 1 (precomputed edges with Rules 1–2) and Phase 2 (synthetic phonetic edges via §2i).
-- `function reweightEdge(edge, weights)` — computes the weighted sum from signal components.
+- `function clusterResults(hits, edges, theta, weights, queryScores, params)` — returns a `Map<clusterId, ClusterGroup>`. Runs Phase 1 (precomputed edges with Rules 1–2), Phase 2a (phonetic synthetic edges), and Phase 2b (structural synthetic edges).
+- `function reweightEdge(edge, weights)` — computes the weighted sum from signal components with null-facet renormalisation.
 - `function queryBridgeThreshold(theta)` — computes `θ_bridge` from the user's main threshold (e.g. `θ × 0.6`, floored at 0.3).
-- `function syntheticEdgePass(uf, hits, params)` — H3-bucketed phonetic comparison for edgeless pairs with type-overlap check (§2i).
-- `function typesOverlap(a, b)` — returns `true` if the two hits share at least one AAT ancestor or if either is untyped. Used as a gate for synthetic edges (§2i).
+- `function phoneticSyntheticPass(uf, hits, params)` — H3-bucketed phonetic comparison for edgeless pairs with stoplist guard and type-overlap check (§2i Rule A).
+- `function structuralSyntheticPass(uf, hits, params)` — H3-bucketed structural comparison (ccode overlap, shared namespace, shared baseline) for edgeless pairs (§2i Rule B).
+- `function typesOverlap(a, b)` — returns `true` if the two hits share at least one AAT ancestor or if either is untyped. Used as a gate for phonetic synthetic edges.
+- `function isStoplistName(name, stoplist)` — returns `true` if the name is in the high-frequency toponym stoplist. Used as a guard for phonetic synthetic edges.
+- `function spatialBucket(hits)` — groups hits by H3 centroid equality or `h3_cover` intersection at r5. Returns buckets for synthetic edge passes.
 - `function cosineSimilarity(a, b)` — int8 dot product for phonetic re-scoring and synthetic edges.
 - `function decodePhonEmb(base64)` — decode base64-encoded int8 embedding to `Int8Array`.
 
@@ -449,7 +501,7 @@ The Django thin proxy forwards search and reconciliation requests to the CRC gat
 
 1. **Stop sending `group_by_cluster`** — this parameter is removed from the gateway API.
 2. **Pass through `cluster_threshold`** — when the Django search form or API consumer sets `cluster_threshold`, forward it to the gateway.
-3. **Pass through new response fields** — the proxy must not strip `edges`, `phon_emb`, `h3`, `temporal_range`, `baseline_cluster_id`, or other new fields from the gateway response.
+3. **Pass through new response fields** — the proxy must not strip `edges`, `phon_emb`, `h3`, `h3_cover`, `temporal_range`, `baseline_cluster_id`, `query_emb`, or other new fields from the gateway response. In particular, pass through the response-level metadata: `toponym_stoplist` (generic name tokens for synthetic edge filtering), and `clustering_params` (calibrated defaults for `θ_bridge`, `θ_query`, `θ_synth`, `θ_synth_structural`, `τ_name`, `τ_link`, default facet weights).
 
 ---
 
@@ -517,4 +569,11 @@ Many records (especially GeoNames) lack temporal data and have generic types. Mi
 - Baseline clusters at θ = 0.9 only merge near-certain matches.
 - The default UI slider position should start high (e.g. 0.8), encouraging conservative grouping.
 - Hard links (authority sameAs) bypass the threshold entirely.
+
+### 8d. Edge incompleteness → under-clustering
+
+The dominant recall failure mode: the offline graph misses edges for cross-lingual exonyms, sparse-name records, or type-misaligned authorities. Lowering θ cannot fix missing edges. Mitigations:
+- Phonetic synthetic edges (§2i Rule A) catch spatially co-located pairs with phonetic similarity.
+- **Structural synthetic edges (§2i Rule B)** catch pairs where phonetics fail entirely but structural signals (shared country code, namespace, baseline cluster) confirm co-reference. This is the cheapest and most reliable catch for the dominant failure mode.
+- The query-bridge rule (§2c Rule 2) relaxes thresholds for query-relevant pairs.
 
