@@ -119,6 +119,7 @@ class AtlasPageView(TemplateView):
         context['available_sources'] = json.dumps([
             {'id': 'osm', 'label': 'OSM (Modern)', 'enabled': True},
             {'id': 'ohm', 'label': 'OHM (Historical)', 'enabled': True},
+            {'id': 'osm_misc', 'label': 'OSM/OHM (Miscellaneous)', 'enabled': False},
             {'id': 'periodo', 'label': 'PeriodO', 'enabled': False, 'coming_soon': True},
             {'id': 'cliopatria', 'label': 'Cliopatria', 'enabled': False, 'coming_soon': True},
             {'id': 'nativeland', 'label': 'NativeLand', 'enabled': False, 'coming_soon': True},

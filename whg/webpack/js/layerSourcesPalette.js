@@ -42,12 +42,13 @@ const ZOOM_THRESHOLDS = [
 ];
 
 /* Sources that support boundary display */
-const BOUNDARY_SOURCES = new Set(['osm', 'ohm']);
+const BOUNDARY_SOURCES = new Set(['osm', 'ohm', 'osm_misc']);
 
 /* Tooltip descriptions for known sources */
 const SOURCE_TOOLTIPS = {
     osm:        'OpenStreetMap — modern administrative boundaries and geographic features',
     ohm:        'OpenHistoricalMap — community-contributed historical boundaries and features',
+    osm_misc:   'OSM/OHM miscellaneous boundary types — aboriginal lands, baronies, civil and political boundaries, climatic zones, geographic regions, historical and obsolete administrative divisions, indigenous territories, parishes, and other non-standard boundary classifications',
     periodo:    'PeriodO — periods, events, and temporalities',
     cliopatria: 'Cliopatria — historical political entities',
     nativeland: 'NativeLand — indigenous territories and languages',
@@ -69,7 +70,7 @@ export default class LayerSourcesPalette {
         this._activeSources = [this._activeSource];
 
         // Namespace is inferred from the selected source
-        this._currentNamespace = this._activeSource === 'ohm' ? 'ohm' : 'osm';
+        this._currentNamespace = this._inferNamespace(this._activeSource);
 
         this._currentAdminLevel = null;
         this._autoAdmin = true;
@@ -148,7 +149,7 @@ export default class LayerSourcesPalette {
                 if (!radio.checked) return;
                 this._activeSource = radio.value;
                 this._activeSources = [this._activeSource];
-                this._currentNamespace = this._activeSource === 'ohm' ? 'ohm' : 'osm';
+                this._currentNamespace = this._inferNamespace(this._activeSource);
 
                 // Show/hide boundary section
                 const boundarySection = this._panel.querySelector('#boundary_level_section');
@@ -202,6 +203,16 @@ export default class LayerSourcesPalette {
 
         // ── Setup zoom-based auto-switching ──
         this._setupZoomAutoSwitch();
+    }
+
+    /* ──────────────────────────────────────────────────────────────── */
+    /*  Namespace inference                                             */
+    /* ──────────────────────────────────────────────────────────────── */
+
+    /** Map source id to the namespace used by boundary tiles. */
+    _inferNamespace(sourceId) {
+        const map = { osm: 'osm', ohm: 'ohm', osm_misc: 'osm_misc' };
+        return map[sourceId] || 'osm';
     }
 
     /* ──────────────────────────────────────────────────────────────── */
@@ -330,7 +341,7 @@ export default class LayerSourcesPalette {
      * Maps active source to namespace used by boundary tiles.
      */
     getActiveNamespaces() {
-        const nsMap = { osm: 'osm', ohm: 'ohm' };
+        const nsMap = { osm: 'osm', ohm: 'ohm', osm_misc: 'osm_misc' };
         return this._activeSources
             .filter(s => s in nsMap)
             .map(s => nsMap[s]);
