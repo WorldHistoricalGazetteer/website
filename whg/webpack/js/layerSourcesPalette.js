@@ -99,7 +99,7 @@ export default class LayerSourcesPalette {
                                ${checked} ${disabled}>
                         <label class="form-check-label" for="layer_src_${s.id}"
                                data-bs-toggle="tooltip" data-bs-placement="right"
-                               title="${tooltip}">
+                               data-bs-title="${tooltip}">
                             ${s.label}
                             ${s.coming_soon ? '<span class="coming-soon">(coming soon)</span>' : ''}
                         </label>

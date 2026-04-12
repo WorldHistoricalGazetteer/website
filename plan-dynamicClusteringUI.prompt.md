@@ -152,6 +152,10 @@ Default weights (from the offline calibration pipeline):
 
 Temporal and type facets are weighted lower because many records lack temporal data and type mappings are incomplete; links are weighted higher because authority assertions are the strongest identity signal.
 
+**Null-facet handling.** When a signal component is `null` (e.g. `s.t = null` because one or both places lack timespans), the client **renormalises weights dynamically**: redistribute the null facet's weight proportionally among the non-null facets. For example, if `s.t = null` and the user's weights are `[0.30, 0.25, 0.10, 0.10, 0.25]`, the effective weights become `[0.30, 0.25, 0, 0.10, 0.25] / 0.90 = [0.333, 0.278, 0, 0.111, 0.278]`. This ensures records lacking temporal data are not penalised (treated as 0) or artificially boosted — they are simply scored on the available evidence. The same renormalisation rule is used in the offline pipeline for consistency.
+
+**Int8 cosine similarity.** Symphonym embeddings are unit vectors quantized to int8 range [-128, 127]. The client computes `dot(a, b) / (norm(a) × norm(b))` using `Int8Array` arithmetic. Server-side and client-side similarity values are consistent because both use the same quantized vectors.
+
 This approach keeps all expensive similarity computation server-side (in the offline pipeline), while giving the client cheap, instant re-weighting with no server round-trip. The client never recomputes spatial distances, temporal overlaps, or AAT LCA depths — it only applies weight coefficients to precomputed normalised scores.
 
 ### 2b. Comparison pruning
@@ -166,8 +170,8 @@ Only compare pairs that have a precomputed edge. This avoids O(n²) explosion:
 
 ```
 // Phase 1 — precomputed edges
-for each edge (a, b, signals) sorted by reweighted_S descending:
-    S = Σ w_i · signals[i]    // reweight with current UI sliders
+for each edge (a, b, signals):
+    S = reweight(signals, weights)    // with null-facet renormalisation (§2a)
 
     // Rule 1 — standard: edge exceeds user threshold
     if S >= θ:
@@ -178,23 +182,32 @@ for each edge (a, b, signals) sorted by reweighted_S descending:
         union(a, b)
 
 // Phase 2 — synthetic edges for edgeless pairs (§2i)
+θ_synth_eff = max(θ_synth, θ)    // never below calibrated floor or user threshold
 for each H3 bucket (results sharing h3 value):
     for each pair (a, b) in bucket where find(a) ≠ find(b):
-        sim = cosine(phon_emb[a], phon_emb[b])
-        if sim >= θ_synth:
-            union(a, b)
+        if types_overlap(a, b):   // at least one shared type (§2i)
+            sim = cosine(phon_emb[a], phon_emb[b])
+            if sim >= θ_synth_eff:
+                union(a, b)
+
+// Phase 3 — post-processing: split oversized clusters (§2f)
+for each component C where |C| > N_max:
+    split C by tightening threshold within the component
 ```
 
 Properties:
-- As θ increases, clusters split (monotonic for fixed weights, given θ_bridge scales with θ).
-- Pre-sorting edges by current weights allows progressive application — slider updates do not require recomputation from scratch (only re-sort + re-apply, still O(E log E)).
+- Edge iteration order does not affect the result — Union-Find is applied over all qualifying edges in a single pass (no sorting required). Complexity: O(E·α(n)) ≈ O(E).
+- Rule 2 and Phase 2 can cause **non-monotonic behaviour**: lowering θ may merge clusters that were separate at higher θ due to the bridge and synthetic thresholds. In practice this is rare (bridge fires on <5% of edges, synthetic pass on edgeless pairs only). Tying `θ_synth_eff = max(θ_synth, θ)` limits the effect: at high θ, synthetic edges require even higher phonetic similarity, preserving monotonic feel in the common case.
 - Union-Find is near-linear and runs in <10 ms for 500 nodes.
 - The query-bridge rule (Rule 2) ensures query-relevant pairs cluster even when their precomputed toponym signal `s.n` is low — see §2h for the full rationale.
-- The synthetic-edge pass (Phase 2) closes the "missing edge" gap for pairs that share spatial proximity and phonetic similarity but were never candidates in the offline pipeline — see §2i.
+- The synthetic-edge pass (Phase 2) closes the "missing edge" gap for pairs that share spatial proximity, phonetic similarity, and type overlap but were never candidates in the offline pipeline — see §2i.
+- Oversized clusters are split as a post-processing step (Phase 3), not blocked during union — see §2f.
 
 ### 2d. Baseline cluster bootstrapping
 
 Before applying the user threshold, initialize the Union-Find with baseline clusters (if present): for all results sharing a `baseline_cluster_id`, union them. This provides instant grouping for obvious matches (e.g. GeoNames + Wikidata for the same city) before the user even touches the slider.
+
+**Safety:** baseline clusters are computed offline at θ = 0.9 (near-certain co-referents). Bootstrapping cannot merge two *different* baseline clusters — it only unions results within the same cluster ID. Subsequent edges from Phase 1 may *expand* a baseline cluster by merging additional results into it, but only if those edges pass the user's threshold θ.
 
 ### 2e. Cluster display
 
@@ -203,9 +216,16 @@ Each cluster gets:
 - **Aggregated metadata**: all names across members, all authorities, temporal span union, types union.
 - **Expandable**: user can expand a cluster to see individual member records.
 
-### 2f. Cluster-size damping
+### 2f. Cluster-size limiting (post-processing)
 
-Union-Find can collapse aggressively at low θ, producing "mega-clusters" in dense urban regions (e.g. every "Paris" record in one group). Safeguard: during the union pass, refuse to merge two components if the resulting cluster would exceed a configurable maximum size (e.g. N = 50) **unless** the edge score exceeds a high-confidence threshold (e.g. 0.9) or the edge originates from a hard link (authority sameAs). This prevents runaway merging while still allowing genuinely co-referent large clusters to form.
+Union-Find can produce "mega-clusters" at low θ in dense urban regions (e.g. every "Paris" record in one group). Rather than blocking merges during the union pass (which introduces order-dependent results and breaks transitivity), oversized clusters are **split as a post-processing step** after the Union-Find completes:
+
+1. For each connected component with more than `N_max` members (e.g. 50):
+2. Extract the subgraph of edges within the component.
+3. Tighten the threshold iteratively: raise θ within this component until it fragments into sub-clusters all ≤ N_max, or until θ reaches 0.95 (at which point accept the large cluster as genuinely co-referent).
+4. Hard-link edges (authority sameAs, `s.l ≈ 1.0`) are never cut during splitting — they act as unbreakable bonds within the component.
+
+This preserves transitivity: if A~B and B~C both pass the user's threshold, they are always in the same component. Splitting only tightens the threshold *within* oversized components, producing deterministic and order-independent results.
 
 ### 2g. Client-side phonetic re-scoring
 
