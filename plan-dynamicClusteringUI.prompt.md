@@ -158,6 +158,8 @@ Temporal and type facets are weighted lower because many records lack temporal d
 
 **Null-facet handling.** When a signal component is `null` (e.g. `s.t = null` because one or both places lack timespans), the client **renormalises weights dynamically**: redistribute the null facet's weight proportionally among the non-null facets. For example, if `s.t = null` and the user's weights are `[0.30, 0.25, 0.10, 0.10, 0.25]`, the effective weights become `[0.30, 0.25, 0, 0.10, 0.25] / 0.90 = [0.333, 0.278, 0, 0.111, 0.278]`. This ensures records lacking temporal data are not penalised (treated as 0) or artificially boosted — they are simply scored on the available evidence. The same renormalisation rule is used in the offline pipeline for consistency.
 
+**Known tradeoff: missing data scores higher than noisy data.** Redistribution means two places with perfect name/spatial/link but *no* temporal data score higher than two with perfect name/spatial/link but *slightly mismatched* temporal data. We accept this because: (1) treating null as 0 is strictly worse — ~40% of records lack temporal data and would be systematically under-clustered; (2) the temporal weight is only 0.10, so the maximum scoring advantage from missing data is small (~0.10); (3) the issue diminishes as temporal coverage improves.
+
 **Int8 cosine similarity.** Symphonym embeddings are unit vectors quantized to int8 range [-128, 127]. The client computes `dot(a, b) / (norm(a) × norm(b))` using `Int8Array` arithmetic. Server-side and client-side similarity values are consistent because both use the same quantized vectors.
 
 **Score invariance.** The composite `score` on each edge equals the weighted sum of signal components after null renormalisation under the default (calibrated) weights: `score == Σ (w_i / Σ_nonnull w_j) × s_i`. The client can reconstruct the server's composite score exactly from the `s` breakdown under default weights. This is tested in the offline pipeline and guaranteed as an API invariant — any discrepancy between server and client scores at default weights indicates a bug. When the user adjusts facet weights, the recomputed score intentionally diverges from the precomputed `score` field; only the signal components `s.*` are used.
@@ -223,6 +225,8 @@ Properties:
 ### 2d. Baseline cluster bootstrapping
 
 Before applying the user threshold, initialize the Union-Find with baseline clusters (if present): for all results sharing a `baseline_cluster_id`, union them. This provides instant grouping for obvious matches (e.g. GeoNames + Wikidata for the same city) before the user even touches the slider.
+
+**θ = 1.0 bypass.** When the user sets θ = 1.0 ("no grouping — flat list"), baseline bootstrapping is **skipped entirely**. The Union-Find starts with every result in its own singleton component, and since no edge can have a reweighted score ≥ 1.0, no unions occur. This guarantees a truly flat result list identical to unclustered behaviour. At any θ < 1.0, baseline bootstrapping runs normally.
 
 **Safety:** baseline clusters are **link-dominated**: constructed offline using only authority link signals (`s.l`) and very high toponym signals (`s.n ≥ 0.95`), not the full composite score. This ensures they remain valid regardless of how the user tunes facet weights — a user who prioritises spatial proximity over name similarity will not find that baseline clusters contradict their semantic intent. Bootstrapping cannot merge two *different* baseline clusters — it only unions results within the same cluster ID. Subsequent edges from Phase 1 may *expand* a baseline cluster by merging additional results into it, but only if those edges pass the user's threshold θ.
 
@@ -433,7 +437,7 @@ The existing Data Sources panel lists the authority namespaces available for fil
 The client-side clustering logic (Union-Find, edge reweighting, threshold application) should be implemented as a self-contained ES module (e.g. `whg/webpack/js/clustering.js`) with no external dependencies:
 
 - `class UnionFind` — standard disjoint-set with path compression and union by rank.
-- `function clusterResults(hits, edges, theta, weights, queryScores, params)` — returns a `Map<clusterId, ClusterGroup>`. Runs Phase 1 (precomputed edges with Rules 1–2), Phase 2a (phonetic synthetic edges), and Phase 2b (structural synthetic edges).
+- `function clusterResults(hits, edges, theta, weights, queryScores, params)` — returns a `Map<clusterId, ClusterGroup>`. At θ = 1.0, returns all singletons immediately (no baseline bootstrapping, no edge processing). Otherwise runs Phase 0 (baseline bootstrap), Phase 1 (precomputed edges with Rules 1–2), Phase 2a (phonetic synthetic edges), and Phase 2b (structural synthetic edges).
 - `function reweightEdge(edge, weights)` — computes the weighted sum from signal components with null-facet renormalisation.
 - `function queryBridgeThreshold(theta)` — computes `θ_bridge` from the user's main threshold (e.g. `θ × 0.6`, floored at 0.3).
 - `function phoneticSyntheticPass(uf, hits, params)` — H3-bucketed phonetic comparison for edgeless pairs with stoplist guard and type-overlap check (§2i Rule A).
@@ -551,11 +555,15 @@ Total perceived latency: **~300 ms server + instant client interaction**.
 
 ## 8. Failure Modes and Mitigations
 
-### 8a. Too many results (> 2000)
+### 8a. No server-side pagination for clusterable results
 
-Client-side clustering degrades beyond ~2000 results due to edge volume. Mitigations:
-- Cap clustering to top N results (e.g. 500); remaining results are ungrouped.
-- Server-side fallback: apply default threshold and return pre-grouped results.
+Client-side clustering requires the full result set and its edge subgraph in a single payload — traditional server-side pagination is fundamentally incompatible because co-referent places split across pages could never be clustered together (e.g. "Paris" from GeoNames on page 1, "Paris" from Wikidata on page 2).
+
+The existing gateway returns all results in one response (`SearchRequest.size`, max 500) with no `page`/`offset` parameter. The clustering design preserves this: the entire clustering window (up to 500 results + up to 4000 edges) is delivered in a single payload. Any "pagination" is purely **client-side display pagination** — the browser holds all results and edges in memory, clusters them, and uses virtual scrolling or page controls to render subsets of the already-clustered list.
+
+For queries producing more than 500 matches, the gateway returns the top 500 by discovery score. Matches beyond 500 are not clusterable but are summarised in the response metadata (total hit count, facet aggregations). If a user needs to explore beyond the clustering window, they should refine the query (add filters, narrow spatial bounds) rather than paginate.
+
+If future requirements demand clustering over larger result sets, the server-side fallback path (`cluster_threshold` parameter) can cluster on the gateway and return pre-grouped results for any number of hits.
 
 ### 8b. Dense urban datasets (OSM-heavy)
 
