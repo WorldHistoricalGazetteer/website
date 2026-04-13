@@ -32,9 +32,9 @@ from rest_framework.views import APIView
 from periods.models import Period, Chrononym
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
-from .crc_client import crc_reconcile_search, crc_suggest_search, crc_fetch_places
+from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
 from .querysets import place_feature_queryset, period_public_queryset
-from .reconcile_helpers import make_candidate, format_extend_row, format_crc_extend_row, es_search, \
+from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE
 from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema
@@ -191,16 +191,17 @@ class ReconciliationView(APIView):
                     for obj in qs:
                         rows[f"place:{obj.id}"] = format_extend_row(obj, properties, request=request)
 
-                # CRC places — fetch from CRC gateway
+                # CRC places — forward to CRC gateway /api/extend
                 if crc_ids:
-                    crc_places = crc_fetch_places(crc_ids, user=request.user)
+                    crc_full_ids = [f"place:{crc_id}" for crc_id in crc_ids]
+                    crc_rows = crc_extend(crc_full_ids, properties, user=request.user)
+                    rows.update(crc_rows)
+
+                    # Fill in any IDs that the gateway didn't return
                     for crc_id in crc_ids:
-                        crc_data = crc_places.get(crc_id)
-                        if crc_data:
-                            rows[f"place:{crc_id}"] = format_crc_extend_row(crc_data, properties)
-                        else:
-                            # Return empty cells so OpenRefine doesn't break
-                            rows[f"place:{crc_id}"] = {
+                        key = f"place:{crc_id}"
+                        if key not in rows:
+                            rows[key] = {
                                 (p.get("id") if isinstance(p, dict) else p): []
                                 for p in properties
                             }

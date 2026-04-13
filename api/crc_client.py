@@ -170,60 +170,70 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     return _adapt_hits(data)
 
 
-def crc_fetch_places(place_ids: list[str], user=None) -> dict[str, dict]:
+def crc_extend(entity_ids: list[str], properties: list, user=None) -> dict:
     """
-    Fetch full place data from the CRC gateway by namespaced IDs.
+    Call the CRC gateway ``POST /api/extend`` endpoint for data extension.
 
-    Calls ``GET /api/places?ids=gn:745044,gn:123456`` (or POST with body).
+    Forwards an OpenRefine-style extend request for CRC-sourced place records
+    (namespaced IDs like ``"place:wd:Q16202"``) to the gateway, which looks up
+    records and extracts the requested properties.
 
     Args:
-        place_ids: List of namespaced CRC place IDs, e.g. ``["gn:745044", "tgn:7010731"]``.
-        user: Django User instance.
+        entity_ids: Full entity IDs including the type prefix,
+            e.g. ``["place:wd:Q16202", "place:gn:745044"]``.
+        properties: Property list in OpenRefine extend format,
+            e.g. ``[{"id": "whg:geometry_geojson"}, {"id": "whg:names_canonical"}]``.
+        user: Django User instance (for access check).
 
     Returns:
-        Dict mapping each place_id to its data dict (with keys like
-        ``title``, ``names``, ``ccodes``, ``geometries``, etc.).
-        Missing/errored IDs are omitted.  Returns ``{}`` on any error.
+        Dict mapping entity_id → property values dict, e.g.::
+
+            {
+                "place:wd:Q16202": {
+                    "whg:geometry_geojson": [{"str": "..."}],
+                    "whg:names_canonical": [{"str": "Istanbul"}]
+                }
+            }
+
+        Returns ``{}`` on any error.
     """
     if not _is_enabled(user):
         return {}
 
-    if not place_ids:
+    if not entity_ids:
         return {}
 
+    body = {
+        "ids": entity_ids,
+        "properties": properties,
+    }
+
     try:
-        url = f"{_gateway_url()}/api/places"
-        logger.info("CRC gateway GET %s  ids=%s", url, place_ids)
+        url = f"{_gateway_url()}/api/extend"
+        logger.info("CRC gateway POST %s  ids=%s", url, entity_ids)
         resp = requests.post(
             url,
-            json={"ids": place_ids},
+            json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
-        logger.info("CRC gateway /api/places response: %s", resp.status_code)
+        logger.info("CRC gateway /api/extend response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except requests.Timeout:
-        logger.warning("CRC gateway /api/places timeout after %ss", _timeout())
+        logger.warning("CRC gateway /api/extend timeout after %ss", _timeout())
         return {}
     except requests.ConnectionError as e:
-        logger.warning("CRC gateway /api/places connection error: %s", e)
+        logger.warning("CRC gateway /api/extend connection error: %s", e)
         return {}
     except requests.HTTPError as e:
-        logger.warning("CRC gateway /api/places HTTP error: %s — extend unavailable for CRC entities", e)
+        logger.warning("CRC gateway /api/extend HTTP error: %s", e)
         return {}
     except Exception as e:
-        logger.warning("CRC gateway /api/places unexpected error: %s", e)
+        logger.warning("CRC gateway /api/extend unexpected error: %s", e)
         return {}
 
-    # Expected response: {"places": [{"place_id": "gn:745044", "title": ..., ...}, ...]}
-    result = {}
-    for place in data.get("places", data.get("hits", [])):
-        pid = str(place.get("place_id", ""))
-        if pid:
-            result[pid] = place
-
-    return result
+    return data.get("rows", {})
 
 
 def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None,
