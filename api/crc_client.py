@@ -170,6 +170,62 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     return _adapt_hits(data)
 
 
+def crc_fetch_places(place_ids: list[str], user=None) -> dict[str, dict]:
+    """
+    Fetch full place data from the CRC gateway by namespaced IDs.
+
+    Calls ``POST /api/places`` with body ``{"ids": [...]}``.
+
+    Args:
+        place_ids: List of namespaced CRC place IDs, e.g. ``["gn:745044", "tgn:7010731"]``.
+        user: Django User instance.
+
+    Returns:
+        Dict mapping each place_id to its data dict (with keys like
+        ``title``, ``names``, ``ccodes``, ``geometries``, etc.).
+        Missing/errored IDs are omitted.  Returns ``{}`` on any error.
+    """
+    if not _is_enabled(user):
+        return {}
+
+    if not place_ids:
+        return {}
+
+    try:
+        url = f"{_gateway_url()}/api/places"
+        logger.info("CRC gateway GET %s  ids=%s", url, place_ids)
+        resp = requests.post(
+            url,
+            json={"ids": place_ids},
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        logger.info("CRC gateway /api/places response: %s", resp.status_code)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.Timeout:
+        logger.warning("CRC gateway /api/places timeout after %ss", _timeout())
+        return {}
+    except requests.ConnectionError as e:
+        logger.warning("CRC gateway /api/places connection error: %s", e)
+        return {}
+    except requests.HTTPError as e:
+        logger.warning("CRC gateway /api/places HTTP error: %s — extend unavailable for CRC entities", e)
+        return {}
+    except Exception as e:
+        logger.warning("CRC gateway /api/places unexpected error: %s", e)
+        return {}
+
+    # Expected response: {"places": [{"place_id": "gn:745044", "title": ..., ...}, ...]}
+    result = {}
+    for place in data.get("places", data.get("hits", [])):
+        pid = str(place.get("place_id", ""))
+        if pid:
+            result[pid] = place
+
+    return result
+
+
 def crc_extend(entity_ids: list[str], properties: list, user=None) -> dict:
     """
     Call the CRC gateway ``POST /api/extend`` endpoint for data extension.
