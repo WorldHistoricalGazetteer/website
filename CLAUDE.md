@@ -11,7 +11,7 @@
 ### Stack
 - **Backend:** Django 4.1.7 + Django REST Framework 3.14 + Celery
 - **Database:** PostgreSQL 15 with PostGIS 3.4 (via `psycopg2-binary`)
-- **Search:** Elasticsearch 8 (client: `elasticsearch8==8.9.0`), hosted on Pitt CRC
+- **Search:** Elasticsearch 9 hosted on Pitt CRC
 - **Frontend:** Bootstrap 5.2, jQuery 3.6, Webpack 5 (bundles to `static/webpack/`)
 - **Mapping:** MapLibre GL JS, Turf.js
 - **Task queue:** Celery + Redis (broker), django-celery-results (backend)
