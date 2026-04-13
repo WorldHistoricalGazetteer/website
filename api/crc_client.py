@@ -121,6 +121,18 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
             countries = json.loads(countries)
         body["ccodes"] = countries
 
+    # Namespace filter (e.g. ["wd", "gn"])
+    namespaces = raw.get("namespaces")
+    if namespaces:
+        if isinstance(namespaces, str):
+            namespaces = [n.strip() for n in namespaces.split(",") if n.strip()]
+        body["namespaces"] = namespaces
+
+    # Feature class filter (e.g. ["P", "A"])
+    fclasses = normalised_query.get("fclasses")
+    if fclasses:
+        body["fclasses"] = fclasses
+
     # Spatial bounds
     bounds = normalised_query.get("bounds")
     if bounds:

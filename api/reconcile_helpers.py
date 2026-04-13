@@ -237,19 +237,26 @@ def build_es_query(params, size=100):
     if bounds:
         if isinstance(bounds, str):
             bounds = json.loads(bounds)
+
+        # Collect geometries from either plain GeoJSON or GeometryCollection
+        geometries = []
         if bounds.get("geometries"):
-            for geometry in bounds["geometries"]:
-                geometry_filters.append({
-                    "geo_shape": {
-                        "geoms.location": {
-                            "shape": {
-                                "type": geometry["type"],
-                                "coordinates": geometry["coordinates"]
-                            },
-                            "relation": "intersects"
-                        }
+            geometries = bounds["geometries"]
+        elif bounds.get("type") in ("Polygon", "MultiPolygon"):
+            geometries = [bounds]
+
+        for geometry in geometries:
+            geometry_filters.append({
+                "geo_shape": {
+                    "geoms.location": {
+                        "shape": {
+                            "type": geometry["type"],
+                            "coordinates": geometry["coordinates"]
+                        },
+                        "relation": "intersects"
                     }
-                })
+                }
+            })
 
     userareas = params.get("userareas")
     if userareas:

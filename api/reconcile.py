@@ -635,7 +635,7 @@ def normalise_query_params(params):
     Returns a dict with clean values ready for downstream use.
     """
     query_text = params.get("query", "").strip() or None
-    size = int(params.get("size", 100))
+    size = int(params.get("limit", params.get("size", 100)))
 
     bounds = None
 
@@ -662,14 +662,26 @@ def normalise_query_params(params):
     if has_nearby:
         bounds = circle_to_polygon(lat, lng, radius)
     else:
-        # Bounds (GeoJSON-style polygon)
+        # Bounds (GeoJSON geometry)
         if "bounds" in params:
             try:
-                geom = params["bounds"].get("geometries", [])[0]
-                if geom["type"] != "Polygon":
-                    raise ValueError("Bounds geometry must be a Polygon")
-                bounds = {"type": "Polygon", "coordinates": geom["coordinates"]}
-            except Exception as e:
+                raw_bounds = params["bounds"]
+                if isinstance(raw_bounds, str):
+                    raw_bounds = json.loads(raw_bounds)
+
+                # Accept plain GeoJSON geometry (Polygon, MultiPolygon, etc.)
+                if raw_bounds.get("type") in ("Polygon", "MultiPolygon"):
+                    bounds = {"type": raw_bounds["type"], "coordinates": raw_bounds["coordinates"]}
+                # Accept GeometryCollection with a geometries array
+                elif raw_bounds.get("geometries"):
+                    geom = raw_bounds["geometries"][0]
+                    bounds = {"type": geom["type"], "coordinates": geom["coordinates"]}
+                else:
+                    raise ValueError(
+                        "Bounds must be a GeoJSON Polygon/MultiPolygon or a "
+                        "GeometryCollection with a 'geometries' array"
+                    )
+            except (ValueError, KeyError, IndexError, TypeError) as e:
                 raise ValueError(f"Invalid bounds: {e}")
 
     has_dataset = "dataset" in params
