@@ -107,6 +107,13 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             countries = json.loads(countries)
         body["ccodes"] = countries
 
+    # Namespace filter (e.g. ["wd", "gn"])
+    namespaces = raw.get("namespaces")
+    if namespaces:
+        if isinstance(namespaces, str):
+            namespaces = [n.strip() for n in namespaces.split(",") if n.strip()]
+        body["namespaces"] = namespaces
+
     # Feature classes (e.g. ["A", "P"])
     fclasses = normalised_query.get("fclasses") or raw.get("fclasses")
     if fclasses:
@@ -134,9 +141,6 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     if end is not None:
         body["end_year"] = int(end)
 
-    # Namespace filter (e.g. ["gn", "tgn"])
-    if namespaces:
-        body["namespaces"] = sorted(namespaces)
 
     try:
         url = f"{_gateway_url()}/api/reconcile"
