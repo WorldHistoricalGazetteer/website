@@ -200,13 +200,23 @@ class ReconciliationView(APIView):
                 return json_error(str(e))
 
             if not entity_type:
-                # If it looks like OpenRefine type guessing, return dummies to force display of all default types
-                all_candidates = create_type_guessing_dummies(SERVICE_METADATA)
-                first_query_id = next(iter(queries))
-                results = {
-                    first_query_id: {"result": all_candidates}
-                }
-                return JsonResponse(results)
+                # Check if any query has real query text — if so, default to "place"
+                # rather than assuming this is an OpenRefine type-guessing probe.
+                has_real_query = any(
+                    q.get("query", "").strip()
+                    for q in queries.values()
+                    if isinstance(q, dict)
+                )
+                if has_real_query:
+                    entity_type = "place"
+                else:
+                    # No type and no query text: OpenRefine type guessing — return dummies
+                    all_candidates = create_type_guessing_dummies(SERVICE_METADATA)
+                    first_query_id = next(iter(queries))
+                    results = {
+                        first_query_id: {"result": all_candidates}
+                    }
+                    return JsonResponse(results)
 
             # Period reconciliation
             batch_size = SERVICE_METADATA.get("batch_size", 50)
