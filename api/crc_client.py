@@ -99,12 +99,11 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         "size": normalised_query.get("size", 50),
     }
 
-    # Country codes
+    # Country codes – accept list ["US","GB"] or comma-delimited string "US,GB"
     countries = raw.get("countries")
     if countries:
         if isinstance(countries, str):
-            import json
-            countries = json.loads(countries)
+            countries = [c.strip().upper() for c in countries.split(",") if c.strip()]
         body["ccodes"] = countries
 
     # Namespace filter (e.g. ["wd", "gn"])
