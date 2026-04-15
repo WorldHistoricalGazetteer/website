@@ -42,6 +42,20 @@ from .serializers_api import PeriodPreviewSerializer
 
 logger = logging.getLogger('reconciliation')
 
+LOG_MAX_LEN = 2000  # max characters per logged payload/response
+
+
+def _log_json(label, data):
+    """Log a JSON-serialisable object, truncating if needed."""
+    try:
+        text = json.dumps(data, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        text = str(data)
+    if len(text) > LOG_MAX_LEN:
+        text = text[:LOG_MAX_LEN] + f"... ({len(text)} chars total)"
+    logger.debug("%s: %s", label, text)
+
+
 DOMAIN = os.environ.get('URL_FRONT', 'https://whgazetteer.org').rstrip('/')
 DOCS_URL = "https://docs.whgazetteer.org/content/technical/apis.html#reconciliation-service-api"
 TILESERVER_URL = os.environ.get('TILEBOSS', 'https://tiles.whgazetteer.org').rstrip('/')
@@ -170,6 +184,8 @@ class ReconciliationView(APIView):
             logger.warning("POST /reconcile parse error from %s: %s", request.META.get('REMOTE_ADDR'), e)
             return json_error(str(e))
 
+        _log_json("POST /reconcile payload", payload)
+
         # Data extension requests
         extend = payload.get("extend", {})
         if extend:
@@ -178,6 +194,7 @@ class ReconciliationView(APIView):
                         len(entity_ids), [p.get("id") if isinstance(p, dict) else p
                                           for p in extend.get("properties", [])])
             if not entity_ids:
+                logger.debug("POST /reconcile extend: no entity IDs, returning empty")
                 return JsonResponse({"rows": {}, "meta": []})
 
             try:
@@ -227,7 +244,9 @@ class ReconciliationView(APIView):
                 for prop in properties
             ]
 
-            return JsonResponse({"meta": meta, "rows": rows})
+            response_data = {"meta": meta, "rows": rows}
+            _log_json("POST /reconcile extend response", response_data)
+            return JsonResponse(response_data)
 
         # Reconciliation queries
         queries = payload.get("queries", {})
@@ -256,6 +275,7 @@ class ReconciliationView(APIView):
                     results = {
                         first_query_id: {"result": all_candidates}
                     }
+                    _log_json("POST /reconcile type-guessing response", results)
                     return JsonResponse(results)
 
             # Period reconciliation
@@ -268,10 +288,12 @@ class ReconciliationView(APIView):
                 for key, params in queries.items():
                     results[key] = self.reconcile_chrononym_to_period(params)
 
+                _log_json("POST /reconcile period response", results)
                 return JsonResponse(results)
 
             # Place reconciliation
             results = process_queries(queries, batch_size=batch_size, user=request.user)
+            _log_json("POST /reconcile place response", results)
             return JsonResponse(results)
 
         return json_error("Missing 'queries' or 'extend' parameter")
