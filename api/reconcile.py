@@ -458,6 +458,10 @@ class SuggestEntityView(AuthenticatedAPIView):
     def get(self, request, *args, **kwargs):
         prefix = request.GET.get("prefix", "").strip()
 
+        logger.info("GET /suggest/entity from %s (user=%s, prefix=%r, params=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user, prefix,
+                     {k: v for k, v in request.GET.items() if k != 'token'})
+
         if not prefix:
             return JsonResponse({"result": []})
 
@@ -591,6 +595,9 @@ class SuggestEntityView(AuthenticatedAPIView):
         callback = request.GET.get('callback')
         results = {"result": final_candidates}
 
+        logger.info("GET /suggest/entity response: %d candidates", len(final_candidates))
+        _log_json("GET /suggest/entity response", results)
+
         if callback:
             response_data = f"{callback}({json.dumps(results)})"
             return JsonResponse(response_data, safe=False, content_type='application/javascript')
@@ -603,6 +610,9 @@ class SuggestEntityView(AuthenticatedAPIView):
 class SuggestPropertyView(AuthenticatedAPIView):
 
     def get(self, request, *args, **kwargs):
+        logger.info("GET /suggest/property from %s (user=%s, params=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user,
+                     {k: v for k, v in request.GET.items() if k != 'token'})
         try:
             query_text = (request.GET.get("prefix") or request.GET.get("query") or "").strip().lower()
             limit = int(request.GET.get("limit", 10))
