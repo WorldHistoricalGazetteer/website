@@ -136,6 +136,7 @@ class ReconciliationView(APIView):
     authentication_classes = [TokenQueryOrBearerAuthentication, SessionAuthentication]
 
     def get(self, request, *args, **kwargs):
+        logger.info("GET /reconcile from %s (user=%s)", request.META.get('REMOTE_ADDR'), request.user)
 
         token = request.GET.get("token")
 
@@ -157,17 +158,25 @@ class ReconciliationView(APIView):
     def post(self, request, *args, **kwargs):
 
         if not request.user or not request.user.is_authenticated:
+            logger.warning("POST /reconcile unauthenticated from %s", request.META.get('REMOTE_ADDR'))
             return json_error("Authentication required. Provide a valid API token.", status=401)
+
+        logger.info("POST /reconcile from %s (user=%s, content_type=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user, request.content_type)
 
         try:
             payload = parse_request_payload(request)
         except ValueError as e:
+            logger.warning("POST /reconcile parse error from %s: %s", request.META.get('REMOTE_ADDR'), e)
             return json_error(str(e))
 
         # Data extension requests
         extend = payload.get("extend", {})
         if extend:
             entity_ids = extend.get("ids", [])
+            logger.info("POST /reconcile extend: %d entity IDs, properties=%s",
+                        len(entity_ids), [p.get("id") if isinstance(p, dict) else p
+                                          for p in extend.get("properties", [])])
             if not entity_ids:
                 return JsonResponse({"rows": {}, "meta": []})
 
@@ -223,9 +232,11 @@ class ReconciliationView(APIView):
         # Reconciliation queries
         queries = payload.get("queries", {})
         if queries:
+            logger.info("POST /reconcile queries: %d queries", len(queries))
             try:
                 entity_type, _ = extract_entity_type(queries, from_queries=True)
             except ValueError as e:
+                logger.warning("POST /reconcile entity_type error: %s", e)
                 return json_error(str(e))
 
             if not entity_type:
@@ -664,6 +675,7 @@ def process_queries(queries, batch_size=50, user=None):
         # Slice rather than reject
         queries = dict(list(queries.items())[:batch_size])
         messages.append(f"Batch size limit exceeded; processing first {batch_size} queries.")
+        logger.info("process_queries: batch limit exceeded, truncated to %d", batch_size)
 
     results = {}
     for key, params in queries.items():
@@ -671,6 +683,7 @@ def process_queries(queries, batch_size=50, user=None):
             query = normalise_query_params(params)
             results[key] = reconcile_place_es(query, user=user)
         except ValueError as e:
+            logger.warning("process_queries: query '%s' failed: %s", key, e)
             results[key] = {"error": str(e), "result": []}
     return {**results, "messages": messages} if messages else results
 
