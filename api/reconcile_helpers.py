@@ -931,6 +931,16 @@ def parse_schema(schema_file):
         }
     ])
 
+    # Add filter properties (used as query constraints, not data extension)
+    propose_properties.extend([
+        {
+            "id": "whg:namespaces",
+            "name": "Place: Namespaces (filter)",
+            "description": "Comma-separated namespace prefixes to search (e.g. 'wd,gn'). Limits results to the specified data sources.",
+            "type": "string"
+        },
+    ])
+
     return propose_properties, valid_fclasses
 
 

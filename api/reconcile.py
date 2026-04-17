@@ -724,8 +724,37 @@ def normalise_query_params(params):
     """
     Validate and normalise a single reconcile query dict.
     Ensures geometry filters, nearby circle, and query_text are handled consistently.
+
+    OpenRefine sends additional column mappings as a ``properties`` array
+    inside each query, e.g.::
+
+        {"query": "rome", "properties": [{"pid": "whg:countries_codes", "v": "IT"}]}
+
+    This function extracts recognised filter properties and merges them
+    into the top-level params before processing.
+
     Returns a dict with clean values ready for downstream use.
     """
+    # --- Extract OpenRefine-style properties into top-level params ---
+    or_props = params.get("properties", [])
+    if or_props and isinstance(or_props, list):
+        PROPERTY_FILTER_MAP = {
+            "whg:namespaces": "namespaces",
+            "whg:countries_codes": "countries",
+            "whg:classes_codes": "fclasses",
+            "whg:types_objects": "types",
+        }
+        for prop in or_props:
+            if not isinstance(prop, dict):
+                continue
+            pid = prop.get("pid") or prop.get("p") or prop.get("id")
+            val = prop.get("v") if "v" in prop else prop.get("value")
+            if pid and val is not None and pid in PROPERTY_FILTER_MAP:
+                target_key = PROPERTY_FILTER_MAP[pid]
+                # Only set if not already explicitly provided at top level
+                if target_key not in params:
+                    params[target_key] = val
+
     query_text = params.get("query", "").strip() or None
     size = int(params.get("limit", params.get("size", 100)))
 
