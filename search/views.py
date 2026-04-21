@@ -94,7 +94,7 @@ class SearchPageView(TemplateView):
                 user_areas.append(feature)
 
         context['has_areas'] = len(user_areas) > 0
-        context['user_areas'] = user_areas
+        context['user_areas'] = json.dumps(user_areas)
 
         return context
 
@@ -143,7 +143,7 @@ class AtlasPageView(TemplateView):
                 user_areas.append(feature)
 
         context['has_areas'] = len(user_areas) > 0
-        context['user_areas'] = user_areas
+        context['user_areas'] = json.dumps(user_areas)
         return context
 
 
