@@ -67,6 +67,7 @@ urlpatterns = [
                   path('places/', include('places.urls')),
                   path('resources/', include('resources.urls')),
                   path('search/', include('search.urls')),
+                  path('types/', include('placetypes.urls')),
                   path(
                       "sitemap.xml",
                       cache_page(3600, cache='sitemap_cache')(sitemapviews.index),
