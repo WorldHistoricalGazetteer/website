@@ -1,0 +1,2240 @@
+{
+  "namespace": "pleiades",
+  "source": "Pleiades place-types vocabulary (https://pleiades.stoa.org/vocabularies/place-types)",
+  "total_active_types": 220,
+  "total_deprecated_types": 9,
+  "types_with_aat_mapping": 151,
+  "values": [
+    {
+      "value": "abbey",
+      "label": "abbey (monastery)",
+      "description": "An abbey (monastery) as defined by the Getty Art and Architecture Thesaurus: independent and canonically erected monasteries, ruled by an abbot if occupied by monks and by an abbess if occupied by nuns.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000642"
+      ],
+      "deprecated": false,
+      "aat_id": 300000642,
+      "aat_uri": "http://vocab.getty.edu/aat/300000642"
+    },
+    {
+      "value": "abbey-church",
+      "label": "abbey church",
+      "description": "An abbey church as defined by the Getty Art and Architecture Thesaurus: Churches that form the center of an abbey.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007495"
+      ],
+      "deprecated": false,
+      "aat_id": 300007495,
+      "aat_uri": "http://vocab.getty.edu/aat/300007495"
+    },
+    {
+      "value": "acropolis",
+      "label": "acropolis",
+      "description": "An acropolis as defined by the Getty Art and Architecture Thesaurus term 300000700: \"The higher and usually fortified sections of ancient Greek cities, typically containing temples and some public buildings and used as places of refuge.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000700"
+      ],
+      "deprecated": false,
+      "aat_id": 300000700,
+      "aat_uri": "http://vocab.getty.edu/aat/300000700"
+    },
+    {
+      "value": "agora",
+      "label": "agora",
+      "description": "An agora as defined by the Getty Art and Architecture Thesaurus: In ancient Greek settlements, open spaces used as marketplaces or general public meeting places.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008074"
+      ],
+      "deprecated": false,
+      "aat_id": 300008074,
+      "aat_uri": "http://vocab.getty.edu/aat/300008074"
+    },
+    {
+      "value": "altar",
+      "label": "altar",
+      "description": "An altar as defined by the Getty Art and Architecture Thesaurus: \"Elevated platforms or constructions upon which religious sacrifice is offered or other religious or spiritual activities carried out. In a Christian church altars are platforms where Eucharistic elements are consecrated, in the ancient tradition of a sacrifice. Includes both indoor small, tablelike fixtures and larger, free-standing, outdoor structures.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300003725"
+      ],
+      "deprecated": false,
+      "aat_id": 300003725,
+      "aat_uri": "https://vocab.getty.edu/aat/300003725"
+    },
+    {
+      "value": "amphitheatre",
+      "label": "amphitheatre, amphitheater",
+      "description": "An amphitheater as defined by the Getty Art and Architecture Thesaurus: \"Circular or elliptical structures in which a central performance area is surrounded by rising tiers of seats.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007128"
+      ],
+      "deprecated": false,
+      "aat_id": 300007128,
+      "aat_uri": "https://vocab.getty.edu/aat/300007128"
+    },
+    {
+      "value": "anchorage",
+      "label": "anchorage",
+      "description": "An anchorage as defined by the Getty Art and Architecture Thesaurus: Areas where vessals anchor.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300386968"
+      ],
+      "deprecated": false,
+      "aat_id": 300386968,
+      "aat_uri": "http://vocab.getty.edu/aat/300386968"
+    },
+    {
+      "value": "aqueduct",
+      "label": "aqueduct",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "arch",
+      "label": "arch",
+      "description": "An arch as defined by the Getty Art and Architecture Thesaurus: Structural elements, typically curved, spanning openings and transmitting vertical loads to either side of the opening; also, structural elements or freestanding structures that resemble arches or act structurally like arches.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000994"
+      ],
+      "deprecated": false,
+      "aat_id": 300000994,
+      "aat_uri": "http://vocab.getty.edu/aat/300000994"
+    },
+    {
+      "value": "archaeological-site",
+      "label": "archaeological site",
+      "description": "An archaeological site as defined by the Getty Art and Architecture Thesaurus:  Locations where human activities once took place and some form of material evidence has been left behind, particularly sites where evidence of past activity is being or has been investigated using the discipline of archaeology.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000810"
+      ],
+      "deprecated": false,
+      "aat_id": 300000810,
+      "aat_uri": "http://vocab.getty.edu/aat/300000810"
+    },
+    {
+      "value": "archipelago",
+      "label": "archipelago, island group",
+      "description": "Any grouping of islands or an archipelago that are treated as a unit in antiquity or in archaeological analysis.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300386854"
+      ],
+      "deprecated": false,
+      "aat_id": 300386854,
+      "aat_uri": "https://vocab.getty.edu/aat/300386854"
+    },
+    {
+      "value": "architecturalcomplex",
+      "label": "architectural complex",
+      "description": "A group of rooms, spaces, built features or structures that make up an individual architectural unit within a larger building or group of buildings.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "archive-repository",
+      "label": "archive repository",
+      "description": "An archive repository as defined by the Getty Art and Architecture Thesaurus: buildings or rooms for long-term storage or depositing of archives or documents",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300264596"
+      ],
+      "deprecated": false,
+      "aat_id": 300264596,
+      "aat_uri": "http://vocab.getty.edu/aat/300264596"
+    },
+    {
+      "value": "barracks",
+      "label": "barracks",
+      "description": "Barracks as defined by the Getty Art and Architecture Thesaurus: Buildings or sets of buildings erected as common living quarters for groups of soldiers or workers.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005665"
+      ],
+      "deprecated": false,
+      "aat_id": 300005665,
+      "aat_uri": "http://vocab.getty.edu/aat/300005665"
+    },
+    {
+      "value": "basilica",
+      "label": "basilica",
+      "description": "A basilica as defined by the Getty Art and Architecture Thesaurus: \"Refers to religious or secular buildings characterized by an oblong plan divided into a nave with two or more side aisles, the former higher and wider than the latter and generally lit by clerestory windows; usually terminated by an apse.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300170443"
+      ],
+      "deprecated": false,
+      "aat_id": 300170443,
+      "aat_uri": "https://vocab.getty.edu/aat/300170443"
+    },
+    {
+      "value": "bath",
+      "label": "bath, spa",
+      "description": "Bath complexes as commonly found in Greek and Roman cities.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "battlefield",
+      "label": "battlefield",
+      "description": "A battlefield as defined by the Getty Art and Architecture Thesaurus: Locations where a hostile meetings of opposing military forces in the course of a war have taken place.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300000835"
+      ],
+      "deprecated": false,
+      "aat_id": 300000835,
+      "aat_uri": "https://vocab.getty.edu/aat/300000835"
+    },
+    {
+      "value": "bay",
+      "label": "bay",
+      "description": "A bay as defined by the Getty Art and Architecture Thesaurus: \"Denotes wide, open, curving indentations of a shoreline, larger than coves and smaller than gulfs.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300132316"
+      ],
+      "deprecated": false,
+      "aat_id": 300132316,
+      "aat_uri": "https://vocab.getty.edu/aat/300132316"
+    },
+    {
+      "value": "bridge",
+      "label": "bridge",
+      "description": "A bridge as defined by the Getty Art and Architecture Thesaurus: Structures spanning and providing passage over waterways, topographic depressions, transportation routes, or similar circulation barriers.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007836"
+      ],
+      "deprecated": false,
+      "aat_id": 300007836,
+      "aat_uri": "http://vocab.getty.edu/aat/300007836"
+    },
+    {
+      "value": "brothel",
+      "label": "brothel",
+      "description": "A brothel as defined by the Getty Art and Architecture Thesaurus: Buildings designed or maintained as houses of prostitution.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007218"
+      ],
+      "deprecated": false,
+      "aat_id": 300007218,
+      "aat_uri": "https://vocab.getty.edu/aat/300007218"
+    },
+    {
+      "value": "building",
+      "label": "building",
+      "description": "A building as defined in WikiData Q41176: a structure, typically with a roof and walls, standing more or less permanently in one place",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q41176"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "cairn",
+      "label": "cairn",
+      "description": "A cairn as defined by the Getty Art and Architecture Thesaurus term 300006960: \"Ancient landmarks, monuments, memorials, or burial places covered with stones or a large mound of earth, specific to Scotland, Ireland, and Wales\".",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006960"
+      ],
+      "deprecated": false,
+      "aat_id": 300006960,
+      "aat_uri": "http://vocab.getty.edu/aat/300006960"
+    },
+    {
+      "value": "canal",
+      "label": "canal",
+      "description": "A canal as defined by the Getty Art and Architecture Thesaurus: Artificial navigable waterways.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006075"
+      ],
+      "deprecated": false,
+      "aat_id": 300006075,
+      "aat_uri": "http://vocab.getty.edu/aat/300006075"
+    },
+    {
+      "value": "canyon",
+      "label": "canyon",
+      "description": "A canyon (fluvial landform) as defined by the Getty Art and Architecture Thesaurus: Deep, steep-sided land depressions, often having a river at the bottom; common to arid and semi-arid areas. Distinct from \"valleys (landforms),\" which tend to have a flattish landscape rather than high, precipitous slopes. Distinct from \"gorges (landforms),\" which tend to be smaller, narrower, and more rocky.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008763"
+      ],
+      "deprecated": false,
+      "aat_id": 300008763,
+      "aat_uri": "http://vocab.getty.edu/aat/300008763"
+    },
+    {
+      "value": "cape",
+      "label": "cape, promontory, promuntory",
+      "description": "A cape as defined by the Getty Art and Archaeology Thesaurus: \"Land areas, more prominent than a point, projecting into the sea and marking a notable change in coastal direction.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008850"
+      ],
+      "deprecated": false,
+      "aat_id": 300008850,
+      "aat_uri": "https://vocab.getty.edu/aat/300008850"
+    },
+    {
+      "value": "cascade",
+      "label": "cascade",
+      "description": "A cascade as defined by the Getty Art and Architecture Thesaurus: Man-made stepped waterfalls, whether naturalistic or architectural in form.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006792"
+      ],
+      "deprecated": false,
+      "aat_id": 300006792,
+      "aat_uri": "http://vocab.getty.edu/aat/300006792"
+    },
+    {
+      "value": "castellum",
+      "label": "castellum",
+      "description": "A castellum as defined by the Getty Art and Architecture Thesaurus: Small, ancient Roman fortified towns or outposts.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008450"
+      ],
+      "deprecated": false,
+      "aat_id": 300008450,
+      "aat_uri": "http://vocab.getty.edu/aat/300008450"
+    },
+    {
+      "value": "castle",
+      "label": "castle",
+      "description": "A castle as defined by the Getty Art and Architecture Thesaurus: Buildings or groups of buildings intended primarily to serve as a fortified residence of a prince or nobleman.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006891"
+      ],
+      "deprecated": false,
+      "aat_id": 300006891,
+      "aat_uri": "http://vocab.getty.edu/aat/300006891"
+    },
+    {
+      "value": "causeway",
+      "label": "causeway",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "cave",
+      "label": "cave",
+      "description": "A cave as defined by the Getty Art and Architecture Thesaurus: \"Natural openings in the earth large enough for human exploration.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008746"
+      ],
+      "deprecated": false,
+      "aat_id": 300008746,
+      "aat_uri": "https://vocab.getty.edu/aat/300008746"
+    },
+    {
+      "value": "cemetery",
+      "label": "catacomb, cemetery, necropolis",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "cenotaph",
+      "label": "cenotaph",
+      "description": "A cenotaph as defined by the Getty Art and Architecture Thesaurus: \"Sepulchral monuments erected to a person or persons buried elsewhere.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007027"
+      ],
+      "deprecated": false,
+      "aat_id": 300007027,
+      "aat_uri": "https://vocab.getty.edu/aat/300007027"
+    },
+    {
+      "value": "centuriation",
+      "label": "centuriation",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "ceramicproduction",
+      "label": "ceramic production facility or area",
+      "description": "A ceramic production facility, plant, or area.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "channel-artificial",
+      "label": "channel (artificial)",
+      "description": "An artificial water channel as defined by the Getty Art and Architecture Thesaurus: Well-defined channels that carry flowing water and that have been artificially constructed.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300133792"
+      ],
+      "deprecated": false,
+      "aat_id": 300133792,
+      "aat_uri": "http://vocab.getty.edu/aat/300133792"
+    },
+    {
+      "value": "church-2",
+      "label": "church",
+      "description": "A church building as defined by the Getty Art and Architecture Thesaurus term 300007466: \"Buildings for public Christian worship that are distinguished historically from chapels and oratories, which are buildings that are in some respect private, or not public in the widest sense. Church architecture generally somewhat follows standard models, which vary depending upon the date, location, and characteristics of the congregation.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007466"
+      ],
+      "deprecated": false,
+      "aat_id": 300007466,
+      "aat_uri": "http://vocab.getty.edu/aat/300007466"
+    },
+    {
+      "value": "circus",
+      "label": "circus",
+      "description": "A circus as defined by the Getty Art and Architecture Thesaurus: \"Oblong ancient Roman enclosures that are curved at one end, with tiered seating on three sides, and built for chariot and horse racing.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007255"
+      ],
+      "deprecated": false,
+      "aat_id": 300007255,
+      "aat_uri": "https://vocab.getty.edu/aat/300007255"
+    },
+    {
+      "value": "cistern",
+      "label": "cistern",
+      "description": "A waterproof receptacle for retaining liquids, as described at http://en.wikipedia.org/wiki/Cistern. Equivalent to aat:300052558.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300052558"
+      ],
+      "deprecated": false,
+      "aat_id": 300052558,
+      "aat_uri": "http://vocab.getty.edu/aat/300052558"
+    },
+    {
+      "value": "citadel",
+      "label": "citadel",
+      "description": "A citadel as defined by the Getty Art and Architecture Thesaurus: Fortresses commanding cities or towns, serving to protect and control the inhabitants.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006902"
+      ],
+      "deprecated": false,
+      "aat_id": 300006902,
+      "aat_uri": "http://vocab.getty.edu/aat/300006902"
+    },
+    {
+      "value": "city-block",
+      "label": "city block",
+      "description": "A city block as defined by the Getty Art and Architecture Thesaurus: Pieces of land within urban areas usually bounded on all sides by streets or other transportation routes, natural physical barriers, or public open space and not traversed by through streets.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008077"
+      ],
+      "deprecated": false,
+      "aat_id": 300008077,
+      "aat_uri": "http://vocab.getty.edu/aat/300008077"
+    },
+    {
+      "value": "city-center",
+      "label": "city center",
+      "description": "A city center as defined in Wikidata Q1468524: commercial, cultural and often the historical, political and geographic heart of a city",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q1468524"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "city-gate",
+      "label": "gate (of a city), city gate",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "city-wall",
+      "label": "wall (of a city), city wall",
+      "description": "A wall as defined by the Getty Art and Architecture Thesaurus, term 300005072: Fortification walls of cities.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005072"
+      ],
+      "deprecated": false,
+      "aat_id": 300005072,
+      "aat_uri": "http://vocab.getty.edu/aat/300005072"
+    },
+    {
+      "value": "coast",
+      "label": "coast, shore",
+      "description": "A coast as defined by the GeoNames Ontology: \"a zone of variable width straddling the shoreline\"",
+      "same_as": [
+        "https://www.geonames.org/ontology#L.CST"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "coastal-change",
+      "label": "coastal change",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "cultural-landscape",
+      "label": "cultural landscape",
+      "description": "A culture landscape as defined by the Getty Art and Architecture Thesaurus: a land or water area significantly altered or modified by human actions; used in contrast to \"natural landscapes,\" that designate areas where human effects, if present, are not ecologically significant to the regions as a whole.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008932"
+      ],
+      "deprecated": false,
+      "aat_id": 300008932,
+      "aat_uri": "http://vocab.getty.edu/aat/300008932"
+    },
+    {
+      "value": "dam",
+      "label": "dam, dike, levee",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "defensive-wall",
+      "label": "wall (defensive)",
+      "description": "A defensive wall as defined by the Getty Art and Architecture Thesaurus: all sorts of walls constructed to resist attack.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300002485"
+      ],
+      "deprecated": false,
+      "aat_id": 300002485,
+      "aat_uri": "http://vocab.getty.edu/aat/300002485"
+    },
+    {
+      "value": "delta",
+      "label": "delta",
+      "description": "A delta as defined by the Getty Art and Architecture Thesaurus: Alluvial deposits at the mouths of rivers commonly forming nearly flat, fan-shaped plains of considerable area traversed by many separate branches of water.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008760"
+      ],
+      "deprecated": false,
+      "aat_id": 300008760,
+      "aat_uri": "http://vocab.getty.edu/aat/300008760"
+    },
+    {
+      "value": "deme-attic",
+      "label": "deme (Athenian)",
+      "description": "An administrative unit of the ancient Athenian state as defined in Wikidata Q672490.",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q672490"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "desert",
+      "label": "desert",
+      "description": "A desert is a barren area of land where little precipitation occurs and consequently living conditions are hostile for plant and animal life. As defined at https://en.wikipedia.org/wiki/Desert",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "diocese-church",
+      "label": "diocese (church)",
+      "description": "A diocese as defined by the Getty Art and Architecture Thesaurus: Administrative divisions of church government under the authority of a bishop.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000799"
+      ],
+      "deprecated": false,
+      "aat_id": 300000799,
+      "aat_uri": "http://vocab.getty.edu/aat/300000799"
+    },
+    {
+      "value": "diocese-roman",
+      "label": "diocese (later Roman Empire)",
+      "description": "Administrative districts of the Roman Empire introduced under the emperor Diocletian.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "district",
+      "label": "district",
+      "description": "A district as defined by the Getty Art and Architecture Thesaurus: territorial divisions as for administrative or electoral purposes, or settlement areas with distinguishing characteristics.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000705"
+      ],
+      "deprecated": false,
+      "aat_id": 300000705,
+      "aat_uri": "http://vocab.getty.edu/aat/300000705"
+    },
+    {
+      "value": "ditch",
+      "label": "ditch",
+      "description": "A ditch as defined by the Getty Art and Architecture Thesaurus: \"Long narrow excavations, usually with sloping sides, dug in the earth for defense, drainage, or irrigation.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300006178"
+      ],
+      "deprecated": false,
+      "aat_id": 300006178,
+      "aat_uri": "https://vocab.getty.edu/aat/300006178"
+    },
+    {
+      "value": "earthwork",
+      "label": "earthwork",
+      "description": "An earthwork.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "ekklesiasterion",
+      "label": "ekklesiasterion",
+      "description": "A type of Greek building used for public assemblies.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "escarpment",
+      "label": "escarpment",
+      "description": "An escarpment as defined by the Getty Art and Architecture Thesaurus: Steep slopes in front of fortifications. Also, long, steep cliffs or slopes resulting from erosion, and which separate two comparatively level surfaces.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300132353"
+      ],
+      "deprecated": false,
+      "aat_id": 300132353,
+      "aat_uri": "http://vocab.getty.edu/aat/300132353"
+    },
+    {
+      "value": "estate",
+      "label": "estate",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "estuary",
+      "label": "estuary",
+      "description": "An estuary as defined by the Getty Art and Architecture Thesaurus: Category of marine body of water comprising areas where freshwater streams or rivers merge with the ocean.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300266571"
+      ],
+      "deprecated": false,
+      "aat_id": 300266571,
+      "aat_uri": "http://vocab.getty.edu/aat/300266571"
+    },
+    {
+      "value": "false",
+      "label": "false place",
+      "description": "A putative place, now rejected, that originally resulted from ancient scribal error, research mistake, or erroneous modern scholarship. Not to be confused with fictional places.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "farm",
+      "label": "farm",
+      "description": "A farm as defined by the Getty Art and Architecture Thesaurus: Complexes where plants or animals are raised for livelihood or commerce.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300000206"
+      ],
+      "deprecated": false,
+      "aat_id": 300000206,
+      "aat_uri": "https://vocab.getty.edu/aat/300000206"
+    },
+    {
+      "value": "fiction",
+      "label": "fictional place",
+      "description": "A demonstrably non-existent place invented or perpetuated by ancient sources.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "field",
+      "label": "field",
+      "description": "A field as defined by the Getty Art and Architecture Thesaurus: \"Open land as opposed to woodland or land occupied by buildings\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300343519"
+      ],
+      "deprecated": false,
+      "aat_id": 300343519,
+      "aat_uri": "https://vocab.getty.edu/aat/300343519"
+    },
+    {
+      "value": "findspot",
+      "label": "findspot, place of finding, find place",
+      "description": "A find place as defined by the Getty Art and Architecture Thesaurus: \"In archaeology and related disciplines, the location where an object, artifact, or another thing or things were found.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300451414"
+      ],
+      "deprecated": false,
+      "aat_id": 300451414,
+      "aat_uri": "https://vocab.getty.edu/aat/300451414"
+    },
+    {
+      "value": "fishpond",
+      "label": "fishpond(s)",
+      "description": "A fishpond or system of fishponds as defined in Wikidata: body of standing water, man-made and non perennial, used for pisciculture.",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q1265665"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "forest",
+      "label": "forest",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "fort-2",
+      "label": "fort",
+      "description": "A fort  as defined by the Getty Art and Architecture Thesaurus:  Permanent fortifications for troops, often surrounded by such elements as ditches, parapets, and ramparts and often used as advance posts in or near hostile territory.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006909"
+      ],
+      "deprecated": false,
+      "aat_id": 300006909,
+      "aat_uri": "http://vocab.getty.edu/aat/300006909"
+    },
+    {
+      "value": "fort-group",
+      "label": "fort group",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "fortified-church",
+      "label": "church (fortified)",
+      "description": "A fortified church  as defined by the Getty Art and Architecture Thesaurus:  Churches fortified with strong walls, towers, and bridges.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300263447"
+      ],
+      "deprecated": false,
+      "aat_id": 300263447,
+      "aat_uri": "http://vocab.getty.edu/aat/300263447"
+    },
+    {
+      "value": "fortified-settlement",
+      "label": "settlement (fortified)",
+      "description": "A fortified settlement  as defined by the Getty Art and Architecture Thesaurus:  Settlements of any kind with defensive structures such as moats, enclosures, or ramparts.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387238"
+      ],
+      "deprecated": false,
+      "aat_id": 300387238,
+      "aat_uri": "http://vocab.getty.edu/aat/300387238"
+    },
+    {
+      "value": "fortlet",
+      "label": "fortlet",
+      "description": "A fortlet as defined by the Getty Art and Architecture Thesaurus:  Small or rudimentary forts, especially in the Roman period.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006910"
+      ],
+      "deprecated": false,
+      "aat_id": 300006910,
+      "aat_uri": "http://vocab.getty.edu/aat/300006910"
+    },
+    {
+      "value": "forum",
+      "label": "forum",
+      "description": "A forum as defined by the Getty Art and Architecture Thesaurus: In ancient Roman settlements, open spaces used as marketplaces or general public meeting places and places for judicial and public business.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008085"
+      ],
+      "deprecated": false,
+      "aat_id": 300008085,
+      "aat_uri": "http://vocab.getty.edu/aat/300008085"
+    },
+    {
+      "value": "fountain",
+      "label": "fountain",
+      "description": "An architectural feature that furnishes water for drinking, washing or aesthetic display into a built basin of some kind.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "frontier-system-limes",
+      "label": "frontier system, limes",
+      "description": "A border defensive system, as described at http://en.wikipedia.org/wiki/Limes",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "garden-hortus",
+      "label": "garden, hortus",
+      "description": "A garden is a planned space, usually outdoors, set aside for the display, cultivation, and enjoyment of plants and other forms of nature, as described at https://en.wikipedia.org/?title=Garden",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q1107656"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "gateway",
+      "label": "gateway",
+      "description": "A gateway as defined by the Getty Art and Architecture Thesaurus: Passages through fences or walls separating two exterior spaces, or the structures or ornamental constructions enclosing such passages",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300069189"
+      ],
+      "deprecated": false,
+      "aat_id": 300069189,
+      "aat_uri": "http://vocab.getty.edu/aat/300069189"
+    },
+    {
+      "value": "gorge",
+      "label": "gorge",
+      "description": "A gorge (landform) as defined by the Getty Art and Architecture Thesaurus: Deep, rocky land depressions with steep sides, larger than ravines, with a river or stream at the bottom; distinct from \"canyons,\" which tend to be larger and less rocky.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008767"
+      ],
+      "deprecated": false,
+      "aat_id": 300008767,
+      "aat_uri": "http://vocab.getty.edu/aat/300008767"
+    },
+    {
+      "value": "grama",
+      "label": "grama/gama",
+      "description": "A village/hamlet (Sanskrit and prakrits)",
+      "same_as": [
+        "https://www.wisdomlib.org/definition/grama"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "grove",
+      "label": "grove",
+      "description": "A grove as defined by the Getty Art and Architecture Thesaurus: \"Groups of trees, often of a single species, smaller than forests in extent, growing naturally or planted in formation, and generally with little or no undergrowth.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008884"
+      ],
+      "deprecated": false,
+      "aat_id": 300008884,
+      "aat_uri": "https://vocab.getty.edu/aat/300008884"
+    },
+    {
+      "value": "gulf",
+      "label": "gulf",
+      "description": "A gulf as defined by the Getty Art and Architecture Thesaurus: \"Large inlets of the sea, usually more enclosed and more deeply indented than bays.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300132315"
+      ],
+      "deprecated": false,
+      "aat_id": 300132315,
+      "aat_uri": "https://vocab.getty.edu/aat/300132315"
+    },
+    {
+      "value": "gymnasium",
+      "label": "gymnasium, gymnasion",
+      "description": "A gymnasium as defined by the Getty Art and Architecture Thesaurus term 300007297: Buildings designed and equipped for indoor, or, in antiquity, indoor and outdoor, sports, exercise, or physical education and training and usually including changing rooms and bath or shower facilites; in ancient Greece, often combined with educational facilities; generally larger than \"palaestrae.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007297"
+      ],
+      "deprecated": false,
+      "aat_id": 300007297,
+      "aat_uri": "http://vocab.getty.edu/aat/300007297"
+    },
+    {
+      "value": "harbor",
+      "label": "harbor",
+      "description": "A harbor as defined by the Getty Art and Architecture Thesaurus: Well-sheltered inlets of water affording protection from wind and sea and sufficient depth to allow anchorage for vessels.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008678"
+      ],
+      "deprecated": false,
+      "aat_id": 300008678,
+      "aat_uri": "https://vocab.getty.edu/aat/300008678"
+    },
+    {
+      "value": "hill",
+      "label": "hill",
+      "description": "A hill as defined by the Getty Art and Architecture Thesaurus: \"Elevation of earth's surface, smaller than a mountain.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008777"
+      ],
+      "deprecated": false,
+      "aat_id": 300008777,
+      "aat_uri": "https://vocab.getty.edu/aat/300008777"
+    },
+    {
+      "value": "hillfort",
+      "label": "hillfort",
+      "description": "A hillfort  as defined by the Getty Art and Architecture Thesaurus:  Defensive enclosures comprised of ramparts and ditches encircling a fortified structure on a central prominence; common in Bronze Age and Iron Age Europe.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006911"
+      ],
+      "deprecated": false,
+      "aat_id": 300006911,
+      "aat_uri": "http://vocab.getty.edu/aat/300006911"
+    },
+    {
+      "value": "house",
+      "label": "house",
+      "description": "A house as defined by the Getty Art and Architecture Thesaurus: \"Individual dwellings designed to be occupied by a single tenant or family. May also refer to a building for human occupation, for some purpose other than that of an ordinary dwelling.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300005433"
+      ],
+      "deprecated": false,
+      "aat_id": 300005433,
+      "aat_uri": "https://vocab.getty.edu/aat/300005433"
+    },
+    {
+      "value": "hunting-base",
+      "label": "hunting base",
+      "description": "A hunting base as defined by the Getty Art and Architecture Thesaurus: Operational centers of any size used for activities surrounding hunting",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387322"
+      ],
+      "deprecated": false,
+      "aat_id": 300387322,
+      "aat_uri": "http://vocab.getty.edu/aat/300387322"
+    },
+    {
+      "value": "interior-wall",
+      "label": "wall (interior)",
+      "description": "An interior wall as defined by the Getty Art and Architecture Thesaurus: Walls having two interior faces and existing entirely within the exterior walls.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300002535"
+      ],
+      "deprecated": false,
+      "aat_id": 300002535,
+      "aat_uri": "http://vocab.getty.edu/aat/300002535"
+    },
+    {
+      "value": "island",
+      "label": "island",
+      "description": "An island as defined by the Getty Art and Architecture Thesaurus: \"Landforms smaller than a continent, completely surrounded by water at high water. Islands appear in oceans, seas, lakes, or rivers.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008791"
+      ],
+      "deprecated": false,
+      "aat_id": 300008791,
+      "aat_uri": "https://vocab.getty.edu/aat/300008791"
+    },
+    {
+      "value": "isthmus",
+      "label": "isthmus",
+      "description": "a narrow strip of land connecting two larger land areas.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "kingdom",
+      "label": "kingdom",
+      "description": "A kingdom as defined by the Getty Art and Architecture Thesaurus: \"Administrative bodies subject to a king or queen.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300235096"
+      ],
+      "deprecated": false,
+      "aat_id": 300235096,
+      "aat_uri": "https://vocab.getty.edu/aat/300235096"
+    },
+    {
+      "value": "lagoon",
+      "label": "lagoon",
+      "description": "A lagoon is a shallow body of water separated from a larger body of water by barrier islands or reefs.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "lake",
+      "label": "lake",
+      "description": "Lake or Lacus (Latin), abbreviated: L. As defined by the Getty Art and Architecture Thesaurus: \"Bodies of fresh or salt water surrounded by land.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008680"
+      ],
+      "deprecated": false,
+      "aat_id": 300008680,
+      "aat_uri": "https://vocab.getty.edu/aat/300008680"
+    },
+    {
+      "value": "landmark",
+      "label": "landmark",
+      "description": "A landmark as defined by the Getty Art and Architecture Thesaurus: \"Conspicuous monuments, fixed objects, or markers that serve as guides in the direction of one's course, characterize a neighborhood, or establish the location of land boundaries or property.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300006971"
+      ],
+      "deprecated": false,
+      "aat_id": 300006971,
+      "aat_uri": "https://vocab.getty.edu/aat/300006971"
+    },
+    {
+      "value": "league",
+      "label": "league, organization, association",
+      "description": "A league/organization/association as defined by the Getty Art and Architecture Thesaurus: Collections of people, groups, or nations that join for mutual protection or cooperation, or for another purpose.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387505"
+      ],
+      "deprecated": false,
+      "aat_id": 300387505,
+      "aat_uri": "http://vocab.getty.edu/aat/300387505"
+    },
+    {
+      "value": "lesche",
+      "label": "lesche",
+      "description": "A lesche as defined in Wikidata: \"ancient Greek council house or clubhouse\"",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q1785888"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "lighthouse",
+      "label": "lighthouse",
+      "description": "A lighthouse as defined by the Getty Art and Architecture Thesaurus: Towers or other structures equipped with a powerful light or lights (originally a signal fire) at the top, erected at important or dangerous points on or near the coast for the guidance of mariners.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007741"
+      ],
+      "deprecated": false,
+      "aat_id": 300007741,
+      "aat_uri": "http://vocab.getty.edu/aat/300007741"
+    },
+    {
+      "value": "lime-kiln",
+      "label": "lime kiln",
+      "description": "A lime kiln as defined by the Getty Art and Architecture Thesaurus: Furnace-type apparatus, usually long, tilted cylinders, that are slowly rotated; used to heat calcium carbonate above 900 degrees centigrade to produce lime.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300006404"
+      ],
+      "deprecated": false,
+      "aat_id": 300006404,
+      "aat_uri": "https://vocab.getty.edu/aat/300006404"
+    },
+    {
+      "value": "macellum",
+      "label": "macellum",
+      "description": "A macellum as defined by the Getty Art and Architecture Thesaurus: Designates ancient Roman meat markets; may also be used more generally for ancient Roman food markets.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300005241"
+      ],
+      "deprecated": false,
+      "aat_id": 300005241,
+      "aat_uri": "https://vocab.getty.edu/aat/300005241"
+    },
+    {
+      "value": "marsh-wetland",
+      "label": "wetland (swamp, marsh, or bog)",
+      "description": "A wetland is a land area that is saturated with water, either permanently or seasonally, such that it takes on the characteristics of a distinct ecosystem. Getty Art and Architecture Thesaurus: \"Large category including areas of land characterized by poor drainage, standing or slowly moving water, and as a result, an almost constant state of water-saturated soil. Wetlands include swamps, marshes, and bogs.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008899"
+      ],
+      "deprecated": false,
+      "aat_id": 300008899,
+      "aat_uri": "https://vocab.getty.edu/aat/300008899"
+    },
+    {
+      "value": "meadow",
+      "label": "meadow",
+      "description": "A meadow as defined by the Getty Art and Architecture Thesaurus: \"Large open tracts of grassland, sometimes used for pasture.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008876"
+      ],
+      "deprecated": false,
+      "aat_id": 300008876,
+      "aat_uri": "https://vocab.getty.edu/aat/300008876"
+    },
+    {
+      "value": "metalworking",
+      "label": "metalworking facility",
+      "description": "A metalworking facility, plant, or area as defined by the Getty Art and Architecture Thesaurus: Structures comprising the buildings, machinery, apparatus, and fixtures required to shape or process metal into products on an industrial level.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300169784"
+      ],
+      "deprecated": false,
+      "aat_id": 300169784,
+      "aat_uri": "http://vocab.getty.edu/aat/300169784"
+    },
+    {
+      "value": "milestone",
+      "label": "milestone",
+      "description": "A milestone as defined by the Getty Art and Architecture Thesaurus: Stones, slabs, or pillars of any material, set by the side of a road to mark distances between one point and another; most often distances between cities.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006973"
+      ],
+      "deprecated": false,
+      "aat_id": 300006973,
+      "aat_uri": "http://vocab.getty.edu/aat/300006973"
+    },
+    {
+      "value": "military-base",
+      "label": "military base",
+      "description": "A military base as defined by the Getty Art and Architecture Thesaurus.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000455"
+      ],
+      "deprecated": false,
+      "aat_id": 300000455,
+      "aat_uri": "http://vocab.getty.edu/aat/300000455"
+    },
+    {
+      "value": "military-installation-or-camp-temporary",
+      "label": "military installation or camp, temporary",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "mine-2",
+      "label": "mine",
+      "description": "A mine as defined by the Getty Art and Architecture Thesaurus: Excavation or systems of excavations, including pits or tunnels, made underground for the extraction of metals, metallic ores, coal, salt, precious stones, building stone, clay, or another substance, or an open-air excavation for the extraction of such substances.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000390"
+      ],
+      "deprecated": false,
+      "aat_id": 300000390,
+      "aat_uri": "http://vocab.getty.edu/aat/300000390"
+    },
+    {
+      "value": "monastery",
+      "label": "monastery",
+      "description": "A monastery as defined by the Getty Art and Architecture Thesaurus: Built complexes for religious retirement or seclusion from the world for monks, who are people living a celibate life according to the rule of a particular religious order and adhering to vows, especially of poverty, chastity, and obedience.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000641"
+      ],
+      "deprecated": false,
+      "aat_id": 300000641,
+      "aat_uri": "http://vocab.getty.edu/aat/300000641"
+    },
+    {
+      "value": "monument",
+      "label": "monument",
+      "description": "A monument as defined by the Getty Art and Architecture Thesaurus term 300006958: \"Structures or edifices of importance or historical interest, typically erected in memory of the dead or of an important event.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300006958"
+      ],
+      "deprecated": false,
+      "aat_id": 300006958,
+      "aat_uri": "http://vocab.getty.edu/aat/300006958"
+    },
+    {
+      "value": "mosque",
+      "label": "mosque",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "mound",
+      "label": "mound",
+      "description": "A mound as defined by the Getty Art and Architecture Thesaurus: \" Piles of earth heaped up for landmarks, monuments, or as bases for other structures.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008024"
+      ],
+      "deprecated": false,
+      "aat_id": 300008024,
+      "aat_uri": "https://vocab.getty.edu/aat/300008024"
+    },
+    {
+      "value": "mountain",
+      "label": "mountain",
+      "description": "A mountain as defined by the Getty Art and Architecture Thesaurus: Prominent landforms rising considerably above the surrounding area, typically having steep slopes, a sharp summit area, and large mass. Mountains rarely occur individually, and in most cases, are found in ranges, chains, or systems.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008795"
+      ],
+      "deprecated": false,
+      "aat_id": 300008795,
+      "aat_uri": "http://vocab.getty.edu/aat/300008795"
+    },
+    {
+      "value": "mouth",
+      "label": "river mouth",
+      "description": "A river mouth as defined by the Getty Art and Architecture Thesaurus: Points where rivers open into larger bodies of water.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387057"
+      ],
+      "deprecated": false,
+      "aat_id": 300387057,
+      "aat_uri": "http://vocab.getty.edu/aat/300387057"
+    },
+    {
+      "value": "nome-egyptian",
+      "label": "nome (pharaonic)",
+      "description": "Regions of ancient Egypt introduced during the Old Kingdom.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "nome-gr",
+      "label": "nome (greek/roman)",
+      "description": "Administrative regions of ancient Egypt as employed during the periods of Ptolemaic and Roman rule.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "nuraghe",
+      "label": "nuraghe",
+      "description": "A nuraghe as defined by the Getty Art and Architecture Thesaurus term 300004838: \"Ancient Sardinian towerlike structures, dating from the Bronze and Iron Ages; generally associated with villages, built on hilltops, and having tapering sides and corbel-vaulted interior spaces. Many are large, but others are small. The purpose and function of the structures are not entirely understood; among the possible uses are location markers, religious temples, rulers' residences, military strongholds, or meeting halls.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005727"
+      ],
+      "deprecated": false,
+      "aat_id": 300005727,
+      "aat_uri": "http://vocab.getty.edu/aat/300005727"
+    },
+    {
+      "value": "oasis",
+      "label": "oasis",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "odeon",
+      "label": "odeon",
+      "description": "An odeon as defined by the Getty Art and Architecture Thesaurus: Buildings or other roofed structures used for musical performances.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300127075"
+      ],
+      "deprecated": false,
+      "aat_id": 300127075,
+      "aat_uri": "http://vocab.getty.edu/aat/300127075"
+    },
+    {
+      "value": "pagus",
+      "label": "pagus",
+      "description": "A rural district in the Roman world including scattered hamlets or villages that can be referred to as vici. Alternatively, pagus can be construed as a fortified center in such a district.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "palace",
+      "label": "palace",
+      "description": "A palace as defined by the Getty Art and Architecture Thesaurus: Official residences, frequently large and impressively appointed, of sovereigns or other high dignitaries",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005734"
+      ],
+      "deprecated": false,
+      "aat_id": 300005734,
+      "aat_uri": "http://vocab.getty.edu/aat/300005734"
+    },
+    {
+      "value": "palace-complex",
+      "label": "palace complex",
+      "description": "A palace complex as defined by the Getty Art and Architecture Thesaurus: Complexes of built works surrounding the palace or palaces of a ruler",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300417317"
+      ],
+      "deprecated": false,
+      "aat_id": 300417317,
+      "aat_uri": "http://vocab.getty.edu/aat/300417317"
+    },
+    {
+      "value": "palaestra",
+      "label": "palaestra",
+      "description": "A palaestra as defined by the Getty Art and Architecture Thesaurus: \"Ancient Greek or Roman buildings for training in wrestling or other athletic endeavors. Palaestrae were often part of public gymnasia, although some functioned independently. The floorplan of palaestrae was standardized, usually comprising a rectangular court surrounded by colonnades with adjoining rooms devoted to activities such as undressing, bathing, socializing, observation, instruction, and storage.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007301"
+      ],
+      "deprecated": false,
+      "aat_id": 300007301,
+      "aat_uri": "https://vocab.getty.edu/aat/300007301"
+    },
+    {
+      "value": "palaistra",
+      "label": "palaistra",
+      "description": "A square or rectangular court, usually surrounded by colonnades, that formed part of a Greek-style athletic complex.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "paradise-garden",
+      "label": "paradise garden, park",
+      "description": "A paradise garden as defined by the Getty Art and Architecture Thesaurus: \"Gardens often provided with shade, flowing water, pavilions, and elaborate plantings for private enjoyment; common in Islamic countries.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008112"
+      ],
+      "deprecated": false,
+      "aat_id": 300008112,
+      "aat_uri": "https://vocab.getty.edu/aat/300008112"
+    },
+    {
+      "value": "pass",
+      "label": "pass, \"gates\" (landform)",
+      "description": "A pass as defined by the Getty Art and Architecture Thesaurus: Refers to narrow routes through or gaps in mountain ranges allowing passage across.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300259572"
+      ],
+      "deprecated": false,
+      "aat_id": 300259572,
+      "aat_uri": "http://vocab.getty.edu/aat/300259572"
+    },
+    {
+      "value": "peninsula",
+      "label": "peninsula",
+      "description": "A peninsula as defined by the Getty Art and Architecture Thesaurus: \"Landforms surrounded by water on three sides, not completey independent from the mainland.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008804"
+      ],
+      "deprecated": false,
+      "aat_id": 300008804,
+      "aat_uri": "https://vocab.getty.edu/aat/300008804"
+    },
+    {
+      "value": "people",
+      "label": "people, tribe (historical cultural group)",
+      "description": "A historical cultural group as defined by the Getty Art and Architecture Thesaurus: Societies or groups of people who once existed and were characterized by common ideas, customs, or social behavior within a particular nation or people and period.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387177"
+      ],
+      "deprecated": false,
+      "aat_id": 300387177,
+      "aat_uri": "http://vocab.getty.edu/aat/300387177"
+    },
+    {
+      "value": "piscina-roman",
+      "label": "piscina (pool, Roman)",
+      "description": "A Roman piscina as defined by the Getty Art and Architecture Thesaurus: \"A reservoir of water used as a swimming pool or fish pond inside a Roman home or public bath.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300375619"
+      ],
+      "deprecated": false,
+      "aat_id": 300375619,
+      "aat_uri": "http://vocab.getty.edu/aat/300375619"
+    },
+    {
+      "value": "pit",
+      "label": "pit",
+      "description": "A pit as defined by the Getty Art and Architecture Thesaurus: Cavities in the earth, usually not below ground water level, that are shallow in proportion to their width and generally created for materials extraction or burial.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008027"
+      ],
+      "deprecated": false,
+      "aat_id": 300008027,
+      "aat_uri": "https://vocab.getty.edu/aat/300008027"
+    },
+    {
+      "value": "place",
+      "label": "place (distinct area)",
+      "description": "A place as defined by the Getty Art and Architecture Thesaurus: \"A space or area within the lived world of daily experience, perceived as distinct and unified, and possessing emotional, purposive, and social connotations along with physical features and characteristics.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300248475"
+      ],
+      "deprecated": false,
+      "aat_id": 300248475,
+      "aat_uri": "https://vocab.getty.edu/aat/300248475"
+    },
+    {
+      "value": "plain",
+      "label": "plain",
+      "description": "A plain as defined by the Getty Art and Architecture Thesaurus: \"Extensive areas of land having few inequalities of surface, being usually fairly flat and at low elevation.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008805"
+      ],
+      "deprecated": false,
+      "aat_id": 300008805,
+      "aat_uri": "https://vocab.getty.edu/aat/300008805"
+    },
+    {
+      "value": "plateau",
+      "label": "plateau",
+      "description": "an area of relatively level high ground, as described at https://en.wikipedia.org/wiki/Plateau.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "platform",
+      "label": "platform",
+      "description": "A platform as defined by the Getty Art and Architecture Thesaurus: Flat surfaces, blocks, or floors, generally raised above the adjoining floor",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300375665"
+      ],
+      "deprecated": false,
+      "aat_id": 300375665,
+      "aat_uri": "http://vocab.getty.edu/aat/300375665"
+    },
+    {
+      "value": "polis",
+      "label": "polis",
+      "description": "A polis as defined by the Getty Art and Architecture Thesaurus: An ancient Greek city state.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008397"
+      ],
+      "deprecated": false,
+      "aat_id": 300008397,
+      "aat_uri": "http://vocab.getty.edu/aat/300008397"
+    },
+    {
+      "value": "port",
+      "label": "port",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "portico",
+      "label": "portico",
+      "description": "A portico as defined by the Getty Art and Architecture Thesaurus: \"Roofed porchlike spaces, open along at least one side and usually associated with an entrance, supported by columns and often surmounted by a pediment; porticoes may project from the main building mass or be recessed in it.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300004145"
+      ],
+      "deprecated": false,
+      "aat_id": 300004145,
+      "aat_uri": "https://vocab.getty.edu/aat/300004145"
+    },
+    {
+      "value": "postern",
+      "label": "postern",
+      "description": "A postern as defined by the Getty Art and Architecture Thesaurus: Secondary, and often inconspicuous back doors or gates, especially to fortified or walled enclosures; may also be used for minor, private or side entrances.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300002932"
+      ],
+      "deprecated": false,
+      "aat_id": 300002932,
+      "aat_uri": "http://vocab.getty.edu/aat/300002932"
+    },
+    {
+      "value": "prasada",
+      "label": "prāsāda",
+      "description": "A prāsāda as defined by the Getty Art and Architecture Thesaurus: In Indian architecture, palaces, mansions; or temples",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300446978"
+      ],
+      "deprecated": false,
+      "aat_id": 300446978,
+      "aat_uri": "https://vocab.getty.edu/aat/300446978"
+    },
+    {
+      "value": "priory",
+      "label": "priory",
+      "description": "A priory as defined by the Getty Art and Architecture Thesaurus: independent and canonically erected monasteries, ruled by an abbot if occupied by monks and by an abbess if occupied by nuns.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000645"
+      ],
+      "deprecated": false,
+      "aat_id": 300000645,
+      "aat_uri": "http://vocab.getty.edu/aat/300000645"
+    },
+    {
+      "value": "production",
+      "label": "production center (manufacturing, fishing)",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "province-2",
+      "label": "province",
+      "description": "A province as defined by the Getty Art and Architecture Thesaurus: The constituent political and administrative divisions within various sovereign states, including historic ones such as the Roman Empire and modern nations under a federal system such as Canada and Spain.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000774"
+      ],
+      "deprecated": false,
+      "aat_id": 300000774,
+      "aat_uri": "http://vocab.getty.edu/aat/300000774"
+    },
+    {
+      "value": "prytaneion",
+      "label": "prytaneion",
+      "description": "A prytaneion as defined by the Getty Art and Architecture Thesaurus: \"Public halls in ancient Greek cities where the sacred hearth and official headquarters of the city administration were housed and where official guests were entertained.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300127097"
+      ],
+      "deprecated": false,
+      "aat_id": 300127097,
+      "aat_uri": "https://vocab.getty.edu/aat/300127097"
+    },
+    {
+      "value": "pyramid",
+      "label": "pyramid",
+      "description": "A pyramid as defined by the Getty Art and Architecture Thesaurus term 300004838: \"Monumental structures with a square or triangular base and inclined triangular sides, usually meeting at a point. The most famous pyramids are those used as mausolea in ancient Egypt; they were focal points of much larger funerary complexes. However, pyramids, usually with flat tops, are also found in Central America, where they were used as platforms for altars or temples, occasionally also covering the burial chamber of a ruler.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300004838"
+      ],
+      "deprecated": false,
+      "aat_id": 300004838,
+      "aat_uri": "http://vocab.getty.edu/aat/300004838"
+    },
+    {
+      "value": "quarry",
+      "label": "quarry",
+      "description": "A quarry as defined by the Getty Art and Architecture Thesaurus: Open-air excavations from which stone for building or other purposes is or has been obtained by cutting or blasting.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300000402"
+      ],
+      "deprecated": false,
+      "aat_id": 300000402,
+      "aat_uri": "http://vocab.getty.edu/aat/300000402"
+    },
+    {
+      "value": "rapid",
+      "label": "cataract, rapid",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "reef",
+      "label": "reef",
+      "description": "A reef as defined by the Getty Art and Architecture Thesaurus: Ranges of rock, coral, or sand with their surface at or just above the low tide mark.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008808"
+      ],
+      "deprecated": false,
+      "aat_id": 300008808,
+      "aat_uri": "https://vocab.getty.edu/aat/300008808"
+    },
+    {
+      "value": "regio-augusti",
+      "label": "regio (Augustan region of Italia)",
+      "description": "Geographic district of Italia as defined by the Roman emperor Augustus.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "region",
+      "label": "region",
+      "description": "A historical region as defined by the Getty Art and Architecture Thesaurus: \"Areas that were bound in the past by culture, economics, topography, or another characteristic, and that have historical importance.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300387178"
+      ],
+      "deprecated": false,
+      "aat_id": 300387178,
+      "aat_uri": "https://vocab.getty.edu/aat/300387178"
+    },
+    {
+      "value": "reservoir",
+      "label": "reservoir, hafir",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "ridge",
+      "label": "ridge",
+      "description": "A ridge as defined by the Getty Art and Architecture Thesaurus: Ridges are elongated strips of elevated ground that may be either on dry land or underwater.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300266640"
+      ],
+      "deprecated": false,
+      "aat_id": 300266640,
+      "aat_uri": "http://vocab.getty.edu/aat/300266640"
+    },
+    {
+      "value": "river",
+      "label": "river, drainage",
+      "description": "A river as defined by the Getty Art and Architecture Thesaurus: \"Bodies of water flowing in direct course or a series of divergents or converging channels.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008707"
+      ],
+      "deprecated": false,
+      "aat_id": 300008707,
+      "aat_uri": "https://vocab.getty.edu/aat/300008707"
+    },
+    {
+      "value": "road",
+      "label": "road",
+      "description": "A road as defined by the Getty Art and Architecture Thesaurus: \"General term referring to all long outdoor passages used by and generally created by humans, intended to allow people to pass between different places, usually one wide enough to admit of the passage of wheeled vehicles, horses, or travellers on foot.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300008217"
+      ],
+      "deprecated": false,
+      "aat_id": 300008217,
+      "aat_uri": "https://vocab.getty.edu/aat/300008217"
+    },
+    {
+      "value": "room",
+      "label": "room (interior)",
+      "description": "A room (interior space) as defined by the Getty Art and Architecture Thesaurus: Refers to the interior portions of buildings or other structures fully separated and divided off from the other portions by a floor, ceiling, and walls or partitions.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300004044"
+      ],
+      "deprecated": false,
+      "aat_id": 300004044,
+      "aat_uri": "http://vocab.getty.edu/aat/300004044"
+    },
+    {
+      "value": "route",
+      "label": "route",
+      "description": "A route as defined by the Getty Art and Architecture Thesaurus: \"Generally, a travelled way or course, from one place to another, whether terrestrial or on water.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300265365"
+      ],
+      "deprecated": false,
+      "aat_id": 300265365,
+      "aat_uri": "https://vocab.getty.edu/aat/300265365"
+    },
+    {
+      "value": "ruin",
+      "label": "ruin",
+      "description": "A ruin as defined by the Getty Art and Architecture Thesaurus: The remains of buildings or groups of buildings that have been destroyed or are in a state of great disrepair or decay.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008057"
+      ],
+      "deprecated": false,
+      "aat_id": 300008057,
+      "aat_uri": "http://vocab.getty.edu/aat/300008057"
+    },
+    {
+      "value": "salt-marsh",
+      "label": "salt-marsh",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "salt-pan-salina",
+      "label": "salt pans, salinae",
+      "description": "Salt evaporation ponds, also called salterns or salt pans, are shallow artificial ponds designed to extract salts from sea water or other brines, as described at http://en.wikipedia.org/wiki/Salt_evaporation_pond",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "sanctuary",
+      "label": "sanctuary (religious center)",
+      "description": "A sanctuary as defined by the Getty Art and Architecture Thesaurus term 300391482: \"Centers or sites having religious sanctuaries as a primary focus.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300391482"
+      ],
+      "deprecated": false,
+      "aat_id": 300391482,
+      "aat_uri": "http://vocab.getty.edu/aat/300391482"
+    },
+    {
+      "value": "satrapy",
+      "label": "satrapy",
+      "description": "A satrapy as defined by the Getty Art and Architecture Thesaurus: An administrative division of the Persian empire under the Achaemenid and later administrations.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300235102"
+      ],
+      "deprecated": false,
+      "aat_id": 300235102,
+      "aat_uri": "http://vocab.getty.edu/aat/300235102"
+    },
+    {
+      "value": "settlement",
+      "label": "settlement",
+      "description": "Equivalent to \"inhabited place\" as defined by the Getty Art and Architecture Thesaurus: General term for places or areas occupied, modified, or planned to be inhabited by communities of human populations and that contain enough societal functions to be relatively self-sufficient. They are characterized by inhabitants living in neighboring sets of living quarters and by the place having a proper name or a locally recognized status.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008347"
+      ],
+      "deprecated": false,
+      "aat_id": 300008347,
+      "aat_uri": "http://vocab.getty.edu/aat/300008347"
+    },
+    {
+      "value": "settlement-modern",
+      "label": "settlement-modern",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "sewer",
+      "label": "sewer",
+      "description": "A sewer as defined by the Getty Art and Architecture Thesaurus: Underground conduits for carrying away waste and storm water.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300006122"
+      ],
+      "deprecated": false,
+      "aat_id": 300006122,
+      "aat_uri": "https://vocab.getty.edu/aat/300006122"
+    },
+    {
+      "value": "shipshed",
+      "label": "shipshed",
+      "description": "A shipshed as defined in Wikidata Q120685369: covered slipway for dry-land storage of ancient Greek and Roman warships",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q120685369"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "shrine",
+      "label": "shrine",
+      "description": "A shrine as defined by the Getty Art and Architecture Thesaurus term 300007558: \"Structures or large furnishings in which devotion is paid to a statue, picture, saint, deity or other holy objects.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007558"
+      ],
+      "deprecated": false,
+      "aat_id": 300007558,
+      "aat_uri": "http://vocab.getty.edu/aat/300007558"
+    },
+    {
+      "value": "siege-mine",
+      "label": "siege mine",
+      "description": "An excavated area or tunnel associated with sapping and other forms of subterranean and siege warfare.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "siege-ramp",
+      "label": "siege ramp",
+      "description": "A ramp associated with siege warfare tactics.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "slag-heap",
+      "label": "slag heap",
+      "description": "A slag heap as defined by the Getty Art and Architecture Thesaurus: Piles of fused refuse or dross separated from metal in the process of smelting; also refers to piles of unwanted tailings or refuse that are the by-products of mining ore, coal, or other substances. Piles of fused refuse or dross separated from metal in the process of smelting; also refers to piles of unwanted tailings or refuse that are the by-products of mining ore, coal, or other substances.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300000832"
+      ],
+      "deprecated": false,
+      "aat_id": 300000832,
+      "aat_uri": "https://vocab.getty.edu/aat/300000832"
+    },
+    {
+      "value": "space-exterior-covered",
+      "label": "space (exterior covered)",
+      "description": "An exterior, covered space as defined by the Getty Art and Architecture Thesaurus: Building spaces that are covered, and located on the exterior of the buildings",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300075459"
+      ],
+      "deprecated": false,
+      "aat_id": 300075459,
+      "aat_uri": "http://vocab.getty.edu/aat/300075459"
+    },
+    {
+      "value": "space-interior",
+      "label": "space (interior)",
+      "description": "An interior space as defined by the Getty Art and Architecture Thesaurus: Spaces located in the interior of structures",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300078790"
+      ],
+      "deprecated": false,
+      "aat_id": 300078790,
+      "aat_uri": "http://vocab.getty.edu/aat/300078790"
+    },
+    {
+      "value": "space-uncovered",
+      "label": "space (uncovered)",
+      "description": "An uncovered space as defined by the Getty Art and Architecture Thesaurus: Spaces attached to buildings that are uncovered.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300075460"
+      ],
+      "deprecated": false,
+      "aat_id": 300075460,
+      "aat_uri": "http://vocab.getty.edu/aat/300075460"
+    },
+    {
+      "value": "spring",
+      "label": "spring",
+      "description": "A spring as defined by the Getty Art and Architecture Thesaurus: Water issuing naturally from the rock or soil upon the land or into a body of surface water.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008697"
+      ],
+      "deprecated": false,
+      "aat_id": 300008697,
+      "aat_uri": "http://vocab.getty.edu/aat/300008697"
+    },
+    {
+      "value": "stadion",
+      "label": "stadion, stadium",
+      "description": "A space in which the stadion footrace was held, usually consisting of a flat rectangular track about 200 meters long with a starting line at one end and a semicircular area at the other, with seating areas sloping up from the track on the two long sides and the end.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "state",
+      "label": "state (polity)",
+      "description": "A sovereign state ad defined by the Getty Art and Architecture Thesaurus: Political units, such as nations, that exercise and are recognized internationally as possessing sovereignty.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300232420"
+      ],
+      "deprecated": false,
+      "aat_id": 300232420,
+      "aat_uri": "http://vocab.getty.edu/aat/300232420"
+    },
+    {
+      "value": "station",
+      "label": "station (road or coastal)",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "statue",
+      "label": "statue",
+      "description": "A statue as defined by the Getty Art and Architecture Thesaurus: \"Sculpture in the round, usually but not always depicting humans, animals, mythical beings, or small figure groups. Statues are relatively large in scale, being life-size, larger than life-size, or only slightly smaller than life-size.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300047600"
+      ],
+      "deprecated": false,
+      "aat_id": 300047600,
+      "aat_uri": "https://vocab.getty.edu/aat/300047600"
+    },
+    {
+      "value": "stoa",
+      "label": "stoa",
+      "description": "A stoa as defined by the Getty Art and Architecture Thesaurus: \"Structures that originated in Greek architecture, comprising freestanding colonnades or covered walkways, or long open buildings with the roof supported by one or more rows of columns parallel to the rear wall. Stoas surrounded marketplaces and sanctuaries, forming places of business and public promenade. Rooms could back onto the colonnade, and a second story was sometimes added.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300005144"
+      ],
+      "deprecated": false,
+      "aat_id": 300005144,
+      "aat_uri": "https://vocab.getty.edu/aat/300005144"
+    },
+    {
+      "value": "strait",
+      "label": "strait",
+      "description": "A strait as defined by the Getty Art and Architecture Thesaurus: A narrow waterway, usually narrower and less extensive than a sound, connecting two larger bodies of water.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300266559"
+      ],
+      "deprecated": false,
+      "aat_id": 300266559,
+      "aat_uri": "https://vocab.getty.edu/aat/300266559"
+    },
+    {
+      "value": "street",
+      "label": "street",
+      "description": "A street as defined by the Getty Art and Architecture Thesaurus: A road in a city, town, or village, characterized by usually being paved and comparatively wide (as opposed to a lane or alley), and generally running between two rows of houses or other buildings.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008247"
+      ],
+      "deprecated": false,
+      "aat_id": 300008247,
+      "aat_uri": "http://vocab.getty.edu/aat/300008247"
+    },
+    {
+      "value": "stupa",
+      "label": "stupa",
+      "description": "A stupa as defined by the Getty Art and Architecture Thesaurus: Buddhist relic mounds of earth, brick, or stone, dominated by a hemispherical or bulbous dome set on a square or circular base and topped by a small pavilionlike structure and a spire. Stupas often serve as pilgrimage sites and symbols of the Buddha or his teachings.",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007576"
+      ],
+      "deprecated": false,
+      "aat_id": 300007576,
+      "aat_uri": "https://vocab.getty.edu/aat/300007576"
+    },
+    {
+      "value": "subcontinent",
+      "label": "subcontinent",
+      "description": "A subcontinent as defined by the Getty Art and Architecture Thesaurus: \"Land masses of great size but smaller than those generally called continents; also large subdivisions of continents having a certain geographical independence.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300182723"
+      ],
+      "deprecated": false,
+      "aat_id": 300182723,
+      "aat_uri": "https://vocab.getty.edu/aat/300182723"
+    },
+    {
+      "value": "synagogue",
+      "label": "synagogue",
+      "description": "A synagogue as defined by the Getty Art and Architecture Thesaurus: Community places for the regular assembly or congregation of Jews for liturgical services, assembly, and study apart from the service of the temple; since the destruction of the temple in Jerusalem, worship at the synagogue is the sole place of public worship.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007590"
+      ],
+      "deprecated": false,
+      "aat_id": 300007590,
+      "aat_uri": "http://vocab.getty.edu/aat/300007590"
+    },
+    {
+      "value": "taberna-shop",
+      "label": "taberna, shop",
+      "description": "A taberna is a Roman single room shop most often covered by a barrel vault, as described in http://en.wikipedia.org/wiki/Taberna.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "tell",
+      "label": "tell",
+      "description": "A tell as defined by the Getty Art and Architecture Thesaurus: Artificial mounds consisting of the accumulation of debris from successive settlement levels; common in regions where mud brick is used.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008545"
+      ],
+      "deprecated": false,
+      "aat_id": 300008545,
+      "aat_uri": "http://vocab.getty.edu/aat/300008545"
+    },
+    {
+      "value": "temple-2",
+      "label": "temple",
+      "description": "A temple as defined by the Getty Art and Architecture Thesaurus term 300007595: \"Buildings housing places devoted to the worship of a deity or deities. In the strictest sense, it refers to the dwelling place of a deity, and thus often houses a cult image. In modern usage a temple is generally a structure, but it was originally derived from the Latin \"templum\" and historically has referred to an uncovered place affording a view of the surrounding region. For Christian or Islamic religious buildings the terms \"churches\" or \"mosques\" are generally used, but an exception is that \"temples\" is used for Protestant, as opposed to Roman Catholic, places of worship in France and some French-speaking regions.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007595"
+      ],
+      "deprecated": false,
+      "aat_id": 300007595,
+      "aat_uri": "http://vocab.getty.edu/aat/300007595"
+    },
+    {
+      "value": "territory",
+      "label": "territory",
+      "description": "A territory as defined by Wikidata: \"an area of land under a certain jurisdiction\"",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q183366"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "theatre",
+      "label": "theatre, theater",
+      "description": "A theater as defined by the Getty Art and Architecture Thesaurus: \"Buildings having a stage or projection screen for the presentation of dramatic performances and providing seating areas for spectators.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300007117"
+      ],
+      "deprecated": false,
+      "aat_id": 300007117,
+      "aat_uri": "https://vocab.getty.edu/aat/300007117"
+    },
+    {
+      "value": "tomb",
+      "label": "tomb",
+      "description": "A tomb as defined by the Getty Art and Architecture Thesaurus term 300005926: \"Elaborations constructed over or around burial sites.\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005926"
+      ],
+      "deprecated": false,
+      "aat_id": 300005926,
+      "aat_uri": "http://vocab.getty.edu/aat/300005926"
+    },
+    {
+      "value": "tower-church",
+      "label": "tower (church)",
+      "description": "A church tower as defined by the Getty Art and Architecture Thesaurus: Towers attached to churches.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300003625"
+      ],
+      "deprecated": false,
+      "aat_id": 300003625,
+      "aat_uri": "http://vocab.getty.edu/aat/300003625"
+    },
+    {
+      "value": "tower-defensive",
+      "label": "tower (defensive)",
+      "description": "A defensive tower as as defined by the Getty Art and Architecture Thesaurus: Towers used specifically for defense purposes.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300004862"
+      ],
+      "deprecated": false,
+      "aat_id": 300004862,
+      "aat_uri": "http://vocab.getty.edu/aat/300004862"
+    },
+    {
+      "value": "tower-division",
+      "label": "tower (building division)",
+      "description": "A tower that is part of a larger structure as defined by the Getty Art and Architecture Thesaurus: Parts of buildings with walls rising considerably above the rest, usually with vertical proportions, and to some extent architecturally distinct.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300003615"
+      ],
+      "deprecated": false,
+      "aat_id": 300003615,
+      "aat_uri": "http://vocab.getty.edu/aat/300003615"
+    },
+    {
+      "value": "tower-gate",
+      "label": "tower (gate)",
+      "description": "A gate tower as defined by the Getty Art and Architecture Thesaurus: Towers containing and protecting gates, as to fortresses or walled cities.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300003627"
+      ],
+      "deprecated": false,
+      "aat_id": 300003627,
+      "aat_uri": "http://vocab.getty.edu/aat/300003627"
+    },
+    {
+      "value": "tower-mill",
+      "label": "tower mill",
+      "description": "A tower mill as defined by the Getty Art and Architecture Thesaurus: Windmills having the form of a masonry tower, atop which are positioned a rotating cap and the sails.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300411567"
+      ],
+      "deprecated": false,
+      "aat_id": 300411567,
+      "aat_uri": "http://vocab.getty.edu/aat/300411567"
+    },
+    {
+      "value": "tower-single",
+      "label": "tower (single)",
+      "description": "A single tower as defined by the Getty Art and Architecture Thesaurus: Detached or isolated buildings or other structures high in proportion to their lateral dimensions.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300004847"
+      ],
+      "deprecated": false,
+      "aat_id": 300004847,
+      "aat_uri": "http://vocab.getty.edu/aat/300004847"
+    },
+    {
+      "value": "tower-tomb",
+      "label": "tower tomb",
+      "description": "A tower-tomb as defined by the Getty Art and Architecture Thesaurus: Used to designate ancient Roman funerary structures of several stories usually rising from a stepped square or rectangular base and topped by a pyramidal, domical, or flat roof.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300120649"
+      ],
+      "deprecated": false,
+      "aat_id": 300120649,
+      "aat_uri": "http://vocab.getty.edu/aat/300120649"
+    },
+    {
+      "value": "tower-wall",
+      "label": "tower (wall)",
+      "description": "A wall tower as defined by the Getty Art and Architecture Thesaurus: Towers incorporated into a protective wall, such as the wall around a city or castle.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300003639"
+      ],
+      "deprecated": false,
+      "aat_id": 300003639,
+      "aat_uri": "http://vocab.getty.edu/aat/300003639"
+    },
+    {
+      "value": "townhouse",
+      "label": "townhouse",
+      "description": "Designation for a private residence or individual mixed-use residential and commercial complex within a planned urban environment. A townhouse abuts neighboring residences, either directly through party-walls or indirectly through lot-edges or shared alleys.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "treasure-house",
+      "label": "treasure house, treasury",
+      "description": "A treasure house as defined by the Getty Art and Architecture Thesaurus: \"Buildings in which money or other valuables are stored, usually of relatively modest size and used for historical buildings. Examples are found in Classical Greece and Rome.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300451437"
+      ],
+      "deprecated": false,
+      "aat_id": 300451437,
+      "aat_uri": "https://vocab.getty.edu/aat/300451437"
+    },
+    {
+      "value": "tree",
+      "label": "tree",
+      "description": "A tree as defined by the Getty Art and Architecture Thesaurus: \"Woody, perennial plants usually with a single, long, self-supporting stem or trunk, and which grow to a considerable height.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300132410"
+      ],
+      "deprecated": false,
+      "aat_id": 300132410,
+      "aat_uri": "https://vocab.getty.edu/aat/300132410"
+    },
+    {
+      "value": "tribus",
+      "label": "tribus, Roman voting assembly",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "trophy",
+      "label": "trophy, tropaion",
+      "description": "A trophy as defined in Wikidata: \"Greco-Roman monument celebrating victory\"",
+      "same_as": [
+        "https://www.wikidata.org/wiki/Q1753584"
+      ],
+      "deprecated": false
+    },
+    {
+      "value": "tumulus",
+      "label": "tumulus",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "tunnel",
+      "label": "tunnel",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "undefined",
+      "label": "undefined",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "underground-structures",
+      "label": "underground structures",
+      "description": "Equivalent to Getty AAT category \"underground structures\" aat: 300008047.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008047"
+      ],
+      "deprecated": false,
+      "aat_id": 300008047,
+      "aat_uri": "http://vocab.getty.edu/aat/300008047"
+    },
+    {
+      "value": "unknown",
+      "label": "unknown",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "unlocated",
+      "label": "unlocated",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "urban",
+      "label": "urban area",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "valley",
+      "label": "valley",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "vicus",
+      "label": "vicus",
+      "description": "Small, rural farming settlement of the high Roman empire and later periods, often associated with a villa.",
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "villa",
+      "label": "villa",
+      "description": "A villa as defined by the Getty Art and Architecture Thesaurus: Used since the Roman period to designate country houses, generally of some pretension, and often including their outbuildings and gardens.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300005517"
+      ],
+      "deprecated": false,
+      "aat_id": 300005517,
+      "aat_uri": "http://vocab.getty.edu/aat/300005517"
+    },
+    {
+      "value": "volcano",
+      "label": "volcano",
+      "description": "A volcano as defined by the Getty Art and Architecture Thesaurus: Vents in the crust of the Earth or other planet or satellite, from which issue eruptions of molten rock, hot rock fragments, and hot gases.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300132325"
+      ],
+      "deprecated": false,
+      "aat_id": 300132325,
+      "aat_uri": "http://vocab.getty.edu/aat/300132325"
+    },
+    {
+      "value": "wall-2",
+      "label": "wall",
+      "description": "A wall as defined by the Getty Art and Architecture Thesaurus, term 300002469: Vertical architectural members used to define and divide spaces.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300002469"
+      ],
+      "deprecated": false,
+      "aat_id": 300002469,
+      "aat_uri": "http://vocab.getty.edu/aat/300002469"
+    },
+    {
+      "value": "water-feature",
+      "label": "water feature (landscaping)",
+      "description": "A landscaped water feature as defined by the Getty Art and Architecture Thesaurus: \"passive reflective or dynamic elements in the cultural landscape that incorporate water as the primary design feature\"",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300180674"
+      ],
+      "deprecated": false,
+      "aat_id": 300180674,
+      "aat_uri": "http://vocab.getty.edu/aat/300180674"
+    },
+    {
+      "value": "water-inland",
+      "label": "water (inland)",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "water-open",
+      "label": "water, open",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "watercourse",
+      "label": "watercourse",
+      "description": "A watercourse as defined by the Getty Art and Architecture Thesaurus: Natural or artificial well-defined channels that carry flowing water; may be either produced by the flowing water or artificially designed to carry flowing water.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300387091"
+      ],
+      "deprecated": false,
+      "aat_id": 300387091,
+      "aat_uri": "http://vocab.getty.edu/aat/300387091"
+    },
+    {
+      "value": "waterfall",
+      "label": "waterfall",
+      "description": "A waterfall as defined by the Getty Art and Architecture Thesaurus: Perpendicular or very steep descents of the water of a stream",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300008736"
+      ],
+      "deprecated": false,
+      "aat_id": 300008736,
+      "aat_uri": "http://vocab.getty.edu/aat/300008736"
+    },
+    {
+      "value": "well",
+      "label": "well",
+      "description": "A well as defined by the Getty Art and Architecture Thesaurus: \"Holes, pits, or other generally vertical excavations cored, bored, drilled, or otherwise constructed in the earth for purposes of drawing out various liquids, such as water, brine, or petroleum, or natural gas.\"",
+      "same_as": [
+        "https://vocab.getty.edu/aat/300006207"
+      ],
+      "deprecated": false,
+      "aat_id": 300006207,
+      "aat_uri": "https://vocab.getty.edu/aat/300006207"
+    },
+    {
+      "value": "wheel",
+      "label": "water wheel",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "whirlpool",
+      "label": "whirlpool",
+      "description": null,
+      "same_as": [],
+      "deprecated": false
+    },
+    {
+      "value": "ziggurat",
+      "label": "ziggurat",
+      "description": "A ziggurat as defined by the Getty Art and Architecture Thesaurus: Ancient Mesopotamian temple towers in the form of stepped pyramids.",
+      "same_as": [
+        "http://vocab.getty.edu/aat/300007626"
+      ],
+      "deprecated": false,
+      "aat_id": 300007626,
+      "aat_uri": "http://vocab.getty.edu/aat/300007626"
+    }
+  ],
+  "deprecated": [
+    {
+      "value": "church",
+      "label": "church, monastery (deprecated)",
+      "description": "Deprecated type derived from a Barrington Atlas symbol.",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "fort",
+      "label": "fort, tower (deprecated)",
+      "description": null,
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "label",
+      "label": "map label location",
+      "description": "For locations: position or extent of a label placed on a map e.g., for a region, people, or province",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "mine",
+      "label": "mine, quarry (deprecated)",
+      "description": "Deprecated type derived from a Barrington Atlas symbol.",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "plaza",
+      "label": "agora, forum, plaza (deprecated)",
+      "description": "An agora, forum, or other plaza-like civic space.",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "province",
+      "label": "province, diocese, nome (deprecated)",
+      "description": "An administrative region",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "temple",
+      "label": "temple, sanctuary, shrine, monument, tomb (deprecated)",
+      "description": "A conglomerate category inherited from the Barrington Atlas map symbology. Though widespread at present in Pleiades, this term is now deprecated in favor of individual terms for each type of site or structure (q.v.).",
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "treasury",
+      "label": "treasury (deprecated)",
+      "description": null,
+      "same_as": [],
+      "deprecated": true
+    },
+    {
+      "value": "wall",
+      "label": "wall, earthwork (deprecated)",
+      "description": "Deprecated type derived from a Barrington Atlas symbol.",
+      "same_as": [],
+      "deprecated": true
+    }
+  ]
+}

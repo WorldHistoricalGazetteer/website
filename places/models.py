@@ -170,20 +170,8 @@ class Place(models.Model):
         ]
 
 
-class Type(models.Model):
-    aat_id = models.IntegerField(unique=True)
-    parent_id = models.IntegerField(null=True, blank=True)
-    term = models.CharField(max_length=100)
-    term_full = models.CharField(max_length=100)
-    note = models.TextField(max_length=3000)
-    fclass = models.CharField(max_length=1, null=True, blank=True)
-
-    def __str__(self):
-        return str(self.aat_id) + ':' + self.term
-
-    class Meta:
-        managed = True
-        db_table = 'types'
+# Type has moved to the `placetypes` app. Re-exported here for backward compatibility.
+from placetypes.models import Type  # noqa: F401, E402
 
 
 # NB in LPF spec but seldom used

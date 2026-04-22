@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     'main.apps.MainConfig',
     'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
+    'placetypes.apps.TypesConfig',
     'places.apps.PlacesConfig',
     'regions.apps.RegionsConfig',
     'resources.apps.ResourcesConfig',  # for teaching
