@@ -55,7 +55,9 @@ class Command(BaseCommand):
                     search_body = {
                         "pit": {"id": pit_id, "keep_alive": "1m"},
                         "query": {"match_all": {}},
-                        "sort": ["_id"],  # Required for search_after
+                        # _id sort can require fielddata; _shard_doc is the recommended
+                        # tiebreaker for PIT + search_after deep pagination.
+                        "sort": [{"_shard_doc": "asc"}],
                         "_source": ["aat_id"],
                         "size": 10000,
                     }
@@ -78,7 +80,7 @@ class Command(BaseCommand):
 
                     total_fetched += len(batch_hits)
                     pit_id = batch_resp.get("pit_id", pit_id)
-                    # With sort ["_id"], the last hit's sort will be [aat_id_string]
+                    # With _shard_doc sort, ES always returns a stable sort token.
                     search_after = batch_hits[-1].get("sort", [])
 
                     self.stdout.write(f"  ... fetched {total_fetched} documents")
@@ -180,23 +182,16 @@ class Command(BaseCommand):
                 }
                 actions.append(action)
             
-            # Iterate over bulk results
-            for result in es_bulk(es, actions, request_timeout=30, chunk_size=500):
-                # Handle both tuple (success, info) and non-tuple returns
-                if isinstance(result, tuple) and len(result) == 2:
-                    success, info = result
-                    if success:
-                        added += 1
-                    else:
-                        errors.append(info)
-                elif isinstance(result, dict):
-                    # Sometimes ES returns dict directly
-                    if result.get('index', {}).get('status') in (200, 201):
-                        added += 1
-                    else:
-                        errors.append(result)
-                # Skip non-tuple, non-dict results (final count, etc.)
-            
+            # helpers.bulk returns (success_count, errors)
+            added, errors = es_bulk(
+                es,
+                actions,
+                request_timeout=30,
+                chunk_size=500,
+                raise_on_error=False,
+                stats_only=False,
+            )
+
             self.stdout.write(f"  ✓ Successfully added: {added}")
             
             if errors:
