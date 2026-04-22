@@ -13,7 +13,6 @@ This command:
 4. Optionally bulk-adds missing types to ES without destroying existing data
 """
 
-import json
 import logging
 from django.core.management.base import BaseCommand, CommandError
 from django.conf import settings
@@ -147,9 +146,9 @@ class Command(BaseCommand):
         if not documents:
             self.stdout.write("No documents to add.")
             return 0
-
+        
         self.stdout.write(f"\nBulk indexing {len(documents)} documents...")
-
+        
         if dry_run:
             self.stdout.write(self.style.WARNING("(DRY RUN MODE — not writing to ES)"))
             for i, doc in enumerate(documents[:20], 1):
@@ -157,14 +156,14 @@ class Command(BaseCommand):
             if len(documents) > 20:
                 self.stdout.write(f"  ... and {len(documents) - 20} more")
             return 0
-
+        
         es = settings.ES_CONN
         added = 0
         errors = []
-
+        
         try:
             from elasticsearch8.helpers import bulk as es_bulk
-
+            
             actions = []
             for doc in documents:
                 action = {
@@ -173,27 +172,36 @@ class Command(BaseCommand):
                     "_source": doc,
                 }
                 actions.append(action)
-
-            for success, info in es_bulk(
-                es, actions, request_timeout=30, chunk_size=500
-            ):
-                if success:
-                    added += 1
-                else:
-                    errors.append(info)
-
+            
+            # Iterate over bulk results
+            for result in es_bulk(es, actions, request_timeout=30, chunk_size=500):
+                # Handle both tuple (success, info) and non-tuple returns
+                if isinstance(result, tuple) and len(result) == 2:
+                    success, info = result
+                    if success:
+                        added += 1
+                    else:
+                        errors.append(info)
+                elif isinstance(result, dict):
+                    # Sometimes ES returns dict directly
+                    if result.get('index', {}).get('status') in (200, 201):
+                        added += 1
+                    else:
+                        errors.append(result)
+                # Skip non-tuple, non-dict results (final count, etc.)
+            
             self.stdout.write(f"  ✓ Successfully added: {added}")
-
+            
             if errors:
                 self.stdout.write(self.style.WARNING(f"  Errors: {len(errors)}"))
                 for err in errors[:5]:
                     self.stdout.write(f"    {err}")
                 if len(errors) > 5:
                     self.stdout.write(f"    ... and {len(errors) - 5} more")
-
+        
         except Exception as e:
             raise CommandError(f"Error during bulk indexing: {e}")
-
+        
         return added
 
     def handle(self, *args, **options):
