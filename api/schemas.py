@@ -570,3 +570,30 @@ def suggest_property_schema():
             401: OpenApiResponse(description="Authentication failed"),
         },
     )
+
+
+def authority_datasets_schema():
+    """Schema for /reconcile/authority-datasets endpoint"""
+    return build_schema_view(
+        methods={"get": True},
+        tags=["Reconciliation API"],
+        summary="List authority datasets",
+        description=(
+            "Returns datasets flagged as authority sources for the new search indexes, "
+            "including dataset id, title, and place count."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="token",
+                required=False,
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="API token for authentication",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="A list of authority datasets."),
+            401: OpenApiResponse(description="Authentication failed"),
+        },
+    )
+

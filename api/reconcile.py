@@ -20,6 +20,7 @@ import os
 import urllib
 
 from django.contrib.postgres.search import TrigramSimilarity
+from django.db.models import Count
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -30,6 +31,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from periods.models import Period, Chrononym
+from datasets.models import Dataset
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
 from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
@@ -37,7 +39,8 @@ from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE
-from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema
+from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema, \
+    authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
 
 logger = logging.getLogger('reconciliation')
@@ -127,6 +130,10 @@ SERVICE_METADATA = {
                 ]
             }
         ]
+    },
+    "authority_datasets": {
+        "service_url": DOMAIN,
+        "service_path": "/reconcile/authority-datasets?token={{token}}"
     },
     "batch_size": 50,
     "authentication": {
@@ -638,6 +645,26 @@ class SuggestPropertyView(AuthenticatedAPIView):
         paginated_matches = matches[start_index:end_index]
 
         return JsonResponse({"result": paginated_matches})
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+@authority_datasets_schema()
+class AuthorityDatasetsView(AuthenticatedAPIView):
+
+    def get(self, request, *args, **kwargs):
+        logger.info("GET /reconcile/authority-datasets from %s (user=%s)",
+                    request.META.get('REMOTE_ADDR'), request.user)
+
+        datasets = list(
+            Dataset.objects.filter(authority=True)
+            .annotate(place_count=Count("places", distinct=True))
+            .order_by("id")
+            .values("id", "title", "place_count")
+        )
+
+        results = {"result": datasets}
+        _log_json("GET /reconcile/authority-datasets response", results)
+        return JsonResponse(results)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
