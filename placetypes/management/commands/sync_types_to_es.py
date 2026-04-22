@@ -52,12 +52,18 @@ class Command(BaseCommand):
 
             try:
                 while True:
+                    search_body = {
+                        "pit": {"id": pit_id, "keep_alive": "1m"},
+                        "query": {"match_all": {}},
+                        "sort": ["_id"],  # Required for search_after
+                        "_source": ["aat_id"],
+                        "size": 10000,
+                    }
+                    if search_after:
+                        search_body["search_after"] = search_after
+
                     batch_resp = es.search(
-                        pit={"id": pit_id, "keep_alive": "1m"},
-                        query={"match_all": {}},
-                        _source=["aat_id"],
-                        size=10000,
-                        search_after=search_after,
+                        body=search_body,
                         request_timeout=30,
                     )
 
@@ -72,6 +78,7 @@ class Command(BaseCommand):
 
                     total_fetched += len(batch_hits)
                     pit_id = batch_resp.get("pit_id", pit_id)
+                    # With sort ["_id"], the last hit's sort will be [aat_id_string]
                     search_after = batch_hits[-1].get("sort", [])
 
                     self.stdout.write(f"  ... fetched {total_fetched} documents")
