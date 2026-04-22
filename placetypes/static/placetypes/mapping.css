@@ -1,0 +1,219 @@
+/* placetypes/static/placetypes/mapping.css */
+
+/* Table row styling */
+.mapping-row--mapped {
+    background: rgba(40, 167, 69, 0.05);
+}
+.mapping-row--unmapped .badge-unmapped {
+    background: #ffc107;
+    color: #333;
+}
+
+/* Tab inline stats (mapped/total) */
+.tab-stats {
+    font-size: 0.78em;
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+/* Sortable column headers */
+.mapping-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+.mapping-table th.sortable:hover {
+    background: #e9ecef;
+}
+.mapping-table th.sortable::after {
+    content: ' \21C5';
+    opacity: 0.3;
+    font-size: 0.75em;
+}
+.mapping-table th.sortable.sort-asc::after {
+    content: ' \2191';
+    opacity: 0.8;
+}
+.mapping-table th.sortable.sort-desc::after {
+    content: ' \2193';
+    opacity: 0.8;
+}
+
+/* AAT mapping badge */
+.aat-badge {
+    font-size: 0.82em;
+    font-weight: 500;
+}
+
+/* Confidence badges (shown next to AAT mapping) */
+.confidence-close {
+    font-size: 0.7em;
+    font-weight: 500;
+    background-color: #0d6efd;
+    color: #fff;
+    vertical-align: middle;
+}
+.confidence-review {
+    font-size: 0.7em;
+    font-weight: 500;
+    background-color: #fd7e14;
+    color: #fff;
+    vertical-align: middle;
+}
+
+/* Modal AAT search result items */
+.aat-result {
+    cursor: pointer;
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    transition: background 0.15s;
+}
+.aat-result:hover {
+    background: #f0f0f0;
+}
+.aat-result.selected {
+    background: #e8f4fd;
+    border-color: #0d6efd;
+}
+.aat-result .aat-note {
+    font-size: 0.85em;
+    color: #666;
+    margin-top: 2px;
+}
+.aat-result .aat-id {
+    font-family: monospace;
+    font-size: 0.82em;
+    color: #888;
+}
+.aat-result .fclass-badge {
+    font-size: 0.7em;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: #e9ecef;
+    color: #555;
+    margin-left: 4px;
+}
+
+/* "Show in tree" button within search results */
+.aat-result .btn-show-in-tree {
+    font-size: 0.72em;
+    line-height: 1;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+}
+.aat-result:hover .btn-show-in-tree,
+.aat-result .btn-show-in-tree:focus {
+    opacity: 1;
+}
+
+/* Sticky table headers within scrollable container */
+.mapping-table thead.sticky-top th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8f9fa;
+}
+
+/* Count column right-aligned, fixed-width */
+.mapping-table td.count-cell {
+    text-align: right;
+    font-family: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.88em;
+}
+
+/* Generic badge styling */
+.mapping-badge {
+    font-size: 0.78em;
+    white-space: nowrap;
+}
+
+/* Low-value tag de-emphasis (yes, no, other, fixme, etc.) */
+.mapping-row--lowvalue {
+    opacity: 0.5;
+}
+
+/* Responsive tweaks */
+@media (max-width: 768px) {
+    .mapping-table th,
+    .mapping-table td {
+        font-size: 0.85em;
+        padding: 0.3rem 0.4rem;
+    }
+}
+
+/* Modal type tree: selected node highlight */
+.tt-node-selected > .tt-label {
+    background-color: #e8f4fd;
+    border: 1px solid #0d6efd;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-weight: 600;
+}
+
+/* Modal type tree container styling (reuse search.css classes) */
+#modal-type-tree-container .tt-root,
+#modal-type-tree-container .tt-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+#modal-type-tree-container .tt-children {
+    padding-left: 16px;
+}
+#modal-type-tree-container .tt-node {
+    padding: 0;
+    line-height: 1.3;
+}
+#modal-type-tree-container .tt-toggle {
+    display: inline-block;
+    width: 14px;
+    text-align: center;
+    cursor: pointer;
+    color: #6c757d;
+    font-size: 0.75rem;
+    vertical-align: middle;
+}
+#modal-type-tree-container .tt-toggle:hover {
+    color: #333;
+}
+#modal-type-tree-container .tt-toggle.tt-leaf {
+    cursor: default;
+    visibility: hidden;
+}
+#modal-type-tree-container .tt-label {
+    font-size: 0.82rem;
+    cursor: pointer;
+    vertical-align: middle;
+    color: #333;
+}
+#modal-type-tree-container .tt-label:hover {
+    color: #000;
+    text-decoration: underline;
+}
+#modal-type-tree-container .tt-guide > .tt-label {
+    font-style: italic;
+    color: #888;
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+#modal-type-tree-container .tt-badge {
+    display: inline-block;
+    font-size: 0.55rem;
+    font-weight: 600;
+    padding: 0 3px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-left: 2px;
+    color: #fff;
+    line-height: 1.4;
+}
+#modal-type-tree-container .tt-badge-a { background-color: #7b68ee; }
+#modal-type-tree-container .tt-badge-p { background-color: #e07b53; }
+#modal-type-tree-container .tt-badge-s { background-color: #808080; }
+#modal-type-tree-container .tt-badge-r { background-color: #b8860b; }
+#modal-type-tree-container .tt-badge-l { background-color: #3cb371; }
+#modal-type-tree-container .tt-badge-t { background-color: #8b6914; }
+#modal-type-tree-container .tt-badge-h { background-color: #4682b4; }
+#modal-type-tree-container .tt-badge-u { background-color: #2f4f4f; }
+
