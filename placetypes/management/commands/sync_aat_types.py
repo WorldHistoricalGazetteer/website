@@ -32,6 +32,7 @@ from placetypes.aat_config import (
     AAT_DUMP_META_FILE,
     AAT_ENTRY_POINTS,
     AAT_EXCLUDED_SUBTREES,
+    AAT_INCLUDE_ALL_CONCEPTS,
     AAT_EXPLICIT_DUMP_URL,
     AAT_FCLASS_MAP,
     AAT_NT_HIERARCHICAL_RELS,
@@ -166,8 +167,11 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"  -> {len(notes):,} English scope notes in {t1c - t1b:.1f}s")
 
-            # -- Step 3: Walk hierarchy from entry points ------------------
-            self.stdout.write("Walking hierarchy from entry points ...")
+            # -- Step 3: Walk hierarchy from configured seeds --------------
+            if AAT_INCLUDE_ALL_CONCEPTS:
+                self.stdout.write("Walking hierarchy from all discovered roots ...")
+            else:
+                self.stdout.write("Walking hierarchy from entry points ...")
             place_types = self._walk_hierarchy(
                 preferred_parent, children, parents, labels, notes)
             t2 = time.time()
@@ -259,6 +263,11 @@ class Command(BaseCommand):
 
     def _crawl_api(self):
         """BFS crawl via JSON API. Returns list of dicts."""
+        if AAT_INCLUDE_ALL_CONCEPTS:
+            raise CommandError(
+                "--api does not support AAT_INCLUDE_ALL_CONCEPTS; "
+                "use dump-based sync (default mode)."
+            )
         self.stdout.write("Crawling AAT hierarchy via JSON API ...")
         session = requests.Session()
         session.headers.update({'Accept': 'application/json'})
@@ -659,8 +668,22 @@ class Command(BaseCommand):
 
         # Queue: (aat_id, walk_parent, path, depth)
         queue = []
-        for ep in AAT_ENTRY_POINTS:
-            queue.append((ep, None, str(ep), 0))
+        if AAT_INCLUDE_ALL_CONCEPTS:
+            all_ids = (
+                set(children.keys())
+                | set(parents_map.keys())
+                | set(labels.keys())
+                | set(notes.keys())
+            )
+            root_ids = sorted(i for i in all_ids if not parents_map.get(i))
+            for root_id in root_ids:
+                queue.append((root_id, None, str(root_id), 0))
+            self.stdout.write(
+                f"  include-all mode: {len(root_ids):,} root concepts discovered"
+            )
+        else:
+            for ep in AAT_ENTRY_POINTS:
+                queue.append((ep, None, str(ep), 0))
 
         excluded_count = 0
 
@@ -669,8 +692,8 @@ class Command(BaseCommand):
             if aat_id in visited:
                 continue
 
-            # Skip excluded subtrees entirely (don't even visit children)
-            if aat_id in AAT_EXCLUDED_SUBTREES:
+            # Skip configured excluded subtrees when not in include-all mode.
+            if (not AAT_INCLUDE_ALL_CONCEPTS) and aat_id in AAT_EXCLUDED_SUBTREES:
                 excluded_count += 1
                 visited.add(aat_id)
                 continue

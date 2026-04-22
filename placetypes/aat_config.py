@@ -57,13 +57,14 @@ AAT_ENTRY_POINTS = [
     300232420,   # sovereign states (Agents Facet)
 ]
 
+# When True, sync starts from all discovered hierarchy roots and ingests every
+# reachable AAT concept from the dump, ignoring AAT_ENTRY_POINTS.
+AAT_INCLUDE_ALL_CONCEPTS = True
+
 # ---------------------------------------------------------------------------
 # Excluded subtrees: NOT place types — skip these and all descendants
 # ---------------------------------------------------------------------------
-AAT_EXCLUDED_SUBTREES = {
-    300266061,   # vegetation (1,083 concepts — plant species/communities)
-    300266157,   # extraterrestrial bodies (23 concepts — stars, galaxies)
-}
+AAT_EXCLUDED_SUBTREES = set()  # Intentionally empty when include-all is enabled.
 
 # ---------------------------------------------------------------------------
 # fclass assignment map
