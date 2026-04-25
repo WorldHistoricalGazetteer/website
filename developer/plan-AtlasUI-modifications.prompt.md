@@ -11,8 +11,9 @@ The prototype Atlas UI has inspired plans to extend it as a default UI for the e
 3. The "Toponyms" button should be relabelled as "Places".
 4. The renamed "Gazetteers" offcanvas will need to be populated from an extended `/suggest` API which will provide lists of available gazetteers (including what are elsewhere in the codebase known as Authorities and also the individual WHG Datasets -- which are now being indexed as separately-namespaced Authorities -- and Collections).
 5. The Gazetteers list will serve two distinct functions, the selection of which will need to be clearly articulated, perhaps by tabbing(Filter|Explore, or similar) which switches between checkboxes and radio buttons, and changes the labelling of an action button:
-    - When more that one is selected, they serve as a filter for subsequent searches.
+    - When more than one is selected, they serve as a filter for subsequent searches.
     - When only one is selected, the Atlas UI becomes a "Gazetteer Explorer", taking over the role currently served by separate pages for Dataset Browse and two types of Collection Browse.
+    - Selection of Gazetteers which fall entirely outside of any `Area` filters should be disabled and the Gazetteers hidden from the list by a default-hidden toggle. For this to work efficiently, condensed H3 coverage should be precomputed for all Gazetteers on indexing.  Similar filtering must be implemented for temporality.
 6. A toggle filter on the Gazetteers list should allow logged-in users to show (and subsequently explore) only their own gazetteers.
 7. The main site navigation bar can then be rationalised:
     - The "Search" option should be removed (in its current `dev`-server form it was a prototype which led to development of the Atlas UI).
