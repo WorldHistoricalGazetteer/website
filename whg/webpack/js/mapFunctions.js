@@ -324,6 +324,12 @@ export function initPopups(table) {
             let savedFeatureHighlight = activePopup.featureHighlight; // Store the feature highlight info
             clearPopup();
 
+            // Clear the previously clicked/selected feature highlight
+            if (window.highlightedFeatureIndex) {
+                whg_map.setFeatureState(window.highlightedFeatureIndex, { highlight: false });
+                window.highlightedFeatureIndex = undefined;
+            }
+
             // Set the clicked feature as the highlighted feature to keep it red
             if (savedFeatureHighlight !== false) {
                 window.highlightedFeatureIndex = savedFeatureHighlight;

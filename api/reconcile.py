@@ -20,27 +20,44 @@ import os
 import urllib
 
 from django.contrib.postgres.search import TrigramSimilarity
+from django.db.models import Count
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from geopy.distance import geodesic
 from rest_framework.authentication import SessionAuthentication
-from rest_framework.decorators import authentication_classes, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
 from periods.models import Period, Chrononym
+from datasets.models import Dataset
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
-from .crc_client import crc_reconcile_search, crc_suggest_search
+from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
 from .querysets import place_feature_queryset, period_public_queryset
-from .reconcile_helpers import make_candidate, format_extend_row, es_search, extract_entity_type, \
-    create_type_guessing_dummies, parse_schema
-from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema
+from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
+    extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
+    parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE
+from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema, \
+    authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
 
 logger = logging.getLogger('reconciliation')
+
+LOG_MAX_LEN = 2000  # max characters per logged payload/response
+
+
+def _log_json(label, data):
+    """Log a JSON-serialisable object, truncating if needed."""
+    try:
+        text = json.dumps(data, ensure_ascii=False, default=str)
+    except (TypeError, ValueError):
+        text = str(data)
+    if len(text) > LOG_MAX_LEN:
+        text = text[:LOG_MAX_LEN] + f"... ({len(text)} chars total)"
+    logger.debug("%s: %s", label, text)
+
 
 DOMAIN = os.environ.get('URL_FRONT', 'https://whgazetteer.org').rstrip('/')
 DOCS_URL = "https://docs.whgazetteer.org/content/technical/apis.html#reconciliation-service-api"
@@ -114,6 +131,10 @@ SERVICE_METADATA = {
             }
         ]
     },
+    "authority_datasets": {
+        "service_url": DOMAIN,
+        "service_path": "/reconcile/authority-datasets?token={{token}}"
+    },
     "batch_size": 50,
     "authentication": {
         "type": "apiKey",
@@ -130,7 +151,13 @@ def json_error(message, status=400):
 @method_decorator(csrf_exempt, name="dispatch")
 @reconcile_schema()
 class ReconciliationView(APIView):
+    # GET (service metadata) is public; POST requires authentication.
+    # Authentication classes must be set at class level for DRF to use them.
+    # Anonymous requests will still work for GET; POST checks explicitly below.
+    authentication_classes = [TokenQueryOrBearerAuthentication, SessionAuthentication]
+
     def get(self, request, *args, **kwargs):
+        logger.info("GET /reconcile from %s (user=%s)", request.META.get('REMOTE_ADDR'), request.user)
 
         token = request.GET.get("token")
 
@@ -149,20 +176,32 @@ class ReconciliationView(APIView):
 
         return JsonResponse(metadata)
 
-    @authentication_classes([TokenQueryOrBearerAuthentication, SessionAuthentication])
-    @permission_classes([IsAuthenticated])
     def post(self, request, *args, **kwargs):
+
+        if not request.user or not request.user.is_authenticated:
+            logger.warning("POST /reconcile unauthenticated from %s", request.META.get('REMOTE_ADDR'))
+            return json_error("Authentication required. Provide a valid API token.", status=401)
+
+        logger.info("POST /reconcile from %s (user=%s, content_type=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user, request.content_type)
 
         try:
             payload = parse_request_payload(request)
         except ValueError as e:
+            logger.warning("POST /reconcile parse error from %s: %s", request.META.get('REMOTE_ADDR'), e)
             return json_error(str(e))
+
+        _log_json("POST /reconcile payload", payload)
 
         # Data extension requests
         extend = payload.get("extend", {})
         if extend:
             entity_ids = extend.get("ids", [])
+            logger.info("POST /reconcile extend: %d entity IDs, properties=%s",
+                        len(entity_ids), [p.get("id") if isinstance(p, dict) else p
+                                          for p in extend.get("properties", [])])
             if not entity_ids:
+                logger.debug("POST /reconcile extend: no entity IDs, returning empty")
                 return JsonResponse({"rows": {}, "meta": []})
 
             try:
@@ -172,15 +211,38 @@ class ReconciliationView(APIView):
 
             properties = extend.get("properties", [])
 
+            rows = {}
+
             if entity_type == "place":
-                qs = place_feature_queryset(request.user).filter(id__in=ids)
+                # Partition into legacy (numeric) and CRC (namespaced) IDs
+                legacy_ids = [raw_id for raw_id in ids if not is_crc_place_id(raw_id)]
+                crc_ids = [raw_id for raw_id in ids if is_crc_place_id(raw_id)]
+
+                # Legacy places — fetch from Django ORM
+                if legacy_ids:
+                    qs = place_feature_queryset(request.user).filter(id__in=legacy_ids)
+                    for obj in qs:
+                        rows[f"place:{obj.id}"] = format_extend_row(obj, properties, request=request)
+
+                # CRC places — forward to CRC gateway /api/extend
+                if crc_ids:
+                    crc_full_ids = [f"place:{crc_id}" for crc_id in crc_ids]
+                    crc_rows = crc_extend(crc_full_ids, properties, user=request.user)
+                    rows.update(crc_rows)
+
+                    # Fill in any IDs that the gateway didn't return
+                    for crc_id in crc_ids:
+                        key = f"place:{crc_id}"
+                        if key not in rows:
+                            rows[key] = {
+                                (p.get("id") if isinstance(p, dict) else p): []
+                                for p in properties
+                            }
+
             else:  # period
                 qs = period_public_queryset(request.user).filter(id__in=ids)
-
-            rows = {
-                f"{entity_type}:{obj.id}": format_extend_row(obj, properties, request=request)
-                for obj in qs
-            }
+                for obj in qs:
+                    rows[f"period:{obj.id}"] = format_extend_row(obj, properties, request=request)
 
             # Meta block required by OpenRefine
             meta = [
@@ -189,14 +251,18 @@ class ReconciliationView(APIView):
                 for prop in properties
             ]
 
-            return JsonResponse({"meta": meta, "rows": rows})
+            response_data = {"meta": meta, "rows": rows}
+            _log_json("POST /reconcile extend response", response_data)
+            return JsonResponse(response_data)
 
         # Reconciliation queries
         queries = payload.get("queries", {})
         if queries:
+            logger.info("POST /reconcile queries: %d queries", len(queries))
             try:
                 entity_type, _ = extract_entity_type(queries, from_queries=True)
             except ValueError as e:
+                logger.warning("POST /reconcile entity_type error: %s", e)
                 return json_error(str(e))
 
             if not entity_type:
@@ -216,6 +282,7 @@ class ReconciliationView(APIView):
                     results = {
                         first_query_id: {"result": all_candidates}
                     }
+                    _log_json("POST /reconcile type-guessing response", results)
                     return JsonResponse(results)
 
             # Period reconciliation
@@ -228,10 +295,12 @@ class ReconciliationView(APIView):
                 for key, params in queries.items():
                     results[key] = self.reconcile_chrononym_to_period(params)
 
+                _log_json("POST /reconcile period response", results)
                 return JsonResponse(results)
 
             # Place reconciliation
-            results = process_queries(queries, batch_size=batch_size, request=request)
+            results = process_queries(queries, batch_size=batch_size, user=request.user)
+            _log_json("POST /reconcile place response", results)
             return JsonResponse(results)
 
         return json_error("Missing 'queries' or 'extend' parameter")
@@ -396,6 +465,10 @@ class SuggestEntityView(AuthenticatedAPIView):
     def get(self, request, *args, **kwargs):
         prefix = request.GET.get("prefix", "").strip()
 
+        logger.info("GET /suggest/entity from %s (user=%s, prefix=%r, params=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user, prefix,
+                     {k: v for k, v in request.GET.items() if k != 'token'})
+
         if not prefix:
             return JsonResponse({"result": []})
 
@@ -403,6 +476,10 @@ class SuggestEntityView(AuthenticatedAPIView):
         exact = request.GET.get("exact", "false").lower() == "true"
         mode = request.GET.get("mode", "all").lower()
         type = request.GET.get("type", "all").lower()
+        namespaces = parse_namespaces(request.GET.get("namespaces"))
+        ccodes = parse_delimited_param(request.GET.get("countries"), upper=True)
+        fclasses = parse_delimited_param(request.GET.get("fclasses"), upper=True)
+        types = parse_delimited_param(request.GET.get("types"))
 
         try:
             limit = int(request.GET.get("limit", 10))
@@ -413,31 +490,45 @@ class SuggestEntityView(AuthenticatedAPIView):
         # --- 2. Search for Places (Elasticsearch) ---
         place_candidates = []
         if type in ("all", "place"):
-            raw_params = {"query": prefix, "size": 50}  # Search a large size for combining
-            query = normalise_query_params(raw_params)
-            query["mode"] = "starts" if exact else "fuzzy"
+            # Legacy WHG search — skip when the caller excluded "whg"
+            if namespaces is None or WHG_NAMESPACE in namespaces:
+                raw_params = {"query": prefix, "size": 50}
+                if ccodes:
+                    raw_params["countries"] = ccodes
+                if fclasses:
+                    raw_params["fclasses"] = fclasses
+                if types:
+                    raw_params["types"] = types
+                query = normalise_query_params(raw_params)
+                query["mode"] = "starts" if exact else "fuzzy"
 
-            place_hits = es_search(query=query)
+                place_hits = es_search(query=query)
 
-            # Max score is used for normalizing subsequent scores
-            max_score = place_hits[0].get("_score", 1.0) if place_hits else 1.0
+                # Max score is used for normalizing subsequent scores
+                max_score = place_hits[0].get("_score", 1.0) if place_hits else 1.0
 
-            for hit in place_hits:
-                candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
-                place_candidates.append(candidate)
+                for hit in place_hits:
+                    candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
+                    place_candidates.append(candidate)
 
             # --- 2b. CRC gateway search (new places/toponyms indexes) ---
-            crc_mode = "starts" if exact else "fuzzy"
-            crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, request=request)
-            if crc_hits:
-                crc_max_score = crc_hits[0].get("_score", 1.0)
-                # Deduplicate against existing candidates by name
-                existing_names = {c["name"].lower() for c in place_candidates}
-                for hit in crc_hits:
-                    candidate = make_candidate(hit, prefix, crc_max_score, SCHEMA_SPACE)
-                    if candidate["name"].lower() not in existing_names:
-                        place_candidates.append(candidate)
-                        existing_names.add(candidate["name"].lower())
+            crc_namespaces = None
+            if namespaces is not None:
+                crc_namespaces = namespaces - {WHG_NAMESPACE}
+            if namespaces is None or crc_namespaces:
+                crc_mode = "starts" if exact else "fuzzy"
+                crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user,
+                                              namespaces=crc_namespaces, ccodes=ccodes,
+                                              fclasses=fclasses, types=types)
+                if crc_hits:
+                    crc_max_score = crc_hits[0].get("_score", 1.0)
+                    # Deduplicate against existing candidates by name
+                    existing_names = {c["name"].lower() for c in place_candidates}
+                    for hit in crc_hits:
+                        candidate = make_candidate(hit, prefix, crc_max_score, SCHEMA_SPACE)
+                        if candidate["name"].lower() not in existing_names:
+                            place_candidates.append(candidate)
+                            existing_names.add(candidate["name"].lower())
 
         # --- 3. Search for Periods (Database - Chrononym) ---
         period_candidates = []
@@ -511,6 +602,9 @@ class SuggestEntityView(AuthenticatedAPIView):
         callback = request.GET.get('callback')
         results = {"result": final_candidates}
 
+        logger.info("GET /suggest/entity response: %d candidates", len(final_candidates))
+        _log_json("GET /suggest/entity response", results)
+
         if callback:
             response_data = f"{callback}({json.dumps(results)})"
             return JsonResponse(response_data, safe=False, content_type='application/javascript')
@@ -523,6 +617,9 @@ class SuggestEntityView(AuthenticatedAPIView):
 class SuggestPropertyView(AuthenticatedAPIView):
 
     def get(self, request, *args, **kwargs):
+        logger.info("GET /suggest/property from %s (user=%s, params=%s)",
+                     request.META.get('REMOTE_ADDR'), request.user,
+                     {k: v for k, v in request.GET.items() if k != 'token'})
         try:
             query_text = (request.GET.get("prefix") or request.GET.get("query") or "").strip().lower()
             limit = int(request.GET.get("limit", 10))
@@ -548,6 +645,26 @@ class SuggestPropertyView(AuthenticatedAPIView):
         paginated_matches = matches[start_index:end_index]
 
         return JsonResponse({"result": paginated_matches})
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+@authority_datasets_schema()
+class AuthorityDatasetsView(AuthenticatedAPIView):
+
+    def get(self, request, *args, **kwargs):
+        logger.info("GET /reconcile/authority-datasets from %s (user=%s)",
+                    request.META.get('REMOTE_ADDR'), request.user)
+
+        datasets = list(
+            Dataset.objects.filter(authority=True)
+            .annotate(place_count=Count("places", distinct=True))
+            .order_by("id")
+            .values("id", "title", "place_count")
+        )
+
+        results = {"result": datasets}
+        _log_json("GET /reconcile/authority-datasets response", results)
+        return JsonResponse(results)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -607,7 +724,7 @@ def parse_request_payload(request):
         raise ValueError(f"Unsupported Content-Type: {content_type}")
 
 
-def process_queries(queries, batch_size=50, request=None):
+def process_queries(queries, batch_size=50, user=None):
     """
     Enforce batch limit, normalise each query, and return a dict of results.
     """
@@ -617,13 +734,15 @@ def process_queries(queries, batch_size=50, request=None):
         # Slice rather than reject
         queries = dict(list(queries.items())[:batch_size])
         messages.append(f"Batch size limit exceeded; processing first {batch_size} queries.")
+        logger.info("process_queries: batch limit exceeded, truncated to %d", batch_size)
 
     results = {}
     for key, params in queries.items():
         try:
             query = normalise_query_params(params)
-            results[key] = reconcile_place_es(query, request=request)
+            results[key] = reconcile_place_es(query, user=user)
         except ValueError as e:
+            logger.warning("process_queries: query '%s' failed: %s", key, e)
             results[key] = {"error": str(e), "result": []}
     return {**results, "messages": messages} if messages else results
 
@@ -632,8 +751,37 @@ def normalise_query_params(params):
     """
     Validate and normalise a single reconcile query dict.
     Ensures geometry filters, nearby circle, and query_text are handled consistently.
+
+    OpenRefine sends additional column mappings as a ``properties`` array
+    inside each query, e.g.::
+
+        {"query": "rome", "properties": [{"pid": "whg:countries_codes", "v": "IT"}]}
+
+    This function extracts recognised filter properties and merges them
+    into the top-level params before processing.
+
     Returns a dict with clean values ready for downstream use.
     """
+    # --- Extract OpenRefine-style properties into top-level params ---
+    or_props = params.get("properties", [])
+    if or_props and isinstance(or_props, list):
+        PROPERTY_FILTER_MAP = {
+            "whg:namespaces": "namespaces",
+            "whg:countries_codes": "countries",
+            "whg:classes_codes": "fclasses",
+            "whg:types_objects": "types",
+        }
+        for prop in or_props:
+            if not isinstance(prop, dict):
+                continue
+            pid = prop.get("pid") or prop.get("p") or prop.get("id")
+            val = prop.get("v") if "v" in prop else prop.get("value")
+            if pid and val is not None and pid in PROPERTY_FILTER_MAP:
+                target_key = PROPERTY_FILTER_MAP[pid]
+                # Only set if not already explicitly provided at top level
+                if target_key not in params:
+                    params[target_key] = val
+
     query_text = params.get("query", "").strip() or None
     size = int(params.get("limit", params.get("size", 100)))
 
@@ -668,7 +816,6 @@ def normalise_query_params(params):
                 raw_bounds = params["bounds"]
                 if isinstance(raw_bounds, str):
                     raw_bounds = json.loads(raw_bounds)
-
                 # Accept plain GeoJSON geometry (Polygon, MultiPolygon, etc.)
                 if raw_bounds.get("type") in ("Polygon", "MultiPolygon"):
                     bounds = {"type": raw_bounds["type"], "coordinates": raw_bounds["coordinates"]}
@@ -691,7 +838,10 @@ def normalise_query_params(params):
 
     fclasses = None
     if "fclasses" in params:
-        fclasses = [x.strip().upper() for x in params["fclasses"] if x.strip()]
+        raw_fclasses = params["fclasses"]
+        if isinstance(raw_fclasses, str):
+            raw_fclasses = [x.strip() for x in raw_fclasses.split(",") if x.strip()]
+        fclasses = [x.strip().upper() for x in raw_fclasses if x.strip()]
         invalid = [x for x in fclasses if x not in VALID_FCLASSES]
         if invalid:
             raise ValueError(
@@ -699,6 +849,9 @@ def normalise_query_params(params):
                 f"Allowed values are: {', '.join(sorted(VALID_FCLASSES))}. "
                 f"See https://www.geonames.org/source-code/javadoc/org/geonames/FeatureClass.html"
             )
+
+    namespaces = parse_namespaces(params.get("namespaces"))
+    types = parse_delimited_param(params.get("types"))
 
     return {
         "query_text": query_text,
@@ -710,11 +863,13 @@ def normalise_query_params(params):
         "has_nearby": bool(has_nearby),
         "has_dataset": bool(has_dataset),
         "fclasses": fclasses,
+        "types": types,
+        "namespaces": namespaces,
         "raw": params,  # keep original for additional filters
     }
 
 
-def reconcile_place_es(query, request=None):
+def reconcile_place_es(query, user=None):
     """
     Execute a reconciliation query against Elasticsearch.
 
@@ -722,14 +877,31 @@ def reconcile_place_es(query, request=None):
     new places/toponyms indexes.  Results are merged, deduplicated, and
     re-ranked by score.
 
-    query:   dict from normalise_query_params
-    request: Django HttpRequest (used for CRC gateway version-based access check)
+    When ``query["namespaces"]`` is set, only sources whose namespace is
+    in the set are searched / returned.  The pseudo-namespace ``"whg"``
+    represents legacy WHG places (numeric IDs); any other value (e.g.
+    ``"gn"``, ``"tgn"``) is forwarded to the CRC gateway.
+
+    query: dict from normalise_query_params
+    user:  Django User instance (used for CRC gateway access check)
     """
-    # 1. Legacy ES search
-    legacy_hits = es_search(query=query)
+    namespaces = query.get("namespaces")  # None ⇒ all
+
+    # 1. Legacy ES search — skip when the caller excluded "whg"
+    legacy_hits = []
+    if namespaces is None or WHG_NAMESPACE in namespaces:
+        legacy_hits = es_search(query=query)
 
     # 2. CRC gateway search (fail-safe: returns [] on error)
-    crc_hits = crc_reconcile_search(query, request=request)
+    #    Compute the CRC-specific namespace set (everything except "whg").
+    crc_hits = []
+    crc_namespaces = None  # None ⇒ don't filter on the gateway side
+    if namespaces is not None:
+        crc_namespaces = namespaces - {WHG_NAMESPACE}
+    # Only call the gateway when at least one CRC namespace is wanted
+    # (or when no namespace filter was given at all).
+    if namespaces is None or crc_namespaces:
+        crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces)
 
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits
@@ -751,6 +923,9 @@ def reconcile_place_es(query, request=None):
 
     # 6. Trim to requested size
     deduped = deduped[:query.get("size", 100)]
+
+    # 7. Post-filter by namespace (safety net)
+    deduped = filter_hits_by_namespace(deduped, namespaces)
 
     max_score = deduped[0]["_score"] if deduped else 1
     results = []

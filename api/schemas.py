@@ -125,8 +125,11 @@ Free-text search string. Required if no spatial or dataset filters are provided.
 **`mode`** *(string)*  
 Search mode: `exact`, `fuzzy`* (default), `starts`, or `in`. Fuzzy mode can also be specified as `prefix_length|fuzziness` (e.g., `2|1`). **Coming soon**: `phonetic`, and eventually `ner` for LLM-based entity recognition.
 
-**`fclasses`** *(array)*  
-Restrict to specific feature classes. Valid values: `A` (Administrative), `H` (Hydrographic), `L` (Landscape), `P` (Populated places), `R` (Roads/routes), `S` (Sites), `T` (Topographic), `X` (unknown - always included). Format: `["A","L"]`.
+**`fclasses`** *(array | string)*  
+Restrict to specific GeoNames feature classes. Valid values: `A` (Administrative), `H` (Hydrographic), `L` (Landscape), `P` (Populated places), `R` (Roads/routes), `S` (Sites), `T` (Topographic), `X` (unknown - always included). Format: `["A","L"]` or `"A,L"`.
+
+**`types`** *(array | string)*  
+Restrict to specific AAT (Getty Art & Architecture Thesaurus) place types by identifier. Format: `["aat:300008347"]` or `"aat:300008347,aat:300008389"`. Values are matched against the `types.identifier` field in the index.
 
 ### Temporal Filtering
 
@@ -161,6 +164,11 @@ IDs of user-defined stored areas for spatial filtering. Format: `[123,456]`.
 
 **`dataset`** *(integer)*  
 Restrict results to specific dataset ID. Must be a valid dataset ID to which the user has access.
+
+### Source / Namespace Filtering
+
+**`namespaces`** *(string)*  
+Comma-separated list of source namespaces to include. When omitted, results from all available sources are returned. Use `whg` for legacy WHG places. Other values correspond to CRC gateway index prefixes (e.g. `gn` for GeoNames, `tgn` for Getty TGN). Examples: `"whg"`, `"gn,tgn"`, `"whg,gn"`.
 
 ### Data Completeness
 
@@ -365,6 +373,29 @@ def reconcile_schema():
                         }
                     ),
                     OpenApiExample(
+                        name="Namespace-Filtered Reconciliation Request",
+                        description=(
+                            "Restrict results to specific source namespaces. "
+                            "Use 'whg' for legacy WHG places, or CRC namespace prefixes "
+                            "like 'gn' (GeoNames) or 'tgn' (Getty TGN). "
+                            "Combine multiple namespaces with commas."
+                        ),
+                        value={
+                            "queries": {
+                                "q0": {
+                                    "query": "Istanbul",
+                                    "type": "https://whgazetteer.org/static/whg_schema.jsonld#Place",
+                                    "namespaces": "gn,tgn"
+                                },
+                                "q1": {
+                                    "query": "Edinburgh",
+                                    "type": "https://whgazetteer.org/static/whg_schema.jsonld#Place",
+                                    "namespaces": "whg"
+                                }
+                            }
+                        }
+                    ),
+                    OpenApiExample(
                         name="Advanced Reconciliation Request",
                         description="Search with custom fuzziness and with geographic and temporal constraints",
                         value={
@@ -457,6 +488,48 @@ def suggest_entity_schema():
                 description="Whether to return exact matches only",
                 default=False,
             ),
+            OpenApiParameter(
+                name="namespaces",
+                type=OpenApiTypes.STR,
+                required=False,
+                description=(
+                    "Comma-separated list of source namespaces to include. "
+                    "Use 'whg' for legacy WHG places, or CRC namespace prefixes "
+                    "like 'gn' (GeoNames) or 'tgn' (Getty TGN). "
+                    "When omitted, results from all sources are returned. "
+                    "Example: 'whg,gn'"
+                ),
+            ),
+            OpenApiParameter(
+                name="countries",
+                type=OpenApiTypes.STR,
+                required=False,
+                description=(
+                    "Comma-separated ISO 3166-1 alpha-2 country codes to restrict results. "
+                    "Example: 'US,GB'"
+                ),
+            ),
+            OpenApiParameter(
+                name="fclasses",
+                type=OpenApiTypes.STR,
+                required=False,
+                description=(
+                    "Comma-separated GeoNames feature class codes. "
+                    "Valid values: A (Administrative), H (Hydrographic), L (Landscape), "
+                    "P (Populated places), R (Roads/routes), S (Sites), T (Topographic). "
+                    "Example: 'A,P'"
+                ),
+            ),
+            OpenApiParameter(
+                name="types",
+                type=OpenApiTypes.STR,
+                required=False,
+                description=(
+                    "Comma-separated AAT (Getty Art & Architecture Thesaurus) place type identifiers. "
+                    "Values are matched against the types.identifier field. "
+                    "Example: 'aat:300008347,aat:300008389'"
+                ),
+            ),
         ],
         responses={
             200: OpenApiResponse(description="A list of matching entity suggestions."),
@@ -497,3 +570,30 @@ def suggest_property_schema():
             401: OpenApiResponse(description="Authentication failed"),
         },
     )
+
+
+def authority_datasets_schema():
+    """Schema for /reconcile/authority-datasets endpoint"""
+    return build_schema_view(
+        methods={"get": True},
+        tags=["Reconciliation API"],
+        summary="List authority datasets",
+        description=(
+            "Returns datasets flagged as authority sources for the new search indexes, "
+            "including dataset id, title, and place count."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="token",
+                required=False,
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                description="API token for authentication",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(description="A list of authority datasets."),
+            401: OpenApiResponse(description="Authentication failed"),
+        },
+    )
+

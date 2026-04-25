@@ -1,468 +1,626 @@
 #!/usr/bin/env python3
 """
-Reconciliation API diagnostic tests.
+Comprehensive test suite for the WHG Reconciliation Service API v0.2.
 
-Tests both the CRC gateway directly (via SSH to DO server) and the
-Django reconcile endpoint's internal logic.
+Validates all endpoints against a live server, checking response shapes
+match what OpenRefine expects.  Run against dev before promoting to production.
 
-Run from repo root:
-    python tests/test_reconciliation_api.py          # full suite
-    python tests/test_reconciliation_api.py gateway   # gateway-only
-    python tests/test_reconciliation_api.py django     # django-only
+Usage:
+    python tests/test_reconciliation_api.py [--base-url URL] [--token TOKEN]
 
-Requires: requests, subprocess (ssh whg must be configured)
+Defaults to dev.whgazetteer.org.
 """
 
+import argparse
 import json
-import subprocess
+import re
 import sys
-import textwrap
+import time
 
-# ---------------------------------------------------------------------------
-# Config
-# ---------------------------------------------------------------------------
+import requests
 
-GATEWAY_URL = "http://index.whgazetteer.org:9200"
-WHG_URL = "https://whgazetteer.org"
+# ── Defaults ─────────────────────────────────────────────────────────────────
 
-WESTERN_EUROPE_BOUNDS = {
-    "type": "Polygon",
-    "coordinates": [[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]],
-}
+DEFAULT_BASE = "https://dev.whgazetteer.org"
+DEFAULT_TOKEN = "IwZ5-626F25qXVRn--IYxJPgH-DKPBwZw8xa8BSgnJ4"
 
-# Same bounds but wrapped in GeometryCollection (legacy WHG format)
-WESTERN_EUROPE_BOUNDS_LEGACY = {
-    "geometries": [WESTERN_EUROPE_BOUNDS],
-}
+# ── Test infrastructure ──────────────────────────────────────────────────────
 
-TEST_PLACES = ["London", "Venice", "Paris", "Istanbul"]
+PASS = 0
+FAIL = 0
+ERRORS = []
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
-class TestResult:
-    def __init__(self, name):
-        self.name = name
-        self.passed = 0
-        self.failed = 0
-        self.errors = []
-
-    def ok(self, msg):
-        self.passed += 1
-        print(f"  ✓ {msg}")
-
-    def fail(self, msg, detail=""):
-        self.failed += 1
-        self.errors.append(msg)
-        print(f"  ✗ {msg}")
+def check(name: str, condition: bool, detail: str = ""):
+    """Record a test result."""
+    global PASS, FAIL
+    if condition:
+        PASS += 1
+        print(f"  ✅ {name}")
+    else:
+        FAIL += 1
+        msg = f"  ❌ {name}"
         if detail:
-            for line in textwrap.wrap(detail, width=100):
-                print(f"      {line}")
-
-    def summary(self):
-        total = self.passed + self.failed
-        status = "PASS" if self.failed == 0 else "FAIL"
-        print(f"\n  [{status}] {self.name}: {self.passed}/{total} passed")
-        return self.failed == 0
+            msg += f"  — {detail}"
+        print(msg)
+        ERRORS.append(name)
 
 
-def gateway_curl(method, path, body=None, timeout=15):
+def section(title: str):
+    print(f"\n{'─' * 60}")
+    print(f"  {title}")
+    print(f"{'─' * 60}")
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def is_recon_result(r: dict, entity_prefix: str = "place") -> list[str]:
     """
-    Run a curl command against the gateway via ssh whg.
-    Returns (status_code, response_body_dict_or_str).
+    Validate a single reconciliation result dict against the v0.2 spec.
+    Returns a list of problems (empty = valid).
     """
-    # Build the curl command string for remote execution
-    curl_parts = ["curl", "-s", "-w", "'|||%{http_code}'", "-X", method]
-    if body:
-        body_json = json.dumps(body)
-        # Escape single quotes in JSON for the shell
-        body_json_escaped = body_json.replace("'", "'\\''")
-        curl_parts += ["-H", "'Content-Type: application/json'", "-d", f"'{body_json_escaped}'"]
-    curl_parts.append(f"'{GATEWAY_URL}{path}'")
+    problems = []
 
-    remote_cmd = " ".join(curl_parts)
-    cmd = ["ssh", "whg", remote_cmd]
+    # Required keys
+    for key in ("id", "name", "score", "match", "type"):
+        if key not in r:
+            problems.append(f"missing key '{key}'")
 
-    try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=timeout + 10
-        )
-        output = result.stdout.strip()
+    if "id" in r:
+        if not isinstance(r["id"], str):
+            problems.append(f"id should be str, got {type(r['id']).__name__}")
 
-        # Split on our custom separator
-        if "|||" in output:
-            body_str, code_str = output.rsplit("|||", 1)
-        else:
-            body_str = output
-            code_str = "0"
+    if "name" in r:
+        if not isinstance(r["name"], str) or not r["name"]:
+            problems.append(f"name should be non-empty str")
 
-        try:
-            status = int(code_str.strip())
-        except ValueError:
-            status = 0
-        try:
-            data = json.loads(body_str)
-        except json.JSONDecodeError:
-            data = body_str
-        return status, data
-    except subprocess.TimeoutExpired:
-        return 0, "TIMEOUT"
-    except Exception as e:
-        return 0, str(e)
+    if "score" in r:
+        if not isinstance(r["score"], (int, float)):
+            problems.append(f"score should be numeric, got {type(r['score']).__name__}")
+        elif not (0 <= r["score"] <= 100):
+            problems.append(f"score {r['score']} not in 0–100")
+
+    if "match" in r:
+        if not isinstance(r["match"], bool):
+            problems.append(f"match should be bool, got {type(r['match']).__name__}")
+
+    if "type" in r:
+        if not isinstance(r["type"], list):
+            problems.append(f"type should be list, got {type(r['type']).__name__}")
+        elif r["type"]:
+            t = r["type"][0]
+            if not isinstance(t, dict) or "id" not in t or "name" not in t:
+                problems.append(f"type[0] should have {{id, name}}, got {t}")
+
+    return problems
 
 
-# ---------------------------------------------------------------------------
-# Gateway tests
-# ---------------------------------------------------------------------------
+# ── Test groups ──────────────────────────────────────────────────────────────
 
-def test_gateway_health():
-    t = TestResult("Gateway Health")
-    status, data = gateway_curl("GET", "/api/health")
-    if status == 200 and isinstance(data, dict):
-        t.ok(f"Gateway: {data.get('gateway', '?')}, ES: {data.get('elasticsearch', '?')}")
-    else:
-        t.fail(f"Health check returned {status}", str(data)[:200])
-    t.summary()
-    return t
+def test_service_metadata(s: requests.Session, base: str, token: str):
+    section("1. Service Metadata (GET /reconcile)")
 
+    # Without token
+    resp = s.get(f"{base}/reconcile")
+    check("GET /reconcile returns 200", resp.status_code == 200, f"got {resp.status_code}")
+    meta = resp.json()
 
-def test_gateway_reconcile_modes():
-    """Test all search modes against the gateway."""
-    t = TestResult("Gateway Reconcile Modes")
+    check("has 'versions'", "versions" in meta)
+    check("versions includes '0.2'", "0.2" in meta.get("versions", []))
+    check("has 'name'", isinstance(meta.get("name"), str) and len(meta["name"]) > 0)
+    check("has 'identifierSpace'", isinstance(meta.get("identifierSpace"), str))
+    check("has 'schemaSpace'", isinstance(meta.get("schemaSpace"), str))
 
-    for mode in ("exact", "starts", "fuzzy"):
-        body = {"query": "London", "mode": mode, "size": 5}
-        status, data = gateway_curl("POST", "/api/reconcile", body)
+    # defaultTypes
+    dt = meta.get("defaultTypes", [])
+    check("has defaultTypes (list)", isinstance(dt, list) and len(dt) > 0)
+    if dt:
+        check("defaultTypes[0] has {id, name}",
+              isinstance(dt[0], dict) and "id" in dt[0] and "name" in dt[0])
+        type_names = [t["name"] for t in dt]
+        check("defaultTypes includes Place", "Place" in type_names)
+        check("defaultTypes includes Period", "Period" in type_names)
 
-        if status != 200:
-            t.fail(f"mode={mode}: HTTP {status}", str(data)[:200])
-            continue
+    # suggest
+    sug = meta.get("suggest", {})
+    check("has suggest.entity", "entity" in sug)
+    check("has suggest.property", "property" in sug)
+    if "entity" in sug:
+        check("suggest.entity has service_url + service_path",
+              "service_url" in sug["entity"] and "service_path" in sug["entity"])
 
-        hits = data.get("hits", []) if isinstance(data, dict) else []
-        if hits:
-            titles = [h.get("title", "?") for h in hits[:3]]
-            t.ok(f"mode={mode}: {len(hits)} hits ({', '.join(titles)})")
-        else:
-            t.fail(f"mode={mode}: 0 hits", json.dumps(data)[:300])
+    # extend
+    ext = meta.get("extend", {})
+    check("has extend.propose_properties", "propose_properties" in ext)
+    check("has extend.property_settings", "property_settings" in ext)
 
-    t.summary()
-    return t
+    # preview
+    check("has preview with url, width, height",
+          "preview" in meta and "url" in meta.get("preview", {})
+          and "width" in meta.get("preview", {}) and "height" in meta.get("preview", {}))
 
+    # view + feature_view
+    check("has view.url", "url" in meta.get("view", {}))
+    check("has feature_view.url", "url" in meta.get("feature_view", {}))
 
-def test_gateway_bounds():
-    """Test spatial bounds filtering (plain GeoJSON Polygon)."""
-    t = TestResult("Gateway Bounds Filtering")
+    # authentication
+    auth = meta.get("authentication", {})
+    check("authentication.type is 'apiKey'", auth.get("type") == "apiKey")
+    check("authentication.name is 'token'", auth.get("name") == "token")
+    check("authentication.in is 'query'", auth.get("in") == "query")
 
-    for place in TEST_PLACES:
-        body = {
-            "query": place,
-            "mode": "starts",
-            "size": 5,
-            "bounds": WESTERN_EUROPE_BOUNDS,
-            "namespaces": ["gn", "wd"],
-        }
-        status, data = gateway_curl("POST", "/api/reconcile", body)
+    check("has batch_size (int)", isinstance(meta.get("batch_size"), int))
 
-        if status != 200:
-            t.fail(f"{place}: HTTP {status}", str(data)[:200])
-            continue
+    # With token — verify {{token}} substitution
+    resp2 = s.get(f"{base}/reconcile", params={"token": token})
+    meta2 = resp2.json()
+    preview_url = meta2.get("preview", {}).get("url", "")
+    check("token injected into preview URL",
+          token in preview_url, f"preview.url = {preview_url}")
+    suggest_path = meta2.get("suggest", {}).get("entity", {}).get("service_path", "")
+    check("token injected into suggest.entity.service_path",
+          token in suggest_path, f"service_path = {suggest_path}")
 
-        hits = data.get("hits", []) if isinstance(data, dict) else []
-        if hits:
-            first = hits[0]
-            t.ok(f"{place}: {len(hits)} hits, best={first.get('title')} ({first.get('place_id')})")
-        else:
-            t.fail(f"{place} with W.Europe bounds: 0 hits")
-
-    t.summary()
-    return t
-
-
-def test_gateway_namespaces():
-    """Test namespace filtering."""
-    t = TestResult("Gateway Namespace Filter")
-
-    # Only GeoNames
-    body = {"query": "London", "mode": "starts", "size": 10, "namespaces": ["gn"]}
-    status, data = gateway_curl("POST", "/api/reconcile", body)
-    if status == 200 and isinstance(data, dict):
-        hits = data.get("hits", [])
-        non_gn = [h for h in hits if not h.get("place_id", "").startswith("gn:")]
-        if non_gn:
-            t.fail(f"Namespace gn filter leaked: {[h['place_id'] for h in non_gn[:3]]}")
-        elif hits:
-            t.ok(f"namespaces=[gn]: {len(hits)} hits, all gn:*")
-        else:
-            t.fail("namespaces=[gn]: 0 hits")
-    else:
-        t.fail(f"HTTP {status}", str(data)[:200])
-
-    # Wikidata + GeoNames
-    body = {"query": "Venice", "mode": "starts", "size": 10, "namespaces": ["gn", "wd"]}
-    status, data = gateway_curl("POST", "/api/reconcile", body)
-    if status == 200 and isinstance(data, dict):
-        hits = data.get("hits", [])
-        namespaces = {h.get("namespace", "") for h in hits}
-        if hits:
-            t.ok(f"namespaces=[gn,wd]: {len(hits)} hits, namespaces={namespaces}")
-        else:
-            t.fail("namespaces=[gn,wd]: 0 hits")
-    else:
-        t.fail(f"HTTP {status}", str(data)[:200])
-
-    t.summary()
-    return t
+    return meta.get("schemaSpace", "")
 
 
-def test_gateway_search():
-    """Test the /api/search endpoint."""
-    t = TestResult("Gateway /api/search")
+def test_place_reconciliation(s: requests.Session, base: str, token: str, schema_space: str):
+    section("2. Place Reconciliation (POST /reconcile)")
+    place_type = f"{schema_space}#Place"
 
-    for mode in ("starts", "fuzzy"):
-        body = {"query": "London", "mode": mode, "size": 5}
-        status, data = gateway_curl("POST", "/api/search", body)
+    # ── 2a. Form-encoded (OpenRefine style)
+    print("\n  2a. Form-encoded query")
+    queries_json = json.dumps({
+        "q0": {"query": "Edinburgh", "type": place_type, "limit": 5}
+    })
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  data={"queries": queries_json},
+                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("form-encoded POST returns 200", resp.status_code == 200, f"got {resp.status_code}")
+    data = resp.json()
 
-        if status != 200:
-            t.fail(f"/api/search mode={mode}: HTTP {status}", str(data)[:200])
-            continue
+    check("response has key 'q0'", "q0" in data)
+    results = data.get("q0", {}).get("result", [])
+    check("q0.result is non-empty list", isinstance(results, list) and len(results) > 0,
+          f"got {len(results)} results")
 
-        hits = data.get("hits", []) if isinstance(data, dict) else []
-        if hits:
-            t.ok(f"/api/search mode={mode}: {len(hits)} hits, facets present={bool(data.get('facets'))}")
-        else:
-            t.fail(f"/api/search mode={mode}: 0 hits")
+    if results:
+        r0 = results[0]
+        probs = is_recon_result(r0)
+        check("first result has valid v0.2 shape", len(probs) == 0,
+              "; ".join(probs) if probs else "")
+        check("first result id starts with 'place:'",
+              r0.get("id", "").startswith("place:"), f"id = {r0.get('id')}")
+        check("first result type[0].name is 'Place'",
+              r0.get("type", [{}])[0].get("name") == "Place")
 
-    t.summary()
-    return t
+        # Check for CRC results mixed in
+        crc_results = [r for r in results if re.match(r"place:\w+:", r.get("id", ""))]
+        legacy_results = [r for r in results if re.match(r"place:\d+$", r.get("id", ""))]
+        print(f"    ℹ️  {len(legacy_results)} legacy + {len(crc_results)} CRC results")
 
+    # ── 2b. JSON body
+    print("\n  2b. JSON body query")
+    resp2 = s.post(f"{base}/reconcile", params={"token": token},
+                   json={"queries": {"q0": {"query": "Athens", "type": place_type, "limit": 5}}})
+    check("JSON POST returns 200", resp2.status_code == 200, f"got {resp2.status_code}")
+    data2 = resp2.json()
+    results2 = data2.get("q0", {}).get("result", [])
+    check("JSON body query returns results", len(results2) > 0)
+    if results2:
+        probs = is_recon_result(results2[0])
+        check("JSON result has valid shape", len(probs) == 0, "; ".join(probs))
 
-def test_gateway_suggest():
-    """Test the /api/suggest endpoint."""
-    t = TestResult("Gateway /api/suggest")
-
-    status, data = gateway_curl("GET", "/api/suggest?q=Lond&size=5")
-    if status == 200 and isinstance(data, dict):
-        suggestions = data.get("suggestions", [])
-        if suggestions:
-            names = [s.get("name", "?") for s in suggestions]
-            t.ok(f"/api/suggest: {len(suggestions)} suggestions ({', '.join(names[:3])})")
-        else:
-            t.fail("/api/suggest: 0 suggestions")
-    else:
-        t.fail(f"HTTP {status}", str(data)[:200])
-
-    t.summary()
-    return t
-
-
-# ---------------------------------------------------------------------------
-# Django normalise_query_params tests (offline unit tests)
-# ---------------------------------------------------------------------------
-
-def test_django_normalise_bounds():
-    """Test the Django-side bounds parsing handles all formats."""
-    t = TestResult("Django normalise_query_params — Bounds Parsing")
-
-    # Import the function (needs Django setup)
-    try:
-        import django
-        import os
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whg.settings")
-        django.setup()
-        from api.reconcile import normalise_query_params
-    except Exception as e:
-        t.fail(f"Cannot import Django: {e}")
-        t.summary()
-        return t
-
-    # Test 1: Plain GeoJSON Polygon (the user's format)
-    params = {
-        "query": "London",
-        "bounds": {"type": "Polygon", "coordinates": [[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]]},
+    # ── 2c. Batch queries
+    print("\n  2c. Batch queries")
+    batch = {
+        "q0": {"query": "London", "type": place_type, "limit": 3},
+        "q1": {"query": "Paris", "type": place_type, "limit": 3},
+        "q2": {"query": "Tokyo", "type": place_type, "limit": 3},
     }
-    try:
-        result = normalise_query_params(params)
-        if result["bounds"] and result["bounds"]["type"] == "Polygon":
-            t.ok("Plain Polygon bounds parsed correctly")
-        else:
-            t.fail(f"Plain Polygon bounds: unexpected result {result['bounds']}")
-    except Exception as e:
-        t.fail(f"Plain Polygon bounds raised: {e}")
+    resp3 = s.post(f"{base}/reconcile", params={"token": token},
+                   data={"queries": json.dumps(batch)},
+                   headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("batch POST returns 200", resp3.status_code == 200)
+    data3 = resp3.json()
+    check("batch response has all 3 query keys",
+          all(k in data3 for k in ("q0", "q1", "q2")),
+          f"keys = {list(data3.keys())}")
+    for qk in ("q0", "q1", "q2"):
+        res = data3.get(qk, {}).get("result", [])
+        check(f"batch {qk} has results", len(res) > 0, f"{len(res)} results")
 
-    # Test 2: GeometryCollection format (legacy)
-    params = {
-        "query": "London",
-        "bounds": {"geometries": [{"type": "Polygon", "coordinates": [[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]]}]},
+    # ── 2d. Score normalization across batch
+    print("\n  2d. Score normalization")
+    all_scores = []
+    for qk in ("q0", "q1", "q2"):
+        for r in data3.get(qk, {}).get("result", []):
+            all_scores.append(r.get("score", -1))
+    check("all scores in 0–100 range",
+          all(0 <= sc <= 100 for sc in all_scores),
+          f"min={min(all_scores)}, max={max(all_scores)}" if all_scores else "no scores")
+
+    # Return a place ID for the extension test (prefer legacy, but accept CRC)
+    first_place_id = None
+    first_legacy_id = None
+    for r in results:
+        rid = r.get("id", "")
+        if not first_place_id and rid.startswith("place:"):
+            first_place_id = rid
+        if not first_legacy_id and re.match(r"place:\d+$", rid):
+            first_legacy_id = rid
+    return first_legacy_id or first_place_id
+
+
+def test_type_guessing(s: requests.Session, base: str, token: str, schema_space: str):
+    section("3. Type Guessing (OpenRefine discovery)")
+
+    # OpenRefine sends a query without a 'type' to discover available types
+    queries_json = json.dumps({
+        "q0": {"query": "test", "limit": 5}
+    })
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  data={"queries": queries_json},
+                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("type-guessing POST returns 200", resp.status_code == 200, f"got {resp.status_code}")
+    data = resp.json()
+    results = data.get("q0", {}).get("result", [])
+    check("type-guessing returns results", len(results) > 0)
+
+    if results:
+        type_names_seen = set()
+        for r in results:
+            for t in r.get("type", []):
+                type_names_seen.add(t.get("name", ""))
+        check("type-guessing covers Place type", "Place" in type_names_seen, f"types seen: {type_names_seen}")
+        check("type-guessing covers Period type", "Period" in type_names_seen)
+        check("all dummy results have score 100",
+              all(r.get("score") == 100 for r in results))
+        check("all dummy results have match True",
+              all(r.get("match") is True for r in results))
+        check("dummy ids are prefixed 'dummy:'",
+              all(r.get("id", "").startswith("dummy:") for r in results))
+
+
+def test_period_reconciliation(s: requests.Session, base: str, token: str, schema_space: str):
+    section("4. Period Reconciliation")
+    period_type = f"{schema_space}#Period"
+
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  data={"queries": json.dumps({
+                      "q0": {"query": "Medieval", "type": period_type, "limit": 5}
+                  })},
+                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("period POST returns 200", resp.status_code == 200, f"got {resp.status_code}")
+    data = resp.json()
+    results = data.get("q0", {}).get("result", [])
+    check("period query returns results", len(results) > 0, f"{len(results)} results")
+
+    if results:
+        r0 = results[0]
+        probs = is_recon_result(r0, "period")
+        check("period result has valid v0.2 shape", len(probs) == 0, "; ".join(probs))
+        check("period result id starts with 'period:'",
+              r0.get("id", "").startswith("period:"), f"id = {r0.get('id')}")
+        check("period result type[0].name is 'Period'",
+              r0.get("type", [{}])[0].get("name") == "Period")
+        check("period result has description",
+              isinstance(r0.get("description"), str) and len(r0["description"]) > 0)
+
+
+def test_data_extension(s: requests.Session, base: str, token: str, place_id: str | None, schema_space: str):
+    section("5. Data Extension (POST /reconcile with extend)")
+
+    # If no ID from earlier, try a targeted query
+    if not place_id:
+        print("    ℹ️  No place ID from earlier test; running bootstrap query...")
+        place_type = f"{schema_space}#Place"
+        resp0 = s.post(f"{base}/reconcile", params={"token": token},
+                       json={"queries": {"q0": {"query": "London", "type": place_type, "limit": 50}}})
+        if resp0.status_code == 200:
+            for r in resp0.json().get("q0", {}).get("result", []):
+                if r.get("id", "").startswith("place:"):
+                    place_id = r["id"]
+                    break
+
+    if not place_id:
+        print("  ⚠️  Skipping — no place ID available")
+        return
+
+    is_crc = not re.match(r"place:\d+$", place_id)
+    print(f"    ℹ️  Using place ID: {place_id} ({'CRC' if is_crc else 'legacy'})")
+
+    extend_payload = {
+        "ids": [place_id],
+        "properties": [
+            {"id": "whg:names_canonical"},
+            {"id": "whg:countries_codes"},
+        ]
     }
-    try:
-        result = normalise_query_params(params)
-        if result["bounds"] and result["bounds"]["type"] == "Polygon":
-            t.ok("GeometryCollection bounds parsed correctly")
-        else:
-            t.fail(f"GeometryCollection bounds: unexpected result {result['bounds']}")
-    except Exception as e:
-        t.fail(f"GeometryCollection bounds raised: {e}")
 
-    # Test 3: MultiPolygon
-    params = {
-        "query": "London",
-        "bounds": {
-            "type": "MultiPolygon",
-            "coordinates": [[[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]]],
-        },
-    }
-    try:
-        result = normalise_query_params(params)
-        if result["bounds"] and result["bounds"]["type"] == "MultiPolygon":
-            t.ok("MultiPolygon bounds parsed correctly")
-        else:
-            t.fail(f"MultiPolygon bounds: unexpected result {result['bounds']}")
-    except Exception as e:
-        t.fail(f"MultiPolygon bounds raised: {e}")
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  data={"extend": json.dumps(extend_payload)},
+                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("extend POST returns 200", resp.status_code == 200, f"got {resp.status_code}")
 
-    # Test 4: Invalid bounds should raise ValueError
-    params = {"query": "London", "bounds": {"type": "Point", "coordinates": [0, 0]}}
-    try:
-        normalise_query_params(params)
-        t.fail("Point bounds should have raised ValueError")
-    except ValueError:
-        t.ok("Point bounds correctly rejected")
-    except Exception as e:
-        t.fail(f"Point bounds raised unexpected: {type(e).__name__}: {e}")
-
-    # Test 5: Empty bounds object should raise ValueError
-    params = {"query": "London", "bounds": {}}
-    try:
-        normalise_query_params(params)
-        t.fail("Empty bounds should have raised ValueError")
-    except ValueError:
-        t.ok("Empty bounds correctly rejected")
-    except Exception as e:
-        t.fail(f"Empty bounds raised unexpected: {type(e).__name__}: {e}")
-
-    # Test 6: limit parameter maps to size
-    params = {"query": "London", "limit": 5}
-    try:
-        result = normalise_query_params(params)
-        if result["size"] == 5:
-            t.ok("'limit' parameter correctly mapped to size=5")
-        else:
-            t.fail(f"'limit' parameter: expected size=5, got size={result['size']}")
-    except Exception as e:
-        t.fail(f"'limit' parameter raised: {e}")
-
-    t.summary()
-    return t
-
-
-def test_django_build_es_query_bounds():
-    """Test build_es_query handles both bounds formats."""
-    t = TestResult("Django build_es_query — Bounds Handling")
+    if resp.status_code != 200:
+        print(f"    ⚠️  Response body: {resp.text[:200]}")
+        return
 
     try:
-        import django
-        import os
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "whg.settings")
-        django.setup()
-        from api.reconcile_helpers import build_es_query
+        data = resp.json()
     except Exception as e:
-        t.fail(f"Cannot import Django: {e}")
-        t.summary()
-        return t
+        check("extend response is valid JSON", False, str(e))
+        return
 
-    # Test 1: Plain Polygon bounds
-    params = {
-        "qstr": "London",
-        "bounds": {"type": "Polygon", "coordinates": [[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]]},
-    }
+    check("response has 'meta' key", "meta" in data)
+    check("response has 'rows' key", "rows" in data)
+
+    meta = data.get("meta", [])
+    check("meta is a list", isinstance(meta, list))
+    if meta:
+        check("meta[0] has {id, name}", "id" in meta[0] and "name" in meta[0],
+              f"meta[0] = {meta[0]}")
+
+    rows = data.get("rows", {})
+    check("rows is a dict", isinstance(rows, dict))
+    check("rows has entry for our entity", len(rows) > 0,
+          f"keys = {list(rows.keys())}")
+
+    if rows:
+        first_key = list(rows.keys())[0]
+        row = rows[first_key]
+        check("row is a dict of property values", isinstance(row, dict))
+        for pid in ("whg:names_canonical", "whg:countries_codes"):
+            val = row.get(pid)
+            check(f"row has '{pid}'", val is not None, f"keys = {list(row.keys())}")
+            if val is not None:
+                check(f"'{pid}' is a list", isinstance(val, list))
+                # OpenRefine expects each cell to be {str: value} or {id: value, name: label}
+                if val:
+                    cell = val[0]
+                    check(f"'{pid}' cell is a dict",
+                          isinstance(cell, dict),
+                          f"got {type(cell).__name__}: {cell}")
+
+
+def test_propose_properties(s: requests.Session, base: str):
+    section("6. Propose Properties (GET /reconcile/properties)")
+
+    resp = s.get(f"{base}/reconcile/properties")
+    check("GET /reconcile/properties returns 200", resp.status_code == 200,
+          f"got {resp.status_code}")
+    data = resp.json()
+    check("response has 'properties' key", "properties" in data)
+
+    props = data.get("properties", [])
+    check("properties is a non-empty list", isinstance(props, list) and len(props) > 0)
+
+    if props:
+        p0 = props[0]
+        check("property has 'id'", "id" in p0)
+        check("property has 'name'", "name" in p0)
+
+
+def test_suggest_entity(s: requests.Session, base: str, token: str):
+    section("7. Suggest Entity (GET /suggest/entity)")
+
+    resp = s.get(f"{base}/suggest/entity",
+                 params={"token": token, "prefix": "Lon", "limit": 5})
+    check("GET /suggest/entity returns 200", resp.status_code == 200,
+          f"got {resp.status_code}")
+    data = resp.json()
+    check("response has 'result' key", "result" in data)
+
+    results = data.get("result", [])
+    check("suggest returns results", len(results) > 0, f"{len(results)} results")
+
+    if results:
+        r0 = results[0]
+        probs = is_recon_result(r0)
+        check("suggest result has v0.2 shape", len(probs) == 0, "; ".join(probs))
+        check("suggest result has description",
+              "description" in r0, f"keys = {list(r0.keys())}")
+
+
+def test_suggest_property(s: requests.Session, base: str, token: str):
+    section("8. Suggest Property (GET /suggest/property)")
+
+    resp = s.get(f"{base}/suggest/property",
+                 params={"token": token, "prefix": "name", "limit": 5})
+    check("GET /suggest/property returns 200", resp.status_code == 200,
+          f"got {resp.status_code}")
+    data = resp.json()
+    check("response has 'result' key", "result" in data)
+
+    results = data.get("result", [])
+    check("property suggest returns results", len(results) > 0, f"{len(results)} results")
+
+    if results:
+        p0 = results[0]
+        check("property result has 'id'", "id" in p0)
+        check("property result has 'name'", "name" in p0)
+
+
+def test_filters(s: requests.Session, base: str, token: str, schema_space: str):
+    section("9. Spatial / Country / Temporal Filters")
+    place_type = f"{schema_space}#Place"
+
+    # ── 9a. Nearby circle (London area)
+    print("\n  9a. Nearby circle filter")
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  json={"queries": {"q0": {
+                      "query": "Westminster",
+                      "type": place_type,
+                      "lat": 51.5, "lng": -0.12, "radius": 50,
+                      "limit": 5,
+                  }}})
+    check("nearby filter returns 200", resp.status_code == 200)
+    results = resp.json().get("q0", {}).get("result", [])
+    check("nearby filter returns results", len(results) > 0, f"{len(results)} results")
+
+    # ── 9b. Country code filter
+    print("\n  9b. Country code filter")
+    resp2 = s.post(f"{base}/reconcile", params={"token": token},
+                   json={"queries": {"q0": {
+                       "query": "Athens",
+                       "type": place_type,
+                       "countries": ["GR"],
+                       "limit": 5,
+                   }}})
+    check("country filter returns 200", resp2.status_code == 200)
+    results2 = resp2.json().get("q0", {}).get("result", [])
+    check("country filter returns results", len(results2) > 0)
+
+    # ── 9c. Temporal filter
+    print("\n  9c. Temporal filter")
+    resp3 = s.post(f"{base}/reconcile", params={"token": token},
+                   json={"queries": {"q0": {
+                       "query": "Constantinople",
+                       "type": place_type,
+                       "start": 300, "end": 1453,
+                       "limit": 5,
+                   }}})
+    check("temporal filter returns 200", resp3.status_code == 200)
+    results3 = resp3.json().get("q0", {}).get("result", [])
+    check("temporal filter returns results", len(results3) > 0, f"{len(results3)} results")
+
+
+def test_batch_limit(s: requests.Session, base: str, token: str, schema_space: str):
+    section("10. Batch Size Limit")
+    place_type = f"{schema_space}#Place"
+
+    # Build 55 queries (batch_size is 50)
+    queries = {f"q{i}": {"query": f"city_{i}", "type": place_type, "limit": 1}
+               for i in range(55)}
+
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  data={"queries": json.dumps(queries)},
+                  headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("oversized batch returns 200", resp.status_code == 200,
+          f"got {resp.status_code}")
+
+    if resp.status_code != 200:
+        print(f"    ⚠️  Skipping remaining checks (status {resp.status_code})")
+        return
+
     try:
-        query = build_es_query(params)
-        query_str = json.dumps(query)
-        if "geo_shape" in query_str:
-            t.ok("Plain Polygon bounds → geo_shape filter present")
-        else:
-            t.fail("Plain Polygon bounds → no geo_shape filter in query", query_str[:300])
+        data = resp.json()
     except Exception as e:
-        t.fail(f"Plain Polygon bounds raised: {e}")
+        check("batch response is valid JSON", False, str(e))
+        return
 
-    # Test 2: GeometryCollection bounds
-    params = {
-        "qstr": "London",
-        "bounds": {"geometries": [{"type": "Polygon", "coordinates": [[[-15, 25], [40, 25], [40, 65], [-15, 65], [-15, 25]]]}]},
-    }
+    # Should have at most 50 query keys + possibly a "messages" key
+    query_keys = [k for k in data.keys() if k.startswith("q")]
+    check("batch truncated to ≤50 queries", len(query_keys) <= 50,
+          f"got {len(query_keys)} query keys")
+    check("response includes 'messages' about truncation",
+          "messages" in data, f"keys = {list(data.keys())}")
+
+
+def test_auth_required(s_noauth: requests.Session, base: str):
+    section("11. Authentication Enforcement")
+
+    # POST without token should get 401
+    resp = s_noauth.post(f"{base}/reconcile",
+                         data={"queries": json.dumps({"q0": {"query": "test"}})},
+                         headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check("POST without token returns 401", resp.status_code == 401,
+          f"got {resp.status_code}")
+
+    # GET (metadata) should still work without token
+    resp2 = s_noauth.get(f"{base}/reconcile")
+    check("GET metadata works without token", resp2.status_code == 200,
+          f"got {resp2.status_code}")
+
+
+def test_error_handling(s: requests.Session, base: str, token: str, schema_space: str):
+    section("12. Error Handling")
+    place_type = f"{schema_space}#Place"
+
+    # Empty query without bounds
+    resp = s.post(f"{base}/reconcile", params={"token": token},
+                  json={"queries": {"q0": {"query": "", "type": place_type}}})
+    check("empty query returns 200 with error", resp.status_code == 200,
+          f"got {resp.status_code}")
     try:
-        query = build_es_query(params)
-        query_str = json.dumps(query)
-        if "geo_shape" in query_str:
-            t.ok("GeometryCollection bounds → geo_shape filter present")
-        else:
-            t.fail("GeometryCollection bounds → no geo_shape filter in query", query_str[:300])
-    except Exception as e:
-        t.fail(f"GeometryCollection bounds raised: {e}")
+        data = resp.json()
+        q0 = data.get("q0", {})
+        check("empty query result has 'error' field",
+              "error" in q0, f"q0 keys = {list(q0.keys())}")
+    except Exception:
+        check("empty query response is valid JSON", False, "non-JSON response")
 
-    t.summary()
-    return t
+    # Missing queries and extend
+    resp2 = s.post(f"{base}/reconcile", params={"token": token},
+                   json={"bad_key": "test"})
+    check("missing queries/extend returns error", resp2.status_code == 400,
+          f"got {resp2.status_code}")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    scope = sys.argv[1] if len(sys.argv) > 1 else "all"
+    parser = argparse.ArgumentParser(description="WHG Reconciliation API test suite")
+    parser.add_argument("--base-url", default=DEFAULT_BASE, help="Base URL of WHG instance")
+    parser.add_argument("--token", default=DEFAULT_TOKEN, help="API token")
+    args = parser.parse_args()
 
-    all_results = []
-    total_passed = 0
-    total_failed = 0
+    base = args.base_url.rstrip("/")
+    token = args.token
 
-    if scope in ("all", "gateway"):
-        print("\n" + "=" * 60)
-        print("GATEWAY TESTS (via ssh whg → CRC)")
-        print("=" * 60)
+    print(f"\n{'═' * 60}")
+    print(f"  WHG Reconciliation API v0.2 — Test Suite")
+    print(f"  Target: {base}")
+    print(f"{'═' * 60}")
 
-        for test_fn in [
-            test_gateway_health,
-            test_gateway_reconcile_modes,
-            test_gateway_bounds,
-            test_gateway_namespaces,
-            test_gateway_search,
-            test_gateway_suggest,
-        ]:
-            print(f"\n--- {test_fn.__doc__ or test_fn.__name__} ---")
-            result = test_fn()
-            all_results.append(result)
-            total_passed += result.passed
-            total_failed += result.failed
+    # Authenticated session
+    s = requests.Session()
+    s.headers.update({"User-Agent": "Mozilla/5.0 (WHG API Test Suite)"})
 
-    if scope in ("all", "django"):
-        print("\n" + "=" * 60)
-        print("DJANGO UNIT TESTS (offline)")
-        print("=" * 60)
+    # Unauthenticated session (for auth tests)
+    s_noauth = requests.Session()
+    s_noauth.headers.update({"User-Agent": "Mozilla/5.0 (WHG API Test Suite)"})
 
-        for test_fn in [
-            test_django_normalise_bounds,
-            test_django_build_es_query_bounds,
-        ]:
-            print(f"\n--- {test_fn.__doc__ or test_fn.__name__} ---")
-            result = test_fn()
-            all_results.append(result)
-            total_passed += result.passed
-            total_failed += result.failed
+    start = time.time()
 
-    # Summary
-    print("\n" + "=" * 60)
-    print("SUMMARY")
-    print("=" * 60)
-    for r in all_results:
-        status = "✓" if r.failed == 0 else "✗"
-        print(f"  {status} {r.name}: {r.passed}/{r.passed + r.failed}")
-    print(f"\n  Total: {total_passed} passed, {total_failed} failed")
+    schema_space = test_service_metadata(s, base, token)
+    place_id = test_place_reconciliation(s, base, token, schema_space)
+    test_type_guessing(s, base, token, schema_space)
+    test_period_reconciliation(s, base, token, schema_space)
+    test_data_extension(s, base, token, place_id, schema_space)
+    test_propose_properties(s, base)
+    test_suggest_entity(s, base, token)
+    test_suggest_property(s, base, token)
+    test_filters(s, base, token, schema_space)
+    test_batch_limit(s, base, token, schema_space)
+    test_auth_required(s_noauth, base)
+    test_error_handling(s, base, token, schema_space)
 
-    sys.exit(1 if total_failed else 0)
+    elapsed = time.time() - start
+
+    print(f"\n{'═' * 60}")
+    print(f"  Results: {PASS} passed, {FAIL} failed  ({elapsed:.1f}s)")
+    print(f"{'═' * 60}")
+
+    if ERRORS:
+        print(f"\n  Failed tests:")
+        for e in ERRORS:
+            print(f"    • {e}")
+        print()
+
+    sys.exit(1 if FAIL else 0)
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
 
 

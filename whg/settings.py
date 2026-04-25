@@ -50,6 +50,13 @@ CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWA
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
 
+# CRC Gateway (Pitt CRC Elasticsearch + FastAPI gateway)
+# Set CRC_GATEWAY_URL in env vars or local_settings to enable.
+# Leave unset on production until ready to go live.
+CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWAY_URL', '')
+CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
+CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -109,6 +116,7 @@ INSTALLED_APPS = [
     'main.apps.MainConfig',
     'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
+    'placetypes.apps.TypesConfig',
     'places.apps.PlacesConfig',
     'regions.apps.RegionsConfig',
     'resources.apps.ResourcesConfig',  # for teaching

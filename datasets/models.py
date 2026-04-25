@@ -96,6 +96,7 @@ class Dataset(models.Model):
     )
     featured = models.IntegerField(null=True, blank=True)  #
     core = models.BooleanField(default=False)  # e.g. tgn, geonames, physical geography
+    authority = models.BooleanField(default=False)  # eligible as an authority source for new ES indexes
     public = models.BooleanField(default=False)
     doi = models.BooleanField(default=False, help_text="Indicates if a DOI is associated with this dataset")
 

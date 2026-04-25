@@ -4,10 +4,10 @@ from guardian.admin import GuardedModelAdmin
 
 # class DatasetAdmin(GuardedModelAdmin):
 class DatasetAdmin(admin.ModelAdmin):
-    list_display = ('title', 'label', 'id', 'ds_status', 'public', 'create_date')
-    list_filter = ('ds_status',)
+    list_display = ('title', 'label', 'id', 'ds_status', 'public', 'authority', 'create_date')
+    list_filter = ('ds_status', 'authority')
     fields = ('id','label','title','owner','ds_status', 'volunteers',
-              ('public','core',), 'featured', 'image_file', 'pdf', 'description',
+              ('public','core','authority',), 'featured', 'image_file', 'pdf', 'description',
               'creator', 'numrows','numlinked','total_links')
     readonly_fields = ('id','label','owner','create_date','numrows','numlinked','total_links',)
     search_fields = ('title','label')

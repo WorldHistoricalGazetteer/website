@@ -14,9 +14,10 @@ All calls are fail-safe: on timeout, connection error, or HTTP error,
 a warning is logged and an empty list is returned.  Legacy results are
 always returned regardless of CRC availability.
 
-Access is gated by the configured APP_VERSION in settings:
-  - version < 3.5  → never call the gateway (legacy behaviour)
-  - version >= 3.5 → call the gateway for all authenticated users
+Access is environment-controlled:
+  - ``CRC_GATEWAY_URL`` must be set (e.g. in env vars or local_settings).
+  - The requesting user must be authenticated.
+  - To test before going live, configure the URL only on the dev server.
 """
 
 import logging
@@ -27,43 +28,24 @@ from django.conf import settings
 logger = logging.getLogger("reconciliation")
 
 
-def _is_enabled_for_request(request) -> bool:
+def _is_enabled(user=None) -> bool:
     """
-    Check whether CRC gateway integration should fire for *this* request.
+    Check whether CRC gateway integration is active.
 
     The gateway is enabled when:
-    1. ``CRC_GATEWAY_URL`` is configured in settings.
+    1. ``CRC_GATEWAY_URL`` is configured in settings (env var or local_settings).
     2. The user is authenticated.
-    3. The configured ``APP_VERSION`` is >= 3.5.
+
+    This keeps gating purely environment-based: configure the URL on dev
+    for testing, leave it unset on production until ready to go live.
     """
-    # Must have a gateway URL configured at all
     gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")
     if not gateway_url:
-        logger.warning("CRC gateway disabled: CRC_GATEWAY_URL is empty")
         return False
 
-    if request is None:
-        logger.warning("CRC gateway disabled: request is None")
-        return False
-
-    user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
-        logger.warning("CRC gateway disabled: user not authenticated (user=%s)", user)
         return False
 
-    # Determine the version from settings
-    version_str = getattr(settings, "APP_VERSION", "0")
-    try:
-        version_num = float(version_str.split("-")[0])
-    except (ValueError, AttributeError):
-        logger.warning("CRC gateway disabled: cannot parse version %r", version_str)
-        return False
-
-    if version_num < 3.5:
-        logger.warning("CRC gateway disabled: version %.1f < 3.5", version_num)
-        return False
-
-    logger.info("CRC gateway enabled: url=%s, user=%s, version=%s", gateway_url, user, version_str)
     return True
 
 
@@ -87,7 +69,7 @@ def _headers() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
+def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway ``/api/reconcile`` endpoint.
 
@@ -95,14 +77,18 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
         normalised_query: The dict returned by ``normalise_query_params()``
             in reconcile.py.  Keys used: ``query_text``, ``raw`` (original
             params dict), ``bounds``, ``size``.
-        request: The Django HttpRequest (used for version-based access check).
+        user: The Django User instance from ``request.user``.
+        namespaces: Optional set of CRC namespace codes to restrict
+            results to (e.g. ``{"gn", "tgn"}``).  ``None`` means no
+            filtering.  The set should *not* contain ``"whg"`` (legacy
+            places are handled separately).
 
     Returns:
         List of dicts in the same shape as ES ``hits.hits`` entries, i.e.
         ``{"_id": ..., "_score": ..., "_source": {...}}``, ready for
         ``make_candidate()``.  Returns ``[]`` on any error.
     """
-    if not _is_enabled_for_request(request):
+    if not _is_enabled(user):
         return []
 
     # Build the gateway request body from the normalised query
@@ -113,12 +99,11 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
         "size": normalised_query.get("size", 50),
     }
 
-    # Country codes
+    # Country codes – accept list ["US","GB"] or comma-delimited string "US,GB"
     countries = raw.get("countries")
     if countries:
         if isinstance(countries, str):
-            import json
-            countries = json.loads(countries)
+            countries = [c.strip().upper() for c in countries.split(",") if c.strip()]
         body["ccodes"] = countries
 
     # Namespace filter (e.g. ["wd", "gn"])
@@ -128,10 +113,19 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
             namespaces = [n.strip() for n in namespaces.split(",") if n.strip()]
         body["namespaces"] = namespaces
 
-    # Feature class filter (e.g. ["P", "A"])
-    fclasses = normalised_query.get("fclasses")
+    # Feature classes (e.g. ["A", "P"])
+    fclasses = normalised_query.get("fclasses") or raw.get("fclasses")
     if fclasses:
+        if isinstance(fclasses, str):
+            fclasses = [f.strip() for f in fclasses.split(",") if f.strip()]
         body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    types = normalised_query.get("types") or raw.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        body["types"] = types
 
     # Spatial bounds
     bounds = normalised_query.get("bounds")
@@ -146,13 +140,17 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
     if end is not None:
         body["end_year"] = int(end)
 
+
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway /api/reconcile response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except requests.Timeout:
@@ -171,16 +169,152 @@ def crc_reconcile_search(normalised_query: dict, request=None) -> list[dict]:
     return _adapt_hits(data)
 
 
-def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, request=None) -> list[dict]:
+def crc_fetch_places(place_ids: list[str], user=None) -> dict[str, dict]:
+    """
+    Fetch full place data from the CRC gateway by namespaced IDs.
+
+    Calls ``POST /api/places`` with body ``{"ids": [...]}``.
+
+    Args:
+        place_ids: List of namespaced CRC place IDs, e.g. ``["gn:745044", "tgn:7010731"]``.
+        user: Django User instance.
+
+    Returns:
+        Dict mapping each place_id to its data dict (with keys like
+        ``title``, ``names``, ``ccodes``, ``geometries``, etc.).
+        Missing/errored IDs are omitted.  Returns ``{}`` on any error.
+    """
+    if not _is_enabled(user):
+        return {}
+
+    if not place_ids:
+        return {}
+
+    try:
+        url = f"{_gateway_url()}/api/places"
+        logger.info("CRC gateway GET %s  ids=%s", url, place_ids)
+        resp = requests.post(
+            url,
+            json={"ids": place_ids},
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        logger.info("CRC gateway /api/places response: %s", resp.status_code)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.Timeout:
+        logger.warning("CRC gateway /api/places timeout after %ss", _timeout())
+        return {}
+    except requests.ConnectionError as e:
+        logger.warning("CRC gateway /api/places connection error: %s", e)
+        return {}
+    except requests.HTTPError as e:
+        logger.warning("CRC gateway /api/places HTTP error: %s — extend unavailable for CRC entities", e)
+        return {}
+    except Exception as e:
+        logger.warning("CRC gateway /api/places unexpected error: %s", e)
+        return {}
+
+    # Expected response: {"places": [{"place_id": "gn:745044", "title": ..., ...}, ...]}
+    result = {}
+    for place in data.get("places", data.get("hits", [])):
+        pid = str(place.get("place_id", ""))
+        if pid:
+            result[pid] = place
+
+    return result
+
+
+def crc_extend(entity_ids: list[str], properties: list, user=None) -> dict:
+    """
+    Call the CRC gateway ``POST /api/extend`` endpoint for data extension.
+
+    Forwards an OpenRefine-style extend request for CRC-sourced place records
+    (namespaced IDs like ``"place:wd:Q16202"``) to the gateway, which looks up
+    records and extracts the requested properties.
+
+    Args:
+        entity_ids: Full entity IDs including the type prefix,
+            e.g. ``["place:wd:Q16202", "place:gn:745044"]``.
+        properties: Property list in OpenRefine extend format,
+            e.g. ``[{"id": "whg:geometry_geojson"}, {"id": "whg:names_canonical"}]``.
+        user: Django User instance (for access check).
+
+    Returns:
+        Dict mapping entity_id → property values dict, e.g.::
+
+            {
+                "place:wd:Q16202": {
+                    "whg:geometry_geojson": [{"str": "..."}],
+                    "whg:names_canonical": [{"str": "Istanbul"}]
+                }
+            }
+
+        Returns ``{}`` on any error.
+    """
+    if not _is_enabled(user):
+        return {}
+
+    if not entity_ids:
+        return {}
+
+    body = {
+        "ids": entity_ids,
+        "properties": properties,
+    }
+
+    try:
+        url = f"{_gateway_url()}/api/extend"
+        logger.info("CRC gateway POST %s  ids=%s", url, entity_ids)
+        resp = requests.post(
+            url,
+            json=body,
+            headers=_headers(),
+            timeout=_timeout(),
+        )
+        logger.info("CRC gateway /api/extend response: %s", resp.status_code)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.Timeout:
+        logger.warning("CRC gateway /api/extend timeout after %ss", _timeout())
+        return {}
+    except requests.ConnectionError as e:
+        logger.warning("CRC gateway /api/extend connection error: %s", e)
+        return {}
+    except requests.HTTPError as e:
+        logger.warning("CRC gateway /api/extend HTTP error: %s", e)
+        return {}
+    except Exception as e:
+        logger.warning("CRC gateway /api/extend unexpected error: %s", e)
+        return {}
+
+    return data.get("rows", {})
+
+
+def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=None,
+                       namespaces: set[str] | None = None,
+                       ccodes: list[str] | None = None,
+                       fclasses: list[str] | None = None,
+                       types: list[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway for suggest/typeahead results.
 
     Uses the same ``/api/reconcile`` endpoint with a small size.
 
+    Args:
+        prefix: The search prefix text.
+        mode: Search mode (``"starts"`` or ``"fuzzy"``).
+        limit: Maximum number of results.
+        user: Django User instance.
+        namespaces: Optional set of CRC namespace codes to filter by.
+        ccodes: Optional list of ISO country codes to filter by.
+        fclasses: Optional list of GeoNames feature classes to filter by.
+        types: Optional list of AAT type identifiers to filter by.
+
     Returns:
         List of adapted ES-style hit dicts.
     """
-    if not _is_enabled_for_request(request):
+    if not _is_enabled(user):
         return []
 
     body = {
@@ -189,13 +323,32 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, reque
         "size": limit,
     }
 
+    # Namespace filter (e.g. ["gn", "tgn"])
+    if namespaces:
+        body["namespaces"] = sorted(namespaces)
+
+    # Country codes (e.g. ["US", "GB"])
+    if ccodes:
+        body["ccodes"] = ccodes
+
+    # Feature classes (e.g. ["A", "P"])
+    if fclasses:
+        body["fclasses"] = fclasses
+
+    # AAT place types (e.g. ["aat:300008347"])
+    if types:
+        body["types"] = types
+
     try:
+        url = f"{_gateway_url()}/api/reconcile"
+        logger.info("CRC gateway suggest POST %s", url)
         resp = requests.post(
-            f"{_gateway_url()}/api/reconcile",
+            url,
             json=body,
             headers=_headers(),
             timeout=_timeout(),
         )
+        logger.info("CRC gateway suggest response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
@@ -203,84 +356,6 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, reque
         return []
 
     return _adapt_hits(data)
-
-
-# ---------------------------------------------------------------------------
-# Beta search proxy — calls the new /api/search and /api/suggest endpoints
-# ---------------------------------------------------------------------------
-
-def crc_search(params: dict, request=None) -> dict:
-    """
-    Call the CRC gateway ``/api/search`` endpoint (beta only).
-
-    Args:
-        params: Dict with keys matching the gateway SearchRequest schema:
-            query, mode, ccodes, bounds, start_year, end_year, undated,
-            size, exclude_namespaces, geom.
-
-            ``geom`` controls geometry detail level:
-              - ``"full"`` (default) — complete GeoJSON geometries + repr_point
-              - ``"repr_point"`` — centroids only (lighter payloads)
-        request: Django HttpRequest (for version-based access check).
-
-    Returns:
-        The full gateway response dict (hits, total, max_score, facets),
-        or an empty-result dict on any error.
-    """
-    if not _is_enabled_for_request(request):
-        return {"hits": [], "total": 0, "max_score": 0, "facets": {"types": [], "countries": []}}
-
-    try:
-        url = f"{_gateway_url()}/api/search"
-        logger.info("CRC gateway POST %s with params: %s", url, params)
-        resp = requests.post(
-            url,
-            json=params,
-            headers=_headers(),
-            timeout=_timeout(),
-        )
-        logger.info("CRC gateway /api/search response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
-        resp.raise_for_status()
-        return resp.json()
-    except requests.Timeout:
-        logger.warning("CRC gateway /api/search timeout after %ss", _timeout())
-    except requests.ConnectionError as e:
-        logger.warning("CRC gateway /api/search connection error: %s", e)
-    except requests.HTTPError as e:
-        logger.warning("CRC gateway /api/search HTTP error: %s", e)
-    except Exception as e:
-        logger.warning("CRC gateway /api/search unexpected error: %s", e)
-
-    return {"hits": [], "total": 0, "max_score": 0, "facets": {"types": [], "countries": []}}
-
-
-def crc_suggest(prefix: str, size: int = 10, request=None) -> dict:
-    """
-    Call the CRC gateway ``GET /api/suggest`` endpoint (beta only).
-
-    Returns:
-        The gateway response dict (suggestions, total), or an empty-result
-        dict on any error.
-    """
-    if not _is_enabled_for_request(request):
-        return {"suggestions": [], "total": 0}
-
-    try:
-        url = f"{_gateway_url()}/api/suggest"
-        logger.info("CRC gateway GET %s?q=%s&size=%s", url, prefix, size)
-        resp = requests.get(
-            url,
-            params={"q": prefix, "size": size},
-            headers=_headers(),
-            timeout=_timeout(),
-        )
-        logger.info("CRC gateway /api/suggest response: %s %s", resp.status_code, resp.text[:500] if resp.text else "")
-        resp.raise_for_status()
-        return resp.json()
-    except Exception as e:
-        logger.warning("CRC gateway /api/suggest error: %s", e)
-
-    return {"suggestions": [], "total": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -387,4 +462,3 @@ def _adapt_hits(data: dict) -> list[dict]:
         })
 
     return adapted
-

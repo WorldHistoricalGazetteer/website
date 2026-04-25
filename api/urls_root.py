@@ -6,7 +6,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 
 from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView, SuggestPropertyView, \
-    DummyView
+    AuthorityDatasetsView, DummyView
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
 
@@ -35,6 +35,7 @@ urlpatterns = [
     ## Reconciliation API endpoints
     path("reconcile", ReconciliationView.as_view(), name="reconcile"),
     path('reconcile/properties', ExtendProposeView.as_view(), name='extend-propose'),
+    path('reconcile/authority-datasets', AuthorityDatasetsView.as_view(), name='authority-datasets'),
     path("suggest/entity", SuggestEntityView.as_view(), name="suggest_entity"),
     path("suggest/property", SuggestPropertyView.as_view(), name="suggest_property"),
 
