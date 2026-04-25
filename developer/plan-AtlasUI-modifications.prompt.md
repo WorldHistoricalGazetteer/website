@@ -16,6 +16,7 @@ The prototype Atlas UI has inspired plans to extend it as a default UI for the e
 6. A toggle filter on the Gazetteers list should allow logged-in users to show (and subsequently explore) only their own gazetteers.
 7. The main site navigation bar can then be rationalised:
     - The "Search" option should be removed (in its current `dev`-server form it was a prototype which led to development of the Atlas UI).
-    - The "Workbench" will remain for now, although the contribution pipeline will probably need to be restructured in subsequent development.
-    - The "Teaching" option will remain but will incorporate new material from OME once the integration is active. References to "Place Collection" and "Collection Groups" will need reframing as "Gazetteers".
+    - The "Workbench" will remain for now, although the contribution pipeline will probably need to be restructured in subsequent development. It could be moved entirely to the Documentation site where it would be more easily edited and maintained.
+    - The "Teaching" option will remain but will incorporate new material from OME once the integration is active. References to "Place Collection" and "Collection Groups" will need reframing as "Gazetteers". Some of the content could be moved to the Documentation site. The link might better be served as a dropdown rather than a single page.
     - The "Data" option should be removed as much of its functionality will be provided by the Gazetteers list (i.e. "My Data", "Published Datasets", and "Published Collections"). Functions that will need to move to other options include "Admin Dashboard", "API", and "Volunteering".
+8. The content of the `.atlas-welcome-title` element could absorb the function of the current main site landing page, making that redundant.
