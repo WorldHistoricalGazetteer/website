@@ -1,3 +1,5 @@
+> **DEPRECATED — 2026-04-26.** This document has been absorbed into [`plan-masterPlan.prompt.md`](plan-Atlas-DynamicClustering.prompt.md) (Parts II–V and Appendices A–D) and is retained only for historical reference. Do not update this file; update the master plan instead.
+
 # Plan: Dynamic Clustering — Front-End UI & Django API Changes (whg3 Project)
 
 ## Introduction

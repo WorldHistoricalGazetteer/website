@@ -1,3 +1,5 @@
+> **DEPRECATED — 2026-04-26.** This document has been absorbed into [`plan-masterPlan.prompt.md`](plan-Atlas-DynamicClustering.prompt.md) (Part I and §4.8) and is retained only for historical reference. Do not update this file; update the master plan instead.
+
 ### Atlas UI Modifications Plan
 
 ## Introduction
@@ -20,4 +22,5 @@ The prototype Atlas UI has inspired plans to extend it as a default UI for the e
     - The "Workbench" will remain for now, although the contribution pipeline will probably need to be restructured in subsequent development. It could be moved entirely to the Documentation site where it would be more easily edited and maintained.
     - The "Teaching" option will remain but will incorporate new material from OME once the integration is active. References to "Place Collection" and "Collection Groups" will need reframing as "Gazetteers". Some of the content could be moved to the Documentation site. The link might better be served as a dropdown rather than a single page.
     - The "Data" option should be removed as much of its functionality will be provided by the Gazetteers list (i.e. "My Data", "Published Datasets", and "Published Collections"). Functions that will need to move to other options include "Admin Dashboard", "API", and "Volunteering".
+    - Wherever documentation is linked, it could be loaded into a modal panel to save leaving the site.
 8. The content of the `.atlas-welcome-title` element could absorb the function of the current main site landing page, making that redundant.
