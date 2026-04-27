@@ -462,3 +462,91 @@ def _adapt_hits(data: dict) -> list[dict]:
         })
 
     return adapted
+
+
+# ---------------------------------------------------------------------------
+# Hard-link forwarding to the gateway (Master Plan §2a)
+# ---------------------------------------------------------------------------
+#
+# When a contributor creates / revokes an attestation in this Django app,
+# the row is forwarded to the gateway's /api/links endpoint so the Pitt
+# SQLite hard-link overlay stays in sync without waiting for the next
+# Batch 12 contributor_replay run. Forwarding is best-effort: a failure
+# logs a warning and is reconciled by the next batch run (the SQLite
+# is rebuildable from DO PG at any time).
+
+
+def crc_post_link(payload: dict) -> bool:
+    """POST a single hard-link assertion to the gateway.
+
+    Payload shape (matches ``processing/staging_contract.HARD_LINK_REQUIRED_FIELDS``)::
+
+        {
+          "place_a":         "<ns>:<id>",     # canonical-ordered: place_a < place_b
+          "place_b":         "<ns>:<id>",
+          "relation_type":   "sameAs"|"exactMatch"|"closeMatch"|"distinct",
+          "source_category": "contributor",
+          "source_id":       "contributor:<user_id>[:legacy_v3_2]",
+          "asserted_at":     "<ISO 8601>"|null,
+          "justification":   "..."|null
+        }
+
+    Returns ``True`` on a 2xx response; ``False`` on any error (logged).
+    Always returns ``False`` when no gateway is configured — the next
+    Batch 12 run will pick the row up.
+    """
+    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+        return False
+    try:
+        url = f"{_gateway_url()}/api/links"
+        resp = requests.post(
+            url, json=payload, headers=_headers(), timeout=_timeout(),
+        )
+        if 200 <= resp.status_code < 300:
+            return True
+        logger.warning("CRC gateway POST /api/links %s: %s",
+                       resp.status_code, resp.text[:200])
+        return False
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.warning("CRC gateway POST /api/links network error: %s", exc)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("CRC gateway POST /api/links unexpected: %s", exc)
+    return False
+
+
+def crc_delete_link(payload: dict) -> bool:
+    """DELETE a single hard-link assertion on the gateway.
+
+    Payload identifies the assertion by the ``UNIQUE`` overlay key
+    ``(place_a, place_b, relation_type, source_id)``::
+
+        {
+          "place_a":       "<ns>:<id>",
+          "place_b":       "<ns>:<id>",
+          "relation_type": "...",
+          "source_id":     "contributor:<user_id>[:legacy_v3_2]"
+        }
+
+    Returns ``True`` on 2xx; ``False`` otherwise. Reconciled by the next
+    Batch 12 run on failure.
+    """
+    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+        return False
+    try:
+        url = f"{_gateway_url()}/api/links"
+        # The gateway accepts identification via JSON body on DELETE so we
+        # don't have to URL-encode 4 fields.
+        resp = requests.request(
+            "DELETE", url, json=payload, headers=_headers(),
+            timeout=_timeout(),
+        )
+        if 200 <= resp.status_code < 300:
+            return True
+        logger.warning("CRC gateway DELETE /api/links %s: %s",
+                       resp.status_code, resp.text[:200])
+        return False
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.warning("CRC gateway DELETE /api/links network error: %s", exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("CRC gateway DELETE /api/links unexpected: %s", exc)
+    return False

@@ -9,6 +9,11 @@ from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView,
     AuthorityDatasetsView, DummyView
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
+from .views_indexing import (
+    ContributorAttestationView,
+    GazetteerInventoryView,
+    RetentionNotifyView,
+)
 
 
 @extend_schema_view(
@@ -49,4 +54,12 @@ urlpatterns = [
 
     # Dummy endpoint: serves both as a placeholder and as an inert handler for OpenRefine's legacy search calls
     path('search/', DummyView.as_view(), name='dummy_search'),
+
+    # Indexing-rebuild endpoints (see ../indexing/developer/plan-ingestionRebuild.execution.md)
+    path("api/registry/inventory", GazetteerInventoryView.as_view(),
+         name="indexing-registry-inventory"),
+    path("api/retention/notify", RetentionNotifyView.as_view(),
+         name="indexing-retention-notify"),
+    path("api/links", ContributorAttestationView.as_view(),
+         name="indexing-contributor-attestations"),
 ]
