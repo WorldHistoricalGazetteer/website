@@ -1,5 +1,14 @@
 # Master Plan: WHG v3.5 Platform Rebuild
 
+## IMPORTANT: START HERE
+
+❯This is the front-end specification for integration with the changes made in the backend. Backend code is cloned locally in /home/stephen/PycharmProjects/indexing                                                                                                                                                                                 
+  This document claims that some of the modifications have already been made (see 4.1 and 4.8, and Phase D 1), but this appears not to be true, so begin by verifying and correcting the     
+  prompt.md                                                                                                                                                                                                                  
+  It refers to "Legacy migration from v3.2", but this needs to be updated because the Django DB will always remain the source truth for contributors' gazetteers/datasets/collections: this has been corrected in the backend   
+  implementation plan at /home/stephen/PycharmProjects/indexing/developer/plan-ingestionRebuild.execution.md.                                                                                                                   
+  Appendix A is a jumbled mess. Sort it out into a logically-phased implementation Plan.      
+
 ## 0. Introduction
 
 This master plan consolidates three separately-evolved planning streams into a single coherent specification for WHG's transition from v3.2 to a redesigned platform:

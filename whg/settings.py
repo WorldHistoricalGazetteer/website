@@ -123,7 +123,6 @@ INSTALLED_APPS = [
     'search.apps.SearchConfig',
     'sitemap.apps.SitemapConfig',
     'traces.apps.TracesConfig',
-    'placetypes.apps.TypesConfig',
     'users.apps.UsersConfig',
 ]
 

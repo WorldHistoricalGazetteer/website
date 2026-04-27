@@ -28,6 +28,11 @@ from django.conf import settings
 logger = logging.getLogger("reconciliation")
 
 
+def _request_user(request=None):
+    """Return request.user when available (legacy wrapper compatibility)."""
+    return getattr(request, "user", None) if request is not None else None
+
+
 def _is_enabled(user=None) -> bool:
     """
     Check whether CRC gateway integration is active.
@@ -358,8 +363,73 @@ def crc_suggest_search(prefix: str, mode: str = "starts", limit: int = 10, user=
     return _adapt_hits(data)
 
 
+def crc_search(params: dict, request=None) -> dict:
+    """
+    Backward-compatible wrapper for ``search.views_crc``.
+
+    Returns ``{"hits": [...]}`` where each hit is shaped like raw gateway hits
+    (place_id/title/names/geometries) so ``_adapt_gateway_hit()`` continues to
+    work without changes.
+    """
+    user = _request_user(request)
+    normalised_query = {
+        "query_text": params.get("query", "") or "",
+        "raw": {
+            "mode": params.get("mode", "fuzzy"),
+            "countries": params.get("ccodes"),
+            "start": params.get("start_year"),
+            "end": params.get("end_year"),
+        },
+        "bounds": params.get("bounds"),
+        "size": params.get("size", 50),
+        "fclasses": params.get("fclasses"),
+        "types": params.get("types"),
+    }
+
+    adapted_hits = crc_reconcile_search(normalised_query, user=user)
+    compat_hits = []
+    for hit in adapted_hits:
+        src = hit.get("_source", {}) if isinstance(hit, dict) else {}
+        names = []
+        for n in (src.get("names") or []):
+            if isinstance(n, dict):
+                label = n.get("label") or n.get("toponym")
+                if label:
+                    names.append({"label": label})
+
+        compat_hits.append({
+            "place_id": src.get("place_id", ""),
+            "title": src.get("title", ""),
+            "names": names,
+            "ccodes": src.get("ccodes") or [],
+            "geometries": src.get("geoms") or [],
+        })
+
+    return {"hits": compat_hits}
+
+
+def crc_suggest(prefix: str, size: int = 10, request=None) -> dict:
+    """
+    Backward-compatible wrapper for ``search.views_crc.TypeaheadSuggestions``.
+
+    Returns ``{"suggestions": [{"name": ...}, ...]}``.
+    """
+    user = _request_user(request)
+    adapted_hits = crc_suggest_search(prefix, mode="starts", limit=size, user=user)
+
+    suggestions = []
+    seen = set()
+    for hit in adapted_hits:
+        title = (hit.get("_source", {}) or {}).get("title", "") if isinstance(hit, dict) else ""
+        if title and title not in seen:
+            suggestions.append({"name": title})
+            seen.add(title)
+
+    return {"suggestions": suggestions}
+
+
 # ---------------------------------------------------------------------------
-# Adapter: CRC response → legacy ES hit shape
+# Adapter: CRC response -> legacy ES hit shape
 # ---------------------------------------------------------------------------
 
 def _adapt_hits(data: dict) -> list[dict]:
