@@ -20,6 +20,7 @@ import os
 import urllib
 
 from django.contrib.postgres.search import TrigramSimilarity
+from django.db import models
 from django.db.models import Count
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
@@ -650,17 +651,58 @@ class SuggestPropertyView(AuthenticatedAPIView):
 @method_decorator(csrf_exempt, name="dispatch")
 @authority_datasets_schema()
 class AuthorityDatasetsView(AuthenticatedAPIView):
+    """Discovery endpoint for the indexing rebuild's ``whg-places.py``.
+
+    Default behaviour (back-compat) returns only ``authority=True``
+    datasets. The indexing rebuild also needs ``ds_status`` + ``public`` +
+    ``description`` + ``owner_user_id`` per entry so it can derive the
+    ``dataset_status`` / ``dataset_id`` fields written into every staged
+    place doc (see ``../indexing/developer/plan-ingestionRebuild.execution.md``
+    Batch 4c Phase 4).
+
+    Pass ``?include_pending=true`` to also enumerate datasets that are NOT
+    ``authority=True`` but are eligible for the WHG ingestion path under
+    ``dataset_status='pending'``. The eligibility rule for pending entries
+    is ``ds_status not in {'seed', 'format_error'}`` so half-uploaded /
+    invalid datasets stay out of the index.
+    """
 
     def get(self, request, *args, **kwargs):
         logger.info("GET /reconcile/authority-datasets from %s (user=%s)",
                     request.META.get('REMOTE_ADDR'), request.user)
 
+        include_pending = request.GET.get(
+            "include_pending", ""
+        ).lower() in ("1", "true", "yes")
+
+        if include_pending:
+            qs = Dataset.objects.filter(
+                models.Q(authority=True)
+                | (~models.Q(ds_status__in=("seed", "format_error")))
+            )
+        else:
+            qs = Dataset.objects.filter(authority=True)
+
         datasets = list(
-            Dataset.objects.filter(authority=True)
-            .annotate(place_count=Count("places", distinct=True))
-            .order_by("id")
-            .values("id", "title", "place_count")
+            qs.annotate(place_count=Count("places", distinct=True))
+              .order_by("id")
+              .values(
+                  "id", "title", "label", "description",
+                  "ds_status", "public", "authority",
+                  "owner_id", "place_count",
+              )
         )
+
+        # Add a derived ``dataset_status`` so callers don't have to
+        # re-implement the (authority/public/ds_status) → published|pending
+        # mapping. The ingestion rebuild's whg-places.py reads this.
+        for d in datasets:
+            published = (
+                d.get("authority") is True
+                and d.get("public") is True
+                and d.get("ds_status") in {"accessioning", "indexed"}
+            )
+            d["dataset_status"] = "published" if published else "pending"
 
         results = {"result": datasets}
         _log_json("GET /reconcile/authority-datasets response", results)
