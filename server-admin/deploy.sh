@@ -5,11 +5,11 @@ set -euo pipefail
 
 PROD_DIR="$HOME/sites/whgazetteer-org"
 PROD_BRANCH="main"
-PROD_CONTAINER_PREFIX="whgazetteer-org_main"
+PROD_ENV_CONTEXT="whgazetteer-org"
 
 DEV_DIR="$HOME/sites/dev-whgazetteer-org"
 DEV_BRANCH="staging"
-DEV_CONTAINER_PREFIX="dev-whgazetteer-org_staging"
+DEV_ENV_CONTEXT="dev-whgazetteer-org"
 
 COMPOSE="docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env"
 
@@ -80,11 +80,13 @@ if [ "$ENV" = "prod" ]; then
     fi
     SITE_DIR="$PROD_DIR"
     BRANCH="$PROD_BRANCH"
-    PREFIX="$PROD_CONTAINER_PREFIX"
+    PREFIX="${PROD_ENV_CONTEXT}_${BRANCH}"
 else
     SITE_DIR="$DEV_DIR"
     BRANCH="${BRANCH_OVERRIDE:-$DEV_BRANCH}"
-    PREFIX="$DEV_CONTAINER_PREFIX"
+    # Match load_env.py branch normalization used by docker-compose template.
+    BRANCH_SAFE="${BRANCH//\//--}"
+    PREFIX="${DEV_ENV_CONTEXT}_${BRANCH_SAFE}"
 fi
 
 WEB="web_${PREFIX}"
