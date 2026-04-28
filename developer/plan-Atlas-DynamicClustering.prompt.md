@@ -1,13 +1,6 @@
 # Master Plan: WHG v3.5 Platform Rebuild
 
-## IMPORTANT: START HERE
-
-❯This is the front-end specification for integration with the changes made in the backend. Backend code is cloned locally in /home/stephen/PycharmProjects/indexing                                                                                                                                                                                 
-  This document claims that some of the modifications have already been made (see 4.1 and 4.8, and Phase D 1), but this appears not to be true, so begin by verifying and correcting the     
-  prompt.md                                                                                                                                                                                                                  
-  It refers to "Legacy migration from v3.2", but this needs to be updated because the Django DB will always remain the source truth for contributors' gazetteers/datasets/collections: this has been corrected in the backend   
-  implementation plan at /home/stephen/PycharmProjects/indexing/developer/plan-ingestionRebuild.execution.md.                                                                                                                   
-  Appendix A is a jumbled mess. Sort it out into a logically-phased implementation Plan.      
+> **Companion specification.** This is the front-end specification, paired with the backend execution plan at `/home/stephen/PycharmProjects/indexing/developer/plan-ingestionRebuild.execution.md`. The two documents reference each other; Appendix E summarises the implications of this plan for the indexing/ingestion side, and §10.2 follows the backend plan's principle that DO PostgreSQL remains the canonical store of all contributor gazetteers.
 
 ## 0. Introduction
 
@@ -427,19 +420,18 @@ All parameters (`θ_bridge`, `θ_query`, `θ_synth`, `θ_synth_structural`, `τ_
 
 The Atlas page (the platform's default UI per Part I) has its template in `search/templates/search/search.html` (or its successor) with JS in `whg/webpack/js/search.js`. It requires significant changes to support dynamic clustering.
 
-### 4.1 Remove: "Group linked records" toggle ✅ DONE
+### 4.1 Remove: "Group linked records" toggle
 
-The "Group linked records" checkbox in the (now-renamed) Gazetteers panel has been removed. In its place, the panel displays a static note under the "clustering" header explaining that clustering of linked records is managed using a similarity threshold control within the returned search results (the slider relocated per §1.3).
+The "Group linked records" checkbox in the Gazetteers panel must be removed. In its place, the panel displays a static note under the "Clustering" header explaining that clustering of linked records is managed using a similarity threshold control within the returned search results (the slider relocated per §1.3).
 
-**Changes made:**
-- `search/templates/search/search.html` — removed the checkbox element and its label from the panel; replaced with an informational note about the forthcoming results-panel clustering control.
-- `whg/webpack/js/search.js` — removed the `$('#clustering_toggle').on('change', ...)` event handler; `clusterResults` variable is retained but always `true` (no longer user-togglable from the filters panel).
-- The `cluster: clusterResults` parameter in `gatherOptions()` is retained for backward compatibility until the gateway is updated.
+**Status:** Pending on the Atlas page itself. The toggle still exists in `search/templates/search/atlas.html` (lines 297–300, `id="atlas_clustering_toggle"`) and is still wired up in `whg/webpack/js/atlas.js` (lines 307 and 969). It must be removed from these files as part of this work.
 
-**Files affected:**
-- `search/templates/search/search.html`
-- `whg/webpack/js/search.js`
-- `api/crc_client.py` (Django thin proxy) — stop forwarding `group_by_cluster` to the gateway (pending).
+The equivalent toggle has already been removed from the legacy prototype `search/templates/search/search.html` and `whg/webpack/js/search.js`, but those changes are now moot: §1.5 retires the legacy `Search` page entirely, so the toggle removal needs to happen on the Atlas page that is becoming the default UI.
+
+**Files affected (pending):**
+- `search/templates/search/atlas.html` — remove the `#atlas_clustering_toggle` checkbox + label; replace with the same informational note used elsewhere about results-panel clustering.
+- `whg/webpack/js/atlas.js` — remove the `atlas_clustering_toggle` change-event handler and the read in `gatherOptions()`-equivalent code; retain a `clusterResults = true` constant only if still consumed by request building, and otherwise drop the dead code.
+- `api/crc_client.py` (Django thin proxy) — stop forwarding `group_by_cluster` to the gateway (also pending; see §5.2).
 
 ### 4.2 Add: Similarity threshold slider (top of Results panel)
 
@@ -507,22 +499,23 @@ The existing client-side facet filters (Place Types checkboxes, Countries checkb
 
 The legacy feature-class checkboxes (`A`, `P`, `S`, etc.) in `#adv_checkboxes` are already marked for replacement (see `developer/search-system-architecture.md` §2.2 in the `indexing` repo). This plan accelerates that: replace them with the server-side type aggregation facets returned in the search response. The type facets use AAT identifiers and hierarchical labels from the `types` index, not GeoNames feature classes.
 
-### 4.8 Update: Gazetteers panel (formerly Data Sources) ✅ PARTIALLY DONE
+### 4.8 Update: Gazetteers panel (formerly Data Sources)
 
-Per §1.2 and §1.4, the Data Sources panel is renamed and reconceptualised as the **Gazetteers** offcanvas. The renaming itself, the dual Filter|Explore mode, the unified gazetteers list (Authorities + Datasets + Collections), and the H3/temporality coverage filtering are specified in §1.4. Previously-completed work and remaining changes specific to the panel's contents:
+Per §1.2 and §1.4, the Data Sources panel is renamed and reconceptualised as the **Gazetteers** offcanvas. The renaming itself, the dual Filter|Explore mode, the unified gazetteers list (Authorities + Datasets + Collections), and the H3/temporality coverage filtering are specified in §1.4. Pending work on the Atlas page (`search/templates/search/atlas.html` and `whg/webpack/js/atlas.js`):
 
-- **Remove** the "Group linked records" toggle (§4.1). ✅ DONE — replaced with an informational note about the results-panel clustering control.
+- **Rename** the offcanvas: `id="sources_offcanvas"` → `id="gazetteers_offcanvas"`, title "Data Sources" → "Gazetteers", icon `fa-database` reviewed for fit. The corresponding trigger button (`#open_sources_modal`, currently bound via `data-bs-target="#sources_offcanvas"`) is updated to match. (Pending.)
+- **Remove** the "Group linked records" toggle (§4.1). (Pending — see §4.1; the toggle is still present in `atlas.html` and `atlas.js`.)
 - **Retain** the namespace inclusion/exclusion checkboxes within the unified Gazetteers list — these feed `namespaces` / `exclude_namespaces` on the search request and remain useful within the Filter mode.
-- **Add** D-PLACE as a gazetteer (unchecked by default). ✅ DONE — D-PLACE was moved here from the Regions/Territories panel because it contains only point data and is not useful as a spatial constraint.
+- **Add** D-PLACE as a gazetteer (unchecked by default), moved here from the Regions/Territories panel because it contains only point data and is not useful as a spatial constraint. (Pending in `atlas.html` — D-PLACE was added to the legacy `search.html` prototype but that page is being retired per §1.5; the Atlas page's Data Sources offcanvas, lines 226–287, does not yet list D-PLACE.)
 - **Add** a small indicator per gazetteer showing the count of results from that source in the current (possibly clustered) result set. (Pending.)
 - **Implement** the extended `/suggest` API (§5.3) that supplies the unified gazetteers list, the H3 coverage data, and the temporal-extent summary for coverage filtering. (Pending.)
 - **Implement** the Filter|Explore tabbing UI (§1.4). (Pending.)
 - **Implement** the "My gazetteers" toggle (§1.4.2) for logged-in users. (Pending.)
 
-**Additional spatial changes (already completed):**
-- D-PLACE removed from the Territory tab's polity dataset toggle (`politySelector.js`). ✅ DONE
-- D-PLACE removed from the Atlas page's available spatial sources (`search/views.py`). ✅ DONE
-- "OSM/OHM (Miscellaneous)" added to the Region tab's namespace toggle (`regionSelector.js`). ✅ DONE — covers non-standard `boundary=` tags (aboriginal_lands, barony, civil, civil_parish, climatic_zone, geographic, histori*, indigenous_administration, native_reservation, parish, political, region, etc.). Backend tile/query support pending.
+**Spatial-source changes already completed:**
+- D-PLACE removed from the Territory tab's polity dataset toggle (`politySelector.js`, `POLITY_DATASETS` now contains only `cliopatria` and `nativeland`). ✅ DONE
+- D-PLACE removed from the Atlas page's available spatial sources (`search/views.py`, `available_sources` no longer lists `dplace`). ✅ DONE
+- "OSM/OHM (Miscellaneous)" added to the Region tab's namespace toggle (`regionSelector.js`, `NAMESPACE_OPTIONS` includes `osm_misc`). ✅ DONE — covers non-standard `boundary=` tags (aboriginal_lands, barony, civil, civil_parish, climatic_zone, geographic, histori*, indigenous_administration, native_reservation, parish, political, region, etc.). Backend tile/query support pending.
 
 ### 4.9 JavaScript implementation
 
@@ -866,22 +859,22 @@ Deletion is total: records are removed from the toponyms index, pending assertio
 
 The retention policy applies only to pending datasets. Submitted datasets under editor review are not subject to it (the timer pauses while the dataset is in submitted state); rejected datasets resume the timer from the rejection date, since the ball is again in the contributor's court. Published datasets are not subject to retention at all; their permanence is the point of contribution.
 
-### 10.2 Legacy migration from v3.2
+### 10.2 v3.2 legacy reconciliation flagging
 
-The platform's existing accessioned datasets, accumulated over the v3.2 lifetime, must be preserved through the migration to the new architecture. The migration's principle is that the v3.2 accessioning process produced legitimate contributor work, and that work should be preserved with its provenance intact under the new model.
+Earlier drafts of this section described a one-time **migration** of v3.2 accessioned datasets and their reconciliation links into a new store. That framing has been retired. Per the backend execution plan (`plan-ingestionRebuild.execution.md`, items 8 and 11; Batch 13b), **the Django-side DO PostgreSQL database remains the canonical source of truth for every contributor gazetteer — both legacy v3.2 accessions and any future contributions.** There is no payload migration: the indexing pipeline pulls contributor Datasets and Collections from DO on every run via `authorities/whg-places.py` and treats them as `whg`-namespaced gazetteers (one numerical sub-namespace per Dataset/Collection, `whg:<dataset_id>:<entity_id>`), like any other authority.
 
-Specifically, all currently-published v3.2 datasets are migrated as follows:
+The only one-time legacy work is a narrow data-update on DO PostgreSQL itself:
 
-- The dataset's records are admitted to the new platform's `places` index with `dataset_status: published`.
-- The dataset's existing reconciliation links (whatever form they take in v3.2) are migrated to the new `contributor_attestations` schema with `source_category: contributor`, `source_id: contributor:<original_contributor_id>`, `status: active`, and a special `legacy_v3_2: true` flag indicating that the assertion derives from the legacy reconciliation pipeline.
-- The dataset's metadata (description, citation, license, contributor identification) is preserved.
-- The dataset's accession history (when it was accessioned, by whom, with what curatorial attention) is preserved as historical metadata, not mapped onto the new submission/review history. Legacy accessioning was a different process; treating it as if it had been a submission and acceptance under the new model would misrepresent it.
+- **Schema extension.** Add `legacy_v3_2 BOOLEAN DEFAULT false` to `contributor_attestations`.
+- **Flag historical reconciliation links.** Update every existing v3.2-era reconciliation link in `contributor_attestations` to carry `legacy_v3_2 = true`.
+- **Propagate the flag through the harvest.** The Pitt-side hard-link harvest (`contributor_replay.py`) reads `legacy_v3_2` from DO and appends a `legacy_v3_2` suffix to `source_id` (`contributor:<user_id>:legacy_v3_2`) so downstream consumers can filter on legacy provenance.
+- **Preserve metadata in place.** Dataset description, citation, license, contributor identification, and accession history remain in their existing DO tables. They are not re-mapped onto the new submission/review history (legacy accessioning was a different process; representing it as a submission-and-acceptance under the new model would misrepresent it).
 
-The `legacy_v3_2` flag on the migrated assertions distinguishes them from new contributor assertions made through the redesigned workflow. This is important for two reasons. First, the legacy assertions may have been made under quality controls different from the new workflow's editorial review — for instance, a v3.2 reconciliation that was confirmed by the contributor only, without editorial verification — and downstream consumers may want to know this. Second, the legacy assertions sometimes lack justification text or other metadata that the new workflow collects, and tools handling assertion provenance need to gracefully accommodate the absence.
+The `legacy_v3_2` flag distinguishes legacy reconciliation links from new contributor assertions made through the redesigned workflow. This matters for two reasons. First, legacy assertions may have been made under quality controls different from the new workflow's editorial review (for instance, a v3.2 reconciliation that was confirmed by the contributor only, without editorial verification), and downstream consumers may want to know this. Second, legacy assertions sometimes lack justification text or other metadata that the new workflow collects, and tools handling assertion provenance need to gracefully accommodate the absence.
 
-The migration runs as a one-time batch during the v3.2-to-redesigned transition. Existing pending or in-progress reconciliations from v3.2 are handled by the same logic: pending reconciliations become pending datasets in the new model, with their existing assertions migrated as `status: pending`. Contributors with in-progress work see their datasets appear in the new dataset management panel as pending and can resume reconciliation in the new UI from where they left off.
+In-progress v3.2 reconciliations are handled by the same DO-as-source-of-truth principle. Their `contributor_attestations` rows already carry whatever `status` is appropriate (`pending`, `active`); the new workflow simply continues to use those rows. Contributors with in-progress work see their datasets in the new dataset management panel and can resume reconciliation in the new UI without any data being moved.
 
-A small set of v3.2 datasets that do not migrate cleanly (because of edge cases in how their reconciliation links were stored, or because they reference records that are no longer present) require manual attention from the WHG team during the migration. This is unavoidable for a transition between substantially different data models; the team's effort is bounded by the actual count of edge cases, which the migration script's diagnostic output identifies.
+There is consequently no migration script with a backlog of edge cases to triage. Any v3.2 records that are absent or malformed in DO are absent or malformed *now*, and are addressed by ordinary DO-side data-quality work rather than by a one-shot migration step.
 
 ### 10.3 Datasets intended for permanent privacy
 
@@ -919,48 +912,160 @@ The work to implement this lies in the Atlas terminology and navigation reframin
 
 ## Appendix A — Implementation Phases
 
-### Phase D — Client-side dynamic clustering
+The work is organised into nine phases that respect the dependency order between front-end changes and the backend changes specified in `plan-dynamicClustering.prompt.md` and `plan-ingestionRebuild.execution.md`. Phases 1 and 2 can begin in parallel; phases 3 and 4 depend on phase 2 delivering the new gateway payload and `/suggest` extension; phases 6–7 depend on phase 5's scope-filter foundation; phases 8 and 9 are largely independent and can run in parallel with the later phases.
 
-1. ~~Remove the "Group linked records" toggle from the Data Sources panel.~~ ✅ DONE — replaced with clustering info note; D-PLACE added to (the panel renamed to) Gazetteers; D-PLACE removed from Territory tab; OSM/OHM (Misc.) added to Region tab namespace toggle.
-2. Implement `clustering.js` module: Union-Find, edge reweighting, threshold application, query-bridge rule (§3.8), `cosineSimilarity()`, `decodePhonEmb()`.
-3. Implement threshold slider (§4.2) in the Results panel with debounced re-clustering.
-4. Implement facet emphasis controls (§4.3), collapsed by default.
-5. Implement phonetic comparison input (§4.4) with `/api/embed` integration and `query_emb` shortcut.
-6. Bootstrap with baseline clusters (§3.4).
-7. Add cluster expansion/collapse UI (§4.5).
-8. Update result-facet filters to operate over clustered results (§4.6).
-9. Replace feature-class checkboxes with type facets (§4.7).
-10. Tune default weights, threshold, and query-bridge parameters using calibrated defaults from the server.
+### Phase 1 — UI foundation: Atlas reframing ✅ DONE
 
-### Phase A — Atlas as default UI
+No backend dependency. All edits in `search/templates/search/atlas.html`, `whg/webpack/js/atlas.js`, the main-nav templates, and a few spatial-source registries.
 
-1. Rename "Sources" → "Gazetteers" everywhere it appears in the UI; update CSS/JS element IDs accordingly (§1.2).
-2. Relabel "Toponyms" → "Places" (§1.2).
-3. Implement the extended `/suggest` API for the unified Gazetteers list (§5.3) — coordinate with the architectural plan update.
-4. Implement the Gazetteers offcanvas's Filter|Explore tabbing (§1.4).
-5. Implement coverage filtering using precomputed `h3_coverage` and `temporal_extent` (§1.4.1) — coordinate with the ingestion plan update for the precomputation step.
-6. Implement the "My gazetteers" toggle (§1.4.2).
-7. Rationalise the main navigation (§1.5): remove Search, remove Data, restructure Teaching/Workbench links.
-8. Migrate landing-page content into `.atlas-welcome-title` (§1.6); retire the old landing page.
+1. ✅ DONE — Renamed the offcanvas: `id="sources_offcanvas"` → `id="gazetteers_offcanvas"` and `id="sources_offcanvas_label"` → `id="gazetteers_offcanvas_label"` in `atlas.html`; offcanvas title "Data Sources" → "Gazetteers"; trigger button `#open_sources_modal` → `#open_gazetteers_modal` with updated `data-bs-target`. Selectors updated in `atlas.js`, `atlasTour.js`, and `atlas.css` (§1.2, §1.4, §4.8).
+2. ✅ DONE — Relabelled the "Sources" button → "Gazetteers" and the "Toponyms" mode button → "Places" in `atlas.html`; updated welcome-text references and the tour popover copy in `atlasTour.js`. Tooltips updated to convey the new dual function: the **Gazetteers** control button reads "Filter or Explore Gazetteers"; the **Places** mode button reads "Search for Place Names or Gazetteers within selected Areas". The Gazetteers icon is `fa-book-atlas` (replacing the earlier `fa-database`) on both the control button and the offcanvas title — propagated to the tour popover too. Internal identifiers (`data-search-mode="toponyms"`, `toponym-only-btn` CSS class) preserved as private API (§1.2).
+3. ✅ DONE — Removed the `#atlas_clustering_toggle` "Group linked records" checkbox from `atlas.html` and its handlers from `atlas.js` (the change-event listener and the reset). Replaced the offcanvas content with an informational note pointing to the forthcoming Results-panel slider (§1.3, §4.1).
+4. ✅ DONE — Added D-PLACE to the renamed Gazetteers offcanvas in `atlas.html` (unchecked by default) — moved here because D-PLACE contains only point data and is unsuitable as a spatial constraint (§4.8).
+5. ✅ DONE — Rationalised the main navigation in `main/templates/main/base_webpack.html`:
+   - Removed Search and Workbench.
+   - Moved "Admin Dashboard" into the rightmost (user) dropdown, gated on `is_whg_admin`.
+   - Moved "API" and "Volunteering" links into the "About" dropdown; deleted the "Data" dropdown entirely along with My Data, Published Datasets, and Published Collections (these will return as gazetteers under the "My gazetteers" toggle in Phase 4).
+   - Removed the "New in v{APP_VERSION}" link.
+   - Teaching remains a top-level nav link that navigates to `{% url 'teaching' %}`. (An earlier sketch routed Teaching through the existing `data-whg-modal` mechanism so it would load in an overlay; that change was reverted because the existing Teaching page is not yet authored to render cleanly inside a modal. Revisit when the Teaching page is rebuilt — see Phase 10.)
 
-### Phase C — Contribution workflow
+**Already completed in Phase 1's scope (record):**
+- D-PLACE removed from `politySelector.js` (`POLITY_DATASETS` no longer lists `dplace`). ✅
+- D-PLACE removed from `search/views.py` `available_sources`. ✅
+- "OSM/OHM (Miscellaneous)" added to `regionSelector.js` (`NAMESPACE_OPTIONS` includes `osm_misc`); backend tile/query support pending. ✅
 
-1. Implement scope token threading from Django to gateway (§7.4).
-2. Implement scope filter clauses on the discovery, hard-link expansion, Phase 2 expansion, pair scoring, and cluster representation stages (§7.2).
-3. Extend the `contributor_attestations` schema with `dataset_id` and `status: pending` (§7.4).
-4. Implement the working/preview toggle (§8.4) on the Atlas page header for in-scope contributors.
-5. Implement the dataset management panel (§8.1) and reconciliation progress indicators (§8.3).
-6. Implement the submission workflow (§8.5) and post-rejection revision (§8.6).
-7. Implement the editorial review interface (§9.1) and the accept/reject mechanics (§9.3, §9.4).
-8. Implement the retention sweep with eleven-month and twelve-month notifications (§10.1).
-9. Implement the v3.2 legacy migration script (§10.2).
-10. Implement the `retention: private_permanent` flag and storage cap (§10.3).
+### Phase 2 — Backend integration surface
 
-### Phase E (partial) — Cleanup
+Depends on the gateway changes in `plan-dynamicClustering.prompt.md` (Appendix E.1) and the per-gazetteer pre-computation in `plan-ingestionRebuild.execution.md` (Appendix E.2).
 
-1. Remove `cluster_id` / `cluster_size` from the old search hit rendering.
-2. Remove `group_by_cluster` from the Django proxy and all downstream code.
-3. Write OpenRefine migration guide: `group_by_cluster` → `cluster_threshold` (see §5.1).
+1. Update the Django thin proxy `api/crc_client.py`:
+   - Stop forwarding `group_by_cluster` to the gateway (§5.2 item 1).
+   - Pass through `cluster_threshold` from request to gateway (§5.2 item 2).
+   - Pass through new gateway response fields without stripping: `edges`, `h3`, `h3_cover`, `temporal_range`, `aat_ids`, `aat_depths`, `baseline_cluster_id`, `query_match` (with `phon_emb`), top-level `query_emb`, `clustering_params`, `toponym_stoplist` (§5.2 item 3).
+2. Surface `/api/embed` (debounced) to the browser via the Django proxy for variant-name lookups (§4.4); the initial query's embedding is consumed directly from the response's `query_emb` field with no extra call.
+3. Implement the extended `/suggest` API for the unified Gazetteers list (§5.3): `id`, `name`, `description`, `namespace`, `class`, `owner_user_id`, `record_count`, `h3_coverage`, `temporal_extent`, `status`. Coordinate with the ingestion plan's per-gazetteer H3 coverage and temporal-extent pre-computation (Appendix E.2).
+4. Update the OpenRefine reconciliation contract (§5.1): document `cluster_threshold` and the new `clusters[]` shape; document removal of `group_by_cluster`.
+
+### Phase 3 — Client-side dynamic clustering
+
+Depends on Phase 2.
+
+1. Implement `whg/webpack/js/clustering.js` as a self-contained, DOM-free module (§4.9):
+   - `class UnionFind` (path compression, union by rank).
+   - `clusterResults(hits, edges, theta, weights, queryScores, params)` covering Phase 0 (baseline bootstrap §3.4), Phase 1 (precomputed edges with Rules 1–2 §3.3, §3.8), Phase 2a (phonetic synthetic edges §3.9.1), Phase 2b (structural synthetic edges §3.9.2), Phase 3 (post-processing cluster-size split §3.6).
+   - `reweightEdge`, `queryBridgeThreshold`, `phoneticSyntheticPass`, `structuralSyntheticPass`, `typesOverlap`, `isStoplistName`, `spatialBucket`, `cosineSimilarity`, `decodePhonEmb`.
+   - Honour the θ = 1.0 bypass: short-circuit to all-singletons (§3.4).
+   - Apply lazy `phon_emb` decode (§4.9).
+2. Add the threshold slider at the top of the Results panel with ~100 ms debounced re-clustering and `sessionStorage` persistence (§4.2, §1.3).
+3. Add the collapsible facet-emphasis section ("Similarity tuning") with per-facet weight sliders normalised to sum to 1.0; "Reset to defaults" reads from `clustering_params` in the response (§4.3).
+4. Add the phonetic comparison input ("Compare name variant") with 300 ms debounced `/api/embed` calls and per-result proximity badges; use `query_emb` for the initial query (§4.4).
+5. Render cluster cards: representative + count badge + aggregated names; expansion to member sub-cards; map cluster-bbox zoom over `repr_point`s; optional convex hull on hover for dense clusters (§4.5).
+6. Update result-facet filters to operate over clustered results (cluster visible if any member passes; counts reflect unique clusters) (§4.6).
+7. Replace the legacy feature-class checkboxes (`A`, `P`, `S`, …) with server-side AAT type-aggregation facets (§4.7).
+8. Calibrate defaults from the server-provided `clustering_params` (`θ_bridge`, `θ_query`, `θ_synth`, `θ_synth_structural`, `τ_name`, `τ_link`, default weights); the client must not hard-code them (§3.9, §4.3).
+
+### Phase 4 — Gazetteers offcanvas extension
+
+The full implementation depends on Phase 2 item 3 (`/suggest` extension) and the per-gazetteer pre-computation called for in `plan-ingestionRebuild.execution.md`. The UI scaffolding has been **sketched** in `atlas.html` and `atlas.js` ahead of that backend work so colleagues can preview the intended interaction model; everything dependent on missing data is rendered disabled or inert and labelled accordingly.
+
+#### Sketched in atlas.html / atlas.js / atlas.css (record)
+
+These pieces are visible on the Atlas page now but are not load-bearing — selecting them produces no functional change beyond the UI state described:
+
+- **Filter | Explore mode toggle.** A `btn-group` at the top of the Gazetteers offcanvas with two buttons (Filter / Explore) wired to `setGazetteerMode(mode)` in `atlas.js`. Switching modes flips a `data-mode` attribute on the offcanvas body, swaps the help-text paragraph, shows/hides Explore-mode-only controls, and **physically swaps every authority input between `type="checkbox"` (Filter) and `type="radio"` with a shared `name="gazetteer_explore"` (Explore)** so the affordance matches the mode. **Selection state is persisted per mode** via `filterSelections` (Set of namespaces) and `exploreSelection` (single namespace) — flipping tabs saves the current mode's selection and restores the other mode's last-recorded selection rather than dropping it on the input-type swap. The type-swap and selection-restore are run as **two separate passes** (swap-and-clear, then apply saved selection) to avoid browser quirks where setting `.checked` in the same iteration that mutates `.type` can be silently dropped. The custom CSS gives both mode-toggle buttons a faint outline always; the active one gets a faint fill rather than a strong filled-button look.
+- **Coverage-filter card** (`.gazetteer-card`). A tinted card beneath the help text with two enabled switches — "Hide gazetteers outside Area filter" and "Hide gazetteers outside Period filter". The switches operate; toggling either one on reveals an in-card stub note ("Coverage filtering is not yet implemented — the switch will activate once gazetteer-level `h3_coverage` and `temporal_extent` arrive via the extended `/suggest` API"). Toggling both off hides the note again.
+- **My Gazetteers card** (Explore mode only). A second card matching the coverage-filter card's styling, holding a single switch for **My Gazetteers**. Hidden by default and revealed only when the user clicks the **Explore** tab. When on, it hides the standard gazetteer list and shows a placeholder list grouped into **Published** (`Welsh Place Names`, `Roman Britain Sites` as samples) and **Pending** (`Medieval Pilgrimage Routes` (draft), `Hanseatic Ports` (submitted) as samples). An italic note above the placeholder list flags it as illustrative; the real list will be populated from the extended `/suggest` API once `owner_user_id` and `status` are delivered. <br>**Sketch-period note**: the `user.is_authenticated` template guard around the toggle and placeholder list has been temporarily removed so colleagues without accounts can review the intent. The guard will be reintroduced when this is wired to real per-user data. (Documenting comments inside the template avoid using literal Django tag delimiters around `if`/`endif` because Django parses tags even inside HTML comments.)
+- **Explore-mode capabilities note.** A small left-bordered note that appears only in Explore mode, explaining what signed-in users can do during exploration: add **Attestations** to any place when exploring any gazetteer; when exploring **their own** gazetteer, additionally add places, edit data and metadata, and adjust clustering — equivalent to the reconciliation/accessioning workflow in v3.2.
+- **Per-gazetteer count placeholders.** Each gazetteer entry contains an empty `<span class="gazetteer-count" data-namespace="…">` slot adjacent to the label, ready to be populated from result-set aggregations once §4.8 is wired.
+- **Continue button.** A primary "← Continue" button at the bottom of the offcanvas-body, always visible across Filter / Explore / My Gazetteers states. The leftward arrow + left alignment signals "return to the map UI". Closes the offcanvas via Bootstrap's `data-bs-dismiss="offcanvas"`; current selections have already been mirrored into `filterState` by the change handlers, so no extra wiring is needed.
+- **No explicit "open" action**. Selecting a gazetteer in Explore mode applies the filter via the existing change handler; the user dismisses the offcanvas with **Continue**, the close button, or by clicking the map.
+
+The previous offcanvas-internal "Clustering" section (with its informational note pointing to the Results-panel slider) has been removed; the slider lives in the Results panel and does not need a placeholder header here.
+
+#### Pending backend integration
+
+When the backend pieces above land, the sketch is replaced/extended as follows:
+
+1. Populate the renamed Gazetteers offcanvas from the extended `/suggest` payload — replacing the hard-coded checkbox list with a server-driven render that also includes WHG datasets and collections (§1.4).
+2. Promote the Filter | Explore tabbing from a sketch to a real interaction: in Filter mode the existing live-apply behaviour continues; in Explore mode, the radio-style single-select feeds a single-gazetteer Explorer entry point that loads the gazetteer's records as the primary content (§1.4).
+3. Implement coverage filtering against `h3_coverage` and `temporal_extent`: gazetteers whose coverage does not intersect the active Area filter (or whose extent does not intersect the active period filter) are disabled and (default-hidden) hidden; a toggle reveals hidden entries (§1.4.1).
+4. Replace the placeholder My Gazetteers list with the real per-user list returned by `/suggest`, preserving the Published / Pending grouping and the entry-point semantics into the contributor working scope (§1.4.2).
+5. Wire the per-gazetteer count indicators from the result-set facet aggregations, reflecting the current (possibly clustered) result set (§4.8).
+
+### Phase 5 — Visibility scoping foundation
+
+Depends on backend schema work in `plan-ingestionRebuild.execution.md`.
+
+1. Extend the DO PostgreSQL `contributor_attestations` schema with `dataset_id` and `status: pending` (in addition to existing `active`, `revoked`, `superseded`) (§7.4).
+2. Thread scope tokens (a contributor's pending `dataset_id`s) from Django request through `api/crc_client.py` to the gateway (§5.2 item 4, §7.4).
+3. Apply scope filter clauses at every pipeline stage that touches potentially-private data:
+   - Discovery filter on `dataset_status: published OR dataset_id ∈ scope` (§7.2).
+   - Hard-link expansion: parallel lookup of pending assertions in DO PostgreSQL alongside the gateway's Pitt SQLite lookup, merged with scope filtering (§7.2).
+   - Phase 2 expansion uses the same scope filter (§7.2).
+   - Pair scoring treats in-scope pending assertions with the same weights as active assertions (§7.2).
+   - Cluster representation: members and provenance filtered by scope (§7.2).
+4. Implement the preview-view scope variant (pending content treated as if published) (§7.3).
+5. Build a scope-leakage test suite that issues queries from off-scope users and asserts no pending content appears in any response field; run on every pipeline change (§7.4).
+
+### Phase 6 — Contributor UI affordances
+
+Depends on Phases 4 and 5.
+
+1. Build the "My datasets" panel: name, description, status, examined-count, pending-assertion count, last-modified date / retention deadline (§8.1).
+2. Selecting a dataset puts the contributor into the working scope for that dataset, returning to the Atlas page with the dataset visible (§8.1).
+3. Add reconciliation progress indicators on the Atlas page when in working scope: scope banner, "show unexamined", "show with pending assertions", "show only my dataset" (Explore-mode shortcut) (§8.3).
+4. Implement the Working / Preview-as-published toggle in the Atlas header (§8.4); cached cluster state from the prior view is discarded on toggle and the request is re-issued.
+5. Implement the submission affordance: confirmation dialog summarising counts; optional submission note; soft warning on unexamined records; freeze semantics (§8.5).
+6. Implement withdrawal during submitted state (§8.5) and post-rejection revision with editor-notes display on the dataset history page (§8.6).
+
+### Phase 7 — Editorial review
+
+Depends on Phase 6.
+
+1. Build the editorial review interface: scope set to include the submitted dataset; preview-view by default; toggle to working view; dataset summary panel; read-only assertion history; Accept and Reject affordances (§9.1).
+2. Implement Acceptance: single transaction on DO PostgreSQL flipping all `pending` → `active` for the dataset; batch-forward to Pitt SQLite as a follow-up (failure-tolerant — DO transitions are durable; Pitt sync is reconciled per the architectural plan's §17g) (§9.3).
+3. Implement Rejection: required editor notes; pending assertions remain `pending`; records remain pending; contributor notified; notes persisted on the dataset history (§9.4).
+4. Add editorial workload tools: review queue, assignment, handoff with notes, contributor-history cross-reference (§9.5) — calibrated to the editorial team's practice rather than designed in the platform.
+
+### Phase 8 — Retention, legacy flagging, private-permanent
+
+Depends on backend work in `plan-ingestionRebuild.execution.md` Batches 13b and 14a; runs in parallel with Phases 3–7.
+
+1. **v3.2 legacy reconciliation flagging (no payload migration)** — DO PostgreSQL remains canonical for all contributor gazetteers (§10.2):
+   - DO-side schema change: add `legacy_v3_2 BOOLEAN DEFAULT false` to `contributor_attestations`.
+   - Data update: set `legacy_v3_2 = true` on every existing v3.2-era reconciliation link.
+   - Pitt-side: `contributor_replay.py` reads the flag and appends a `:legacy_v3_2` suffix to `source_id` so downstream consumers can filter on legacy provenance.
+   - Backend tracking: `plan-ingestionRebuild.execution.md` Batch 13b.
+2. **Retention sweep for pending datasets** (§10.1, backend Batch 14a):
+   - Scheduled job deletes pending datasets unmodified for one year; eleven-month notification to contributor; twelve-month deletion confirmation.
+   - Exclusions: `submitted` (timer pauses), `rejected` (timer resumes from rejection date), `private_permanent` (excluded entirely), `published` (not subject to retention).
+3. **Private-permanent datasets** (§10.3): `retention: private_permanent` flag on pending datasets; per-contributor storage cap (operational policy, adjustable on request); upgrade path to `retention: pending` then submission for review.
+
+### Phase 9 — Cleanup
+
+Independent of the rest; can run as soon as each prerequisite has shipped.
+
+1. Remove `cluster_id` / `cluster_size` from the old search-hit rendering (the new cluster representation comes from the client-side Union-Find).
+2. Remove `group_by_cluster` from the Django proxy and any downstream code that still consumes it.
+3. Retire the legacy `search/templates/search/search.html` prototype page (§1.5) — once Phase 1 lands and Atlas is the default, this page has no remaining users.
+4. Write the OpenRefine migration guide: `group_by_cluster` → `cluster_threshold` (§5.1).
+
+### Phase 10 — Further considerations
+
+Items deferred from earlier phases for separate scoping; to be revisited once the core platform is in place.
+
+1. **Landing-page absorption into the Atlas welcome panel** (deferred from Phase 1, §1.6). Migrate the landing-page content into the `.atlas-welcome-title` / `.atlas-welcome-text` elements on the Atlas page so users arriving at the platform see Atlas directly with welcome content in place of an immediate query; retire the old landing page once parity is established. Deferred because it interacts with marketing copy, SEO, and any external links pointing at the current landing URL — all of which want their own review pass.
+2. **Reconsider routing the Teaching link through the modal mechanism.** A Phase 1.5 sketch wired the Teaching nav item to `data-whg-modal="{% url 'teaching' %}"` so it would load in a Bootstrap overlay rather than navigate. The change was reverted because the existing Teaching page is a full-document template and does not render cleanly inside a modal. Worth re-evaluating when the Teaching page is rebuilt — if its content can be authored as a self-contained fragment (or split into a dedicated modal endpoint), the in-place modal entry-point is consistent with the §1.5 direction of keeping users on the Atlas page wherever practical.
+3. Atlas full-screen mode.
+
+### Open policy questions (resolve alongside Phase 6 and 7)
+
+The following questions are flagged in §10.4 as design-adjacent but policy-driven; they should be resolved before the editorial workflow ships rather than deferred:
+
+- "Trusted contributor" status that bypasses or streamlines editorial review (§10.4).
+- Default mode for OpenRefine / programmatic reconciliation contributions: pending-with-review vs immediate-active (§10.4).
+- Cross-dataset references during reconciliation: convention requiring dataset A to be published or also-submitted before dataset B can submit while referencing A (§10.4).
+- Versioning of published datasets: in-place modification vs supersession by a fresh submission, with citation-stability implications (§10.4).
 
 ---
 
@@ -1054,6 +1159,6 @@ This master plan does not directly modify `plan-dynamicClustering.prompt.md` (th
 - **Pending-dataset isolation** — pending records are admitted to the same indices as public records but with `dataset_status: pending`; the discovery filter (above) is what makes them invisible to off-scope users. Ingestion should not create separate per-contributor indices.
 - **`contributor_attestations` schema extension** — `dataset_id` and `status: pending` fields must be added to the table on DO PostgreSQL (§7.4). The ingestion pipeline writes pending assertions as the contributor reconciles, and the publication transaction flips them to `status: active` (§9.3).
 - **`/suggest` source data** — the unified Gazetteers list (§5.3) is sourced from the same metadata the ingestion pipeline maintains: name, description, namespace, owner, record count, status, plus the H3 coverage and temporal extent specified above.
-- **Legacy migration path** — the ingestion pipeline accommodates the one-time v3.2 legacy migration (§10.2): batch-admitting existing accessioned datasets with `dataset_status: published`, mapping their reconciliation links to `contributor_attestations` rows with `legacy_v3_2: true`, and preserving accession history as historical metadata distinct from the new submission/review history.
+- **Legacy v3.2 reconciliation flagging (no migration)** — DO PostgreSQL remains the canonical store for every contributor gazetteer (legacy and new). The ingestion pipeline pulls these from DO via `authorities/whg-places.py` on every run as `whg`-namespaced gazetteers, with no payload migration. The only one-time legacy work is the DO-side schema extension that adds `legacy_v3_2 BOOLEAN DEFAULT false` to `contributor_attestations` and the data-update that sets `legacy_v3_2 = true` on every existing v3.2-era reconciliation link; the Pitt-side hard-link harvest then propagates a `:legacy_v3_2` suffix on `source_id` for downstream filterability (§10.2). This corresponds to Batch 13b in `plan-ingestionRebuild.execution.md`.
 - **Retention sweep** — the ingestion pipeline (or a partner job) implements the one-year retention sweep on pending datasets (§10.1), with eleven-month notification, twelve-month deletion, and appropriate exclusions for `submitted` and `private_permanent` datasets.
 - **Format-only validation at upload** — the ingestion pipeline performs format-level validation (parsing, required fields, coordinate ranges, well-formed place_ids) but not semantic validation (§8.2). Semantic validation is the contributor's task during reconciliation and the editor's task during review.

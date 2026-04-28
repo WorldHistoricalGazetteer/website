@@ -33,15 +33,15 @@
     <!-- Floating search input + controls (top-left) -->
     <div id="floating_search">
         <div class="floating-search-inner">
-            <!-- Mode toggle: Areas / Toponyms -->
+            <!-- Mode toggle: Areas / Places (internal data-search-mode value remains "toponyms") -->
             <div class="search-mode-toggle btn-group btn-group-sm" role="group" aria-label="Search mode">
                 <button type="button" class="btn active" data-search-mode="areas"
                         data-bs-toggle="tooltip" title="Search for geographic areas, boundaries, and territories">
                     <i class="fas fa-vector-square me-1"></i>Areas
                 </button>
                 <button type="button" class="btn" data-search-mode="toponyms"
-                        data-bs-toggle="tooltip" title="Search for place names within selected areas">
-                    <i class="fas fa-search-location me-1"></i>Toponyms
+                        data-bs-toggle="tooltip" title="Search for Place Names or Gazetteers within selected Areas">
+                    <i class="fas fa-search-location me-1"></i>Places
                 </button>
             </div>
 
@@ -65,7 +65,7 @@
                 </button>
             </div>
 
-            <!-- Control buttons (Viewport+Regions areas-only; Sources & Categories toponym-only) -->
+            <!-- Control buttons (Viewport+Regions areas-only; Gazetteers & Categories toponym-only) -->
             <div class="atlas-control-buttons">
                 <div class="btn-group btn-group-sm areas-only-btn" id="areas_control_pill"
                      role="group" aria-label="Spatial constraint">
@@ -83,11 +83,11 @@
                         <i class="fas fa-globe-americas me-1"></i>Regions
                     </button>
                 </div>
-                <button id="open_sources_modal" class="btn btn-sm toponym-only-btn"
-                        data-bs-toggle="offcanvas" data-bs-target="#sources_offcanvas"
-                        title="Filter by data source"
+                <button id="open_gazetteers_modal" class="btn btn-sm toponym-only-btn"
+                        data-bs-toggle="offcanvas" data-bs-target="#gazetteers_offcanvas"
+                        title="Filter or Explore Gazetteers"
                         style="display:none;">
-                    <i class="fas fa-database me-1"></i>Sources
+                    <i class="fas fa-book-atlas me-1"></i>Gazetteers
                 </button>
                 <button id="open_categories_modal" class="btn btn-sm toponym-only-btn"
                         data-bs-toggle="offcanvas" data-bs-target="#categories_offcanvas"
@@ -164,8 +164,8 @@
         </p>
         <p class="atlas-welcome-text" style="margin-bottom: 14px;">
             Start in <strong>Areas</strong> mode to select geographic regions, then
-            switch to <strong>Toponyms</strong> to search for place names within them.
-            Use <strong>Regions</strong>, <strong>Sources</strong>, and <strong>Categories</strong>
+            switch to <strong>Places</strong> to search for place names within them.
+            Use <strong>Regions</strong>, <strong>Gazetteers</strong>, and <strong>Categories</strong>
             to refine your view.
         </p>
         <a href="#" id="atlas_start_tour_link" class="atlas-welcome-tour-link">
@@ -208,96 +208,237 @@
     </div>
 </div>
 
-<!-- Data Sources offcanvas -->
-<div id="sources_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
-     aria-labelledby="sources_offcanvas_label">
+<!-- Gazetteers offcanvas -->
+<div id="gazetteers_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
+     aria-labelledby="gazetteers_offcanvas_label">
     <div class="offcanvas-header">
-        <h6 class="offcanvas-title" id="sources_offcanvas_label">
-            <i class="fas fa-database me-1"></i>Data Sources
+        <h6 class="offcanvas-title" id="gazetteers_offcanvas_label">
+            <i class="fas fa-book-atlas me-1"></i>Gazetteers
         </h6>
         <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
     </div>
-    <div class="offcanvas-body">
-        <p class="offcanvas-help-text">
-            Choose which data sources to include in your toponym search.
-            Checked sources contribute place records to the results; uncheck
+    <div class="offcanvas-body" data-mode="filter">
+
+        <!-- Filter | Explore mode toggle (Master Plan §1.4 — sketch UI; backend unification of
+             Authorities/Datasets/Collections via /suggest is pending Phase 2) -->
+        <div class="gazetteer-mode-toggle btn-group btn-group-sm w-100 mb-2" role="group"
+             aria-label="Gazetteer mode">
+            <button type="button" class="btn active" data-gazetteer-mode="filter"
+                    data-bs-toggle="tooltip"
+                    title="Use multiple selected gazetteers as a filter on subsequent searches">
+                <i class="fas fa-filter me-1"></i>Filter
+            </button>
+            <button type="button" class="btn" data-gazetteer-mode="explore"
+                    data-bs-toggle="tooltip"
+                    title="Browse a single selected gazetteer in Explorer view">
+                <i class="fas fa-binoculars me-1"></i>Explore
+            </button>
+        </div>
+
+        <!-- Mode-specific help text (the inactive copy is hidden via .d-none and toggled by atlas.js) -->
+        <p class="offcanvas-help-text gazetteer-mode-help" data-mode="filter">
+            Choose which gazetteers to include in your search.
+            Checked gazetteers contribute place records to the results; uncheck
             any you wish to exclude.
         </p>
-        <div class="authority-list" style="padding-left: 25px;">
+        <p class="offcanvas-help-text gazetteer-mode-help d-none" data-mode="explore">
+            Select a single gazetteer to browse it in <strong>Explorer view</strong> —
+            its records become the primary content, with clustering, comparison,
+            and link/distinct affordances scoped to that gazetteer.
+        </p>
+
+        <!-- Coverage filters card (Master Plan §1.4.1 — sketch UI; the switches operate but
+             the underlying functionality is not yet implemented. The stub-note appears when
+             either switch is on, and is hidden again when both are off.) -->
+        <div class="gazetteer-card gazetteer-coverage-filters mb-2">
+            <div class="form-check form-switch small mb-1">
+                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_area">
+                <label class="form-check-label small" for="gazetteer_filter_area">
+                    Hide gazetteers outside <strong>Area</strong> filter
+                </label>
+            </div>
+            <div class="form-check form-switch small">
+                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_period">
+                <label class="form-check-label small" for="gazetteer_filter_period">
+                    Hide gazetteers outside <strong>Period</strong> filter
+                </label>
+            </div>
+            <div class="gazetteer-stub-note small text-muted fst-italic mt-2 d-none">
+                <i class="fas fa-info-circle me-1"></i>
+                Coverage filtering is not yet implemented — the switch will activate
+                once gazetteer-level <code>h3_coverage</code> and <code>temporal_extent</code>
+                arrive via the extended <code>/suggest</code> API (Master Plan Phase 2).
+            </div>
+        </div>
+
+        <!-- "My Gazetteers" card (Explore mode only; placeholder data — backend /suggest
+             extension with `owner_user_id` and `status` is pending Phase 2).
+             NOTE: the user.is_authenticated guard is intentionally omitted during the
+             sketch phase so colleagues without accounts can review the intent. The guard will
+             be reintroduced once this is wired to real per-user data. -->
+        <div class="gazetteer-card gazetteer-mine-card mb-2 d-none" data-mode-visible="explore">
+            <div class="form-check form-switch small">
+                <input class="form-check-input" type="checkbox" id="gazetteer_mine_toggle">
+                <label class="form-check-label small" for="gazetteer_mine_toggle">
+                    <i class="fas fa-user me-1"></i><strong>My Gazetteers</strong>
+                    <span class="text-muted">— show only your published and pending gazetteers</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Explore-mode capabilities note (only visible while in Explore mode) -->
+        <div class="gazetteer-explore-note small mb-2 d-none" data-mode-visible="explore">
+            <i class="fas fa-info-circle me-1"></i>
+            While exploring, signed-in users can add <strong>Attestations</strong>
+            to any place. When exploring one of <strong>your own</strong> gazetteers,
+            you can additionally add places, edit data and metadata, and adjust the
+            clustering — equivalent to the reconciliation / accessioning workflow in v3.2.
+        </div>
+
+        <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on) -->
+        <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
+            <label class="authority-item form-check"
+                   data-bs-toggle="tooltip"
+                   data-bs-title="D-PLACE — cross-cultural dataset linking linguistic, environmental, and cultural data to ~1,400 societies worldwide. Contains point locations only (no polygons).">
+                <input class="form-check-input authority-cb" type="checkbox" value="dplace">
+                <span class="form-check-label">D-PLACE</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="dplace"></span>
+            </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="GB1900 gazetteer — British place names 1888–1914">
                 <input class="form-check-input authority-cb" type="checkbox" value="gb">
                 <span class="form-check-label">GB1900</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="gb"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="GeoNames geographical database — ~12 million features">
                 <input class="form-check-input authority-cb" type="checkbox" value="gn" checked>
                 <span class="form-check-label">GeoNames</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="gn"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="Index Villaris 1680 — ~24,000 English and Welsh place names">
                 <input class="form-check-input authority-cb" type="checkbox" value="iv" checked>
                 <span class="form-check-label">IndexVillaris</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="iv"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="OpenHistoricalMap — community-driven historical mapping">
                 <input class="form-check-input authority-cb" type="checkbox" value="ohm" checked>
                 <span class="form-check-label">OpenHistoricalMap</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="ohm"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="OpenStreetMap — comprehensive global coverage">
                 <input class="form-check-input authority-cb" type="checkbox" value="osm">
                 <span class="form-check-label">OpenStreetMap</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="osm"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="Pleiades gazetteer of ancient places — ~37,000 places">
                 <input class="form-check-input authority-cb" type="checkbox" value="pl" checked>
                 <span class="form-check-label">Pleiades</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="pl"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="Getty Thesaurus of Geographic Names — ~3 million records">
                 <input class="form-check-input authority-cb" type="checkbox" value="tgn" checked>
                 <span class="form-check-label">TGN</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="tgn"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="Trismegistos — papyrological and epigraphical records">
                 <input class="form-check-input authority-cb" type="checkbox" value="tm" checked>
                 <span class="form-check-label">Trismegistos</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="tm"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="WHG contributed historical gazetteer datasets">
                 <input class="form-check-input authority-cb" type="checkbox" value="whg" checked>
                 <span class="form-check-label">WHG datasets</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="whg"></span>
             </label>
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="Wikidata — ~8 million places with structured data">
                 <input class="form-check-input authority-cb" type="checkbox" value="wd" checked>
                 <span class="form-check-label">Wikidata</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="wd"></span>
             </label>
         </div>
-        <hr>
-        <div class="filter-header d-flex align-items-center mb-1">
-            <span class="categories fw-bold" style="font-size: 0.85rem;">Clustering</span>
+
+        <!-- "My Gazetteers" placeholder list (visible only when the toggle above is on; sketch
+             quality — every entry is illustrative, not real user data). The real list is
+             populated from the extended /suggest API (Phase 2 + 4).
+             NOTE: as with the toggle above, the user.is_authenticated guard is
+             intentionally omitted for the sketch period. -->
+        <div class="authority-list my-gazetteers-list d-none" style="padding-left: 25px;">
+            <p class="small text-muted fst-italic mb-1">
+                Placeholder data — illustrates the published / pending grouping. The
+                real list will be populated from the extended <code>/suggest</code> API.
+            </p>
+
+            <div class="my-gazetteers-section mb-2">
+                <div class="filter-header d-flex align-items-center mb-1 mt-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-check-circle me-1 text-success"></i>Published
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample published Dataset (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:welsh-place-names">
+                    <span class="form-check-label">Welsh Place Names <span class="text-muted small">(sample dataset)</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample published Collection (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:roman-britain-sites">
+                    <span class="form-check-label">Roman Britain Sites <span class="text-muted small">(sample collection)</span></span>
+                </label>
+            </div>
+
+            <div class="my-gazetteers-section">
+                <div class="filter-header d-flex align-items-center mb-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-clock me-1 text-warning"></i>Pending
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample pending Dataset awaiting reconciliation (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:medieval-pilgrimage-routes">
+                    <span class="form-check-label">Medieval Pilgrimage Routes <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">draft</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample dataset under editorial review (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:hanseatic-ports">
+                    <span class="form-check-label">Hanseatic Ports <span class="badge bg-info text-dark ms-1" style="font-size: 0.6rem;">submitted</span></span>
+                </label>
+            </div>
         </div>
-        <p class="offcanvas-help-text">
-            When enabled, place records that share links or co-references
-            are grouped into a single map marker, reducing clutter and
-            highlighting connections between sources.
-        </p>
-        <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch" id="atlas_clustering_toggle" checked>
-            <label class="form-check-label small" for="atlas_clustering_toggle">Group linked records</label>
+
+        <!-- Continue button (always visible across Filter / Explore / My Gazetteers states).
+             Closes the offcanvas via Bootstrap's data-bs-dismiss; current selections have
+             already been mirrored into filterState by the change handlers.
+             Left-aligned with a left arrow to indicate "return to the map". -->
+        <div class="gazetteer-continue-row text-start mt-3">
+            <button id="gazetteer_continue_btn" class="btn btn-sm btn-primary" type="button"
+                    data-bs-dismiss="offcanvas">
+                <i class="fas fa-arrow-left me-1"></i>Continue
+            </button>
         </div>
+
     </div>
 </div>
 

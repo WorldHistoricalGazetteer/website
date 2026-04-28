@@ -39,6 +39,12 @@ let selectedRegions = [];        // Array of {id, label, admin_level, namespace,
 let areaSearchResults = [];      // Current area search dropdown results
 let areaDropdownIndex = -1;
 
+/* ── Gazetteers offcanvas mode-state caches ──
+   Keep Filter and Explore selections separately so switching tabs restores the
+   last-recorded selection instead of dropping it on each input-type swap. */
+const filterSelections = new Set();   // namespaces ticked in Filter mode (multi-select)
+let exploreSelection = null;          // single namespace selected in Explore mode
+
 /* ── Temporal range state ── */
 let temporalFrom = 800;
 let temporalTo = 1800;
@@ -303,18 +309,61 @@ Promise.all([
     // Set initial state after a short delay (projection may need time to settle)
     setTimeout(() => updateViewportButtonState(heroMap.isGlobeMode()), 500);
 
-    // ── Wire clustering toggle ──
-    document.getElementById('atlas_clustering_toggle').addEventListener('change', function () {
-        clusterResults = this.checked;
+    // ── Initialise the Filter-mode selection cache from the default-checked HTML state. ──
+    document.querySelectorAll('#gazetteers_offcanvas .standard-gazetteers-list .authority-cb').forEach(cb => {
+        if (cb.checked) filterSelections.add(cb.value);
     });
 
     // ── Wire authority checkboxes ──
-    document.querySelectorAll('#sources_offcanvas .authority-cb').forEach(cb => {
-        cb.addEventListener('change', () => {
-            const checked = Array.from(
-                document.querySelectorAll('#sources_offcanvas .authority-cb:checked')
-            ).map(el => el.value);
-            filterState.set('authorities', checked);
+    // Clustering is now controlled by the similarity-threshold slider at the top of
+    // the Results panel (see Master Plan §1.3, §4.1, §4.2). The legacy
+    // #atlas_clustering_toggle checkbox has been removed from atlas.html; clusterResults
+    // remains as a constant `true` until the new slider replaces this signal end-to-end.
+    //
+    // Use event delegation so that authority controls in either the standard or the
+    // My-Gazetteers placeholder list fire the same handler. Inputs are swapped between
+    // type=checkbox (Filter mode) and type=radio (Explore mode) by setGazetteerMode;
+    // the per-mode selection caches are kept in sync so flipping tabs restores state.
+    document.querySelector('#gazetteers_offcanvas').addEventListener('change', (e) => {
+        if (!e.target.classList.contains('authority-cb')) return;
+        const offcanvasBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
+        const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
+        const checked = Array.from(
+            document.querySelectorAll('#gazetteers_offcanvas .authority-cb:checked')
+        ).map(el => el.value);
+        if (mode === 'filter') {
+            filterSelections.clear();
+            checked.forEach(v => filterSelections.add(v));
+        } else {
+            exploreSelection = checked[0] || null;
+        }
+        filterState.set('authorities', checked);
+    });
+
+    // ── Gazetteers offcanvas: Filter | Explore mode toggle (Master Plan §1.4) ──
+    // Sketch only — backend support for the unified /suggest list and the Explorer view
+    // arrives in Phases 2 and 4.
+    document.querySelectorAll('#gazetteers_offcanvas .gazetteer-mode-toggle .btn').forEach(btn => {
+        btn.addEventListener('click', () => setGazetteerMode(btn.dataset.gazetteerMode));
+    });
+
+    // ── Gazetteers offcanvas: My-Gazetteers toggle (Explore mode only) ──
+    // Swaps between the standard gazetteer list and the (placeholder) per-user list
+    // grouped into Published / Pending. Real data arrives via /suggest in Phase 2.
+    const mineToggle = document.getElementById('gazetteer_mine_toggle');
+    if (mineToggle) {
+        mineToggle.addEventListener('change', () => updateGazetteerListVisibility());
+    }
+
+    // ── Gazetteers offcanvas: stub-note handler for unimplemented coverage filters. ──
+    // Show the stub note when either Area or Period switch is on; hide when both off.
+    document.querySelectorAll('#gazetteers_offcanvas .gazetteer-stub-switch').forEach(sw => {
+        sw.addEventListener('change', () => {
+            const card = sw.closest('.gazetteer-coverage-filters');
+            if (!card) return;
+            const note = card.querySelector('.gazetteer-stub-note');
+            const anyOn = card.querySelectorAll('.gazetteer-stub-switch:checked').length > 0;
+            if (note) note.classList.toggle('d-none', !anyOn);
         });
     });
 
@@ -503,6 +552,108 @@ function buildAreasPlaceholder() {
         return `Search for areas…`;
     }
     return 'Search for areas…';
+}
+
+/**
+ * Switch the Gazetteers offcanvas between Filter and Explore mode (Master Plan §1.4).
+ *
+ * Sketch only. This updates the visible UI (active tab, mode-specific help copy,
+ * Explore-mode-only controls) and physically swaps every authority input between
+ * type=checkbox (Filter mode, multi-select) and type=radio (Explore mode,
+ * single-select via shared `name` attribute). Selection state is preserved per mode
+ * via filterSelections / exploreSelection so flipping tabs restores the previously
+ * recorded selection rather than dropping it on the type swap.
+ */
+function setGazetteerMode(mode) {
+    if (mode !== 'filter' && mode !== 'explore') return;
+    const offcanvas = document.getElementById('gazetteers_offcanvas');
+    if (!offcanvas) return;
+
+    const body = offcanvas.querySelector('.offcanvas-body');
+    const previousMode = (body && body.dataset.mode) || 'filter';
+    if (mode === previousMode) return;
+
+    // ── Save current selection into the cache for the previous mode. ──
+    const inputs = offcanvas.querySelectorAll('.authority-cb');
+    const currentChecked = Array.from(inputs).filter(i => i.checked).map(i => i.value);
+    if (previousMode === 'filter') {
+        filterSelections.clear();
+        currentChecked.forEach(v => filterSelections.add(v));
+    } else {
+        exploreSelection = currentChecked[0] || null;
+    }
+
+    if (body) body.dataset.mode = mode;
+
+    offcanvas.querySelectorAll('.gazetteer-mode-toggle .btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.gazetteerMode === mode);
+    });
+
+    offcanvas.querySelectorAll('.gazetteer-mode-help').forEach(p => {
+        p.classList.toggle('d-none', p.dataset.mode !== mode);
+    });
+
+    offcanvas.querySelectorAll('[data-mode-visible]').forEach(el => {
+        el.classList.toggle('d-none', el.dataset.modeVisible !== mode);
+    });
+
+    // ── Swap input type to match the mode, then apply that mode's saved selection. ──
+    // Two-pass to avoid browser quirks where setting `.checked` in the same iteration
+    // that mutates `.type` can be silently dropped (the type change can reset state).
+    if (mode === 'explore') {
+        // Pass 1: convert every input to a radio in a shared name group, all unchecked.
+        inputs.forEach(input => {
+            input.type = 'radio';
+            input.name = 'gazetteer_explore';
+            input.checked = false;
+        });
+        // Pass 2: tick the one matching the saved Explore-mode selection (if any).
+        if (exploreSelection !== null) {
+            const target = Array.from(inputs).find(i => i.value === exploreSelection);
+            if (target) target.checked = true;
+        }
+    } else {
+        // Pass 1: convert every input to a checkbox, all unchecked.
+        inputs.forEach(input => {
+            input.type = 'checkbox';
+            input.removeAttribute('name');
+            input.checked = false;
+        });
+        // Pass 2: tick everything that was in the Filter-mode selection cache.
+        inputs.forEach(input => {
+            if (filterSelections.has(input.value)) input.checked = true;
+        });
+    }
+
+    // The My-Gazetteers toggle is Explore-mode-only; reset it when leaving Explore.
+    if (mode === 'filter') {
+        const mineToggle = document.getElementById('gazetteer_mine_toggle');
+        if (mineToggle) mineToggle.checked = false;
+    }
+    updateGazetteerListVisibility();
+
+    // Mirror the resulting selection into filterState.
+    const checked = Array.from(offcanvas.querySelectorAll('.authority-cb:checked'))
+        .map(el => el.value);
+    filterState.set('authorities', checked);
+}
+
+/**
+ * Show the standard gazetteer list or the (placeholder) My-Gazetteers list, depending
+ * on the My-Gazetteers toggle. Only meaningful in Explore mode for authenticated users.
+ */
+function updateGazetteerListVisibility() {
+    const offcanvas = document.getElementById('gazetteers_offcanvas');
+    if (!offcanvas) return;
+    const standardList = offcanvas.querySelector('.standard-gazetteers-list');
+    const myList = offcanvas.querySelector('.my-gazetteers-list');
+    if (!standardList) return;
+
+    const mineToggle = document.getElementById('gazetteer_mine_toggle');
+    const showMine = !!(mineToggle && mineToggle.checked && myList);
+
+    standardList.classList.toggle('d-none', showMine);
+    if (myList) myList.classList.toggle('d-none', !showMine);
 }
 
 /* ── Viewport constraint helpers ── */
@@ -964,15 +1115,25 @@ function clearAll() {
     if (vpBtn) { vpBtn.classList.remove('active'); }
     updateViewportTooltip();
 
-    // Reset clustering
+    // Reset clustering (always-on default; slider TBD per Master Plan §4.2)
     clusterResults = true;
-    const ct = document.getElementById('atlas_clustering_toggle');
-    if (ct) ct.checked = true;
 
-    // Reset authorities
-    document.querySelectorAll('#sources_offcanvas .authority-cb').forEach(cb => {
-        cb.checked = ['gn', 'iv', 'ohm', 'pl', 'tgn', 'tm', 'wd', 'whg'].includes(cb.value);
+    // Reset gazetteers (formerly authorities) — return to Filter mode + standard list,
+    // restore default checkbox selection, and reset both per-mode caches.
+    setGazetteerMode('filter');
+    const defaults = ['gn', 'iv', 'ohm', 'pl', 'tgn', 'tm', 'wd', 'whg'];
+    filterSelections.clear();
+    defaults.forEach(v => filterSelections.add(v));
+    exploreSelection = null;
+    document.querySelectorAll('#gazetteers_offcanvas .authority-cb').forEach(cb => {
+        cb.checked = filterSelections.has(cb.value);
     });
+    // Reset stub-note and the unimplemented coverage switches.
+    document.querySelectorAll('#gazetteers_offcanvas .gazetteer-stub-switch').forEach(sw => {
+        sw.checked = false;
+    });
+    const stubNote = document.querySelector('#gazetteers_offcanvas .gazetteer-stub-note');
+    if (stubNote) stubNote.classList.add('d-none');
 
     // Hide results
     hideResultsPanel();

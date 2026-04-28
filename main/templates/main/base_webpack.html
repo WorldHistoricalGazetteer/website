@@ -146,12 +146,6 @@
                         <a class="nav-link" href="{% url 'atlas-page' %}">Atlas</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'search-page' %}">Search</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'workbench' %}">Workbench</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link" href="{% url 'teaching' %}">Teaching</a>
                     </li>
                     <li class="nav-item dropdown">
@@ -172,11 +166,10 @@
                                 <a class="dropdown-item" href="{% url 'announcements-list' %}">News & announcements</a>
                             </li>
                             <li>
-                              <a class="dropdown-item"
-                                 href="https://github.com/WorldHistoricalGazetteer/website/releases/tag/v{{ APP_VERSION }}"
-                                 target="_blank">
-                                 New in v{{ APP_VERSION }}
-                              </a>
+                                <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
                             </li>
                             <li>
                                 <hr class="dropdown-divider">
@@ -193,76 +186,42 @@
                         </ul>
                     </li>
                     <!-- about -->
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tooltip"
+                           data-bs-title="<strong>Documentation</strong><br>Our Vision and mission, together with detailed guides, tutorials, and technical information. Includes instructions on datasets, place collections, system setup, and more.<br><i>Opens in a new tab.</i>"
+                           href="https://docs.whgazetteer.org" target="_blank"><i class="fas fa-book"
+                                                                                  style="color:#336699; font-size: 1.2rem; top: 1px; position: relative;"></i></a>
+                    </li>
+                    {% if user.is_authenticated %}
+                    {% is_whg_admin as user_is_whg_admin %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                           aria-expanded="false">Data</a>
+                           aria-expanded="false"
+                           title="{{ user.name }}">
+                            <i class="fas fa-user" style="color:#336699;"></i>
+                        </a>
                         <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                {% is_whg_admin as user_is_whg_admin %}
-                                {% if user_is_whg_admin %}
-                                <a class="dropdown-item" href="{% url 'dashboard-admin' %}">Admin Dashboard</a>
-                                {% endif %}
-                                {% if user.is_authenticated %}
-                                <a class="dropdown-item" href="{% url 'dashboard-user' %}">My Data</a>
-                            <li>
-                                <hr class="dropdown-divider">
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'profile-edit' %}"> Profile </a>
+                            </li>
+                            {% if user_is_whg_admin %}
+                            <li class="nav-item">
+                                <a class="nav-link" href="{% url 'dashboard-admin' %}">Admin Dashboard</a>
                             </li>
                             {% endif %}
+                            <li class="nav-item">
+                                <a class="nav-link"
+                                   href="javascript:{document.getElementById('logout').submit()}">Logout</a>
+                                <form id="logout" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}</form>
+                            </li>
+                        </ul>
                     </li>
-                    <li>
-                        <a class="dropdown-item"
-                           href="{% url 'datasets:dataset-gallery-type' gallery_type='datasets' %}">
-                            Published Datasets</a>
+                    <!-- user -->
+                    {% else %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-user" style="color:#336699;"></i> Login/Register</a>
                     </li>
-                    <li>
-                        <a class="dropdown-item"
-                           href="{% url 'datasets:dataset-gallery-type' gallery_type='collections' %}">
-                            Published Collections</a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
-                    </li>
-                </ul>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" data-bs-toggle="tooltip"
-                       data-bs-title="<strong>Documentation</strong><br>Our Vision and mission, together with detailed guides, tutorials, and technical information. Includes instructions on datasets, place collections, system setup, and more.<br><i>Opens in a new tab.</i>"
-                       href="https://docs.whgazetteer.org" target="_blank"><i class="fas fa-book"
-                                                                              style="color:#336699; font-size: 1.2rem; top: 1px; position: relative;"></i></a>
-                </li>
-                <!-- data -->
-                {% if user.is_authenticated %}
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                       aria-expanded="false"
-                       title="{{ user.name }}">
-                        <i class="fas fa-user" style="color:#336699;"></i>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'profile-edit' %}"> Profile </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link"
-                               href="javascript:{document.getElementById('logout').submit()}">Logout</a>
-                            <form id="logout" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}</form>
-                        </li>
-                    </ul>
-                </li>
-                <!-- user --> {% else %}
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-user" style="color:#336699;"></i> Login/Register</a>
-                </li>
-                {% endif %}
+                    {% endif %}
                 </ul>
             </div>
         </div>

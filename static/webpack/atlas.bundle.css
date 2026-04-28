@@ -611,8 +611,8 @@ span.twitter-typeahead .tt-suggestion {
     color: #fff;
 }
 
-/* Clustering section header in Sources panel */
-#sources_offcanvas .filter-header .categories {
+/* Section headers inside the Gazetteers panel (My Gazetteers groupings, etc.) */
+#gazetteers_offcanvas .filter-header .categories {
     color: #2c3e50;
     font-size: 0.6rem !important;
     text-transform: uppercase;
@@ -620,8 +620,59 @@ span.twitter-typeahead .tt-suggestion {
     border-bottom: 2px solid rgba(123, 45, 59, 0.25);
     padding-bottom: 3px;
 }
-#sources_offcanvas hr {
+#gazetteers_offcanvas hr {
     border-color: rgba(44, 62, 80, 0.10);
+}
+
+/* Filter | Explore mode toggle: faint outline on both, faint fill on the active one. */
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn {
+    background: transparent;
+    border: 1px solid rgba(44, 62, 80, 0.20);
+    color: rgba(44, 62, 80, 0.70);
+    font-weight: 500;
+    box-shadow: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:hover {
+    background: rgba(44, 62, 80, 0.04);
+    color: #2c3e50;
+    border-color: rgba(44, 62, 80, 0.30);
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn.active {
+    background: rgba(44, 62, 80, 0.10);
+    color: #2c3e50;
+    border-color: rgba(44, 62, 80, 0.40);
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:focus,
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:focus-visible {
+    box-shadow: 0 0 0 2px rgba(44, 62, 80, 0.12);
+    outline: none;
+}
+
+/* Shared "card" styling used by the coverage-filters block and the My-Gazetteers toggle. */
+#gazetteers_offcanvas .gazetteer-card {
+    background: rgba(44, 62, 80, 0.04);
+    border: 1px solid rgba(44, 62, 80, 0.08);
+    border-radius: 0.25rem;
+    padding: 0.5rem 0.6rem;
+}
+
+/* Explore-mode capabilities note — uses the same slate palette as the offcanvas help text */
+#gazetteers_offcanvas .gazetteer-explore-note {
+    border-left: 3px solid rgba(44, 62, 80, 0.25);
+    background: rgba(44, 62, 80, 0.03);
+    padding: 6px 10px;
+    color: #34495e;
+    border-radius: 0 0.2rem 0.2rem 0;
+}
+#gazetteers_offcanvas .gazetteer-explore-note .fa-info-circle {
+    color: rgba(44, 62, 80, 0.55);
+}
+
+/* Stub-note inside the coverage-filters card, shown when an unimplemented switch is on. */
+#gazetteers_offcanvas .gazetteer-stub-note {
+    border-top: 1px dashed rgba(44, 62, 80, 0.20);
+    padding-top: 0.4rem;
 }
 
 /* Form controls inside panels — subtle styling */
@@ -643,7 +694,7 @@ span.twitter-typeahead .tt-suggestion {
     border-color: #2c3e50;
 }
 
-#sources_offcanvas .authority-item {
+#gazetteers_offcanvas .authority-item {
     padding: 4px 0;
     transition: background 0.15s;
     border-radius: 4px;
@@ -651,10 +702,10 @@ span.twitter-typeahead .tt-suggestion {
     padding-left: 4px;
     padding-right: 4px;
 }
-#sources_offcanvas .authority-item:hover {
+#gazetteers_offcanvas .authority-item:hover {
     background: rgba(44, 62, 80, 0.04);
 }
-#sources_offcanvas .form-check-label {
+#gazetteers_offcanvas .form-check-label {
     font-size: 0.82rem;
     color: #34495e;
 }

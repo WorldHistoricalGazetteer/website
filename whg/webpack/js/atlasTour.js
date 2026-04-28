@@ -56,7 +56,7 @@ function closeOffcanvas(selector) {
 
 /** Close ALL atlas offcanvas panels. */
 function closeAllOffcanvas() {
-    ['#layers_offcanvas', '#sources_offcanvas', '#categories_offcanvas']
+    ['#layers_offcanvas', '#gazetteers_offcanvas', '#categories_offcanvas']
         .forEach(closeOffcanvas);
 }
 
@@ -299,31 +299,31 @@ function getTourSteps() {
             },
         },
 
-        /* ── 8. Sources panel (switch to Toponyms, auto-open) ──── */
+        /* ── 8. Gazetteers panel (switch to Places, auto-open) ──── */
         {
-            element: '#open_sources_modal',
+            element: '#open_gazetteers_modal',
             popover: {
-                title: 'Data Sources Panel',
+                title: 'Gazetteers Panel',
                 description:
-                    'Now switching to <strong>Toponyms</strong> mode. The ' +
-                    '<strong><i class="fas fa-database"></i> Sources</strong> button ' +
-                    'opens a panel where you can filter search results by data source: ' +
+                    'Now switching to <strong>Places</strong> mode. The ' +
+                    '<strong><i class="fas fa-book-atlas"></i> Gazetteers</strong> button ' +
+                    'opens a panel where you can filter search results by gazetteer: ' +
                     'GeoNames, Wikidata, Pleiades, TGN, OpenHistoricalMap, and more.<br><br>' +
-                    'Uncheck sources to narrow your results to specific gazetteers.<br><br>' +
-                    '<em class="text-muted">The Sources panel is opening now…</em>',
+                    'Uncheck gazetteers to narrow your results.<br><br>' +
+                    '<em class="text-muted">The Gazetteers panel is opening now…</em>',
                 side: 'bottom',
                 align: 'end',
             },
             onHighlightStarted: () => {
-                // Switch to Toponyms so the Sources button becomes visible
+                // Switch to Places so the Gazetteers button becomes visible
                 ensureSearchMode('toponyms');
             },
             onHighlighted: () => {
-                demoTimeout(() => openOffcanvas('#sources_offcanvas'), 300);
+                demoTimeout(() => openOffcanvas('#gazetteers_offcanvas'), 300);
             },
             onDeselected: () => {
                 clearDemoTimeouts();
-                closeOffcanvas('#sources_offcanvas');
+                closeOffcanvas('#gazetteers_offcanvas');
             },
         },
 
