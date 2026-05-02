@@ -203,7 +203,25 @@ class GazetteerRegistryEntry(models.Model):
     # ``[min_start_year, max_end_year]`` with each endpoint optionally null.
     temporal_extent = models.JSONField(default=list)
 
+    # Curatorial fields — admin-managed, NOT touched by the inventory push
+    # (see api/views_indexing.py::GazetteerInventoryView._upsert_one).
+    core = models.BooleanField(default=False, db_index=True)
+    tileset_polygon_only = models.BooleanField(default=False)
+
+    GAZETTEER_TYPE_CHOICES = [
+        ("standard",  "Standard"),
+        ("itinerary", "Itinerary"),
+        ("network",   "Network"),
+    ]
+    gazetteer_type = models.CharField(
+        max_length=16, choices=GAZETTEER_TYPE_CHOICES, default="standard",
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_global(self) -> bool:
+        return self.h3_coverage == "global"
 
     def __str__(self):
         return f"{self.id} ({self.entry_class})"

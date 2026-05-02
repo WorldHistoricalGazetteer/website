@@ -631,6 +631,65 @@
     color: #34495e;
 }
 
+/* Polygon-only gazetteers (OSM/OHM in Explore mode) — visually disabled but
+   still tooltip-receptive so the explanatory hover text fires. */
+#gazetteers_offcanvas .authority-item.disabled {
+    opacity: 0.45;
+    pointer-events: auto;
+    cursor: not-allowed;
+}
+#gazetteers_offcanvas .authority-item.disabled .form-check-input,
+#gazetteers_offcanvas .authority-item.disabled .form-check-label {
+    cursor: not-allowed;
+}
+
+/* Specialist Gazetteers expansion — inline dropdown beneath the parent row. */
+#gazetteers_offcanvas .specialist-gazetteers-expansion {
+    margin: 0.25rem 0 0.5rem 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(44, 62, 80, 0.03);
+    border: 1px solid rgba(44, 62, 80, 0.08);
+    border-radius: 0.25rem;
+}
+#gazetteers_offcanvas .specialist-search {
+    font-size: 0.78rem;
+}
+#gazetteers_offcanvas .specialist-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+#gazetteers_offcanvas .specialist-list .authority-item {
+    padding: 2px 4px;
+    margin: 0;
+}
+
+/* Sketch type-pill filter — three toggle buttons styled like the existing
+   Filter|Explore mode toggle. Active = included, inactive = excluded.
+   Explicit borders + box-shadow dividers so the segments read distinctly even
+   when adjacent buttons share an active state. */
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid rgba(44, 62, 80, 0.25);
+    background: #fff;
+    color: #34495e;
+}
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn + .btn {
+    /* Hairline divider between segments — visible against both active and
+       inactive backgrounds because it sits over the button's own border. */
+    box-shadow: inset 1px 0 0 rgba(44, 62, 80, 0.35);
+}
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn.active {
+    background: #2c3e50;
+    color: #fff;
+    border-color: #2c3e50;
+}
+
+/* "core" badge alignment within the authority-item label. */
+#gazetteers_offcanvas .authority-item .badge {
+    vertical-align: middle;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Type tree overrides for atlas offcanvas
    — remove bullet points, reduce font size

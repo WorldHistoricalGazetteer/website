@@ -295,86 +295,79 @@
             clustering — equivalent to the reconciliation / accessioning workflow in v3.2.
         </div>
 
-        <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on) -->
+        <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on).
+             Populated from `gazetteer_inventory` (api.GazetteerRegistryEntry rows with
+             entry_class='authority'). Only `core` rows are pre-checked. The Specialist
+             Gazetteers parent row is hardcoded after the loop because it's a UI grouping
+             (the WHG-namespaced datasets it expands), not a true authority entry. -->
         <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
+            {% for g in gazetteer_inventory %}
+            {% if g.id != "whg" %}
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
-                   data-bs-title="D-PLACE — cross-cultural dataset linking linguistic, environmental, and cultural data to ~1,400 societies worldwide. Contains point locations only (no polygons).">
-                <input class="form-check-input authority-cb" type="checkbox" value="dplace">
-                <span class="form-check-label">D-PLACE</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="dplace"></span>
+                   data-bs-title="{{ g.description|default:g.name }}"
+                   data-tileset-polygon-only="{% if g.tileset_polygon_only %}1{% else %}0{% endif %}"
+                   data-gazetteer-type="{{ g.gazetteer_type }}">
+                <input class="form-check-input authority-cb" type="checkbox"
+                       value="{{ g.id }}"{% if g.core %} checked{% endif %}>
+                <span class="form-check-label">{{ g.name }}</span>
+                {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>
             </label>
-            <label class="authority-item form-check"
+            {% endif %}
+            {% empty %}
+            <p class="small text-muted fst-italic">
+                No gazetteers registered. Run the indexing pipeline's
+                <code>push_gazetteer_inventory</code> to populate the list.
+            </p>
+            {% endfor %}
+
+            <!-- Specialist Gazetteers — UI grouping that expands to the inline list
+                 of WHG-namespaced datasets. Hardcoded so it is present regardless of
+                 the inventory state (and so the inventory pipeline can't accidentally
+                 remove the parent by reclassifying the underlying rows). -->
+            <label class="authority-item form-check specialist-gazetteers-parent"
                    data-bs-toggle="tooltip"
-                   data-bs-title="GB1900 gazetteer — British place names 1888–1914">
-                <input class="form-check-input authority-cb" type="checkbox" value="gb">
-                <span class="form-check-label">GB1900</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="gb"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="GeoNames geographical database — ~12 million features">
-                <input class="form-check-input authority-cb" type="checkbox" value="gn" checked>
-                <span class="form-check-label">GeoNames</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="gn"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Index Villaris 1680 — ~24,000 English and Welsh place names">
-                <input class="form-check-input authority-cb" type="checkbox" value="iv" checked>
-                <span class="form-check-label">IndexVillaris</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="iv"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="OpenHistoricalMap — community-driven historical mapping">
-                <input class="form-check-input authority-cb" type="checkbox" value="ohm" checked>
-                <span class="form-check-label">OpenHistoricalMap</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="ohm"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="OpenStreetMap — comprehensive global coverage">
-                <input class="form-check-input authority-cb" type="checkbox" value="osm">
-                <span class="form-check-label">OpenStreetMap</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="osm"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Pleiades gazetteer of ancient places — ~37,000 places">
-                <input class="form-check-input authority-cb" type="checkbox" value="pl" checked>
-                <span class="form-check-label">Pleiades</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="pl"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Getty Thesaurus of Geographic Names — ~3 million records">
-                <input class="form-check-input authority-cb" type="checkbox" value="tgn" checked>
-                <span class="form-check-label">TGN</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="tgn"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Trismegistos — papyrological and epigraphical records">
-                <input class="form-check-input authority-cb" type="checkbox" value="tm" checked>
-                <span class="form-check-label">Trismegistos</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="tm"></span>
-            </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="WHG contributed historical gazetteer datasets">
-                <input class="form-check-input authority-cb" type="checkbox" value="whg" checked>
-                <span class="form-check-label">WHG datasets</span>
+                   data-bs-title="WHG-curated specialist gazetteers — datasets and collections contributed by researchers."
+                   data-tileset-polygon-only="0"
+                   data-gazetteer-type="standard">
+                <input class="form-check-input authority-cb" type="checkbox" value="whg">
+                <span class="form-check-label">Specialist Gazetteers</span>
                 <span class="gazetteer-count text-muted small ms-1" data-namespace="whg"></span>
             </label>
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="Wikidata — ~8 million places with structured data">
-                <input class="form-check-input authority-cb" type="checkbox" value="wd" checked>
-                <span class="form-check-label">Wikidata</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="wd"></span>
-            </label>
+            <!-- Specialist Gazetteers expansion (lazy-rendered by atlas.js when the
+                 parent row is first interacted with). The type-pill filter is sketch
+                 only and Explore-mode-visible via [data-mode-visible]. -->
+            <div class="specialist-gazetteers-expansion d-none">
+                <div class="gazetteer-type-pill-filter btn-group btn-group-sm w-100 mb-2 d-none"
+                     data-mode-visible="explore" role="group" aria-label="Gazetteer type filter">
+                    <button type="button" class="btn active" data-gazetteer-type-pill="standard"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Datasets, Place Collections, and Dataset Collections without sequence/network metadata.">
+                        Standard
+                    </button>
+                    <button type="button" class="btn" data-gazetteer-type-pill="itinerary"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Sketch — datasets with embedded sequence metadata.">
+                        Itinerary
+                    </button>
+                    <button type="button" class="btn" data-gazetteer-type-pill="network"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Sketch — datasets with embedded network metadata.">
+                        Network
+                    </button>
+                </div>
+                <input class="form-control form-control-sm specialist-search mb-2"
+                       type="search" placeholder="Search Specialist Gazetteers…">
+                <div class="specialist-list authority-list" style="padding-left: 0;">
+                    <!-- Populated by atlas.js::renderSpecialistList -->
+                </div>
+            </div>
         </div>
+
+        <!-- Specialist Gazetteers payload — emitted as a JSON script tag for
+             atlas.js::renderSpecialistList to consume on demand. -->
+        {{ specialist_gazetteers|json_script:"specialist_gazetteers_data" }}
 
         <!-- "My Gazetteers" placeholder list (visible only when the toggle above is on; sketch
              quality — every entry is illustrative, not real user data). The real list is
@@ -404,6 +397,26 @@
                        data-bs-title="Sample published Collection (placeholder).">
                     <input class="form-check-input authority-cb" type="checkbox" value="my:roman-britain-sites">
                     <span class="form-check-label">Roman Britain Sites <span class="text-muted small">(sample collection)</span></span>
+                </label>
+            </div>
+
+            <div class="my-gazetteers-section mb-2">
+                <div class="filter-header d-flex align-items-center mb-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-lock me-1 text-secondary"></i>Private
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample private Dataset — visible only to you (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:fieldwork-notes-2024">
+                    <span class="form-check-label">Fieldwork Notes 2024 <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample private Collection — work-in-progress, never published (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:thesis-corpus">
+                    <span class="form-check-label">Thesis Corpus <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
                 </label>
             </div>
 

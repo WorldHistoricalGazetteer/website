@@ -10,6 +10,7 @@ from django.http import JsonResponse
 from django.views.generic import View
 from django.views.generic.base import TemplateView
 
+from api.models import GazetteerRegistryEntry
 from api.reconcile import DOCS_URL
 from areas.models import Area
 from collection.models import Collection
@@ -144,6 +145,31 @@ class AtlasPageView(TemplateView):
 
         context['has_areas'] = len(user_areas) > 0
         context['user_areas'] = json.dumps(user_areas)
+
+        # Gazetteer registry — the standard offcanvas list (authorities) and
+        # the Specialist Gazetteers expansion (WHG-namespaced datasets).
+        # Falls back to an empty queryset before the inventory push has run;
+        # the data migration in api/migrations/0003 seeds the ten current
+        # authorities so the page renders even on a fresh DB.
+        gazetteer_inventory = list(
+            GazetteerRegistryEntry.objects
+            .filter(entry_class='authority')
+            .order_by('name')
+            .values(
+                'id', 'name', 'description', 'namespace', 'core',
+                'tileset_polygon_only', 'gazetteer_type', 'record_count',
+            )
+        )
+        specialist_gazetteers = list(
+            GazetteerRegistryEntry.objects
+            .filter(entry_class='dataset', namespace='whg')
+            .order_by('name')
+            .values(
+                'id', 'name', 'description', 'gazetteer_type', 'record_count',
+            )
+        )
+        context['gazetteer_inventory'] = gazetteer_inventory
+        context['specialist_gazetteers'] = specialist_gazetteers
         return context
 
 

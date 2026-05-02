@@ -328,16 +328,15 @@ Promise.all([
         if (!e.target.classList.contains('authority-cb')) return;
         const offcanvasBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
         const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
-        const checked = Array.from(
-            document.querySelectorAll('#gazetteers_offcanvas .authority-cb:checked')
-        ).map(el => el.value);
-        if (mode === 'filter') {
-            filterSelections.clear();
-            checked.forEach(v => filterSelections.add(v));
-        } else {
-            exploreSelection = checked[0] || null;
+
+        if (e.target.closest('.specialist-list')) {
+            // Specialist child change → recount parent tri-state.
+            recountSpecialistTriState();
+        } else if (e.target.closest('.specialist-gazetteers-parent')) {
+            // Parent toggled directly (input or label) → propagate to children.
+            applyParentToggleToChildren(e.target.checked);
         }
-        filterState.set('authorities', checked);
+        emitGazetteerSelection(mode);
     });
 
     // ── Gazetteers offcanvas: Filter | Explore mode toggle (Master Plan §1.4) ──
@@ -366,6 +365,24 @@ Promise.all([
             if (note) note.classList.toggle('d-none', !anyOn);
         });
     });
+
+    // ── Specialist Gazetteers: parent row click reveals the inline dropdown. ──
+    // Lazy-render only; the actual tri-state propagation to children is handled
+    // by the offcanvas change handler so that clicking either the input OR the
+    // label text fires it.
+    document.querySelectorAll('#gazetteers_offcanvas .specialist-gazetteers-parent').forEach(label => {
+        label.addEventListener('click', () => {
+            const expansion = document.querySelector('#gazetteers_offcanvas .specialist-gazetteers-expansion');
+            if (!expansion) return;
+            if (expansion.classList.contains('d-none')) {
+                renderSpecialistList();
+                expansion.classList.remove('d-none');
+            }
+        });
+    });
+
+    // ── Tileset gating for polygon-only gazetteers (OSM, OHM in Explore mode). ──
+    applyTilesetGating(document.querySelector('#gazetteers_offcanvas .offcanvas-body')?.dataset.mode || 'filter');
 
     // ── Initialise type tree in categories offcanvas ──
     typeTree = new TypeTreeWidget('#atlas_type_tree', {
@@ -421,6 +438,36 @@ Promise.all([
         searchInput.value = atlas_toponym;
         switchSearchMode('toponyms');
         setTimeout(() => initiateToponymSearch(), 300);
+    }
+
+    // ── Handle Gazetteers deep link from sitewide navbar ──
+    // /atlas/?panel=gazetteers&gmode=explore opens the Atlas in Places mode
+    // with the Gazetteers offcanvas in view and the requested Filter|Explore
+    // tab pre-selected. We trigger native click() on the existing buttons so
+    // that all wired side-effects (.active class updates, etc.) fire exactly
+    // as if the user had clicked them by hand.
+    {
+        const params = new URLSearchParams(location.search);
+        if (params.get('panel') === 'gazetteers') {
+            const placesBtn = document.querySelector(
+                '.search-mode-toggle .btn[data-search-mode="toponyms"]'
+            );
+            if (placesBtn) placesBtn.click();
+            // The toponym-only-btn group (#open_gazetteers_modal, #open_categories_modal)
+            // is unhidden by switchSearchMode; clicking the trigger opens the offcanvas
+            // via Bootstrap's data-bs-target wiring.
+            setTimeout(() => {
+                const trigger = document.getElementById('open_gazetteers_modal');
+                if (trigger) trigger.click();
+                const gmode = params.get('gmode') === 'explore' ? 'explore' : 'filter';
+                if (gmode === 'explore') {
+                    const exploreBtn = document.querySelector(
+                        '#gazetteers_offcanvas .gazetteer-mode-toggle .btn[data-gazetteer-mode="explore"]'
+                    );
+                    if (exploreBtn) exploreBtn.click();
+                }
+            }, 50);
+        }
     }
 
     // ── Welcome panel: fade out on control interaction ──
@@ -632,10 +679,17 @@ function setGazetteerMode(mode) {
     }
     updateGazetteerListVisibility();
 
+    // Polygon-only gazetteers (OSM/OHM) are disabled in Explore mode because
+    // their tilesets cover polygons only. Filter mode keeps them selectable.
+    applyTilesetGating(mode);
+
+    // Re-apply type-pill filter visibility & state if the Specialist expansion
+    // is open (the [data-mode-visible] loop above has already toggled the row's
+    // visibility, but the underlying child filtering must re-run).
+    applyTypePillFilter();
+
     // Mirror the resulting selection into filterState.
-    const checked = Array.from(offcanvas.querySelectorAll('.authority-cb:checked'))
-        .map(el => el.value);
-    filterState.set('authorities', checked);
+    emitGazetteerSelection(mode);
 }
 
 /**
@@ -654,6 +708,227 @@ function updateGazetteerListVisibility() {
 
     standardList.classList.toggle('d-none', showMine);
     if (myList) myList.classList.toggle('d-none', !showMine);
+}
+
+/* ── Polygon-only tileset gating (OSM/OHM in Explore mode) ──
+   Disables the input and visually greys the row in Explore mode; restores it in
+   Filter mode. The original tooltip is preserved on a data-bs-title-original
+   attribute so it can be swapped back when leaving Explore. */
+function applyTilesetGating(mode) {
+    const labels = document.querySelectorAll(
+        '#gazetteers_offcanvas .authority-item[data-tileset-polygon-only="1"]'
+    );
+    const disabled = (mode === 'explore');
+    labels.forEach(label => {
+        const input = label.querySelector('.authority-cb');
+        if (input) {
+            input.disabled = disabled;
+            if (disabled) input.checked = false;
+        }
+        label.classList.toggle('disabled', disabled);
+        if (!label.dataset.bsTitleOriginal) {
+            label.dataset.bsTitleOriginal = label.getAttribute('data-bs-title') || '';
+        }
+        const newTitle = disabled
+            ? 'Tilesets for this gazetteer cover polygons only — not available in Explore mode'
+            : label.dataset.bsTitleOriginal;
+        label.setAttribute('data-bs-title', newTitle);
+        label.setAttribute('data-bs-original-title', newTitle);
+        try {
+            const tt = bootstrap.Tooltip.getInstance(label);
+            if (tt) tt.setContent({ '.tooltip-inner': newTitle });
+        } catch (e) { /* no tooltip yet — picked up on next init */ }
+    });
+    // Clear a stale Explore selection that now points at a disabled row.
+    if (disabled && exploreSelection) {
+        const sel = document.querySelector(
+            `#gazetteers_offcanvas .authority-cb[value="${CSS.escape(exploreSelection)}"]`
+        );
+        if (sel && sel.disabled) exploreSelection = null;
+    }
+}
+
+/* ── Specialist Gazetteers — lazy render of children, tri-state, search, type pills ──
+   The expansion is hidden by default and rendered on first parent-row interaction.
+   Children are rendered with .authority-cb so the existing offcanvas change
+   delegation routes them through recountSpecialistTriState. */
+let _specialistRendered = false;
+
+function getSpecialistData() {
+    const tag = document.getElementById('specialist_gazetteers_data');
+    if (!tag) return [];
+    try {
+        return JSON.parse(tag.textContent) || [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function renderSpecialistList() {
+    if (_specialistRendered) return;
+    const list = document.querySelector('#gazetteers_offcanvas .specialist-list');
+    if (!list) return;
+    const data = getSpecialistData();
+    if (!data.length) {
+        list.innerHTML = '<p class="small text-muted fst-italic mb-0">No specialist gazetteers registered yet.</p>';
+        _specialistRendered = true;
+        return;
+    }
+    const offcanvasBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
+    const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
+    const inputType = mode === 'explore' ? 'radio' : 'checkbox';
+    const nameAttr = mode === 'explore' ? ' name="gazetteer_explore"' : '';
+    const html = data.map(g => {
+        const desc = (g.description || g.name || '').replace(/"/g, '&quot;');
+        const type = g.gazetteer_type || 'standard';
+        return `
+            <label class="authority-item form-check"
+                   data-bs-toggle="tooltip"
+                   data-bs-title="${desc}"
+                   data-gazetteer-type="${type}"
+                   data-specialist-id="${g.id}">
+                <input class="form-check-input authority-cb" type="${inputType}"${nameAttr}
+                       value="${g.id}">
+                <span class="form-check-label">${g.name}</span>
+            </label>
+        `;
+    }).join('');
+    list.innerHTML = html;
+    _specialistRendered = true;
+
+    // Wire the search input (once).
+    const search = document.querySelector('#gazetteers_offcanvas .specialist-search');
+    if (search && !search.dataset.wired) {
+        search.dataset.wired = '1';
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            list.querySelectorAll('label.authority-item').forEach(l => {
+                const text = (l.textContent || '').toLowerCase();
+                l.classList.toggle('d-none', q && !text.includes(q));
+            });
+            applyTypePillFilter();
+            recountSpecialistTriState();
+        });
+    }
+
+    // Wire the type-pill filter (once).
+    document.querySelectorAll('#gazetteers_offcanvas .gazetteer-type-pill-filter [data-gazetteer-type-pill]').forEach(btn => {
+        if (btn.dataset.wired) return;
+        btn.dataset.wired = '1';
+        btn.addEventListener('click', () => {
+            btn.classList.toggle('active');
+            applyTypePillFilter();
+            recountSpecialistTriState();
+        });
+    });
+
+    applyTypePillFilter();
+    recountSpecialistTriState();
+}
+
+function applyParentToggleToChildren(checkedAll) {
+    const children = document.querySelectorAll(
+        '#gazetteers_offcanvas .specialist-list .authority-cb'
+    );
+    children.forEach(cb => {
+        // Only toggle visible (non-d-none, non-disabled) children.
+        const label = cb.closest('label');
+        if (label && label.classList.contains('d-none')) return;
+        cb.checked = !!checkedAll;
+    });
+    recountSpecialistTriState();
+}
+
+function recountSpecialistTriState() {
+    const parentInput = document.querySelector(
+        '#gazetteers_offcanvas .specialist-gazetteers-parent .authority-cb'
+    );
+    if (!parentInput) return;
+    // Count *all* children regardless of search/pill visibility so that the
+    // 'whg' alias is only emitted when literally every Specialist Gazetteer
+    // is selected, never when filtering merely hides some rows.
+    const allChildren = Array.from(document.querySelectorAll(
+        '#gazetteers_offcanvas .specialist-list .authority-cb'
+    ));
+    if (!allChildren.length) {
+        parentInput.indeterminate = false;
+        return;
+    }
+    const checkedCount = allChildren.filter(cb => cb.checked).length;
+    if (checkedCount === 0) {
+        parentInput.checked = false;
+        parentInput.indeterminate = false;
+    } else if (checkedCount === allChildren.length) {
+        parentInput.checked = true;
+        parentInput.indeterminate = false;
+    } else {
+        parentInput.checked = false;
+        parentInput.indeterminate = true;
+    }
+}
+
+/* ── Type-pill filter (Explore-only sketch) ──
+   Hides Specialist children whose data-gazetteer-type is not in the active pill
+   set. Convention: when *all* pills are off, fall back to "show all" (matches
+   the page's existing area/region selection convention). */
+function applyTypePillFilter() {
+    const filterRow = document.querySelector('#gazetteers_offcanvas .gazetteer-type-pill-filter');
+    if (!filterRow) return;
+    const list = document.querySelector('#gazetteers_offcanvas .specialist-list');
+    if (!list) return;
+    // If filter row is hidden (Filter mode), force show all.
+    const hidden = filterRow.classList.contains('d-none');
+    const activePills = hidden
+        ? null
+        : Array.from(filterRow.querySelectorAll('[data-gazetteer-type-pill].active'))
+            .map(b => b.dataset.gazetteerTypePill);
+    const showAll = !activePills || activePills.length === 0;
+    list.querySelectorAll('label.authority-item').forEach(label => {
+        if (showAll) {
+            // Restore visibility unless the search-box has hidden this row.
+            // (We can't distinguish source-of-hide; safe default: show.)
+            label.classList.remove('d-none');
+            return;
+        }
+        const t = label.dataset.gazetteerType || 'standard';
+        label.classList.toggle('d-none', !activePills.includes(t));
+    });
+}
+
+/* ── Mirror the active gazetteer selection into filterState ──
+   Tri-state: parent fully checked → 'whg' (compact alias for "all WHG datasets");
+   parent indeterminate → explicit list of child specialist ids; parent unchecked
+   → no Specialist contribution. Standard authority selections are always sent
+   verbatim. */
+function emitGazetteerSelection(mode) {
+    const offcanvas = document.getElementById('gazetteers_offcanvas');
+    if (!offcanvas) return;
+    // Standard list values only — never include specialist children here, since
+    // the parent's tri-state below decides whether to expand to explicit ids.
+    const standardChecked = Array.from(
+        offcanvas.querySelectorAll('.standard-gazetteers-list > .authority-item .authority-cb:checked')
+    ).map(el => el.value);
+
+    const parentInput = offcanvas.querySelector(
+        '.specialist-gazetteers-parent .authority-cb'
+    );
+    let composed = standardChecked.slice();
+    if (parentInput && parentInput.indeterminate) {
+        // Drop the bare 'whg' alias (the parent isn't fully checked) and
+        // substitute the explicit list of selected child specialist ids.
+        composed = composed.filter(v => v !== 'whg');
+        const childIds = Array.from(offcanvas.querySelectorAll(
+            '.specialist-list .authority-cb:checked'
+        )).map(el => el.value);
+        composed = composed.concat(childIds);
+    }
+    if (mode === 'filter') {
+        filterSelections.clear();
+        composed.forEach(v => filterSelections.add(v));
+    } else {
+        exploreSelection = composed[0] || null;
+    }
+    filterState.set('authorities', composed);
 }
 
 /* ── Viewport constraint helpers ── */
