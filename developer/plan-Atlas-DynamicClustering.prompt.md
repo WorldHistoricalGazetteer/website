@@ -79,13 +79,43 @@ For coverage filtering to work efficiently, **condensed H3 coverage and a tempor
 
 #### 1.4.2 "My gazetteers" toggle
 
-A toggle filter on the Gazetteers list allows logged-in users to show (and subsequently explore) only their own gazetteers. This is the principal entry point to the contributor's working scope — a contributor with one or more pending datasets sees them in the Gazetteers list and selects them to enter the working view (Part VI).
+A toggle filter on the Gazetteers list allows logged-in users to show (and subsequently explore) only their own gazetteers. This is the principal entry point to the contributor's working scope — a contributor with one or more pending datasets sees them in the Gazetteers list and selects them to enter the working view (Part VI). The "My Gazetteers" placeholder list groups contributor-owned entries into three sections: **Published** (publicly visible, immutable except via supersession), **Private** (visible only to the owner; never submitted for review — see §10.3 retention policy for `private_permanent`), and **Pending** (drafts and submitted-under-review datasets).
+
+#### 1.4.3 Curatorial fields on the gazetteer registry
+
+The `GazetteerRegistryEntry` model (Django app `api`, defined in `api/models.py`) carries three **admin-only curatorial fields** alongside the inventory-derived fields populated by the ingestion pipeline. They are **deliberately not** part of the inventory push payload (see Appendix E.2) so staff curation survives every re-push:
+
+- **`core`** (boolean, indexed). Pre-selects the gazetteer in the offcanvas Filter mode by default and renders a small "core" badge next to its name. Seeded `True` for **GeoNames, Wikidata, TGN**; everything else seeds `False`. Replaces the previously hardcoded default-checked attributes in the standard list.
+- **`tileset_polygon_only`** (boolean). Marks gazetteers whose tilesets are generated for polygons only (currently OSM and OHM). The Atlas JS disables these entries in **Explore** mode (the Explorer view depends on tileset rendering) with an explanatory tooltip; in **Filter** mode they remain selectable because filtering does not depend on tilesets. Editable in admin to allow staff override of the pipeline-set value.
+- **`gazetteer_type`** (CharField, choices `standard | itinerary | network`). Sketch-only field that backs the type-pill filter inside the Specialist Gazetteers expansion (§1.4.4). "Standard" encompasses what are currently Datasets, Place Collections, and Dataset Collections without embedded sequence/network metadata; "Itinerary" and "Network" are placeholders for future sequence- and network-aware gazetteer types.
+
+A computed `is_global` property (`@property` returning `h3_coverage == "global"`) is exposed read-only in admin for display alongside the `h3_coverage` JSON field; it is not a separate persisted field — `h3_coverage` remains the single source of truth, holding either the literal string `"global"` or a list of compacted H3 cell IDs.
+
+A staff-only Django admin (`api/admin.py::GazetteerRegistryEntryAdmin`) exposes the registry with **only the three curatorial fields editable** (plus `tileset_polygon_only` for staff override); all inventory-derived fields are read-only. `list_editable` on `core`, `tileset_polygon_only`, and `gazetteer_type` enables in-place editing from the changelist.
+
+#### 1.4.4 Specialist Gazetteers expansion
+
+The row formerly labelled "WHG datasets" is **relabelled "Specialist Gazetteers"** and behaves as an inline-expandable container rather than a leaf selection. Clicking the row reveals a tinted card beneath it containing:
+
+- A **search box** that filters the list by case-insensitive substring match on the dataset name.
+- An **Explore-only type-pill filter** (Standard | Itinerary | Network) implemented as a multi-select btn-group. **Standard** is active by default; the user can add Itinerary/Network or de-select Standard. When all pills are off, the convention is "show all" (matching the page's existing area/region selection convention).
+- A **searchable list** of WHG-namespaced datasets, populated lazily from a JSON script tag emitted by the Django view from `GazetteerRegistryEntry.objects.filter(entry_class='dataset', namespace='whg')`. List rows carry `data-gazetteer-type="…"` so the type-pill filter can hide non-matching entries. Children render as checkboxes in Filter mode and radios in Explore mode, matching the parent input semantic.
+
+The **parent row** uses **tri-state semantics** mirrored into `filterState`:
+
+- **Unchecked** → no Specialist Gazetteers contribute to the search.
+- **Fully checked** → the compact alias `whg` is sent (covers all WHG datasets); ticking the parent ticks every visible child.
+- **Indeterminate** (some children checked) → the explicit list of selected child IDs is sent in place of the bare `whg` alias.
+
+The Specialist Gazetteers parent row is **hardcoded in the template** (not seeded as a `GazetteerRegistryEntry` row) because it is a presentational grouping over WHG-namespaced datasets, not a true authority entry; treating it as a registry row would conflict with the inventory pipeline's own use of the `whg` namespace for individual datasets. The template's loop skips any DB row with `id="whg"` defensively.
 
 ### 1.5 Main navigation rationalisation
 
 With the Atlas UI as the default and Gazetteers absorbing several previously-distinct concepts, the main site navigation bar simplifies:
 
 - **Search** is removed. In its current `dev`-server form it was a prototype which led to development of the Atlas UI; the Atlas UI replaces it.
+- **Atlas** remains as the primary entry point.
+- **Gazetteers** is added as a sibling top-level link sitting immediately to the right of Atlas. It is a deep link into the Atlas page that pre-selects "Places" mode, opens the Gazetteers offcanvas, and switches it into Explore tab. The link is implemented as `{% url 'atlas-page' %}?panel=gazetteers&gmode=explore`; the Atlas JS reads `URLSearchParams(location.search)` on load and triggers native `.click()` on the existing Places-mode button, the offcanvas trigger (`#open_gazetteers_modal`), and (if `gmode=explore`) the Explore tab button — so all wired side-effects (the `.active` class update, Bootstrap's `data-bs-target` offcanvas open, and `setGazetteerMode`) fire exactly as if the user had clicked them by hand.
 - **Workbench** remains for now, although the contribution pipeline will probably need to be restructured in subsequent development. The Workbench could be moved entirely to the Documentation site, where it would be more easily edited and maintained.
 - **Teaching** remains but will incorporate new material from OME once the integration is active. References to "Place Collection" and "Collection Groups" are reframed as "Gazetteers". Some of the content could be moved to the Documentation site. The link might be better served as a dropdown rather than a single page.
 - **Data** is removed. Most of its functionality is provided by the Gazetteers list (i.e. "My Data", "Published Datasets", and "Published Collections"). Functions that move to other options include "Admin Dashboard", "API", and "Volunteering".
@@ -501,20 +531,33 @@ The legacy feature-class checkboxes (`A`, `P`, `S`, etc.) in `#adv_checkboxes` a
 
 ### 4.8 Update: Gazetteers panel (formerly Data Sources)
 
-Per §1.2 and §1.4, the Data Sources panel is renamed and reconceptualised as the **Gazetteers** offcanvas. The renaming itself, the dual Filter|Explore mode, the unified gazetteers list (Authorities + Datasets + Collections), and the H3/temporality coverage filtering are specified in §1.4. Pending work on the Atlas page (`search/templates/search/atlas.html` and `whg/webpack/js/atlas.js`):
+Per §1.2 and §1.4, the Data Sources panel is renamed and reconceptualised as the **Gazetteers** offcanvas. The renaming itself, the dual Filter|Explore mode, the unified gazetteers list (Authorities + Datasets + Collections), the H3/temporality coverage filtering, the curatorial fields layered on top of the registry, and the Specialist Gazetteers expansion are specified in §1.4.
 
-- **Rename** the offcanvas: `id="sources_offcanvas"` → `id="gazetteers_offcanvas"`, title "Data Sources" → "Gazetteers", icon `fa-database` reviewed for fit. The corresponding trigger button (`#open_sources_modal`, currently bound via `data-bs-target="#sources_offcanvas"`) is updated to match. (Pending.)
-- **Remove** the "Group linked records" toggle (§4.1). (Pending — see §4.1; the toggle is still present in `atlas.html` and `atlas.js`.)
-- **Retain** the namespace inclusion/exclusion checkboxes within the unified Gazetteers list — these feed `namespaces` / `exclude_namespaces` on the search request and remain useful within the Filter mode.
-- **Add** D-PLACE as a gazetteer (unchecked by default), moved here from the Regions/Territories panel because it contains only point data and is not useful as a spatial constraint. (Pending in `atlas.html` — D-PLACE was added to the legacy `search.html` prototype but that page is being retired per §1.5; the Atlas page's Data Sources offcanvas, lines 226–287, does not yet list D-PLACE.)
-- **Add** a small indicator per gazetteer showing the count of results from that source in the current (possibly clustered) result set. (Pending.)
-- **Implement** the extended `/suggest` API (§5.3) that supplies the unified gazetteers list, the H3 coverage data, and the temporal-extent summary for coverage filtering. (Pending.)
-- **Implement** the Filter|Explore tabbing UI (§1.4). (Pending.)
-- **Implement** the "My gazetteers" toggle (§1.4.2) for logged-in users. (Pending.)
+**Delivered ahead of the extended `/suggest` API:**
+
+- ✅ **Renamed** the offcanvas: `id="sources_offcanvas"` → `id="gazetteers_offcanvas"`, title "Data Sources" → "Gazetteers", icon `fa-book-atlas`. Trigger button updated to match.
+- ✅ **Removed** the "Group linked records" toggle (§4.1) and replaced it with an informational note pointing to the Results-panel slider.
+- ✅ **Server-driven render of the standard list.** `AtlasPageView.get_context_data` queries `GazetteerRegistryEntry.objects.filter(entry_class='authority')` and the template loops over the result, replacing the previously hardcoded checkbox list. Default-checked state is driven by the new `core` field (only GeoNames, Wikidata, TGN); a small "core" badge renders next to the name. Each row carries `data-tileset-polygon-only="0|1"` and `data-gazetteer-type="…"` data attributes for client-side gating.
+- ✅ **Specialist Gazetteers expansion** (§1.4.4) — relabel of "WHG datasets", inline expansion containing a search box, an Explore-only Standard|Itinerary|Network type-pill filter, and a lazily-rendered list of WHG-namespaced datasets. Tri-state parent emits the compact `whg` alias when fully checked and the explicit list of child IDs when indeterminate. The parent row is hardcoded in the template (UI grouping, not a registry entry); the inventory loop skips any DB row with `id="whg"` defensively.
+- ✅ **Polygon-only tileset gating.** `applyTilesetGating(mode)` runs on every `setGazetteerMode` transition and on initial load: in Explore mode it disables the inputs of any row carrying `data-tileset-polygon-only="1"` (currently OSM, OHM), greys the label via the `.disabled` modifier (with `pointer-events: auto` so the explanatory tooltip still fires), unchecks any previously selected polygon-only entry, and clears `exploreSelection` if it pointed at a now-disabled row. In Filter mode the inputs are restored.
+- ✅ **Filter|Explore tabbing UI** wired (§1.4). Switching modes saves the current selection cache, swaps every authority input between `type="checkbox"` and `type="radio"` (with shared `name="gazetteer_explore"`), and restores the saved selection for the destination mode.
+- ✅ **"My gazetteers" toggle** (§1.4.2) sketched with three placeholder sections (Published, Private, Pending).
+- ✅ **Curatorial admin** — `api/admin.py::GazetteerRegistryEntryAdmin` registered (staff-only); curatorial fields editable, inventory-derived fields read-only.
+- ✅ **Inventory-push protection** — `api/views_indexing.py::GazetteerInventoryView._upsert_one` carries an inline comment naming `core`, `tileset_polygon_only`, `gazetteer_type` as admin-managed and intentionally omitted from `defaults`. `update_or_create(defaults=…)` only writes the keys present in `defaults`, so omission is sufficient to preserve curation across re-pushes (Appendix E.2).
+
+**Pending backend integration:**
+
+- **Extended `/suggest` API** (§5.3) — the gazetteer inventory currently rendered server-side from `GazetteerRegistryEntry` will be supplemented by the `/suggest` endpoint to drive coverage filtering, owner-based filtering for "My Gazetteers", and the per-gazetteer count indicators.
+- **Per-gazetteer count indicators.** Each gazetteer entry contains an empty `<span class="gazetteer-count" data-namespace="…">` slot ready to be populated from result-set aggregations.
+- **Coverage filtering** against `h3_coverage` and `temporal_extent` (§1.4.1).
+- **Real per-user My Gazetteers list** (§1.4.2) replacing the placeholder data once `/suggest` returns `owner_user_id` and `status`.
+- **Specialist type-pill backend wiring.** The `gazetteer_type` field on `GazetteerRegistryEntry` is currently sketch-only; the type-pill filter hides DOM rows by `data-gazetteer-type` but no backend semantics are attached. Itinerary and Network are forward-looking placeholders.
 
 **Spatial-source changes already completed:**
+
 - D-PLACE removed from the Territory tab's polity dataset toggle (`politySelector.js`, `POLITY_DATASETS` now contains only `cliopatria` and `nativeland`). ✅ DONE
 - D-PLACE removed from the Atlas page's available spatial sources (`search/views.py`, `available_sources` no longer lists `dplace`). ✅ DONE
+- D-PLACE added to the renamed Gazetteers offcanvas in `atlas.html` (unchecked by default). ✅ DONE
 - "OSM/OHM (Miscellaneous)" added to the Region tab's namespace toggle (`regionSelector.js`, `NAMESPACE_OPTIONS` includes `osm_misc`). ✅ DONE — covers non-standard `boundary=` tags (aboriginal_lands, barony, civil, civil_parish, climatic_zone, geographic, histori*, indigenous_administration, native_reservation, parish, political, region, etc.). Backend tile/query support pending.
 
 ### 4.9 JavaScript implementation
@@ -968,6 +1011,8 @@ Depends on Phase 2.
 
 The full implementation depends on Phase 2 item 3 (`/suggest` extension) and the per-gazetteer pre-computation called for in `plan-ingestionRebuild.execution.md`. The UI scaffolding has been **sketched** in `atlas.html` and `atlas.js` ahead of that backend work so colleagues can preview the intended interaction model; everything dependent on missing data is rendered disabled or inert and labelled accordingly.
 
+The **standard authority list** is no longer hardcoded — it is rendered from `GazetteerRegistryEntry` rows (`entry_class='authority'`) populated by the inventory pipeline (or by the `0003_gazetteer_curatorial_fields` data-migration fallback that seeds the ten currently-known authorities so the page renders before the first inventory push lands). The migration uses `atomic = False` because applying it to an already-populated table fires PostgreSQL trigger events that block in-transaction `CREATE INDEX` for the new `core` field.
+
 #### Sketched in atlas.html / atlas.js / atlas.css (record)
 
 These pieces are visible on the Atlas page now but are not load-bearing — selecting them produces no functional change beyond the UI state described:
@@ -977,8 +1022,14 @@ These pieces are visible on the Atlas page now but are not load-bearing — sele
 - **My Gazetteers card** (Explore mode only). A second card matching the coverage-filter card's styling, holding a single switch for **My Gazetteers**. Hidden by default and revealed only when the user clicks the **Explore** tab. When on, it hides the standard gazetteer list and shows a placeholder list grouped into **Published** (`Welsh Place Names`, `Roman Britain Sites` as samples) and **Pending** (`Medieval Pilgrimage Routes` (draft), `Hanseatic Ports` (submitted) as samples). An italic note above the placeholder list flags it as illustrative; the real list will be populated from the extended `/suggest` API once `owner_user_id` and `status` are delivered. <br>**Sketch-period note**: the `user.is_authenticated` template guard around the toggle and placeholder list has been temporarily removed so colleagues without accounts can review the intent. The guard will be reintroduced when this is wired to real per-user data. (Documenting comments inside the template avoid using literal Django tag delimiters around `if`/`endif` because Django parses tags even inside HTML comments.)
 - **Explore-mode capabilities note.** A small left-bordered note that appears only in Explore mode, explaining what signed-in users can do during exploration: add **Attestations** to any place when exploring any gazetteer; when exploring **their own** gazetteer, additionally add places, edit data and metadata, and adjust clustering — equivalent to the reconciliation/accessioning workflow in v3.2.
 - **Per-gazetteer count placeholders.** Each gazetteer entry contains an empty `<span class="gazetteer-count" data-namespace="…">` slot adjacent to the label, ready to be populated from result-set aggregations once §4.8 is wired.
+- **"Core" badge and default selection.** Backed by the new `core` field on `GazetteerRegistryEntry` (§1.4.3). The template's loop emits `checked` on the input only when `g.core`; a small "core" badge renders next to the label. Default-selected set is GeoNames, Wikidata, TGN. Replaces the previously hardcoded `checked` attributes.
+- **Polygon-only tileset gating.** Backed by the new `tileset_polygon_only` field. `applyTilesetGating(mode)` (in `atlas.js`) disables OSM and OHM (and any other row carrying `data-tileset-polygon-only="1"`) in Explore mode with an explanatory tooltip; Filter mode keeps them selectable. Re-runs on every `setGazetteerMode` transition and on initial load. CSS class `.authority-item.disabled` provides the greyed-out treatment with `pointer-events: auto` so the tooltip still fires.
+- **Specialist Gazetteers expansion.** The "WHG datasets" row is **relabelled** "Specialist Gazetteers" and behaves as an inline-expandable container (§1.4.4). Lazy-rendered children come from the `specialist_gazetteers` JSON script tag (a serialisation of `GazetteerRegistryEntry.objects.filter(entry_class='dataset', namespace='whg')`). Tri-state parent emits `whg` when fully checked and the explicit list of child IDs when indeterminate. Search box performs case-insensitive substring filtering. Standard|Itinerary|Network type-pill filter (Explore-only, **Standard active by default**) hides children by `data-gazetteer-type`; the convention is "all pills off → show all".
+- **"Private" section in My Gazetteers placeholder list.** Three sections now: **Published**, **Private** (new — visible only to owner, never submitted for review), **Pending**.
 - **Continue button.** A primary "← Continue" button at the bottom of the offcanvas-body, always visible across Filter / Explore / My Gazetteers states. The leftward arrow + left alignment signals "return to the map UI". Closes the offcanvas via Bootstrap's `data-bs-dismiss="offcanvas"`; current selections have already been mirrored into `filterState` by the change handlers, so no extra wiring is needed.
 - **No explicit "open" action**. Selecting a gazetteer in Explore mode applies the filter via the existing change handler; the user dismisses the offcanvas with **Continue**, the close button, or by clicking the map.
+- **Curatorial admin and inventory-push protection.** `api/admin.py::GazetteerRegistryEntryAdmin` registered (staff-only) with only `core`, `tileset_polygon_only`, `gazetteer_type` editable. `api/views_indexing.py::GazetteerInventoryView._upsert_one` carries an inline comment naming these fields as admin-managed and intentionally omitted from `defaults`, so re-pushes preserve curation.
+- **Sitewide navbar "Gazetteers" entry** (§1.5). New `<li class="nav-item">` to the right of Atlas pointing at `?panel=gazetteers&gmode=explore`; the URL handler in `atlas.js` triggers native `.click()` on the existing Places button, the offcanvas trigger, and the Explore mode tab so all wired side-effects fire as if the user clicked manually.
 
 The previous offcanvas-internal "Clustering" section (with its informational note pointing to the Results-panel slider) has been removed; the slider lives in the Results panel and does not need a placeholder header here.
 
@@ -986,11 +1037,12 @@ The previous offcanvas-internal "Clustering" section (with its informational not
 
 When the backend pieces above land, the sketch is replaced/extended as follows:
 
-1. Populate the renamed Gazetteers offcanvas from the extended `/suggest` payload — replacing the hard-coded checkbox list with a server-driven render that also includes WHG datasets and collections (§1.4).
+1. Populate the **Specialist Gazetteers** child list and any future per-user "My Gazetteers" entries from the extended `/suggest` payload — supplementing (not replacing) the standard list, which is already server-driven from `GazetteerRegistryEntry` (§1.4, §1.4.4).
 2. Promote the Filter | Explore tabbing from a sketch to a real interaction: in Filter mode the existing live-apply behaviour continues; in Explore mode, the radio-style single-select feeds a single-gazetteer Explorer entry point that loads the gazetteer's records as the primary content (§1.4).
 3. Implement coverage filtering against `h3_coverage` and `temporal_extent`: gazetteers whose coverage does not intersect the active Area filter (or whose extent does not intersect the active period filter) are disabled and (default-hidden) hidden; a toggle reveals hidden entries (§1.4.1).
-4. Replace the placeholder My Gazetteers list with the real per-user list returned by `/suggest`, preserving the Published / Pending grouping and the entry-point semantics into the contributor working scope (§1.4.2).
+4. Replace the placeholder My Gazetteers list (Published / Private / Pending sections) with the real per-user list returned by `/suggest`, preserving the section grouping and the entry-point semantics into the contributor working scope (§1.4.2).
 5. Wire the per-gazetteer count indicators from the result-set facet aggregations, reflecting the current (possibly clustered) result set (§4.8).
+6. Attach backend semantics to the `gazetteer_type` field — the type-pill filter currently hides DOM rows by `data-gazetteer-type` but does not propagate the selection into the search request. Define how Itinerary and Network gazetteers differ from Standard at the search/discovery level, then either filter at the request layer or surface a different rendering for each type in Explorer view (§1.4.4).
 
 ### Phase 5 — Visibility scoping foundation
 
@@ -1159,6 +1211,7 @@ This master plan does not directly modify `plan-dynamicClustering.prompt.md` (th
 - **Pending-dataset isolation** — pending records are admitted to the same indices as public records but with `dataset_status: pending`; the discovery filter (above) is what makes them invisible to off-scope users. Ingestion should not create separate per-contributor indices.
 - **`contributor_attestations` schema extension** — `dataset_id` and `status: pending` fields must be added to the table on DO PostgreSQL (§7.4). The ingestion pipeline writes pending assertions as the contributor reconciles, and the publication transaction flips them to `status: active` (§9.3).
 - **`/suggest` source data** — the unified Gazetteers list (§5.3) is sourced from the same metadata the ingestion pipeline maintains: name, description, namespace, owner, record count, status, plus the H3 coverage and temporal extent specified above.
+- **Curatorial fields are admin-managed and must never be in the inventory push.** The `GazetteerRegistryEntry` model carries three curatorial fields (`core`, `tileset_polygon_only`, `gazetteer_type`) that are set by staff via Django admin (§1.4.3) and **must never** appear in the inventory-push payload from `processing/push_gazetteer_inventory.py`. The Django side enforces this by omitting them from the `defaults` dict in `api/views_indexing.py::GazetteerInventoryView._upsert_one`; `update_or_create(defaults=…)` only writes the keys present in `defaults`, so omission is sufficient — but anyone widening that dict in future could silently blow away staff curation. An inline comment in `_upsert_one` names the protected fields, and a unit test asserting curatorial-field preservation across re-pushes is recommended.
 - **Legacy v3.2 reconciliation flagging (no migration)** — DO PostgreSQL remains the canonical store for every contributor gazetteer (legacy and new). The ingestion pipeline pulls these from DO via `authorities/whg-places.py` on every run as `whg`-namespaced gazetteers, with no payload migration. The only one-time legacy work is the DO-side schema extension that adds `legacy_v3_2 BOOLEAN DEFAULT false` to `contributor_attestations` and the data-update that sets `legacy_v3_2 = true` on every existing v3.2-era reconciliation link; the Pitt-side hard-link harvest then propagates a `:legacy_v3_2` suffix on `source_id` for downstream filterability (§10.2). This corresponds to Batch 13b in `plan-ingestionRebuild.execution.md`.
 - **Retention sweep** — the ingestion pipeline (or a partner job) implements the one-year retention sweep on pending datasets (§10.1), with eleven-month notification, twelve-month deletion, and appropriate exclusions for `submitted` and `private_permanent` datasets.
 - **Format-only validation at upload** — the ingestion pipeline performs format-level validation (parsing, required fields, coordinate ranges, well-formed place_ids) but not semantic validation (§8.2). Semantic validation is the contributor's task during reconciliation and the editor's task during review.
