@@ -550,6 +550,9 @@ CACHES = {
 
 SITEMAP_CACHE = 'sitemap_cache'
 
+# Allow inventory pushes from Pitt VM with large h3 cell lists.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024   # 50 MB
+
 ## GIS Libraries
 GDAL_LIBRARY_PATH = '/usr/lib/libgdal.so.28'
 GEOS_LIBRARY_PATH = '/usr/lib/x86_64-linux-gnu/libgeos_c.so.1'
