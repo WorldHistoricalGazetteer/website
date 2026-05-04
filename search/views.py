@@ -121,13 +121,16 @@ class AtlasPageView(TemplateView):
         # entries on/off via the Django admin (api/admin.py); previously
         # this list was hardcoded inline. See migration 0005 for seeds.
         from api.models import GazetteerRegistryEntry
+        # Region Source list is driven solely by the ``region_source`` flag.
+        # ``no_explore`` is independent — it gates the Gazetteers offcanvas
+        # Explore mode (see atlas.js::applyTilesetGating), not this panel.
         # Display order matches the panel's existing order so admin toggles
         # don't visually reshuffle. Unknown ids fall to the end alphabetically.
         REGION_SOURCE_ORDER = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl']
         region_source_rows = (
             GazetteerRegistryEntry.objects
             .filter(region_source=True, status='published')
-            .values('id', 'name', 'description', 'no_explore')
+            .values('id', 'name', 'description')
         )
         ordered = sorted(
             region_source_rows,
@@ -141,7 +144,7 @@ class AtlasPageView(TemplateView):
                 'id': row['id'],
                 'label': row['name'],
                 'description': row['description'] or '',
-                'enabled': not row['no_explore'],
+                'enabled': True,
             }
             for row in ordered
         ])
