@@ -8,6 +8,12 @@ may access the site.  All other users (anonymous or non-superuser) are
 redirected to the Django **admin** login page (ORCiD is not available on
 dev because the redirect URI differs from the registered production one).
 
+Requests carrying an ``Authorization: Bearer …`` header bypass the gate so
+DRF's own token-auth class (``api.authentication.TokenQueryOrBearerAuthentication``)
+can validate the credential at the view layer. This keeps machine-to-machine
+API endpoints (e.g. the ingestion-pipeline inventory push) working on dev
+without exposing the rest of the site to anonymous traffic.
+
 On any other environment (production, local, etc.) this middleware is a
 transparent no-op.
 """
@@ -40,6 +46,15 @@ class DevServerAccessMiddleware:
 
         # Always allow the whitelisted URL prefixes
         if any(request.path.startswith(p) for p in self.ALLOWED_PREFIXES):
+            return self.get_response(request)
+
+        # Bearer-token API requests bypass the session gate and let DRF's
+        # own auth class validate the credential. This is checked BEFORE
+        # ``request.user`` because session middleware reports anonymous for
+        # bearer-only requests, which would otherwise redirect them to the
+        # admin login.
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.lower().startswith('bearer '):
             return self.get_response(request)
 
         # Require authentication
