@@ -177,7 +177,7 @@ class AtlasPageView(TemplateView):
             .order_by('name')
             .values(
                 'id', 'name', 'description', 'namespace', 'core',
-                'tileset_polygon_only', 'gazetteer_type', 'record_count',
+                'no_explore', 'gazetteer_type', 'record_count',
             )
         )
         specialist_gazetteers = list(

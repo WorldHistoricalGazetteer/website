@@ -710,13 +710,13 @@ function updateGazetteerListVisibility() {
     if (myList) myList.classList.toggle('d-none', !showMine);
 }
 
-/* ── Polygon-only tileset gating (OSM/OHM in Explore mode) ──
+/* ── Explore-mode gating for ``no_explore`` gazetteers ──
    Disables the input and visually greys the row in Explore mode; restores it in
    Filter mode. The original tooltip is preserved on a data-bs-title-original
    attribute so it can be swapped back when leaving Explore. */
 function applyTilesetGating(mode) {
     const labels = document.querySelectorAll(
-        '#gazetteers_offcanvas .authority-item[data-tileset-polygon-only="1"]'
+        '#gazetteers_offcanvas .authority-item[data-no-explore="1"]'
     );
     const disabled = (mode === 'explore');
     labels.forEach(label => {
