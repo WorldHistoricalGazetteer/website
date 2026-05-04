@@ -87,6 +87,15 @@ def unseed_region_sources(apps, schema_editor):
 
 class Migration(migrations.Migration):
 
+    # Run each operation in its own transaction. Required on PostgreSQL when
+    # this migration is applied against an already-populated table: the
+    # AddField for ``region_source`` and ``reingest_status`` (both with
+    # ``db_index=True``) rewrites every existing row, leaving pending trigger
+    # events that block the implicit ``CREATE INDEX`` in the same transaction
+    # (psycopg2.errors.ObjectInUse). With ``atomic = False``, the column add
+    # commits before the index is built. Mirrors migration 0003.
+    atomic = False
+
     dependencies = [
         ("api", "0004_seed_whg_specialist_parent"),
     ]
