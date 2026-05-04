@@ -596,9 +596,9 @@ function switchSearchMode(mode) {
 
 function buildAreasPlaceholder() {
     if (layerPalette && layerPalette.getAdminLevel() !== null) {
-        return `Search for areas…`;
+        return `Search for regions…`;
     }
-    return 'Search for areas…';
+    return 'Search for regions…';
 }
 
 /**

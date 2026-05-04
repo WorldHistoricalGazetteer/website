@@ -22,7 +22,7 @@ export default class AreaSearchRouter {
     }
 
     /**
-     * Search for areas matching the query, routing to appropriate backends.
+     * Search for regions matching the query, routing to appropriate backends.
      *
      * @param {string} query - search text (min 2 chars)
      * @param {object} options - { adminLevel, namespace, limit, temporalStart, temporalEnd }
