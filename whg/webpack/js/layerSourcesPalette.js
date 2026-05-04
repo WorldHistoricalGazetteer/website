@@ -44,6 +44,13 @@ const ZOOM_THRESHOLDS = [
 /* Sources that support boundary display */
 const BOUNDARY_SOURCES = new Set(['osm', 'ohm', 'osm_misc']);
 
+/* Map a layer-sources palette namespace to the boundary tile source-layer. */
+const NAMESPACE_TO_BOUNDARY_SOURCE = {
+    osm: 'osm_admin',
+    ohm: 'ohm_admin',
+    osm_misc: 'osm_misc',
+};
+
 /* Tooltip descriptions for known sources */
 const SOURCE_TOOLTIPS = {
     osm:        'OpenStreetMap — modern administrative boundaries and geographic features',
@@ -224,18 +231,17 @@ export default class LayerSourcesPalette {
             heroMap.hideBoundaries();
             return;
         }
-        const filters = ['all', ['==', ['get', 'admin_level'], this._currentAdminLevel]];
-
-        // For admin levels 0–1 with OSM, include m49 namespace
-        if (this._currentNamespace === 'osm' && this._currentAdminLevel <= 1) {
-            filters.push(['any',
-                ['==', ['get', 'namespace'], 'osm'],
-                ['==', ['get', 'namespace'], 'm49'],
-            ]);
-        } else {
-            filters.push(['==', ['get', 'namespace'], this._currentNamespace]);
+        const source = NAMESPACE_TO_BOUNDARY_SOURCE[this._currentNamespace] || 'osm_admin';
+        if (source === 'osm_misc') {
+            // osm_misc records carry tag-named `boundary` values, not admin
+            // levels; the dropdown's level concept doesn't apply here.
+            heroMap.showBoundaries({ source });
+            return;
         }
-        heroMap.showBoundaries(filters);
+        heroMap.showBoundaries({
+            source,
+            boundaryValues: [String(this._currentAdminLevel)],
+        });
     }
 
     /* ──────────────────────────────────────────────────────────────── */

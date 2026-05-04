@@ -991,26 +991,29 @@ class TraceGeomView(View):
 
 class BoundarySearchView(View):
     """
-    Search the `boundaries` ES index for admin regions by name.
+    Search the `places` ES index for boundary-flagged records by name.
 
-    Searches across name, name_local, and alt_names.* fields so that
-    regions can be found by their name in any language.
+    The legacy `boundaries` ES index has been retired; boundary-flagged
+    places now live in the `places` index with a top-level `boundary`
+    keyword field (string admin-level "0"–"11" for OSM/OHM admin
+    relations, plus tag values like "civil_parish" or "polity"/"period"
+    for the miscellaneous, Cliopatria, and PeriodO authorities).
 
     GET parameters:
-        q           — name prefix (min 2 chars)
-        admin_level — exact admin level (0-10), optional
-        namespace   — 'osm', 'ohm', or comma-separated e.g. 'osm,m49'; optional
-        limit       — max results (default 20, max 50)
+        q          — name prefix (min 2 chars)
+        boundary   — exact `boundary` value (e.g. "2" for country); optional
+        namespace  — 'osm' or 'ohm' (single value); optional
+        limit      — max results (default 20, max 50)
 
-    Returns JSON: { results: [ {id, name, name_local, admin_level,
-                                 namespace, bounds, repr_point, ccodes} ] }
+    Returns JSON: { results: [ {id, name, boundary, namespace, bounds,
+                                 repr_point, ccodes} ] }
     """
 
-    BOUNDARIES_INDEX = 'boundaries'
+    PLACES_INDEX = 'places'
 
     def get(self, request):
         q = request.GET.get('q', '').strip()
-        admin_level = request.GET.get('admin_level')
+        boundary = request.GET.get('boundary', '').strip()
         namespace = request.GET.get('namespace', '').strip()
         try:
             limit = min(int(request.GET.get('limit', 20)), 50)
@@ -1020,50 +1023,41 @@ class BoundarySearchView(View):
         if not q or len(q) < 2:
             return JsonResponse({'results': []})
 
-        # Search across name, name_local, and all alt_names.* sub-fields
-        name_query = {
-            'bool': {
-                'should': [
-                    {'match_phrase_prefix': {'name': {'query': q, 'max_expansions': 20, 'boost': 3}}},
-                    {'match_phrase_prefix': {'name_local': {'query': q, 'max_expansions': 20, 'boost': 2}}},
-                    {'multi_match': {
-                        'query': q,
-                        'type': 'phrase_prefix',
-                        'fields': ['alt_names.*'],
-                        'max_expansions': 20,
-                    }},
-                ],
-                'minimum_should_match': 1,
-            }
-        }
-
-        must = [name_query]
-        if admin_level is not None and admin_level != '':
-            try:
-                must.append({'term': {'admin_level': int(admin_level)}})
-            except (ValueError, TypeError):
-                pass
-
-        # Support comma-separated namespace values (e.g. 'osm,m49')
+        must = [
+            {'exists': {'field': 'boundary'}},
+            {
+                'bool': {
+                    'should': [
+                        {'match_phrase_prefix': {'title': {
+                            'query': q, 'max_expansions': 20, 'boost': 3,
+                        }}},
+                        {'nested': {
+                            'path': 'toponyms',
+                            'query': {'match_phrase_prefix': {'toponyms.label': {
+                                'query': q, 'max_expansions': 20,
+                            }}},
+                        }},
+                    ],
+                    'minimum_should_match': 1,
+                },
+            },
+        ]
+        if boundary:
+            must.append({'term': {'boundary': boundary}})
         if namespace:
-            ns_values = [v.strip() for v in namespace.split(',') if v.strip()]
-            if len(ns_values) == 1:
-                must.append({'term': {'namespace': ns_values[0]}})
-            elif len(ns_values) > 1:
-                must.append({'terms': {'namespace': ns_values}})
+            must.append({'term': {'namespace': namespace}})
 
         body = {
             'query': {'bool': {'must': must}},
             'size': limit,
             '_source': [
-                'boundary_id', 'name', 'name_local', 'admin_level',
-                'namespace', 'bounds', 'repr_point', 'ccodes',
+                'place_id', 'title', 'boundary', 'namespace', 'ccodes', 'geometries',
             ],
         }
 
         try:
             es = settings.ES_CONN
-            result = es.search(index=self.BOUNDARIES_INDEX, body=body)
+            result = es.search(index=self.PLACES_INDEX, body=body)
         except Exception as exc:
             logger.warning('BoundarySearchView: ES query failed: %s', exc)
             return JsonResponse({'results': [], 'error': str(exc)}, status=200)
@@ -1071,14 +1065,14 @@ class BoundarySearchView(View):
         results = []
         for hit in result.get('hits', {}).get('hits', []):
             src = hit['_source']
+            geom = (src.get('geometries') or [{}])[0]
             results.append({
-                'id': src.get('boundary_id', ''),
-                'name': src.get('name', ''),
-                'name_local': src.get('name_local'),
-                'admin_level': src.get('admin_level'),
+                'id': src.get('place_id', ''),
+                'name': src.get('title', ''),
+                'boundary': src.get('boundary'),
                 'namespace': src.get('namespace', ''),
-                'bounds': src.get('bounds'),
-                'repr_point': src.get('repr_point'),
+                'bounds': geom.get('bounds'),
+                'repr_point': geom.get('repr_point'),
                 'ccodes': src.get('ccodes', []),
             })
 

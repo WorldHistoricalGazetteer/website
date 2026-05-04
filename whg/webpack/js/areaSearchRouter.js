@@ -63,21 +63,14 @@ export default class AreaSearchRouter {
         const params = new URLSearchParams({ q: query, limit: String(options.limit || 20) });
 
         if (options.adminLevel != null && options.adminLevel !== '') {
-            params.set('admin_level', String(options.adminLevel));
+            params.set('boundary', String(options.adminLevel));
         }
 
-        // Build namespace filter
+        // Single-namespace filter only — both active means no constraint.
         const namespaces = [];
         if (activeSources.includes('osm')) namespaces.push('osm');
         if (activeSources.includes('ohm')) namespaces.push('ohm');
-        if (namespaces.length > 0 && namespaces.length < 2) {
-            // If both are active, don't filter by namespace
-            params.set('namespace', namespaces[0]);
-        }
-        // For admin levels 0-1, Modern includes 'osm' and 'm49'
-        if (options.adminLevel != null && options.adminLevel <= 1 && activeSources.includes('osm')) {
-            params.set('namespace', 'osm,m49');
-        }
+        if (namespaces.length === 1) params.set('namespace', namespaces[0]);
 
         try {
             const resp = await fetch(`/search/boundaries/?${params}`);
@@ -86,13 +79,13 @@ export default class AreaSearchRouter {
             return (data.results || []).map(r => ({
                 id: r.id || `boundary:${r.namespace}:${r.name}`,
                 label: r.name,
-                sublabel: `Level ${r.admin_level} · ${(r.namespace || 'osm').toUpperCase()}`
+                sublabel: `Level ${r.boundary} · ${(r.namespace || 'osm').toUpperCase()}`
                     + (r.ccodes && r.ccodes.length ? ` · ${r.ccodes.join(', ')}` : ''),
                 source: r.namespace || 'osm',
                 source_type: 'boundary',
                 bounds: r.bounds,
                 repr_point: r.repr_point,
-                admin_level: r.admin_level,
+                boundary: r.boundary,
                 namespace: r.namespace || 'osm',
                 geometry: null, // Must click polygon on map to get geometry
                 _fromIndex: true,

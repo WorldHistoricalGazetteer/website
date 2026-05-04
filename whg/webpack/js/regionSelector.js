@@ -62,6 +62,13 @@ const NAMESPACE_OPTIONS = [
     { value: 'osm_misc', label: 'Misc.', title: 'OSM/OHM miscellaneous boundary types — includes aboriginal lands, baronies, civil and political boundaries, climatic zones, geographic regions, historical and obsolete administrative divisions, indigenous territories, parishes, and other non-standard boundary classifications' },
 ];
 
+/** Namespace toggle value → boundary tile source-layer (= source ID). */
+const NAMESPACE_TO_SOURCE = {
+    osm: 'osm_admin',
+    ohm: 'ohm_admin',
+    osm_misc: 'osm_misc',
+};
+
 /* ───── Helpers ───── */
 
 /** Is the tier one of the admin-boundary tiers? */
@@ -78,6 +85,13 @@ function getAdminLevel(tier) {
 /** Tiers that should be gated behind map zoom (everything except 'off'). */
 function isZoomGatedTier(tier) {
     return tier !== 'off';
+}
+
+/** Parse a `boundary` field value to a numeric admin level, or null. */
+function parseAdminLevel(boundary) {
+    if (boundary == null) return null;
+    const n = parseInt(String(boundary), 10);
+    return Number.isFinite(n) ? n : null;
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -222,29 +236,24 @@ export default class RegionSelector {
             contextMap.hideBoundaries();
             return;
         }
-
         const adminLevel = getAdminLevel(tier);
         if (adminLevel == null) {
             contextMap.hideBoundaries();
             return;
         }
 
-        // Exact admin_level match (not cumulative)
-        const filters = ['all', ['==', ['get', 'admin_level'], adminLevel]];
-
-        if (this._currentNamespace) {
-            if (this._currentNamespace === 'osm' && adminLevel <= 1) {
-                // Levels 0-1: Modern includes both 'osm' (Antarctica) and 'm49' (assembled regions)
-                filters.push(['any',
-                    ['==', ['get', 'namespace'], 'osm'],
-                    ['==', ['get', 'namespace'], 'm49'],
-                ]);
-            } else {
-                filters.push(['==', ['get', 'namespace'], this._currentNamespace]);
-            }
+        // Map the namespace toggle (osm | ohm | osm_misc) to the boundary
+        // tile source. For osm/ohm the tier picks a single `boundary` value
+        // ("0"–"8"); the synthetic continental/sub-continental rows live
+        // under the osm namespace as place_ids "osm:m49_*".
+        const source = NAMESPACE_TO_SOURCE[this._currentNamespace] || 'osm_admin';
+        if (source === 'osm_misc') {
+            // osm_misc records carry tag-named `boundary` values, not admin
+            // levels. Tier doesn't apply — show everything in the source.
+            contextMap.showBoundaries({ source });
+            return;
         }
-
-        contextMap.showBoundaries(filters);
+        contextMap.showBoundaries({ source, boundaryValues: [String(adminLevel)] });
     }
 
     /* ── Handle boundary click from the context map ── */
@@ -254,11 +263,16 @@ export default class RegionSelector {
         // Only handle when an admin tier is active
         if (!isAdminTier(this._currentTier)) return;
 
-        const id = `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`;
+        // The new tilesets carry a string `boundary` field ("0"–"11" for
+        // admin tiers); convert back to the numeric admin level the chip
+        // and filterState expect.
+        const adminLevel = parseAdminLevel(detail.boundary);
+        const id = detail.place_id
+            || `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`;
         this._addBoundaryRegion({
             id,
             label: detail.name || 'Unnamed',
-            admin_level: detail.admin_level,
+            admin_level: adminLevel,
             namespace: detail.namespace || 'osm',
             geometry: detail.geometry,
         });
@@ -384,21 +398,17 @@ export default class RegionSelector {
 
         if (isAdminTier(tier)) {
             const adminLevel = getAdminLevel(tier);
+            const boundaryValue = String(adminLevel);
 
-            // 1. Query the ES boundaries index (searches all regions in all languages)
+            // 1. Query the ES `places` index for boundary-flagged docs.
             try {
                 const params = new URLSearchParams({
                     q: query,
-                    admin_level: String(adminLevel),
+                    boundary: boundaryValue,
                     limit: '20',
                 });
-                if (this._currentNamespace) {
-                    if (this._currentNamespace === 'osm' && adminLevel <= 1) {
-                        // Levels 0-1: Modern includes both 'osm' and 'm49'
-                        params.set('namespace', 'osm,m49');
-                    } else {
-                        params.set('namespace', this._currentNamespace);
-                    }
+                if (this._currentNamespace && this._currentNamespace !== 'osm_misc') {
+                    params.set('namespace', this._currentNamespace);
                 }
                 const resp = await fetch(`/search/boundaries/?${params}`);
                 if (resp.ok) {
@@ -407,14 +417,14 @@ export default class RegionSelector {
                         this._results = data.results.map(r => ({
                             id: r.id || `boundary:${r.namespace}:${r.name}`,
                             label: r.name,
-                            sublabel: `Level ${r.admin_level} \u00b7 ${(r.namespace || 'osm').toUpperCase()}`
+                            sublabel: `Level ${r.boundary} \u00b7 ${(r.namespace || 'osm').toUpperCase()}`
                                 + (r.ccodes && r.ccodes.length ? ` \u00b7 ${r.ccodes.join(', ')}` : ''),
                             bounds: r.bounds,
                             repr_point: r.repr_point,
-                            admin_level: r.admin_level,
+                            boundary: r.boundary,
                             namespace: r.namespace || 'osm',
-                            // geometry not available from ES search (too heavy);
-                            // user must zoom to the area and click the polygon
+                            // No geometry returned \u2014 user clicks the polygon on
+                            // the map after the search zooms to bounds.
                             geometry: null,
                             _boundary: true,
                             _fromIndex: true,
@@ -427,16 +437,15 @@ export default class RegionSelector {
                 console.warn('RegionSelector: ES boundary search failed, falling back to tiles', e);
             }
 
-            // 2. Fall back to tile-based search (only finds loaded/rendered features)
-            const tileFeatures = contextMap.searchBoundaryFeatures(
-                query, adminLevel, this._currentNamespace
-            );
+            // 2. Fall back to tile-based search across loaded/rendered features.
+            const tileFeatures = contextMap.searchBoundaryFeatures(query, [boundaryValue]);
 
             if (tileFeatures.length > 0) {
                 this._results = tileFeatures.map(f => ({
-                    id: `boundary:${f.properties.namespace || 'osm'}:${f.properties.osm_id || f.properties.id || f.properties.name}`,
+                    id: f.properties.place_id
+                        || `boundary:${f.properties.namespace || 'osm'}:${f.properties.name}`,
                     label: f.properties.name || 'Unnamed',
-                    sublabel: `Level ${f.properties.admin_level || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
+                    sublabel: `Level ${f.properties.boundary || '?'} \u00b7 ${(f.properties.namespace || 'osm').toUpperCase()}`,
                     geometry: f.geometry,
                     properties: f.properties,
                     _boundary: true,

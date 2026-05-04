@@ -12,7 +12,6 @@
  */
 
 import filterState from './filterState';
-import { decodeBoundaryId } from './boundaryId';
 
 const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
@@ -22,7 +21,23 @@ const SUGGESTION_SOURCE = 'suggestion-markers';
 const SUGGESTION_CIRCLES = 'suggestion-circles';
 const SUGGESTION_LABELS = 'suggestion-labels';
 
-const BOUNDARIES_SOURCE_LAYER = 'boundaries';
+// Boundary source-layer names in the whg-context style. Each is also
+// the source ID for its tileset. See contextMap.js for full schema notes.
+const BOUNDARY_SOURCE_LAYERS = ['osm_admin', 'ohm_admin', 'osm_misc', 'po', 'clio', 'nl'];
+
+function filtersIntersect(layerFilter, requestedValues) {
+    if (!requestedValues || requestedValues.length === 0) return true;
+    const requested = new Set(requestedValues);
+    if (!Array.isArray(layerFilter)) return true;
+    if (layerFilter[0] === 'match' && Array.isArray(layerFilter[2])) {
+        for (const v of layerFilter[2]) if (requested.has(v)) return true;
+        return false;
+    }
+    if (layerFilter[0] === '==' && typeof layerFilter[2] === 'string') {
+        return requested.has(layerFilter[2]);
+    }
+    return true;
+}
 
 class HeroMap {
     constructor() {
@@ -35,13 +50,14 @@ class HeroMap {
         this._spinning = false;
         this._spinRAF = null;
         this._spinStopped = false;
+        this._layersBySource = {};
+        this._fillBySource = {};
         this._boundaryLayerIds = [];
-        this._boundaryFillId = null;
-        this._boundarySourceId = null;
         this._originalFilters = {};
         this._hoverTooltip = null;
-        this._hoveredBoundaryId = null;
-        this._selectedBoundaryId = null;
+        this._currentSource = null;
+        this._hovered = null;
+        this._selected = null;
     }
 
     /**
@@ -308,9 +324,17 @@ class HeroMap {
         const style = this.map.getStyle();
         if (!style || !style.layers) return;
 
-        this._boundaryLayerIds = style.layers
-            .filter(l => l['source-layer'] === BOUNDARIES_SOURCE_LAYER)
-            .map(l => l.id);
+        this._layersBySource = {};
+        this._fillBySource = {};
+        for (const l of style.layers) {
+            const sl = l['source-layer'];
+            if (!BOUNDARY_SOURCE_LAYERS.includes(sl)) continue;
+            (this._layersBySource[sl] ||= []).push(l.id);
+            if (l.type === 'fill' && !this._fillBySource[sl]) {
+                this._fillBySource[sl] = l.id;
+            }
+        }
+        this._boundaryLayerIds = Object.values(this._layersBySource).flat();
 
         if (this._boundaryLayerIds.length === 0) {
             console.warn('heroMap: no boundary layers found in style');
@@ -319,123 +343,112 @@ class HeroMap {
 
         this._originalFilters = {};
         for (const layerId of this._boundaryLayerIds) {
-            const layerDef = style.layers.find(l => l.id === layerId);
-            this._originalFilters[layerId] = layerDef?.filter
-                ? JSON.parse(JSON.stringify(layerDef.filter)) : null;
+            const def = style.layers.find(l => l.id === layerId);
+            this._originalFilters[layerId] = def?.filter
+                ? JSON.parse(JSON.stringify(def.filter)) : null;
         }
-
-        this._boundaryFillId = this._boundaryLayerIds.find(id => {
-            const layer = this.map.getLayer(id);
-            return layer && layer.type === 'fill';
-        }) || this._boundaryLayerIds[0];
-
-        const fillLayerDef = style.layers.find(l => l.id === this._boundaryFillId);
-        this._boundarySourceId = fillLayerDef ? fillLayerDef.source : null;
 
         for (const layerId of this._boundaryLayerIds) {
-            try { this.map.setLayoutProperty(layerId, 'visibility', 'none'); }
-            catch (e) { /* */ }
+            try { this.map.setLayoutProperty(layerId, 'visibility', 'none'); } catch (e) {}
         }
 
-        // Hover tooltip
         this._hoverTooltip = document.createElement('div');
         this._hoverTooltip.className = 'boundary-hover-tooltip';
         this._hoverTooltip.style.display = 'none';
         document.body.appendChild(this._hoverTooltip);
 
-        // Hover feature-state
-        this._hoveredBoundaryId = null;
-        this.map.on('mousemove', this._boundaryFillId, (e) => {
-            this.map.getCanvas().style.cursor = 'pointer';
-            if (e.features && e.features.length > 0) {
-                const feature = e.features[0];
-                const featureId = feature.id;
-                if (featureId != null && featureId !== this._hoveredBoundaryId) {
-                    if (this._hoveredBoundaryId != null) {
-                        try {
-                            this.map.removeFeatureState(
-                                { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._hoveredBoundaryId },
-                                'hover'
-                            );
-                        } catch (err) { /* */ }
-                    }
-                    this._hoveredBoundaryId = featureId;
-                    try {
-                        this.map.setFeatureState(
-                            { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: featureId },
-                            { hover: true }
-                        );
-                    } catch (err) { /* */ }
-                }
-                const name = feature.properties?.name;
-                if (name && this._hoverTooltip) {
-                    this._hoverTooltip.textContent = name;
-                    this._hoverTooltip.style.display = 'block';
-                    this._hoverTooltip.style.left = (e.originalEvent.pageX + 12) + 'px';
-                    this._hoverTooltip.style.top = (e.originalEvent.pageY - 28) + 'px';
-                }
-            }
-        });
-        this.map.on('mouseleave', this._boundaryFillId, () => {
-            this.map.getCanvas().style.cursor = '';
-            this._hoveredBoundaryId = null;
-            this.clearBoundaryHover();
-        });
-
-        // Click: selection + dispatch event
-        this.map.on('click', this._boundaryFillId, (e) => {
-            if (!e.features || e.features.length === 0) return;
-            const feature = e.features[0];
-            const props = feature.properties || {};
-
-            this.clearBoundarySelection();
-            if (feature.id != null) {
-                this._selectedBoundaryId = feature.id;
-                try {
-                    this.map.setFeatureState(
-                        { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: feature.id },
-                        { selected: true }
-                    );
-                } catch (err) { /* */ }
-            }
-
-            const fc = this._collectBoundaryFragments(feature);
-            let geometry = feature.geometry;
-            if (fc && fc.features.length > 0) {
-                if (fc.features.length === 1) {
-                    geometry = fc.features[0].geometry;
-                } else {
-                    geometry = {
-                        type: 'GeometryCollection',
-                        geometries: fc.features.map(f => f.geometry),
-                    };
-                }
-            }
-
-            const decoded = decodeBoundaryId(feature.id);
-            document.dispatchEvent(new CustomEvent('boundary-click', {
-                detail: {
-                    id: `${decoded.namespace}:r${decoded.relationId}`,
-                    name: props.name || '',
-                    admin_level: props.admin_level,
-                    namespace: decoded.namespace,
-                    geometry,
-                },
-            }));
-        });
+        for (const [sourceId, fillId] of Object.entries(this._fillBySource)) {
+            this.map.on('mousemove', fillId, (e) => this._onBoundaryMousemove(e, sourceId));
+            this.map.on('mouseleave', fillId, () => this._onBoundaryMouseleave(sourceId));
+            this.map.on('click', fillId, (e) => this._onBoundaryClick(e, sourceId));
+        }
     }
 
-    _collectBoundaryFragments(feature) {
-        if (feature.id == null || !this._boundarySourceId) return null;
+    _onBoundaryMousemove(e, sourceId) {
+        this.map.getCanvas().style.cursor = 'pointer';
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const featureId = feature.id;
+        if (featureId != null && (
+            !this._hovered || this._hovered.source !== sourceId || this._hovered.id !== featureId
+        )) {
+            if (this._hovered) {
+                try {
+                    this.map.removeFeatureState(
+                        { source: this._hovered.source, sourceLayer: this._hovered.source, id: this._hovered.id },
+                        'hover',
+                    );
+                } catch (err) {}
+            }
+            this._hovered = { source: sourceId, id: featureId };
+            try {
+                this.map.setFeatureState(
+                    { source: sourceId, sourceLayer: sourceId, id: featureId },
+                    { hover: true },
+                );
+            } catch (err) {}
+        }
+        const name = feature.properties?.name;
+        if (name && this._hoverTooltip) {
+            this._hoverTooltip.textContent = name;
+            this._hoverTooltip.style.display = 'block';
+            this._hoverTooltip.style.left = (e.originalEvent.pageX + 12) + 'px';
+            this._hoverTooltip.style.top = (e.originalEvent.pageY - 28) + 'px';
+        }
+    }
+
+    _onBoundaryMouseleave(_sourceId) {
+        this.map.getCanvas().style.cursor = '';
+        this.clearBoundaryHover();
+    }
+
+    _onBoundaryClick(e, sourceId) {
+        if (!e.features || e.features.length === 0) return;
+        const feature = e.features[0];
+        const props = feature.properties || {};
+
+        this.clearBoundarySelection();
+        if (feature.id != null) {
+            this._selected = { source: sourceId, id: feature.id };
+            try {
+                this.map.setFeatureState(
+                    { source: sourceId, sourceLayer: sourceId, id: feature.id },
+                    { selected: true },
+                );
+            } catch (err) {}
+        }
+
+        const fc = this._collectBoundaryFragments(feature, sourceId);
+        let geometry = feature.geometry;
+        if (fc && fc.features.length > 0) {
+            geometry = fc.features.length === 1
+                ? fc.features[0].geometry
+                : { type: 'GeometryCollection', geometries: fc.features.map(f => f.geometry) };
+        }
+
+        document.dispatchEvent(new CustomEvent('boundary-click', {
+            detail: {
+                id: props.place_id || '',
+                place_id: props.place_id || '',
+                name: props.name || '',
+                boundary: props.boundary,
+                namespace: props.namespace || sourceId.split('_')[0],
+                geometry,
+            },
+        }));
+    }
+
+    _collectBoundaryFragments(feature, sourceId) {
+        if (feature.id == null) return null;
         try {
-            const allFragments = this.map.querySourceFeatures(this._boundarySourceId, {
-                sourceLayer: BOUNDARIES_SOURCE_LAYER,
+            const all = this.map.querySourceFeatures(sourceId, {
+                sourceLayer: sourceId,
                 filter: ['==', ['id'], feature.id],
             });
-            if (allFragments.length === 0) return null;
+            if (all.length === 0) return null;
             const seen = new Set();
             const features = [];
-            for (const f of allFragments) {
+            for (const f of all) {
                 const key = JSON.stringify(f.geometry.coordinates);
                 if (seen.has(key)) continue;
                 seen.add(key);
@@ -448,48 +461,81 @@ class HeroMap {
         }
     }
 
-    _combineFilters(original, extra) {
-        if (!original && !extra) return null;
-        if (!original) return extra;
-        if (!extra) return original;
-        const origParts = (Array.isArray(original) && original[0] === 'all')
-            ? original.slice(1) : [original];
-        const extraParts = (Array.isArray(extra) && extra[0] === 'all')
-            ? extra.slice(1) : [extra];
-        return ['all', ...origParts, ...extraParts];
-    }
-
-    showBoundaries(filter) {
+    /**
+     * Activate boundary display for one source, narrowed to the given
+     * `boundary` field values. See contextMap.showBoundaries for full
+     * semantics — this is the same logic on the hero map.
+     *
+     * @param {Object} opts
+     * @param {string} opts.source — boundary source-layer name
+     * @param {string[]} [opts.boundaryValues] — restrict visible features
+     */
+    showBoundaries(opts) {
         if (!this.map || this._boundaryLayerIds.length === 0) return;
-        for (const layerId of this._boundaryLayerIds) {
-            try {
-                const original = this._originalFilters[layerId];
-                const combined = this._combineFilters(original, filter);
-                this.map.setFilter(layerId, combined);
-                this.map.setLayoutProperty(layerId, 'visibility', 'visible');
-            } catch (e) { /* */ }
+        const { source, boundaryValues = null } = opts || {};
+        if (!source || !this._layersBySource[source]) {
+            console.warn('heroMap.showBoundaries: unknown source', source);
+            return;
         }
-        if (this._boundaryFillId) {
+
+        for (const [sId, layerIds] of Object.entries(this._layersBySource)) {
+            if (sId === source) continue;
+            for (const layerId of layerIds) {
+                try {
+                    this.map.setFilter(layerId, this._originalFilters[layerId] || null);
+                    this.map.setLayoutProperty(layerId, 'visibility', 'none');
+                } catch (e) {}
+            }
+        }
+
+        const valueFilter = (boundaryValues && boundaryValues.length)
+            ? ['match', ['get', 'boundary'], boundaryValues, true, false]
+            : null;
+
+        const fillId = this._fillBySource[source];
+        for (const layerId of this._layersBySource[source]) {
+            const original = this._originalFilters[layerId];
+            const overlaps = filtersIntersect(original, boundaryValues);
+            if (!overlaps) {
+                try {
+                    this.map.setFilter(layerId, original || null);
+                    this.map.setLayoutProperty(layerId, 'visibility', 'none');
+                } catch (e) {}
+                continue;
+            }
             try {
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', [
+                if (layerId === fillId && valueFilter) {
+                    this.map.setFilter(layerId, valueFilter);
+                } else {
+                    this.map.setFilter(layerId, original || null);
+                }
+                this.map.setLayoutProperty(layerId, 'visibility', 'visible');
+            } catch (e) {}
+        }
+
+        if (fillId) {
+            try {
+                this.map.setPaintProperty(fillId, 'fill-color', [
                     'case',
                     ['boolean', ['feature-state', 'selected'], false], '#4a90d9',
                     ['boolean', ['feature-state', 'hover'], false], '#fbbf24',
                     'rgb(100, 140, 190)',
                 ]);
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-opacity', [
+                this.map.setPaintProperty(fillId, 'fill-opacity', [
                     'case',
                     ['boolean', ['feature-state', 'selected'], false], 0.25,
                     ['boolean', ['feature-state', 'hover'], false], 0.30,
                     0.12,
                 ]);
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', [
+                this.map.setPaintProperty(fillId, 'fill-outline-color', [
                     'case',
                     ['boolean', ['feature-state', 'selected'], false], '#2563eb',
                     'rgba(50, 80, 120, 0.35)',
                 ]);
-            } catch (e) { /* */ }
+            } catch (e) {}
         }
+
+        this._currentSource = source;
     }
 
     hideBoundaries() {
@@ -498,79 +544,80 @@ class HeroMap {
             try {
                 this.map.setFilter(layerId, this._originalFilters[layerId] || null);
                 this.map.setLayoutProperty(layerId, 'visibility', 'none');
-            } catch (e) { /* */ }
+            } catch (e) {}
         }
-        if (this._boundarySourceId) {
+        for (const fillId of Object.values(this._fillBySource)) {
             try {
-                this.map.removeFeatureState(
-                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER }
-                );
-            } catch (e) { /* */ }
+                this.map.setPaintProperty(fillId, 'fill-color', 'rgba(0, 0, 0, 0)');
+                this.map.setPaintProperty(fillId, 'fill-outline-color', 'rgba(0, 0, 0, 0)');
+            } catch (e) {}
         }
-        this._hoveredBoundaryId = null;
-        this._selectedBoundaryId = null;
-        if (this._boundaryFillId) {
-            try {
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-color', [
-                    'match', ['get', 'admin_level'],
-                    0, 'rgba(80, 110, 160, 0.06)', 1, 'rgba(90, 120, 165, 0.05)',
-                    2, 'rgba(100, 130, 170, 0.05)', 3, 'rgba(120, 150, 185, 0.04)',
-                    4, 'rgba(120, 150, 185, 0.04)', 'rgba(140, 160, 195, 0.03)',
-                ]);
-                this.map.setPaintProperty(this._boundaryFillId, 'fill-outline-color', 'rgba(0, 0, 0, 0)');
-            } catch (e) { /* */ }
+        for (const sourceId of Object.keys(this._layersBySource)) {
+            try { this.map.removeFeatureState({ source: sourceId, sourceLayer: sourceId }); }
+            catch (e) {}
         }
+        this._hovered = null;
+        this._selected = null;
+        this._currentSource = null;
         this.clearBoundaryHover();
     }
 
     clearBoundaryHover() {
         if (!this.map) return;
-        if (this._hoveredBoundaryId != null && this._boundarySourceId) {
+        if (this._hovered) {
             try {
                 this.map.removeFeatureState(
-                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._hoveredBoundaryId },
-                    'hover'
+                    { source: this._hovered.source, sourceLayer: this._hovered.source, id: this._hovered.id },
+                    'hover',
                 );
-            } catch (e) { /* */ }
-            this._hoveredBoundaryId = null;
+            } catch (e) {}
+            this._hovered = null;
         }
         if (this._hoverTooltip) this._hoverTooltip.style.display = 'none';
     }
 
     clearBoundarySelection() {
         if (!this.map) return;
-        if (this._selectedBoundaryId != null && this._boundarySourceId) {
+        if (this._selected) {
             try {
                 this.map.removeFeatureState(
-                    { source: this._boundarySourceId, sourceLayer: BOUNDARIES_SOURCE_LAYER, id: this._selectedBoundaryId },
-                    'selected'
+                    { source: this._selected.source, sourceLayer: this._selected.source, id: this._selected.id },
+                    'selected',
                 );
-            } catch (e) { /* */ }
-            this._selectedBoundaryId = null;
+            } catch (e) {}
+            this._selected = null;
         }
     }
 
-    searchBoundaryFeatures(query, adminLevel, namespace, limit = 20) {
-        if (!this.map || !this._boundarySourceId) return [];
-        const filter = ['all', ['==', ['get', 'admin_level'], adminLevel]];
-        if (namespace) filter.push(['==', ['get', 'namespace'], namespace]);
-        let features;
-        try {
-            features = this.map.querySourceFeatures(this._boundarySourceId, {
-                sourceLayer: BOUNDARIES_SOURCE_LAYER, filter,
-            });
-        } catch (e) { return []; }
-        const lowerQuery = query.toLowerCase();
+    searchBoundaryFeatures(query, boundaryValues = null, limit = 20) {
+        if (!this.map) return [];
+        const sources = this._currentSource
+            ? [this._currentSource]
+            : Object.keys(this._layersBySource);
+        if (sources.length === 0) return [];
+        const valueFilter = (boundaryValues && boundaryValues.length)
+            ? ['match', ['get', 'boundary'], boundaryValues, true, false]
+            : null;
+        const lower = query.toLowerCase();
         const seen = new Set();
         const results = [];
-        for (const f of features) {
-            const name = (f.properties?.name || '').toLowerCase();
-            if (!name || !name.includes(lowerQuery)) continue;
-            const key = `${f.properties.name}|${f.properties.namespace || ''}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            results.push(f);
-            if (results.length >= limit) break;
+        for (const sourceId of sources) {
+            let features;
+            try {
+                features = this.map.querySourceFeatures(sourceId, {
+                    sourceLayer: sourceId,
+                    filter: valueFilter,
+                });
+            } catch (e) { continue; }
+            for (const f of features) {
+                const name = (f.properties?.name || '').toLowerCase();
+                if (!name || !name.includes(lower)) continue;
+                const key = `${f.properties.name}|${f.properties.namespace || sourceId}`;
+                if (seen.has(key)) continue;
+                seen.add(key);
+                results.push(f);
+                if (results.length >= limit) return results;
+            }
         }
         return results;
     }
