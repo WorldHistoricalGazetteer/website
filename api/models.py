@@ -177,6 +177,13 @@ class GazetteerRegistryEntry(models.Model):
         ("itinerary", "Itinerary"),
         ("network",   "Network"),
     ]
+    REINGEST_STATUS_CHOICES = [
+        ("idle",      "Idle"),
+        ("queued",    "Queued"),
+        ("running",   "Running"),
+        ("completed", "Completed"),
+        ("failed",    "Failed"),
+    ]
 
     # Stable id used by the inventory push; matches the namespace for
     # authorities (``"gn"``) and the sub-namespace for WHG datasets
@@ -210,15 +217,36 @@ class GazetteerRegistryEntry(models.Model):
 
     # Curatorial fields managed via the Django admin only — the inventory
     # push from the indexing pipeline deliberately omits these so it never
-    # overwrites staff curation. Defaults must mirror migration 0003 so
+    # overwrites staff curation. Defaults must mirror the migration so
     # rows pushed without these fields satisfy NOT NULL on INSERT.
     core = models.BooleanField(default=False, db_index=True)
-    tileset_polygon_only = models.BooleanField(default=False)
+    # ``no_explore``: hides the entry's tileset-dependent affordances
+    # (Explore mode in the Gazetteers offcanvas, in-Atlas polygon hover/click).
+    # Renamed from ``tileset_polygon_only`` — the original name was opaque.
+    no_explore = models.BooleanField(default=False)
+    # ``region_source``: appears as a selectable Source in the Regions
+    # offcanvas (the boundary-namespace toggle in the Atlas page). Drives
+    # ``available_sources`` in ``search.views.AtlasPageView``.
+    region_source = models.BooleanField(default=False, db_index=True)
     gazetteer_type = models.CharField(
         max_length=16,
         choices=GAZETTEER_TYPE_CHOICES,
         default="standard",
     )
+
+    # Re-ingest tracking — written by the admin "Re-ingest" action and
+    # by ``api.reingest`` polling the Pitt gateway. Only the latest run is
+    # tracked; if history is needed later a separate audit table can hold it.
+    reingest_status = models.CharField(
+        max_length=12,
+        choices=REINGEST_STATUS_CHOICES,
+        default="idle",
+        db_index=True,
+    )
+    reingest_started_at = models.DateTimeField(null=True, blank=True)
+    reingest_finished_at = models.DateTimeField(null=True, blank=True)
+    reingest_job_id = models.CharField(max_length=64, null=True, blank=True)
+    reingest_message = models.TextField(null=True, blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -51,15 +51,9 @@ const NAMESPACE_TO_BOUNDARY_SOURCE = {
     osm_misc: 'osm_misc',
 };
 
-/* Tooltip descriptions for known sources */
-const SOURCE_TOOLTIPS = {
-    osm:        'OpenStreetMap — modern administrative boundaries and geographic features',
-    ohm:        'OpenHistoricalMap — community-contributed historical boundaries and features',
-    osm_misc:   'OSM/OHM miscellaneous boundary types — aboriginal lands, baronies, civil and political boundaries, climatic zones, geographic regions, historical and obsolete administrative divisions, indigenous territories, parishes, and other non-standard boundary classifications',
-    periodo:    'PeriodO — periods, events, and temporalities',
-    cliopatria: 'Cliopatria — historical political entities',
-    nativeland: 'NativeLand — indigenous territories and languages',
-};
+/* Tooltip descriptions are now carried per-row by the registry-driven
+   data feed (``available_sources`` in search/views.py::AtlasPageView).
+   Each row provides a ``description`` string used as the tooltip text. */
 
 export default class LayerSourcesPalette {
     /**
@@ -95,9 +89,9 @@ export default class LayerSourcesPalette {
         let html = '<span class="layer-panel-section-label">Source</span>';
 
         this._sources.forEach(s => {
-            const tooltip = SOURCE_TOOLTIPS[s.id] || s.label;
+            const tooltip = s.description || s.label;
             const checked = s.id === this._activeSource ? 'checked' : '';
-            const disabled = s.coming_soon ? 'disabled' : '';
+            const disabled = s.enabled === false ? 'disabled' : '';
             html += `
                 <div class="layer-source-item">
                     <div class="form-check">
@@ -108,7 +102,6 @@ export default class LayerSourcesPalette {
                                data-bs-toggle="tooltip" data-bs-placement="right"
                                data-bs-title="${tooltip}">
                             ${s.label}
-                            ${s.coming_soon ? '<span class="coming-soon">(coming soon)</span>' : ''}
                         </label>
                     </div>
                 </div>`;
@@ -216,10 +209,12 @@ export default class LayerSourcesPalette {
     /*  Namespace inference                                             */
     /* ──────────────────────────────────────────────────────────────── */
 
-    /** Map source id to the namespace used by boundary tiles. */
+    /** Map source id to the namespace used by boundary tiles.
+     *  For OSM/OHM/Misc this is identity; po/clio/nl currently fall back
+     *  to ``osm`` because their boundary-tier integration is not yet wired
+     *  (BOUNDARY_SOURCES gates whether the tier dropdown ever fires). */
     _inferNamespace(sourceId) {
-        const map = { osm: 'osm', ohm: 'ohm', osm_misc: 'osm_misc' };
-        return map[sourceId] || 'osm';
+        return sourceId || 'osm';
     }
 
     /* ──────────────────────────────────────────────────────────────── */

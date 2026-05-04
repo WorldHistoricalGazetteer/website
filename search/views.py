@@ -116,14 +116,34 @@ class AtlasPageView(TemplateView):
         context['index_places'] = getattr(settings, 'INDEX_PLACES_LABEL', 'millions of')
         context['index_toponyms'] = getattr(settings, 'INDEX_TOPONYMS_LABEL', 'millions of')
 
-        # Available spatial data sources for the Layer Sources palette
+        # Available spatial data sources for the Layer Sources palette,
+        # driven by ``GazetteerRegistryEntry.region_source``. Staff toggle
+        # entries on/off via the Django admin (api/admin.py); previously
+        # this list was hardcoded inline. See migration 0005 for seeds.
+        from api.models import GazetteerRegistryEntry
+        # Display order matches the panel's existing order so admin toggles
+        # don't visually reshuffle. Unknown ids fall to the end alphabetically.
+        REGION_SOURCE_ORDER = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl']
+        region_source_rows = (
+            GazetteerRegistryEntry.objects
+            .filter(region_source=True, status='published')
+            .values('id', 'name', 'description', 'no_explore')
+        )
+        ordered = sorted(
+            region_source_rows,
+            key=lambda r: (
+                REGION_SOURCE_ORDER.index(r['id']) if r['id'] in REGION_SOURCE_ORDER else len(REGION_SOURCE_ORDER),
+                r['id'],
+            ),
+        )
         context['available_sources'] = json.dumps([
-            {'id': 'osm', 'label': 'OSM (Modern)', 'enabled': True},
-            {'id': 'ohm', 'label': 'OHM (Historical)', 'enabled': True},
-            {'id': 'osm_misc', 'label': 'OSM/OHM (Miscellaneous)', 'enabled': False},
-            {'id': 'periodo', 'label': 'PeriodO', 'enabled': False, 'coming_soon': True},
-            {'id': 'cliopatria', 'label': 'Cliopatria', 'enabled': False, 'coming_soon': True},
-            {'id': 'nativeland', 'label': 'NativeLand', 'enabled': False, 'coming_soon': True},
+            {
+                'id': row['id'],
+                'label': row['name'],
+                'description': row['description'] or '',
+                'enabled': not row['no_explore'],
+            }
+            for row in ordered
         ])
 
         user_areas = []

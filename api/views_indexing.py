@@ -87,10 +87,12 @@ class GazetteerInventoryView(AuthenticatedAPIView):
             return False, f"missing field: {exc}"
 
         # Inventory-derived fields only. Curatorial fields (``core``,
-        # ``tileset_polygon_only``, ``gazetteer_type``) are admin-managed
-        # via api/admin.py::GazetteerRegistryEntryAdmin and MUST NOT be
-        # added here — ``update_or_create(defaults=…)`` would silently
-        # reset them on every push, blowing away staff curation.
+        # ``no_explore``, ``region_source``, ``gazetteer_type``) are
+        # admin-managed via api/admin.py::GazetteerRegistryEntryAdmin and
+        # MUST NOT be added here — ``update_or_create(defaults=…)`` would
+        # silently reset them on every push, blowing away staff curation.
+        # Re-ingest tracking fields are likewise excluded; they're owned
+        # by the admin "Re-ingest" action and the gateway poll loop.
         defaults = {
             "name": str(entry.get("name") or entry_id),
             "description": entry.get("description"),
