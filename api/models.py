@@ -172,6 +172,11 @@ class GazetteerRegistryEntry(models.Model):
         ("pending",   "pending"),
         ("published", "published"),
     ]
+    GAZETTEER_TYPE_CHOICES = [
+        ("standard",  "Standard"),
+        ("itinerary", "Itinerary"),
+        ("network",   "Network"),
+    ]
 
     # Stable id used by the inventory push; matches the namespace for
     # authorities (``"gn"``) and the sub-namespace for WHG datasets
@@ -202,6 +207,18 @@ class GazetteerRegistryEntry(models.Model):
     h3_coverage = models.JSONField(default=list)
     # ``[min_start_year, max_end_year]`` with each endpoint optionally null.
     temporal_extent = models.JSONField(default=list)
+
+    # Curatorial fields managed via the Django admin only — the inventory
+    # push from the indexing pipeline deliberately omits these so it never
+    # overwrites staff curation. Defaults must mirror migration 0003 so
+    # rows pushed without these fields satisfy NOT NULL on INSERT.
+    core = models.BooleanField(default=False, db_index=True)
+    tileset_polygon_only = models.BooleanField(default=False)
+    gazetteer_type = models.CharField(
+        max_length=16,
+        choices=GAZETTEER_TYPE_CHOICES,
+        default="standard",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
