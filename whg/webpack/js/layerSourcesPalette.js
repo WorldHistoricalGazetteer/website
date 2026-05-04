@@ -41,15 +41,20 @@ const ZOOM_THRESHOLDS = [
     { maxZoom: Infinity, adminLevel: 8 },
 ];
 
-/* Sources that support boundary display */
-const BOUNDARY_SOURCES = new Set(['osm', 'ohm', 'osm_misc']);
+/* Sources that support admin-tier filtering (the Boundary Level dropdown).
+   osm_misc, po, clio, nl are boundary-bearing but untiered: their
+   ``boundary`` field carries tag values or single class strings, not the
+   string admin levels "0".."11" that osm/ohm use. */
+const TIERED_SOURCES = new Set(['osm', 'ohm']);
 
-/* Map a layer-sources palette namespace to the boundary tile source-layer. */
-const NAMESPACE_TO_BOUNDARY_SOURCE = {
-    osm: 'osm_admin',
-    ohm: 'ohm_admin',
-    osm_misc: 'osm_misc',
-};
+/* Map a layer-sources palette source id to the boundary tile source-layer
+   in the whg-context style. ``osm`` and ``ohm`` map to the ``*_admin``
+   tilesets; everything else is identity (the source id and tile-source
+   name already match). Once the user renames the OSM/OHM admin tilesets
+   to drop the ``_admin`` suffix, this map collapses to identity. */
+function tileSourceFor(sourceId) {
+    return ({osm: 'osm_admin', ohm: 'ohm_admin'})[sourceId] || sourceId;
+}
 
 /* Tooltip descriptions are now carried per-row by the registry-driven
    data feed (``available_sources`` in search/views.py::AtlasPageView).
@@ -110,7 +115,7 @@ export default class LayerSourcesPalette {
         // ── Boundary level section (hidden by default, shown for OSM/OHM) ──
         html += `
             <div id="boundary_level_section"
-                 style="${BOUNDARY_SOURCES.has(this._activeSource) ? '' : 'display:none'}">
+                 style="${TIERED_SOURCES.has(this._activeSource) ? '' : 'display:none'}">
                 <hr class="layer-panel-divider">
                 <span class="layer-panel-section-label">Boundaries</span>
                 <p class="layer-panel-help-text">
@@ -151,18 +156,25 @@ export default class LayerSourcesPalette {
                 this._activeSources = [this._activeSource];
                 this._currentNamespace = this._inferNamespace(this._activeSource);
 
-                // Show/hide boundary section
+                const isTiered = TIERED_SOURCES.has(this._activeSource);
                 const boundarySection = this._panel.querySelector('#boundary_level_section');
                 if (boundarySection) {
-                    const show = BOUNDARY_SOURCES.has(this._activeSource);
-                    boundarySection.style.display = show ? '' : 'none';
-                    if (!show && this._boundariesVisible) {
-                        this._currentAdminLevel = null;
-                        this._boundariesVisible = false;
-                        heroMap.hideBoundaries();
-                    } else if (show && this._autoAdmin) {
+                    boundarySection.style.display = isTiered ? '' : 'none';
+                }
+
+                if (isTiered) {
+                    // Apply the admin-tier boundary filter — auto-pick by zoom
+                    // if auto is on, otherwise reuse the current admin level.
+                    if (this._autoAdmin) {
                         this._applyZoomAutoLevel();
+                    } else if (this._currentAdminLevel != null) {
+                        this._updateBoundaryFilter();
                     }
+                } else {
+                    // Untiered: show every feature in this source's tileset.
+                    this._currentAdminLevel = null;
+                    this._boundariesVisible = true;
+                    heroMap.showBoundaries({ source: tileSourceFor(this._activeSource) });
                 }
 
                 this._onSourcesChange();
@@ -209,10 +221,9 @@ export default class LayerSourcesPalette {
     /*  Namespace inference                                             */
     /* ──────────────────────────────────────────────────────────────── */
 
-    /** Map source id to the namespace used by boundary tiles.
-     *  For OSM/OHM/Misc this is identity; po/clio/nl currently fall back
-     *  to ``osm`` because their boundary-tier integration is not yet wired
-     *  (BOUNDARY_SOURCES gates whether the tier dropdown ever fires). */
+    /** Map source id to the namespace used by boundary tiles. Identity:
+     *  the layer-sources palette and the registry use the same id strings,
+     *  so the namespace is just the source id. */
     _inferNamespace(sourceId) {
         return sourceId || 'osm';
     }
@@ -226,15 +237,10 @@ export default class LayerSourcesPalette {
             heroMap.hideBoundaries();
             return;
         }
-        const source = NAMESPACE_TO_BOUNDARY_SOURCE[this._currentNamespace] || 'osm_admin';
-        if (source === 'osm_misc') {
-            // osm_misc records carry tag-named `boundary` values, not admin
-            // levels; the dropdown's level concept doesn't apply here.
-            heroMap.showBoundaries({ source });
-            return;
-        }
+        // Only tiered sources reach this path (osm/ohm). Untiered sources
+        // render via the radio change handler with no boundaryValues.
         heroMap.showBoundaries({
-            source,
+            source: tileSourceFor(this._activeSource),
             boundaryValues: [String(this._currentAdminLevel)],
         });
     }
@@ -246,7 +252,7 @@ export default class LayerSourcesPalette {
     _setupZoomAutoSwitch() {
         heroMap.init().then(() => {
             heroMap.map.on('zoomend', () => {
-                if (this._autoAdmin && BOUNDARY_SOURCES.has(this._activeSource)) {
+                if (this._autoAdmin && TIERED_SOURCES.has(this._activeSource)) {
                     this._applyZoomAutoLevel();
                 }
             });
@@ -255,7 +261,7 @@ export default class LayerSourcesPalette {
 
     _applyZoomAutoLevel() {
         if (!heroMap.map) return;
-        if (!BOUNDARY_SOURCES.has(this._activeSource)) return;
+        if (!TIERED_SOURCES.has(this._activeSource)) return;
 
         const zoom = heroMap.map.getZoom();
         let targetLevel = null;
