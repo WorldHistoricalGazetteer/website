@@ -785,11 +785,14 @@ class HeroMap {
             return;
         }
 
-        const fillLayerId = `${this._currentGazetteer}_fill`;
-        const fillExists = !!this.map.getLayer(fillLayerId);
+        // All overlay layers are inserted just before the first symbol
+        // layer of the base style — i.e. ABOVE the gazetteer's heatmap
+        // and circle layers (also placed at this same insertion point,
+        // earlier in the call) so a heatmap doesn't paint over the
+        // country borders / settlement points the user is meant to see.
         const symbolBeforeId = this.map.getStyle().layers.find(l => l.type === 'symbol')?.id;
         console.debug('heroMap._addContextLayers: building',
-            {gazetteer: this._currentGazetteer, fillLayerId, fillExists, symbolBeforeId});
+            {gazetteer: this._currentGazetteer, symbolBeforeId});
 
         // Country borders only — the GeoNames settlement overlay supplies
         // sub-country geographic context, so the line layer's job is just
@@ -808,7 +811,7 @@ class HeroMap {
                     'line-width': 1.0,
                     'line-opacity': 1.0,
                 },
-            }, fillExists ? fillLayerId : symbolBeforeId);
+            }, symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LINE_LAYER);
         } catch (e) {
             console.warn('heroMap._addContextLayers: country line failed', e);
@@ -901,14 +904,19 @@ class HeroMap {
             // share their present-day siblings' tier (PPLCH ≅ PPLC,
             // PPLH ≅ PPL) so they participate at the right level rather
             // than getting demoted into the catch-all bucket.
+            //
+            // Built as a chain of ``case`` + ``in`` rather than ``match``
+            // with list-labels — the latter is technically valid but the
+            // case form is unambiguous across MapLibre versions and
+            // easier to reason about under expression validation.
             const tierExpr = [
-                'match', ['get', 'fcode'],
-                ['PPLC', 'PPLG', 'PPLCH'], 1,           // capitals (current + historical)
-                ['PPLA'],                  2,           // 1st-order admin seats
-                ['PPLA2'],                 3,           // 2nd-order admin seats
-                ['PPLA3'],                 4,           // 3rd-order admin seats
-                ['PPLA4', 'PPLA5', 'PPL', 'PPLH'], 5,   // lower seats + generic + historical
-                6,                                       // PPLF/PPLL/PPLR/PPLS/PPLX/PPLW/PPLQ/…
+                'case',
+                ['in', ['get', 'fcode'], ['literal', ['PPLC', 'PPLG', 'PPLCH']]], 1,
+                ['==', ['get', 'fcode'], 'PPLA'],   2,
+                ['==', ['get', 'fcode'], 'PPLA2'],  3,
+                ['==', ['get', 'fcode'], 'PPLA3'],  4,
+                ['in', ['get', 'fcode'], ['literal', ['PPLA4', 'PPLA5', 'PPL', 'PPLH']]], 5,
+                6,
             ];
             // Label-language fallback — same chain we use elsewhere on
             // the map. ``"local"`` (or no preference) opts into the
@@ -947,26 +955,31 @@ class HeroMap {
                         'circle-stroke-width': 0.7,
                         // Tier-by-zoom gating. At each zoom band, only
                         // tiers <= N appear; everyone else is invisible.
+                        // Thresholds chosen so generic populated places
+                        // (PPL, the bulk of GN) appear at moderate zoom
+                        // rather than only on heavy zoom-in.
                         'circle-opacity': [
                             'step', ['zoom'],
                             0,
-                            2, ['case', ['<=', tierExpr, 1], 0.7, 0],   // capitals
-                            4, ['case', ['<=', tierExpr, 2], 0.7, 0],   // + 1st-order
-                            5, ['case', ['<=', tierExpr, 3], 0.65, 0],  // + 2nd-order
-                            7, ['case', ['<=', tierExpr, 4], 0.6,  0],  // + 3rd-order
-                            9, 0.6,                                     // everything left in
+                            1, ['case', ['<=', tierExpr, 1], 0.7, 0],   // capitals
+                            3, ['case', ['<=', tierExpr, 2], 0.7, 0],   // + 1st-order
+                            4, ['case', ['<=', tierExpr, 3], 0.65, 0],  // + 2nd-order
+                            5, ['case', ['<=', tierExpr, 4], 0.6,  0],  // + 3rd-order
+                            6, ['case', ['<=', tierExpr, 5], 0.55, 0],  // + lower seats + generic
+                            8, 0.55,                                    // everything left in
                         ],
                         'circle-stroke-opacity': [
                             'step', ['zoom'],
                             0,
-                            2, ['case', ['<=', tierExpr, 1], 0.85, 0],
-                            4, ['case', ['<=', tierExpr, 2], 0.85, 0],
-                            5, ['case', ['<=', tierExpr, 3], 0.8,  0],
-                            7, ['case', ['<=', tierExpr, 4], 0.75, 0],
-                            9, 0.75,
+                            1, ['case', ['<=', tierExpr, 1], 0.85, 0],
+                            3, ['case', ['<=', tierExpr, 2], 0.85, 0],
+                            4, ['case', ['<=', tierExpr, 3], 0.8,  0],
+                            5, ['case', ['<=', tierExpr, 4], 0.75, 0],
+                            6, ['case', ['<=', tierExpr, 5], 0.7,  0],
+                            8, 0.7,
                         ],
                     },
-                }, fillExists ? fillLayerId : symbolBeforeId);
+                }, symbolBeforeId);
                 this._contextLayerIds.push(CONTEXT_PLACE_CIRCLE_LAYER);
             } catch (e) {
                 console.warn('heroMap._addContextLayers: place circle failed', e);
@@ -996,15 +1009,17 @@ class HeroMap {
                         'text-color': 'rgba(60, 60, 60, 0.85)',
                         'text-halo-color': 'rgba(255, 255, 255, 0.85)',
                         'text-halo-width': 1.0,
-                        // Labels are stricter than the circles — they
-                        // show one tier later so the map stays legible.
+                        // Labels are stricter than the circles — each
+                        // tier opens one zoom level later so the map
+                        // stays legible at moderate zooms.
                         'text-opacity': [
                             'step', ['zoom'],
                             0,
-                            3, ['case', ['<=', tierExpr, 1], 0.85, 0],
-                            5, ['case', ['<=', tierExpr, 2], 0.85, 0],
-                            7, ['case', ['<=', tierExpr, 3], 0.8,  0],
-                            9, ['case', ['<=', tierExpr, 4], 0.75, 0],
+                            2, ['case', ['<=', tierExpr, 1], 0.85, 0],
+                            4, ['case', ['<=', tierExpr, 2], 0.85, 0],
+                            5, ['case', ['<=', tierExpr, 3], 0.8,  0],
+                            6, ['case', ['<=', tierExpr, 4], 0.75, 0],
+                            8, ['case', ['<=', tierExpr, 5], 0.7,  0],
                         ],
                     },
                 }, symbolBeforeId);
@@ -1030,7 +1045,8 @@ class HeroMap {
                 'source-layer': layer?.['source-layer'],
             };
         });
-        console.debug('heroMap._addContextLayers: post-add state', overlayState);
+        console.debug('heroMap._addContextLayers: post-add state\n' +
+            JSON.stringify(overlayState, null, 2));
         // Also log the next-up layers above each overlay layer in z-order,
         // so we can see whether a heatmap or fill might be obscuring them.
         const above = this._contextLayerIds.flatMap(id => {
@@ -1040,7 +1056,8 @@ class HeroMap {
                 aboveOf: id, neighbour: l.id, type: l.type, visibility: l.layout?.visibility ?? 'visible'
             }));
         });
-        console.debug('heroMap._addContextLayers: layers stacked above', above);
+        console.debug('heroMap._addContextLayers: layers stacked above\n' +
+            JSON.stringify(above, null, 2));
     }
 
     /** Remove the context layers. */
