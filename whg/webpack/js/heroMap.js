@@ -769,13 +769,27 @@ class HeroMap {
      * above the fill so they stay readable on point-bearing gazetteers.
      */
     _addContextLayers() {
-        if (!this.map || !this._currentGazetteer) return;
-        if (!this.map.getSource('osm')) return;          // base style missing source
-        if (this._contextLayerIds.length > 0) return;          // already added
+        if (!this.map || !this._currentGazetteer) {
+            console.debug('heroMap._addContextLayers: skipped — map or currentGazetteer missing',
+                {map: !!this.map, currentGazetteer: this._currentGazetteer});
+            return;
+        }
+        if (!this.map.getSource('osm')) {
+            console.warn('heroMap._addContextLayers: skipped — no "osm" source in current style',
+                {sources: Object.keys(this.map.getStyle().sources || {})});
+            return;
+        }
+        if (this._contextLayerIds.length > 0) {
+            console.debug('heroMap._addContextLayers: skipped — already added',
+                this._contextLayerIds);
+            return;
+        }
 
         const fillLayerId = `${this._currentGazetteer}_fill`;
         const fillExists = !!this.map.getLayer(fillLayerId);
         const symbolBeforeId = this.map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+        console.debug('heroMap._addContextLayers: building',
+            {gazetteer: this._currentGazetteer, fillLayerId, fillExists, symbolBeforeId});
 
         // Country borders only — the GeoNames settlement overlay supplies
         // sub-country geographic context, so the line layer's job is just
@@ -796,7 +810,9 @@ class HeroMap {
                 },
             }, fillExists ? fillLayerId : symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LINE_LAYER);
-        } catch (e) { /* layer may already exist after a partial teardown */ }
+        } catch (e) {
+            console.warn('heroMap._addContextLayers: country line failed', e);
+        }
 
         // Country labels are useful only at low zooms where the whole
         // country fits comfortably on screen — once zoomed past ~z6 a
@@ -851,7 +867,9 @@ class HeroMap {
                 },
             }, symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
-        } catch (e) { /* same as above */ }
+        } catch (e) {
+            console.warn('heroMap._addContextLayers: country label failed', e);
+        }
 
         // Settlement context — driven by the GeoNames ``fcode`` metadata
         // emitted by the indexing pipeline. ``population`` is unreliable
@@ -950,7 +968,9 @@ class HeroMap {
                     },
                 }, fillExists ? fillLayerId : symbolBeforeId);
                 this._contextLayerIds.push(CONTEXT_PLACE_CIRCLE_LAYER);
-            } catch (e) { /* same as above */ }
+            } catch (e) {
+                console.warn('heroMap._addContextLayers: place circle failed', e);
+            }
 
             try {
                 this.map.addLayer({
@@ -989,7 +1009,9 @@ class HeroMap {
                     },
                 }, symbolBeforeId);
                 this._contextLayerIds.push(CONTEXT_PLACE_LABEL_LAYER);
-            } catch (e) { /* same as above */ }
+            } catch (e) {
+                console.warn('heroMap._addContextLayers: place label failed', e);
+            }
         }
     }
 
