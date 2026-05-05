@@ -339,7 +339,9 @@ export default class LayerSourcesPalette {
         this._currentNamespace = id;
         this._currentAdminLevel = null;
         this._boundariesVisible = true;
-        heroMap.showBoundaries({ source: tileSourceFor(id) });
+        // Tileset isn't in the base style — load it on demand via the generic
+        // gazetteer-style loader.
+        heroMap.showGazetteer(tileSourceFor(id));
         this._onSourcesChange();
     }
 

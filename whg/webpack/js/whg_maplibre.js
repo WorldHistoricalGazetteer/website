@@ -83,12 +83,83 @@ maplibregl.Map.prototype.clearHighlights = function () {
 }
 
 function getStyleURL(style) {
-	return `${process.env.TILEBOSS}/styles/${style}/style.json`; 
+	return `${process.env.TILEBOSS}/styles/${style}/style.json`;
 }
 
 function getTilejsonURL(style) {
 	return `${process.env.TILEBOSS}/data/${style}.json`;
 }
+
+/**
+ * Load a vector tileset (gazetteer) into the map on demand. Fetches the
+ * TileJSON at ``${TILEBOSS}/data/${id}.json``, adds a vector source named
+ * ``id``, and adds a generic fill/line/circle layer triplet for each
+ * vector_layer the TileJSON declares. Idempotent — returns immediately if
+ * the source is already present.
+ *
+ * The default styling here is deliberately generic; the per-gazetteer
+ * paint (and any per-tileset filter or interaction) can be specialised in
+ * follow-up work without changing the loader's call sites.
+ */
+maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
+    if (!id || this.getSource(id)) return;
+    const tilejson = await fetchJSON(getTilejsonURL(id));
+    this.addSource(id, {
+        type: 'vector',
+        tiles: tilejson.tiles || [],
+        minzoom: tilejson.minzoom ?? 0,
+        maxzoom: tilejson.maxzoom ?? 14,
+        attribution: tilejson.attribution || '',
+        bounds: tilejson.bounds || undefined,
+    });
+    // Place dynamic layers below the lowest label so symbols stay legible.
+    const beforeId = this.getStyle().layers.find(l => l.type === 'symbol')?.id;
+    const vectorLayers = (tilejson.vector_layers && tilejson.vector_layers.length
+        ? tilejson.vector_layers
+        : [{ id }]);
+    for (const vl of vectorLayers) {
+        const sourceLayer = vl.id;
+        const baseId = vectorLayers.length > 1 ? `${id}__${sourceLayer}` : id;
+        this.addLayer({
+            id: `${baseId}_fill`,
+            type: 'fill',
+            source: id,
+            'source-layer': sourceLayer,
+            filter: ['==', ['geometry-type'], 'Polygon'],
+            paint: {
+                'fill-color': 'rgb(100, 140, 190)',
+                'fill-opacity': 0.12,
+                'fill-outline-color': 'rgba(50, 80, 120, 0.35)',
+            },
+        }, beforeId);
+        this.addLayer({
+            id: `${baseId}_line`,
+            type: 'line',
+            source: id,
+            'source-layer': sourceLayer,
+            filter: ['match', ['geometry-type'], ['Polygon', 'LineString'], true, false],
+            paint: {
+                'line-color': '#2563eb',
+                'line-width': 1,
+                'line-opacity': 0.6,
+            },
+        }, beforeId);
+        this.addLayer({
+            id: `${baseId}_circle`,
+            type: 'circle',
+            source: id,
+            'source-layer': sourceLayer,
+            filter: ['==', ['geometry-type'], 'Point'],
+            paint: {
+                'circle-radius': 4,
+                'circle-color': '#e04040',
+                'circle-stroke-color': '#fff',
+                'circle-stroke-width': 1,
+                'circle-opacity': 0.85,
+            },
+        }, beforeId);
+    }
+};
 
 async function fetchJSON(jsonURL) {
     try {

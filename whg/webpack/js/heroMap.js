@@ -56,6 +56,7 @@ class HeroMap {
         this._originalFilters = {};
         this._hoverTooltip = null;
         this._currentSource = null;
+        this._currentGazetteer = null;
         this._hovered = null;
         this._selected = null;
     }
@@ -472,6 +473,8 @@ class HeroMap {
      */
     showBoundaries(opts) {
         if (!this.map || this._boundaryLayerIds.length === 0) return;
+        // Switching back to a baked-in source — drop any dynamic gazetteer first.
+        this.hideGazetteer();
         const { source, boundaryValues = null } = opts || {};
         if (!source || !this._layersBySource[source]) {
             console.warn('heroMap.showBoundaries: unknown source', source);
@@ -620,6 +623,41 @@ class HeroMap {
             }
         }
         return results;
+    }
+
+    /**
+     * Show a dynamic gazetteer tileset — one not present in the base
+     * whg-context style. Hides baked-in boundary layers and tears down
+     * any previously-shown dynamic gazetteer source, then loads (if needed)
+     * and shows the requested tileset via ``map.loadGazetteerStyle``.
+     *
+     * @param {string} id — tileset id (e.g. ``"tm"`` or ``"whg-892"``)
+     */
+    async showGazetteer(id) {
+        if (!this.map || !id) return;
+        this.hideBoundaries();
+        if (this._currentGazetteer && this._currentGazetteer !== id) {
+            try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
+            this._currentGazetteer = null;
+        }
+        if (!this.map.getSource(id)) {
+            try {
+                await this.map.loadGazetteerStyle(id);
+            } catch (e) {
+                console.warn('heroMap.showGazetteer: load failed', id, e);
+                return;
+            }
+        }
+        this._currentGazetteer = id;
+    }
+
+    /** Tear down the currently-shown dynamic gazetteer, if any. */
+    hideGazetteer() {
+        if (!this.map) return;
+        if (this._currentGazetteer) {
+            try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
+            this._currentGazetteer = null;
+        }
     }
 
     /**
