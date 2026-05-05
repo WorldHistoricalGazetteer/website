@@ -114,6 +114,7 @@ class HeroMap {
         this._currentSource = null;
         this._currentGazetteer = null;
         this._contextLayerIds = [];
+        this._settlementDiagnostic = null;
         this._hovered = null;
         this._selected = null;
         // Set true while ``applyProjectionForBounds`` is driving a
@@ -950,14 +951,22 @@ class HeroMap {
                 6,
             ];
 
-            // Diagnostic — count features in the rendered tiles and
-            // surface a sample by fcode so we can see whether specific
-            // capitals (Dublin, etc.) are present in the source at all.
-            try {
-                const features = this.map.querySourceFeatures(
-                    PLACE_OVERLAY_SOURCE,
-                    { sourceLayer: PLACE_OVERLAY_TILESET },
-                );
+            // Diagnostic — re-run on each idle (i.e. after tiles for
+            // the current viewport have loaded) so the counts reflect
+            // what's actually visible. Without the idle listener the
+            // first call fires before tiles arrive and returns an empty
+            // set every time. The listener is detached in
+            // ``_removeContextLayers`` so it doesn't accumulate.
+            this._settlementDiagnostic = () => {
+                if (!this.map || !this.map.getSource(PLACE_OVERLAY_SOURCE)) return;
+                let features;
+                try {
+                    features = this.map.querySourceFeatures(
+                        PLACE_OVERLAY_SOURCE,
+                        { sourceLayer: PLACE_OVERLAY_TILESET },
+                    );
+                } catch (e) { return; }
+                if (!features.length) return;
                 const byFcode = features.reduce((acc, f) => {
                     const k = f.properties?.fcode || '(none)';
                     acc[k] = (acc[k] || 0) + 1;
@@ -970,11 +979,13 @@ class HeroMap {
                         clustered: f.properties?.clustered,
                         point_count: f.properties?.point_count,
                     }));
-                console.debug('settlement source — fcode distribution',
+                const z = this.map.getZoom().toFixed(2);
+                console.debug(`settlement source @ z${z} — fcode counts ` +
                     JSON.stringify(byFcode));
-                console.debug('settlement source — Dublin features',
+                console.debug(`settlement source @ z${z} — Dublin features ` +
                     JSON.stringify(dublin));
-            } catch (e) { /* querySourceFeatures may fail before tiles load */ }
+            };
+            this.map.on('idle', this._settlementDiagnostic);
             // Label-language fallback — same chain we use elsewhere on
             // the map. ``"local"`` (or no preference) opts into the
             // tileset's default ``name`` field.
@@ -1120,6 +1131,10 @@ class HeroMap {
     /** Remove the context layers. */
     _removeContextLayers() {
         if (!this.map) return;
+        if (this._settlementDiagnostic) {
+            try { this.map.off('idle', this._settlementDiagnostic); } catch (e) {}
+            this._settlementDiagnostic = null;
+        }
         for (const layerId of this._contextLayerIds) {
             try {
                 if (this.map.getLayer(layerId)) this.map.removeLayer(layerId);
