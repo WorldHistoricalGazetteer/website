@@ -20,9 +20,11 @@
     <meta name="glitchtip-release" content="{{ GLITCHTIP_RELEASE }}">
     {% if user.is_authenticated %}
     <meta name="user-id" content="user_{{ user.id }}">
-    {# Preferred map/UI label language. Empty means "auto-detect" — the
-       frontend then falls back to ``navigator.language``. Set via
-       Profile → Preferences. Only a few features currently respect it. #}
+    {% comment %}
+    Preferred map/UI label language. Empty means "auto-detect" — the
+    frontend then falls back to navigator.language. Set via
+    Profile → Preferences. Only a few features currently respect it.
+    {% endcomment %}
     <meta name="user-language" content="{{ user.language|default:'' }}">
     {% endif %}
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>
