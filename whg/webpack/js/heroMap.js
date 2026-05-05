@@ -42,6 +42,29 @@ function writeGlobeDisabled(disabled) {
     } catch (e) { /* localStorage unavailable */ }
 }
 
+// Context layer (faint OSM admin boundaries shown beneath a selected
+// gazetteer in Explore mode). The thresholds pick which admin levels are
+// visible at each zoom; chosen to keep ~3 levels in view at any zoom so
+// the user always sees *some* context without crowding the display.
+const CONTEXT_ZOOM_THRESHOLDS = [
+    { maxZoom: 2.5, levels: ['0', '1', '2'] },
+    { maxZoom: 4.0, levels: ['1', '2', '3'] },
+    { maxZoom: 6.0, levels: ['2', '3', '4'] },
+    { maxZoom: 8.0, levels: ['3', '4', '5'] },
+    { maxZoom: 10.0, levels: ['4', '5', '6'] },
+    { maxZoom: Infinity, levels: ['5', '6', '7', '8'] },
+];
+
+function adminLevelsForZoom(zoom) {
+    for (const t of CONTEXT_ZOOM_THRESHOLDS) {
+        if (zoom < t.maxZoom) return t.levels;
+    }
+    return CONTEXT_ZOOM_THRESHOLDS[CONTEXT_ZOOM_THRESHOLDS.length - 1].levels;
+}
+
+const CONTEXT_LINE_LAYER = '_atlas_context_admin_line';
+const CONTEXT_LABEL_LAYER = '_atlas_context_admin_label';
+
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
     const requested = new Set(requestedValues);
@@ -74,6 +97,8 @@ class HeroMap {
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
+        this._contextLayerIds = [];
+        this._contextZoomListener = null;
         this._hovered = null;
         this._selected = null;
     }
@@ -665,6 +690,9 @@ class HeroMap {
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
             this._currentGazetteer = null;
         }
+        // Always rebuild context layers so their z-order stays correct
+        // relative to the freshly-loaded gazetteer fill/line/circle.
+        this._removeContextLayers();
         let tilejson = null;
         try {
             tilejson = await this.map.loadGazetteerStyle(id);
@@ -673,6 +701,7 @@ class HeroMap {
             return;
         }
         this._currentGazetteer = id;
+        this._addContextLayers();
         if (tilejson && Array.isArray(tilejson.bounds) && tilejson.bounds.length === 4) {
             this.applyProjectionForBounds(tilejson.bounds);
             try { this.map.fitViewport(tilejson.bounds); } catch (e) {}
@@ -706,10 +735,98 @@ class HeroMap {
     /** Tear down the currently-shown dynamic gazetteer, if any. */
     hideGazetteer() {
         if (!this.map) return;
+        this._removeContextLayers();
         if (this._currentGazetteer) {
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
             this._currentGazetteer = null;
         }
+    }
+
+    /**
+     * Add a faint OSM-admin context layer beneath the selected gazetteer.
+     * Driven by the existing ``osm_admin`` source from the base style — no
+     * extra tileset is loaded. The line layer renders below the gazetteer's
+     * fill so it never overpowers the primary data; labels render above the
+     * fill so they stay readable on point-bearing gazetteers.
+     *
+     * The visible admin levels switch on zoom via ``adminLevelsForZoom``.
+     */
+    _addContextLayers() {
+        if (!this.map || !this._currentGazetteer) return;
+        if (!this.map.getSource('osm_admin')) return;          // base style missing source
+        if (this._contextLayerIds.length > 0) return;          // already added
+
+        const fillLayerId = `${this._currentGazetteer}_fill`;
+        const fillExists = !!this.map.getLayer(fillLayerId);
+        const symbolBeforeId = this.map.getStyle().layers.find(l => l.type === 'symbol')?.id;
+
+        const initialLevels = adminLevelsForZoom(this.map.getZoom());
+        const levelFilter = ['match', ['get', 'boundary'], initialLevels, true, false];
+
+        try {
+            this.map.addLayer({
+                id: CONTEXT_LINE_LAYER,
+                type: 'line',
+                source: 'osm_admin',
+                'source-layer': 'osm_admin',
+                paint: {
+                    'line-color': 'rgba(0, 0, 0, 0.18)',
+                    'line-width': 0.6,
+                    'line-opacity': 0.7,
+                },
+                filter: levelFilter,
+            }, fillExists ? fillLayerId : symbolBeforeId);
+            this._contextLayerIds.push(CONTEXT_LINE_LAYER);
+        } catch (e) { /* layer may already exist after a partial teardown */ }
+
+        try {
+            this.map.addLayer({
+                id: CONTEXT_LABEL_LAYER,
+                type: 'symbol',
+                source: 'osm_admin',
+                'source-layer': 'osm_admin',
+                layout: {
+                    'text-field': ['coalesce', ['get', 'name'], ['get', 'name:en'], ''],
+                    'text-font': ['Open Sans Regular'],
+                    'text-size': 10,
+                    'text-allow-overlap': false,
+                    'symbol-placement': 'point',
+                },
+                paint: {
+                    'text-color': 'rgba(60, 60, 60, 0.75)',
+                    'text-halo-color': 'rgba(255, 255, 255, 0.7)',
+                    'text-halo-width': 1.0,
+                },
+                filter: levelFilter,
+            }, symbolBeforeId);
+            this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
+        } catch (e) { /* same as above */ }
+
+        // Keep the visible admin levels in step with zoom.
+        this._contextZoomListener = () => {
+            if (!this.map) return;
+            const levels = adminLevelsForZoom(this.map.getZoom());
+            const filter = ['match', ['get', 'boundary'], levels, true, false];
+            for (const layerId of this._contextLayerIds) {
+                try { this.map.setFilter(layerId, filter); } catch (e) {}
+            }
+        };
+        this.map.on('zoomend', this._contextZoomListener);
+    }
+
+    /** Remove the context layers and detach the zoom listener. */
+    _removeContextLayers() {
+        if (!this.map) return;
+        if (this._contextZoomListener) {
+            try { this.map.off('zoomend', this._contextZoomListener); } catch (e) {}
+            this._contextZoomListener = null;
+        }
+        for (const layerId of this._contextLayerIds) {
+            try {
+                if (this.map.getLayer(layerId)) this.map.removeLayer(layerId);
+            } catch (e) {}
+        }
+        this._contextLayerIds = [];
     }
 
     /**

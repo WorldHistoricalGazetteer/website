@@ -93,8 +93,14 @@ function getTilejsonURL(style) {
 /**
  * Load a vector tileset (gazetteer) into the map on demand. Fetches the
  * TileJSON at ``${TILEBOSS}/data/${id}.json``, adds a vector source named
- * ``id``, and adds a generic fill/line/circle layer triplet for each
+ * ``id``, and adds a generic fill/line/heatmap/circle layer set for each
  * vector_layer the TileJSON declares.
+ *
+ * Point representation transitions from heatmap (z0–z9, weighted by the
+ * ``point_count`` attribute that the indexing pipeline's tippecanoe
+ * clustering attaches to surviving cluster points) to individual circles
+ * (z7+). The two layers cross-fade through z7–z9 so the user always sees
+ * something while the cutover happens.
  *
  * Returns the parsed TileJSON (so callers can read ``bounds`` etc. for
  * fit-to-view and projection decisions). Always fetches the TileJSON;
@@ -148,18 +154,66 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
                 'line-opacity': 0.6,
             },
         }, beforeId);
+        // Heatmap of clustered points (z0–z9). Tippecanoe writes
+        // ``point_count`` on each cluster point at zooms <= 8; above the
+        // cluster cap individual points carry no point_count and the
+        // ``coalesce`` defaults their weight to 1. The opacity expression
+        // fades the heatmap out as the circle layer below fades in.
+        this.addLayer({
+            id: `${baseId}_heatmap`,
+            type: 'heatmap',
+            source: id,
+            'source-layer': sourceLayer,
+            maxzoom: 9,
+            filter: ['==', ['geometry-type'], 'Point'],
+            paint: {
+                'heatmap-weight': ['coalesce', ['to-number', ['get', 'point_count']], 1],
+                'heatmap-intensity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    0, 0.5, 8, 1.5,
+                ],
+                'heatmap-color': [
+                    'interpolate', ['linear'], ['heatmap-density'],
+                    0,    'rgba(33, 102, 172, 0)',
+                    0.2,  'rgba(103, 169, 207, 0.55)',
+                    0.4,  'rgba(209, 229, 240, 0.7)',
+                    0.6,  'rgba(253, 219, 199, 0.8)',
+                    0.8,  'rgba(239, 138, 98,  0.85)',
+                    1,    'rgba(178, 24,  43,  0.9)',
+                ],
+                'heatmap-radius': [
+                    'interpolate', ['linear'], ['zoom'],
+                    0, 8, 8, 30,
+                ],
+                'heatmap-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    7, 0.9, 9, 0.0,
+                ],
+            },
+        }, beforeId);
+        // Individual point markers — only rendered above the cluster cap,
+        // fading in as the heatmap fades out. Below z7 the heatmap alone
+        // represents point density.
         this.addLayer({
             id: `${baseId}_circle`,
             type: 'circle',
             source: id,
             'source-layer': sourceLayer,
+            minzoom: 7,
             filter: ['==', ['geometry-type'], 'Point'],
             paint: {
                 'circle-radius': 4,
                 'circle-color': '#e04040',
                 'circle-stroke-color': '#fff',
                 'circle-stroke-width': 1,
-                'circle-opacity': 0.85,
+                'circle-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    7, 0.0, 9, 0.85,
+                ],
+                'circle-stroke-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    7, 0.0, 9, 1.0,
+                ],
             },
         }, beforeId);
     }
