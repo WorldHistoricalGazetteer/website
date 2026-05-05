@@ -967,23 +967,47 @@ class HeroMap {
                     );
                 } catch (e) { return; }
                 if (!features.length) return;
-                const byFcode = features.reduce((acc, f) => {
+                const z = this.map.getZoom().toFixed(2);
+
+                // Surface the surviving capitals (any fcode in the
+                // PPLC-family) so we can see whether they exist at all
+                // at this zoom — not just the few I happened to filter
+                // by name. ``PPLA`` is also surfaced because in some
+                // indexings the country capital is reclassified as the
+                // first-order admin seat.
+                const capitals = features
+                    .filter(f => /^PPL(C|G|CH|A)$/.test(f.properties?.fcode || ''))
+                    .map(f => ({
+                        name: f.properties?.name,
+                        name_local: f.properties?.name_local,
+                        fcode: f.properties?.fcode,
+                        place_id: f.properties?.place_id,
+                        clustered: f.properties?.clustered,
+                    }));
+
+                // Anything name-matching Dublin in any case / partial form.
+                const dublin = features
+                    .filter(f => /dubl|baile.*?cliath/i.test(
+                        (f.properties?.name || '') + ' ' + (f.properties?.name_local || '')))
+                    .map(f => ({
+                        name: f.properties?.name,
+                        name_local: f.properties?.name_local,
+                        fcode: f.properties?.fcode,
+                        place_id: f.properties?.place_id,
+                    }));
+
+                const fcodeCounts = features.reduce((acc, f) => {
                     const k = f.properties?.fcode || '(none)';
                     acc[k] = (acc[k] || 0) + 1;
                     return acc;
                 }, {});
-                const dublin = features
-                    .filter(f => f.properties?.name === 'Dublin')
-                    .map(f => ({
-                        fcode: f.properties?.fcode,
-                        clustered: f.properties?.clustered,
-                        point_count: f.properties?.point_count,
-                    }));
-                const z = this.map.getZoom().toFixed(2);
-                console.debug(`settlement source @ z${z} — fcode counts ` +
-                    JSON.stringify(byFcode));
-                console.debug(`settlement source @ z${z} — Dublin features ` +
-                    JSON.stringify(dublin));
+
+                console.debug(`settlement @ z${z} — capitals/PPLA in view (${capitals.length})\n` +
+                    JSON.stringify(capitals, null, 2));
+                console.debug(`settlement @ z${z} — Dublin name match (${dublin.length})\n` +
+                    JSON.stringify(dublin, null, 2));
+                console.debug(`settlement @ z${z} — full fcode counts ` +
+                    JSON.stringify(fcodeCounts));
             };
             this.map.on('idle', this._settlementDiagnostic);
             // Label-language fallback — same chain we use elsewhere on
