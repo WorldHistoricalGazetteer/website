@@ -94,16 +94,20 @@ function getTilejsonURL(style) {
  * Load a vector tileset (gazetteer) into the map on demand. Fetches the
  * TileJSON at ``${TILEBOSS}/data/${id}.json``, adds a vector source named
  * ``id``, and adds a generic fill/line/circle layer triplet for each
- * vector_layer the TileJSON declares. Idempotent — returns immediately if
- * the source is already present.
+ * vector_layer the TileJSON declares.
+ *
+ * Returns the parsed TileJSON (so callers can read ``bounds`` etc. for
+ * fit-to-view and projection decisions). Always fetches the TileJSON;
+ * the browser caches the response, so repeat calls are cheap.
  *
  * The default styling here is deliberately generic; the per-gazetteer
  * paint (and any per-tileset filter or interaction) can be specialised in
  * follow-up work without changing the loader's call sites.
  */
 maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
-    if (!id || this.getSource(id)) return;
+    if (!id) return null;
     const tilejson = await fetchJSON(getTilejsonURL(id));
+    if (this.getSource(id)) return tilejson;
     this.addSource(id, {
         type: 'vector',
         tiles: tilejson.tiles || [],
@@ -159,6 +163,7 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
             },
         }, beforeId);
     }
+    return tilejson;
 };
 
 async function fetchJSON(jsonURL) {

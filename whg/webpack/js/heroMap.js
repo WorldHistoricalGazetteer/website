@@ -25,6 +25,23 @@ const SUGGESTION_LABELS = 'suggestion-labels';
 // the source ID for its tileset. See contextMap.js for full schema notes.
 const BOUNDARY_SOURCE_LAYERS = ['osm_admin', 'ohm_admin', 'osm_misc', 'po', 'clio', 'nl'];
 
+// Persistent user preference: when set, the map opens in Mercator and the
+// gazetteer-bounds rule never auto-switches into globe. Toggled on/off by
+// the globe control on the Atlas map.
+const GLOBE_DISABLED_KEY = 'whg.globe_disabled';
+
+function readGlobeDisabled() {
+    try { return localStorage.getItem(GLOBE_DISABLED_KEY) === '1'; }
+    catch (e) { return false; }
+}
+
+function writeGlobeDisabled(disabled) {
+    try {
+        if (disabled) localStorage.setItem(GLOBE_DISABLED_KEY, '1');
+        else localStorage.removeItem(GLOBE_DISABLED_KEY);
+    } catch (e) { /* localStorage unavailable */ }
+}
+
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
     const requested = new Set(requestedValues);
@@ -68,6 +85,9 @@ class HeroMap {
     init() {
         if (this._readyPromise) return this._readyPromise;
 
+        const startInGlobe = !readGlobeDisabled();
+        this._isGlobe = startInGlobe;
+
         this._readyPromise = new Promise((resolve) => {
             this.map = new whg_maplibre.Map({
                 container: 'hero_map',
@@ -82,7 +102,7 @@ class HeroMap {
                 temporalControl: false,
                 navigationControl: {position: 'top-right', showZoom: true, showCompass: false, visualizePitch: false},
                 globeControl: true,
-                globeMode: true,
+                globeMode: startInGlobe,
             });
 
             this.map.on('load', () => {
@@ -631,6 +651,11 @@ class HeroMap {
      * any previously-shown dynamic gazetteer source, then loads (if needed)
      * and shows the requested tileset via ``map.loadGazetteerStyle``.
      *
+     * After the source is in place, fits the viewport to the tileset's
+     * declared ``bounds`` and picks the projection: Mercator if the bounds
+     * span more than 180° of longitude, globe otherwise (unless the user
+     * has previously disabled globe via the map's globe control).
+     *
      * @param {string} id — tileset id (e.g. ``"tm"`` or ``"whg-892"``)
      */
     async showGazetteer(id) {
@@ -640,15 +665,42 @@ class HeroMap {
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
             this._currentGazetteer = null;
         }
-        if (!this.map.getSource(id)) {
-            try {
-                await this.map.loadGazetteerStyle(id);
-            } catch (e) {
-                console.warn('heroMap.showGazetteer: load failed', id, e);
-                return;
-            }
+        let tilejson = null;
+        try {
+            tilejson = await this.map.loadGazetteerStyle(id);
+        } catch (e) {
+            console.warn('heroMap.showGazetteer: load failed', id, e);
+            return;
         }
         this._currentGazetteer = id;
+        if (tilejson && Array.isArray(tilejson.bounds) && tilejson.bounds.length === 4) {
+            this.applyProjectionForBounds(tilejson.bounds);
+            try { this.map.fitViewport(tilejson.bounds); } catch (e) {}
+        }
+    }
+
+    /**
+     * Pick the projection appropriate to the supplied lon/lat bounds.
+     * Bounds spanning more than 180° of longitude render badly on a globe,
+     * so we force Mercator; narrower bounds switch back to globe unless the
+     * user has globally disabled it via the globe control.
+     *
+     * @param {[number, number, number, number]} bounds — [west, south, east, north]
+     */
+    applyProjectionForBounds(bounds) {
+        if (!this.map || !Array.isArray(bounds) || bounds.length !== 4) return;
+        let west = bounds[0], east = bounds[2];
+        if (east < west) east += 360;       // antimeridian-spanning
+        const lonSpan = east - west;
+        const wantsMercator = lonSpan > 180;
+        const target = wantsMercator
+            ? 'mercator'
+            : (readGlobeDisabled() ? 'mercator' : 'globe');
+        try { this.map.setProjection({ type: target }); } catch (e) {}
+        // Sync internal state — programmatic setProjection doesn't fire the
+        // user-click path, but moveend/idle in _wireProjectionDetection will
+        // catch up. Nudge it explicitly so the first listener call doesn't lag.
+        setTimeout(() => this._checkProjectionChange(), 50);
     }
 
     /** Tear down the currently-shown dynamic gazetteer, if any. */
@@ -722,12 +774,19 @@ class HeroMap {
         this.map.on('moveend', () => this._checkProjectionChange());
         this.map.on('idle', () => this._checkProjectionChange());
 
-        // Also listen for the globe control button click for faster response
+        // Also listen for the globe control button click for faster response.
+        // A user-driven toggle here is the canonical signal for the persistent
+        // "disable globe globally" preference: if the click leaves the map in
+        // Mercator the user wants Mercator by default; in globe → globe default.
         const container = this.map.getContainer();
         container.addEventListener('click', (e) => {
             if (e.target.closest('.maplibregl-ctrl-globe')) {
-                setTimeout(() => this._checkProjectionChange(), 200);
-                setTimeout(() => this._checkProjectionChange(), 500);
+                const persist = () => {
+                    this._checkProjectionChange();
+                    writeGlobeDisabled(!this.isGlobeMode());
+                };
+                setTimeout(persist, 200);
+                setTimeout(persist, 500);
             }
         });
     }
