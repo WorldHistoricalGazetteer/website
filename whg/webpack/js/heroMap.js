@@ -64,6 +64,8 @@ function adminLevelsForZoom(zoom) {
 
 const CONTEXT_LINE_LAYER = '_atlas_context_admin_line';
 const CONTEXT_LABEL_LAYER = '_atlas_context_admin_label';
+const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_context_place_circle';
+const CONTEXT_PLACE_LABEL_LAYER = '_atlas_context_place_label';
 
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
@@ -801,6 +803,87 @@ class HeroMap {
             }, symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
         } catch (e) { /* same as above */ }
+
+        // Settlement context — repurposes Natural Earth's place_label layer
+        // (already loaded in the base style for water/rivers/lakes). The
+        // ``scalerank`` field gives a 0–10 city-importance ordering (0 =
+        // megacity); we filter generously and tier visibility through
+        // step-by-zoom radius/opacity so low zooms show only the largest
+        // cities and small towns join progressively as the user zooms in.
+        if (this.map.getSource('natural_earth')) {
+            try {
+                this.map.addLayer({
+                    id: CONTEXT_PLACE_CIRCLE_LAYER,
+                    type: 'circle',
+                    source: 'natural_earth',
+                    'source-layer': 'place_label',
+                    minzoom: 2,
+                    filter: ['<=', ['to-number', ['get', 'scalerank']], 8],
+                    paint: {
+                        'circle-radius': [
+                            'step', ['to-number', ['get', 'scalerank']],
+                            2.4,    // scalerank 0–2: major cities
+                            3, 2.0, // 3–5: cities
+                            6, 1.4, // 6+: towns
+                        ],
+                        'circle-color': 'rgba(70, 70, 70, 0.7)',
+                        'circle-stroke-color': 'rgba(255, 255, 255, 0.85)',
+                        'circle-stroke-width': 0.7,
+                        'circle-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            3, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.7, 0],
+                            5, ['case', ['<=', ['to-number', ['get', 'scalerank']], 5], 0.65, 0],
+                            7, 0.6,
+                        ],
+                        'circle-stroke-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            3, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.85, 0],
+                            5, ['case', ['<=', ['to-number', ['get', 'scalerank']], 5], 0.8, 0],
+                            7, 0.75,
+                        ],
+                    },
+                }, fillExists ? fillLayerId : symbolBeforeId);
+                this._contextLayerIds.push(CONTEXT_PLACE_CIRCLE_LAYER);
+            } catch (e) { /* same as above */ }
+
+            try {
+                this.map.addLayer({
+                    id: CONTEXT_PLACE_LABEL_LAYER,
+                    type: 'symbol',
+                    source: 'natural_earth',
+                    'source-layer': 'place_label',
+                    minzoom: 3,
+                    filter: ['<=', ['to-number', ['get', 'scalerank']], 6],
+                    layout: {
+                        'text-field': ['coalesce', ['get', 'name'], ''],
+                        'text-font': ['Open Sans Regular'],
+                        'text-size': [
+                            'interpolate', ['linear'], ['zoom'],
+                            3, 9, 8, 11,
+                        ],
+                        'text-anchor': 'top',
+                        'text-offset': [0, 0.45],
+                        'text-allow-overlap': false,
+                        'text-padding': 4,
+                    },
+                    paint: {
+                        'text-color': 'rgba(60, 60, 60, 0.85)',
+                        'text-halo-color': 'rgba(255, 255, 255, 0.85)',
+                        'text-halo-width': 1.0,
+                        'text-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            4, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.85, 0],
+                            6, ['case', ['<=', ['to-number', ['get', 'scalerank']], 4], 0.8, 0],
+                            8, 0.75,
+                        ],
+                    },
+                }, symbolBeforeId);
+                this._contextLayerIds.push(CONTEXT_PLACE_LABEL_LAYER);
+            } catch (e) { /* same as above */ }
+        }
 
         // Keep the visible admin levels in step with zoom.
         this._contextZoomListener = () => {
