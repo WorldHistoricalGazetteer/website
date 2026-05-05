@@ -72,14 +72,15 @@ const CONTEXT_LABEL_LAYER = '_atlas_overlay_admin_label';
 const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
 const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
 
-// The base style ships a stripped Natural Earth source (``whg-ne-basic``,
-// exposed as ``natural_earth``) that holds only water/ice/rivers/lakes —
-// no place labels. To draw town/city points we add the full
-// ``natural-earth-vector`` tileset on demand, the first time context
-// layers are built. The source id is namespaced so it can't clash with
-// anything in the base style.
-const PLACE_OVERLAY_SOURCE = '_atlas_overlay_place_source';
-const PLACE_OVERLAY_TILESET = 'natural-earth-vector';
+// Settlement-context overlay. We re-use the GeoNames tileset because it
+// carries population and feature-code metadata for every populated place
+// on Earth, indexed by the same pipeline that builds the gazetteer
+// tilesets. Pulling tiles via a separately-named source means the
+// settlement overlay renders even when the user's selected gazetteer
+// isn't GeoNames; when they pick GeoNames we accept the small
+// duplication (browser tile cache absorbs it).
+const PLACE_OVERLAY_SOURCE = '_atlas_overlay_settlements';
+const PLACE_OVERLAY_TILESET = 'gn';
 
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
@@ -818,13 +819,14 @@ class HeroMap {
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
         } catch (e) { /* same as above */ }
 
-        // Settlement context — Natural Earth's place_label layer. The base
-        // style's ``natural_earth`` source is a stripped subset; the full
-        // tileset is added here on first use. The ``scalerank`` field gives
-        // a 0–10 city-importance ordering (0 = megacity); we filter
-        // generously and tier visibility through step-by-zoom radius/opacity
-        // so low zooms show only the largest cities and smaller towns join
-        // progressively as the user zooms in.
+        // Settlement context — driven by GeoNames ``population`` and
+        // ``fcode`` metadata that the indexing pipeline emits onto every
+        // tile feature. We restrict to feature codes starting with ``PPL``
+        // (populated places: PPL, PPLC capital, PPLA admin centre, etc.)
+        // and tier visibility by population, so low zooms show only major
+        // cities and smaller towns join progressively as the user zooms in.
+        // The source is added on first use and persists across gazetteer
+        // switches so its tile cache is reused.
         if (!this.map.getSource(PLACE_OVERLAY_SOURCE)) {
             try {
                 this.map.addSource(PLACE_OVERLAY_SOURCE, {
@@ -834,37 +836,54 @@ class HeroMap {
             } catch (e) { /* source may already exist after a partial teardown */ }
         }
         if (this.map.getSource(PLACE_OVERLAY_SOURCE)) {
+            // Only render features for which we know they're populated
+            // places AND we have a population number to tier them by.
+            const settlementFilter = ['all',
+                ['has', 'fcode'],
+                ['==', ['slice', ['get', 'fcode'], 0, 3], 'PPL'],
+                ['has', 'population'],
+                ['>=', ['to-number', ['get', 'population']], 1000],
+            ];
             try {
                 this.map.addLayer({
                     id: CONTEXT_PLACE_CIRCLE_LAYER,
                     type: 'circle',
                     source: PLACE_OVERLAY_SOURCE,
-                    'source-layer': 'place_label',
+                    'source-layer': PLACE_OVERLAY_TILESET,
                     minzoom: 2,
-                    filter: ['<=', ['to-number', ['get', 'scalerank']], 8],
+                    filter: settlementFilter,
                     paint: {
+                        // Marker size grows with population — major cities
+                        // ~2.6 px, towns ~1.4 px.
                         'circle-radius': [
-                            'step', ['to-number', ['get', 'scalerank']],
-                            2.4,    // scalerank 0–2: major cities
-                            3, 2.0, // 3–5: cities
-                            6, 1.4, // 6+: towns
+                            'step', ['to-number', ['get', 'population']],
+                            1.4,            //         pop < 50k:    towns
+                            50000,    1.7,  //   50k <= pop < 200k:  small cities
+                            200000,   2.1,  //  200k <= pop < 1M:    cities
+                            1000000,  2.6,  //    1M <= pop:         major cities
                         ],
                         'circle-color': 'rgba(70, 70, 70, 0.7)',
                         'circle-stroke-color': 'rgba(255, 255, 255, 0.85)',
                         'circle-stroke-width': 0.7,
+                        // Population-tier gating: each zoom step reveals a
+                        // smaller class of settlement.
                         'circle-opacity': [
                             'step', ['zoom'],
-                            0,
-                            3, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.7, 0],
-                            5, ['case', ['<=', ['to-number', ['get', 'scalerank']], 5], 0.65, 0],
-                            7, 0.6,
+                            0,                                                                   // < z2: hidden
+                            2, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.7, 0],
+                            4, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.7, 0],
+                            5, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.65, 0],
+                            7, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.6,  0],
+                            9, 0.6,
                         ],
                         'circle-stroke-opacity': [
                             'step', ['zoom'],
                             0,
-                            3, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.85, 0],
-                            5, ['case', ['<=', ['to-number', ['get', 'scalerank']], 5], 0.8, 0],
-                            7, 0.75,
+                            2, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.85, 0],
+                            4, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.85, 0],
+                            5, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.8,  0],
+                            7, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.75, 0],
+                            9, 0.75,
                         ],
                     },
                 }, fillExists ? fillLayerId : symbolBeforeId);
@@ -876,9 +895,9 @@ class HeroMap {
                     id: CONTEXT_PLACE_LABEL_LAYER,
                     type: 'symbol',
                     source: PLACE_OVERLAY_SOURCE,
-                    'source-layer': 'place_label',
+                    'source-layer': PLACE_OVERLAY_TILESET,
                     minzoom: 3,
-                    filter: ['<=', ['to-number', ['get', 'scalerank']], 6],
+                    filter: settlementFilter,
                     layout: {
                         'text-field': ['coalesce', ['get', 'name'], ''],
                         'text-font': ['Open Sans Regular'],
@@ -895,12 +914,16 @@ class HeroMap {
                         'text-color': 'rgba(60, 60, 60, 0.85)',
                         'text-halo-color': 'rgba(255, 255, 255, 0.85)',
                         'text-halo-width': 1.0,
+                        // Labels are stricter — only the more significant
+                        // settlements get a label at each zoom band, to
+                        // keep the map legible.
                         'text-opacity': [
                             'step', ['zoom'],
                             0,
-                            4, ['case', ['<=', ['to-number', ['get', 'scalerank']], 2], 0.85, 0],
-                            6, ['case', ['<=', ['to-number', ['get', 'scalerank']], 4], 0.8, 0],
-                            8, 0.75,
+                            3, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.85, 0],
+                            5, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.85, 0],
+                            7, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.8,  0],
+                            9, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.75, 0],
                         ],
                     },
                 }, symbolBeforeId);
