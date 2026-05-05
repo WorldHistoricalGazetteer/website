@@ -2,7 +2,7 @@
 
 import {initClipboard} from './utilities'
 
-const {apiTokenUrl, newsToggleUrl, csrfToken, domain} = window.profileConfig;
+const {apiTokenUrl, newsToggleUrl, languageSaveUrl, csrfToken, domain} = window.profileConfig;
 const tokenSection = document.getElementById('api-token-section');
 const tokenCode = document.getElementById('api-token');
 
@@ -142,5 +142,21 @@ if (newsCheckbox) {
         }).catch(() => {
             alert('Failed to save news preferences.');
         });
+    });
+}
+
+const languageSelect = document.getElementById('id_language');
+if (languageSelect && languageSaveUrl) {
+    languageSelect.addEventListener('change', function () {
+        const formData = new FormData();
+        formData.append('language', languageSelect.value);
+        formData.append('csrfmiddlewaretoken', csrfToken);
+        fetch(languageSaveUrl, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: formData,
+        }).then(response => {
+            if (!response.ok) alert('Failed to save language preference.');
+        }).catch(() => alert('Failed to save language preference.'));
     });
 }

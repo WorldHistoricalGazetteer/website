@@ -13,6 +13,7 @@ urlpatterns = [
     path('profile/api-token/', views.ProfileAPITokenView.as_view(), name='profile-api-token'),
 
     path('profile/news-toggle/', views.profile_news_toggle, name='profile-news-toggle'),
+    path('profile/language-save/', views.profile_language_save, name='profile-language-save'),
     path('profile/download/', views.profile_download, name='profile-download'),
     path('profile/delete/', views.profile_delete, name='profile-delete'),
 

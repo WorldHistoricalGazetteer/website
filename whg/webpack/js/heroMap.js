@@ -789,6 +789,16 @@ class HeroMap {
         // country fits comfortably on screen — once zoomed past ~z6 a
         // single huge centroid label is more clutter than orientation.
         // The text-opacity step fades the label away over z5–z7.
+        //
+        // Label-language fallback chain: the user's preferred language
+        // (from Profile → Preferences, falling through to navigator.language
+        // and finally to the tileset's default) → English → local. ``local``
+        // is a synthetic preference that means "use the tileset's untagged
+        // ``name`` field" — for it we skip straight to that.
+        const lang = this.map.preferredLanguage;
+        const labelTextField = (!lang || lang === 'local')
+            ? ['coalesce', ['get', 'name'], ['get', 'name:en'], '']
+            : ['coalesce', ['get', `name:${lang}`], ['get', 'name:en'], ['get', 'name'], ''];
         try {
             this.map.addLayer({
                 id: CONTEXT_LABEL_LAYER,
@@ -797,7 +807,7 @@ class HeroMap {
                 'source-layer': 'osm_admin',
                 filter: COUNTRY_BOUNDARY_FILTER,
                 layout: {
-                    'text-field': ['coalesce', ['get', 'name'], ['get', 'name:en'], ''],
+                    'text-field': labelTextField,
                     'text-font': ['Open Sans Regular'],
                     'text-size': [
                         'interpolate', ['linear'], ['zoom'],
@@ -1012,16 +1022,17 @@ class HeroMap {
         // A user-driven toggle here is the canonical signal for the persistent
         // "disable globe globally" preference: if the click leaves the map in
         // Mercator the user wants Mercator by default; in globe → globe default.
+        //
+        // We persist after the next ``idle`` event because ``getProjection()``
+        // can lag the click while the transition animates — earlier code used
+        // 200/500 ms timeouts and read the old state, leaving the flag stuck.
         const container = this.map.getContainer();
         container.addEventListener('click', (e) => {
-            if (e.target.closest('.maplibregl-ctrl-globe')) {
-                const persist = () => {
-                    this._checkProjectionChange();
-                    writeGlobeDisabled(!this.isGlobeMode());
-                };
-                setTimeout(persist, 200);
-                setTimeout(persist, 500);
-            }
+            if (!e.target.closest('.maplibregl-ctrl-globe')) return;
+            this.map.once('idle', () => {
+                this._checkProjectionChange();
+                writeGlobeDisabled(!this.isGlobeMode());
+            });
         });
     }
 

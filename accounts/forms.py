@@ -46,7 +46,7 @@ class LoginForm(forms.Form):
 class UserModelForm(forms.ModelForm):
     class Meta:
         model = User
-        fields = ('news_permitted',)
+        fields = ('news_permitted', 'language')
         exclude = ('password',)
 
         widgets = {
@@ -60,6 +60,21 @@ class UserModelForm(forms.ModelForm):
                 ),
             }),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Build the language <select> from the shared language table so
+        # the choices stay in lockstep with the JS-side ``languages.js``.
+        from accounts.languages import language_choices
+        self.fields['language'] = forms.ChoiceField(
+            choices=language_choices(),
+            required=False,
+            widget=forms.Select(attrs={
+                'class': 'form-select form-select-sm',
+                'style': 'max-width: 22rem;',
+                'id': 'id_language',
+            }),
+        )
 
 
 class EmailForm(forms.Form):

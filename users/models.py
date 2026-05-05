@@ -81,6 +81,15 @@ class User(AbstractUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     news_permitted = models.BooleanField(default=False)
 
+    # Optional preferred display language for map labels (and other
+    # site features as the implementation expands). Empty string means
+    # "no preference set" — the frontend then falls back to the browser's
+    # ``navigator.language``. Stored as the IETF language tag used by the
+    # OpenMapTiles ``name:<lang>`` fields (e.g. ``"en"``, ``"de"``,
+    # ``"sr-Latn"``); the special value ``"local"`` opts into the
+    # tileset's local-language ``name`` field rather than a translation.
+    language = models.CharField(max_length=8, blank=True, default="")
+
     # Legacy fields - keep for migration period
     must_reset_password = models.BooleanField(default=False)
 

@@ -362,6 +362,28 @@ def profile_news_toggle(request):
 
 
 @login_required
+@require_POST
+def profile_language_save(request):
+    """Persist the user's preferred map-label language.
+
+    Empty string clears the stored preference (frontend then falls back
+    to ``navigator.language``). Any other value must appear in the
+    shared ``LANGUAGES`` table to be accepted, which is what the
+    profile-page <select> renders from.
+    """
+    from accounts.languages import is_valid_tag
+    value = request.POST.get('language', '')
+    if not is_valid_tag(value):
+        return JsonResponse(
+            {'status': 'error', 'detail': 'unknown language tag'},
+            status=400,
+        )
+    request.user.language = value
+    request.user.save(update_fields=['language'])
+    return JsonResponse({'status': 'success', 'language': value})
+
+
+@login_required
 def profile_delete(request):
     if request.method == 'POST':
         user = request.user

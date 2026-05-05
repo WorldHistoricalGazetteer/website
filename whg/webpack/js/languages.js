@@ -1,16 +1,26 @@
 function getPreferredLanguage() {
-    // First check for a URL override
+    // 1. URL ``?lang=`` wins — single-page override for testing.
     const urlParams = new URLSearchParams(window.location.search);
     const langParam = urlParams.get('lang');
     if (langParam && languages[langParam]) {
         console.info(`Overriding language to ${langParam} from URL parameter`);
         return langParam;
     }
-    // Get the browser's language setting by splitting at the hyphen to get the language code
-    const browserLang = navigator.language || navigator.userLanguage;
+    // 2. Logged-in user preference (set via Profile → Preferences) is
+    //    written to a ``user-language`` meta tag in the base template.
+    //    Empty content means "no stored preference; auto-detect".
+    const metaTag = document.querySelector('meta[name="user-language"]');
+    const stored = metaTag ? metaTag.getAttribute('content') : '';
+    if (stored && languages[stored]) {
+        console.info(`Using stored user language preference: ${stored}`);
+        return stored;
+    }
+    // 3. Browser default. ``navigator.language`` is e.g. ``"en-GB"``;
+    //    take the primary subtag and use the table to validate.
+    const browserLang = navigator.language || navigator.userLanguage || '';
     const langCode = browserLang.split('-')[0];
     console.info(`Detected browser language: ${browserLang}, using code: ${langCode}`);
-    return languages[langCode] ? langCode : 'local'; // Default to 'local' if not found
+    return languages[langCode] ? langCode : 'local';
 }
 
 const languages = {

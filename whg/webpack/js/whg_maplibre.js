@@ -216,6 +216,44 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
                 ],
             },
         }, beforeId);
+        // Gazetteer feature labels — rendered without a ``beforeId`` so they
+        // sit at the top of the layer stack, above any context overlay
+        // labels (settlements/countries) added later by heroMap. Larger,
+        // darker, and more strongly haloed than those overlays so the
+        // gazetteer's own features dominate the reading order.
+        this.addLayer({
+            id: `${baseId}_label`,
+            type: 'symbol',
+            source: id,
+            'source-layer': sourceLayer,
+            minzoom: 6,
+            filter: ['has', 'name'],
+            layout: {
+                'text-field': ['coalesce', ['get', 'name'], ''],
+                'text-font': ['Open Sans Semibold'],
+                'text-size': [
+                    'interpolate', ['linear'], ['zoom'],
+                    6, 11, 10, 14,
+                ],
+                'text-anchor': 'top',
+                'text-offset': [0, 0.55],
+                'text-allow-overlap': false,
+                'text-padding': 6,
+                'symbol-placement': 'point',
+            },
+            paint: {
+                'text-color': '#1d3a72',
+                'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+                'text-halo-width': 1.6,
+                'text-halo-blur': 0.4,
+                // Fade in as the heatmap fades out, so labels join the map
+                // at the same zoom as the individual circle markers.
+                'text-opacity': [
+                    'interpolate', ['linear'], ['zoom'],
+                    6, 0.0, 8, 1.0,
+                ],
+            },
+        });
     }
     return tilejson;
 };
