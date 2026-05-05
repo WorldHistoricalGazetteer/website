@@ -62,10 +62,15 @@ function adminLevelsForZoom(zoom) {
     return CONTEXT_ZOOM_THRESHOLDS[CONTEXT_ZOOM_THRESHOLDS.length - 1].levels;
 }
 
-const CONTEXT_LINE_LAYER = '_atlas_context_admin_line';
-const CONTEXT_LABEL_LAYER = '_atlas_context_admin_label';
-const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_context_place_circle';
-const CONTEXT_PLACE_LABEL_LAYER = '_atlas_context_place_label';
+// Layer IDs use a neutral ``_atlas_overlay_`` prefix rather than
+// ``_atlas_context_``: the global error handler in whg_maplibre.js
+// classifies any error message containing the substring "context" as a
+// WebGL-context fatality, which silently shows a fatal modal whenever
+// MapLibre reports a layer/expression error mentioning the layer id.
+const CONTEXT_LINE_LAYER = '_atlas_overlay_admin_line';
+const CONTEXT_LABEL_LAYER = '_atlas_overlay_admin_label';
+const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
+const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
 
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
@@ -885,13 +890,18 @@ class HeroMap {
             } catch (e) { /* same as above */ }
         }
 
-        // Keep the visible admin levels in step with zoom.
+        // Keep the visible admin levels in step with zoom — but apply the
+        // boundary filter only to the admin-source layers. The place
+        // (Natural Earth) layers filter by ``scalerank``, set once at
+        // creation and tiered via paint expressions.
         this._contextZoomListener = () => {
             if (!this.map) return;
             const levels = adminLevelsForZoom(this.map.getZoom());
             const filter = ['match', ['get', 'boundary'], levels, true, false];
-            for (const layerId of this._contextLayerIds) {
-                try { this.map.setFilter(layerId, filter); } catch (e) {}
+            for (const layerId of [CONTEXT_LINE_LAYER, CONTEXT_LABEL_LAYER]) {
+                if (this._contextLayerIds.includes(layerId)) {
+                    try { this.map.setFilter(layerId, filter); } catch (e) {}
+                }
             }
         };
         this.map.on('zoomend', this._contextZoomListener);

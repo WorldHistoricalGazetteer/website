@@ -1373,41 +1373,42 @@ maplibregl.Map = function (options = {}) {
     mapInstance.initOptions = chosenOptions;
 
     mapInstance.on('error', (e) => {
-        // Identify if this is a "Fatal" error (WebGL or Critical Resource Failure)
+        // Always surface the underlying error to the console first — the
+        // classifier below decides whether to *also* show a fatal modal.
+        // Without this, any error that the classifier marks fatal would
+        // disappear silently, which makes layer/expression bugs that fire
+        // through map.on('error') very hard to diagnose.
+        console.error('MapLibre runtime error:', e?.error || e);
+
+        const msg = e?.error?.message || '';
+        const status = e?.error?.status;
         let isFatal = false;
         let userMessage = 'The map encountered an error.';
 
-        // Check for WebGL/Context errors
-        if (e.error && (
-            e.error.message?.includes('WebGL') ||
-            e.error.message?.includes('context') ||
-            e.error.message?.includes('CONTEXT_LOST')
-        )) {
+        // WebGL / graphics-context fatality. Match conservatively: a bare
+        // substring of "context" matches too many incidental things (e.g.
+        // any layer id containing the word). Require either an explicit
+        // CONTEXT_LOST signal or "WebGL" alongside "context" / "lost".
+        if (
+            msg.includes('CONTEXT_LOST') ||
+            (msg.includes('WebGL') && (msg.includes('context') || msg.includes('lost')))
+        ) {
             isFatal = true;
             userMessage = 'Graphics context lost. Please refresh.';
         }
-
-        // Check for Style/Network Fetch errors
-        else if (e.error && (
-             (e.error.status && e.error.status >= 400) || // Catch 404, 500, etc.
-             (e.error.message && (
-                 e.error.message.includes('Fetch') ||
-                 e.error.message.includes('Network') ||
-                 e.error.message.includes('Failed to load') ||
-                 e.error.message.includes('style') // Catch style parsing/loading errors
-             ))
-        )) {
+        // Critical resource failure — style / tileset HTTP errors.
+        else if (
+            (typeof status === 'number' && status >= 400) ||
+            msg.includes('Failed to fetch') ||
+            msg.includes('NetworkError') ||
+            (msg.includes('style') && msg.includes('load'))
+        ) {
             isFatal = true;
             userMessage = 'Unable to load map data or style. Please check your connection.';
-            console.warn('Map resource failed to load:', e.error);
         }
 
-        // If fatal, trigger UI overlay
         if (isFatal) {
             handleMapCreationFailure(chosenOptions, userMessage, mapInstance);
-        } else {
-            // Log non-fatal errors (like missing tiles or minor warnings)
-            console.error('MapLibre runtime error:', e);
         }
     });
 
