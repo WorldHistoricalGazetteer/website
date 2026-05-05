@@ -72,6 +72,15 @@ const CONTEXT_LABEL_LAYER = '_atlas_overlay_admin_label';
 const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
 const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
 
+// The base style ships a stripped Natural Earth source (``whg-ne-basic``,
+// exposed as ``natural_earth``) that holds only water/ice/rivers/lakes —
+// no place labels. To draw town/city points we add the full
+// ``natural-earth-vector`` tileset on demand, the first time context
+// layers are built. The source id is namespaced so it can't clash with
+// anything in the base style.
+const PLACE_OVERLAY_SOURCE = '_atlas_overlay_place_source';
+const PLACE_OVERLAY_TILESET = 'natural-earth-vector';
+
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
     const requested = new Set(requestedValues);
@@ -809,18 +818,27 @@ class HeroMap {
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
         } catch (e) { /* same as above */ }
 
-        // Settlement context — repurposes Natural Earth's place_label layer
-        // (already loaded in the base style for water/rivers/lakes). The
-        // ``scalerank`` field gives a 0–10 city-importance ordering (0 =
-        // megacity); we filter generously and tier visibility through
-        // step-by-zoom radius/opacity so low zooms show only the largest
-        // cities and small towns join progressively as the user zooms in.
-        if (this.map.getSource('natural_earth')) {
+        // Settlement context — Natural Earth's place_label layer. The base
+        // style's ``natural_earth`` source is a stripped subset; the full
+        // tileset is added here on first use. The ``scalerank`` field gives
+        // a 0–10 city-importance ordering (0 = megacity); we filter
+        // generously and tier visibility through step-by-zoom radius/opacity
+        // so low zooms show only the largest cities and smaller towns join
+        // progressively as the user zooms in.
+        if (!this.map.getSource(PLACE_OVERLAY_SOURCE)) {
+            try {
+                this.map.addSource(PLACE_OVERLAY_SOURCE, {
+                    type: 'vector',
+                    url: `${process.env.TILEBOSS}/data/${PLACE_OVERLAY_TILESET}.json`,
+                });
+            } catch (e) { /* source may already exist after a partial teardown */ }
+        }
+        if (this.map.getSource(PLACE_OVERLAY_SOURCE)) {
             try {
                 this.map.addLayer({
                     id: CONTEXT_PLACE_CIRCLE_LAYER,
                     type: 'circle',
-                    source: 'natural_earth',
+                    source: PLACE_OVERLAY_SOURCE,
                     'source-layer': 'place_label',
                     minzoom: 2,
                     filter: ['<=', ['to-number', ['get', 'scalerank']], 8],
@@ -857,7 +875,7 @@ class HeroMap {
                 this.map.addLayer({
                     id: CONTEXT_PLACE_LABEL_LAYER,
                     type: 'symbol',
-                    source: 'natural_earth',
+                    source: PLACE_OVERLAY_SOURCE,
                     'source-layer': 'place_label',
                     minzoom: 3,
                     filter: ['<=', ['to-number', ['get', 'scalerank']], 6],
