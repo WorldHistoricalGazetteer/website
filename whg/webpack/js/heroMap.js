@@ -52,15 +52,15 @@ function writeGlobeDisabled(disabled) {
 // WebGL-context fatality, which silently shows a fatal modal whenever
 // MapLibre reports a layer/expression error mentioning the layer id.
 //
-// Country boundaries (admin level "2" in the OSM tileset) provide
-// just enough geographic anchoring without competing with the GeoNames-
-// sourced settlement overlay. Sub-country admin levels are deliberately
-// left out — the place markers do that job better.
+// Country boundaries provide just enough geographic anchoring without
+// competing with the GeoNames-sourced settlement overlay. Sub-country
+// admin levels are deliberately left out — the place markers do that
+// job better. Both line and label layers source from the ``un`` tileset
+// (see BORDER_OVERLAY_TILESET below) which is country-only.
 const CONTEXT_LINE_LAYER = '_atlas_overlay_country_line';
 const CONTEXT_LABEL_LAYER = '_atlas_overlay_country_label';
 const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
 const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
-const COUNTRY_BOUNDARY_FILTER = ['==', ['get', 'boundary'], '2'];
 
 // Settlement-context overlay. We re-use the GeoNames tileset because it
 // carries population and feature-code metadata for every populated place
@@ -861,13 +861,19 @@ class HeroMap {
                ['get', 'name_local'],
                ['get', 'name'],
                ''];
+        // Country labels — sourced from the ``un`` tileset (same source
+        // as the borders) for the same reason: zoom-stable rendering
+        // without the OSM tippecanoe coalesce drop-outs. ``name_en`` is
+        // expected to be the only fully-populated language field, but
+        // the fallback chain catches ``name_<user>``/``name_local``/
+        // ``name`` if any of them happen to be present.
         try {
             this.map.addLayer({
                 id: CONTEXT_LABEL_LAYER,
                 type: 'symbol',
-                source: 'osm',
-                'source-layer': 'osm',
-                filter: COUNTRY_BOUNDARY_FILTER,
+                source: BORDER_OVERLAY_SOURCE,
+                'source-layer': BORDER_OVERLAY_TILESET,
+                minzoom: 3,
                 layout: {
                     'text-field': labelTextField,
                     'text-font': ['Open Sans Regular'],
@@ -885,7 +891,7 @@ class HeroMap {
                     'text-halo-width': 1.2,
                     'text-opacity': [
                         'interpolate', ['linear'], ['zoom'],
-                        2, 0.85,
+                        3, 0.85,
                         5, 0.85,
                         7, 0.0,
                     ],
@@ -916,9 +922,18 @@ class HeroMap {
         }
         if (this.map.getSource(PLACE_OVERLAY_SOURCE)) {
             // Filter: every PPL-prefixed feature code (populated places).
-            const settlementFilter = ['all',
-                ['has', 'fcode'],
-                ['==', ['slice', ['get', 'fcode'], 0, 3], 'PPL'],
+            // Uses ``match`` with explicit values rather than ``slice`` —
+            // the slice approach assumes ``fcode`` is always a string of
+            // length ≥ 3, which the tippecanoe clustering pass doesn't
+            // necessarily guarantee on synthesized cluster reps.
+            const PPL_FCODES = [
+                'PPLC', 'PPLG', 'PPLCH',
+                'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5',
+                'PPL', 'PPLH',
+                'PPLF', 'PPLL', 'PPLR', 'PPLS', 'PPLX', 'PPLW', 'PPLQ',
+            ];
+            const settlementFilter = ['match', ['get', 'fcode'],
+                PPL_FCODES, true, false,
             ];
             // Per-feature significance tier (1 = capital, 6 = catch-all).
             // Used as input for both circle-radius (sizes by tier) and the
@@ -926,20 +941,40 @@ class HeroMap {
             // share their present-day siblings' tier (PPLCH ≅ PPLC,
             // PPLH ≅ PPL) so they participate at the right level rather
             // than getting demoted into the catch-all bucket.
-            //
-            // Built as a chain of ``case`` + ``in`` rather than ``match``
-            // with list-labels — the latter is technically valid but the
-            // case form is unambiguous across MapLibre versions and
-            // easier to reason about under expression validation.
-            const tierExpr = [
-                'case',
-                ['in', ['get', 'fcode'], ['literal', ['PPLC', 'PPLG', 'PPLCH']]], 1,
-                ['==', ['get', 'fcode'], 'PPLA'],   2,
-                ['==', ['get', 'fcode'], 'PPLA2'],  3,
-                ['==', ['get', 'fcode'], 'PPLA3'],  4,
-                ['in', ['get', 'fcode'], ['literal', ['PPLA4', 'PPLA5', 'PPL', 'PPLH']]], 5,
+            const tierExpr = ['match', ['get', 'fcode'],
+                'PPLC',  1, 'PPLG',  1, 'PPLCH', 1,
+                'PPLA',  2,
+                'PPLA2', 3,
+                'PPLA3', 4,
+                'PPLA4', 5, 'PPLA5', 5, 'PPL', 5, 'PPLH', 5,
                 6,
             ];
+
+            // Diagnostic — count features in the rendered tiles and
+            // surface a sample by fcode so we can see whether specific
+            // capitals (Dublin, etc.) are present in the source at all.
+            try {
+                const features = this.map.querySourceFeatures(
+                    PLACE_OVERLAY_SOURCE,
+                    { sourceLayer: PLACE_OVERLAY_TILESET },
+                );
+                const byFcode = features.reduce((acc, f) => {
+                    const k = f.properties?.fcode || '(none)';
+                    acc[k] = (acc[k] || 0) + 1;
+                    return acc;
+                }, {});
+                const dublin = features
+                    .filter(f => f.properties?.name === 'Dublin')
+                    .map(f => ({
+                        fcode: f.properties?.fcode,
+                        clustered: f.properties?.clustered,
+                        point_count: f.properties?.point_count,
+                    }));
+                console.debug('settlement source — fcode distribution',
+                    JSON.stringify(byFcode));
+                console.debug('settlement source — Dublin features',
+                    JSON.stringify(dublin));
+            } catch (e) { /* querySourceFeatures may fail before tiles load */ }
             // Label-language fallback — same chain we use elsewhere on
             // the map. ``"local"`` (or no preference) opts into the
             // tileset's default ``name`` field.
