@@ -221,38 +221,82 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function(id) {
         // labels (settlements/countries) added later by heroMap. Larger,
         // darker, and more strongly haloed than those overlays so the
         // gazetteer's own features dominate the reading order.
+        // Label-language fallback: user preference → English → local.
+        // The WHG indexing pipeline emits per-language fields as
+        // ``name_en``, ``name_fr``, … (underscore convention) plus
+        // ``name_local`` and ``name``. ``"local"`` is a synthetic
+        // preference meaning "use the tileset's default toponym".
+        const lang = this.preferredLanguage;
+        const textField = (!lang || lang === 'local')
+            ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
+            : ['coalesce',
+               ['get', `name_${lang}`],
+               ['get', 'name_en'],
+               ['get', 'name_local'],
+               ['get', 'name'],
+               ''];
+        const sharedLabelLayout = {
+            'text-field': textField,
+            'text-font': ['Open Sans Semibold'],
+            'text-size': [
+                'interpolate', ['linear'], ['zoom'],
+                6, 11, 10, 14,
+            ],
+            'text-allow-overlap': false,
+            'text-padding': 6,
+        };
+        const sharedLabelPaint = {
+            'text-color': '#1d3a72',
+            'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+            'text-halo-width': 1.6,
+            'text-halo-blur': 0.4,
+            // Fade in as the heatmap fades out, so labels join the map
+            // at the same zoom as the individual circle markers.
+            'text-opacity': [
+                'interpolate', ['linear'], ['zoom'],
+                6, 0.0, 8, 1.0,
+            ],
+        };
+        // Point + Polygon labels — anchored at the geometry's
+        // representative point (centroid for polygons).
         this.addLayer({
             id: `${baseId}_label`,
             type: 'symbol',
             source: id,
             'source-layer': sourceLayer,
             minzoom: 6,
-            filter: ['has', 'name'],
+            filter: ['all',
+                ['has', 'name'],
+                ['!=', ['geometry-type'], 'LineString'],
+            ],
             layout: {
-                'text-field': ['coalesce', ['get', 'name'], ''],
-                'text-font': ['Open Sans Semibold'],
-                'text-size': [
-                    'interpolate', ['linear'], ['zoom'],
-                    6, 11, 10, 14,
-                ],
+                ...sharedLabelLayout,
                 'text-anchor': 'top',
                 'text-offset': [0, 0.55],
-                'text-allow-overlap': false,
-                'text-padding': 6,
                 'symbol-placement': 'point',
             },
-            paint: {
-                'text-color': '#1d3a72',
-                'text-halo-color': 'rgba(255, 255, 255, 0.95)',
-                'text-halo-width': 1.6,
-                'text-halo-blur': 0.4,
-                // Fade in as the heatmap fades out, so labels join the map
-                // at the same zoom as the individual circle markers.
-                'text-opacity': [
-                    'interpolate', ['linear'], ['zoom'],
-                    6, 0.0, 8, 1.0,
-                ],
+            paint: sharedLabelPaint,
+        });
+        // Line labels — placed along the line so long features get
+        // their name rendered repeatedly at curve-friendly intervals.
+        this.addLayer({
+            id: `${baseId}_label_line`,
+            type: 'symbol',
+            source: id,
+            'source-layer': sourceLayer,
+            minzoom: 6,
+            filter: ['all',
+                ['has', 'name'],
+                ['==', ['geometry-type'], 'LineString'],
+            ],
+            layout: {
+                ...sharedLabelLayout,
+                'symbol-placement': 'line',
+                'symbol-spacing': 250,
+                'text-rotation-alignment': 'map',
+                'text-pitch-alignment': 'viewport',
             },
+            paint: sharedLabelPaint,
         });
     }
     return tilejson;

@@ -103,6 +103,11 @@ class HeroMap {
         this._contextLayerIds = [];
         this._hovered = null;
         this._selected = null;
+        // Set true while ``applyProjectionForBounds`` is driving a
+        // programmatic projection change; ``_emitProjectionChange``
+        // checks this so it doesn't persist a globe-disabled flag from
+        // an automatic switch.
+        this._programmaticProjection = false;
     }
 
     /**
@@ -120,7 +125,7 @@ class HeroMap {
                 container: 'hero_map',
                 zoom: 2.5,
                 minZoom: 0.5,
-                maxZoom: 14,
+                maxZoom: 22,
                 maxBounds: undefined,
                 style: ['whg-context'],
                 fullscreenControl: false,
@@ -727,10 +732,14 @@ class HeroMap {
         const target = wantsMercator
             ? 'mercator'
             : (readGlobeDisabled() ? 'mercator' : 'globe');
+        // Mark the upcoming projection change as programmatic so that
+        // ``_emitProjectionChange`` doesn't flip the user's stored
+        // ``whg.globe_disabled`` preference. Cleared on the next idle —
+        // the transition takes longer than a microtask.
+        this._programmaticProjection = true;
         try { this.map.setProjection({ type: target }); } catch (e) {}
-        // Sync internal state — programmatic setProjection doesn't fire the
-        // user-click path, but moveend/idle in _wireProjectionDetection will
-        // catch up. Nudge it explicitly so the first listener call doesn't lag.
+        this.map.once('idle', () => { this._programmaticProjection = false; });
+        // Nudge the projection listeners so the first call doesn't lag.
         setTimeout(() => this._checkProjectionChange(), 50);
     }
 
@@ -790,15 +799,23 @@ class HeroMap {
         // single huge centroid label is more clutter than orientation.
         // The text-opacity step fades the label away over z5–z7.
         //
-        // Label-language fallback chain: the user's preferred language
-        // (from Profile → Preferences, falling through to navigator.language
-        // and finally to the tileset's default) → English → local. ``local``
-        // is a synthetic preference that means "use the tileset's untagged
-        // ``name`` field" — for it we skip straight to that.
+        // Label-language fallback chain: user preference → English → local.
+        // The WHG indexing pipeline emits per-language fields as
+        // ``name_en``, ``name_fr``, … (underscore, not the OpenMapTiles
+        // colon convention) plus a ``name_local`` containing the country-
+        // local-language version, plus ``name`` (the tileset's default
+        // toponym). The ``"local"`` preference is the synthetic option
+        // meaning "use what the tileset gives me" — skip the user-pref
+        // lookup and go straight to ``name_local``/``name``.
         const lang = this.map.preferredLanguage;
         const labelTextField = (!lang || lang === 'local')
-            ? ['coalesce', ['get', 'name'], ['get', 'name:en'], '']
-            : ['coalesce', ['get', `name:${lang}`], ['get', 'name:en'], ['get', 'name'], ''];
+            ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
+            : ['coalesce',
+               ['get', `name_${lang}`],
+               ['get', 'name_en'],
+               ['get', 'name_local'],
+               ['get', 'name'],
+               ''];
         try {
             this.map.addLayer({
                 id: CONTEXT_LABEL_LAYER,
@@ -1018,22 +1035,9 @@ class HeroMap {
         this.map.on('moveend', () => this._checkProjectionChange());
         this.map.on('idle', () => this._checkProjectionChange());
 
-        // Also listen for the globe control button click for faster response.
-        // A user-driven toggle here is the canonical signal for the persistent
-        // "disable globe globally" preference: if the click leaves the map in
-        // Mercator the user wants Mercator by default; in globe → globe default.
-        //
-        // We persist after the next ``idle`` event because ``getProjection()``
-        // can lag the click while the transition animates — earlier code used
-        // 200/500 ms timeouts and read the old state, leaving the flag stuck.
-        const container = this.map.getContainer();
-        container.addEventListener('click', (e) => {
-            if (!e.target.closest('.maplibregl-ctrl-globe')) return;
-            this.map.once('idle', () => {
-                this._checkProjectionChange();
-                writeGlobeDisabled(!this.isGlobeMode());
-            });
-        });
+        // The persistent "disable globe globally" preference is driven by
+        // ``_emitProjectionChange`` (below) — it persists whenever the
+        // projection actually changes AND the change wasn't programmatic.
     }
 
     /** @private Check if projection changed and notify listeners. */
@@ -1047,6 +1051,12 @@ class HeroMap {
 
     /** @private */
     _emitProjectionChange(isGlobe) {
+        // Persist the preference whenever the user (not the gazetteer-
+        // bounds rule) drives the change. ``_programmaticProjection`` is
+        // set by ``applyProjectionForBounds`` for its window of work.
+        if (!this._programmaticProjection) {
+            writeGlobeDisabled(!isGlobe);
+        }
         this._projectionChangeListeners.forEach(fn => {
             try { fn(isGlobe); } catch (e) { console.error('projection listener error', e); }
         });
