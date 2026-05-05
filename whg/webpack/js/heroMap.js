@@ -42,35 +42,21 @@ function writeGlobeDisabled(disabled) {
     } catch (e) { /* localStorage unavailable */ }
 }
 
-// Context layer (faint OSM admin boundaries shown beneath a selected
-// gazetteer in Explore mode). The thresholds pick which admin levels are
-// visible at each zoom; chosen to keep ~3 levels in view at any zoom so
-// the user always sees *some* context without crowding the display.
-const CONTEXT_ZOOM_THRESHOLDS = [
-    { maxZoom: 2.5, levels: ['0', '1', '2'] },
-    { maxZoom: 4.0, levels: ['1', '2', '3'] },
-    { maxZoom: 6.0, levels: ['2', '3', '4'] },
-    { maxZoom: 8.0, levels: ['3', '4', '5'] },
-    { maxZoom: 10.0, levels: ['4', '5', '6'] },
-    { maxZoom: Infinity, levels: ['5', '6', '7', '8'] },
-];
-
-function adminLevelsForZoom(zoom) {
-    for (const t of CONTEXT_ZOOM_THRESHOLDS) {
-        if (zoom < t.maxZoom) return t.levels;
-    }
-    return CONTEXT_ZOOM_THRESHOLDS[CONTEXT_ZOOM_THRESHOLDS.length - 1].levels;
-}
-
 // Layer IDs use a neutral ``_atlas_overlay_`` prefix rather than
 // ``_atlas_context_``: the global error handler in whg_maplibre.js
 // classifies any error message containing the substring "context" as a
 // WebGL-context fatality, which silently shows a fatal modal whenever
 // MapLibre reports a layer/expression error mentioning the layer id.
-const CONTEXT_LINE_LAYER = '_atlas_overlay_admin_line';
-const CONTEXT_LABEL_LAYER = '_atlas_overlay_admin_label';
+//
+// Country boundaries (admin level "2" in the osm_admin tileset) provide
+// just enough geographic anchoring without competing with the GeoNames-
+// sourced settlement overlay. Sub-country admin levels are deliberately
+// left out — the place markers do that job better.
+const CONTEXT_LINE_LAYER = '_atlas_overlay_country_line';
+const CONTEXT_LABEL_LAYER = '_atlas_overlay_country_label';
 const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
 const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
+const COUNTRY_BOUNDARY_FILTER = ['==', ['get', 'boundary'], '2'];
 
 // Settlement-context overlay. We re-use the GeoNames tileset because it
 // carries population and feature-code metadata for every populated place
@@ -115,7 +101,6 @@ class HeroMap {
         this._currentSource = null;
         this._currentGazetteer = null;
         this._contextLayerIds = [];
-        this._contextZoomListener = null;
         this._hovered = null;
         this._selected = null;
     }
@@ -760,13 +745,15 @@ class HeroMap {
     }
 
     /**
-     * Add a faint OSM-admin context layer beneath the selected gazetteer.
-     * Driven by the existing ``osm_admin`` source from the base style — no
-     * extra tileset is loaded. The line layer renders below the gazetteer's
-     * fill so it never overpowers the primary data; labels render above the
-     * fill so they stay readable on point-bearing gazetteers.
+     * Add the context overlay beneath the selected gazetteer:
+     * - country borders + low-zoom country labels from ``osm_admin``
+     * - settlement points + labels from the GeoNames tileset, tiered by
+     *   the ``population`` and ``fcode`` metadata that the indexing
+     *   pipeline emits onto each tile feature
      *
-     * The visible admin levels switch on zoom via ``adminLevelsForZoom``.
+     * The country line renders below the gazetteer's fill so it never
+     * overpowers the primary data; labels and settlement layers render
+     * above the fill so they stay readable on point-bearing gazetteers.
      */
     _addContextLayers() {
         if (!this.map || !this._currentGazetteer) return;
@@ -777,44 +764,60 @@ class HeroMap {
         const fillExists = !!this.map.getLayer(fillLayerId);
         const symbolBeforeId = this.map.getStyle().layers.find(l => l.type === 'symbol')?.id;
 
-        const initialLevels = adminLevelsForZoom(this.map.getZoom());
-        const levelFilter = ['match', ['get', 'boundary'], initialLevels, true, false];
-
+        // Country borders only — the GeoNames settlement overlay supplies
+        // sub-country geographic context, so the line layer's job is just
+        // to delimit nation states. The OSM admin tileset only carries
+        // boundary='2' features at zooms where they're meaningful, so no
+        // zoom-based filter is needed here.
         try {
             this.map.addLayer({
                 id: CONTEXT_LINE_LAYER,
                 type: 'line',
                 source: 'osm_admin',
                 'source-layer': 'osm_admin',
+                filter: COUNTRY_BOUNDARY_FILTER,
                 paint: {
-                    'line-color': 'rgba(0, 0, 0, 0.18)',
-                    'line-width': 0.6,
-                    'line-opacity': 0.7,
+                    'line-color': 'rgba(0, 0, 0, 0.22)',
+                    'line-width': 0.7,
+                    'line-opacity': 0.75,
                 },
-                filter: levelFilter,
             }, fillExists ? fillLayerId : symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LINE_LAYER);
         } catch (e) { /* layer may already exist after a partial teardown */ }
 
+        // Country labels are useful only at low zooms where the whole
+        // country fits comfortably on screen — once zoomed past ~z6 a
+        // single huge centroid label is more clutter than orientation.
+        // The text-opacity step fades the label away over z5–z7.
         try {
             this.map.addLayer({
                 id: CONTEXT_LABEL_LAYER,
                 type: 'symbol',
                 source: 'osm_admin',
                 'source-layer': 'osm_admin',
+                filter: COUNTRY_BOUNDARY_FILTER,
                 layout: {
                     'text-field': ['coalesce', ['get', 'name'], ['get', 'name:en'], ''],
                     'text-font': ['Open Sans Regular'],
-                    'text-size': 10,
+                    'text-size': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 10, 5, 12,
+                    ],
                     'text-allow-overlap': false,
+                    'text-padding': 6,
                     'symbol-placement': 'point',
                 },
                 paint: {
-                    'text-color': 'rgba(60, 60, 60, 0.75)',
-                    'text-halo-color': 'rgba(255, 255, 255, 0.7)',
-                    'text-halo-width': 1.0,
+                    'text-color': 'rgba(60, 60, 60, 0.85)',
+                    'text-halo-color': 'rgba(255, 255, 255, 0.8)',
+                    'text-halo-width': 1.2,
+                    'text-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        2, 0.85,
+                        5, 0.85,
+                        7, 0.0,
+                    ],
                 },
-                filter: levelFilter,
             }, symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
         } catch (e) { /* same as above */ }
@@ -930,31 +933,11 @@ class HeroMap {
                 this._contextLayerIds.push(CONTEXT_PLACE_LABEL_LAYER);
             } catch (e) { /* same as above */ }
         }
-
-        // Keep the visible admin levels in step with zoom — but apply the
-        // boundary filter only to the admin-source layers. The place
-        // (Natural Earth) layers filter by ``scalerank``, set once at
-        // creation and tiered via paint expressions.
-        this._contextZoomListener = () => {
-            if (!this.map) return;
-            const levels = adminLevelsForZoom(this.map.getZoom());
-            const filter = ['match', ['get', 'boundary'], levels, true, false];
-            for (const layerId of [CONTEXT_LINE_LAYER, CONTEXT_LABEL_LAYER]) {
-                if (this._contextLayerIds.includes(layerId)) {
-                    try { this.map.setFilter(layerId, filter); } catch (e) {}
-                }
-            }
-        };
-        this.map.on('zoomend', this._contextZoomListener);
     }
 
-    /** Remove the context layers and detach the zoom listener. */
+    /** Remove the context layers. */
     _removeContextLayers() {
         if (!this.map) return;
-        if (this._contextZoomListener) {
-            try { this.map.off('zoomend', this._contextZoomListener); } catch (e) {}
-            this._contextZoomListener = null;
-        }
         for (const layerId of this._contextLayerIds) {
             try {
                 if (this.map.getLayer(layerId)) this.map.removeLayer(layerId);
