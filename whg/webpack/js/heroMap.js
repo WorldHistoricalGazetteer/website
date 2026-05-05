@@ -72,6 +72,15 @@ const COUNTRY_BOUNDARY_FILTER = ['==', ['get', 'boundary'], '2'];
 const PLACE_OVERLAY_SOURCE = '_atlas_overlay_settlements';
 const PLACE_OVERLAY_TILESET = 'gn';
 
+// Country-border overlay. The ``un`` tileset is a clean, zoom-stable
+// set of UN-defined country boundaries — unlike the OSM admin tileset
+// it doesn't suffer from tippecanoe coalesce-densest fragmentation that
+// makes country lines flicker on/off as the user zooms. Loaded via a
+// separately-named source for the same reason as the settlement
+// overlay above.
+const BORDER_OVERLAY_SOURCE = '_atlas_overlay_borders';
+const BORDER_OVERLAY_TILESET = 'un';
+
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
     const requested = new Set(requestedValues);
@@ -794,27 +803,40 @@ class HeroMap {
         console.debug('heroMap._addContextLayers: building',
             {gazetteer: this._currentGazetteer, symbolBeforeId});
 
-        // Country borders only — the GeoNames settlement overlay supplies
-        // sub-country geographic context, so the line layer's job is just
-        // to delimit nation states. The OSM admin tileset only carries
-        // boundary='2' features at zooms where they're meaningful, so no
-        // zoom-based filter is needed here.
-        try {
-            this.map.addLayer({
-                id: CONTEXT_LINE_LAYER,
-                type: 'line',
-                source: 'osm',
-                'source-layer': 'osm',
-                filter: COUNTRY_BOUNDARY_FILTER,
-                paint: {
-                    'line-color': 'rgba(40, 40, 40, 0.55)',
-                    'line-width': 1.0,
-                    'line-opacity': 1.0,
-                },
-            }, symbolBeforeId);
-            this._contextLayerIds.push(CONTEXT_LINE_LAYER);
-        } catch (e) {
-            console.warn('heroMap._addContextLayers: country line failed', e);
+        // Country borders — sourced from the ``un`` (UN-defined country
+        // boundaries) tileset rather than ``osm``: the OSM admin tileset
+        // suffers from tippecanoe ``--coalesce-densest-as-needed`` drops
+        // at low zooms, which makes country borders fragment on/off as
+        // the user zooms. ``un`` is a small, dedicated country-only
+        // tileset that renders consistently. ``minzoom: 3`` because the
+        // tileset's lowest zooms have features that don't render well at
+        // very wide views.
+        if (!this.map.getSource(BORDER_OVERLAY_SOURCE)) {
+            try {
+                this.map.addSource(BORDER_OVERLAY_SOURCE, {
+                    type: 'vector',
+                    url: `${process.env.TILEBOSS}/data/${BORDER_OVERLAY_TILESET}.json`,
+                });
+            } catch (e) { /* source may already exist after a partial teardown */ }
+        }
+        if (this.map.getSource(BORDER_OVERLAY_SOURCE)) {
+            try {
+                this.map.addLayer({
+                    id: CONTEXT_LINE_LAYER,
+                    type: 'line',
+                    source: BORDER_OVERLAY_SOURCE,
+                    'source-layer': BORDER_OVERLAY_TILESET,
+                    minzoom: 3,
+                    paint: {
+                        'line-color': 'rgba(0, 0, 0, 0.32)',
+                        'line-width': 0.6,
+                        'line-opacity': 0.8,
+                    },
+                }, symbolBeforeId);
+                this._contextLayerIds.push(CONTEXT_LINE_LAYER);
+            } catch (e) {
+                console.warn('heroMap._addContextLayers: country line failed', e);
+            }
         }
 
         // Country labels are useful only at low zooms where the whole
