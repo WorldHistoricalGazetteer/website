@@ -95,8 +95,10 @@ const CAPITALS_OVERLAY_SOURCE = '_atlas_overlay_capitals';
 const CAPITALS_OVERLAY_TILESET = 'gn_capitals';
 // Fcode set rendered by the capitals overlay. Mirrors the indexing-side
 // filter — duplicating it here lets the existing ``gn`` settlement
-// layer exclude these so capitals aren't double-rendered.
-const CAPITAL_FCODES = ['PPLC', 'PPLG', 'PPLCH', 'PPLA'];
+// layer exclude these so capitals aren't double-rendered. ``PPLCH``
+// (historical capital) is *not* included: it was tried earlier but
+// pulled in noisy artefacts like former dioceses and pre-modern seats.
+const CAPITAL_FCODES = ['PPLC', 'PPLG', 'PPLA'];
 
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
@@ -1130,12 +1132,23 @@ class HeroMap {
             } catch (e) { /* may already exist after a partial teardown */ }
         }
         if (this.map.getSource(CAPITALS_OVERLAY_SOURCE)) {
-            // No filter needed — the tileset is pre-filtered to the
-            // capital fcodes by the indexing pipeline. We do still
-            // tier within the set: PPLC/PPLG/PPLCH at tier 1 (always
-            // visible), PPLA at tier 2 (visible from z3).
-            const capitalTierExpr = ['match', ['get', 'fcode'],
-                'PPLC', 1, 'PPLG', 1, 'PPLCH', 1,
+            // Defensive filter — the tileset is *meant* to be pre-
+            // filtered to PPLC/PPLG/PPLA by the indexing pipeline, but
+            // until the regenerated mbtiles is deployed the existing
+            // gn_capitals.mbtiles still includes ``PPLCH``. Filtering
+            // here keeps historical-capital noise out either way.
+            const capitalFilter = ['match', ['get', 'fcode'],
+                CAPITAL_FCODES, true, false,
+            ];
+            // Size differential: PPLC/PPLG slightly larger than PPLA so
+            // national capitals read more strongly than first-order
+            // admin seats. *Visibility* is no longer tiered by zoom —
+            // the gn_capitals tileset is small enough that every
+            // feature can render at every zoom from 0 upwards, which
+            // is the whole reason we built a separate non-clustered
+            // tileset for it.
+            const capitalSizeTier = ['match', ['get', 'fcode'],
+                'PPLC', 1, 'PPLG', 1,
                 'PPLA', 2,
                 2,
             ];
@@ -1145,27 +1158,18 @@ class HeroMap {
                     type: 'circle',
                     source: CAPITALS_OVERLAY_SOURCE,
                     'source-layer': CAPITALS_OVERLAY_TILESET,
+                    filter: capitalFilter,
                     paint: {
                         'circle-radius': [
-                            'step', capitalTierExpr,
-                            2.8,         // (default: tier 1 — capitals)
+                            'step', capitalSizeTier,
+                            2.8,         // tier 1 — national capitals
                             2, 2.3,      // tier 2 — first-order admin seats
                         ],
                         'circle-color': 'rgba(60, 60, 60, 0.85)',
                         'circle-stroke-color': 'rgba(255, 255, 255, 0.95)',
                         'circle-stroke-width': 0.9,
-                        'circle-opacity': [
-                            'step', ['zoom'],
-                            0,
-                            1, ['case', ['<=', capitalTierExpr, 1], 0.85, 0],
-                            3, 0.85,
-                        ],
-                        'circle-stroke-opacity': [
-                            'step', ['zoom'],
-                            0,
-                            1, ['case', ['<=', capitalTierExpr, 1], 0.95, 0],
-                            3, 0.95,
-                        ],
+                        'circle-opacity': 0.85,
+                        'circle-stroke-opacity': 0.95,
                     },
                 }, symbolBeforeId);
                 this._contextLayerIds.push(CONTEXT_CAPITAL_CIRCLE_LAYER);
@@ -1178,6 +1182,7 @@ class HeroMap {
                     type: 'symbol',
                     source: CAPITALS_OVERLAY_SOURCE,
                     'source-layer': CAPITALS_OVERLAY_TILESET,
+                    filter: capitalFilter,
                     layout: {
                         'text-field': placeTextField,
                         'text-font': ['Open Sans Semibold'],
@@ -1194,12 +1199,7 @@ class HeroMap {
                         'text-color': 'rgba(20, 20, 20, 0.95)',
                         'text-halo-color': 'rgba(255, 255, 255, 0.95)',
                         'text-halo-width': 1.4,
-                        'text-opacity': [
-                            'step', ['zoom'],
-                            0,
-                            2, ['case', ['<=', capitalTierExpr, 1], 0.95, 0],
-                            4, 0.95,
-                        ],
+                        'text-opacity': 0.95,
                     },
                 });
                 this._contextLayerIds.push(CONTEXT_CAPITAL_LABEL_LAYER);
