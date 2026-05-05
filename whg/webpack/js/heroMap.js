@@ -804,9 +804,9 @@ class HeroMap {
                 'source-layer': 'osm',
                 filter: COUNTRY_BOUNDARY_FILTER,
                 paint: {
-                    'line-color': 'rgba(0, 0, 0, 0.22)',
-                    'line-width': 0.7,
-                    'line-opacity': 0.75,
+                    'line-color': 'rgba(40, 40, 40, 0.55)',
+                    'line-width': 1.0,
+                    'line-opacity': 1.0,
                 },
             }, fillExists ? fillLayerId : symbolBeforeId);
             this._contextLayerIds.push(CONTEXT_LINE_LAYER);
@@ -1013,6 +1013,34 @@ class HeroMap {
                 console.warn('heroMap._addContextLayers: place label failed', e);
             }
         }
+
+        // Diagnostic snapshot — layer ids actually present in the style
+        // and their visibility, so we can see whether the layers are
+        // missing, shadowed, or rendering with no features.
+        const allLayers = this.map.getStyle().layers;
+        const overlayState = this._contextLayerIds.map(id => {
+            const layer = allLayers.find(l => l.id === id);
+            const idx = layer ? allLayers.indexOf(layer) : -1;
+            return {
+                id,
+                present: !!layer,
+                index: idx,
+                visibility: layer?.layout?.visibility ?? '(default visible)',
+                source: layer?.source,
+                'source-layer': layer?.['source-layer'],
+            };
+        });
+        console.debug('heroMap._addContextLayers: post-add state', overlayState);
+        // Also log the next-up layers above each overlay layer in z-order,
+        // so we can see whether a heatmap or fill might be obscuring them.
+        const above = this._contextLayerIds.flatMap(id => {
+            const idx = allLayers.findIndex(l => l.id === id);
+            if (idx < 0) return [];
+            return allLayers.slice(idx + 1, idx + 4).map(l => ({
+                aboveOf: id, neighbour: l.id, type: l.type, visibility: l.layout?.visibility ?? 'visible'
+            }));
+        });
+        console.debug('heroMap._addContextLayers: layers stacked above', above);
     }
 
     /** Remove the context layers. */
