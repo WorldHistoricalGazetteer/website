@@ -821,6 +821,23 @@ class HeroMap {
         console.debug('heroMap._addContextLayers: building',
             {gazetteer: this._currentGazetteer, symbolBeforeId});
 
+        // Label-language fallback chain — shared by every label layer
+        // (country labels, settlement labels, capital labels). The
+        // user's preferred language wins; English and the tileset's
+        // local-language toponym are progressive fallbacks. Hoisted to
+        // function scope so the capitals block (added after the gn
+        // settlement block closes) can reference ``placeTextField``
+        // without throwing a ReferenceError.
+        const lang = this.map.preferredLanguage;
+        const placeTextField = (!lang || lang === 'local')
+            ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
+            : ['coalesce',
+               ['get', `name_${lang}`],
+               ['get', 'name_en'],
+               ['get', 'name_local'],
+               ['get', 'name'],
+               ''];
+
         // Country borders — sourced from the ``un`` (UN-defined country
         // boundaries) tileset rather than ``osm``: the OSM admin tileset
         // suffers from tippecanoe ``--coalesce-densest-as-needed`` drops
@@ -861,24 +878,9 @@ class HeroMap {
         // country fits comfortably on screen — once zoomed past ~z6 a
         // single huge centroid label is more clutter than orientation.
         // The text-opacity step fades the label away over z5–z7.
-        //
-        // Label-language fallback chain: user preference → English → local.
-        // The WHG indexing pipeline emits per-language fields as
-        // ``name_en``, ``name_fr``, … (underscore, not the OpenMapTiles
-        // colon convention) plus a ``name_local`` containing the country-
-        // local-language version, plus ``name`` (the tileset's default
-        // toponym). The ``"local"`` preference is the synthetic option
-        // meaning "use what the tileset gives me" — skip the user-pref
-        // lookup and go straight to ``name_local``/``name``.
-        const lang = this.map.preferredLanguage;
-        const labelTextField = (!lang || lang === 'local')
-            ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
-            : ['coalesce',
-               ['get', `name_${lang}`],
-               ['get', 'name_en'],
-               ['get', 'name_local'],
-               ['get', 'name'],
-               ''];
+        // Country labels reuse the function-scoped ``placeTextField``
+        // declared above (same WHG ``name_<lang>``/``name_local``/
+        // ``name`` fallback chain as the settlement / capital labels).
         // Country labels — sourced from the ``un`` tileset (same source
         // as the borders) for the same reason: zoom-stable rendering
         // without the OSM tippecanoe coalesce drop-outs. ``name_en`` is
@@ -893,7 +895,7 @@ class HeroMap {
                 'source-layer': BORDER_OVERLAY_TILESET,
                 minzoom: 3,
                 layout: {
-                    'text-field': labelTextField,
+                    'text-field': placeTextField,
                     'text-font': ['Open Sans Regular'],
                     'text-size': [
                         'interpolate', ['linear'], ['zoom'],
@@ -1022,18 +1024,9 @@ class HeroMap {
                     JSON.stringify(fcodeCounts));
             };
             this.map.on('idle', this._settlementDiagnostic);
-            // Label-language fallback — same chain we use elsewhere on
-            // the map. ``"local"`` (or no preference) opts into the
-            // tileset's default ``name`` field.
-            const lang = this.map.preferredLanguage;
-            const placeTextField = (!lang || lang === 'local')
-                ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
-                : ['coalesce',
-                   ['get', `name_${lang}`],
-                   ['get', 'name_en'],
-                   ['get', 'name_local'],
-                   ['get', 'name'],
-                   ''];
+            // ``placeTextField`` is the function-scoped variable
+            // declared near the top of _addContextLayers — see the
+            // hoisted comment block there for the fallback chain.
 
             try {
                 this.map.addLayer({
