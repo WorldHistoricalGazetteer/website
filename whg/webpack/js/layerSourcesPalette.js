@@ -47,13 +47,14 @@ const ZOOM_THRESHOLDS = [
    string admin levels "0".."11" that osm/ohm use. */
 const TIERED_SOURCES = new Set(['osm', 'ohm']);
 
-/* Map a layer-sources palette source id to the boundary tile source-layer
+/* Map a gazetteer / palette source id to the boundary tile source-layer
    in the whg-context style. ``osm`` and ``ohm`` map to the ``*_admin``
-   tilesets; everything else is identity (the source id and tile-source
-   name already match). Once the user renames the OSM/OHM admin tilesets
-   to drop the ``_admin`` suffix, this map collapses to identity. */
+   tilesets; ``:`` in WHG-namespaced ids (``whg:892``) is rewritten to
+   ``-`` to match the tileserver naming (``whg-892``). Everything else
+   is identity. */
 function tileSourceFor(sourceId) {
-    return ({osm: 'osm_admin', ohm: 'ohm_admin'})[sourceId] || sourceId;
+    const k = (sourceId || '').replace(':', '-');
+    return ({osm: 'osm_admin', ohm: 'ohm_admin'})[k] || k;
 }
 
 /* Tooltip descriptions are now carried per-row by the registry-driven
@@ -308,6 +309,38 @@ export default class LayerSourcesPalette {
     /** Get currently active source IDs (single-element array). */
     getActiveSources() {
         return [...this._activeSources];
+    }
+
+    /**
+     * Programmatically select a source by id. If the id matches a registered
+     * Region Source radio, ticks it and runs the same change path the user
+     * would trigger by clicking. If the id has no matching radio (e.g. a
+     * specialist gazetteer's tileset like ``whg-892``), unticks the radios
+     * and applies the tileset directly via ``heroMap.showBoundaries``.
+     *
+     * Used by the Atlas Gazetteers offcanvas to mirror Explore-mode selections
+     * onto the map.
+     */
+    setActiveSource(id) {
+        if (!id) return;
+        const radio = this._panel.querySelector(`.layer-source-radio[value="${id}"]`);
+        if (radio) {
+            if (!radio.checked) radio.checked = true;
+            radio.dispatchEvent(new Event('change'));
+            return;
+        }
+        // Untick any currently-checked Region Source radio so the UI doesn't
+        // keep claiming a source the map is no longer showing.
+        this._panel.querySelectorAll('.layer-source-radio').forEach(r => { r.checked = false; });
+        const boundarySection = this._panel.querySelector('#boundary_level_section');
+        if (boundarySection) boundarySection.style.display = 'none';
+        this._activeSource = id;
+        this._activeSources = [id];
+        this._currentNamespace = id;
+        this._currentAdminLevel = null;
+        this._boundariesVisible = true;
+        heroMap.showBoundaries({ source: tileSourceFor(id) });
+        this._onSourcesChange();
     }
 
     /** Check if a given source is active. */

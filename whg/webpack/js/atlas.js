@@ -381,7 +381,7 @@ Promise.all([
         });
     });
 
-    // ── Tileset gating for polygon-only gazetteers (OSM, OHM in Explore mode). ──
+    // ── Tileset gating for ``no_explore`` gazetteers (OSM, OHM in Explore mode). ──
     applyTilesetGating(document.querySelector('#gazetteers_offcanvas .offcanvas-body')?.dataset.mode || 'filter');
 
     // ── Initialise type tree in categories offcanvas ──
@@ -679,8 +679,8 @@ function setGazetteerMode(mode) {
     }
     updateGazetteerListVisibility();
 
-    // Polygon-only gazetteers (OSM/OHM) are disabled in Explore mode because
-    // their tilesets cover polygons only. Filter mode keeps them selectable.
+    // Gazetteers flagged ``no_explore`` (e.g. OSM/OHM) are disabled in Explore
+    // mode and re-enabled in Filter mode.
     applyTilesetGating(mode);
 
     // Re-apply type-pill filter visibility & state if the Specialist expansion
@@ -712,8 +712,10 @@ function updateGazetteerListVisibility() {
 
 /* ── Explore-mode gating for ``no_explore`` gazetteers ──
    Disables the input and visually greys the row in Explore mode; restores it in
-   Filter mode. The original tooltip is preserved on a data-bs-title-original
-   attribute so it can be swapped back when leaving Explore. */
+   Filter mode. ``no_explore`` is set on the GazetteerRegistryEntry for sources
+   whose tilesets are not browsable in Explore mode (currently OSM and OHM).
+   The original tooltip is preserved on a data-bs-title-original attribute so it
+   can be swapped back when leaving Explore. */
 function applyTilesetGating(mode) {
     const labels = document.querySelectorAll(
         '#gazetteers_offcanvas .authority-item[data-no-explore="1"]'
@@ -730,7 +732,7 @@ function applyTilesetGating(mode) {
             label.dataset.bsTitleOriginal = label.getAttribute('data-bs-title') || '';
         }
         const newTitle = disabled
-            ? 'Tilesets for this gazetteer cover polygons only — not available in Explore mode'
+            ? 'This gazetteer is not available in Explore mode'
             : label.dataset.bsTitleOriginal;
         label.setAttribute('data-bs-title', newTitle);
         label.setAttribute('data-bs-original-title', newTitle);
@@ -927,6 +929,12 @@ function emitGazetteerSelection(mode) {
         composed.forEach(v => filterSelections.add(v));
     } else {
         exploreSelection = composed[0] || null;
+        // Mirror the Explore selection onto the map: load the gazetteer's
+        // tileset and remove any others. Specialist gazetteers (e.g. ``whg:892``)
+        // resolve to their tileserver name (``whg-892``) inside setActiveSource.
+        if (layerPalette && exploreSelection) {
+            layerPalette.setActiveSource(exploreSelection);
+        }
     }
     filterState.set('authorities', composed);
 }
