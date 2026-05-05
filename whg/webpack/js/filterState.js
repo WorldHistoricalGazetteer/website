@@ -190,6 +190,13 @@ class FilterState {
 
         // Attach geometry references based on active mode (now arrays)
         if (s.mode === 'timespan' && s.spatial.region_id.length > 0) {
+            // FIXME: ``osm_admin_polygons`` is a stale reference — no
+            // such Elasticsearch index currently exists. The intended
+            // index name is unresolved; the search backend likely
+            // ignores or rejects this geometry_refs payload until it's
+            // pointed at a real index. Both branches of the ternary
+            // resolve to the same value, which is itself a clue that
+            // the original author had pending decisions here.
             payload.spatial.geometry_refs = s.spatial.region_id.map(r => ({
                 index: r.source === 'un_geoscheme' ? 'osm_admin_polygons' : 'osm_admin_polygons',
                 id: r.id,

@@ -19,10 +19,12 @@ const SUGGESTION_LABELS = 'suggestion-labels';
 
 /* ── Admin boundaries from the whg-context style ──
  * The whg-context style splits boundaries across multiple vector
- * sources, each with a same-named source-layer:
+ * sources, each with a same-named source-layer (post tileset rename
+ * the OSM/OHM sources are bare ``osm`` / ``ohm`` rather than
+ * ``osm_admin`` / ``ohm_admin``):
  *
- *   osm_admin / ohm_admin — OSM/OHM admin boundaries; per-tier line
- *     and label layers plus a transparent fill we use for hover/click.
+ *   osm / ohm — OSM/OHM admin boundaries; per-tier line and label
+ *     layers plus a transparent fill we use for hover/click.
  *     Feature-property `boundary` is a string admin_level "0"–"11".
  *   osm_misc — miscellaneous OSM/OHM boundary types (parishes,
  *     historical, regions, …); fill layers per category. `boundary`
@@ -33,7 +35,7 @@ const SUGGESTION_LABELS = 'suggestion-labels';
  * We discover layers per source at load time, hide them, and reveal
  * them on demand via showBoundaries({source, boundaryValues}).
  */
-const BOUNDARY_SOURCE_LAYERS = ['osm_admin', 'ohm_admin', 'osm_misc', 'po', 'clio', 'nl'];
+const BOUNDARY_SOURCE_LAYERS = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl'];
 
 /**
  * Decide whether a per-layer static filter on the `boundary` field
@@ -76,7 +78,7 @@ class ContextMap {
         this._boundaryLayerIds = [];   // flat list across all sources
         this._originalFilters = {};    // Snapshot of each boundary layer's original filter
         this._hoverTooltip = null;     // Floating tooltip element for hovered boundaries
-        this._currentSource = null;    // The boundary source currently shown (e.g. 'osm_admin')
+        this._currentSource = null;    // The boundary source currently shown (e.g. 'osm')
         this._hovered = null;          // {source, id} of currently hovered feature
         this._selected = null;         // {source, id} of currently selected feature
     }
@@ -551,7 +553,7 @@ class ContextMap {
      *
      * @param {Object} opts
      * @param {string} opts.source — boundary source-layer name
-     *   ('osm_admin' | 'ohm_admin' | 'osm_misc' | 'po' | 'clio' | 'nl').
+     *   ('osm' | 'ohm' | 'osm_misc' | 'po' | 'clio' | 'nl').
      * @param {string[]} [opts.boundaryValues] — list of `boundary` values
      *   to show (e.g. ['2'] for country tier). If omitted/empty, every
      *   feature in the source is shown.

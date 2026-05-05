@@ -62,10 +62,11 @@ const NAMESPACE_OPTIONS = [
     { value: 'osm_misc', label: 'Misc.', title: 'OSM/OHM miscellaneous boundary types — includes aboriginal lands, baronies, civil and political boundaries, climatic zones, geographic regions, historical and obsolete administrative divisions, indigenous territories, parishes, and other non-standard boundary classifications' },
 ];
 
-/** Namespace toggle value → boundary tile source-layer (= source ID). */
+/** Namespace toggle value → boundary tile source-layer (= source ID).
+ *  After the OSM/OHM tileset rename the mapping is identity. */
 const NAMESPACE_TO_SOURCE = {
-    osm: 'osm_admin',
-    ohm: 'ohm_admin',
+    osm: 'osm',
+    ohm: 'ohm',
     osm_misc: 'osm_misc',
 };
 
@@ -246,7 +247,7 @@ export default class RegionSelector {
         // tile source. For osm/ohm the tier picks a single `boundary` value
         // ("0"–"8"); the synthetic continental/sub-continental rows live
         // under the osm namespace as place_ids "osm:m49_*".
-        const source = NAMESPACE_TO_SOURCE[this._currentNamespace] || 'osm_admin';
+        const source = NAMESPACE_TO_SOURCE[this._currentNamespace] || 'osm';
         if (source === 'osm_misc') {
             // osm_misc records carry tag-named `boundary` values, not admin
             // levels. Tier doesn't apply — show everything in the source.

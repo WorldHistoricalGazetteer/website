@@ -48,13 +48,11 @@ const ZOOM_THRESHOLDS = [
 const TIERED_SOURCES = new Set(['osm', 'ohm']);
 
 /* Map a gazetteer / palette source id to the boundary tile source-layer
-   in the whg-context style. ``osm`` and ``ohm`` map to the ``*_admin``
-   tilesets; ``:`` in WHG-namespaced ids (``whg:892``) is rewritten to
-   ``-`` to match the tileserver naming (``whg-892``). Everything else
-   is identity. */
+   in the whg-context style. After the OSM/OHM tileset rename the mapping
+   is identity except for WHG-namespaced ids: ``whg:892`` becomes
+   ``whg-892`` to match the tileserver naming. */
 function tileSourceFor(sourceId) {
-    const k = (sourceId || '').replace(':', '-');
-    return ({osm: 'osm_admin', ohm: 'ohm_admin'})[k] || k;
+    return (sourceId || '').replace(':', '-');
 }
 
 /* Tooltip descriptions are now carried per-row by the registry-driven

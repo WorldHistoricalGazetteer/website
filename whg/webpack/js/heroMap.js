@@ -23,7 +23,11 @@ const SUGGESTION_LABELS = 'suggestion-labels';
 
 // Boundary source-layer names in the whg-context style. Each is also
 // the source ID for its tileset. See contextMap.js for full schema notes.
-const BOUNDARY_SOURCE_LAYERS = ['osm_admin', 'ohm_admin', 'osm_misc', 'po', 'clio', 'nl'];
+// Source ids in the base style that carry boundary geometry. After the
+// tileset rename, OSM and OHM admin boundaries live under their bare
+// namespace ids (``osm``, ``ohm``); the inner source-layer name in each
+// mbtiles equals the source id, so this list also indexes by that name.
+const BOUNDARY_SOURCE_LAYERS = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl'];
 
 // Persistent user preference: when set, the map opens in Mercator and the
 // gazetteer-bounds rule never auto-switches into globe. Toggled on/off by
@@ -48,7 +52,7 @@ function writeGlobeDisabled(disabled) {
 // WebGL-context fatality, which silently shows a fatal modal whenever
 // MapLibre reports a layer/expression error mentioning the layer id.
 //
-// Country boundaries (admin level "2" in the osm_admin tileset) provide
+// Country boundaries (admin level "2" in the OSM tileset) provide
 // just enough geographic anchoring without competing with the GeoNames-
 // sourced settlement overlay. Sub-country admin levels are deliberately
 // left out — the place markers do that job better.
@@ -755,7 +759,7 @@ class HeroMap {
 
     /**
      * Add the context overlay beneath the selected gazetteer:
-     * - country borders + low-zoom country labels from ``osm_admin``
+     * - country borders + low-zoom country labels from ``osm``
      * - settlement points + labels from the GeoNames tileset, tiered by
      *   the ``population`` and ``fcode`` metadata that the indexing
      *   pipeline emits onto each tile feature
@@ -766,7 +770,7 @@ class HeroMap {
      */
     _addContextLayers() {
         if (!this.map || !this._currentGazetteer) return;
-        if (!this.map.getSource('osm_admin')) return;          // base style missing source
+        if (!this.map.getSource('osm')) return;          // base style missing source
         if (this._contextLayerIds.length > 0) return;          // already added
 
         const fillLayerId = `${this._currentGazetteer}_fill`;
@@ -782,8 +786,8 @@ class HeroMap {
             this.map.addLayer({
                 id: CONTEXT_LINE_LAYER,
                 type: 'line',
-                source: 'osm_admin',
-                'source-layer': 'osm_admin',
+                source: 'osm',
+                'source-layer': 'osm',
                 filter: COUNTRY_BOUNDARY_FILTER,
                 paint: {
                     'line-color': 'rgba(0, 0, 0, 0.22)',
@@ -820,8 +824,8 @@ class HeroMap {
             this.map.addLayer({
                 id: CONTEXT_LABEL_LAYER,
                 type: 'symbol',
-                source: 'osm_admin',
-                'source-layer': 'osm_admin',
+                source: 'osm',
+                'source-layer': 'osm',
                 filter: COUNTRY_BOUNDARY_FILTER,
                 layout: {
                     'text-field': labelTextField,
@@ -849,12 +853,14 @@ class HeroMap {
             this._contextLayerIds.push(CONTEXT_LABEL_LAYER);
         } catch (e) { /* same as above */ }
 
-        // Settlement context — driven by GeoNames ``population`` and
-        // ``fcode`` metadata that the indexing pipeline emits onto every
-        // tile feature. We restrict to feature codes starting with ``PPL``
-        // (populated places: PPL, PPLC capital, PPLA admin centre, etc.)
-        // and tier visibility by population, so low zooms show only major
-        // cities and smaller towns join progressively as the user zooms in.
+        // Settlement context — driven by the GeoNames ``fcode`` metadata
+        // emitted by the indexing pipeline. ``population`` is unreliable
+        // for tiering (most GN points have no value), so we use the GN
+        // feature-code hierarchy directly: capitals (PPLC/PPLG/PPLCH) →
+        // first-order admin seats (PPLA) → second-order (PPLA2) →
+        // third-order (PPLA3) → lower seats / generic populated places.
+        // Historical / destroyed / abandoned codes are kept and slotted
+        // into the appropriate tier — this is a *historical* gazetteer.
         // The source is added on first use and persists across gazetteer
         // switches so its tile cache is reused.
         if (!this.map.getSource(PLACE_OVERLAY_SOURCE)) {
@@ -866,14 +872,39 @@ class HeroMap {
             } catch (e) { /* source may already exist after a partial teardown */ }
         }
         if (this.map.getSource(PLACE_OVERLAY_SOURCE)) {
-            // Only render features for which we know they're populated
-            // places AND we have a population number to tier them by.
+            // Filter: every PPL-prefixed feature code (populated places).
             const settlementFilter = ['all',
                 ['has', 'fcode'],
                 ['==', ['slice', ['get', 'fcode'], 0, 3], 'PPL'],
-                ['has', 'population'],
-                ['>=', ['to-number', ['get', 'population']], 1000],
             ];
+            // Per-feature significance tier (1 = capital, 6 = catch-all).
+            // Used as input for both circle-radius (sizes by tier) and the
+            // zoom-keyed opacity gating below. Historical equivalents
+            // share their present-day siblings' tier (PPLCH ≅ PPLC,
+            // PPLH ≅ PPL) so they participate at the right level rather
+            // than getting demoted into the catch-all bucket.
+            const tierExpr = [
+                'match', ['get', 'fcode'],
+                ['PPLC', 'PPLG', 'PPLCH'], 1,           // capitals (current + historical)
+                ['PPLA'],                  2,           // 1st-order admin seats
+                ['PPLA2'],                 3,           // 2nd-order admin seats
+                ['PPLA3'],                 4,           // 3rd-order admin seats
+                ['PPLA4', 'PPLA5', 'PPL', 'PPLH'], 5,   // lower seats + generic + historical
+                6,                                       // PPLF/PPLL/PPLR/PPLS/PPLX/PPLW/PPLQ/…
+            ];
+            // Label-language fallback — same chain we use elsewhere on
+            // the map. ``"local"`` (or no preference) opts into the
+            // tileset's default ``name`` field.
+            const lang = this.map.preferredLanguage;
+            const placeTextField = (!lang || lang === 'local')
+                ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
+                : ['coalesce',
+                   ['get', `name_${lang}`],
+                   ['get', 'name_en'],
+                   ['get', 'name_local'],
+                   ['get', 'name'],
+                   ''];
+
             try {
                 this.map.addLayer({
                     id: CONTEXT_PLACE_CIRCLE_LAYER,
@@ -883,36 +914,37 @@ class HeroMap {
                     minzoom: 2,
                     filter: settlementFilter,
                     paint: {
-                        // Marker size grows with population — major cities
-                        // ~2.6 px, towns ~1.4 px.
+                        // Marker size shrinks as significance falls.
                         'circle-radius': [
-                            'step', ['to-number', ['get', 'population']],
-                            1.4,            //         pop < 50k:    towns
-                            50000,    1.7,  //   50k <= pop < 200k:  small cities
-                            200000,   2.1,  //  200k <= pop < 1M:    cities
-                            1000000,  2.6,  //    1M <= pop:         major cities
+                            'step', tierExpr,
+                            2.6,        // (default: tier 1 — capitals)
+                            2, 2.2,     // tier 2 — 1st-order admin seats
+                            3, 1.8,     // tier 3 — 2nd-order
+                            4, 1.5,     // tier 4 — 3rd-order
+                            5, 1.3,     // tier 5 — lower seats + generic
+                            6, 1.1,     // tier 6 — catch-all
                         ],
                         'circle-color': 'rgba(70, 70, 70, 0.7)',
                         'circle-stroke-color': 'rgba(255, 255, 255, 0.85)',
                         'circle-stroke-width': 0.7,
-                        // Population-tier gating: each zoom step reveals a
-                        // smaller class of settlement.
+                        // Tier-by-zoom gating. At each zoom band, only
+                        // tiers <= N appear; everyone else is invisible.
                         'circle-opacity': [
                             'step', ['zoom'],
-                            0,                                                                   // < z2: hidden
-                            2, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.7, 0],
-                            4, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.7, 0],
-                            5, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.65, 0],
-                            7, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.6,  0],
-                            9, 0.6,
+                            0,
+                            2, ['case', ['<=', tierExpr, 1], 0.7, 0],   // capitals
+                            4, ['case', ['<=', tierExpr, 2], 0.7, 0],   // + 1st-order
+                            5, ['case', ['<=', tierExpr, 3], 0.65, 0],  // + 2nd-order
+                            7, ['case', ['<=', tierExpr, 4], 0.6,  0],  // + 3rd-order
+                            9, 0.6,                                     // everything left in
                         ],
                         'circle-stroke-opacity': [
                             'step', ['zoom'],
                             0,
-                            2, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.85, 0],
-                            4, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.85, 0],
-                            5, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.8,  0],
-                            7, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.75, 0],
+                            2, ['case', ['<=', tierExpr, 1], 0.85, 0],
+                            4, ['case', ['<=', tierExpr, 2], 0.85, 0],
+                            5, ['case', ['<=', tierExpr, 3], 0.8,  0],
+                            7, ['case', ['<=', tierExpr, 4], 0.75, 0],
                             9, 0.75,
                         ],
                     },
@@ -929,7 +961,7 @@ class HeroMap {
                     minzoom: 3,
                     filter: settlementFilter,
                     layout: {
-                        'text-field': ['coalesce', ['get', 'name'], ''],
+                        'text-field': placeTextField,
                         'text-font': ['Open Sans Regular'],
                         'text-size': [
                             'interpolate', ['linear'], ['zoom'],
@@ -944,16 +976,15 @@ class HeroMap {
                         'text-color': 'rgba(60, 60, 60, 0.85)',
                         'text-halo-color': 'rgba(255, 255, 255, 0.85)',
                         'text-halo-width': 1.0,
-                        // Labels are stricter — only the more significant
-                        // settlements get a label at each zoom band, to
-                        // keep the map legible.
+                        // Labels are stricter than the circles — they
+                        // show one tier later so the map stays legible.
                         'text-opacity': [
                             'step', ['zoom'],
                             0,
-                            3, ['case', ['>=', ['to-number', ['get', 'population']], 5000000], 0.85, 0],
-                            5, ['case', ['>=', ['to-number', ['get', 'population']], 1000000], 0.85, 0],
-                            7, ['case', ['>=', ['to-number', ['get', 'population']],  200000], 0.8,  0],
-                            9, ['case', ['>=', ['to-number', ['get', 'population']],   50000], 0.75, 0],
+                            3, ['case', ['<=', tierExpr, 1], 0.85, 0],
+                            5, ['case', ['<=', tierExpr, 2], 0.85, 0],
+                            7, ['case', ['<=', tierExpr, 3], 0.8,  0],
+                            9, ['case', ['<=', tierExpr, 4], 0.75, 0],
                         ],
                     },
                 }, symbolBeforeId);
