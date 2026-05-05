@@ -61,6 +61,8 @@ const CONTEXT_LINE_LAYER = '_atlas_overlay_country_line';
 const CONTEXT_LABEL_LAYER = '_atlas_overlay_country_label';
 const CONTEXT_PLACE_CIRCLE_LAYER = '_atlas_overlay_place_circle';
 const CONTEXT_PLACE_LABEL_LAYER = '_atlas_overlay_place_label';
+const CONTEXT_CAPITAL_CIRCLE_LAYER = '_atlas_overlay_capital_circle';
+const CONTEXT_CAPITAL_LABEL_LAYER = '_atlas_overlay_capital_label';
 
 // Settlement-context overlay. We re-use the GeoNames tileset because it
 // carries population and feature-code metadata for every populated place
@@ -80,6 +82,21 @@ const PLACE_OVERLAY_TILESET = 'gn';
 // overlay above.
 const BORDER_OVERLAY_SOURCE = '_atlas_overlay_borders';
 const BORDER_OVERLAY_TILESET = 'un';
+
+// Capitals overlay — a synthetic, non-clustered tileset built by the
+// indexing pipeline (``processing/generate_tiles.py::_CONTEXT_OVERLAY_BUCKETS``)
+// containing every PPLC/PPLG/PPLCH/PPLA point from GeoNames. We use
+// it instead of the main ``gn`` tileset for capital-class features
+// because tippecanoe's clustering on ``gn`` drops capitals at zooms
+// 0-8 (cluster-rep selection prefers dense neighbouring POIs).
+// ``gn_capitals`` is generated without clustering, so every capital
+// survives at every zoom from 0 upwards.
+const CAPITALS_OVERLAY_SOURCE = '_atlas_overlay_capitals';
+const CAPITALS_OVERLAY_TILESET = 'gn_capitals';
+// Fcode set rendered by the capitals overlay. Mirrors the indexing-side
+// filter — duplicating it here lets the existing ``gn`` settlement
+// layer exclude these so capitals aren't double-rendered.
+const CAPITAL_FCODES = ['PPLC', 'PPLG', 'PPLCH', 'PPLA'];
 
 function filtersIntersect(layerFilter, requestedValues) {
     if (!requestedValues || requestedValues.length === 0) return true;
@@ -922,29 +939,24 @@ class HeroMap {
             } catch (e) { /* source may already exist after a partial teardown */ }
         }
         if (this.map.getSource(PLACE_OVERLAY_SOURCE)) {
-            // Filter: every PPL-prefixed feature code (populated places).
-            // Uses ``match`` with explicit values rather than ``slice`` —
-            // the slice approach assumes ``fcode`` is always a string of
-            // length ≥ 3, which the tippecanoe clustering pass doesn't
-            // necessarily guarantee on synthesized cluster reps.
+            // Filter: PPL-family fcodes EXCEPT the capital classes —
+            // those are rendered by the dedicated ``gn_capitals``
+            // overlay added below, where they survive at every zoom
+            // because that tileset isn't clustered. Including them
+            // here too would just waste paint cycles.
             const PPL_FCODES = [
-                'PPLC', 'PPLG', 'PPLCH',
-                'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5',
+                'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5',
                 'PPL', 'PPLH',
                 'PPLF', 'PPLL', 'PPLR', 'PPLS', 'PPLX', 'PPLW', 'PPLQ',
             ];
             const settlementFilter = ['match', ['get', 'fcode'],
                 PPL_FCODES, true, false,
             ];
-            // Per-feature significance tier (1 = capital, 6 = catch-all).
-            // Used as input for both circle-radius (sizes by tier) and the
-            // zoom-keyed opacity gating below. Historical equivalents
-            // share their present-day siblings' tier (PPLCH ≅ PPLC,
-            // PPLH ≅ PPL) so they participate at the right level rather
-            // than getting demoted into the catch-all bucket.
+            // Per-feature significance tier within the non-capital
+            // family (3 = 2nd-order admin seat, 6 = catch-all). Tiers
+            // 1 and 2 (capitals, 1st-order seats) live in the capitals
+            // overlay so they're not represented here.
             const tierExpr = ['match', ['get', 'fcode'],
-                'PPLC',  1, 'PPLG',  1, 'PPLCH', 1,
-                'PPLA',  2,
                 'PPLA2', 3,
                 'PPLA3', 4,
                 'PPLA4', 5, 'PPLA5', 5, 'PPL', 5, 'PPLH', 5,
@@ -1033,11 +1045,12 @@ class HeroMap {
                     filter: settlementFilter,
                     paint: {
                         // Marker size shrinks as significance falls.
+                        // Tiers 1 and 2 (capitals, 1st-order seats) are
+                        // not represented in this layer — see the
+                        // capitals overlay for those.
                         'circle-radius': [
                             'step', tierExpr,
-                            2.6,        // (default: tier 1 — capitals)
-                            2, 2.2,     // tier 2 — 1st-order admin seats
-                            3, 1.8,     // tier 3 — 2nd-order
+                            1.8,        // (default: tier 3 — 2nd-order)
                             4, 1.5,     // tier 4 — 3rd-order
                             5, 1.3,     // tier 5 — lower seats + generic
                             6, 1.1,     // tier 6 — catch-all
@@ -1045,26 +1058,17 @@ class HeroMap {
                         'circle-color': 'rgba(70, 70, 70, 0.7)',
                         'circle-stroke-color': 'rgba(255, 255, 255, 0.85)',
                         'circle-stroke-width': 0.7,
-                        // Tier-by-zoom gating. At each zoom band, only
-                        // tiers <= N appear; everyone else is invisible.
-                        // Thresholds chosen so generic populated places
-                        // (PPL, the bulk of GN) appear at moderate zoom
-                        // rather than only on heavy zoom-in.
                         'circle-opacity': [
                             'step', ['zoom'],
                             0,
-                            1, ['case', ['<=', tierExpr, 1], 0.7, 0],   // capitals
-                            3, ['case', ['<=', tierExpr, 2], 0.7, 0],   // + 1st-order
-                            4, ['case', ['<=', tierExpr, 3], 0.65, 0],  // + 2nd-order
-                            5, ['case', ['<=', tierExpr, 4], 0.6,  0],  // + 3rd-order
-                            6, ['case', ['<=', tierExpr, 5], 0.55, 0],  // + lower seats + generic
-                            8, 0.55,                                    // everything left in
+                            4, ['case', ['<=', tierExpr, 3], 0.65, 0],  // 2nd-order at z4+
+                            5, ['case', ['<=', tierExpr, 4], 0.6,  0],  // + 3rd-order at z5+
+                            6, ['case', ['<=', tierExpr, 5], 0.55, 0],  // + lower seats + generic at z6+
+                            8, 0.55,                                    // everything left in at z8+
                         ],
                         'circle-stroke-opacity': [
                             'step', ['zoom'],
                             0,
-                            1, ['case', ['<=', tierExpr, 1], 0.85, 0],
-                            3, ['case', ['<=', tierExpr, 2], 0.85, 0],
                             4, ['case', ['<=', tierExpr, 3], 0.8,  0],
                             5, ['case', ['<=', tierExpr, 4], 0.75, 0],
                             6, ['case', ['<=', tierExpr, 5], 0.7,  0],
@@ -1107,17 +1111,107 @@ class HeroMap {
                         'text-opacity': [
                             'step', ['zoom'],
                             0,
-                            2, ['case', ['<=', tierExpr, 1], 0.85, 0],
-                            4, ['case', ['<=', tierExpr, 2], 0.85, 0],
-                            5, ['case', ['<=', tierExpr, 3], 0.8,  0],
-                            6, ['case', ['<=', tierExpr, 4], 0.75, 0],
-                            8, ['case', ['<=', tierExpr, 5], 0.7,  0],
+                            5, ['case', ['<=', tierExpr, 3], 0.8,  0],   // 2nd-order at z5+
+                            6, ['case', ['<=', tierExpr, 4], 0.75, 0],   // + 3rd-order at z6+
+                            8, ['case', ['<=', tierExpr, 5], 0.7,  0],   // + lower seats + generic at z8+
                         ],
                     },
                 }, symbolBeforeId);
                 this._contextLayerIds.push(CONTEXT_PLACE_LABEL_LAYER);
             } catch (e) {
                 console.warn('heroMap._addContextLayers: place label failed', e);
+            }
+        }
+
+        // ── Capitals overlay (PPLC/PPLG/PPLCH/PPLA) ──
+        // Sourced from the dedicated, non-clustered ``gn_capitals``
+        // tileset. Because clustering doesn't run on this tileset every
+        // capital survives at every zoom; we tier visibility by zoom
+        // here purely so the world map at z2 isn't a forest of dots.
+        if (!this.map.getSource(CAPITALS_OVERLAY_SOURCE)) {
+            try {
+                this.map.addSource(CAPITALS_OVERLAY_SOURCE, {
+                    type: 'vector',
+                    url: `${process.env.TILEBOSS}/data/${CAPITALS_OVERLAY_TILESET}.json`,
+                });
+            } catch (e) { /* may already exist after a partial teardown */ }
+        }
+        if (this.map.getSource(CAPITALS_OVERLAY_SOURCE)) {
+            // No filter needed — the tileset is pre-filtered to the
+            // capital fcodes by the indexing pipeline. We do still
+            // tier within the set: PPLC/PPLG/PPLCH at tier 1 (always
+            // visible), PPLA at tier 2 (visible from z3).
+            const capitalTierExpr = ['match', ['get', 'fcode'],
+                'PPLC', 1, 'PPLG', 1, 'PPLCH', 1,
+                'PPLA', 2,
+                2,
+            ];
+            try {
+                this.map.addLayer({
+                    id: CONTEXT_CAPITAL_CIRCLE_LAYER,
+                    type: 'circle',
+                    source: CAPITALS_OVERLAY_SOURCE,
+                    'source-layer': CAPITALS_OVERLAY_TILESET,
+                    paint: {
+                        'circle-radius': [
+                            'step', capitalTierExpr,
+                            2.8,         // (default: tier 1 — capitals)
+                            2, 2.3,      // tier 2 — first-order admin seats
+                        ],
+                        'circle-color': 'rgba(60, 60, 60, 0.85)',
+                        'circle-stroke-color': 'rgba(255, 255, 255, 0.95)',
+                        'circle-stroke-width': 0.9,
+                        'circle-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            1, ['case', ['<=', capitalTierExpr, 1], 0.85, 0],
+                            3, 0.85,
+                        ],
+                        'circle-stroke-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            1, ['case', ['<=', capitalTierExpr, 1], 0.95, 0],
+                            3, 0.95,
+                        ],
+                    },
+                }, symbolBeforeId);
+                this._contextLayerIds.push(CONTEXT_CAPITAL_CIRCLE_LAYER);
+            } catch (e) {
+                console.warn('heroMap._addContextLayers: capital circle failed', e);
+            }
+            try {
+                this.map.addLayer({
+                    id: CONTEXT_CAPITAL_LABEL_LAYER,
+                    type: 'symbol',
+                    source: CAPITALS_OVERLAY_SOURCE,
+                    'source-layer': CAPITALS_OVERLAY_TILESET,
+                    layout: {
+                        'text-field': placeTextField,
+                        'text-font': ['Open Sans Semibold'],
+                        'text-size': [
+                            'interpolate', ['linear'], ['zoom'],
+                            2, 10, 6, 12, 10, 14,
+                        ],
+                        'text-anchor': 'top',
+                        'text-offset': [0, 0.55],
+                        'text-allow-overlap': false,
+                        'text-padding': 6,
+                    },
+                    paint: {
+                        'text-color': 'rgba(20, 20, 20, 0.95)',
+                        'text-halo-color': 'rgba(255, 255, 255, 0.95)',
+                        'text-halo-width': 1.4,
+                        'text-opacity': [
+                            'step', ['zoom'],
+                            0,
+                            2, ['case', ['<=', capitalTierExpr, 1], 0.95, 0],
+                            4, 0.95,
+                        ],
+                    },
+                });
+                this._contextLayerIds.push(CONTEXT_CAPITAL_LABEL_LAYER);
+            } catch (e) {
+                console.warn('heroMap._addContextLayers: capital label failed', e);
             }
         }
 
