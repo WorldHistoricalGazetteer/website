@@ -99,8 +99,12 @@ export default class GazetteerInteraction {
         if (!this._popup) {
             this._popup = new whg_maplibre.Popup({
                 closeButton: true,
-                closeOnClick: true,
-                maxWidth: '320px',
+                // Manage close manually so back-to-back feature clicks
+                // re-target the same popup instead of MapLibre's
+                // outside-click listener tearing it down before our layer
+                // click handler can reposition it.
+                closeOnClick: false,
+                maxWidth: '400px',
                 className: POPUP_CLASS,
             });
         }

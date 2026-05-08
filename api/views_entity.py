@@ -184,16 +184,17 @@ def _legacy_place_to_lpf(serialized: dict, request=None) -> dict:
 def _crc_place_to_popup(crc_place: dict, place_id: str) -> dict:
     """Shape a CRC gateway place dict for the Atlas popup template.
 
-    Surfaces the popup-relevant fields and rewrites awkward keys (notably
-    ``depictions[].@id``, which Django templates can't access via dot
-    notation) into template-friendly aliases.
+    Flattens the gateway response into template-friendly form: rewrites
+    awkward keys (``depictions[].@id``), groups types/links/depictions,
+    and exposes the per-toponym / per-geometry / per-relation timespans
+    that the gateway now emits.
     """
     title = crc_place.get("title", "") or place_id
     namespace = crc_place.get("namespace") or (
         place_id.split(":", 1)[0] if ":" in place_id else ""
     )
 
-    # Primary type label — first types[].label or sourceLabel
+    # Types — primary first, the rest as additional chips
     primary_type = ""
     other_types: list[str] = []
     for t in crc_place.get("types") or []:
@@ -204,31 +205,35 @@ def _crc_place_to_popup(crc_place: dict, place_id: str) -> dict:
             continue
         if not primary_type:
             primary_type = label
-        else:
+        elif label not in other_types and label != primary_type:
             other_types.append(label)
 
-    # Description — first non-empty value, truncated by template
-    description = ""
+    # Descriptions — keep all for the template; expose first as `description`
+    descriptions = []
     for d in crc_place.get("descriptions") or []:
         if isinstance(d, dict) and d.get("value"):
-            description = d["value"]
-            break
+            descriptions.append({
+                "value": d["value"],
+                "lang": d.get("lang") or "",
+            })
+    description = descriptions[0]["value"] if descriptions else ""
 
-    # First depiction with a usable URL
-    depiction = None
+    # Depictions — expose all with normalised keys; first one is the headline
+    depictions = []
     for dep in crc_place.get("depictions") or []:
         if not isinstance(dep, dict):
             continue
         url = dep.get("@id") or dep.get("id") or ""
-        if url:
-            depiction = {
-                "url": url,
-                "title": dep.get("title", ""),
-                "license": dep.get("license", ""),
-            }
-            break
+        if not url:
+            continue
+        depictions.append({
+            "url": url,
+            "title": dep.get("title") or "",
+            "license": dep.get("license") or "",
+        })
+    depiction = depictions[0] if depictions else None
 
-    # Timespan — _collapse_timespans returns at most one {start, end}
+    # Overall timespan
     timespan = None
     timespans = crc_place.get("timespans") or []
     if timespans and isinstance(timespans[0], dict):
@@ -236,6 +241,95 @@ def _crc_place_to_popup(crc_place: dict, place_id: str) -> dict:
             "start": timespans[0].get("start"),
             "end": timespans[0].get("end"),
         }
+
+    # Names — drop the place's primary title from the alt-name list, keep
+    # per-name timespans intact for in-template rendering.
+    names: list[dict] = []
+    for n in crc_place.get("names") or []:
+        if not isinstance(n, dict):
+            continue
+        label = n.get("label") or ""
+        if not label or label == title:
+            continue
+        names.append({
+            "label": label,
+            "lang": n.get("lang") or "",
+            "timespans": n.get("timespans") or [],
+        })
+
+    # Geometries — only surface those with temporal markers; the geometry
+    # shape itself is already on the map. Render a short type/coord-count
+    # summary so the user can disambiguate which marker the timespan refers to.
+    temporal_geometries: list[dict] = []
+    for g in crc_place.get("geometries") or []:
+        if not isinstance(g, dict):
+            continue
+        gts = g.get("timespans") or []
+        if not gts:
+            continue
+        geom = g.get("geom") or {}
+        gtype = geom.get("type") or "Geometry"
+        rp = g.get("repr_point")
+        coord_hint = ""
+        if isinstance(rp, list) and len(rp) == 2:
+            coord_hint = f"{rp[1]:.3f}, {rp[0]:.3f}"
+        temporal_geometries.append({
+            "type": gtype,
+            "coord_hint": coord_hint,
+            "timespans": gts,
+        })
+
+    # Relations — keep per-relation timespans; build a clickable URL for
+    # the related entity if it looks like a CRC place id.
+    relations: list[dict] = []
+    for r in crc_place.get("relations") or []:
+        if not isinstance(r, dict):
+            continue
+        rel_type = r.get("relation_type") or ""
+        related_id = r.get("related_place_id") or ""
+        rel_label = r.get("label") or related_id
+        if not rel_type and not related_id:
+            continue
+        link_url = f"/entity/place:{related_id}" if related_id else ""
+        relations.append({
+            "relation_type": rel_type,
+            "related_place_id": related_id,
+            "label": rel_label,
+            "link_url": link_url,
+            "timespans": r.get("timespans") or [],
+        })
+
+    # Links — group by authority prefix (wikipedia, wikidata, etc.) so
+    # the template can render a tidy section per source.
+    links_by_authority: dict[str, list[dict]] = {}
+    for lnk in crc_place.get("links") or []:
+        if not isinstance(lnk, dict):
+            continue
+        identifier = lnk.get("identifier") or ""
+        if not identifier:
+            continue
+        ltype = lnk.get("type") or "closeMatch"
+        # Authority key: the URL host prefix or the namespace before ':'
+        authority = ""
+        if "://" in identifier:
+            try:
+                authority = identifier.split("://", 1)[1].split("/", 1)[0]
+                if authority.startswith("www."):
+                    authority = authority[4:]
+            except Exception:
+                authority = identifier
+        elif ":" in identifier:
+            authority = identifier.split(":", 1)[0]
+        else:
+            authority = ltype
+        links_by_authority.setdefault(authority, []).append({
+            "type": ltype,
+            "identifier": identifier,
+        })
+    links_grouped = [
+        {"authority": k, "items": v}
+        for k, v in sorted(links_by_authority.items())
+    ]
 
     return {
         "place_id": place_id,
@@ -245,11 +339,19 @@ def _crc_place_to_popup(crc_place: dict, place_id: str) -> dict:
         "primary_type": primary_type,
         "other_types": other_types,
         "ccodes": crc_place.get("ccodes") or [],
+        "fclasses": crc_place.get("fclasses") or [],
         "boundary": crc_place.get("boundary"),
         "timespan": timespan,
         "population": crc_place.get("population"),
+        "elevation": crc_place.get("elevation"),
         "description": description,
+        "descriptions": descriptions,
         "depiction": depiction,
+        "depictions": depictions,
+        "names": names,
+        "temporal_geometries": temporal_geometries,
+        "relations": relations,
+        "links_grouped": links_grouped,
     }
 
 

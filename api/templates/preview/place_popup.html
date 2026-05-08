@@ -1,44 +1,171 @@
 {% spaceless %}
 <div class="whg-gazetteer-popup">
+
     <div class="popup-header">
         <a class="popup-title" href="/entity/{{ place.entity_id }}" target="_blank" rel="noopener">{{ place.title }}</a>
-        {% if place.namespace %}<span class="popup-ns">{{ place.namespace|upper }}</span>{% endif %}
+        {% if place.namespace %}<span class="popup-ns" title="Source authority">{{ place.namespace|upper }}</span>{% endif %}
     </div>
 
-    {% if place.primary_type or place.boundary or place.ccodes %}
+    {% if place.depiction %}
+    <div class="popup-depiction">
+        <img src="{{ place.depiction.url }}" alt="{{ place.depiction.title }}" loading="lazy">
+        {% if place.depiction.title or place.depiction.license %}
+        <div class="popup-depiction-caption">
+            {% if place.depiction.title %}{{ place.depiction.title|truncatechars:80 }}{% endif %}
+            {% if place.depiction.license %}<span class="popup-license">{{ place.depiction.license }}</span>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if place.primary_type or place.boundary or place.ccodes or place.other_types %}
     <div class="popup-chips">
         {% if place.primary_type %}<span class="popup-chip popup-chip-type">{{ place.primary_type }}</span>{% endif %}
+        {% for t in place.other_types %}<span class="popup-chip popup-chip-type popup-chip-secondary">{{ t }}</span>{% endfor %}
         {% if place.boundary %}<span class="popup-chip popup-chip-admin">{{ place.boundary }}</span>{% endif %}
         {% for cc in place.ccodes %}<span class="popup-chip popup-chip-cc">{{ cc }}</span>{% endfor %}
     </div>
     {% endif %}
 
-    {% if place.timespan %}
-    <div class="popup-meta">
-        <span class="popup-meta-label">Active:</span>
-        {{ place.timespan.start|default_if_none:"?" }} – {{ place.timespan.end|default_if_none:"?" }}
-    </div>
-    {% endif %}
+    <div class="popup-body">
 
-    {% if place.population %}
-    <div class="popup-meta">
-        <span class="popup-meta-label">Population:</span> {{ place.population }}
-    </div>
-    {% endif %}
+        {% if place.timespan or place.population or place.elevation %}
+        <dl class="popup-meta-list">
+            {% if place.timespan %}
+            <dt>Active</dt>
+            <dd>{{ place.timespan.start|default_if_none:"?" }} – {{ place.timespan.end|default_if_none:"?" }}</dd>
+            {% endif %}
+            {% if place.population %}
+            <dt>Population</dt>
+            <dd>{{ place.population }}</dd>
+            {% endif %}
+            {% if place.elevation %}
+            <dt>Elevation</dt>
+            <dd>{{ place.elevation }} m</dd>
+            {% endif %}
+        </dl>
+        {% endif %}
 
-    {% if place.description %}
-    <div class="popup-description">{{ place.description|truncatechars:240 }}</div>
-    {% endif %}
+        {% if place.description %}
+        <p class="popup-description">{{ place.description|truncatechars:320 }}</p>
+        {% endif %}
 
-    {% if place.depiction %}
-    <div class="popup-depiction">
-        <img src="{{ place.depiction.url }}" alt="{{ place.depiction.title }}" loading="lazy">
-        {% if place.depiction.title %}<div class="popup-depiction-caption">{{ place.depiction.title|truncatechars:80 }}</div>{% endif %}
+        {% if place.descriptions|length > 1 %}
+        <details class="popup-section">
+            <summary>{{ place.descriptions|length|add:"-1" }} more description{{ place.descriptions|length|add:"-1"|pluralize }}</summary>
+            <div class="popup-section-body">
+                {% for d in place.descriptions %}{% if not forloop.first %}
+                <p class="popup-description-extra">
+                    {% if d.lang %}<span class="popup-lang">{{ d.lang }}</span>{% endif %}
+                    {{ d.value|truncatechars:320 }}
+                </p>
+                {% endif %}{% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% if place.names %}
+        <details class="popup-section" open>
+            <summary>Alternative names ({{ place.names|length }})</summary>
+            <div class="popup-section-body">
+                <ul class="popup-name-list">
+                    {% for n in place.names %}
+                    <li>
+                        <span class="popup-name-label">{{ n.label }}</span>
+                        {% if n.lang %}<span class="popup-lang">{{ n.lang }}</span>{% endif %}
+                        {% if n.timespans %}
+                        <span class="popup-timespan-marker" title="Attested {% for ts in n.timespans %}{{ ts.start|default_if_none:'?' }}–{{ ts.end|default_if_none:'?' }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                            {% for ts in n.timespans %}{{ ts.start|default_if_none:"?" }}–{{ ts.end|default_if_none:"?" }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </details>
+        {% endif %}
+
+        {% if place.temporal_geometries %}
+        <details class="popup-section" open>
+            <summary>Geometry temporal validity</summary>
+            <div class="popup-section-body">
+                <ul class="popup-geom-list">
+                    {% for g in place.temporal_geometries %}
+                    <li>
+                        <span class="popup-geom-type">{{ g.type }}</span>
+                        {% if g.coord_hint %}<span class="popup-geom-coord">@ {{ g.coord_hint }}</span>{% endif %}
+                        <span class="popup-timespan-marker">
+                            {% for ts in g.timespans %}{{ ts.start|default_if_none:"?" }}–{{ ts.end|default_if_none:"?" }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </details>
+        {% endif %}
+
+        {% if place.relations %}
+        <details class="popup-section">
+            <summary>Relations ({{ place.relations|length }})</summary>
+            <div class="popup-section-body">
+                <ul class="popup-relation-list">
+                    {% for r in place.relations %}
+                    <li>
+                        <span class="popup-relation-type">{{ r.relation_type }}</span>
+                        {% if r.link_url %}<a href="{{ r.link_url }}" target="_blank" rel="noopener">{{ r.label }}</a>{% else %}<span>{{ r.label }}</span>{% endif %}
+                        {% if r.timespans %}
+                        <span class="popup-timespan-marker">
+                            {% for ts in r.timespans %}{{ ts.start|default_if_none:"?" }}–{{ ts.end|default_if_none:"?" }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </span>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </details>
+        {% endif %}
+
+        {% if place.links_grouped %}
+        <details class="popup-section">
+            <summary>External links</summary>
+            <div class="popup-section-body">
+                {% for group in place.links_grouped %}
+                <div class="popup-link-group">
+                    <span class="popup-link-authority">{{ group.authority }}</span>
+                    <ul class="popup-link-list">
+                        {% for lnk in group.items %}
+                        <li>
+                            <a href="{{ lnk.identifier }}" target="_blank" rel="noopener">{{ lnk.identifier|truncatechars:48 }}</a>
+                            {% if lnk.type and lnk.type != "closeMatch" %}<span class="popup-link-type">{{ lnk.type }}</span>{% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endfor %}
+            </div>
+        </details>
+        {% endif %}
+
+        {% if place.depictions|length > 1 %}
+        <details class="popup-section">
+            <summary>{{ place.depictions|length|add:"-1" }} more image{{ place.depictions|length|add:"-1"|pluralize }}</summary>
+            <div class="popup-section-body">
+                <div class="popup-depiction-gallery">
+                    {% for d in place.depictions %}{% if not forloop.first %}
+                    <a href="{{ d.url }}" target="_blank" rel="noopener" title="{{ d.title }}">
+                        <img src="{{ d.url }}" alt="{{ d.title }}" loading="lazy">
+                    </a>
+                    {% endif %}{% endfor %}
+                </div>
+            </div>
+        </details>
+        {% endif %}
+
     </div>
-    {% endif %}
 
     <div class="popup-footer">
         <a href="/entity/{{ place.entity_id }}" target="_blank" rel="noopener">Full record →</a>
     </div>
+
 </div>
 {% endspaceless %}
