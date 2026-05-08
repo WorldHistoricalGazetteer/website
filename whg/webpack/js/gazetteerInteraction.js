@@ -252,6 +252,22 @@ function renderTemporalGeometries(data) {
     `;
 }
 
+/** A namespaced place id is a short lowercase namespace prefix followed
+ *  by ``:`` and at least one alphanumeric character (e.g. ``wd:Q123``,
+ *  ``gn:12345``, ``iv:IV:IV1680``). Bare codes like ``MDG`` or ``450`` —
+ *  which authorities sometimes shove into ``related_place_id`` to mean
+ *  "this is the ISO-3166 alpha-3 code", not "this is a place reference"
+ *  — fail this test and are rendered as plain text alongside their
+ *  label rather than as a (broken) link.
+ *
+ *  Test the identifier shape, not the ``relation_type``: a closeMatch can
+ *  point at a non-place identifier just as easily as a hasIdentifier can
+ *  point at a real namespaced place. */
+const PLACE_ID_PATTERN = /^[a-z]{2,10}:[A-Za-z0-9].*/;
+function looksLikePlaceId(id) {
+    return PLACE_ID_PATTERN.test(id || '');
+}
+
 /** Render a place-id reference as either an external-tab link (when the
  *  id maps to a public authority page via NAMESPACE_WEB_TEMPLATES) or a
  *  modal trigger (when it would otherwise resolve to ``/entity/place:…``,
@@ -271,14 +287,27 @@ function renderRelations(data) {
     const rels = (data.relations || []).filter((r) => r && (r.relation_type || r.related_place_id));
     if (rels.length === 0) return '';
     const items = rels.map((r) => {
-        const label = r.label || r.related_place_id || '';
         const tsHtml = (r.timespans && r.timespans.length)
             ? `<span class="popup-timespan-marker">${esc(renderTimespanList(r.timespans))}</span>`
             : '';
+        let bodyHtml;
+        if (looksLikePlaceId(r.related_place_id)) {
+            const label = r.label || r.related_place_id || '';
+            bodyHtml = renderPlaceRefHTML(r.related_place_id, label);
+        } else if (r.related_place_id) {
+            // Non-place identifier value (e.g. ``hasIdentifier`` →
+            // ``ISO 3166-1 alpha-3: MDG``). Show label and value as text.
+            const valueText = r.label
+                ? `${r.label}: ${r.related_place_id}`
+                : r.related_place_id;
+            bodyHtml = `<span>${esc(valueText)}</span>`;
+        } else {
+            bodyHtml = `<span>${esc(r.label || '')}</span>`;
+        }
         return `
             <li>
                 ${r.relation_type ? `<span class="popup-relation-type">${esc(r.relation_type)}</span>` : ''}
-                ${renderPlaceRefHTML(r.related_place_id || '', label)}
+                ${bodyHtml}
                 ${tsHtml}
             </li>
         `;
