@@ -433,7 +433,12 @@ function openPlaceModal(placeId) {
     _modalInstance.show();
     if (_modalAbort) { try { _modalAbort.abort(); } catch (e) {} }
     _modalAbort = new AbortController();
-    const headers = { 'Accept': 'text/html' };
+    // No explicit ``Accept`` — only JSONRenderer is registered in DRF
+    // (``REST_FRAMEWORK.DEFAULT_RENDERER_CLASSES``), so ``Accept: text/html``
+    // would 406 before the view runs. The default ``*/*`` matches
+    // JSONRenderer and the view's explicit ``HttpResponse(text/html)``
+    // sets the actual response content-type.
+    const headers = {};
     if (typeof window !== 'undefined' && window.csrfToken) {
         headers['X-CSRFToken'] = window.csrfToken;
     }
@@ -564,7 +569,9 @@ export default class GazetteerInteraction {
         // ``X-CSRFToken`` is accepted as ``CSRFUser`` (an AnonymousUser
         // whose ``is_authenticated`` is True). ``window.csrfToken`` is set
         // in base.js from the page's ``<meta name="csrf-token">`` tag.
-        const headers = { 'Accept': 'application/json' };
+        // We deliberately don't set ``Accept`` — see _bindModalDelegate
+        // for why.
+        const headers = {};
         if (typeof window !== 'undefined' && window.csrfToken) {
             headers['X-CSRFToken'] = window.csrfToken;
         }
