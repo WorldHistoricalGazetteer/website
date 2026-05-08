@@ -1,0 +1,44 @@
+{% spaceless %}
+<div class="whg-gazetteer-popup">
+    <div class="popup-header">
+        <a class="popup-title" href="/entity/{{ place.entity_id }}" target="_blank" rel="noopener">{{ place.title }}</a>
+        {% if place.namespace %}<span class="popup-ns">{{ place.namespace|upper }}</span>{% endif %}
+    </div>
+
+    {% if place.primary_type or place.boundary or place.ccodes %}
+    <div class="popup-chips">
+        {% if place.primary_type %}<span class="popup-chip popup-chip-type">{{ place.primary_type }}</span>{% endif %}
+        {% if place.boundary %}<span class="popup-chip popup-chip-admin">{{ place.boundary }}</span>{% endif %}
+        {% for cc in place.ccodes %}<span class="popup-chip popup-chip-cc">{{ cc }}</span>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if place.timespan %}
+    <div class="popup-meta">
+        <span class="popup-meta-label">Active:</span>
+        {{ place.timespan.start|default_if_none:"?" }} – {{ place.timespan.end|default_if_none:"?" }}
+    </div>
+    {% endif %}
+
+    {% if place.population %}
+    <div class="popup-meta">
+        <span class="popup-meta-label">Population:</span> {{ place.population }}
+    </div>
+    {% endif %}
+
+    {% if place.description %}
+    <div class="popup-description">{{ place.description|truncatechars:240 }}</div>
+    {% endif %}
+
+    {% if place.depiction %}
+    <div class="popup-depiction">
+        <img src="{{ place.depiction.url }}" alt="{{ place.depiction.title }}" loading="lazy">
+        {% if place.depiction.title %}<div class="popup-depiction-caption">{{ place.depiction.title|truncatechars:80 }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="popup-footer">
+        <a href="/entity/{{ place.entity_id }}" target="_blank" rel="noopener">Full record →</a>
+    </div>
+</div>
+{% endspaceless %}
