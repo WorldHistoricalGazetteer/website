@@ -1040,12 +1040,14 @@
     display: block;
     margin-bottom: 2px;
 }
-.whg-gazetteer-popup .popup-link-list a {
+.whg-gazetteer-popup .popup-link-list a,
+.whg-gazetteer-popup .popup-relation-list a {
     color: #4a90d9;
     text-decoration: none;
     word-break: break-all;
 }
-.whg-gazetteer-popup .popup-link-list a:hover { text-decoration: underline; }
+.whg-gazetteer-popup .popup-link-list a:hover,
+.whg-gazetteer-popup .popup-relation-list a:hover { text-decoration: underline; }
 .whg-gazetteer-popup .popup-link-type {
     font-size: 0.6rem;
     color: #95a5a6;
@@ -1066,6 +1068,18 @@
 }
 
 .whg-gazetteer-popup .popup-body > :first-child { margin-top: 6px; }
+
+/* Modal-trigger affordance — both the popup title and any in-WHG
+ * place reference render as a click target that pops the place's
+ * preview HTML in a Bootstrap modal rather than opening a new tab. */
+.whg-place-modal-trigger { cursor: pointer; }
+
+.whg-place-modal .modal-body { padding: 0; }
+.whg-place-modal .modal-body .record-container {
+    border-left: 0;
+    margin: 0;
+    background: transparent;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Exact-match toggle

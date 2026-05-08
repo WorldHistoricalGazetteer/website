@@ -114,10 +114,15 @@ function renderTimespanList(arr) {
 function renderHeader(data) {
     const placeId = data.place_id || '';
     const title = data.title || placeId;
-    const entityHref = `/entity/place:${encodeURIComponent(placeId)}`;
+    // The title points at the in-WHG record; render as a modal trigger
+    // (same UX as relation links to in-WHG places) rather than a new-tab
+    // /entity/ link that would land on raw LPF JSON.
+    const titleHtml = placeId
+        ? `<a class="popup-title whg-place-modal-trigger" href="#" data-whg-place-modal="${esc(placeId)}">${esc(title)}</a>`
+        : `<span class="popup-title">${esc(title)}</span>`;
     return `
         <div class="popup-header">
-            <a class="popup-title" href="${esc(entityHref)}" target="_blank" rel="noopener">${esc(title)}</a>
+            ${titleHtml}
             ${placeId ? `<div class="popup-place-id" title="Source identifier">${esc(placeId)}</div>` : ''}
         </div>
     `;
@@ -140,13 +145,15 @@ function renderDepictionHero(data) {
 
 function renderChips(data) {
     const chips = [];
-    // Types — fall back to identifier when label is absent so types
-    // never silently disappear from the popup.
+    // Types — prefer the authority's ``sourceLabel`` over the WHG-resolved
+    // ``label`` (the latter is often a generic AAT translation that loses
+    // the gazetteer's own wording). Fall back to identifier so types never
+    // silently disappear.
     const seenTypeLabels = new Set();
     let isPrimary = true;
     for (const t of data.types || []) {
         if (!t || typeof t !== 'object') continue;
-        const label = t.label || t.sourceLabel || t.identifier || '';
+        const label = t.sourceLabel || t.label || t.identifier || '';
         if (!label || seenTypeLabels.has(label)) continue;
         seenTypeLabels.add(label);
         const cls = isPrimary ? 'popup-chip popup-chip-type' : 'popup-chip popup-chip-type popup-chip-secondary';
@@ -245,22 +252,33 @@ function renderTemporalGeometries(data) {
     `;
 }
 
+/** Render a place-id reference as either an external-tab link (when the
+ *  id maps to a public authority page via NAMESPACE_WEB_TEMPLATES) or a
+ *  modal trigger (when it would otherwise resolve to ``/entity/place:…``,
+ *  which has no human page for CRC records). */
+function renderPlaceRefHTML(relatedId, label) {
+    const text = label || relatedId || '';
+    if (!relatedId) return `<span>${esc(text)}</span>`;
+    const url = relatedPlaceUrl(relatedId);
+    if (!url) return `<span>${esc(text)}</span>`;
+    if (url.startsWith('/entity/')) {
+        return `<a class="whg-place-modal-trigger" href="#" data-whg-place-modal="${esc(relatedId)}">${esc(text)}</a>`;
+    }
+    return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(text)}</a>`;
+}
+
 function renderRelations(data) {
     const rels = (data.relations || []).filter((r) => r && (r.relation_type || r.related_place_id));
     if (rels.length === 0) return '';
     const items = rels.map((r) => {
         const label = r.label || r.related_place_id || '';
-        const url = relatedPlaceUrl(r.related_place_id || '');
         const tsHtml = (r.timespans && r.timespans.length)
             ? `<span class="popup-timespan-marker">${esc(renderTimespanList(r.timespans))}</span>`
             : '';
-        const labelHtml = url
-            ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>`
-            : `<span>${esc(label)}</span>`;
         return `
             <li>
                 ${r.relation_type ? `<span class="popup-relation-type">${esc(r.relation_type)}</span>` : ''}
-                ${labelHtml}
+                ${renderPlaceRefHTML(r.related_place_id || '', label)}
                 ${tsHtml}
             </li>
         `;
@@ -357,6 +375,95 @@ function renderPopup(data) {
 </div>`;
 }
 
+/* ─── Place-detail modal (shared singleton) ──────────────────────────── */
+//
+// Internal-WHG place references can't open a useful new tab — for CRC
+// places ``/entity/place:<id>`` redirects straight to the LPF JSON.
+// We instead pop a Bootstrap modal containing the HTML preview snippet
+// returned by ``/entity/place:<id>/preview`` (the same OpenRefine-style
+// preview that the reconciliation API exposes).
+
+let _modalEl = null;
+let _modalBody = null;
+let _modalInstance = null;
+let _modalAbort = null;
+
+function _ensureModal() {
+    if (_modalEl) return;
+    _modalEl = document.createElement('div');
+    _modalEl.className = 'modal fade whg-place-modal';
+    _modalEl.tabIndex = -1;
+    _modalEl.setAttribute('aria-hidden', 'true');
+    _modalEl.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Place</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body whg-place-modal-body">
+                    <div class="popup-loading">Loading…</div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(_modalEl);
+    _modalBody = _modalEl.querySelector('.whg-place-modal-body');
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+        _modalInstance = new bootstrap.Modal(_modalEl);
+    }
+    _modalEl.addEventListener('hidden.bs.modal', () => {
+        if (_modalAbort) {
+            try { _modalAbort.abort(); } catch (e) {}
+            _modalAbort = null;
+        }
+        _modalBody.innerHTML = '<div class="popup-loading">Loading…</div>';
+    });
+}
+
+function openPlaceModal(placeId) {
+    if (!placeId) return;
+    _ensureModal();
+    if (!_modalInstance) {
+        // Bootstrap unavailable — fall back to opening the preview in a tab.
+        window.open(`/entity/place:${encodeURIComponent(placeId)}/preview`, '_blank', 'noopener');
+        return;
+    }
+    _modalBody.innerHTML = '<div class="popup-loading">Loading…</div>';
+    _modalInstance.show();
+    if (_modalAbort) { try { _modalAbort.abort(); } catch (e) {} }
+    _modalAbort = new AbortController();
+    const headers = { 'Accept': 'text/html' };
+    if (typeof window !== 'undefined' && window.csrfToken) {
+        headers['X-CSRFToken'] = window.csrfToken;
+    }
+    const url = `/entity/place:${encodeURIComponent(placeId)}/preview`;
+    fetch(url, { signal: _modalAbort.signal, credentials: 'same-origin', headers })
+        .then((r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.text();
+        })
+        .then((html) => { _modalBody.innerHTML = html; })
+        .catch((err) => {
+            if (err.name === 'AbortError') return;
+            _modalBody.innerHTML = '<div class="popup-loading">Failed to load place details.</div>';
+        });
+}
+
+// Single document-level delegate so the popup can be re-rendered freely
+// without having to re-bind handlers each time setHTML is called.
+let _modalDelegateBound = false;
+function _bindModalDelegate() {
+    if (_modalDelegateBound) return;
+    _modalDelegateBound = true;
+    document.addEventListener('click', (ev) => {
+        const trigger = ev.target.closest && ev.target.closest('[data-whg-place-modal]');
+        if (!trigger) return;
+        ev.preventDefault();
+        openPlaceModal(trigger.getAttribute('data-whg-place-modal'));
+    });
+}
+
 /* ─── Controller ─────────────────────────────────────────────────────── */
 
 export default class GazetteerInteraction {
@@ -366,6 +473,7 @@ export default class GazetteerInteraction {
         this._handlers = [];
         this._popup = null;
         this._abortController = null;
+        _bindModalDelegate();
     }
 
     /**
