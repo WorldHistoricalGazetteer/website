@@ -12,6 +12,7 @@
  */
 
 import filterState from './filterState';
+import GazetteerInteraction from './gazetteerInteraction';
 
 const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
@@ -132,6 +133,7 @@ class HeroMap {
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
+        this._gazetteerInteraction = null;
         this._contextLayerIds = [];
         this._settlementDiagnostic = null;
         this._hovered = null;
@@ -727,6 +729,7 @@ class HeroMap {
         if (!this.map || !id) return;
         this.hideBoundaries();
         if (this._currentGazetteer && this._currentGazetteer !== id) {
+            if (this._gazetteerInteraction) this._gazetteerInteraction.detach();
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
             this._currentGazetteer = null;
         }
@@ -742,6 +745,19 @@ class HeroMap {
         }
         this._currentGazetteer = id;
         this._addContextLayers();
+        // Wire hover-cursor + click-popup on the gazetteer's shape layers.
+        // baseId rule must match whg_maplibre.loadGazetteerStyle (line ~132):
+        // single vector_layer → ``id``; multi-layer → ``${id}__${sourceLayer}``.
+        const vectorLayers = (tilejson && tilejson.vector_layers && tilejson.vector_layers.length)
+            ? tilejson.vector_layers
+            : [{ id }];
+        const baseIds = vectorLayers.map((vl) =>
+            vectorLayers.length > 1 ? `${id}__${vl.id}` : id
+        );
+        if (!this._gazetteerInteraction) {
+            this._gazetteerInteraction = new GazetteerInteraction(this.map);
+        }
+        this._gazetteerInteraction.attach(id, baseIds);
         if (tilejson && Array.isArray(tilejson.bounds) && tilejson.bounds.length === 4) {
             this.applyProjectionForBounds(tilejson.bounds);
             try { this.map.fitViewport(tilejson.bounds); } catch (e) {}
@@ -779,6 +795,7 @@ class HeroMap {
     /** Tear down the currently-shown dynamic gazetteer, if any. */
     hideGazetteer() {
         if (!this.map) return;
+        if (this._gazetteerInteraction) this._gazetteerInteraction.detach();
         this._removeContextLayers();
         if (this._currentGazetteer) {
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}

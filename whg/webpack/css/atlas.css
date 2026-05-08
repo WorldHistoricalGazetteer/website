@@ -793,6 +793,129 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   Gazetteer feature popup (Atlas Explore mode)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-content {
+    max-width: 320px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.whg-gazetteer-popup {
+    font-size: 0.8rem;
+    color: #2c3e50;
+    line-height: 1.4;
+    padding: 10px 12px 8px;
+    min-width: 220px;
+}
+
+.whg-gazetteer-popup .popup-loading {
+    color: #888;
+    font-style: italic;
+    padding: 6px 0;
+}
+
+.whg-gazetteer-popup .popup-header {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.whg-gazetteer-popup .popup-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #c0392b;
+    text-decoration: none;
+    flex: 1;
+    word-break: break-word;
+}
+.whg-gazetteer-popup .popup-title:hover {
+    text-decoration: underline;
+}
+
+.whg-gazetteer-popup .popup-ns {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: #7f8c8d;
+    background: #ecf0f1;
+    padding: 1px 5px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+}
+
+.whg-gazetteer-popup .popup-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+
+.whg-gazetteer-popup .popup-chip {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #ecf0f1;
+    color: #34495e;
+}
+.whg-gazetteer-popup .popup-chip-type { background: #d6eaf8; color: #1f4e79; }
+.whg-gazetteer-popup .popup-chip-admin { background: #fdebd0; color: #7e5109; }
+.whg-gazetteer-popup .popup-chip-cc { background: #d5f5e3; color: #1e6b3a; }
+
+.whg-gazetteer-popup .popup-meta {
+    font-size: 0.75rem;
+    color: #546e7a;
+    margin-bottom: 4px;
+}
+.whg-gazetteer-popup .popup-meta-label {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-right: 3px;
+}
+
+.whg-gazetteer-popup .popup-description {
+    font-size: 0.75rem;
+    color: #34495e;
+    margin: 6px 0;
+}
+
+.whg-gazetteer-popup .popup-depiction {
+    margin: 6px 0;
+}
+.whg-gazetteer-popup .popup-depiction img {
+    width: 100%;
+    max-height: 140px;
+    object-fit: cover;
+    border-radius: 3px;
+    display: block;
+}
+.whg-gazetteer-popup .popup-depiction-caption {
+    font-size: 0.65rem;
+    color: #888;
+    margin-top: 2px;
+}
+
+.whg-gazetteer-popup .popup-footer {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    text-align: right;
+    font-size: 0.75rem;
+}
+.whg-gazetteer-popup .popup-footer a {
+    color: #4a90d9;
+    text-decoration: none;
+}
+.whg-gazetteer-popup .popup-footer a:hover {
+    text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Exact-match toggle
    ═══════════════════════════════════════════════════════════════════ */
 

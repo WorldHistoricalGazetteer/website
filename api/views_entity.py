@@ -181,6 +181,78 @@ def _legacy_place_to_lpf(serialized: dict, request=None) -> dict:
     }
 
 
+def _crc_place_to_popup(crc_place: dict, place_id: str) -> dict:
+    """Shape a CRC gateway place dict for the Atlas popup template.
+
+    Surfaces the popup-relevant fields and rewrites awkward keys (notably
+    ``depictions[].@id``, which Django templates can't access via dot
+    notation) into template-friendly aliases.
+    """
+    title = crc_place.get("title", "") or place_id
+    namespace = crc_place.get("namespace") or (
+        place_id.split(":", 1)[0] if ":" in place_id else ""
+    )
+
+    # Primary type label — first types[].label or sourceLabel
+    primary_type = ""
+    other_types: list[str] = []
+    for t in crc_place.get("types") or []:
+        if not isinstance(t, dict):
+            continue
+        label = t.get("label") or t.get("sourceLabel") or ""
+        if not label:
+            continue
+        if not primary_type:
+            primary_type = label
+        else:
+            other_types.append(label)
+
+    # Description — first non-empty value, truncated by template
+    description = ""
+    for d in crc_place.get("descriptions") or []:
+        if isinstance(d, dict) and d.get("value"):
+            description = d["value"]
+            break
+
+    # First depiction with a usable URL
+    depiction = None
+    for dep in crc_place.get("depictions") or []:
+        if not isinstance(dep, dict):
+            continue
+        url = dep.get("@id") or dep.get("id") or ""
+        if url:
+            depiction = {
+                "url": url,
+                "title": dep.get("title", ""),
+                "license": dep.get("license", ""),
+            }
+            break
+
+    # Timespan — _collapse_timespans returns at most one {start, end}
+    timespan = None
+    timespans = crc_place.get("timespans") or []
+    if timespans and isinstance(timespans[0], dict):
+        timespan = {
+            "start": timespans[0].get("start"),
+            "end": timespans[0].get("end"),
+        }
+
+    return {
+        "place_id": place_id,
+        "entity_id": f"place:{place_id}",
+        "title": title,
+        "namespace": namespace,
+        "primary_type": primary_type,
+        "other_types": other_types,
+        "ccodes": crc_place.get("ccodes") or [],
+        "boundary": crc_place.get("boundary"),
+        "timespan": timespan,
+        "population": crc_place.get("population"),
+        "description": description,
+        "depiction": depiction,
+    }
+
+
 def _crc_place_to_preview(crc_place: dict) -> dict:
     """
     Convert CRC gateway place data to a dict compatible with the
@@ -393,11 +465,21 @@ class EntityPreviewView(AuthenticatedAPIView):
         if not config:
             return HttpResponse(f"Unsupported object type: {obj_type}", status=404)
 
+        variant = request.GET.get("variant")
+
         # CRC places — fetch from gateway and render preview from dict
         if obj_type == "place" and is_crc_place_id(id):
             crc_place = _fetch_crc_place(id, user=request.user)
             if not crc_place:
                 return HttpResponse(f"CRC place not found: {id}", status=404)
+            if variant == "popup":
+                popup_data = _crc_place_to_popup(crc_place, id)
+                html = render_to_string(
+                    "preview/place_popup.html",
+                    {"place": popup_data},
+                    request=request,
+                )
+                return HttpResponse(html, content_type="text/html; charset=UTF-8")
             preview_data = _crc_place_to_preview(crc_place)
             html = render_to_string(
                 f"preview/{obj_type}.html",
