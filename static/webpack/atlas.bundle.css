@@ -885,6 +885,21 @@ span.twitter-typeahead .tt-suggestion {
     overflow: hidden;
 }
 
+/* Keep the MapLibre close button above any popup content and ensure it
+ * has a comfortable hit area in the top-right corner of the popup. */
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-close-button {
+    z-index: 2;
+    width: 22px;
+    height: 22px;
+    line-height: 18px;
+    font-size: 18px;
+    color: #7f8c8d;
+}
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-close-button:hover {
+    color: #2c3e50;
+    background: rgba(0, 0, 0, 0.04);
+}
+
 .whg-gazetteer-popup {
     font-size: 0.8rem;
     color: #2c3e50;
@@ -902,10 +917,9 @@ span.twitter-typeahead .tt-suggestion {
 }
 
 .whg-gazetteer-popup .popup-header {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    padding: 10px 12px 6px;
+    /* Right-padding reserves space for the absolutely-positioned close
+     * button so it doesn't visually collide with header content. */
+    padding: 10px 32px 6px 12px;
     flex: 0 0 auto;
 }
 
@@ -914,23 +928,20 @@ span.twitter-typeahead .tt-suggestion {
     font-size: 0.95rem;
     color: #c0392b;
     text-decoration: none;
-    flex: 1;
     word-break: break-word;
     line-height: 1.25;
+    display: block;
 }
 .whg-gazetteer-popup .popup-title:hover {
     text-decoration: underline;
 }
 
-.whg-gazetteer-popup .popup-ns {
-    font-size: 0.65rem;
-    font-weight: 600;
-    color: #7f8c8d;
-    background: #ecf0f1;
-    padding: 1px 5px;
-    border-radius: 3px;
-    letter-spacing: 0.04em;
-    flex: 0 0 auto;
+.whg-gazetteer-popup .popup-place-id {
+    font-size: 0.68rem;
+    color: #95a5a6;
+    margin-top: 1px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
 }
 
 .whg-gazetteer-popup .popup-chips {
@@ -1133,22 +1144,7 @@ span.twitter-typeahead .tt-suggestion {
     display: block;
 }
 
-.whg-gazetteer-popup .popup-footer {
-    padding: 6px 12px;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
-    text-align: right;
-    font-size: 0.75rem;
-    flex: 0 0 auto;
-    background: rgba(0, 0, 0, 0.015);
-}
-.whg-gazetteer-popup .popup-footer a {
-    color: #4a90d9;
-    text-decoration: none;
-    font-weight: 600;
-}
-.whg-gazetteer-popup .popup-footer a:hover {
-    text-decoration: underline;
-}
+.whg-gazetteer-popup .popup-body > :first-child { margin-top: 6px; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Exact-match toggle
