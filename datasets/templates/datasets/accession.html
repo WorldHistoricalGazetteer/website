@@ -85,6 +85,7 @@
 					                    <span class="notes" {% if user.is_authenticated %}data-user-id="{{ user.id }}" {% endif %}data-place-id="{{ record.id }}" data-force-tag="defer">
 										    {% for r in record.defer_comments %}<p title="{{ r.tag }}" data-bs-toggle="tooltip" data-creator="{{ r.user.id }}" data-note-id="{{ r.id }}">{{ r.note }}</p>{% endfor %}
 					                    </span>
+										<p class="small text-muted fst-italic mb-2">Notes you add here are a private scratch pad for your reconciliation work. They will be cleared when the dataset is published, and are not included in dataset downloads.</p>
 					                	<h4 class="text-danger">{{ record.title }}
 					                  		{% if record.geoms %}
 						                  		<span class="ms-2">

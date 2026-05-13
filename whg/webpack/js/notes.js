@@ -234,6 +234,9 @@ $.fn.notes = function() {
 		const hasNotes = $(this).find('p').length > 0;
 		
 		const chosenTags = forceTag == '' ? vocabularyTags : `<input type="hidden" name="tag" value="${forceTag}">`;
+		const deferNotice = forceTag === 'defer'
+			? `<div class="alert alert-warning small py-2 mb-2" role="alert">These notes are private to you and are intended as a scratch pad while you reconcile this dataset. They will be cleared when the dataset is published, and are not included in dataset downloads.</div>`
+			: '';
 		
 		if (!userId && !hasNotes) {
 			$(this).remove();
@@ -276,6 +279,7 @@ $.fn.notes = function() {
 	                </button>
 	              </div>
 	              <div class="modal-body">
+	                ${deferNotice}
 	                <form id="commentForm">
 	                  ${chosenTags}
 	                  <label for="commentText">Note:</label>
