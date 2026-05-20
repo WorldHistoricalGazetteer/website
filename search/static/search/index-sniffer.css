@@ -1,0 +1,55 @@
+/* Hard-blocking overlay shown over <main> when the indexing server is down.
+   Paired with search/index-sniffer.js. Intentionally self-contained (no
+   Bootstrap dependency) so it still renders if other assets fail to load. */
+
+main.index-down-host {
+    position: relative;
+    min-height: 60vh;
+}
+
+#index-down-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1080; /* above page chrome, below nothing on this page */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.93);
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+    cursor: not-allowed; /* signal the UI is disabled */
+}
+
+#index-down-overlay .index-down-card {
+    max-width: 520px;
+    padding: 1.5rem 1.75rem;
+    background: #fff;
+    border: 1px solid #ffc107;
+    border-top: 4px solid #dc3545;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15);
+    cursor: default;
+}
+
+#index-down-overlay .index-down-icon {
+    margin-bottom: 0.5rem;
+    font-size: 2.5rem;
+    color: #dc3545;
+}
+
+#index-down-overlay h2 {
+    margin-bottom: 0.5rem;
+    font-size: 1.4rem;
+}
+
+#index-down-overlay p {
+    margin-bottom: 0.5rem;
+    color: #444;
+}
+
+#index-down-overlay .index-down-status {
+    font-size: 0.85rem;
+    color: #888;
+}

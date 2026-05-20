@@ -3,7 +3,7 @@ from django.urls import path  # , include
 
 from search.views import (
     SearchViewV3, SearchPageView, FeatureContextView, TraceGeomView,
-    SearchDatabaseView, CollectionGeomView, TypeaheadSuggestions
+    SearchDatabaseView, CollectionGeomView, TypeaheadSuggestions, index_health
 )
 
 # app_name = "search"
@@ -14,6 +14,7 @@ urlpatterns = [
     # path('old/', SearchPageView.as_view(), name='search-page-old'),
 
     # generic search view, renders search.html w/results
+    path('health/', index_health, name='index-health'),  # liveness check for the index sniffer
     path('index/', SearchViewV3.as_view(), name='search'),  # executes index search
     path('suggestions/', TypeaheadSuggestions, name='typeahead_suggestions'),  # finds suggestions for Search
 

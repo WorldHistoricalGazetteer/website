@@ -59,6 +59,9 @@
 
 {% block extra_head %}
 <link href="{% static 'webpack/search.bundle.css' %}" rel="stylesheet"/>
+<!-- Indexing-server sniffer: disables the page if the index is unreachable -->
+<link href="{% static 'search/index-sniffer.css' %}" rel="stylesheet"/>
+<script src="{% static 'search/index-sniffer.js' %}" defer></script>
 {% endblock %}
 
 {% block header %}

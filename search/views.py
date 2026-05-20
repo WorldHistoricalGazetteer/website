@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 
+import requests
 import simplejson as json
 import sys
 from django.conf import settings
@@ -21,6 +22,26 @@ from utils.regions_countries import get_regions_countries
 from whg.settings import STANDARD_FIELDS
 
 logger = logging.getLogger(__name__)
+
+
+def index_health(request):
+    """Lightweight liveness check of the Elasticsearch indexing server.
+
+    Consumed by the client-side sniffer on the search page, which disables the
+    UI when the index is unreachable (without it, search is non-functional).
+    Unauthenticated and deliberately cheap: a short-timeout request to the
+    cluster health endpoint. Always returns HTTP 200 so the client only needs
+    to read the JSON `status` field.
+    """
+    url = f"{settings.ES_SCHEME}://{settings.ES_HOST}:{settings.ES_PORT}/_cluster/health"
+    up = False
+    try:
+        resp = requests.get(url, auth=('elastic', settings.ELASTIC_PASSWORD), timeout=3)
+        if resp.ok:
+            up = resp.json().get('status') in ('green', 'yellow')
+    except requests.RequestException as e:
+        logger.warning(f"Index health check failed: {e}")
+    return JsonResponse({'status': 'up' if up else 'down'})
 
 
 # new
