@@ -226,6 +226,8 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 15000,
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # Returns a clear 503 JSON when the Elasticsearch indexing server is down.
+    'EXCEPTION_HANDLER': 'api.exception_handlers.api_exception_handler',
 }
 
 TEMPLATES = [

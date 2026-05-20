@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError, MultipleObjectsReturned
 from elasticsearch8 import BadRequestError
+from elastic.health import INDEX_DOWN_EXCEPTIONS, index_unavailable_response
 from rest_framework.request import Request
 
 User = get_user_model()
@@ -496,7 +497,11 @@ class IndexAPIView(View):
                         }
                     }
                 }
-                bundle = bundler(q, whgid, idx)
+                try:
+                    bundle = bundler(q, whgid, idx)
+                except INDEX_DOWN_EXCEPTIONS:
+                    logger.warning("Indexing server unavailable during /api/index bundler query")
+                    return index_unavailable_response()
                 result = {"index_id": whgid,
                           "note": str(len(bundle)) + " records in WHGasserted as skos:closeMatch",
                           "type": "FeatureCollection",
@@ -544,6 +549,9 @@ class IndexAPIView(View):
 
                 try:
                     response = collector(q, settings.ES_WHG)
+                except INDEX_DOWN_EXCEPTIONS:
+                    logger.warning("Indexing server unavailable during /api/index collector query")
+                    return index_unavailable_response()
                 except BadRequestError as e:
                     return JsonResponse({
                         'error': 'BadRequestError',

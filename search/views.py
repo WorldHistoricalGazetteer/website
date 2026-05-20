@@ -3,7 +3,6 @@
 import logging
 from datetime import datetime
 
-import requests
 import simplejson as json
 import sys
 from django.conf import settings
@@ -12,6 +11,7 @@ from django.views.generic import View
 from django.views.generic.base import TemplateView
 
 from api.reconcile import DOCS_URL
+from elastic.health import index_available
 from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
@@ -33,15 +33,7 @@ def index_health(request):
     cluster health endpoint. Always returns HTTP 200 so the client only needs
     to read the JSON `status` field.
     """
-    url = f"{settings.ES_SCHEME}://{settings.ES_HOST}:{settings.ES_PORT}/_cluster/health"
-    up = False
-    try:
-        resp = requests.get(url, auth=('elastic', settings.ELASTIC_PASSWORD), timeout=3)
-        if resp.ok:
-            up = resp.json().get('status') in ('green', 'yellow')
-    except requests.RequestException as e:
-        logger.warning(f"Index health check failed: {e}")
-    return JsonResponse({'status': 'up' if up else 'down'})
+    return JsonResponse({'status': 'up' if index_available() else 'down'})
 
 
 # new
