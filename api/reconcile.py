@@ -874,9 +874,10 @@ def normalise_query_params(params):
                 raise ValueError(f"Invalid bounds: {e}")
 
     has_dataset = "dataset" in params
+    has_contained_in = bool(params.get("contained_in"))
 
-    if not query_text and not (bounds or has_nearby or has_dataset):
-        raise ValueError("Empty query requires bounds, nearby circle, or dataset filter.")
+    if not query_text and not (bounds or has_nearby or has_dataset or has_contained_in):
+        raise ValueError("Empty query requires bounds, nearby circle, a contained_in region, or dataset filter.")
 
     fclasses = None
     if "fclasses" in params:

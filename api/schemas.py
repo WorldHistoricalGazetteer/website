@@ -144,9 +144,28 @@ End year for temporal filtering (default: current year). Must be ≥ `start` yea
 **`countries`** *(array)*  
 Restrict results to ISO 3166-1 alpha-2 country codes. Format: `["US","GB"]`.
 
-**`bounds`** *(object)*  
-GeoJSON geometry collection for spatial restriction. Ignored if circular search parameters are provided.  
+**`bounds`** *(object)*
+GeoJSON geometry collection for spatial restriction. Ignored if circular search parameters are provided.
 Example: `{"type":"Polygon","coordinates":[[[lon,lat],[lon,lat],...]]})`
+
+**`contained_in`** *(array | string)*
+Restrict results to places spatially inside the region formed by the union of
+one or more existing places' geometries (e.g. a country `un:ita`, or any
+administrative polygon such as `osm:r365331`). Pass namespaced place IDs:
+`["un:ita"]` or `"un:ita,osm:r365331"`. May be used on its own (a pure-spatial
+query, no `query` text) or combined with `query`. Resolved server-side, so only
+the IDs are sent — not geometry.
+
+**`containment`** *(string)*
+How `contained_in`/`bounds` membership is tested: `fuzzy` (default — fast,
+tolerant, uses an H3 cell grid) or `exact` (precise polygon geometry). Use
+`exact` when boundary precision matters.
+
+**`relation`** *(string)*
+Spatial relation for `contained_in`/`bounds`: `intersects` (default — any
+overlap with the region) or `within` (the place's whole geometry must lie
+inside the region; border-straddling features are excluded). For point places
+the two are equivalent. Fully-reliable `within` requires `containment=exact`.
 
 **`lat`** *(float)*  
 Latitude for circular search (-90 to 90). Must be used with `lng` and `radius`.
