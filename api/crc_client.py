@@ -132,6 +132,19 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     if bounds:
         body["bounds"] = bounds
 
+    # Spatial containment by reference place_ids, with optional mode + relation.
+    contained_in = raw.get("contained_in")
+    if contained_in:
+        if isinstance(contained_in, str):
+            contained_in = [c.strip() for c in contained_in.split(",") if c.strip()]
+        body["contained_in"] = contained_in
+    containment = raw.get("containment")
+    if containment in ("fuzzy", "exact"):
+        body["containment"] = containment
+    relation = raw.get("relation")
+    if relation in ("intersects", "within"):
+        body["relation"] = relation
+
     # Temporal range
     start = raw.get("start")
     end = raw.get("end")
