@@ -452,7 +452,9 @@ def reconcile_schema():
                 ],
                 "responses": {
                     200: OpenApiResponse(
-                        description="Reconciliation results with candidate matches and scores, or extension data with requested properties"),
+                        description="Reconciliation results with candidate matches and scores (each candidate "
+                                    "includes a `has_geom` flag — true when the place has a full polygon geometry "
+                                    "usable as a `contained_in` region), or extension data with requested properties"),
                     400: OpenApiResponse(description="Invalid query format or missing required parameters"),
                     401: OpenApiResponse(description="Authentication failed"),
                 },

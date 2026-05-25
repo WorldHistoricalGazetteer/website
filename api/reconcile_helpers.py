@@ -208,6 +208,13 @@ def make_candidate(hit, query_text, max_score, schema_space):
     score = normalize_score(hit["_score"], max_score)
     is_exact = name.lower() == query_text.lower()
     ccodes = src.get("ccodes", [])
+    # has_geom: does this place have a full POLYGON geometry (i.e. usable as a `contained_in`
+    # region)? Prefer the explicit flag forwarded from the gateway; otherwise infer it from the
+    # geometry types (legacy ES path), falling back to False when no geometry is present.
+    has_geom = src.get("has_geom")
+    if has_geom is None:
+        has_geom = any((g.get("location") or {}).get("type") in ("Polygon", "MultiPolygon")
+                       for g in src.get("geoms", []))
     return {
         "id": "place:" + str(src.get("place_id")),  # or hit.get("whg_id") or hit["_id"]),
         "name": name,
@@ -215,6 +222,7 @@ def make_candidate(hit, query_text, max_score, schema_space):
         "match": is_exact,
         "alt_names": alt_names,
         "description": f"Country: {', '.join(ccodes)}",
+        "has_geom": bool(has_geom),
         "type": [
             {
                 "id": schema_space + "#Place",

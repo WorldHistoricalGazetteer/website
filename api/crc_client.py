@@ -469,6 +469,9 @@ def _adapt_hits(data: dict) -> list[dict]:
                 "searchy": searchy,
                 "ccodes": ccodes,
                 "geoms": geoms,
+                # True iff the place has a full polygon geometry (usable as a contained_in
+                # region). The gateway flags this per geometry; surface it for the candidate.
+                "has_geom": any(isinstance(g, dict) and g.get("has_geom") for g in geometries),
                 # Mark as CRC-sourced so make_candidate can optionally tag it
                 "_crc_source": True,
             },
