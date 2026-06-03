@@ -36,7 +36,8 @@ def suggest_lead(request):
         if not trusted and cache.get(rl_key, 0) >= RATE_LIMIT_MAX:
             messages.warning(request, "You've sent several suggestions recently — "
                                       "please try again a little later.")
-            return render(request, 'leads/suggest.html', {'form': PublicLeadForm()})
+            return render(request, 'leads/suggest.html',
+                          {'form': PublicLeadForm(), 'show_honeypot': True})
 
         form = PublicLeadForm(request.POST, trusted=trusted)
         if form.is_valid():
@@ -57,7 +58,8 @@ def suggest_lead(request):
     else:
         form = PublicLeadForm(trusted=trusted)
 
-    return render(request, 'leads/suggest.html', {'form': form})
+    return render(request, 'leads/suggest.html',
+                  {'form': form, 'show_honeypot': not trusted})
 
 
 def suggest_thanks(request):

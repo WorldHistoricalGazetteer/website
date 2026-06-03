@@ -27,7 +27,7 @@
         {% csrf_token %}
 
         {# Spam-trap — keep this empty. Absent for logged-in (trusted) users. #}
-        {% if form.website %}
+        {% if show_honeypot %}
         <div class="leads-hp" aria-hidden="true">
             <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
             {{ form.website }}
