@@ -6,9 +6,12 @@ from .models import DatasetLead
 
 class PublicLeadForm(forms.ModelForm):
     """
-    Unauthenticated public suggestion form. Exposes only safe bibliographic
-    fields; status/provenance are set server-side in the view. Includes a hidden
-    honeypot ('website') that real users never see — a filled value means a bot.
+    Public suggestion form. Exposes only safe bibliographic fields;
+    status/provenance are set server-side in the view. Includes a hidden honeypot
+    ('website') that real users never see — a filled value means a bot.
+
+    Pass ``trusted=True`` (e.g. for a logged-in user) to drop the spam-trap field
+    entirely: authenticated submitters don't need anti-spam friction.
     """
 
     # Honeypot: visually hidden, off the tab order. Bots fill it; humans don't.
@@ -53,6 +56,13 @@ class PublicLeadForm(forms.ModelForm):
             'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'recommended_by': forms.TextInput(attrs={'class': 'form-control'}),
         }
+
+    def __init__(self, *args, trusted=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Logged-in users are trusted: remove the spam-trap field so it is neither
+        # rendered nor validated. clean_website() then never runs.
+        if trusted:
+            self.fields.pop('website', None)
 
     def clean_website(self):
         # Honeypot must stay empty.

@@ -23,31 +23,39 @@ def _client_ip(request):
 
 
 def suggest_lead(request):
-    """Public (no login) form to suggest a candidate dataset / print gazetteer."""
+    """Form to suggest a candidate dataset / print gazetteer (login optional).
+
+    Logged-in users are trusted: the honeypot field and the per-IP rate limit
+    (and any future CAPTCHA) are bypassed for them.
+    """
+    trusted = request.user.is_authenticated
+
     if request.method == 'POST':
-        ip = _client_ip(request)
-        rl_key = f'leads:suggest:rl:{ip}'
-        count = cache.get(rl_key, 0)
-        if count >= RATE_LIMIT_MAX:
+        rl_key = f'leads:suggest:rl:{_client_ip(request)}'
+        # Anti-spam (honeypot + rate limit) only applies to anonymous submitters.
+        if not trusted and cache.get(rl_key, 0) >= RATE_LIMIT_MAX:
             messages.warning(request, "You've sent several suggestions recently — "
                                       "please try again a little later.")
             return render(request, 'leads/suggest.html', {'form': PublicLeadForm()})
 
-        form = PublicLeadForm(request.POST)
+        form = PublicLeadForm(request.POST, trusted=trusted)
         if form.is_valid():
             lead = form.save(commit=False)
             lead.status = LeadStatus.SUGGESTED
             lead.provenance = LeadProvenance.PUBLIC_FORM
+            if trusted:
+                lead.recommender_user = request.user
             lead.save()
-            # increment rate-limit counter (set TTL on first write)
-            try:
-                cache.incr(rl_key)
-            except ValueError:
-                cache.set(rl_key, 1, RATE_LIMIT_WINDOW)
-            logger.info('New public dataset-lead suggestion #%s: %s', lead.pk, lead.title)
+            if not trusted:
+                # increment rate-limit counter (set TTL on first write)
+                try:
+                    cache.incr(rl_key)
+                except ValueError:
+                    cache.set(rl_key, 1, RATE_LIMIT_WINDOW)
+            logger.info('New dataset-lead suggestion #%s: %s', lead.pk, lead.title)
             return redirect('leads:suggest_thanks')
     else:
-        form = PublicLeadForm()
+        form = PublicLeadForm(trusted=trusted)
 
     return render(request, 'leads/suggest.html', {'form': form})
 

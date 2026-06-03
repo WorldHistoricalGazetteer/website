@@ -26,11 +26,13 @@
     <form method="post" action="{% url 'leads:suggest' %}" class="needs-validation" novalidate>
         {% csrf_token %}
 
-        {# Honeypot — keep this empty #}
+        {# Spam-trap — keep this empty. Absent for logged-in (trusted) users. #}
+        {% if form.website %}
         <div class="leads-hp" aria-hidden="true">
             <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
             {{ form.website }}
         </div>
+        {% endif %}
 
         {% if form.non_field_errors %}
             <div class="alert alert-danger">{{ form.non_field_errors }}</div>
