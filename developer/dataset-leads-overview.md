@@ -55,8 +55,10 @@ It's **one-directional: Zotero → WHG**, and it never overwrites our triage dat
 
 - **Triage board = Django Admin** → *Leads › Dataset leads*. Filter by status /
   provenance / scan status / assignee; edit status, priority, and assignee inline
-  from the list; bulk actions (Approve, Reject, recompute gap value, sync from
-  Zotero).
+  from the list; working bulk actions to **Approve** / **Reject** selected leads.
+  (Two more actions — *sync from Zotero* and *recompute gap value* — are stubbed
+  in the menu as placeholders for the roadmap items below; they don't do anything
+  yet.)
 - **72 candidate rows already seeded** from the candidate-bibliography spreadsheet,
   so the board starts with real data (all currently *In triage*).
 - **The two fields Ruth asked for:**
