@@ -69,8 +69,11 @@ It's **one-directional: Zotero → WHG**, and it never overwrites our triage dat
     etc.). For now these are human judgements; see the note on gap value below.
 - **Public suggestion form** at `/leads/suggest/`, reachable from the new
   **Contribute** menu in the site header. No login required (in production).
-  Submissions arrive as *Suggested* / *Public form*. Light spam guards: a hidden
-  "spam-trap" field (see note below) and a simple per-IP rate limit.
+  Submissions arrive as *Suggested* / *Public form*. Light spam guards for
+  anonymous users: a hidden "spam-trap" field (see note below) and a simple
+  per-IP rate limit. **Logged-in users skip both** — they're trusted, so the form
+  has no anti-spam friction, and their submission is automatically linked to their
+  account.
 
 ### The "honeypot" / spam-trap field, briefly
 
@@ -80,6 +83,10 @@ it; automated spam bots fill in every field they find. If that hidden field
 comes back with anything in it, we treat the submission as a bot and drop it.
 It's a zero-friction alternative to a CAPTCHA — nothing for genuine users to do.
 We can add a CAPTCHA later if bots get clever (see decision #4).
+
+**This only affects anonymous submitters.** Logged-in users are trusted: the
+spam-trap and rate limit are bypassed entirely (and any future CAPTCHA would be
+too), so decision #4 is really only about *anonymous* submissions.
 
 ## 4. Decisions / inputs we need from the group
 
@@ -94,8 +101,8 @@ We can add a CAPTCHA later if bots get clever (see decision #4).
    later if someone can describe a metric that's both simple and meaningful.
    Question for the group: is there a *narrow, well-defined* version worth trying?
 3. **Should accepted leads be publicly browsable**, or admin-only for now?
-4. **Spam-protection appetite** for the public form — hidden-field trap only, or
-   add a CAPTCHA?
+4. **Spam-protection appetite** for *anonymous* submissions — hidden-field trap
+   only, or add a CAPTCHA? (Logged-in users already skip all of this.)
 5. **Confirm the division of truth** in §2 (Zotero = bibliography, WHG = workflow,
    write-back deferred).
 
