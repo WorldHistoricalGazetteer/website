@@ -160,6 +160,20 @@
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                            aria-expanded="false">
+                            Contribute </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item" href="{% url 'leads:suggest' %}">Suggest a dataset</a>
+                            </li>
+                            <li>
+                                {# TODO placeholder — wire up the "contribute your own data" workflow #}
+                                <a class="dropdown-item" href="#">I have data!</a>
+                            </li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                           aria-expanded="false">
                             About </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li>
