@@ -1,0 +1,18 @@
+{% extends 'main/base_webpack.html' %}
+
+{% block title %}<title>Thank you · WHG</title>{% endblock %}
+
+{% block content %}
+<div class="container my-5" style="max-width: 720px;">
+    <h2>Thank you!</h2>
+    <p class="lead">Your suggestion has been received and added to our review queue.</p>
+    <p>
+        The team triages new suggestions regularly. If you left your name, we may
+        follow up. Thanks for helping grow the World Historical Gazetteer.
+    </p>
+    <p class="mt-4">
+        <a class="btn btn-outline-primary" href="{% url 'leads:suggest' %}">Suggest another</a>
+        <a class="btn btn-link" href="/">Back to home</a>
+    </p>
+</div>
+{% endblock %}
