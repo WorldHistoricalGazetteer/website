@@ -63,6 +63,7 @@ urlpatterns = [
                   path('collections/', include('collection.urls')),
                   path('datasets/', include('datasets.urls')),
                   path('elastic/', include('elastic.urls')),
+                  path('leads/', include('leads.urls')),
                   path('main/', include('main.urls')),  # utility urls/views
                   path('places/', include('places.urls')),
                   path('resources/', include('resources.urls')),
