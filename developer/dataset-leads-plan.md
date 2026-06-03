@@ -212,6 +212,16 @@ bibliography layer feeds the tracker.
 Decision to confirm with the team: **direction of truth.** MVP = Zotero is the
 bibliographic source, Django owns workflow. Write-back to Zotero is deferred.
 
+**Storage convention — link, don't attach.** The Zotero app and API are free;
+the only thing Zotero charges for is *file-attachment* storage above a 300 MB
+free tier. Bibliographic metadata does **not** count against that quota — only
+attached files (PDF scans) do. So group-library items should store the
+`source_url` (Internet Archive / HathiTrust / repository link) and **not** the
+scanned PDFs themselves. Many candidate rows already link to full-text PDFs on
+IA, so this loses nothing and keeps the group library comfortably inside the
+free tier — no subscription required. Reflect this when mapping Zotero fields:
+prefer `url`/`archive`/`libraryCatalog` over downloading attachments.
+
 ## Gap-value automation (`leads/services/gapvalue.py`)
 
 The rubric's "WHG gap value" criterion is partly computable — this is the
