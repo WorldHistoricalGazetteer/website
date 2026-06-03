@@ -97,6 +97,10 @@ services:
       - {{ ENV_CONTEXT }}
     platform: linux/amd64
     image: redis:bullseye
+    # Redis here is only a cache + Celery broker (disposable). Disable RDB/AOF
+    # persistence so a corrupt dump.rdb can never wedge startup (see 2026-06-03
+    # outage). Empty --save string turns snapshotting off.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     container_name: redis_{{ ENV_CONTEXT }}_{{ BRANCH }}
     {% if MEM_LIMIT_REDIS is defined %}
     mem_limit: {{ MEM_LIMIT_REDIS }}
