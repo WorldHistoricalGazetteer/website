@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -73,6 +74,11 @@ class CitationWiringTests(TestCase):
 
     def setUp(self):
         from datasets.models import Dataset
+        # Dataset post_save fires a DataCite DOI call; mock it out so tests
+        # make no external requests.
+        doi_patch = patch("datasets.signals.doi")
+        doi_patch.start()
+        self.addCleanup(doi_patch.stop)
         self.User = get_user_model()
         self.user = self.User.objects.create(username="t", email="t@example.com")
         self.ds = Dataset.objects.create(
