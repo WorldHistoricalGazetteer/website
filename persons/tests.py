@@ -161,8 +161,8 @@ class ContributorEndpointTests(TestCase):
         doi_patch.start()
         self.addCleanup(doi_patch.stop)
         User = get_user_model()
-        self.owner = User.objects.create_user("owner", "o@example.com", "pw")
-        self.other = User.objects.create_user("other", "x@example.com", "pw")
+        self.owner = User.objects.create(username="owner", email="o@example.com")
+        self.other = User.objects.create(username="other", email="x@example.com")
         self.ds = Dataset.objects.create(owner=self.owner, label="d", title="T",
                                          description="D")
         self.add_url = reverse("datasets:ds_contribution_add", args=[self.ds.id])
