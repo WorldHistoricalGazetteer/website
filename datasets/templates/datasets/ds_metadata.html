@@ -8,6 +8,15 @@
 {% block extra_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   <link href="{% static 'webpack/builders-dataset.bundle.css' %}" rel="stylesheet" />
+  <style>
+    /* Make the whole metadata content one scrolling region so it never
+       overflows past the footer. builders-dataset.css caps .container height
+       with overflow:visible (so #dataset_content spilled over the footer) and
+       scrolls only the left #ds_details column; instead scroll
+       #dataset_content as a whole and disable the inner per-column scroll. */
+    #dataset_content { max-height: calc(100vh - 110px); overflow-y: auto; }
+    #ds_details { overflow-y: visible; max-height: none; }
+  </style>
 {% endblock %}
 
 {% block title %}<title>Dataset::{{ ds.label }}</title>{% endblock %}
