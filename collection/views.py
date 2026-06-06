@@ -1000,6 +1000,8 @@ class PlaceCollectionBrowseView(DetailView):
         context['media_url'] = settings.MEDIA_URL
 
         context['is_admin'] = True if self.request.user.groups.filter(name__in=['whg_admins']).exists() else False
+        # Read-only CRediT credit for the unified attribution partial (§4.4).
+        context['contributions'] = _credit_context(coll, self.request.user)['contributions']
         context['ds_list'] = coll.ds_list
         context['num_places'] = coll.num_places
         context['ds_counter'] = coll.ds_counter
@@ -1352,6 +1354,8 @@ class DatasetCollectionBrowseView(DetailView):
         # context['ds_list'] = coll.ds_list
         context['links'] = Link.objects.filter(collection=id_)
         context['updates'] = {}
+        # Read-only CRediT credit for the unified attribution partial (§4.4).
+        context['contributions'] = _credit_context(coll, self.request.user)['contributions']
         context['is_admin'] = True if self.request.user.groups.filter(name__in=['whg_admins']).exists() else False
         context[
             'visParameters'] = coll.vis_parameters or "{'seq': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'min': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'max': {'tabulate': false, 'temporal_control': 'none', 'trail': false}}"

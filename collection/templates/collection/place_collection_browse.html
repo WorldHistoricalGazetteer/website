@@ -107,7 +107,7 @@
 						</table>
 						<div data-csl-json="{{ object.citation_csl }}"></div>
 						{% if object.license %}
-							<div class="mt-1">{% include "licensing/_license_badge.html" with license=object.license rights_statement=object.rights_statement %}</div>
+							<div class="mt-1">{% include "includes/_attribution.html" with license=object.license rights_statement=object.rights_statement contributions=contributions %}</div>
 						{% endif %}
 						<div class="">
 							<p>

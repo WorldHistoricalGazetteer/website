@@ -290,7 +290,8 @@
                           <td class="fw-bold">License</td>
                           <td>
                             {% if ds.license %}
-                              {% include "licensing/_license_badge.html" with license=ds.license rights_statement=ds.rights_statement %}
+                              {# Unified attribution partial; contributors omitted here — the editor widget above handles them. #}
+                              {% include "includes/_attribution.html" with license=ds.license rights_statement=ds.rights_statement %}
                             {% else %}
                               <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>
                             {% endif %}
