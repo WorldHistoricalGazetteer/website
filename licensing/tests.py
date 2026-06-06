@@ -2,6 +2,19 @@ from django.template import Context, Template
 from django.test import TestCase
 
 from .models import License
+from .rights import datacite_rights_list, rights_statement_text
+
+
+class _Obj:
+    """Lightweight stand-in for a Dataset/Collection (avoids the real models'
+    save signals, which call DataCite). Only the attrs the helper reads."""
+    def __init__(self, license=None, rights_statement=""):
+        self.license = license
+        self.rights_statement = rights_statement
+
+
+class Dataset(_Obj):
+    pass
 
 
 class LicenseSeedTests(TestCase):
@@ -41,3 +54,39 @@ class LicenseBadgeTests(TestCase):
 
     def test_renders_nothing_without_license(self):
         self.assertEqual(self._render(license=None), "")
+
+
+class RightsHelperTests(TestCase):
+    """licensing.rights — truthful per-object rights (citations §4.2–4.3).
+    The WHG overlay (settings.WHG_OVERLAY_LICENSE) is CC-BY-NC-4.0."""
+
+    def test_datacite_source_then_overlay(self):
+        lic = License.objects.get(spdx_id="ODbL-1.0")
+        rl = datacite_rights_list(Dataset(license=lic))
+        self.assertEqual(len(rl), 2)
+        self.assertEqual(rl[0]["rightsIdentifier"], "ODbL-1.0")   # source first
+        self.assertEqual(rl[1]["rightsIdentifier"], "CC-BY-NC-4.0")  # overlay
+
+    def test_datacite_overlay_only_without_license(self):
+        rl = datacite_rights_list(Dataset(license=None))
+        self.assertEqual([r["rightsIdentifier"] for r in rl], ["CC-BY-NC-4.0"])
+
+    def test_datacite_ignores_non_license_attr(self):
+        # A plain string (e.g. the legacy Link.license CharField) is not a
+        # License row and must not be emitted as a source licence.
+        rl = datacite_rights_list(Dataset(license="some-string"))
+        self.assertEqual([r["rightsIdentifier"] for r in rl], ["CC-BY-NC-4.0"])
+
+    def test_statement_names_source_and_overlay(self):
+        lic = License.objects.get(spdx_id="ODbL-1.0")
+        txt = rights_statement_text(Dataset(license=lic,
+                                           rights_statement="Extra terms."))
+        self.assertIn("ODbL-1.0", txt)
+        self.assertIn("Extra terms.", txt)
+        self.assertIn("CC-BY-NC-4.0", txt)        # overlay still stated
+        self.assertNotIn("noncommercial purposes only", txt)  # no false claim
+
+    def test_statement_overlay_only_without_license(self):
+        txt = rights_statement_text(Dataset(license=None))
+        self.assertNotIn("licensed under", txt)   # no source-licence sentence
+        self.assertIn("aggregation licence", txt)

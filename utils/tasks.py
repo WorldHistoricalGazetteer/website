@@ -173,16 +173,17 @@ def create_zipfile(data_dump_filename, dsid=None, collid=None):
         metadata = dataset_to_json(dsid) if dsid else collection_to_json(collid)
         pretty_metadata = json.dumps(metadata, indent=1, sort_keys=False)
         dl_class = "Dataset" if dsid else "Collection"
+        # Truthful per-object licence statement: the source licence (when
+        # recorded) plus WHG's aggregation overlay — not a hard-coded constant.
+        # See licensing/rights.py (citations design §4.3).
+        from licensing.rights import rights_statement_text
+        obj = (Dataset.objects.filter(id=dsid).first() if dsid
+               else Collection.objects.filter(id=collid).first())
+        licence_statement = rights_statement_text(obj) if obj else ""
         readme_content = (f'World Historical Gazetteer (WHG)\n{dl_class} Download\n'
                           f'data: {os.path.basename(data_dump_filename)}\n'
                           '********************************\n'
-                          'This dataset conforms to the CC-BY 4.0 NC license.\n\n'
-                          "This license enables reusers to distribute, remix, adapt, and build upon the material "
-                          "in any medium or format for noncommercial purposes only, and only so long as attribution "
-                          "is given to the creator. CC BY-NC includes the following elements:\n"
-                          "* Attribution — You must give appropriate credit, provide a link to the license, and indicate "
-                          "if changes were made.\n"
-                          "* NonCommercial — You may not use the material for commercial purposes.\n\n"
+                          + licence_statement + "\n\n"
                           "***********************************\n"
                           "Metadata:\n" + pretty_metadata)
 
