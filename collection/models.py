@@ -103,6 +103,17 @@ class Collection(models.Model):
     contact = models.CharField(null=True, blank=True, max_length=500)
     webpage = models.URLField(null=True, blank=True)
 
+    # Source licence (the data's own rights). WHG's curation/aggregation licence
+    # is asserted separately via settings.WHG_OVERLAY_LICENSE.
+    license = models.ForeignKey(
+        'licensing.License', null=True, blank=True,
+        on_delete=models.PROTECT, related_name='collections',
+    )
+    rights_statement = models.TextField(
+        null=True, blank=True,
+        help_text="Free-text rights, for custom licences or extra conditions.",
+    )
+
     # modified, 20220902: 'place' or 'dataset'; no default
     collection_class = models.CharField(choices=COLLECTIONCLASSES, max_length=12)
 

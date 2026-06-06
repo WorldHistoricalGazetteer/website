@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     'datasets.apps.DatasetsConfig',
     'elastic.apps.ElasticConfig',
     'ingestion.apps.IngestionConfig',
+    'licensing.apps.LicensingConfig',
     'main.apps.MainConfig',
     'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
@@ -591,6 +592,16 @@ DOI_PASSWORD = os.environ.get("DOI_PASSWORD")
 DOI_PREFIX = os.environ.get("DOI_PREFIX")
 DOI_API_URL = f"https://api{'' if os.environ.get('ENV_CONTEXT') == 'whgazetteer-org' else '.test'}.datacite.org/dois"
 DOI_ENCODED_CREDENTIALS = base64.b64encode(f"{DOI_USER_ID}:{DOI_PASSWORD}".encode('utf-8')).decode('utf-8')
+
+# WHG's own curation/aggregation licence. Asserted ALONGSIDE each source's
+# rights (never instead of them) — source licences live on the licensing.License
+# model. Consumed by the DOI/download/render paths in later phases; defined here
+# so the overlay is a single source of truth.
+WHG_OVERLAY_LICENSE = {
+    "spdx_id": "CC-BY-NC-4.0",
+    "label": "Creative Commons Attribution-NonCommercial 4.0 International",
+    "url": "https://creativecommons.org/licenses/by-nc/4.0/",
+}
 
 # Page-specific settings
 DATASETS_PLACES_LIMIT = 100000
