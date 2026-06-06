@@ -1,3 +1,7 @@
+import json
+
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
@@ -62,3 +66,69 @@ class ContributionTests(TestCase):
         self._contrib(target, role=CreditRole.DATA_CURATION)  # no error
         self.assertEqual(
             Contribution.objects.filter(object_id=str(target.pk)).count(), 2)
+
+
+class CitationWiringTests(TestCase):
+    """Phase 2b: CSL + DataCite read structured Contributions, with free-text fallback."""
+
+    def setUp(self):
+        from datasets.models import Dataset
+        self.User = get_user_model()
+        self.user = self.User.objects.create(username="t", email="t@example.com")
+        self.ds = Dataset.objects.create(
+            owner=self.user, label="testds", title="T", description="D",
+            creator="Ruth Mostern; Karl Grossner (0000-0002-4066-8297)",
+            contributors="[University of Pittsburgh]",
+        )
+
+    def _csl(self):
+        from utils.csl_citation_formatter import csl_citation
+        return json.loads(csl_citation(self.ds))
+
+    def test_freetext_fallback_when_no_contributions(self):
+        # No structured contributions yet -> author list comes from free text.
+        authors = self._csl()["author"]
+        families = {a.get("family") for a in authors}
+        self.assertIn("Mostern", families)
+        self.assertIn("Grossner", families)
+        self.assertIn({"literal": "University of Pittsburgh"},
+                      [a for a in authors if "literal" in a])
+
+    def test_structured_contributions_preferred(self):
+        p = Person.objects.create(family="Mostern", given="Ruth",
+                                  orcid="0000-0002-0000-0000")
+        Contribution.objects.create(person=p, role=CreditRole.CONCEPTUALIZATION,
+                                    target=self.ds, order=0)
+        authors = self._csl()["author"]
+        # Structured path wins: exactly the one contributor, with ORCID.
+        self.assertEqual(authors, [{"family": "Mostern", "given": "Ruth",
+                                    "ORCID": "https://orcid.org/0000-0002-0000-0000"}])
+
+    def test_datacite_contributors(self):
+        from utils.doi import get_contributors
+        p = Person.objects.create(family="Grossner", given="Karl",
+                                  orcid="0000-0002-4066-8297",
+                                  affiliation="University of Pittsburgh")
+        Contribution.objects.create(person=p, role=CreditRole.DATA_CURATION,
+                                    target=self.ds)
+        contribs = get_contributors(self.ds)
+        self.assertEqual(len(contribs), 1)
+        c = contribs[0]
+        self.assertEqual(c["contributorType"], "DataCurator")
+        self.assertEqual(c["familyName"], "Grossner")
+        self.assertEqual(c["nameIdentifiers"][0]["nameIdentifier"],
+                         "https://orcid.org/0000-0002-4066-8297")
+        self.assertEqual(c["affiliation"], [{"name": "University of Pittsburgh"}])
+
+    def test_importer_creates_contributions(self):
+        call_command("import_freetext_contributors")
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(self.ds.__class__)
+        contribs = Contribution.objects.filter(content_type=ct, object_id=str(self.ds.pk))
+        # 2 creators (Conceptualization) + 1 org contributor (Data curation)
+        self.assertEqual(contribs.count(), 3)
+        self.assertTrue(Person.objects.filter(orcid="0000-0002-4066-8297").exists())
+        self.assertTrue(Person.objects.filter(literal="University of Pittsburgh").exists())
+        # idempotent
+        call_command("import_freetext_contributors")
+        self.assertEqual(contribs.count(), 3)
