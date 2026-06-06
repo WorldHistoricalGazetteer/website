@@ -33,13 +33,16 @@ class ContributionTests(TestCase):
     def test_target_string_pk(self):
         # GazetteerRegistryEntry has a CharField PK ("gn") — exercises the
         # CharField object_id that lets one generic FK span mixed PK types.
+        # Use a sub-namespaced id (and one not seeded by api's data migration)
+        # to exercise a non-integer PK in object_id.
         gaz = GazetteerRegistryEntry.objects.create(
-            id="gn", name="GeoNames", namespace="gn", entry_class="authority",
+            id="whg:credit-test", name="Credit Test", namespace="whg",
+            entry_class="dataset",
         )
         c = self._contrib(gaz, role=CreditRole.RESOURCES)
         reloaded = Contribution.objects.get(pk=c.pk)
         self.assertEqual(reloaded.target, gaz)
-        self.assertEqual(reloaded.object_id, "gn")
+        self.assertEqual(reloaded.object_id, "whg:credit-test")
 
     def test_credit_uri(self):
         c = self._contrib(self.person, role=CreditRole.SOFTWARE)
