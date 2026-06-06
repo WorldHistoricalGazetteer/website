@@ -14,7 +14,8 @@ from django.core.cache import cache
 from django.db.models import F, Min, Max
 from django.db.models.functions import Coalesce
 from django.forms.models import inlineformset_factory
-from django.http import JsonResponse, HttpResponseRedirect, Http404, HttpResponseServerError
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse, HttpResponseRedirect, Http404, HttpResponseServerError, HttpResponseForbidden
 from django.conf import settings
 from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_POST
@@ -963,6 +964,7 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         context['created'] = self.object.create_date.strftime("%Y-%m-%d")
         # context['whgteam'] = User.objects.filter(groups__name='whg_team')
 
+        context.update(_credit_context(self.object, self.request.user))
         return context
 
 
@@ -1303,6 +1305,7 @@ class DatasetCollectionUpdateView(UpdateView):
         # context['visParameters'] = json.dumps(vis_parameters)
         context['vis_parameters_dict'] = vis_parameters
 
+        context.update(_credit_context(self.object, self.request.user))
         return context
 
 
@@ -1397,3 +1400,49 @@ class CollectionDeleteView(DeleteView):
 
     def get_success_url(self):
         return reverse('dashboard')
+
+
+# ---------------------------------------------------------------------------
+# CRediT contributor editing (Phase 2b public widget)
+# ---------------------------------------------------------------------------
+
+def _credit_context(obj, user):
+    """Context for the reusable includes/_credit_contributors.html widget."""
+    from django.contrib.contenttypes.models import ContentType
+    from persons.models import Contribution, CreditRole, ContributionDegree
+    ct = ContentType.objects.get_for_model(obj.__class__)
+    return {
+        'contributions': (Contribution.objects
+                          .filter(content_type=ct, object_id=str(obj.pk))
+                          .select_related('person').order_by('order')),
+        'credit_roles': CreditRole.choices,
+        'contribution_degrees': ContributionDegree.choices,
+        'can_edit_credit': user.is_staff or user in obj.owners,
+        'contrib_base': f"/collections/{obj.pk}/contributions",
+    }
+
+
+def _user_can_edit_collection(user, coll):
+    return user.is_staff or user in coll.owners
+
+
+@login_required
+@require_POST
+def collection_contribution_add(request, id):
+    """Create a CRediT Contribution for a collection. Owner/staff only."""
+    from persons.contributions import add_contribution
+    coll = get_object_or_404(Collection, id=id)
+    if not _user_can_edit_collection(request.user, coll):
+        return HttpResponseForbidden("Not permitted")
+    return add_contribution(request, coll)
+
+
+@login_required
+@require_POST
+def collection_contribution_delete(request, id, cid):
+    """Delete a CRediT Contribution from a collection. Owner/staff only."""
+    from persons.contributions import delete_contribution
+    coll = get_object_or_404(Collection, id=id)
+    if not _user_can_edit_collection(request.user, coll):
+        return HttpResponseForbidden("Not permitted")
+    return delete_contribution(request, coll, cid)
