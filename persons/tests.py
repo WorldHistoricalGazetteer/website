@@ -138,3 +138,14 @@ class CitationWiringTests(TestCase):
         # idempotent
         call_command("import_freetext_contributors")
         self.assertEqual(contribs.count(), 3)
+
+    def test_importer_handles_duplicate_persons(self):
+        # Pre-existing duplicate Person rows (same name, null orcid) must not
+        # raise MultipleObjectsReturned — the importer reuses the first.
+        Person.objects.create(family="Mostern", given="Ruth")
+        Person.objects.create(family="Mostern", given="Ruth")
+        call_command("import_freetext_contributors")  # must not raise
+        from django.contrib.contenttypes.models import ContentType
+        ct = ContentType.objects.get_for_model(self.ds.__class__)
+        self.assertTrue(Contribution.objects.filter(
+            content_type=ct, object_id=str(self.ds.pk)).exists())
