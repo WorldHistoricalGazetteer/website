@@ -217,6 +217,8 @@
         <input type="hidden" name="label" value="{{ ds.label }}">
         <input type="hidden" name="format" value="dummy">
         <input type="hidden" name="datatype" value="place">
+
+        {% include 'includes/_credit_contributors.html' %}
       </div> <!-- ds_details -->
 
       <div class="col-sm-5 small">
@@ -305,8 +307,6 @@
 
             {% include 'main/download_modal.html' with object=ds entity_type='dataset' entity_prefix='dataset' %}
 {#          {% endif %} <!-- owner or superuser -->#}
-
-            {% include 'includes/_credit_contributors.html' %}
         </div> <!-- ds_info -->
       </div> <!-- ds_details -->
       </div> <!-- row -->
