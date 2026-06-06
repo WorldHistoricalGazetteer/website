@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.urls import reverse
 
 from api.models import GazetteerRegistryEntry
 from persons.models import Person, Contribution, CreditRole
@@ -149,3 +150,55 @@ class CitationWiringTests(TestCase):
         ct = ContentType.objects.get_for_model(self.ds.__class__)
         self.assertTrue(Contribution.objects.filter(
             content_type=ct, object_id=str(self.ds.pk)).exists())
+
+
+class ContributorEndpointTests(TestCase):
+    """Phase 2b public widget: dataset contribution add/delete endpoints."""
+
+    def setUp(self):
+        from datasets.models import Dataset
+        doi_patch = patch("datasets.signals.doi")
+        doi_patch.start()
+        self.addCleanup(doi_patch.stop)
+        User = get_user_model()
+        self.owner = User.objects.create(username="owner", email="o@example.com")
+        self.other = User.objects.create(username="other", email="x@example.com")
+        self.ds = Dataset.objects.create(owner=self.owner, label="d", title="T",
+                                         description="D")
+        self.add_url = reverse("datasets:ds_contribution_add", args=[self.ds.id])
+
+    def test_owner_can_add_and_delete(self):
+        self.client.force_login(self.owner)
+        r = self.client.post(self.add_url, {
+            "name": "Ruth Mostern", "role": "conceptualization",
+            "orcid": "0000-0002-1111-2222", "affiliation": "Pitt"})
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertIn("Mostern", data["person"])
+        self.assertEqual(data["role"], "Conceptualization")
+        self.assertEqual(Contribution.objects.count(), 1)
+        self.assertTrue(Person.objects.filter(orcid="0000-0002-1111-2222").exists())
+
+        del_url = reverse("datasets:ds_contribution_delete",
+                          args=[self.ds.id, data["id"]])
+        r2 = self.client.post(del_url)
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(Contribution.objects.count(), 0)
+
+    def test_non_owner_forbidden(self):
+        self.client.force_login(self.other)
+        r = self.client.post(self.add_url, {"name": "X", "role": "software"})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(Contribution.objects.count(), 0)
+
+    def test_invalid_role_rejected(self):
+        self.client.force_login(self.owner)
+        r = self.client.post(self.add_url, {"name": "X", "role": "not-a-role"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_org_literal_contributor(self):
+        self.client.force_login(self.owner)
+        r = self.client.post(self.add_url, {
+            "name": "[University of Pittsburgh]", "role": "resources"})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(Person.objects.filter(literal="University of Pittsburgh").exists())
