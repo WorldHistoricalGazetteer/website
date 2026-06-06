@@ -1680,3 +1680,30 @@ class WatershedAPIView(APIView):
             raise Http404(f"Error fetching watershed GeoJSON: {str(e)}")
 
         return Response(watershed_geojson)
+
+
+class AttributionView(APIView):
+    """Resolve gazetteer attribution for the namespaces present in a result set
+    (citations design §4.7). Public registry metadata — no token required.
+
+    GET /api/attribution/?namespaces=gn,wd,tgn
+    GET /api/attribution/?ids=gn:745044,wd:Q84
+
+    Returns ``{"sources": {ns: {name, citation, record_count}}, "whg": {…overlay…}}``.
+    Consumers of the reconciliation / search / extension APIs can resolve the
+    attribution for the namespaces appearing in their results.
+    """
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from api.attribution import attribution_block, namespaces_from_ids
+        namespaces = set()
+        ns_param = request.GET.get('namespaces')
+        if ns_param:
+            namespaces |= {n.strip().lower() for n in ns_param.split(',') if n.strip()}
+        ids_param = request.GET.get('ids')
+        if ids_param:
+            namespaces |= namespaces_from_ids(
+                [i.strip() for i in ids_param.split(',') if i.strip()])
+        return Response(attribution_block(namespaces))
