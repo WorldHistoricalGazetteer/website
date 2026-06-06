@@ -202,3 +202,37 @@ class ContributorEndpointTests(TestCase):
             "name": "[University of Pittsburgh]", "role": "resources"})
         self.assertEqual(r.status_code, 200)
         self.assertTrue(Person.objects.filter(literal="University of Pittsburgh").exists())
+
+
+class CollectionContributorEndpointTests(TestCase):
+    """Phase 2b public widget: collection contribution add/delete endpoints."""
+
+    def setUp(self):
+        from collection.models import Collection
+        doi_patch = patch("collection.signals.doi")
+        doi_patch.start()
+        self.addCleanup(doi_patch.stop)
+        User = get_user_model()
+        self.owner = User.objects.create(username="cowner", email="co@example.com")
+        self.other = User.objects.create(username="cother", email="cx@example.com")
+        self.coll = Collection.objects.create(
+            owner=self.owner, title="C", description="D", collection_class="place")
+        self.add_url = reverse("collection:coll_contribution_add", args=[self.coll.id])
+
+    def test_owner_can_add_and_delete(self):
+        self.client.force_login(self.owner)
+        r = self.client.post(self.add_url, {"name": "Ruth Mostern",
+                                            "role": "conceptualization"})
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertEqual(Contribution.objects.count(), 1)
+        del_url = reverse("collection:coll_contribution_delete",
+                          args=[self.coll.id, data["id"]])
+        self.assertEqual(self.client.post(del_url).status_code, 200)
+        self.assertEqual(Contribution.objects.count(), 0)
+
+    def test_non_owner_forbidden(self):
+        self.client.force_login(self.other)
+        r = self.client.post(self.add_url, {"name": "X", "role": "software"})
+        self.assertEqual(r.status_code, 403)
+        self.assertEqual(Contribution.objects.count(), 0)
