@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import *
+from persons.admin import ContributionInline
 
 class CollectionAdmin(admin.ModelAdmin):
     list_display = ('title', 'id', 'description', 'owner_id', 'status')
@@ -11,6 +12,7 @@ class CollectionAdmin(admin.ModelAdmin):
     autocomplete_fields = ('license',)
     list_filter = ('status','collection_class')
     search_fields = ('username', 'name')
+    inlines = [ContributionInline]
 
 admin.site.register(Collection, CollectionAdmin)
 

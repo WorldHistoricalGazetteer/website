@@ -1,5 +1,17 @@
 from django.contrib import admin
+from django.contrib.contenttypes.admin import GenericTabularInline
 from .models import Person, EmailAddress, Contribution
+
+
+class ContributionInline(GenericTabularInline):
+    """Edit CRediT contributions inline on the credited object's admin page.
+
+    Reused by Dataset and Collection admin (and usable on any credited model).
+    """
+    model = Contribution
+    extra = 1
+    autocomplete_fields = ("person",)
+    fields = ("person", "role", "degree", "is_corresponding", "order")
 
 class EmailAddressInline(admin.TabularInline):
     model = Person.emails.through
