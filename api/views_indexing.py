@@ -67,13 +67,26 @@ class GazetteerInventoryView(AuthenticatedAPIView):
               "record_count": 13000000,
               "status": "published",
               "h3_coverage": "global",
-              "temporal_extent": [-2000, 2025]
+              "temporal_extent": [-2000, 2025],
+
+              // Phase 4 attribution fields (all optional; the indexing
+              // AUTHORITIES config is the source of truth):
+              "citation_text": "GeoNames geographical database. ...",
+              "license_spdx":  "CC-BY-4.0",      // resolved to a License FK
+              "license_url":   "https://...",    // optional deed override
+              "rights_holder": "Unxos GmbH",
+              "source_url":    "https://www.geonames.org/",
+              "contributors":  [{"name": "...", "role": "...", "orcid": "..."}]
             },
             ...
           ]
         }
 
     Returns ``{"upserted": <int>, "errors": [...]}``.
+
+    Unknown ``license_spdx`` codes are logged and skipped (the row's other
+    fields still upsert). Fields absent from a payload are left untouched, so
+    a not-yet-upgraded push is fully backward compatible.
     """
 
     http_method_names = ["post", "put", "options"]
@@ -106,6 +119,31 @@ class GazetteerInventoryView(AuthenticatedAPIView):
         owner_user_id = entry.get("owner_user_id")
         if owner_user_id is not None:
             defaults["owner_id"] = owner_user_id
+
+        # Attribution / licence / rights (citations design Phase 4). All
+        # optional — only fields actually present in the payload are written,
+        # so a push that omits them leaves any prior values intact. These are
+        # push-managed: the indexing ``AUTHORITIES`` config is the SoT.
+        for key in ("citation_text", "license_url", "rights_holder",
+                    "source_url"):
+            if key in entry:
+                defaults[key] = entry.get(key)
+        if "contributors" in entry:
+            defaults["contributors_csl"] = entry.get("contributors") or []
+        # Resolve the SPDX code to a seeded ``License`` row. Unknown codes are
+        # logged and skipped (license left untouched) rather than failing the
+        # whole entry — flexibility over strictness (design decision 3).
+        license_spdx = entry.get("license_spdx")
+        if license_spdx:
+            from licensing.models import License
+            lic = License.objects.filter(spdx_id=license_spdx).first()
+            if lic is not None:
+                defaults["license_id"] = lic.pk
+            else:
+                logger.warning(
+                    "GazetteerInventoryView: unknown license_spdx %r for %s "
+                    "— leaving license unset", license_spdx, entry_id,
+                )
 
         try:
             GazetteerRegistryEntry.objects.update_or_create(
