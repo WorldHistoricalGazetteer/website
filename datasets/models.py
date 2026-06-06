@@ -113,6 +113,17 @@ class Dataset(models.Model):
     source = models.CharField(max_length=500, null=True, blank=True)
     citation = models.CharField(max_length=2044, null=True, blank=True)  # user-added; if absent, generated in browser
 
+    # Source licence (the data's own rights). WHG's curation/aggregation licence
+    # is asserted separately via settings.WHG_OVERLAY_LICENSE.
+    license = models.ForeignKey(
+        'licensing.License', null=True, blank=True,
+        on_delete=models.PROTECT, related_name='datasets',
+    )
+    rights_statement = models.TextField(
+        null=True, blank=True,
+        help_text="Free-text rights, for custom licences or extra conditions.",
+    )
+
     # Fields to be deprecated following their migration to CSL
     creator = models.CharField(max_length=500, null=True, blank=True)  # NB: Used in API serializer
     contributors = models.CharField(max_length=500, null=True, blank=True)

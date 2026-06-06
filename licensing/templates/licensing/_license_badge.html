@@ -1,0 +1,19 @@
+{% comment %}
+Render a source-licence badge.
+
+Context:
+  license          a licensing.License instance (or None)
+  rights_statement optional free-text rights (e.g. for custom licences)
+
+Renders nothing when `license` is falsy — callers decide on a fallback
+(typically the WHG overlay statement) themselves.
+{% endcomment %}
+{% if license %}
+  <a href="{{ license.url|default:license.spdx_url }}" target="_blank" rel="noopener"
+     class="badge bg-light text-dark border" title="{{ license.label }}">
+    {{ license.spdx_id }}
+  </a>
+  {% if rights_statement %}
+    <div class="small text-muted mt-1">{{ rights_statement }}</div>
+  {% endif %}
+{% endif %}
