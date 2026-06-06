@@ -7,6 +7,7 @@ import logging
 from collection.models import Collection
 from datasets.models import Dataset
 from resources.models import Resource
+from licensing.rights import datacite_rights_list
 
 # Set up logger
 logger = logging.getLogger('django')  # Or another logger name from your configuration
@@ -234,16 +235,10 @@ def get_doi_metadata(type, id):
                 "schemeURI": "http://id.loc.gov/authorities/subjects"
             }
         ],
-        "rightsList": [
-            {
-                "rights": "Creative Commons Attribution-NonCommercial 4.0 International",
-                "rightsURI": "https://creativecommons.org/licenses/by-nc/4.0/",
-                "rightsIdentifier": "CC-BY-NC-4.0",
-                "rightsIdentifierScheme": "SPDX",
-                "schemeURI": "https://spdx.org/licenses/",
-                "lang": "en"
-            }
-        ]
+        # Truthful per-object rights: the source licence (when recorded) plus
+        # WHG's aggregation overlay — never a single hard-coded constant.
+        # See licensing/rights.py (citations design §4.2).
+        "rightsList": datacite_rights_list(obj),
     }
 
     return obj, metadata
