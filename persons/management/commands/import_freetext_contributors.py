@@ -9,7 +9,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from persons.models import Person, Contribution, CreditRole
+from persons.models import Contribution, CreditRole
+from persons.utils import resolve_person
 from utils.csl_citation_formatter import parse_names
 
 # (free-text field name, default CRediT role)
@@ -17,33 +18,6 @@ FIELD_ROLES = [
     ("creator", CreditRole.CONCEPTUALIZATION),
     ("contributors", CreditRole.DATA_CURATION),
 ]
-
-
-def _get_person(name):
-    """name is a CSL dict from parse_names: {family, given[, ORCID]} or {literal}.
-
-    Uses filter().first() rather than get_or_create so that pre-existing
-    DUPLICATE Person rows (same family/given) don't raise MultipleObjectsReturned
-    — the first match is reused.
-    """
-    literal = name.get("literal")
-    if literal:
-        return (Person.objects.filter(literal=literal).first()
-                or Person.objects.create(literal=literal))
-
-    orcid = (name.get("ORCID") or "").replace("https://orcid.org/", "") or None
-    if orcid:
-        existing = Person.objects.filter(orcid=orcid).first()
-        if existing:
-            return existing
-
-    family = name.get("family") or None
-    given = name.get("given") or None
-    existing = Person.objects.filter(family=family, given=given).first()
-    if existing:
-        return existing
-    return Person.objects.create(
-        family=family, given=given, **({"orcid": orcid} if orcid else {}))
 
 
 class Command(BaseCommand):
@@ -80,7 +54,7 @@ class Command(BaseCommand):
                                 if dry:
                                     contributions += 1
                                     continue
-                                person = _get_person(name)
+                                person = resolve_person(name)
                                 people += 1
                                 _, created = Contribution.objects.get_or_create(
                                     person=person, role=role, content_type=ct,

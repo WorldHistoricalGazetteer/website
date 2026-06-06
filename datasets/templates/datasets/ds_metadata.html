@@ -305,6 +305,49 @@
 
             {% include 'main/download_modal.html' with object=ds entity_type='dataset' entity_prefix='dataset' %}
 {#          {% endif %} <!-- owner or superuser -->#}
+
+            <!-- CRediT Contributors (Phase 2b) -->
+            <div class="mt-3" id="credit-contributors" data-dsid="{{ ds.id }}">
+              <h6 class="fw-bold mb-1">CRediT Contributors
+                <a href="https://credit.niso.org/" target="_blank" rel="noopener"
+                   data-bs-toggle="tooltip" data-bs-title="Contributor Roles Taxonomy">
+                  <i class="fas fa-question-circle fa-xs"></i></a>
+              </h6>
+              <ul class="list-unstyled mb-2" id="contrib-list">
+                {% for c in contributions %}
+                  <li data-cid="{{ c.id }}" class="mb-1">
+                    <span class="fw-semibold">{{ c.person }}</span>{% if c.person.orcid %}
+                      <a href="https://orcid.org/{{ c.person.orcid }}" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>{% endif %}
+                    — {{ c.get_role_display }}{% if c.degree %} ({{ c.get_degree_display }}){% endif %}{% if c.is_corresponding %} <span class="badge bg-light text-dark border">corresponding</span>{% endif %}
+                    {% if can_edit_credit %}<a href="#" class="contrib-del text-danger ms-1" title="Remove"><i class="fas fa-times fa-xs"></i></a>{% endif %}
+                  </li>
+                {% empty %}
+                  <li class="text-muted small" id="contrib-empty">No structured contributors yet.</li>
+                {% endfor %}
+              </ul>
+              {% if can_edit_credit %}
+              <form id="contrib-add-form" class="row g-1 small align-items-center">
+                <div class="col-12 col-md-3"><input type="text" name="name" class="form-control form-control-sm" placeholder="Name or [Organisation]" required></div>
+                <div class="col-6 col-md-2"><input type="text" name="orcid" class="form-control form-control-sm" placeholder="ORCiD (optional)"></div>
+                <div class="col-6 col-md-2"><input type="text" name="affiliation" class="form-control form-control-sm" placeholder="Affiliation"></div>
+                <div class="col-6 col-md-2">
+                  <select name="role" class="form-select form-select-sm" required>
+                    <option value="">Role…</option>
+                    {% for val, label in credit_roles %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-4 col-md-1">
+                  <select name="degree" class="form-select form-select-sm" title="Degree of contribution">
+                    <option value="">—</option>
+                    {% for val, label in contribution_degrees %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+                  </select>
+                </div>
+                <div class="col-3 col-md-1"><label class="small mb-0"><input type="checkbox" name="is_corresponding"> corr.</label></div>
+                <div class="col-auto"><button type="submit" class="btn btn-sm btn-primary">Add</button></div>
+                <div class="col-12"><span id="contrib-error" class="text-danger small"></span></div>
+              </form>
+              {% endif %}
+            </div>
         </div> <!-- ds_info -->
       </div> <!-- ds_details -->
       </div> <!-- row -->
@@ -359,7 +402,77 @@
     
     /* TODO: THESE ARE REFERENCED IN JAVASCRIPT BUT NOT SET IN THE VIEW */
     var context_status = '{{ status }}';
-    var context_context = '{{ context }}';   
+    var context_context = '{{ context }}';
+</script>
+
+<script>
+// CRediT contributors widget (Phase 2b)
+(function () {
+  var root = document.getElementById('credit-contributors');
+  if (!root) return;
+  var dsId = root.getAttribute('data-dsid');
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  var csrf = meta ? meta.getAttribute('content') : '';
+  var list = document.getElementById('contrib-list');
+  var form = document.getElementById('contrib-add-form');
+  var errEl = document.getElementById('contrib-error');
+
+  function onDelete(e) {
+    e.preventDefault();
+    var li = e.target.closest('li');
+    var cid = li.getAttribute('data-cid');
+    fetch('/datasets/' + dsId + '/contributions/' + cid + '/delete',
+          {method: 'POST', headers: {'X-CSRFToken': csrf}})
+      .then(function (r) { if (r.ok) li.remove(); });
+  }
+  function bindDelete(scope) {
+    (scope || document).querySelectorAll('.contrib-del')
+      .forEach(function (a) { a.onclick = onDelete; });
+  }
+  bindDelete();
+
+  if (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      errEl.textContent = '';
+      fetch('/datasets/' + dsId + '/contributions/add',
+            {method: 'POST', headers: {'X-CSRFToken': csrf}, body: new FormData(form)})
+        .then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+        .then(function (res) {
+          if (!res.ok) { errEl.textContent = res.d.error || 'Error adding contributor.'; return; }
+          var d = res.d;
+          var empty = document.getElementById('contrib-empty');
+          if (empty) empty.remove();
+          var li = document.createElement('li');
+          li.setAttribute('data-cid', d.id);
+          li.className = 'mb-1';
+          // User-entered name via textContent (no innerHTML) to avoid XSS.
+          var nameSpan = document.createElement('span');
+          nameSpan.className = 'fw-semibold';
+          nameSpan.textContent = d.person;
+          li.appendChild(nameSpan);
+          if (d.orcid) {
+            li.insertAdjacentHTML('beforeend',
+              ' <a href="https://orcid.org/' + encodeURIComponent(d.orcid) +
+              '" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>');
+          }
+          var tail = ' — ' + d.role + (d.degree ? ' (' + d.degree + ')' : '') +
+                     (d.is_corresponding ? '' : '');
+          li.appendChild(document.createTextNode(tail));
+          if (d.is_corresponding) {
+            li.insertAdjacentHTML('beforeend',
+              ' <span class="badge bg-light text-dark border">corresponding</span>');
+          }
+          li.insertAdjacentHTML('beforeend',
+            ' <a href="#" class="contrib-del text-danger ms-1" title="Remove"><i class="fas fa-times fa-xs"></i></a>');
+          list.appendChild(li);
+          bindDelete(li);
+          form.reset();
+        })
+        .catch(function () { errEl.textContent = 'Network error.'; });
+    });
+  }
+})();
 </script>
 
 {% endblock %}
