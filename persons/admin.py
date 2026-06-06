@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Person, EmailAddress
+from .models import Person, EmailAddress, Contribution
 
 class EmailAddressInline(admin.TabularInline):
     model = Person.emails.through
@@ -32,3 +32,13 @@ class EmailAddressAdmin(admin.ModelAdmin):
     list_display = ('address',)
 
 admin.site.register(EmailAddress, EmailAddressAdmin)
+
+
+@admin.register(Contribution)
+class ContributionAdmin(admin.ModelAdmin):
+    list_display = ('person', 'role', 'degree', 'is_corresponding',
+                    'content_type', 'object_id', 'order')
+    list_filter = ('role', 'degree', 'is_corresponding', 'content_type')
+    search_fields = ('person__family', 'person__given', 'person__orcid', 'object_id')
+    autocomplete_fields = ('person',)
+    ordering = ('content_type', 'object_id', 'order')
