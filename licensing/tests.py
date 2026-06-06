@@ -22,12 +22,27 @@ class LicenseSeedTests(TestCase):
     rows are present without re-running anything here."""
 
     def test_seed_rows_present(self):
-        self.assertEqual(License.objects.count(), 8)
+        # 8 from 0002 + 4 from 0003 (Phase 6: CC-BY-ND-4.0 + 3 custom rows).
+        self.assertEqual(License.objects.count(), 12)
 
     def test_flag_semantics(self):
         self.assertFalse(License.objects.get(spdx_id="CC0-1.0").attribution_required)
         self.assertTrue(License.objects.get(spdx_id="ODbL-1.0").share_alike)
         self.assertFalse(License.objects.get(spdx_id="CC-BY-NC-4.0").permits_commercial)
+
+    def test_phase6_rows(self):
+        # The one genuine SPDX addition.
+        nd = License.objects.get(spdx_id="CC-BY-ND-4.0")
+        self.assertFalse(nd.custom)
+        self.assertTrue(nd.permits_commercial)
+        # The three bespoke non-SPDX rows.
+        for key in ("custom-nativeland-dst", "custom-historic-counties",
+                    "custom-chgis-academic"):
+            self.assertTrue(License.objects.get(spdx_id=key).custom, key)
+        # Non-commercial terms flagged as such; permissive one is not.
+        self.assertFalse(License.objects.get(spdx_id="custom-nativeland-dst").permits_commercial)
+        self.assertFalse(License.objects.get(spdx_id="custom-chgis-academic").permits_commercial)
+        self.assertTrue(License.objects.get(spdx_id="custom-historic-counties").permits_commercial)
 
     def test_spdx_url(self):
         self.assertEqual(
