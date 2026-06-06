@@ -1,0 +1,36 @@
+{% comment %}
+Unified attribution DISPLAY partial (citations design §4.4).
+
+Read-only consolidation of the source-licence badge, an optional citation, and
+the contributor credit grouped by CRediT role. Reused across dataset/collection
+browse + metadata surfaces. The owner/staff *editor* is a separate widget
+(includes/_credit_contributors.html); this partial never renders edit controls.
+
+Context (all optional — render only what's supplied):
+  license           a licensing.License instance         -> licence badge
+  rights_statement  free-text rights                     -> shown under badge
+  contributions     queryset/list of persons.Contribution -> credit by role
+  citation_html     pre-rendered, trusted citation markup -> shown above badge
+{% endcomment %}
+<div class="whg-attribution">
+  {% if citation_html %}<div class="small mb-1">{{ citation_html }}</div>{% endif %}
+
+  {% include "licensing/_license_badge.html" with license=license rights_statement=rights_statement %}
+
+  {% if contributions %}
+    <div class="small mt-2" id="attribution-credit">
+      <span class="fw-bold">Credited contributors</span>
+      <a href="https://credit.niso.org/" target="_blank" rel="noopener"
+         data-bs-toggle="tooltip" data-bs-title="Contributor Roles Taxonomy">
+        <i class="fas fa-question-circle fa-xs"></i></a>
+      {% regroup contributions|dictsort:"role" by get_role_display as role_groups %}
+      <ul class="list-unstyled mb-0">
+        {% for grp in role_groups %}
+          <li><span class="text-muted">{{ grp.grouper }}:</span>
+            {% for c in grp.list %}{{ c.person }}{% if c.person.orcid %} <a href="https://orcid.org/{{ c.person.orcid }}" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>{% endif %}{% if c.is_corresponding %} <span class="badge bg-light text-dark border">corresponding</span>{% endif %}{% if not forloop.last %};{% endif %}{% endfor %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+</div>
