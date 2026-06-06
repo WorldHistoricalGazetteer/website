@@ -46,6 +46,8 @@ urlpatterns = [
 
     # UTILITY
     path('<int:id>/citation', views.collection_citation, name='collection-citation'),
+    path('<int:id>/contributions/add', views.collection_contribution_add, name='coll_contribution_add'),
+    path('<int:id>/contributions/<int:cid>/delete', views.collection_contribution_delete, name='coll_contribution_delete'),
     path('list_ds/', views.ListDatasetView.as_view(), name='list-ds'),
     path('add_ds/<int:coll_id>/<int:ds_id>', views.add_dataset, name='add-ds'),
     path('add_dsplaces/<int:coll_id>/<int:ds_id>', views.add_dataset_places, name='add-dsplaces'),
