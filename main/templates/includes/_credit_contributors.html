@@ -1,0 +1,141 @@
+{% comment %}
+Reusable CRediT contributors editor (Phase 2b). Required context:
+  contributions          queryset of persons.Contribution for the object
+  credit_roles           CreditRole.choices
+  contribution_degrees   ContributionDegree.choices
+  can_edit_credit        bool (owner/staff)
+  contrib_base           URL prefix, e.g. "/datasets/123/contributions"
+                         (endpoints: {base}/add and {base}/{cid}/delete)
+
+Note: the add controls are a <div>, NOT a <form>, so this widget can be placed
+inside another form (e.g. the dataset metadata form) without nesting forms.
+{% endcomment %}
+<div class="mt-3" id="credit-contributors" data-contrib-base="{{ contrib_base }}">
+  <h6 class="fw-bold mb-1">CRediT Contributors
+    <a href="https://credit.niso.org/" target="_blank" rel="noopener"
+       data-bs-toggle="tooltip" data-bs-title="Contributor Roles Taxonomy">
+      <i class="fas fa-question-circle fa-xs"></i></a>
+  </h6>
+  {% if can_edit_credit %}
+  <p class="small text-muted fst-italic mb-1">
+    These structured CRediT contributors are intended to supersede the free-text
+    Creator(s)/Contributor(s) fields. Please check the auto-imported entries below,
+    then clear those deprecated fields once you have verified them.
+  </p>
+  {% endif %}
+  <ul class="list-unstyled mb-2" id="contrib-list">
+    {% for c in contributions %}
+      <li data-cid="{{ c.id }}" class="mb-1">
+        <span class="fw-semibold">{{ c.person }}</span>{% if c.person.orcid %}
+          <a href="https://orcid.org/{{ c.person.orcid }}" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>{% endif %}
+        — {{ c.get_role_display }}{% if c.degree %} ({{ c.get_degree_display }}){% endif %}{% if c.is_corresponding %} <span class="badge bg-light text-dark border">corresponding</span>{% endif %}
+        {% if can_edit_credit %}<a href="#" class="contrib-del text-danger ms-1" title="Remove"><i class="fas fa-times fa-xs"></i></a>{% endif %}
+      </li>
+    {% empty %}
+      <li class="text-muted small" id="contrib-empty">No structured contributors yet.</li>
+    {% endfor %}
+  </ul>
+  {% if can_edit_credit %}
+  <div id="contrib-add-form" class="row g-1 small align-items-center">
+    <div class="col-12 col-md-3"><input type="text" name="name" class="form-control form-control-sm" placeholder="Name or [Organisation]"></div>
+    <div class="col-6 col-md-2"><input type="text" name="orcid" class="form-control form-control-sm" placeholder="ORCiD (optional)"></div>
+    <div class="col-6 col-md-2"><input type="text" name="affiliation" class="form-control form-control-sm" placeholder="Affiliation"></div>
+    <div class="col-6 col-md-2">
+      <select name="role" class="form-select form-select-sm">
+        <option value="">Role…</option>
+        {% for val, label in credit_roles %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-4 col-md-1">
+      <select name="degree" class="form-select form-select-sm" title="Degree of contribution">
+        <option value="">—</option>
+        {% for val, label in contribution_degrees %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-3 col-md-1"><label class="small mb-0"><input type="checkbox" name="is_corresponding"> corr.</label></div>
+    <div class="col-auto"><button type="button" id="contrib-add-btn" class="btn btn-sm btn-primary">Add</button></div>
+    <div class="col-12"><span id="contrib-error" class="text-danger small"></span></div>
+  </div>
+  {% endif %}
+</div>
+<script>
+(function () {
+  var root = document.getElementById('credit-contributors');
+  if (!root || root.dataset.creditBound) return;
+  root.dataset.creditBound = '1';
+  var base = root.getAttribute('data-contrib-base');
+  var meta = document.querySelector('meta[name="csrf-token"]');
+  var csrf = meta ? meta.getAttribute('content') : '';
+  var list = document.getElementById('contrib-list');
+  var addEl = document.getElementById('contrib-add-form');
+  var addBtn = document.getElementById('contrib-add-btn');
+  var errEl = document.getElementById('contrib-error');
+
+  function onDelete(e) {
+    e.preventDefault();
+    var li = e.target.closest('li');
+    fetch(base + '/' + li.getAttribute('data-cid') + '/delete',
+          {method: 'POST', headers: {'X-CSRFToken': csrf}})
+      .then(function (r) { if (r.ok) li.remove(); });
+  }
+  function bindDelete(scope) {
+    (scope || document).querySelectorAll('.contrib-del')
+      .forEach(function (a) { a.onclick = onDelete; });
+  }
+  bindDelete();
+
+  function field(n) { var el = addEl.querySelector('[name="' + n + '"]'); return el ? el.value : ''; }
+
+  function submitAdd() {
+    errEl.textContent = '';
+    var fd = new FormData();
+    ['name', 'orcid', 'affiliation', 'role', 'degree'].forEach(function (n) { fd.append(n, field(n)); });
+    var corr = addEl.querySelector('[name="is_corresponding"]');
+    fd.append('is_corresponding', corr && corr.checked ? 'true' : 'false');
+    fetch(base + '/add', {method: 'POST', headers: {'X-CSRFToken': csrf}, body: fd})
+      .then(function (r) { return r.json().then(function (d) { return {ok: r.ok, d: d}; }); })
+      .then(function (res) {
+        if (!res.ok) { errEl.textContent = res.d.error || 'Error adding contributor.'; return; }
+        var d = res.d;
+        var empty = document.getElementById('contrib-empty');
+        if (empty) empty.remove();
+        var li = document.createElement('li');
+        li.setAttribute('data-cid', d.id);
+        li.className = 'mb-1';
+        var nameSpan = document.createElement('span');  // user input -> textContent (no XSS)
+        nameSpan.className = 'fw-semibold';
+        nameSpan.textContent = d.person;
+        li.appendChild(nameSpan);
+        if (d.orcid) {
+          li.insertAdjacentHTML('beforeend',
+            ' <a href="https://orcid.org/' + encodeURIComponent(d.orcid) +
+            '" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>');
+        }
+        li.appendChild(document.createTextNode(
+          ' — ' + d.role + (d.degree ? ' (' + d.degree + ')' : '')));
+        if (d.is_corresponding) {
+          li.insertAdjacentHTML('beforeend',
+            ' <span class="badge bg-light text-dark border">corresponding</span>');
+        }
+        li.insertAdjacentHTML('beforeend',
+          ' <a href="#" class="contrib-del text-danger ms-1" title="Remove"><i class="fas fa-times fa-xs"></i></a>');
+        list.appendChild(li);
+        bindDelete(li);
+        addEl.querySelectorAll('input').forEach(function (i) {
+          if (i.type === 'checkbox') i.checked = false; else i.value = '';
+        });
+        addEl.querySelectorAll('select').forEach(function (s) { s.value = ''; });
+      })
+      .catch(function () { errEl.textContent = 'Network error.'; });
+  }
+
+  if (addBtn) {
+    addBtn.addEventListener('click', submitAdd);
+    addEl.querySelectorAll('input').forEach(function (i) {
+      i.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); submitAdd(); }
+      });
+    });
+  }
+})();
+</script>

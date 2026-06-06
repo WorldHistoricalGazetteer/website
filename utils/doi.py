@@ -84,6 +84,65 @@ def get_creators(obj):
     return valid_creators
 
 
+# CRediT role -> DataCite contributorType (per the JATS4R mapping; roles
+# without a clean DataCite equivalent fall back to "Other").
+CREDIT_TO_DATACITE = {
+    "conceptualization": "Other",
+    "data-curation": "DataCurator",
+    "formal-analysis": "Researcher",
+    "funding-acquisition": "Sponsor",
+    "investigation": "Researcher",
+    "methodology": "Researcher",
+    "project-administration": "ProjectManager",
+    "resources": "Other",
+    "software": "Other",
+    "supervision": "Supervisor",
+    "validation": "Researcher",
+    "visualization": "Other",
+    "writing-original-draft": "Other",
+    "writing-review-editing": "Editor",
+}
+
+
+def get_contributors(obj):
+    """DataCite ``contributors`` entries from structured Contribution rows
+    targeting ``obj``. Empty when there are none (so the DOI payload is
+    unchanged for objects without structured CRediT contributions)."""
+    try:
+        from django.contrib.contenttypes.models import ContentType
+        from persons.models import Contribution
+        ct = ContentType.objects.get_for_model(obj.__class__)
+        contribs = (Contribution.objects
+                    .filter(content_type=ct, object_id=str(obj.pk))
+                    .select_related("person").order_by("order"))
+    except Exception as e:
+        logger.warning(f"Could not load contributions for {obj}: {e}")
+        return []
+
+    out = []
+    for c in contribs:
+        p = c.person
+        literal = p.literal
+        entry = {
+            "contributorType": CREDIT_TO_DATACITE.get(c.role, "Other"),
+            "nameType": "Organizational" if literal else "Personal",
+            "name": literal or f"{p.family or ''}, {p.given or ''}".strip(", "),
+        }
+        if not literal:
+            entry["givenName"] = p.given or ""
+            entry["familyName"] = p.family or ""
+        if p.orcid:
+            entry["nameIdentifiers"] = [{
+                "nameIdentifier": f"https://orcid.org/{p.orcid}",
+                "nameIdentifierScheme": "ORCID",
+                "schemeURI": "https://orcid.org",
+            }]
+        if p.affiliation:
+            entry["affiliation"] = [{"name": p.affiliation}]
+        out.append(entry)
+    return out
+
+
 def get_bbox(obj):
     if obj.bbox:
         min_lon, min_lat, max_lon, max_lat = obj.bbox.extent
@@ -131,6 +190,7 @@ def get_doi_metadata(type, id):
         'doi': format_doi(type, id),
         'url': format_url(type, id, obj),
         "creators": creators_list,
+        **({"contributors": _contributors} if (_contributors := get_contributors(obj)) else {}),
         "titles": [{"title": obj.title or "No title"}],
         "publicationYear": obj.create_date.year if obj.create_date else None,
         "descriptions": [{"description": obj.description or "", "descriptionType": "Abstract"}],

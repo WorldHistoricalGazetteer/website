@@ -1,5 +1,17 @@
 from django.contrib import admin
-from .models import Person, EmailAddress
+from django.contrib.contenttypes.admin import GenericTabularInline
+from .models import Person, EmailAddress, Contribution
+
+
+class ContributionInline(GenericTabularInline):
+    """Edit CRediT contributions inline on the credited object's admin page.
+
+    Reused by Dataset and Collection admin (and usable on any credited model).
+    """
+    model = Contribution
+    extra = 1
+    autocomplete_fields = ("person",)
+    fields = ("person", "role", "degree", "is_corresponding", "order")
 
 class EmailAddressInline(admin.TabularInline):
     model = Person.emails.through
@@ -32,3 +44,13 @@ class EmailAddressAdmin(admin.ModelAdmin):
     list_display = ('address',)
 
 admin.site.register(EmailAddress, EmailAddressAdmin)
+
+
+@admin.register(Contribution)
+class ContributionAdmin(admin.ModelAdmin):
+    list_display = ('person', 'role', 'degree', 'is_corresponding',
+                    'content_type', 'object_id', 'order')
+    list_filter = ('role', 'degree', 'is_corresponding', 'content_type')
+    search_fields = ('person__family', 'person__given', 'person__orcid', 'object_id')
+    autocomplete_fields = ('person',)
+    ordering = ('content_type', 'object_id', 'order')

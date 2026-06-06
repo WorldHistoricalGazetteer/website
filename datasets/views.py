@@ -622,6 +622,19 @@ class DatasetMetadataView(LoginRequiredMixin, UpdateView, DatasetContextMixin, A
 
         context['updates'] = {}
 
+        # CRediT contributors (Phase 2b)
+        from django.contrib.contenttypes.models import ContentType
+        from persons.models import Contribution, CreditRole, ContributionDegree
+        ct = ContentType.objects.get_for_model(Dataset)
+        context['contributions'] = (Contribution.objects
+                                     .filter(content_type=ct, object_id=str(ds.id))
+                                     .select_related('person').order_by('order'))
+        context['credit_roles'] = CreditRole.choices
+        context['contribution_degrees'] = ContributionDegree.choices
+        context['can_edit_credit'] = (self.request.user.is_staff
+                                      or self.request.user in ds.owners)
+        context['contrib_base'] = f"/datasets/{ds.id}/contributions"
+
         return context
 
 
@@ -1930,3 +1943,33 @@ def ds_update(request):
     elif file_format == 'lpf':
         logger.info("ds_update for lpf; doesn't get here yet")
         return JsonResponse({'error': 'LPF updates not yet implemented'}, status=501)
+
+
+# ---------------------------------------------------------------------------
+# CRediT contributor editing (Phase 2b public widget)
+# ---------------------------------------------------------------------------
+
+def _user_can_edit_dataset(user, ds):
+    return user.is_staff or user in ds.owners
+
+
+@login_required
+@require_POST
+def dataset_contribution_add(request, id):
+    """Create a CRediT Contribution for a dataset. Owner/staff only."""
+    from persons.contributions import add_contribution
+    ds = get_object_or_404(Dataset, id=id)
+    if not _user_can_edit_dataset(request.user, ds):
+        return HttpResponseForbidden("Not permitted")
+    return add_contribution(request, ds)
+
+
+@login_required
+@require_POST
+def dataset_contribution_delete(request, id, cid):
+    """Delete a CRediT Contribution from a dataset. Owner/staff only."""
+    from persons.contributions import delete_contribution
+    ds = get_object_or_404(Dataset, id=id)
+    if not _user_can_edit_dataset(request.user, ds):
+        return HttpResponseForbidden("Not permitted")
+    return delete_contribution(request, ds, cid)

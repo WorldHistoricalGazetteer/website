@@ -101,6 +101,9 @@
 						</table>
 						<div class="">
 							<div data-csl-json="{{ object.citation_csl }}"></div>
+							{% if object.license %}
+								<div class="mt-1">{% include "licensing/_license_badge.html" with license=object.license rights_statement=object.rights_statement %}</div>
+							{% endif %}
 							<p>
 								<span class="float-end">
 					                <label for="checkbox" class="small">Close intro by default</label>

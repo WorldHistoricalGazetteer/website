@@ -163,6 +163,7 @@
           </div> {# col-sm-7 #}
         </div> {# row #}
       </form>
+      {% if object.id %}{% include 'includes/_credit_contributors.html' %}{% endif %}
       <div id="linkform_popup" class="pop">
         <form action="#" method="post">
           {% csrf_token %}

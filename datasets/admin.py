@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import Dataset, DatasetFile, Hit
 from guardian.admin import GuardedModelAdmin
+from persons.admin import ContributionInline
 
 # class DatasetAdmin(GuardedModelAdmin):
 class DatasetAdmin(admin.ModelAdmin):
@@ -8,9 +9,11 @@ class DatasetAdmin(admin.ModelAdmin):
     list_filter = ('ds_status', 'authority')
     fields = ('id','label','title','owner','ds_status', 'volunteers',
               ('public','core','authority',), 'featured', 'image_file', 'pdf', 'description',
-              'creator', 'numrows','numlinked','total_links')
+              'creator', ('license','rights_statement'), 'numrows','numlinked','total_links')
     readonly_fields = ('id','label','owner','create_date','numrows','numlinked','total_links',)
+    autocomplete_fields = ('license',)
     search_fields = ('title','label')
+    inlines = [ContributionInline]
 admin.site.register(Dataset, DatasetAdmin)
 # admin.site.register(Dataset)
 

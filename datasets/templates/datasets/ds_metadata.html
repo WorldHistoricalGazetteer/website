@@ -8,6 +8,15 @@
 {% block extra_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
   <link href="{% static 'webpack/builders-dataset.bundle.css' %}" rel="stylesheet" />
+  <style>
+    /* Make the whole metadata content one scrolling region so it never
+       overflows past the footer. builders-dataset.css caps .container height
+       with overflow:visible (so #dataset_content spilled over the footer) and
+       scrolls only the left #ds_details column; instead scroll
+       #dataset_content as a whole and disable the inner per-column scroll. */
+    #dataset_content { max-height: calc(100vh - 110px); overflow-y: auto; }
+    #ds_details { overflow-y: visible; max-height: none; }
+  </style>
 {% endblock %}
 
 {% block title %}<title>Dataset::{{ ds.label }}</title>{% endblock %}
@@ -217,6 +226,8 @@
         <input type="hidden" name="label" value="{{ ds.label }}">
         <input type="hidden" name="format" value="dummy">
         <input type="hidden" name="datatype" value="place">
+
+        {% include 'includes/_credit_contributors.html' %}
       </div> <!-- ds_details -->
 
       <div class="col-sm-5 small">
@@ -278,7 +289,11 @@
                         <tr>
                           <td class="fw-bold">License</td>
                           <td>
-                            <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY-NC 4.0</a>
+                            {% if ds.license %}
+                              {% include "licensing/_license_badge.html" with license=ds.license rights_statement=ds.rights_statement %}
+                            {% else %}
+                              <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>
+                            {% endif %}
                           </td>
                         </tr>
                         {% if file.header and file.header|length > 1 and file.header.0 != "" %}
@@ -355,7 +370,7 @@
     
     /* TODO: THESE ARE REFERENCED IN JAVASCRIPT BUT NOT SET IN THE VIEW */
     var context_status = '{{ status }}';
-    var context_context = '{{ context }}';   
+    var context_context = '{{ context }}';
 </script>
 
 {% endblock %}

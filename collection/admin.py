@@ -1,14 +1,18 @@
 from django.contrib import admin
 from .models import *
+from persons.admin import ContributionInline
 
 class CollectionAdmin(admin.ModelAdmin):
     list_display = ('title', 'id', 'description', 'owner_id', 'status')
     fields = ('id','collection_class','title','owner',
               ('public', 'status','featured'),
-              'description','image_file','keywords','rel_keywords','file','creator')
+              'description','image_file','keywords','rel_keywords','file','creator',
+              ('license','rights_statement'))
     readonly_fields = ('id', 'datasets', 'places', 'collection_class')
+    autocomplete_fields = ('license',)
     list_filter = ('status','collection_class')
     search_fields = ('username', 'name')
+    inlines = [ContributionInline]
 
 admin.site.register(Collection, CollectionAdmin)
 
