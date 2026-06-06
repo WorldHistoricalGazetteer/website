@@ -215,6 +215,38 @@ class GazetteerRegistryEntry(models.Model):
     # ``[min_start_year, max_end_year]`` with each endpoint optionally null.
     temporal_extent = models.JSONField(default=list)
 
+    # ── Attribution / licence / rights (citations design §3.2) ──────────
+    # Source-of-truth = indexing ``AUTHORITIES`` → pushed by Batch 11
+    # (``push_gazetteer_inventory.py``) into the inventory payload, applied
+    # by ``api/views_indexing.py::GazetteerInventoryView._upsert_one``.
+    # These are *push-managed* like the other inventory fields above (NOT in
+    # the admin-protected curatorial set), so a push refreshes them from the
+    # canonical source. All optional — a source supplies whatever it has
+    # (design decision 3: metadata flexibility).
+    #
+    # Human-readable citation. Historically the citation blob was crammed
+    # into ``description``; new pushes populate this and keep ``description``
+    # for genuine prose. ``attribution_for()`` prefers this, falling back to
+    # ``description`` for rows pushed before the upgrade.
+    citation_text = models.TextField(null=True, blank=True)
+    # Canonical SPDX licence; resolved from the pushed ``license_spdx`` code.
+    license = models.ForeignKey(
+        'licensing.License',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='gazetteer_entries',
+    )
+    # Override deed URL when the source deviates from the canonical licence
+    # deed (left null to use ``license.url``).
+    license_url = models.URLField(null=True, blank=True)
+    # e.g. "J. Paul Getty Trust", "ISAW".
+    rights_holder = models.CharField(max_length=255, null=True, blank=True)
+    # Homepage / landing page for the source.
+    source_url = models.URLField(null=True, blank=True)
+    # Optional CRediT-shaped provider credit where the source documents it:
+    # ``[{"name": ..., "role": ..., "orcid": ...}]`` (see §3.3 output shape).
+    contributors_csl = models.JSONField(default=list, blank=True)
+
     # Curatorial fields managed via the Django admin only — the inventory
     # push from the indexing pipeline deliberately omits these so it never
     # overwrites staff curation. Defaults must mirror the migration so

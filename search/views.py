@@ -181,6 +181,12 @@ class AtlasPageView(TemplateView):
             .values(
                 'id', 'name', 'description', 'namespace', 'core',
                 'no_explore', 'gazetteer_type', 'record_count',
+                # Attribution fields (citations Phase 4) — surfaced in the
+                # Gazetteers offcanvas. license_url falls back to the deed
+                # URL on the resolved License row.
+                'citation_text', 'rights_holder', 'source_url',
+                'contributors_csl', 'license__spdx_id', 'license__label',
+                'license__url', 'license_url',
             )
         )
         specialist_gazetteers = list(

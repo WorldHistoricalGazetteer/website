@@ -59,6 +59,19 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
         ("Curatorial (editable)", {
             'fields': ('core', 'region_source', 'no_explore', 'gazetteer_type'),
         }),
+        ("Attribution / licence / rights", {
+            'description': (
+                "Source-of-truth is the indexing AUTHORITIES config, pushed "
+                "by the inventory job. The push only writes the fields it "
+                "sends, so values set here are a safe interim until that push "
+                "is upgraded — after which it becomes authoritative and may "
+                "overwrite them."
+            ),
+            'fields': (
+                'citation_text', 'license', 'license_url', 'rights_holder',
+                'source_url', 'contributors_csl',
+            ),
+        }),
         ("Re-ingest (managed via the Re-ingest action)", {
             'fields': (
                 'reingest_status', 'reingest_started_at',
