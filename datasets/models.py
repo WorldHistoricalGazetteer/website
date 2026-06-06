@@ -128,9 +128,12 @@ class Dataset(models.Model):
     creator = models.CharField(max_length=500, null=True, blank=True)  # NB: Used in API serializer
     contributors = models.CharField(max_length=500, null=True, blank=True)
 
-    # People associated with Dataset creation
-    creators_csl = models.ManyToManyField('persons.Person', related_name='datasets_as_creator', blank=True)
-    contributors_csl = models.ManyToManyField('persons.Person', related_name='datasets_as_contributor', blank=True)
+    # NB: structured authorship now lives in persons.Contribution (a generic
+    # relation targeting Dataset/Collection/GazetteerRegistryEntry — see the
+    # citations design). The former creators_csl/contributors_csl M2M to
+    # persons.Person was never read by the CSL/DOI path and is retired in
+    # datasets/0023; the free-text creator/contributors above remain as a
+    # legacy import source (to be deprecated once editors verify + clear them).
 
     # TODO: these are updated in both Dataset & DatasetFile  (??)
     datatype = models.CharField(
