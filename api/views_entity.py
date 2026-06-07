@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from api.authentication import AuthenticatedAPIView
 from api.crc_client import crc_fetch_places
-from api.download_file import FileCache, stream_live, stream_from_file, build_cache
+from api.download_file import FileCache, stream_live, stream_from_file
 from api.reconcile_helpers import is_crc_place_id
 from api.schemas import entity_schema, TYPE_MAP
 
@@ -341,25 +341,33 @@ class EntityFeatureView(AuthenticatedAPIView):
             response["Content-Length"] = str(os.path.getsize(cache_path))
 
         else:
-            # Cache miss. Build the cache OFF-REQUEST via Celery (no request
-            # timeout; correct .tmp discipline in build_cache) and stream THIS
-            # response live *without* writing the cache. The fragile in-request
-            # stream can therefore never publish a partial file, and the next
-            # request serves the complete async-built cache. The build lock
-            # ensures only one async build is dispatched per object/filetype;
-            # build_cache releases it in its finally. See
+            # Cache miss. The first request to win the build lock streams live
+            # AND writes the cache (so a successful download populates the cache
+            # and it never needs rebuilding). This is now safe: stream_live only
+            # publishes the .tmp on full completion and discards it on abort, so
+            # an interrupted stream can no longer poison the cache. See
             # developer/diagnosis-truncated-lpf-downloads.md.
             if not FileCache.is_building(obj_type, obj_id, filetype=filetype):
                 if FileCache.acquire_build_lock(obj_type, obj_id, filetype=filetype):
-                    logger.debug(f"Cache miss for {filetype.upper()} {obj_type}:{obj_id} - dispatching async build")
-                    build_cache.delay(obj_type, obj_id, filetype)
+                    logger.debug(f"Acquired build lock for {filetype.upper()} {obj_type}:{obj_id}")
+                    # Stream live while building cache (publish-on-complete)
+                    response = StreamingHttpResponse(
+                        stream_live(obj_type, obj, request, cache_filepath=cache_path, filetype=filetype),
+                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
+                    )
+                else:
+                    logger.debug(f"Failed to acquire build lock for {filetype.upper()} {obj_type}:{obj_id}")
+                    # Someone else got the lock - stream live without caching
+                    response = StreamingHttpResponse(
+                        stream_live(obj_type, obj, request, filetype=filetype),
+                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
+                    )
             else:
-                logger.debug(f"Cache already building for {filetype.upper()} {obj_type}:{obj_id}")
-            # Always stream live (uncached) so the client still gets the file.
-            response = StreamingHttpResponse(
-                stream_live(obj_type, obj, request, filetype=filetype),
-                content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
-            )
+                logger.debug(f"Cache is being built for {filetype.upper()} {obj_type}:{obj_id}, streaming live")
+                response = StreamingHttpResponse(
+                    stream_live(obj_type, obj, request, filetype=filetype),
+                    content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
+                )
 
         response['Content-Disposition'] = f'attachment; filename="{urlquote(filename)}"'
         response['Content-Encoding'] = 'gzip'
