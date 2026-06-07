@@ -152,6 +152,11 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
     if cache_filepath:
         # open a .tmp file while streaming so partial outputs never replace the final file
         cache_file = open(cache_filepath + '.tmp', 'wb')
+    # Only a fully-written stream may be published to the cache. Set True after
+    # the gzip trailer is written; the finally block discards the .tmp otherwise
+    # (client disconnect, request timeout, or a serializer error) so a truncated
+    # partial can never poison the cache. See diagnosis-truncated-lpf-downloads.md.
+    completed = False
 
     # logging instrumentation
     LOG_EVERY = 100  # how often to emit progress logs
@@ -472,16 +477,25 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
 
         # Finalize the gzip stream (write the gzip trailer)
         final = compressor.flush(zlib.Z_FINISH)
+        if final and cache_file:
+            cache_file.write(final)
+        # The .tmp now holds the complete stream (JSON closed + gzip trailer).
+        # Mark complete BEFORE the client yield so a disconnect on the final
+        # chunk can't discard an already-complete cache file.
+        completed = True
         if final:
-            if cache_file:
-                cache_file.write(final)
             yield final
 
     finally:
         if cache_file:
             cache_file.close()
-            if os.path.exists(cache_filepath + '.tmp'):
-                os.rename(cache_filepath + '.tmp', cache_filepath)
+            tmp = cache_filepath + '.tmp'
+            if completed and os.path.exists(tmp):
+                # publish only a fully-written cache file
+                os.rename(tmp, cache_filepath)
+            elif os.path.exists(tmp):
+                # discard the partial output — never poison the cache (line ~153 intent)
+                os.remove(tmp)
 
 
 @shared_task(bind=True)
