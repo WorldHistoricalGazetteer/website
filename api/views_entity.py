@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from api.authentication import AuthenticatedAPIView
 from api.crc_client import crc_fetch_places
-from api.download_file import FileCache, stream_live, stream_from_file
+from api.download_file import FileCache, stream_live, stream_from_file, build_cache
 from api.reconcile_helpers import is_crc_place_id
 from api.schemas import entity_schema, TYPE_MAP
 
@@ -341,28 +341,25 @@ class EntityFeatureView(AuthenticatedAPIView):
             response["Content-Length"] = str(os.path.getsize(cache_path))
 
         else:
-            # Check if another request is building the cache
+            # Cache miss. Build the cache OFF-REQUEST via Celery (no request
+            # timeout; correct .tmp discipline in build_cache) and stream THIS
+            # response live *without* writing the cache. The fragile in-request
+            # stream can therefore never publish a partial file, and the next
+            # request serves the complete async-built cache. The build lock
+            # ensures only one async build is dispatched per object/filetype;
+            # build_cache releases it in its finally. See
+            # developer/diagnosis-truncated-lpf-downloads.md.
             if not FileCache.is_building(obj_type, obj_id, filetype=filetype):
                 if FileCache.acquire_build_lock(obj_type, obj_id, filetype=filetype):
-                    logger.debug(f"Acquired build lock for {filetype.upper()} {obj_type}:{obj_id}")
-                    # Stream live while building cache
-                    response = StreamingHttpResponse(
-                        stream_live(obj_type, obj, request, cache_filepath=cache_path, filetype=filetype),
-                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
-                    )
-                else:
-                    logger.debug(f"Failed to acquire build lock for {filetype.upper()} {obj_type}:{obj_id}")
-                    # Someone else got the lock - stream live without caching
-                    response = StreamingHttpResponse(
-                        stream_live(obj_type, obj, request, filetype=filetype),
-                        content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
-                    )
+                    logger.debug(f"Cache miss for {filetype.upper()} {obj_type}:{obj_id} - dispatching async build")
+                    build_cache.delay(obj_type, obj_id, filetype)
             else:
-                logger.debug(f"Cache is being built for {filetype.upper()} {obj_type}:{obj_id}, streaming live")
-                response = StreamingHttpResponse(
-                    stream_live(obj_type, obj, request, filetype=filetype),
-                    content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
-                )
+                logger.debug(f"Cache already building for {filetype.upper()} {obj_type}:{obj_id}")
+            # Always stream live (uncached) so the client still gets the file.
+            response = StreamingHttpResponse(
+                stream_live(obj_type, obj, request, filetype=filetype),
+                content_type="application/geo+json" if filetype == 'lpf' else "text/tab-separated-values"
+            )
 
         response['Content-Disposition'] = f'attachment; filename="{urlquote(filename)}"'
         response['Content-Encoding'] = 'gzip'
