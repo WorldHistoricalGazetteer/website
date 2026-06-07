@@ -98,6 +98,15 @@ class Dataset(models.Model):
     core = models.BooleanField(default=False)  # e.g. tgn, geonames, physical geography
     authority = models.BooleanField(default=False)  # eligible as an authority source for new ES indexes
     public = models.BooleanField(default=False)
+    # Whether the dataset may be downloaded (any format/path). Set False for
+    # very large bulk/authority datasets (e.g. TGN-derived) that should be
+    # obtained from their upstream source instead of via a WHG export — those
+    # exports are impractically large and can never complete a live stream.
+    downloadable = models.BooleanField(
+        default=True,
+        help_text="Uncheck to disable all downloads of this dataset "
+                  "(too large / obtain from upstream source instead).",
+    )
     doi = models.BooleanField(default=False, help_text="Indicates if a DOI is associated with this dataset")
 
     coordinate_density = models.FloatField(

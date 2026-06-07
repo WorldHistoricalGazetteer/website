@@ -81,7 +81,11 @@
                         <div class="">
                             <div data-csl-json="{{ object.citation_csl }}"></div>
                             <p>
-                                {% if user.is_authenticated %}
+                                {% if not object.downloadable %}
+                                    <span class="text-muted" data-bs-toggle="tooltip" data-bs-title="This dataset is too large to download here; please obtain it from its original source.">
+                                        Download unavailable <i class="fas fa-ban"></i>
+                                    </span>
+                                {% elif user.is_authenticated %}
                                     <span data-bs-toggle="tooltip" title="Show download options">
                                         <a href="#" id="a_download_modal"
                                            class="me-2" data-collid="{{ object.id }}"

@@ -150,6 +150,10 @@ def download_file(request, *args, **kwargs):
         FileResponse: File download response
     """
     ds = get_object_or_404(Dataset, pk=kwargs['id'])
+    if not ds.downloadable:
+        return HttpResponse(
+            'This dataset is not available for download; '
+            'please obtain it from its original source.', status=403)
     fileobj = ds.files.all().order_by('-rev')[0]
     fn = 'media/' + fileobj.file.name
     file_handle = fileobj.file.open()
@@ -176,6 +180,10 @@ def download_dataset(request, file_id):
     """
     try:
         fileobj = get_object_or_404(DatasetFile, pk=file_id)
+        if not fileobj.dataset_id.downloadable:
+            return HttpResponse(
+                'This dataset is not available for download; '
+                'please obtain it from its original source.', status=403)
         fn = 'media/' + fileobj.file.name
         file_handle = fileobj.file.open()
 

@@ -308,6 +308,7 @@
                 </div>
               {% endfor %}
             </div>
+            {% if ds.downloadable %}
             <span data-bs-toggle="tooltip" data-bs-title="Show download options">
               <a href="#" id="a_download_modal" class="me-2" data-collid="{{ ds.id }}" data-bs-toggle="modal" data-bs-target="#downloadModal">
                 Download options <i class="fas fa-download linky"></i>
@@ -315,6 +316,11 @@
             </span>
 
             {% include 'main/download_modal.html' with object=ds entity_type='dataset' entity_prefix='dataset' %}
+            {% else %}
+            <span class="text-muted small" data-bs-toggle="tooltip" data-bs-title="This dataset is too large to download here; please obtain it from its original source.">
+              Download unavailable <i class="fas fa-ban"></i>
+            </span>
+            {% endif %}
 {#          {% endif %} <!-- owner or superuser -->#}
         </div> <!-- ds_info -->
       </div> <!-- ds_details -->

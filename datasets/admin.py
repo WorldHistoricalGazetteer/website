@@ -5,10 +5,11 @@ from persons.admin import ContributionInline
 
 # class DatasetAdmin(GuardedModelAdmin):
 class DatasetAdmin(admin.ModelAdmin):
-    list_display = ('title', 'label', 'id', 'ds_status', 'public', 'authority', 'create_date')
-    list_filter = ('ds_status', 'authority')
+    list_display = ('title', 'label', 'id', 'ds_status', 'public', 'downloadable', 'authority', 'create_date')
+    list_filter = ('ds_status', 'authority', 'downloadable')
+    list_editable = ('downloadable',)
     fields = ('id','label','title','owner','ds_status', 'volunteers',
-              ('public','core','authority',), 'featured', 'image_file', 'pdf', 'description',
+              ('public','downloadable','core','authority',), 'featured', 'image_file', 'pdf', 'description',
               'creator', ('license','rights_statement'), 'numrows','numlinked','total_links')
     readonly_fields = ('id','label','owner','create_date','numrows','numlinked','total_links',)
     autocomplete_fields = ('license',)

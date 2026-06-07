@@ -317,6 +317,15 @@ class EntityFeatureView(AuthenticatedAPIView):
         qs = queryset_fn(request.user)
         obj = get_object_or_404(qs, pk=obj_id)
 
+        # Datasets may be flagged non-downloadable (very large bulk/authority
+        # datasets to be obtained upstream). Block every export path.
+        if obj_type == 'dataset' and not getattr(obj, 'downloadable', True):
+            return Response(
+                {'detail': 'This dataset is not available for download; '
+                           'please obtain it from its original source.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         # Non-streaming serializers (e.g., for certain object types)
         serializer_class = config.get("feature_serializer", None)
         if serializer_class and filetype == 'lpf':

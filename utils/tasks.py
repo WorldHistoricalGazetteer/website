@@ -47,6 +47,15 @@ def downloader(request, *args, **kwargs):
                 logger.error('No dsid or collid provided')
                 return HttpResponse(status=400, content='Missing required parameters.')
 
+            # Block downloads of datasets flagged non-downloadable.
+            if dsid:
+                ds = Dataset.objects.filter(id=dsid).first()
+                if ds and not ds.downloadable:
+                    return HttpResponse(
+                        status=403,
+                        content='This dataset is not available for download; '
+                                'please obtain it from its original source.')
+
             try:
                 userid = user.id if user.is_authenticated else 1
                 download_task = make_download.delay(
