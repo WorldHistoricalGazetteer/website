@@ -6,6 +6,7 @@ import zlib
 
 import redis
 from celery import shared_task
+from celery.contrib.abortable import AbortableTask
 from django.conf import settings
 
 from api.schemas import TYPE_MAP
@@ -498,7 +499,7 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 os.remove(tmp)
 
 
-@shared_task(bind=True)
+@shared_task(bind=True, base=AbortableTask)
 def build_cache(self, obj_type, obj_id, filetype='lpf'):
     """
     Celery task to build LPF or TSV cache file in background.
