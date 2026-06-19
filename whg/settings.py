@@ -48,6 +48,16 @@ CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWA
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
 
+# Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
+# Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only
+# link out to it from /contribute/. The default below is the live public form URL (not a
+# secret); override via env var or local_settings if it ever changes.
+BASEROW_SUBMIT_FORM_URL = (
+    os.environ.get('BASEROW_SUBMIT_FORM_URL')
+    or globals().get('BASEROW_SUBMIT_FORM_URL')
+    or 'https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU'
+)
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
