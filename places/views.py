@@ -100,8 +100,12 @@ class PlacePortalView(TemplateView):
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Always present so the template's {% if redirect_to %} resolves cleanly;
+        # only the single-match branch below sets a real redirect target. Without
+        # this default, every normal portal view logs a VariableDoesNotExist traceback.
+        context['redirect_to'] = None
         me = self.request.user
-        
+
         filter_condition = Q(collection_class='place')
         if me.is_authenticated:
             filter_condition &= (Q(owner=me) | Q(collabs__user=me))
