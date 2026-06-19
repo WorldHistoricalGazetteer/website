@@ -34,7 +34,6 @@ class DevServerAccessMiddleware:
         '/media/',
         '/CDNfallbacks/',
         '/health',
-        '/leads/suggest/',  # public dataset-suggestion form is anonymous by design
     )
 
     def __init__(self, get_response):

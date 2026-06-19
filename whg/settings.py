@@ -57,11 +57,6 @@ CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWA
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
 
-# Zotero group library (dataset/print-gazetteer leads bibliography layer)
-# Set in env vars or local_settings; read-only API key. Used by the `leads` app.
-ZOTERO_GROUP_ID = os.environ.get('ZOTERO_GROUP_ID') or globals().get('ZOTERO_GROUP_ID', '')
-ZOTERO_API_KEY = os.environ.get('ZOTERO_API_KEY') or globals().get('ZOTERO_API_KEY', '')
-
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -118,7 +113,6 @@ INSTALLED_APPS = [
     'datasets.apps.DatasetsConfig',
     'elastic.apps.ElasticConfig',
     'ingestion.apps.IngestionConfig',
-    'leads.apps.LeadsConfig',
     'licensing.apps.LicensingConfig',
     'main.apps.MainConfig',
     'periods.apps.PeriodsConfig',
