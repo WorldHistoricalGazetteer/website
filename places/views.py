@@ -98,12 +98,19 @@ class PlaceDetailView(DetailView):
 class PlacePortalView(TemplateView):
     template_name = 'places/place_portal.html'
 
+    def get(self, request, *args, **kwargs):
+        # A place with a single match has no portal to show — redirect server-side
+        # (302) to its detail page. Matches are stashed so get_context_data doesn't
+        # recompute the (N+1) .matches query on the multi-match path.
+        pid = kwargs.get('pid')
+        if pid is not None:
+            self._portal_matches = Place.objects.get(id=pid).matches
+            if len(self._portal_matches) == 1:
+                return redirect(f'/places/{pid}/detail')
+        return super().get(request, *args, **kwargs)
+
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Always present so the template's {% if redirect_to %} resolves cleanly;
-        # only the single-match branch below sets a real redirect target. Without
-        # this default, every normal portal view logs a VariableDoesNotExist traceback.
-        context['redirect_to'] = None
         me = self.request.user
 
         filter_condition = Q(collection_class='place')
@@ -117,9 +124,9 @@ class PlacePortalView(TemplateView):
         place_ids = []
 
         if pid:
-            portal_data = Place.objects.get(id=pid).matches
-            if len(portal_data) == 1:
-                return {'redirect_to': f'/places/{pid}/detail'}
+            portal_data = getattr(self, '_portal_matches', None)
+            if portal_data is None:
+                portal_data = Place.objects.get(id=pid).matches
             place_ids = [place.id for place in portal_data]
         elif whg_id:
             place_ids = findPortalPlaces(whg_id)
