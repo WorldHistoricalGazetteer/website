@@ -35,18 +35,19 @@ A stable internal URL that redirects to the external form:
 | Nav | `base_webpack.html` → "Submit a Dataset" in the **Data** dropdown |
 
 Why a redirect view rather than a raw external link in the nav: the public form
-URL isn't known yet (Palak will share it), and a stable `/contribute/` lets the
-external target change without touching templates. Until the URL is set the view
-redirects home with an info message, so the nav item is safe to ship now.
+a stable `/contribute/` lets the external target change without touching
+templates, and if the URL is ever unset the view redirects home with an info
+message instead of erroring.
 
-### To go live
+### Live URL
 
-1. Get the public form URL from Palak.
-2. Set it in `whg/local_settings.py` (or env):
-   ```python
-   BASEROW_SUBMIT_FORM_URL = 'https://baserow.io/form/XXXXXXXX'
-   ```
-   No restart-time secret — it's just a public URL.
+The form is **live** — `https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU`
+("Submit Your Dataset to WHG") — and is baked in as the default for
+`BASEROW_SUBMIT_FORM_URL` in `whg/settings.py`. It's a public URL, not a secret,
+so the `/contribute/` link works on every deployment as soon as this merges — no
+per-server config. To override (e.g. if the form is rebuilt), set
+`BASEROW_SUBMIT_FORM_URL` via env var or `local_settings.py`; precedence is
+env > local_settings > the baked default.
 
 ### Optional later: embedding / API sync
 
