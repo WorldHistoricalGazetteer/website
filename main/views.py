@@ -476,6 +476,18 @@ def group_list(request, sort='', order=''):
     return render(request, 'lists/group_list.html', context)
 
 
+# Link out to the external Baserow "Submit Your Dataset to WHG" form.
+# The workflow tool itself lives outside this codebase (Baserow workspace);
+# we keep a stable internal URL so the external target can change without
+# touching templates. Falls back gracefully until the form URL is configured.
+def submit_dataset(request):
+    url = getattr(settings, 'BASEROW_SUBMIT_FORM_URL', '')
+    if url:
+        return redirect(url)
+    messages.info(request, "Dataset submission is being set up — please check back soon, or contact us in the meantime.")
+    return redirect('home')
+
+
 # gets the correct view based on user group
 @login_required
 def dashboard_redirect(request):

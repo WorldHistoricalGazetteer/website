@@ -58,6 +58,9 @@ urlpatterns = [
                   # home page
                   path('', views.Home30a.as_view(), name="home"),
 
+                  # link out to the external Baserow dataset-submission form
+                  path('contribute/', views.submit_dataset, name="submit-dataset"),
+
                   # apps
                   path('areas/', include('areas.urls')),
                   path('collections/', include('collection.urls')),
