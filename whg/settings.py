@@ -58,6 +58,15 @@ BASEROW_SUBMIT_FORM_URL = (
     or 'https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU'
 )
 
+# Baserow service account (bot) for the licence-vocabulary sync. Credentials are
+# secrets — set BASEROW_BOT_EMAIL / BASEROW_BOT_PASSWORD in local_settings (local)
+# or env (deployed); never commit them. The table id points at the synced "Licences"
+# lookup table in the WHG Dataset & Project Tracker database.
+BASEROW_API_URL = os.environ.get('BASEROW_API_URL') or globals().get('BASEROW_API_URL', 'https://api.baserow.io')
+BASEROW_BOT_EMAIL = os.environ.get('BASEROW_BOT_EMAIL') or globals().get('BASEROW_BOT_EMAIL', '')
+BASEROW_BOT_PASSWORD = os.environ.get('BASEROW_BOT_PASSWORD') or globals().get('BASEROW_BOT_PASSWORD', '')
+BASEROW_LICENCES_TABLE_ID = int(os.environ.get('BASEROW_LICENCES_TABLE_ID') or globals().get('BASEROW_LICENCES_TABLE_ID', 1037619))
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
