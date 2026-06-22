@@ -143,6 +143,13 @@ class HeroMap {
         // checks this so it doesn't persist a globe-disabled flag from
         // an automatic switch.
         this._programmaticProjection = false;
+        // When pinned (e.g. by the Atlas demo mode), the gazetteer-bounds
+        // rule never switches to Mercator — the map stays on the globe.
+        this._globePinned = false;
+        // The first bounds-driven projection decision (the initial context
+        // tileset load) keeps the globe so the Atlas opens in globe view
+        // even for world-wide bounds; later wide bounds may still flatten.
+        this._initialBoundsApplied = false;
     }
 
     /**
@@ -778,9 +785,19 @@ class HeroMap {
         if (east < west) east += 360;       // antimeridian-spanning
         const lonSpan = east - west;
         const wantsMercator = lonSpan > 180;
-        const target = wantsMercator
-            ? 'mercator'
-            : (readGlobeDisabled() ? 'mercator' : 'globe');
+        // Demo mode pins the globe; the very first bounds decision (initial
+        // context load) also keeps the globe so the map opens in globe view.
+        let target;
+        if (this._globePinned) {
+            target = 'globe';
+        } else if (readGlobeDisabled()) {
+            target = 'mercator';
+        } else if (wantsMercator && this._initialBoundsApplied) {
+            target = 'mercator';
+        } else {
+            target = 'globe';
+        }
+        this._initialBoundsApplied = true;
         // Mark the upcoming projection change as programmatic so that
         // ``_emitProjectionChange`` doesn't flip the user's stored
         // ``whg.globe_disabled`` preference. Cleared on the next idle —
@@ -790,6 +807,25 @@ class HeroMap {
         this.map.once('idle', () => { this._programmaticProjection = false; });
         // Nudge the projection listeners so the first call doesn't lag.
         setTimeout(() => this._checkProjectionChange(), 50);
+    }
+
+    /**
+     * Pin (or release) the globe projection. While pinned, the
+     * gazetteer-bounds rule never switches to Mercator. Pinning also
+     * snaps the map to the globe immediately. Used by the Atlas demo mode
+     * so the looping presentation always shows the globe.
+     *
+     * @param {boolean} pinned
+     */
+    setGlobePinned(pinned) {
+        this._globePinned = !!pinned;
+        if (!this.map) return;
+        if (pinned && !this.isGlobeMode()) {
+            this._programmaticProjection = true;
+            try { this.map.setProjection({ type: 'globe' }); } catch (e) {}
+            this.map.once('idle', () => { this._programmaticProjection = false; });
+            setTimeout(() => this._checkProjectionChange(), 50);
+        }
     }
 
     /** Tear down the currently-shown dynamic gazetteer, if any. */

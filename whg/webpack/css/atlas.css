@@ -1374,3 +1374,134 @@ body.atlas-tour-active .offcanvas-backdrop {
     display: none !important;
 }
 
+/* ════════════════════════════════════════════════════════════════
+   Tour footer + demo-mode controls
+   ════════════════════════════════════════════════════════════════ */
+
+/* Small footer bar inside every tour-step popover: WHG logo + a discreet
+   "preview of a future release" note (and, in demo mode, a pause/continue
+   control). Keeps the demo framing visible without obscuring the UI. */
+.driver-popover-footnote {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e4e4e4;
+}
+
+.driver-popover-footnote-logo {
+    flex: 0 0 auto;
+    height: 16px;
+    width: auto;
+    opacity: 0.85;
+}
+
+.driver-popover-footnote-text {
+    flex: 1 1 auto;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: #8a8a8a;
+    font-style: italic;
+}
+
+/* Discreet pause/continue toggle, demo mode only. */
+.driver-popover-demo-pause {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid #d3c2c6;
+    border-radius: 50%;
+    background: #fff;
+    color: #7b2d3b;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.driver-popover-demo-pause:hover {
+    background: #7b2d3b;
+    color: #fff;
+}
+
+/* "Start looping demo" button injected into the first tour step popover. */
+.driver-popover-demo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.9rem;
+    padding: 0.5rem 0.9rem;
+    border: none;
+    border-radius: 6px;
+    background: #7b2d3b;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.driver-popover-demo-btn:hover {
+    background: #93384a;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Welcome modal — centred, hero-style first tour step
+   ════════════════════════════════════════════════════════════════ */
+
+.driver-popover.atlas-welcome-popover {
+    max-width: 480px;
+    padding: 1.9rem 1.9rem 1.4rem;
+    text-align: center;
+    border-radius: 14px;
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.4);
+    background:
+        radial-gradient(120% 80% at 50% 0%, #fbf4f5 0%, #ffffff 60%);
+}
+
+/* Large WHG logo, this modal only. */
+.atlas-welcome-popover .atlas-welcome-popover-logo {
+    display: block;
+    width: 220px;
+    max-width: 72%;
+    height: auto;
+    margin: 0.25rem auto 1.1rem;
+}
+
+.driver-popover.atlas-welcome-popover .driver-popover-title {
+    font-size: 1.5rem;
+    line-height: 1.25;
+    color: #6b2533;
+    margin-bottom: 0.85rem;
+}
+
+.driver-popover.atlas-welcome-popover .driver-popover-description {
+    text-align: left;
+    font-size: 0.94rem;
+    line-height: 1.5;
+}
+
+/* The big hero logo replaces the small footer logo on this modal. */
+.atlas-welcome-popover .driver-popover-footnote-logo {
+    display: none;
+}
+
+.atlas-welcome-popover .driver-popover-footnote {
+    justify-content: center;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Demo mode — suppress the dev server's red viewport border
+   (set inline as `body { border: 3px red solid !important }`)
+   ════════════════════════════════════════════════════════════════ */
+
+body.atlas-demo-mode {
+    border: none !important;
+}
+

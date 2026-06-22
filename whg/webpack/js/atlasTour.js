@@ -13,9 +13,163 @@
 
 import { driver } from 'driver.js';
 import 'driver.js/dist/driver.css';
+import heroMap from './heroMap';
 
 const TOUR_SEEN_KEY = 'whg_atlas_tour_seen';
 const TOUR_ACTIVE_CLASS = 'atlas-tour-active';
+
+/* ═══════════════════════════════════════════════════════════════════
+   Demo mode — auto-advancing, looping presentation for kiosk/monitor use
+   ═══════════════════════════════════════════════════════════════════ */
+
+/** Dwell time per step before auto-advancing (ms). Must comfortably
+ *  exceed the longest in-step demo timeout (step 2 fires at 2400ms). */
+const DEMO_DWELL_MS = 9000;
+
+/** Static URL of the WHG logo, shown small in each tour-step footer. */
+const WHG_LOGO_URL = '/static/images/whg_logo.svg';
+
+/** Body class applied while demo mode runs — used to suppress the dev
+ *  server's red viewport border for a clean presentation. */
+const DEMO_MODE_CLASS = 'atlas-demo-mode';
+
+let _demoMode = false;
+let _demoPaused = false;
+let _autoAdvanceTimer = null;
+let _activeDriver = null;
+
+/** Number of steps shown in the current mode. The final "Re-take this
+ *  tour" step is omitted in demo mode. */
+function activeStepCount() {
+    const n = getTourSteps().length;
+    return _demoMode ? n - 1 : n;
+}
+
+function clearAutoAdvance() {
+    if (_autoAdvanceTimer) {
+        clearTimeout(_autoAdvanceTimer);
+        _autoAdvanceTimer = null;
+    }
+}
+
+/** Advance one step, looping back to the first after the last. */
+function advanceDemoStep() {
+    if (!_activeDriver || !_activeDriver.isActive()) return;
+    const total = activeStepCount();
+    const idx = _activeDriver.getActiveIndex();
+    if (typeof idx === 'number' && idx >= total - 1) {
+        _activeDriver.moveTo(0);   // loop
+    } else {
+        _activeDriver.moveNext();
+    }
+}
+
+/** Schedule the next auto-advance. Loops back to the first step after
+ *  the last, so the presentation runs indefinitely. */
+function scheduleAutoAdvance() {
+    clearAutoAdvance();
+    if (!_demoMode || _demoPaused || !_activeDriver) return;
+    _autoAdvanceTimer = setTimeout(() => {
+        _autoAdvanceTimer = null;
+        if (!_demoMode || _demoPaused || !_activeDriver || !_activeDriver.isActive()) return;
+        advanceDemoStep();
+        scheduleAutoAdvance();
+    }, DEMO_DWELL_MS);
+}
+
+/** Toggle the demo auto-advance between paused and running. Resuming
+ *  advances to the next step immediately, then resumes the timer. */
+function toggleDemoPause() {
+    _demoPaused = !_demoPaused;
+    updatePauseButtons();
+    if (_demoPaused) {
+        clearAutoAdvance();
+    } else {
+        advanceDemoStep();
+        scheduleAutoAdvance();
+    }
+}
+
+/** Reflect the paused/running state on any rendered pause buttons. */
+function updatePauseButtons() {
+    document.querySelectorAll('.driver-popover-demo-pause').forEach((btn) => {
+        const label = _demoPaused ? 'Resume demo' : 'Pause demo';
+        btn.innerHTML =
+            '<i class="fas ' + (_demoPaused ? 'fa-play' : 'fa-pause') +
+            '" aria-hidden="true"></i>';
+        btn.setAttribute('aria-label', label);
+        btn.title = label;
+    });
+}
+
+/**
+ * Inject the footer bar (small WHG logo + preview note) into a tour
+ * popover. In demo mode it also gets a discrete pause/continue control.
+ * Called for every step from ``onPopoverRender``.
+ */
+function injectPopoverFooter(popover) {
+    if (!popover || !popover.wrapper) return;
+    const bar = document.createElement('div');
+    bar.className = 'driver-popover-footnote';
+
+    const logo = document.createElement('img');
+    logo.className = 'driver-popover-footnote-logo';
+    logo.src = WHG_LOGO_URL;
+    logo.alt = 'WHG';
+
+    const note = document.createElement('span');
+    note.className = 'driver-popover-footnote-text';
+    note.textContent = 'WHG Atlas — preview of a future release';
+
+    bar.appendChild(logo);
+    bar.appendChild(note);
+
+    if (_demoMode) {
+        const pause = document.createElement('button');
+        pause.type = 'button';
+        pause.className = 'driver-popover-demo-pause';
+        pause.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleDemoPause();
+        });
+        bar.appendChild(pause);
+    }
+
+    popover.wrapper.appendChild(bar);
+    if (_demoMode) updatePauseButtons();
+}
+
+/** Style the first ("Welcome to the WHG Atlas") popover as a centred,
+ *  hero-style modal with a large WHG logo. */
+function decorateWelcomePopover(popover) {
+    if (!popover || !popover.wrapper) return;
+    popover.wrapper.classList.add('atlas-welcome-popover');
+    if (popover.wrapper.querySelector('.atlas-welcome-popover-logo')) return;
+    const hero = document.createElement('img');
+    hero.className = 'atlas-welcome-popover-logo';
+    hero.src = WHG_LOGO_URL;
+    hero.alt = 'World Historical Gazetteer';
+    if (popover.title && popover.title.parentNode) {
+        popover.title.parentNode.insertBefore(hero, popover.title);
+    } else {
+        popover.wrapper.insertBefore(hero, popover.wrapper.firstChild);
+    }
+}
+
+/** Enter demo mode from the button on the first tour step: rebuild the
+ *  tour without the final "re-take" step and start auto-advancing. */
+function enterDemoMode() {
+    if (_demoMode) return;
+    // Tear down the current (non-demo) driver without triggering demo
+    // teardown, then restart cleanly in demo mode.
+    if (_activeDriver) {
+        const d = _activeDriver;
+        _activeDriver = null;
+        try { d.destroy(); } catch (e) { /* */ }
+    }
+    startAtlasTour({ demo: true });
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Helpers — programmatic control interaction during the tour
@@ -140,9 +294,8 @@ function tourCleanup() {
 function getTourSteps() {
     return [
 
-        /* ── 1. Map overview ────────────────────────────────────── */
+        /* ── 1. Welcome (centred modal — no highlighted element) ──── */
         {
-            element: '#hero_map',
             popover: {
                 title: 'Welcome to the WHG Atlas',
                 description:
@@ -153,8 +306,6 @@ function getTourSteps() {
                     'Zoom, pan, and rotate the globe to navigate. ' +
                     '<strong>Click on any boundary polygon</strong> to select a region. ' +
                     'Use the corner controls to switch between globe and flat projections.',
-                side: 'top',
-                align: 'center',
             },
         },
 
@@ -378,10 +529,13 @@ function getTourSteps() {
    ═══════════════════════════════════════════════════════════════════ */
 
 function createTourDriver() {
+    // Demo mode drops the final "Re-take this tour" step — it's
+    // meaningless in an auto-advancing loop.
+    const steps = _demoMode ? getTourSteps().slice(0, -1) : getTourSteps();
     return driver({
         showProgress: true,
         showButtons: ['next', 'previous', 'close'],
-        steps: getTourSteps(),
+        steps: steps,
         nextBtnText: 'Next →',
         prevBtnText: '← Back',
         doneBtnText: 'Done',
@@ -392,8 +546,41 @@ function createTourDriver() {
         // of cancelling the tour (which was too easy to trigger accidentally
         // when offcanvas panels or the backdrop were open).
         overlayClickBehavior: 'nextStep',
+        onPopoverRender: (popover, opts) => {
+            // Footer bar (WHG logo + preview note, plus demo pause control)
+            // on every step.
+            injectPopoverFooter(popover);
+            const idx = opts?.state?.activeIndex;
+            // First step is a centred hero-style welcome modal.
+            if (idx === 0) decorateWelcomePopover(popover);
+            // "Start looping demo" button on the first step's popover
+            // (the "Welcome to the WHG Atlas" card) — only when not
+            // already running as a demo.
+            if (idx !== 0 || _demoMode) return;
+            const btn = document.createElement('button');
+            btn.id = 'atlas_demo_mode_btn';
+            btn.type = 'button';
+            btn.className = 'driver-popover-demo-btn';
+            btn.innerHTML =
+                '<i class="fas fa-circle-play" aria-hidden="true"></i> ' +
+                'Start looping demo';
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                enterDemoMode();
+            });
+            if (popover.description) popover.description.appendChild(btn);
+        },
         onDestroyed: () => {
+            clearAutoAdvance();
             tourCleanup();
+            if (_demoMode) {
+                _demoMode = false;
+                _demoPaused = false;
+                document.body.classList.remove(DEMO_MODE_CLASS);
+                try { heroMap.setGlobePinned(false); } catch (e) { /* */ }
+            }
+            _activeDriver = null;
             localStorage.setItem(TOUR_SEEN_KEY, 'true');
         },
     });
@@ -403,13 +590,32 @@ function createTourDriver() {
    Public API
    ═══════════════════════════════════════════════════════════════════ */
 
-/** Start the guided tour. */
-export function startAtlasTour() {
+/**
+ * Start the guided tour.
+ * @param {{demo?: boolean}} [options] — when `demo` is true, the tour runs
+ *   in auto-advancing, looping demo mode with the globe pinned and a
+ *   persistent "preview of a future release" banner.
+ */
+export function startAtlasTour(options = {}) {
     // Ensure clean state before starting
+    clearAutoAdvance();
     tourCleanup();
     blockInteractions();
+    _demoPaused = false;
+    if (options.demo) {
+        _demoMode = true;
+        document.body.classList.add(DEMO_MODE_CLASS);
+        try { heroMap.setGlobePinned(true); } catch (e) { /* map not ready */ }
+    }
     const d = createTourDriver();
+    _activeDriver = d;
     d.drive();
+    if (_demoMode) scheduleAutoAdvance();
+}
+
+/** Start the looping demo presentation directly. */
+export function startAtlasDemo() {
+    startAtlasTour({ demo: true });
 }
 
 /** Has the user already seen the tour? */
