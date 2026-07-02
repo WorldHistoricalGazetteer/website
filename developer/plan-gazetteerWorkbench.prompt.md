@@ -126,8 +126,8 @@ whg3 (Django: api app + webpack)                whg3 api → indexing/gateway   
 ### 2a. Data model (IndexedDB via Dexie)
 
 - `project` — id, name, createdAt, schemaVersion, storagePersisted flag, source-format, column map.
-- `columns` — ordered column defs: `{id, name, role (name|county|type|lat|lon|gridref|date|other|
-  derived), derivedTemplate?, sourceIndex}`.
+- `columns` — ordered column defs: `{id, name, role (name|county|type|lat|lon|x|y|crs|date|other|
+  derived), crs? (EPSG when x/y are in a projected/national CRS), derivedTemplate?, sourceIndex}`.
 - `rows` — `{rowId, cells{colId→value}, dedupKey, state (Pending|Queued|Processing|Completed|Failed|
   Skipped|NoMatch), decision{place_id, label, score, authorityIds{}, matchedAt}, notes}`.
 - `queries` (dedup cache) — `{dedupKey, normalisedQuery, candidates[], fetchedAt}` keyed by hashed
@@ -153,8 +153,9 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
 - New Django view/URL + template + `workbench.bundle.js` webpack entry; auth-gated (WHG login).
 - Dexie schema (§2a); `navigator.storage.persist()` request on project open; **"Clear my data"**.
 - File import in a Web Worker: CSV/TSV (streamed), XLSX (SheetJS), JSON. Progress UI for large files.
-- **Automatic schema detection** (regex/synonym dictionary for name, county, feature type, lat/lon,
-  grid ref, date) → pre-filled **column-mapping** UI the user confirms/edits.
+- **Automatic schema detection** (regex/synonym dictionary for name, county, feature type, lat/lon or
+  projected x/y, CRS/EPSG hints, date) → pre-filled **column-mapping** UI the user confirms/edits;
+  where coordinates are non-WGS84, prompt for / detect the CRS and reproject in-browser (proj4js).
 - Virtualised table (render only visible rows) — evaluate a light virtualiser or hand-roll windowing.
 - **Privacy statement** banner: what stays local, what is sent.
 - **Acceptance:** import a 50k-row CSV, map columns, reload the page, data still there.
@@ -194,8 +195,15 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
   free-text notes.
 - Export: **CSV, JSON, LPF (first-class), LP-TSV**; all client-side (FileSaver).
 - **LPF import** too (round-trips as an interchange format).
+- **"Contribute to WHG" enjoinder (MVP).** A reasonably-prominent, friendly (non-nagging)
+  call-to-action inviting the user to give their finished, reconciled gazetteer back to WHG — because
+  WHG grows through contributed gazetteers, contribution should be the visible, natural endpoint of the
+  workflow. Surface it e.g. at export time and on the progress panel once a threshold of rows is
+  matched, always reinforcing that it is **opt-in and selective** (only chosen rows leave). The *full
+  submission pipeline* is Phase 10; the *encouragement* to contribute ships in the MVP (here it can
+  simply route to the existing WHG dataset-contribution flow with the exported LPF).
 - **Acceptance:** produce a Lewis export with a working British-History-Online VCH URL column and a
-  valid LPF file that re-imports.
+  valid LPF file that re-imports; a visible, dismissible "contribute this to WHG" prompt appears.
 
 ### Phase 6 — Consume the existing standard OpenRefine service (mostly client-side)
 The standard OpenRefine Reconciliation Service **already exists** (`whg3/api/reconcile.py`; see §1a, §4).
@@ -218,7 +226,7 @@ This phase is about *using* it well, not building it:
 
 ### Phase 8 — Map-assisted disambiguation (enhancement)
 - maplibre-gl panel: plot candidate `repr_point`s; click-to-choose; draw a bbox → feed `bounds`;
-  rank by proximity to the row's own coordinates; OS grid-ref ingest (→ lat/lon).
+  rank by proximity to the row's own coordinates (reprojected to WGS84 from whatever CRS they arrived in).
 
 ### Phase 9 — Cleaning pipeline & audit (enhancement)
 - **Replayable, non-destructive** transform recipe (trim, whitespace, expand `St.`/saints, strip
@@ -291,7 +299,9 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
    Versioning vs the server model.
 5. **Submission format & path.** Exact LPF profile and how "submit selected rows" maps onto the
    existing whg3 dataset-contribution flow (validation, indexing).
-6. **Grid-ref support scope.** OSGB only, or a pluggable projection set (proj4js)?
+6. **CRS support scope.** How many coordinate reference systems to support out of the box via proj4js
+   (WGS84 + common national/projected grids: OSGB, ITM, Lambert, UTM, State Plane, …) vs. letting the
+   user paste an arbitrary EPSG code; and how far to auto-detect CRS from the file vs. always prompt.
 
 ---
 
