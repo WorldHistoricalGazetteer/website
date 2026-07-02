@@ -24,6 +24,19 @@ WHG's existing API, and (b) an explicit user-initiated submission of selected ro
 Read the consolidated issue #111 for the full rationale, feature list and caveats. This plan is the
 build order.
 
+### Positioning (what this is *not*, and what it could grow into)
+
+- **Not a replacement for WHG's curated "authority" ingestion pipeline.** Large / complex /
+  authoritative sources stay with the per-source scripts in the `indexing` repo (`authorities/*` +
+  `processing/ingest_all_authorities.py` / `index_namespace.py`), already used for `alc`, `chgis`,
+  `hgis`, GeoNames, TGN, Wikidata, etc. The Workbench serves the long tail; the curated pipeline
+  serves the big/authoritative head. The UI should *route* users to the curated route past some
+  size/complexity threshold (see §6) rather than pretend to handle 200k rows in a tab.
+- **Could double as a curation tool for existing gazetteers** — strong overlap with authoring. To
+  contain complexity, **build shared, composable modules consumed by two thin front-ends** (authoring
+  Workbench + curation surface, plus a tiny single-record correction widget) rather than one
+  monolithic UI. Factor for this reuse from day one even if curation ships later. See §2c and Phase 12.
+
 ### Design invariants (do not violate)
 
 1. **No server-side persistence of user data.** Only queries and (opt-in) final submissions leave.
@@ -35,6 +48,8 @@ build order.
    CRC gateway. Consume it; prefer thin additions over new pipelines.
 5. **Progressive enhancement.** Heavy optional capabilities (in-browser Symphonym, map, multi-source)
    load lazily and never block the MVP path.
+6. **Factor for reuse.** Core capabilities are modules, not page code, so a future curation surface can
+   reuse them without a rewrite (see §2c). No monolith.
 
 ---
 
@@ -143,6 +158,34 @@ whg3 (Django: api app + webpack)                whg3 api → indexing/gateway   
 `Accepted(place_id)`. **On app boot, any row in `Processing` reverts to `Pending`.** The recon worker
 writes state transitions inside IndexedDB transactions so a mid-flight crash can't strand a batch.
 
+### 2c. Shared-module architecture (authoring *and* curation from one core)
+
+The authoring Workbench and a future curation surface differ mostly at the **edges** (where rows come
+from, and what "contribute" produces), not in the middle. Build the middle once, as framework-agnostic
+modules, and compose them into thin front-ends:
+
+| Module | Responsibility | Reused by |
+|---|---|---|
+| `store` | Dexie/IndexedDB + OPFS; project model; `.whgproj` I/O | both |
+| `io` | parsers/serialisers: CSV/TSV/XLSX/JSON/**LPF**/LP-TSV/GeoJSON…; CRS reprojection (proj4js) | both |
+| `schema` | auto-detection + column-mapping | both |
+| `transform` | replayable, non-destructive pipeline | both |
+| `recon` | worker: dedup, throttle, backoff, cache; standard `/reconcile` client | both |
+| `symphonym` | in-browser ONNX embed + local KNN (blocking/clustering) | both |
+| `review` | virtualised table + keyboard candidate review | both |
+| `map` | maplibre candidate plotting / bbox / proximity | both |
+| `contribute` | selective submission of chosen/changed rows (+ diff/patch) | both |
+| **front-ends** | (a) **Workbench** page; (b) **curation** page; (c) **single-record correction widget** | — |
+
+**Sources differ, core is shared:**
+- *Authoring* loads from a **local file**; rows have **no `place_id`** yet → reconcile → contribute a
+  *new* gazetteer.
+- *Curation (bulk)* loads an **existing WHG/authority gazetteer** (via LPF download); rows arrive with
+  `place_id`s → edit/re-reconcile → `contribute` computes a **diff** and submits only changed rows as
+  a **patch/correction**, not a fresh dataset.
+- *Curation (single record)* is the tiny **correction widget** embedded on a place page — reuses
+  `recon` + `review` + `contribute` for one row, feeding WHG's existing correction / veracity model.
+
 ---
 
 ## 3. Phased delivery
@@ -245,6 +288,19 @@ This phase is about *using* it well, not building it:
 - Service worker for offline review of already-fetched candidates.
 - Shared read-only/editable session (design later; needs a state-sync decision — likely out-of-band).
 
+### Phase 12 — Curation surface for existing gazetteers (enhancement; separate front-end)
+Reuses the §2c shared modules — this is a *front-end*, not a second app. Two modes:
+- **Single-record correction widget.** Inline "suggest a correction" on a place page (georeference,
+  better match, typo, type fix); reuses `recon`+`review`+`contribute` for one row; submits to WHG's
+  existing **correction / veracity** model. Low-effort, high-value; could ship before the bulk mode.
+- **Bulk curation of one gazetteer.** Load an existing WHG/authority gazetteer via **LPF download**;
+  rows arrive **with `place_id`s**; edit / re-reconcile / enrich in bulk; `contribute` computes a
+  **diff** and submits only changed rows as a **patch**, not a fresh dataset.
+- **Depends on:** the shared modules (Phases 1–5), selective contribution (Phase 10), and a
+  server-side **gazetteer-export-to-LPF** + **correction/patch intake** contract (see §4, §6).
+- **Guardrail:** honour the size/complexity threshold — steer bulk curation of huge authority
+  gazetteers toward the curated pipeline rather than a 200k-row browser session.
+
 ---
 
 ## 4. Backend: reuse the existing standard service; only small, optional additions
@@ -263,6 +319,12 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
 - **Submission path (Phase 10, optional).** Wire "submit selected rows as LPF/LP-TSV" onto the
   existing `whg3` dataset-contribution flow (validation → indexing). Likely no new endpoint, just
   reuse.
+- **Curation contract (Phase 12, optional).** Two server capabilities the curation surface needs:
+  (a) **export an existing gazetteer to LPF** for download into the browser (may already exist in
+  `whg3` — verify before building), and (b) a **correction/patch intake** that accepts a diff of
+  changed rows for an existing gazetteer, mapping onto WHG's existing **correction / veracity** model
+  (cf. the `indexing` authority scripts that already ingest corrections, e.g. `authorities/alcedo-places.py`).
+  Single-record corrections reuse the same intake for one row.
 - **Conformance/gap check (Phase 6).** Confirm the manifest's `properties`/type vocabulary expresses
   every hint the Workbench needs (county, feature type, coords, dates). If — and only if — a needed
   hint isn't expressible in the standard `queries` shape, consider extending `api/reconcile.py`'s
@@ -291,8 +353,8 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
    multi-panel app is at the edge of comfort for vanilla JS. Options: (a) stay vanilla + a small
    virtualiser; (b) add a scoped framework (Preact/Svelte/Lit) *for this bundle only*. **Recommend
    (b) Svelte or Lit** for maintainability, scoped to `workbench.bundle.js`. Needs sign-off.
-2. **Where the plan/UI code lives.** Front-end clearly in `whg3`. This plan is in `indexing` because
-   the backend adapter + Symphonym model are here. Consider a short pointer doc in `whg3/developer/`.
+2. **Where the UI code lives.** Front-end in `whg3` (this plan lives in `whg3/developer/`); the only
+   backend touch-points are in `indexing` (gateway + Symphonym `hf/`).
 3. **Recon rate limits & auth for high-volume users.** Define per-user throttle; confirm the gateway
    won't reject a legitimate 16k-row (deduped) run.
 4. **Symphonym asset hosting.** Where do the ONNX + vocabs live (WHG static, a Release artifact)?
@@ -302,6 +364,12 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
 6. **CRS support scope.** How many coordinate reference systems to support out of the box via proj4js
    (WGS84 + common national/projected grids: OSGB, ITM, Lambert, UTM, State Plane, …) vs. letting the
    user paste an arbitrary EPSG code; and how far to auto-detect CRS from the file vs. always prompt.
+7. **Workbench-vs-curated-pipeline threshold.** The row-count / geometry-richness / relation-density
+   point past which the UI steers a user to the curated authority-ingestion route (`indexing` repo)
+   instead of a browser session. Needed so the two routes read as complementary, not competing.
+8. **Curation scope & timing.** Is the curation surface (Phase 12) in the first release or a
+   fast-follow? Either way, confirm the §2c module boundaries now so nothing needs a rewrite. Also:
+   does `whg3` already expose gazetteer-export-to-LPF and a correction/patch intake, or are these new?
 
 ---
 
@@ -324,6 +392,9 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
 - **Standard OpenRefine service (existing):** `whg3/api/reconcile.py`, `api/crc_client.py`,
   `api/urls_root.py`; user docs at <https://docs.whgazetteer.org/content/technical/apis.html>.
 - Backend: `indexing/gateway/reconcile.py`, `places.py`, `extend.py`, `es_helpers.py`, `spatial.py`.
+- **Curated authority pipeline** (the *other* contribution route): `indexing/authorities/*` (per-source
+  scripts, e.g. `alcedo-places.py` incl. corrections/veracity), `processing/ingest_all_authorities.py`,
+  `processing/index_namespace.py`.
 - In-browser Symphonym technique: `GOTW` repo `WHG-LESSONS.md` §2, `process/export_symphonym_onnx.py`,
   `process/build_symphonym_index.py`; reference preprocessing in `indexing/hf/inference.py`.
 - Front-end stack: `whg3/webpack.config.js`, `whg3/package.json`, `whg3/static/webpack/`.
