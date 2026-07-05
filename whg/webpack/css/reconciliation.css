@@ -280,3 +280,17 @@
 .recon-role-select.role-date    { border-left-color: #b26a00; }
 .recon-role-select.role-id      { border-left-color: #455a64; }
 .recon-role-select.role-other   { border-left-color: #cfcfcf; }
+
+/* Phase 5 — Enrich & export */
+.recon-export-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }
+@media (max-width: 640px) { .recon-export-grid { grid-template-columns: 1fr; } }
+.recon-export-box { border: 1px solid #e2e2e2; border-radius: 6px; padding: .6rem .8rem; }
+.recon-export-box legend { float: none; width: auto; font-size: .8rem; }
+.recon-export-box label { margin-bottom: .25rem; }
+.recon-export-box input[disabled] + span,
+.recon-export-box label:has(input[disabled]) { color: #adb5bd; }
+.recon-contribute {
+  background: #fff7ed; border: 1px solid #fed7aa; border-radius: 6px;
+  padding: .7rem .9rem; font-size: .85rem; line-height: 1.4;
+}
+.recon-contribute a { font-weight: 600; }

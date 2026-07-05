@@ -468,6 +468,7 @@ function renderAll() {
   renderDates();
   renderPreview();
   refreshReconSection();
+  refreshExport();
   updatePaneSummaries();
   openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
 }
@@ -517,6 +518,7 @@ function resetUI() {
   el('recon-results-wrap').classList.add('d-none');
   el('recon-review').classList.add('d-none');
   el('recon-review-map').classList.add('d-none');
+  el('recon-export').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
     'recon-review-card', 'recon-review-progress'].forEach((id) => {
@@ -596,6 +598,237 @@ function downloadBackup() {
   flashSaved('Backup saved');
 }
 // (Restoring a .whgproj is handled by handleFile — the same dropzone / choose-file control.)
+
+// ── Phase 5: Enrich & export ────────────────────────────────────────────────
+// Produce an augmented copy of the table for use in other software: the original columns plus,
+// optionally, converted WGS84 coordinates, ISO start/end dates, the confirmed WHG match, and richer
+// details enriched from WHG. All computed here in the browser — nothing is uploaded.
+
+function hasCoordRole() {
+  return colIndexByRole('coords') >= 0 || (colIndexByRole('lat') >= 0 && colIndexByRole('lon') >= 0);
+}
+// Resolve a row's coordinate to WGS84 without touching the DOM (works whether or not the pane is open).
+function rowCoordValue(i) {
+  const coordsIdx = colIndexByRole('coords'), latIdx = colIndexByRole('lat'), lonIdx = colIndexByRole('lon');
+  try {
+    if (coordsIdx >= 0) {
+      const fmt = project.coordFormat || Coords.detectCoordFormat(coordColumnSamples(coordsIdx)).format;
+      return Coords.parseCoord(fmt, project.rows[i][coordsIdx]);
+    }
+    if (latIdx >= 0 && lonIdx >= 0) {
+      return Coords.parseLatLonPair(project.rows[i][latIdx], project.rows[i][lonIdx], !!project.coordSwap);
+    }
+  } catch (_) { /* ignore a single bad cell */ }
+  return null;
+}
+
+function currentExportOptions() {
+  const fmtEl = document.querySelector('input[name="recon-exp-fmt"]:checked');
+  return {
+    coords: !!(el('recon-exp-coords') && el('recon-exp-coords').checked) && hasCoordRole(),
+    dates: !!(el('recon-exp-dates') && el('recon-exp-dates').checked) && colIndexByRole('date') >= 0,
+    match: !!(el('recon-exp-match') && el('recon-exp-match').checked),
+    enrich: !!(el('recon-exp-enrich') && el('recon-exp-enrich').checked),
+    format: fmtEl ? fmtEl.value : 'csv',
+  };
+}
+
+// Assemble a per-row augmented record set. Returns { origHeaders, augHeaders, records } where each
+// record is { orig:[cellValues], aug:{header:value}, coord:{lat,lon}|null, whenStart, whenEnd, match }.
+async function buildExportRecords(opts, onProgress) {
+  const built = buildUniqueQueries();
+  const decisions = project.decisions || {};
+  const matches = project.matches || {};
+  if (opts.coords) await loadCoords();
+  if (opts.dates) await loadDates();
+
+  const dateIdx = colIndexByRole('date');
+  const augHeaders = [];
+  if (opts.coords) augHeaders.push('wgs84_lat', 'wgs84_lon');
+  if (opts.dates) augHeaders.push('date_start', 'date_end');
+  if (opts.match) augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
+  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types');
+
+  // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
+  if (opts.enrich) {
+    const ids = [];
+    if (built) built.map.forEach((v, key) => { const d = decisions[key]; if (d && d.status === 'accepted' && d.place_id && !(d.place_id in _candCoord)) ids.push(d.place_id); });
+    for (let k = 0; k < ids.length; k++) { await fetchCandidateCoord(ids[k]); if (onProgress) onProgress(`enriching ${k + 1} / ${ids.length}…`); }
+  }
+
+  const records = [];
+  for (let i = 0; i < project.rows.length; i++) {
+    const orig = project.rows[i].map((v) => (v == null ? '' : v));
+    const aug = {};
+    let coord = null, whenStart = '', whenEnd = '', match = null;
+
+    if (opts.coords) {
+      coord = rowCoordValue(i);
+      aug.wgs84_lat = coord ? +coord.lat.toFixed(6) : '';
+      aug.wgs84_lon = coord ? +coord.lon.toFixed(6) : '';
+    }
+    if (opts.dates) {
+      const raw = project.rows[i][dateIdx];
+      const d = (raw != null && String(raw).trim() !== '') ? Dates.parseDate(raw, { locale: 'uk' }) : null;
+      whenStart = (d && d.startISO) || '';
+      whenEnd = (d && d.endISO) || '';
+      aug.date_start = whenStart;
+      aug.date_end = whenEnd;
+    }
+    if (opts.match || opts.enrich) {
+      const info = built && keyForRow(built, i);
+      const dec = info && decisions[info.key];
+      if (dec && dec.status === 'accepted') {
+        const cand = ((matches[info.key] && matches[info.key].candidates) || [])[dec.ci] || null;
+        match = { id: dec.place_id, title: dec.label, score: dec.score, source: nsName(dec.place_id), cand };
+      }
+    }
+    if (opts.match) {
+      aug.whg_match_id = match ? match.id : '';
+      aug.whg_match_title = match ? match.title : '';
+      aug.whg_match_score = match ? match.score : '';
+      aug.whg_match_source = match ? match.source : '';
+    }
+    if (opts.enrich) {
+      const mc = match && (_candCoord[match.id] || null);
+      aug.whg_match_lon = mc ? +mc.lon.toFixed(6) : '';
+      aug.whg_match_lat = mc ? +mc.lat.toFixed(6) : '';
+      aug.whg_match_variants = (match && match.cand && (match.cand.alt_names || [])).join('; ') || '';
+      aug.whg_match_description = (match && match.cand && match.cand.description) || '';
+      aug.whg_match_types = (match && match.cand && (match.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
+    }
+    records.push({ orig, aug, coord, whenStart, whenEnd, match });
+  }
+  return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
+}
+
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function serializeCSV(data) {
+  const headers = data.origHeaders.concat(data.augHeaders);
+  const lines = [headers.map(csvCell).join(',')];
+  for (const rec of data.records) lines.push(rec.orig.concat(data.augHeaders.map((h) => rec.aug[h])).map(csvCell).join(','));
+  return lines.join('\r\n');
+}
+function serializeJSON(data) {
+  const out = data.records.map((rec) => {
+    const o = {};
+    data.origHeaders.forEach((h, j) => { o[h] = rec.orig[j] == null ? '' : rec.orig[j]; });
+    data.augHeaders.forEach((h) => { o[h] = rec.aug[h]; });
+    return o;
+  });
+  return JSON.stringify(out, null, 2);
+}
+// WHG LP-TSV (a subset of the canonical columns — enough as a starting point for contribution).
+function serializeLPTSV(data) {
+  const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name');
+  const countryIdx = colIndexByRole('country'), countyIdx = colIndexByRole('county');
+  const cols = ['id', 'title', 'title_source', 'ccodes', 'start', 'end', 'lon', 'lat', 'matches', 'parent_name', 'description'];
+  const src = project.fileName || 'workbench';
+  const lines = [cols.join('\t')];
+  data.records.forEach((rec, i) => {
+    const cell = (v) => String(v == null ? '' : v).replace(/[\t\r\n]/g, ' ');
+    const row = {
+      id: idIdx >= 0 ? rec.orig[idIdx] : (i + 1),
+      title: nameIdx >= 0 ? rec.orig[nameIdx] : '',
+      title_source: src,
+      ccodes: countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? String(rec.orig[countryIdx]).toUpperCase() : '',
+      start: rec.whenStart, end: rec.whenEnd,
+      lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
+      matches: rec.match ? rec.match.id : '',
+      parent_name: countyIdx >= 0 ? rec.orig[countyIdx] : '',
+      description: rec.match ? `closeMatch: ${rec.match.title} (${rec.match.source})` : '',
+    };
+    lines.push(cols.map((c) => cell(row[c])).join('\t'));
+  });
+  return lines.join('\n');
+}
+// Linked Places Format (LPF) GeoJSON FeatureCollection.
+function serializeLPF(data) {
+  const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name'), countryIdx = colIndexByRole('country');
+  const features = data.records.map((rec, i) => {
+    const title = nameIdx >= 0 ? String(rec.orig[nameIdx] || '') : '';
+    const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
+    const props = { title };
+    if (cc.length) props.ccodes = cc;
+    const feat = {
+      '@id': String(idIdx >= 0 ? rec.orig[idIdx] : (i + 1)),
+      type: 'Feature',
+      properties: props,
+      names: title ? [{ toponym: title }] : [],
+    };
+    if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
+    if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
+    if (rec.match) feat.links = [{ type: 'closeMatch', identifier: rec.match.id }];
+    return feat;
+  });
+  return JSON.stringify({
+    type: 'FeatureCollection',
+    '@context': 'https://raw.githubusercontent.com/LinkedPasts/linked-places-format/master/linkedplaces-context-v1.1.jsonld',
+    features,
+  }, null, 2);
+}
+
+function downloadText(filename, text, mime) {
+  const blob = new Blob([text], { type: mime + ';charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function runExport() {
+  if (!project) return;
+  const opts = currentExportOptions();
+  const status = el('recon-export-status');
+  const btn = el('recon-export-btn');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'preparing…';
+  try {
+    const data = await buildExportRecords(opts, (msg) => { if (status) status.textContent = msg; });
+    const base = (project.fileName ? project.fileName.replace(/\.[^.]+$/, '') : 'workbench') + '-augmented';
+    const FMT = {
+      csv: [serializeCSV, 'csv', 'text/csv'],
+      json: [serializeJSON, 'json', 'application/json'],
+      lptsv: [serializeLPTSV, 'tsv', 'text/tab-separated-values'],
+      lpf: [serializeLPF, 'lpf.geojson', 'application/geo+json'],
+    };
+    const [fn, ext, mime] = FMT[opts.format] || FMT.csv;
+    downloadText(`${base}.${ext}`, fn(data), mime);
+    if (status) status.textContent = `exported ${data.records.length.toLocaleString()} rows`;
+  } catch (err) {
+    console.error('[recon] export failed', err);
+    if (status) status.textContent = 'export failed — see console';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Show the export pane once a dataset is loaded; enable match/enrich only when there are matches.
+function refreshExport() {
+  const sec = el('recon-export');
+  if (!sec || !project) return;
+  const nameIdx = colIndexByRole('name');
+  sec.classList.toggle('d-none', nameIdx < 0 && !hasCoordRole() && colIndexByRole('date') < 0);
+  const hasMatches = !!(project.matches && Object.keys(project.matches).length);
+  const cn = el('recon-exp-coords-note'); if (cn) cn.textContent = hasCoordRole() ? '' : '(no coordinate column)';
+  const dn = el('recon-exp-dates-note'); if (dn) dn.textContent = colIndexByRole('date') >= 0 ? '' : '(no date column)';
+  ['recon-exp-coords', 'recon-exp-dates', 'recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
+    const box = el(id); if (!box) return;
+    if (id === 'recon-exp-coords') box.disabled = !hasCoordRole();
+    if (id === 'recon-exp-dates') box.disabled = colIndexByRole('date') < 0;
+    if (id === 'recon-exp-match' || id === 'recon-exp-enrich') box.disabled = !hasMatches;
+  });
+  const sum = el('recon-pane-sum-export');
+  if (sum) {
+    let accepted = 0;
+    if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
+    sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
+  }
+}
 
 async function showCapabilities() {
   const caps = [];
@@ -809,7 +1042,7 @@ function renderResultsWindow(calibrate) {
     }
   }
 }
-function renderResults(built) { renderResultsTable(built); refreshReview(); }
+function renderResults(built) { renderResultsTable(built); refreshReview(); refreshExport(); }
 
 // Reviewable unique names (those with ≥1 candidate), highest row-impact first.
 function reviewableKeys(built) {
@@ -1048,6 +1281,7 @@ function afterDecision(advanceAfter) {
   persist();
   const built = buildUniqueQueries(); if (built) renderResultsTable(built);
   updateReviewProgress();
+  refreshExport();
   if (advanceAfter) advance(1); else renderReviewCard();
 }
 function advance(dir) {
@@ -1178,6 +1412,8 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
+  const exportBtn = el('recon-export-btn');
+  if (exportBtn) exportBtn.addEventListener('click', runExport);
   const rw = el('recon-results-wrap');
   if (rw) rw.addEventListener('scroll', () => { if (_resultRows.length) requestAnimationFrame(() => renderResultsWindow(false)); });
 

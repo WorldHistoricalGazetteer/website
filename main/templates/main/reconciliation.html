@@ -217,6 +217,57 @@
     </div>
   </section>
 
+  <section class="recon-card recon-pane d-none" id="recon-export">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-export">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-title">5 · Enrich &amp; export</span>
+        <span class="recon-pane-summary" id="recon-pane-sum-export"></span>
+      </button>
+    </div>
+    <div class="recon-pane-body">
+      <p class="text-muted small mb-2">
+        Take an augmented copy of your table for use elsewhere. Everything is generated here in your
+        browser — nothing is uploaded. Your original columns are always kept; add whichever augmented
+        columns you need.
+      </p>
+      <div class="recon-export-grid">
+        <fieldset class="recon-export-box">
+          <legend class="small text-muted mb-1">Add columns</legend>
+          <label class="d-block small"><input type="checkbox" id="recon-exp-coords" checked>
+            WGS84 latitude &amp; longitude <span class="text-muted" id="recon-exp-coords-note"></span></label>
+          <label class="d-block small"><input type="checkbox" id="recon-exp-dates" checked>
+            ISO start &amp; end dates <span class="text-muted" id="recon-exp-dates-note"></span></label>
+          <label class="d-block small"><input type="checkbox" id="recon-exp-match" checked>
+            Confirmed WHG match <span class="text-muted">(id, title, score, source)</span></label>
+          <label class="d-block small"><input type="checkbox" id="recon-exp-enrich">
+            Enrich from WHG <span class="text-muted">(matched coordinates, variant names, description, type — fetches from WHG)</span></label>
+        </fieldset>
+        <fieldset class="recon-export-box">
+          <legend class="small text-muted mb-1">Format</legend>
+          <label class="d-block small"><input type="radio" name="recon-exp-fmt" value="csv" checked> CSV</label>
+          <label class="d-block small"><input type="radio" name="recon-exp-fmt" value="json"> JSON</label>
+          <label class="d-block small"><input type="radio" name="recon-exp-fmt" value="lpf"> Linked Places (LPF GeoJSON)</label>
+          <label class="d-block small"><input type="radio" name="recon-exp-fmt" value="lptsv"> LP-TSV (WHG upload)</label>
+        </fieldset>
+      </div>
+      <div class="mt-3 d-flex align-items-center gap-2">
+        <button type="button" id="recon-export-btn" class="btn btn-sm btn-primary">
+          <i class="fas fa-file-export me-1"></i>Export
+        </button>
+        <span id="recon-export-status" class="small text-muted"></span>
+      </div>
+      <div class="recon-contribute mt-3">
+        <i class="fas fa-hand-holding-heart me-1"></i>
+        <strong>Consider contributing to WHG.</strong>
+        Reconciled, standardised place data is far more valuable when shared. When you're ready, the
+        <a href="/datasets/" target="_blank" rel="noopener">upload &amp; publication workflow</a>
+        will accession your places into the WHG union index, linking them with records for the same
+        places from other datasets. The LP-TSV export above is a convenient starting point.
+      </div>
+    </div>
+  </section>
+
   <!-- Source-gazetteer picker (namespaces): prioritise or restrict; persisted across reloads -->
   <div class="modal fade" id="recon-sources-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-sources-title">
     <div class="modal-dialog modal-dialog-scrollable">
