@@ -1,6 +1,6 @@
-/*!*****************************************************************************************************************************************!*\
-  !*** css ../../../../../../home/stephen/Documents/GitHub/whg3/node_modules/css-loader/dist/cjs.js!./whg/webpack/css/reconciliation.css ***!
-  \*****************************************************************************************************************************************/
+/*!**************************************************************************************!*\
+  !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/reconciliation.css ***!
+  \**************************************************************************************/
 /* reconciliation.css
    Gazetteer Workbench — Reconciliation UI (staff preview, unpublished).
    The burnt-orange accent is a deliberate "not published / staff-only" signal, matching the
@@ -125,4 +125,44 @@
   white-space: nowrap;
 }
 .recon-preview td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- Resume banner --- */
+.recon-resume {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  background: #eaf2fb;
+  border: 1px solid #b6d4f0;
+  border-left: 4px solid #1565c0;
+  color: #0d3c73;
+  border-radius: 6px;
+  padding: .55rem .85rem;
+  font-size: .9rem;
+  margin-bottom: 1rem;
+}
+.recon-startover { padding: 0 .25rem; font-size: .85rem; }
+
+/* --- Saved-locally indicator --- */
+.recon-saved { opacity: 0; transition: opacity .2s; white-space: nowrap; }
+.recon-saved.recon-saved--show { opacity: 1; }
+
+/* --- Column-mapping table --- */
+.recon-map-wrap { max-height: 340px; overflow-y: auto; }
+.recon-map th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
+.recon-map td { vertical-align: middle; }
+.recon-map-col { font-weight: 600; word-break: break-word; }
+.recon-role-select { max-width: 220px; }
+
+/* Left accent on a role <select> to echo the role's colour, mirroring the preview scheme */
+.recon-role-select { border-left-width: 4px; }
+.recon-role-select.role-name    { border-left-color: #1565c0; }
+.recon-role-select.role-county,
+.recon-role-select.role-country { border-left-color: #6a1b9a; }
+.recon-role-select.role-type    { border-left-color: #00838f; }
+.recon-role-select.role-lat,
+.recon-role-select.role-lon,
+.recon-role-select.role-coords  { border-left-color: #2e7d32; }
+.recon-role-select.role-date    { border-left-color: #b26a00; }
+.recon-role-select.role-id      { border-left-color: #455a64; }
+.recon-role-select.role-other   { border-left-color: #cfcfcf; }
 

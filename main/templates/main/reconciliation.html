@@ -5,8 +5,8 @@
   Gazetteer Workbench — browser-based, local-first Reconciliation UI.
   STAFF-ONLY, UNPUBLISHED preview. Server-side gate is in main.views.reconciliation_view
   (non-staff receive a 404). See WorldHistoricalGazetteer/place#111 (spec) and #112 (collaboration).
-  This is the Phase 1 skeleton: page shell, unpublished-feature signalling, privacy statement,
-  and a purely in-browser file-inspection proof-of-concept. No data leaves the browser.
+  Phase 1: in-browser import + preview, an editable column-mapping step, and IndexedDB
+  persistence so a dataset survives reloads (resumability). No data leaves the browser.
 {% endcomment %}
 
 {% block title %}<title>WHG · Reconciliation (staff preview)</title>{% endblock %}
@@ -46,12 +46,19 @@
       never your rows — and only the rows you explicitly choose will ever be contributed.</span>
   </div>
 
-  <!-- Import step (Phase 1 proof-of-concept: local parse only) -->
+  <!-- Resume banner: shown on load when a saved project is found in IndexedDB -->
+  <div class="recon-resume d-none" id="recon-resume" role="note">
+    <i class="fas fa-clock-rotate-left me-2"></i>
+    <span id="recon-resume-text">Resumed your saved dataset.</span>
+    <button type="button" id="recon-startover" class="btn btn-sm btn-link recon-startover">Start over</button>
+  </div>
+
+  <!-- Import step (local parse only; the file never leaves the browser) -->
   <section class="recon-card" aria-labelledby="recon-import-title">
     <h2 id="recon-import-title" class="h5">1 · Import a dataset</h2>
     <p class="text-muted small mb-2">
-      CSV, TSV or JSON. Parsed locally to preview columns and detect roles — a first step towards the
-      full import → reconcile → enrich → submit workflow. (XLSX/LPF and persistence come next.)
+      CSV, TSV or JSON. Parsed locally and saved in your browser (IndexedDB) so it survives a reload —
+      a first step towards the full import → reconcile → enrich → submit workflow. (XLSX/LPF next.)
     </p>
 
     <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
@@ -68,16 +75,33 @@
     <div class="recon-caps small text-muted mt-2" id="recon-caps"></div>
   </section>
 
-  <!-- Local preview (populated by reconciliation.js) -->
+  <!-- Column mapping + preview (populated by reconciliation.js) -->
   <section class="recon-card d-none" id="recon-result" aria-labelledby="recon-result-title">
     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <h2 id="recon-result-title" class="h5 mb-0">2 · Detected structure</h2>
-      <button type="button" id="recon-clear" class="btn btn-sm btn-outline-secondary">
-        <i class="fas fa-trash-alt me-1"></i>Clear my data
-      </button>
+      <h2 id="recon-result-title" class="h5 mb-0">2 · Confirm column roles</h2>
+      <div class="d-flex align-items-center gap-2">
+        <span id="recon-saved" class="recon-saved small text-success"></span>
+        <button type="button" id="recon-clear" class="btn btn-sm btn-outline-secondary">
+          <i class="fas fa-trash-alt me-1"></i>Clear my data
+        </button>
+      </div>
     </div>
     <div id="recon-summary" class="recon-summary small text-muted my-2"></div>
-    <div id="recon-columns" class="recon-columns mb-2"></div>
+
+    <p class="text-muted small mb-1">
+      We guessed a <em>role</em> for each column (used later as reconciliation hints). Adjust any that
+      are wrong — changes save automatically.
+    </p>
+    <div class="table-responsive recon-map-wrap">
+      <table class="table table-sm recon-map">
+        <thead>
+          <tr><th style="width:38%">Column</th><th style="width:32%">Role</th><th>Sample value</th></tr>
+        </thead>
+        <tbody id="recon-map-body"></tbody>
+      </table>
+    </div>
+
+    <h3 class="h6 mt-3 mb-1">Preview</h3>
     <div class="table-responsive">
       <table class="table table-sm table-bordered recon-preview">
         <thead id="recon-preview-head"></thead>
@@ -85,8 +109,8 @@
       </table>
     </div>
     <p class="text-muted small mb-0">
-      Showing a local preview only. Column-mapping confirmation, persistence, and reconciliation
-      are the next phases (see the plan in <code>developer/plan-gazetteerWorkbench.prompt.md</code>).
+      Reconciliation (querying WHG's <code>/reconcile</code> service), candidate review, enrichment and
+      selective submission are the next phases (see <code>developer/plan-gazetteerWorkbench.prompt.md</code>).
     </p>
   </section>
 
