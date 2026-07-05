@@ -148,8 +148,18 @@
 
 /* --- Column-mapping table --- */
 .recon-map-wrap { max-height: 340px; overflow-y: auto; }
-.recon-map th { position: sticky; top: 0; background: #f8f9fa; z-index: 1; }
-.recon-map td { vertical-align: middle; }
+/* border-collapse:separate is required for a reliable sticky header — with Bootstrap's
+   default collapsed borders the header background bleeds and body cells show through. */
+.recon-map { border-collapse: separate; border-spacing: 0; }
+.recon-map thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #eef1f4;                     /* fully opaque so scrolled rows don't show through */
+  box-shadow: inset 0 -1px 0 #dee2e6;      /* divider that stays put while the body scrolls */
+  border-bottom: 0;
+}
+.recon-map tbody td { background: #fff; vertical-align: middle; border-top: 1px solid #f0f0f0; }
 .recon-map-col { font-weight: 600; word-break: break-word; }
 .recon-role-select { max-width: 220px; }
 
