@@ -1,13 +1,13 @@
 {% extends "main/base_webpack.html" %}
 {% load static %}
 
-{#
+{% comment %}
   Gazetteer Workbench — browser-based, local-first Reconciliation UI.
   STAFF-ONLY, UNPUBLISHED preview. Server-side gate is in main.views.reconciliation_view
   (non-staff receive a 404). See WorldHistoricalGazetteer/place#111 (spec) and #112 (collaboration).
   This is the Phase 1 skeleton: page shell, unpublished-feature signalling, privacy statement,
   and a purely in-browser file-inspection proof-of-concept. No data leaves the browser.
-#}
+{% endcomment %}
 
 {% block title %}<title>WHG · Reconciliation (staff preview)</title>{% endblock %}
 

@@ -185,8 +185,7 @@
                         <a class="nav-link" href="{% url 'teaching' %}">Teaching</a>
                     </li>
                     {% if user.is_staff %}
-                    {# Reconciliation UI — STAFF-ONLY, unpublished preview (place#111/#112).
-                       Burnt-orange pill signals an in-development feature not yet public. #}
+                    {% comment %}Reconciliation UI — STAFF-ONLY, unpublished preview (place#111/#112). Burnt-orange pill signals an in-development feature not yet public.{% endcomment %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'reconciliation' %}"
                            title="Staff preview — unpublished Gazetteer Workbench (place#111)">
