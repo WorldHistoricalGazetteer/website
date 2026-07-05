@@ -5,6 +5,7 @@
 // Numbered + coloured markers match the candidate list; hover shows the source namespace (by name)
 // and alternate toponyms; a ★ marks the row's own coordinate. Lazy-loaded (heavy).
 
+import './recon-maplibre-global.js'; // MUST be first: publishes window.maplibregl (whg_maplibre needs the global)
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './whg_maplibre.js'; // side effect: window.whg_maplibre = (wrapped) maplibregl
 
