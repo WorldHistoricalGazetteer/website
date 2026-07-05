@@ -54,39 +54,41 @@
     <button type="button" id="recon-startover" class="btn btn-sm btn-link recon-startover">Start over</button>
   </div>
 
-  <!-- Import step (local parse only; the file never leaves the browser) -->
-  <section class="recon-card" aria-labelledby="recon-import-title">
-    <h2 id="recon-import-title" class="h5">1 · Import a dataset</h2>
-    <p class="text-muted small mb-2">
-      CSV, TSV or JSON. Parsed locally and saved in your browser (IndexedDB) so it survives a reload —
-      a first step towards the full import → reconcile → enrich → submit workflow. (XLSX/LPF next.)
-    </p>
-
-    <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
-         role="button" aria-label="Choose or drop a data file">
-      <input id="recon-file" type="file" class="d-none"
-             accept=".csv,.tsv,.txt,.json,text/csv,text/tab-separated-values,application/json"/>
-      <i class="fas fa-file-import recon-dropzone-icon"></i>
-      <div class="recon-dropzone-text">
-        <strong>Choose a file</strong> or drag it here
+  <!-- 1 · Import (accordion pane; local parse only — the file never leaves the browser) -->
+  <section class="recon-card recon-pane" id="recon-pane-import">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-pane-import">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-title">1 · Import a dataset</span>
+        <span class="recon-pane-summary" id="recon-pane-sum-import"></span>
+      </button>
+    </div>
+    <div class="recon-pane-body">
+      <p class="text-muted small mb-2">
+        CSV, TSV or JSON — or a saved <code>.whgproj</code> backup. Parsed locally and saved in your
+        browser (IndexedDB) so it survives a reload. Nothing leaves your browser.
+      </p>
+      <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
+           role="button" aria-label="Choose or drop a data file">
+        <input id="recon-file" type="file" class="d-none"
+               accept=".csv,.tsv,.txt,.json,.whgproj,text/csv,text/tab-separated-values,application/json"/>
+        <i class="fas fa-file-import recon-dropzone-icon"></i>
+        <div class="recon-dropzone-text"><strong>Choose a file</strong> or drag it here</div>
+        <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON, or a <code>.whgproj</code> backup — never leaves your browser</div>
       </div>
-      <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON — never leaves your browser</div>
+      <div class="recon-caps small text-muted mt-2" id="recon-caps"></div>
     </div>
-
-    <div class="small text-muted mt-2">
-      Already have a saved project?
-      <label class="recon-restore-link" title="Load a .whgproj backup file">restore a <code>.whgproj</code> backup
-        <input type="file" id="recon-restore" class="d-none" accept=".whgproj,application/json"></label>.
-    </div>
-
-    <div class="recon-caps small text-muted mt-2" id="recon-caps"></div>
   </section>
 
-  <!-- Column mapping + preview (populated by reconciliation.js) -->
-  <section class="recon-card d-none" id="recon-result" aria-labelledby="recon-result-title">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <h2 id="recon-result-title" class="h5 mb-0">2 · Confirm column roles</h2>
-      <div class="d-flex align-items-center gap-2">
+  <!-- 2 · Confirm column roles (accordion pane) -->
+  <section class="recon-card recon-pane d-none" id="recon-result">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-result">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-title">2 · Confirm column roles</span>
+        <span class="recon-pane-summary" id="recon-pane-sum-result"></span>
+      </button>
+      <div class="recon-pane-actions d-flex align-items-center gap-2">
         <span id="recon-saved" class="recon-saved small text-success"></span>
         <button type="button" id="recon-backup" class="btn btn-sm btn-outline-secondary"
                 title="Save a .whgproj backup of this whole project (data, mapping, matches, decisions) to a file">
@@ -97,7 +99,8 @@
         </button>
       </div>
     </div>
-    <div id="recon-summary" class="recon-summary small text-muted my-2"></div>
+    <div class="recon-pane-body">
+      <div id="recon-summary" class="recon-summary small text-muted mb-2"></div>
 
     <p class="text-muted small mb-1">
       We guessed a <em>role</em> for each column (used later as reconciliation hints). Adjust any that
@@ -129,13 +132,18 @@
         <tbody id="recon-preview-body"></tbody>
       </table>
     </div>
+    </div><!-- /recon-pane-body -->
   </section>
 
-  <!-- Reconcile step (Phase 3): query WHG's standard /reconcile service for the mapped 'name' column -->
-  <section class="recon-card d-none" id="recon-recon" aria-labelledby="recon-recon-title">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <h2 id="recon-recon-title" class="h5 mb-0">3 · Reconcile against WHG</h2>
-      <div class="d-flex align-items-center gap-2">
+  <!-- 3 · Reconcile against WHG (accordion pane) -->
+  <section class="recon-card recon-pane d-none" id="recon-recon">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-recon">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-title">3 · Reconcile against WHG</span>
+        <span class="recon-pane-summary" id="recon-pane-sum-recon"></span>
+      </button>
+      <div class="recon-pane-actions d-flex align-items-center gap-2">
         <button type="button" id="recon-run" class="btn btn-sm btn-primary">
           <i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile
         </button>
@@ -144,6 +152,7 @@
         </button>
       </div>
     </div>
+    <div class="recon-pane-body">
     <p class="text-muted small mb-2" id="recon-recon-help">
       Sends only <strong>de-duplicated place-name queries</strong> (with a country hint where available)
       to WHG's <code>/reconcile</code> service — never your rows. Identical names are queried once and the
@@ -174,25 +183,32 @@
       </table>
       <p class="small text-muted mb-0" id="recon-results-note"></p>
     </div>
+    </div><!-- /recon-pane-body -->
   </section>
 
-  <!-- Candidate review (Phase 4): keyboard-first accept/reject/skip/no-match per unique name -->
-  <section class="recon-card d-none" id="recon-review" aria-labelledby="recon-review-title">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-      <h2 id="recon-review-title" class="h5 mb-0">4 · Review &amp; confirm matches</h2>
-      <div class="d-flex align-items-center gap-3 small">
+  <!-- 4 · Review & confirm matches (accordion pane) -->
+  <section class="recon-card recon-pane d-none" id="recon-review">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-review">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-title">4 · Review &amp; confirm matches</span>
+        <span class="recon-pane-summary" id="recon-pane-sum-review"></span>
+      </button>
+      <div class="recon-pane-actions d-flex align-items-center gap-3 small">
         <label class="mb-0"><input type="checkbox" id="recon-review-all"> review all (incl. auto-confirmed)</label>
         <span id="recon-review-progress" class="text-muted"></span>
       </div>
     </div>
-    <p class="text-muted small mb-2">
-      Decisions apply to every row sharing the name and save automatically. Keyboard:
-      <kbd>1</kbd>–<kbd>9</kbd> accept · <kbd>x</kbd> reject · <kbd>s</kbd> skip ·
-      <kbd>n</kbd> no&nbsp;match · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>u</kbd> undo.
-    </p>
-    <div class="recon-review-layout">
-      <div id="recon-review-card" tabindex="0"></div>
-      <div class="recon-review-map d-none" id="recon-review-map"></div>
+    <div class="recon-pane-body">
+      <p class="text-muted small mb-2">
+        Decisions apply to every row sharing the name and save automatically. Keyboard:
+        <kbd>1</kbd>–<kbd>9</kbd> accept · <kbd>x</kbd> reject · <kbd>s</kbd> skip ·
+        <kbd>n</kbd> no&nbsp;match · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>u</kbd> undo.
+      </p>
+      <div class="recon-review-layout">
+        <div id="recon-review-card" tabindex="0"></div>
+        <div class="recon-review-map d-none" id="recon-review-map"></div>
+      </div>
     </div>
   </section>
 

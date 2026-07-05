@@ -468,6 +468,26 @@ function renderAll() {
   renderDates();
   renderPreview();
   refreshReconSection();
+  updatePaneSummaries();
+  // Once a dataset is loaded, collapse the (completed) import pane to keep the focus on mapping.
+  if (!_importAutoCollapsed) { setPaneCollapsed('recon-pane-import', true); _importAutoCollapsed = true; }
+}
+
+let _importAutoCollapsed = false;
+function setPaneCollapsed(id, collapsed) { const p = el(id); if (p) p.classList.toggle('recon-collapsed', collapsed); }
+function updatePaneSummaries() {
+  if (!project) return;
+  const sr = el('recon-pane-sum-result');
+  if (sr) sr.textContent = project.fileName ? `${project.fileName} · ${project.total.toLocaleString()} rows · ${project.columns.length} cols` : '';
+  const sc = el('recon-pane-sum-recon');
+  if (sc) {
+    if (project.matches && Object.keys(project.matches).length) {
+      const built = buildUniqueQueries();
+      let matched = 0, nomatch = 0, pending = 0;
+      if (built) built.map.forEach((v, key) => { const m = project.matches[key]; if (!m) pending++; else if (m.top) matched++; else nomatch++; });
+      sc.textContent = `${matched.toLocaleString()} matched · ${nomatch.toLocaleString()} no match · ${pending.toLocaleString()} pending`;
+    } else sc.textContent = '';
+  }
 }
 
 function showResume() {
@@ -483,6 +503,7 @@ function resetUI() {
   project = null;
   stopRequested = true;
   reviewMeta = []; reviewPos = 0;
+  _importAutoCollapsed = false; setPaneCollapsed('recon-pane-import', false);
   el('recon-result').classList.add('d-none');
   el('recon-resume').classList.add('d-none');
   el('recon-recon').classList.add('d-none');
@@ -504,6 +525,19 @@ function handleFile(file) {
   reader.onload = async () => {
     try {
       const text = String(reader.result);
+      // A .whgproj backup dropped/chosen here → restore the whole project instead of parsing as data.
+      if (/\.whgproj$/i.test(file.name) || (text.trim().startsWith('{') && text.indexOf('"_whgproj"') >= 0)) {
+        const parsed = JSON.parse(text);
+        const p = parsed && parsed._whgproj ? parsed.project : parsed;
+        if (!p || !Array.isArray(p.columns) || !Array.isArray(p.rows)) throw new Error('Not a valid .whgproj backup.');
+        p.id = CURRENT; project = p; reviewMeta = []; reviewPos = 0;
+        el('recon-resume').classList.add('d-none');
+        renderAll();
+        if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (_) { /* */ } }
+        await persist();
+        console.log(`[recon] restored .whgproj: ${project.total} rows`);
+        return;
+      }
       const isJSON = /\.json$/i.test(file.name) || text.trim().startsWith('[') || text.trim().startsWith('{');
       const parsed = isJSON ? fromJSON(JSON.parse(text)) : fromDelimited(text);
       project = {
@@ -555,28 +589,7 @@ function downloadBackup() {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   flashSaved('Backup saved');
 }
-function restoreBackup(file) {
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const parsed = JSON.parse(String(reader.result));
-      const p = parsed && parsed._whgproj ? parsed.project : parsed; // accept a raw project too
-      if (!p || !Array.isArray(p.columns) || !Array.isArray(p.rows)) throw new Error('Not a valid .whgproj file.');
-      p.id = CURRENT;
-      project = p;
-      reviewMeta = []; reviewPos = 0;
-      el('recon-resume').classList.add('d-none');
-      renderAll();
-      await persist();
-      console.log(`[recon] restored project from backup: ${project.total} rows`);
-    } catch (err) {
-      console.error('[recon] restore failed', err);
-      el('recon-caps').innerHTML = `<span class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>Could not restore backup: ${esc(err.message)}</span>`;
-    }
-  };
-  reader.onerror = () => console.error('[recon] backup read error', reader.error);
-  reader.readAsText(file);
-}
+// (Restoring a .whgproj is handled by handleFile — the same dropzone / choose-file control.)
 
 async function showCapabilities() {
   const caps = [];
@@ -761,6 +774,7 @@ function renderResultsTable(built) {
   el('recon-results-wrap').classList.remove('d-none');
   el('recon-results-note').textContent = project.rows.length > RECON_RESULTS_PREVIEW
     ? `Showing the first ${RECON_RESULTS_PREVIEW} rows; summary counts cover all ${project.total.toLocaleString()}.` : '';
+  updatePaneSummaries();
 }
 function renderResults(built) { renderResultsTable(built); refreshReview(); }
 
@@ -1072,8 +1086,11 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
-  const restoreInput = el('recon-restore');
-  if (restoreInput) restoreInput.addEventListener('change', () => { if (restoreInput.files[0]) restoreBackup(restoreInput.files[0]); });
+  // Accordion: clicking a pane header toggles its body (collapsed panes keep header + summary visible).
+  document.querySelectorAll('.recon-pane-toggle').forEach((btn) => btn.addEventListener('click', () => {
+    const p = document.getElementById(btn.dataset.pane);
+    if (p) p.classList.toggle('recon-collapsed');
+  }));
 
   // Phase 4 — candidate review: keyboard-first + the "review all" toggle.
   document.addEventListener('keydown', reviewKeydown);

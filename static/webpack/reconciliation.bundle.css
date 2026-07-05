@@ -68,6 +68,20 @@
   background: #fff;
 }
 
+/* --- Accordion panes (the numbered steps) --- */
+.recon-pane-header { display: flex; align-items: center; gap: .5rem; }
+.recon-pane-toggle {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: .55rem;
+  background: none; border: none; padding: 0; text-align: left; cursor: pointer; color: inherit;
+}
+.recon-pane-title { font-size: 1.05rem; font-weight: 600; white-space: nowrap; }
+.recon-pane-summary { color: #667788; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recon-pane-chevron { color: #aaa; transition: transform .15s; font-size: .85rem; }
+.recon-pane.recon-collapsed .recon-pane-chevron { transform: rotate(-90deg); }
+.recon-pane.recon-collapsed .recon-pane-body { display: none; }
+.recon-pane-body { margin-top: .8rem; }
+.recon-pane-actions { flex: 0 0 auto; }
+
 /* --- Dropzone --- */
 .recon-dropzone {
   border: 2px dashed #c8a07a;
