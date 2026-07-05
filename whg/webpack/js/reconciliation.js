@@ -377,20 +377,36 @@ function updateProgress(done, total) {
   el('recon-progress-text').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} unique queries (${pct}%)`;
 }
 
+function getThreshold() {
+  const box = el('recon-threshold');
+  const n = box ? parseInt(box.value, 10) : NaN;
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 90;
+}
+// Auto-confirm a top candidate when the name matched exactly, or its score clears the threshold.
+function isAutoConfirmed(top, threshold) {
+  return !!top && (top.match || Number(top.score) >= threshold);
+}
+
 function renderResults(built) {
   const matches = project.matches || {};
-  let matched = 0, nomatch = 0, pending = 0, rowsMatched = 0;
+  const threshold = getThreshold();
+  let matched = 0, auto = 0, nomatch = 0, pending = 0, rowsMatched = 0, rowsAuto = 0;
   built.map.forEach((v, key) => {
     const m = matches[key];
     if (!m) { pending += 1; return; }
-    if (m.top) { matched += 1; rowsMatched += v.rows.length; } else { nomatch += 1; }
+    if (m.top) {
+      matched += 1; rowsMatched += v.rows.length;
+      if (isAutoConfirmed(m.top, threshold)) { auto += 1; rowsAuto += v.rows.length; }
+    } else nomatch += 1;
   });
   setReconSummary(
-    `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> · ` +
+    `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> ` +
+    `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto-confirmed)</span> · ` +
     `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
     `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
     `across <strong>${built.map.size.toLocaleString()}</strong> unique names, ` +
-    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
+    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows ` +
+    `(${rowsAuto.toLocaleString()} auto-confirmed).`);
 
   const rowsToShow = Math.min(project.rows.length, RECON_RESULTS_PREVIEW);
   const body = [];
@@ -401,8 +417,9 @@ function renderResults(built) {
     let status, top = '', score = '';
     if (!m) status = '<span class="badge bg-secondary">pending</span>';
     else if (m.top) {
-      status = m.top.match ? '<span class="badge bg-success">match</span>'
-                           : '<span class="badge bg-info text-dark">candidate</span>';
+      status = isAutoConfirmed(m.top, threshold)
+        ? '<span class="badge bg-success">auto ✓</span>'
+        : '<span class="badge bg-info text-dark">candidate</span>';
       top = `${truncate(m.top.name, 50)} <span class="text-muted small">${truncate(m.top.description || '', 30)}</span>`;
       score = m.top.score;
     } else status = '<span class="badge bg-warning text-dark">no match</span>';
@@ -419,7 +436,8 @@ function renderResults(built) {
 function refreshReconSection() {
   const hasName = colIndexByRole('name') >= 0;
   el('recon-recon').classList.toggle('d-none', !hasName);
-  el('recon-recon-help').classList.toggle('d-none', false);
+  const thr = el('recon-threshold');
+  if (thr && project && project.autoThreshold != null) thr.value = project.autoThreshold;
   if (hasName && project.matches && Object.keys(project.matches).length) {
     const built = buildUniqueQueries();
     if (built) renderResults(built);
@@ -498,6 +516,15 @@ function init() {
   if (run) run.addEventListener('click', reconcileAll);
   const stop = el('recon-stop');
   if (stop) stop.addEventListener('click', () => { stopRequested = true; });
+
+  const thr = el('recon-threshold');
+  if (thr) thr.addEventListener('input', () => {
+    if (!project) return;
+    project.autoThreshold = getThreshold();
+    persist();
+    const built = buildUniqueQueries();
+    if (built && project.matches && Object.keys(project.matches).length) renderResults(built);
+  });
 
   showCapabilities();
   loadSaved();

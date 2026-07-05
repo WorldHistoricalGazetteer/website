@@ -130,6 +130,13 @@
       result fanned out. Best matches appear below; per-candidate review comes in the next phase.
     </p>
 
+    <div class="d-flex align-items-center gap-2 small mb-2 recon-autoconf" id="recon-autoconf">
+      <label for="recon-threshold" class="text-muted mb-0">Auto-confirm when score ≥</label>
+      <input type="number" id="recon-threshold" class="form-control form-control-sm"
+             style="width:78px" min="0" max="100" step="1" value="90">
+      <span class="text-muted">or the name matches exactly — so review can focus on the rest.</span>
+    </div>
+
     <div class="recon-progress-wrap d-none" id="recon-progress-wrap">
       <div class="recon-progress"><div class="recon-progress-bar" id="recon-progress-bar"></div></div>
       <div class="small text-muted mt-1" id="recon-progress-text"></div>
