@@ -337,6 +337,7 @@ function renderDates() {
   }
   const sh = sample
     ? `e.g. <code>${truncate(sample.raw, 34)}</code> → <strong>${sample.r.startISO || '…'} … ${sample.r.endISO || '…'}</strong>` +
+      (sample.r.calendar ? ` <span class="badge bg-info text-dark">${truncate(sample.r.calendar, 32)}</span>` : '') +
       (sample.r.approximate ? ' <span class="badge bg-secondary">approx</span>' : '')
     : '<span class="text-warning">no values parsed — check the column</span>';
 
@@ -344,7 +345,8 @@ function renderDates() {
     `<div class="recon-coords-inner">
        <div class="d-flex align-items-center flex-wrap gap-2">
          <i class="fas fa-calendar-days text-secondary"></i>
-         <span>Date column → ISO start/end (UK day/month order; BCE/CE aware)</span>
+         <span>Date column → ISO start/end · UK day/month · BCE/CE · regnal, feast &amp; global calendars
+           (Hijri, Hebrew, Śaka, French Republican…)</span>
        </div>
        <div class="small text-muted mt-1">Sample: <strong>${parsed.toLocaleString()}</strong> of ${checked.toLocaleString()} parsed · ${sh}</div>
        <div class="mt-2">

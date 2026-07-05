@@ -12,6 +12,8 @@
 // NOT handled (future): regnal years (8 Henry VI), feast-day / Michaelmas customs-year dating,
 // two-digit-year century inference.
 
+import { parseGlobalCalendar } from './recon-calendars.js';
+
 const MONTHS = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
   january: 1, february: 2, march: 3, april: 4, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
@@ -124,21 +126,48 @@ function dayBefore(y, m, d) {
 function parseRegnal(s) {
   const t = s.trim()
     .replace(/^anno\s+(regni\s+)?(regis\s+|regine\s+|reginae\s+)?/i, '')
-    .replace(/\s+/g, ' ').trim();
+    .replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
   const toks = t.split(' ');
-  if (toks.length !== 3) return null;
-  const nameKey = (tok) => MONARCH_KEY[tok.toLowerCase().replace(/\./g, '')];
-  const k0 = nameKey(toks[0]), k1 = nameKey(toks[1]);
-  let year, key, ord;
-  if (!k0 && k1) { year = asInt(toks[0]); key = k1; ord = asInt(toks[2]); }        // <year> <name> <ordinal>
-  else if (k0 && !k1) { key = k0; ord = asInt(toks[1]); year = asInt(toks[2]); }   // <name> <ordinal> <year>
-  else return null;
-  if (!year || !key || !ord) return null;
+  const nameKey = (tok) => (tok ? MONARCH_KEY[tok.toLowerCase().replace(/\./g, '')] : null);
+
+  // Locate the monarch name (followed by its ordinal) anywhere in the string.
+  let ni = -1, key = null, ord = null;
+  for (let i = 0; i < toks.length; i++) {
+    const k = nameKey(toks[i]);
+    if (k) { const o = asInt(toks[i + 1] || ''); if (o) { ni = i; key = k; ord = o; break; } }
+  }
+  if (ni < 0) return null;
+
+  // Regnal year: precedes the name (English/statute) or follows the ordinal (Latin clause).
+  let year = null, dateToks = null;
+  const before = asInt(toks[ni - 1] || '');
+  if (before) { year = before; dateToks = toks.slice(0, ni - 1); }             // [day month] <year> <name> <ordinal>
+  else { const after = asInt(toks[ni + 2] || ''); if (after) { year = after; dateToks = toks.slice(0, ni); } } // <name> <ordinal> <year>
+  if (!year) return null;
+
   const acc = ACCESSION[`${key}|${ord}`];
   if (!acc) return null;
   const [ay, am, ad] = acc;
-  const [ey, em, ed] = dayBefore(ay + year, am, ad);
-  return { gran: 'regnal', y: ay + year - 1, startISO: iso(ay + year - 1, am, ad), endISO: iso(ey, em, ed) };
+  const Y0 = ay + year - 1; // calendar year in which the regnal year begins
+
+  // Bare regnal year → the whole anniversary span.
+  if (!dateToks || dateToks.length === 0) {
+    const [ey, em, ed] = dayBefore(ay + year, am, ad);
+    return { gran: 'regnal', y: Y0, startISO: iso(Y0, am, ad), endISO: iso(ey, em, ed) };
+  }
+
+  // Day/month or fixed feast within the regnal year → a specific date. The regnal year straddles
+  // two calendar years: a date on/after the accession month-day is in Y0, else in Y0+1.
+  const monthOf = (tok) => MONTHS[String(tok).toLowerCase().replace(/\.$/, '')] || null;
+  const dt = dateToks.join(' ');
+  let M = null, D = null, mm;
+  if ((mm = dt.match(/^(\d{1,2})\s+([a-z]+)\.?$/i)) && monthOf(mm[2])) { D = +mm[1]; M = monthOf(mm[2]); }
+  else if ((mm = dt.match(/^([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?$/i)) && monthOf(mm[1])) { M = monthOf(mm[1]); D = +mm[2]; }
+  else if (FEAST_FIXED[normFeast(dt)]) { [M, D] = FEAST_FIXED[normFeast(dt)]; }
+  else return null;
+  if (M < 1 || M > 12 || D < 1 || D > daysInMonth(2000, M)) return null;
+  const inFirstYear = M > am || (M === am && D >= ad);
+  return { gran: 'day', y: inFirstYear ? Y0 : Y0 + 1, m: M, d: D };
 }
 
 const FEAST_FIXED = {
@@ -292,6 +321,16 @@ export function parseDate(input, opts = {}) {
   // qualifiers may sit inside range parts too (circa … – circa …) — strip per part below.
 
   const stripCirca = (t) => t.replace(/^(circa|ca\.?|c\.)\s*/i, '').replace(/\?\s*$/, '').trim();
+
+  // Non-Western / global calendars (marker-gated: AH, BE, Śaka, an VIII, 民國, Anno Mundi, …).
+  const gc = parseGlobalCalendar(s);
+  if (gc) {
+    const isoYear = (t) => (t ? parseInt(t, 10) : null);
+    return {
+      startISO: gc.startISO, endISO: gc.endISO, startYear: isoYear(gc.startISO), endYear: isoYear(gc.endISO),
+      granularity: gc.gran, calendar: gc.system, approximate, openStart: false, openEnd: false, ambiguous: false, reversed: false,
+    };
+  }
 
   // Open-ended
   let mm;
