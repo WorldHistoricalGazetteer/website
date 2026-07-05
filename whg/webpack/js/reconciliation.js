@@ -21,8 +21,10 @@ __webpack_public_path__ = '/static/webpack/';
 // only pays for them when a coordinate or date column is actually present.
 let Coords = null; // { COORD_FORMATS, detectCoordFormat, parseCoord, parseLatLonPair }
 let Dates = null;  // { parseDate }
+let ReconMap = null; // { renderReviewMap } — MapLibre map for the review pane
 const loadCoords = async () => (Coords || (Coords = await import(/* webpackChunkName: "recon-coords" */ './recon-coords.js')));
 const loadDates = async () => (Dates || (Dates = await import(/* webpackChunkName: "recon-dates" */ './recon-dates.js')));
+const loadReconMap = async () => (ReconMap || (ReconMap = await import(/* webpackChunkName: "recon-map" */ './recon-map.js')));
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -434,6 +436,7 @@ function renderMapping() {
       project.columns[i].role = sel.value;
       sel.className = `form-select form-select-sm recon-role-select role-${sel.value}`;
       persist();
+      renderPreview();       // 'other' (ignore) columns are hidden in the preview
       renderCoords();        // coords/lat/lon mapping affects the coordinate panel
       renderDates();         // date mapping affects the date panel
       refreshReconSection(); // name/country mapping affects what can be reconciled
@@ -442,10 +445,13 @@ function renderMapping() {
 }
 
 function renderPreview() {
-  const cols = project.columns.map((c) => c.name);
-  el('recon-preview-head').innerHTML = '<tr>' + cols.map((c) => `<th>${truncate(c, 40)}</th>`).join('') + '</tr>';
+  const showIgnored = !!project.showIgnored;
+  const box = el('recon-show-ignored'); if (box) box.checked = showIgnored;
+  // Columns mapped to role 'other' (ignore) are hidden by default; the toggle reveals them.
+  const vis = project.columns.map((c, i) => i).filter((i) => showIgnored || project.columns[i].role !== 'other');
+  el('recon-preview-head').innerHTML = '<tr>' + vis.map((i) => `<th>${truncate(project.columns[i].name, 40)}</th>`).join('') + '</tr>';
   el('recon-preview-body').innerHTML = project.rows.slice(0, PREVIEW_ROWS).map((r) =>
-    '<tr>' + cols.map((_, i) => `<td>${truncate(r[i])}</td>`).join('') + '</tr>').join('');
+    '<tr>' + vis.map((i) => `<td>${truncate(r[i])}</td>`).join('') + '</tr>').join('');
 }
 
 function renderAll() {
@@ -481,6 +487,7 @@ function resetUI() {
   el('recon-progress-wrap').classList.add('d-none');
   el('recon-results-wrap').classList.add('d-none');
   el('recon-review').classList.add('d-none');
+  el('recon-review-map').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
     'recon-review-card', 'recon-review-progress'].forEach((id) => {
@@ -532,6 +539,41 @@ async function clearData() {
   try { await deleteProject(); } catch (err) { console.error('[recon] clear failed', err); }
   resetUI();
   console.log('[recon] local project cleared from IndexedDB');
+}
+
+// Phase 2 — downloadable .whgproj backup (the whole project: data, mapping, matches, decisions).
+function downloadBackup() {
+  if (!project) return;
+  const blob = new Blob([JSON.stringify({ _whgproj: 1, savedAt: new Date().toISOString(), project })],
+    { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (project.fileName ? project.fileName.replace(/\.[^.]+$/, '') : 'workbench') + '.whgproj';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  flashSaved('Backup downloaded');
+}
+function restoreBackup(file) {
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const parsed = JSON.parse(String(reader.result));
+      const p = parsed && parsed._whgproj ? parsed.project : parsed; // accept a raw project too
+      if (!p || !Array.isArray(p.columns) || !Array.isArray(p.rows)) throw new Error('Not a valid .whgproj file.');
+      p.id = CURRENT;
+      project = p;
+      reviewMeta = []; reviewPos = 0;
+      el('recon-resume').classList.add('d-none');
+      renderAll();
+      await persist();
+      console.log(`[recon] restored project from backup: ${project.total} rows`);
+    } catch (err) {
+      console.error('[recon] restore failed', err);
+      el('recon-caps').innerHTML = `<span class="text-danger"><i class="fas fa-triangle-exclamation me-1"></i>Could not restore backup: ${esc(err.message)}</span>`;
+    }
+  };
+  reader.onerror = () => console.error('[recon] backup read error', reader.error);
+  reader.readAsText(file);
 }
 
 async function showCapabilities() {
@@ -788,6 +830,54 @@ function renderReviewCard() {
      </div>`;
   card.querySelectorAll('.recon-cand').forEach((li) => li.addEventListener('click', () => acceptCandidate(Number(li.dataset.ci))));
   card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
+  updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
+}
+
+// ── Review map: fetch candidate coordinates and plot them ────────────────────
+const _candCoord = {}; // candidate id -> {lon,lat} | null (cache)
+function firstLngLat(geom) {
+  if (!geom) return null;
+  if (geom.type === 'GeometryCollection') { for (const g of geom.geometries || []) { const p = firstLngLat(g); if (p) return p; } return null; }
+  let c = geom.coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return (Array.isArray(c) && typeof c[0] === 'number') ? { lon: c[0], lat: c[1] } : null;
+}
+async function fetchCandidateCoord(id) {
+  if (id in _candCoord) return _candCoord[id];
+  try {
+    const res = await fetch(`/entity/${encodeURIComponent(id)}/api`, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    const feat = await res.json();
+    _candCoord[id] = firstLngLat(feat && feat.geometry);
+  } catch (_) { _candCoord[id] = null; }
+  return _candCoord[id];
+}
+async function rowOwnCoord(key) {
+  const coordsIdx = colIndexByRole('coords'), latIdx = colIndexByRole('lat'), lonIdx = colIndexByRole('lon');
+  if (coordsIdx < 0 && !(latIdx >= 0 && lonIdx >= 0)) return null;
+  const built = buildUniqueQueries(); const v = built && built.map.get(key);
+  if (!v || !v.rows.length) return null;
+  const r = project.rows[v.rows[0]];
+  await loadCoords();
+  const c = coordsIdx >= 0 ? Coords.parseCoord(currentCoordFormat(), r[coordsIdx]) : Coords.parseLatLonPair(r[latIdx], r[lonIdx], !!project.coordSwap);
+  return c ? { lon: c.lon, lat: c.lat } : null;
+}
+let _mapToken = 0;
+async function updateReviewMap(key) {
+  const box = el('recon-review-map'); if (!box) return;
+  const token = ++_mapToken; // guard against out-of-order results when navigating fast
+  const m = project.matches[key]; const cands = (m.candidates || []).slice(0, 9);
+  const points = [];
+  await Promise.all(cands.map(async (c, i) => { const pt = await fetchCandidateCoord(c.id); if (pt) points.push({ ci: i, lon: pt.lon, lat: pt.lat, name: c.name }); }));
+  let rowPoint = null;
+  try { rowPoint = await rowOwnCoord(key); } catch (_) { /* ignore */ }
+  if (token !== _mapToken) return; // a newer card was requested meanwhile
+  if (!points.length && !rowPoint) { box.classList.add('d-none'); return; }
+  box.classList.remove('d-none');
+  try {
+    const mod = await loadReconMap();
+    if (token === _mapToken) mod.renderReviewMap(box, points, rowPoint, (ci) => acceptCandidate(ci));
+  } catch (err) { console.error('[recon] review map failed', err); box.classList.add('d-none'); }
 }
 function acceptCandidate(ci) {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
@@ -930,6 +1020,14 @@ function init() {
     const built = buildUniqueQueries();
     if (built && project.matches && Object.keys(project.matches).length) renderResults(built);
   });
+
+  const showIgn = el('recon-show-ignored');
+  if (showIgn) showIgn.addEventListener('change', () => { if (!project) return; project.showIgnored = showIgn.checked; persist(); renderPreview(); });
+
+  const backupBtn = el('recon-backup');
+  if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
+  const restoreInput = el('recon-restore');
+  if (restoreInput) restoreInput.addEventListener('change', () => { if (restoreInput.files[0]) restoreBackup(restoreInput.files[0]); });
 
   // Phase 4 — candidate review: keyboard-first + the "review all" toggle.
   document.addEventListener('keydown', reviewKeydown);

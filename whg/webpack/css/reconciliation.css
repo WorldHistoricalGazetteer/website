@@ -216,6 +216,16 @@
 .recon-cand-score { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #555; font-weight: 600; }
 .recon-review kbd { font-size: .7rem; padding: .1rem .3rem; }
 
+/* --- Review map (numbered, coloured candidate markers) --- */
+.recon-review-map { height: 280px; border: 1px solid #e2e2e2; border-radius: 6px; margin-top: .6rem; overflow: hidden; }
+.recon-map-marker {
+  width: 22px; height: 22px; border-radius: 50%; color: #fff;
+  font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .45);
+}
+.recon-map-marker--row { background: #fff; color: #b26a00; border-color: #b26a00; box-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+
 /* Left accent on a role <select> to echo the role's colour, mirroring the preview scheme */
 .recon-role-select { border-left-width: 4px; }
 .recon-role-select.role-name    { border-left-color: #1565c0; }

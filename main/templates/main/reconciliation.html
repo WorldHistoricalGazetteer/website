@@ -73,6 +73,12 @@
       <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON — never leaves your browser</div>
     </div>
 
+    <div class="small text-muted mt-2">
+      Already have a saved project?
+      <label class="recon-restore-link" title="Load a .whgproj backup file">restore a <code>.whgproj</code> backup
+        <input type="file" id="recon-restore" class="d-none" accept=".whgproj,application/json"></label>.
+    </div>
+
     <div class="recon-caps small text-muted mt-2" id="recon-caps"></div>
   </section>
 
@@ -82,6 +88,10 @@
       <h2 id="recon-result-title" class="h5 mb-0">2 · Confirm column roles</h2>
       <div class="d-flex align-items-center gap-2">
         <span id="recon-saved" class="recon-saved small text-success"></span>
+        <button type="button" id="recon-backup" class="btn btn-sm btn-outline-secondary"
+                title="Download a .whgproj backup of this whole project (data, mapping, matches, decisions)">
+          <i class="fas fa-download me-1"></i>Backup
+        </button>
         <button type="button" id="recon-clear" class="btn btn-sm btn-outline-secondary">
           <i class="fas fa-trash-alt me-1"></i>Clear my data
         </button>
@@ -109,7 +119,10 @@
     <!-- Date-parsing panel (shown when a Date column is mapped) — populated by reconciliation.js -->
     <div class="recon-coords d-none" id="recon-dates"></div>
 
-    <h3 class="h6 mt-3 mb-1">Preview</h3>
+    <div class="d-flex align-items-center justify-content-between mt-3 mb-1">
+      <h3 class="h6 mb-0">Preview</h3>
+      <label class="small text-muted mb-0"><input type="checkbox" id="recon-show-ignored"> show ignored columns</label>
+    </div>
     <div class="table-responsive">
       <table class="table table-sm table-bordered recon-preview">
         <thead id="recon-preview-head"></thead>
@@ -178,6 +191,7 @@
       <kbd>n</kbd> no&nbsp;match · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>u</kbd> undo.
     </p>
     <div id="recon-review-card" tabindex="0"></div>
+    <div class="recon-review-map d-none" id="recon-review-map"></div>
   </section>
 
 </div>
