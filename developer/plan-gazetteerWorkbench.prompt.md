@@ -143,18 +143,23 @@ by priority:
 - **Auto-confirm with per-source score thresholds** (`libraryMappings.json`: `autoConfirm`,
   `maxScore`, distance + name similarity): auto-accept high-confidence matches so reviewers see only
   genuine ambiguity. *(Folds into Phase 4; being built now.)*
-- **Bbox enrichment from non-gazetteer sources** — nearby Wikipedia, Geograph photos, PAS finds,
-  OSM roads, Wikidata heritage (parameterised SPARQL). A distinct *enrich-a-located-place* mode
-  beyond name→ID reconciliation. New roadmap capability.
+- **Bbox enrichment from non-gazetteer sources — DECIDED: include.** Once a place has coordinates,
+  pull *nearby* content from multiple sources (Wikipedia summaries, Geograph photos, PAS
+  archaeological finds, OSM roads via Overpass, Wikidata heritage via parameterised SPARQL) and attach
+  as `links`/depictions. A distinct *enrich-a-located-place* mode beyond name→ID reconciliation; each
+  source is a small bbox fetch + JSONata map. High value for WHG contributors — build it.
 - **Shapefile (.zip) + KML import** (shp2geojson+JSZip; fast-xml-parser) — cheap import-coverage wins
   for historical GIS data.
-- **Dataset-level provenance/citation capture** — schema.org `Dataset` (ORCID creators, licence,
-  temporal/spatial coverage) + Citation.js / `CITATION.cff`; dovetails with the WHG citations/licensing
-  work. (Their template defaults to CC-BY 4.0.)
+- **Dataset-level provenance/citation capture — DECIDED: include, plus a citation builder.** Capture
+  schema.org `Dataset` metadata (ORCID creators, licence, temporal/spatial coverage, persistent id)
+  at submission; dovetails with the WHG citations/licensing work. Also build a **citation builder** —
+  an interactive form that assembles this metadata and emits formatted citations + `CITATION.cff`
+  (Locolligo uses Citation.js). Watch the licence default (Locolligo's template defaults to CC-BY 4.0).
 - **`polylabel`** representative points (pole-of-inaccessibility, better than centroid) — relevant to
   WHG's `repr_point` and the `geometries.hull`/`repr_point` fallback issue.
-- **NER geocoding of free-text/prose** input (Google NL API) — a non-tabular ingestion mode our
-  tabular-only design has not anticipated (large; needs an NER backend).
+- **NER geocoding of free-text/prose** input — extract place-names from prose, then geolocate. A
+  non-tabular ingestion mode our tabular-only design has not anticipated. **Noted as a desirable
+  future development** (large; needs an NER backend — could be a WHG service rather than Google NL).
 - **`w3id.org` PID minting** — a concrete, resolvable mechanism for the roadmap's placeholder minting.
 
 Already covered by our plan (Locolligo just confirms): candidate review, LPF/LP-TSV, CRS reprojection,
