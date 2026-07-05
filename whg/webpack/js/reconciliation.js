@@ -9,8 +9,20 @@
 // /reconcile service, candidate review, enrichment, and selective submission.
 
 import '../css/reconciliation.css';
-import { COORD_FORMATS, detectCoordFormat, parseCoord, parseLatLonPair } from './recon-coords.js';
-import { parseDate } from './recon-dates.js';
+
+// Lazy-loaded chunks (proj4, Temporal) are served from Django's static dir. Set the webpack public
+// path explicitly: this entry is loaded as a type="module" script, so document.currentScript is null
+// and webpack's automatic publicPath detection can't find it — chunks would 404 without this.
+// eslint-disable-next-line camelcase, no-undef
+__webpack_public_path__ = '/static/webpack/';
+
+// Heavy modules — proj4 (coordinate conversion) and the Temporal polyfill (date/calendar parsing) —
+// are lazy-loaded on first use via dynamic import(), so the initial workbench bundle stays small and
+// only pays for them when a coordinate or date column is actually present.
+let Coords = null; // { COORD_FORMATS, detectCoordFormat, parseCoord, parseLatLonPair }
+let Dates = null;  // { parseDate }
+const loadCoords = async () => (Coords || (Coords = await import(/* webpackChunkName: "recon-coords" */ './recon-coords.js')));
+const loadDates = async () => (Dates || (Dates = await import(/* webpackChunkName: "recon-dates" */ './recon-dates.js')));
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -182,7 +194,7 @@ function coordCoverage(format, idx) {
   let parsed = 0, sample = null;
   const cap = Math.min(project.rows.length, 500);
   for (let i = 0; i < cap; i++) {
-    const c = parseCoord(format, project.rows[i][idx]);
+    const c = Coords.parseCoord(format, project.rows[i][idx]);
     if (c) { parsed++; if (!sample) sample = { raw: project.rows[i][idx], c }; }
   }
   return { parsed, checked: cap, sample };
@@ -191,7 +203,7 @@ function pairCoverage(latIdx, lonIdx, swapped) {
   let parsed = 0, sample = null;
   const cap = Math.min(project.rows.length, 500);
   for (let i = 0; i < cap; i++) {
-    const c = parseLatLonPair(project.rows[i][latIdx], project.rows[i][lonIdx], swapped);
+    const c = Coords.parseLatLonPair(project.rows[i][latIdx], project.rows[i][lonIdx], swapped);
     if (c) { parsed++; if (!sample) sample = { raw: `${project.rows[i][latIdx]}, ${project.rows[i][lonIdx]}`, c }; }
   }
   return { parsed, checked: cap, sample };
@@ -202,18 +214,20 @@ function sampleHtml(cov, elseMsg) {
     : `<span class="text-warning">${elseMsg}</span>`;
 }
 
-function renderCoords() {
+async function renderCoords() {
   const box = el('recon-coords');
   const coordsIdx = colIndexByRole('coords');
   const latIdx = colIndexByRole('lat');
   const lonIdx = colIndexByRole('lon');
+  if (coordsIdx < 0 && !(latIdx >= 0 && lonIdx >= 0)) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+  await loadCoords(); // lazy-load proj4 on first use
 
   let head = '';
   if (coordsIdx >= 0) {
-    const detection = detectCoordFormat(coordColumnSamples(coordsIdx));
+    const detection = Coords.detectCoordFormat(coordColumnSamples(coordsIdx));
     const chosen = project.coordFormat || detection.format;
     const cov = coordCoverage(chosen, coordsIdx);
-    const opts = COORD_FORMATS.map(([id, l]) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    const opts = Coords.COORD_FORMATS.map(([id, l]) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${esc(l)}</option>`).join('');
     head =
       `<div class="d-flex align-items-center flex-wrap gap-2">
          <i class="fas fa-map-location-dot text-secondary"></i>
@@ -262,12 +276,13 @@ function currentCoordFormat() {
   const sel = el('recon-coord-format');
   if (sel) return sel.value;
   const coordsIdx = colIndexByRole('coords');
-  if (coordsIdx >= 0) return project.coordFormat || detectCoordFormat(coordColumnSamples(coordsIdx)).format;
+  if (coordsIdx >= 0) return project.coordFormat || Coords.detectCoordFormat(coordColumnSamples(coordsIdx)).format;
   return null;
 }
 
 // Validate EVERY row against the chosen coordinate format and report the ones that cannot convert.
-function checkAllCoords() {
+async function checkAllCoords() {
+  await loadCoords();
   const coordsIdx = colIndexByRole('coords');
   const latIdx = colIndexByRole('lat');
   const lonIdx = colIndexByRole('lon');
@@ -283,10 +298,10 @@ function checkAllCoords() {
     const r = project.rows[i];
     let c, raw, isBlank;
     if (single) {
-      raw = r[coordsIdx]; c = parseCoord(fmt, raw); isBlank = blankStr(raw);
+      raw = r[coordsIdx]; c = Coords.parseCoord(fmt, raw); isBlank = blankStr(raw);
     } else {
       raw = `${blankStr(r[latIdx]) ? '' : r[latIdx]}, ${blankStr(r[lonIdx]) ? '' : r[lonIdx]}`;
-      c = parseLatLonPair(r[latIdx], r[lonIdx], swap);
+      c = Coords.parseLatLonPair(r[latIdx], r[lonIdx], swap);
       isBlank = blankStr(r[latIdx]) && blankStr(r[lonIdx]);
     }
     if (c) valid++;
@@ -321,10 +336,11 @@ function renderCoordReport(res) {
 }
 
 // ── Date-parsing panel ──────────────────────────────────────────────────────
-function renderDates() {
+async function renderDates() {
   const box = el('recon-dates');
   const idx = colIndexByRole('date');
   if (idx < 0) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+  await loadDates(); // lazy-load the date/Temporal parser on first use
 
   let sample = null, parsed = 0, checked = 0;
   const cap = Math.min(project.rows.length, 500);
@@ -332,7 +348,7 @@ function renderDates() {
     const v = project.rows[i][idx];
     if (v == null || String(v).trim() === '') continue;
     checked++;
-    const r = parseDate(v, { locale: 'uk' });
+    const r = Dates.parseDate(v, { locale: 'uk' });
     if (r) { parsed++; if (!sample) sample = { raw: v, r }; }
   }
   const sh = sample
@@ -362,7 +378,8 @@ function renderDates() {
 }
 
 // Validate EVERY row's date and report the ones that cannot be parsed.
-function checkAllDates() {
+async function checkAllDates() {
+  await loadDates();
   const idx = colIndexByRole('date');
   if (idx < 0) return;
   let valid = 0, blank = 0, ambiguous = 0;
@@ -371,7 +388,7 @@ function checkAllDates() {
   for (let i = 0; i < total; i++) {
     const v = project.rows[i][idx];
     if (v == null || String(v).trim() === '') { blank++; continue; }
-    const r = parseDate(v, { locale: 'uk' });
+    const r = Dates.parseDate(v, { locale: 'uk' });
     if (r) { valid++; if (r.ambiguous) ambiguous++; }
     else failures.push({ row: i + 1, raw: v });
   }
