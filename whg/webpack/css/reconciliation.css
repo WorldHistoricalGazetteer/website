@@ -160,6 +160,18 @@
 .recon-map-col { font-weight: 600; word-break: break-word; }
 .recon-role-select { max-width: 220px; }
 
+/* --- Coordinate-format detection panel --- */
+.recon-coords { margin-top: .6rem; }
+.recon-coords-inner {
+  background: #f4f7f4;
+  border: 1px solid #cfe0cf;
+  border-left: 4px solid #2e7d32;
+  border-radius: 6px;
+  padding: .55rem .8rem;
+  font-size: .9rem;
+}
+.recon-coords-inner code { color: #6a1b9a; }
+
 /* --- Reconcile step: progress + results --- */
 .recon-progress-wrap { margin: .25rem 0 .5rem; }
 .recon-progress { height: 9px; background: #ececec; border-radius: 5px; overflow: hidden; }

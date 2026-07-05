@@ -9,6 +9,7 @@
 // /reconcile service, candidate review, enrichment, and selective submission.
 
 import '../css/reconciliation.css';
+import { COORD_FORMATS, detectCoordFormat, parseCoord, parseLatLonPair } from './recon-coords.js';
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -42,7 +43,7 @@ const ROLE_HINTS = [
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
   ['lon', /^(lon|lng|long|longitude|x)$/i],
-  ['coords', /^(coord|coordinates|geom|geometry|wkt|point|gridref|grid.?ref|osgb|national.?grid)$/i],
+  ['coords', /coord|geometry|geom|wkt|gridref|grid.?ref|osgb|national.?grid|easting|northing/i],
   ['date', /^(date|year|start|end|from|to|period|century)$/i],
   ['id', /^(id|uid|key|identifier|wikidata|qid|geonames|gn.?id)$/i],
 ];
@@ -166,6 +167,85 @@ function roleSelectHTML(colIndex, role) {
   return `<select class="form-select form-select-sm recon-role-select role-${role}" data-col="${colIndex}">${opts}</select>`;
 }
 
+// ── Coordinate-format detection panel ───────────────────────────────────────
+function coordColumnSamples(idx) {
+  const out = [];
+  for (const r of project.rows) {
+    const v = r[idx];
+    if (v != null && String(v).trim() !== '') out.push(v);
+    if (out.length >= 200) break;
+  }
+  return out;
+}
+function coordCoverage(format, idx) {
+  let parsed = 0, sample = null;
+  const cap = Math.min(project.rows.length, 500);
+  for (let i = 0; i < cap; i++) {
+    const c = parseCoord(format, project.rows[i][idx]);
+    if (c) { parsed++; if (!sample) sample = { raw: project.rows[i][idx], c }; }
+  }
+  return { parsed, checked: cap, sample };
+}
+function pairCoverage(latIdx, lonIdx, swapped) {
+  let parsed = 0, sample = null;
+  const cap = Math.min(project.rows.length, 500);
+  for (let i = 0; i < cap; i++) {
+    const c = parseLatLonPair(project.rows[i][latIdx], project.rows[i][lonIdx], swapped);
+    if (c) { parsed++; if (!sample) sample = { raw: `${project.rows[i][latIdx]}, ${project.rows[i][lonIdx]}`, c }; }
+  }
+  return { parsed, checked: cap, sample };
+}
+function sampleHtml(cov, elseMsg) {
+  return cov.sample
+    ? `e.g. <code>${truncate(cov.sample.raw, 30)}</code> → <strong>${cov.sample.c.lat.toFixed(5)}, ${cov.sample.c.lon.toFixed(5)}</strong>`
+    : `<span class="text-warning">${elseMsg}</span>`;
+}
+
+function renderCoords() {
+  const box = el('recon-coords');
+  const coordsIdx = colIndexByRole('coords');
+  const latIdx = colIndexByRole('lat');
+  const lonIdx = colIndexByRole('lon');
+
+  if (coordsIdx >= 0) {
+    const detection = detectCoordFormat(coordColumnSamples(coordsIdx));
+    const chosen = project.coordFormat || detection.format;
+    const cov = coordCoverage(chosen, coordsIdx);
+    const opts = COORD_FORMATS.map(([id, l]) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${esc(l)}</option>`).join('');
+    box.innerHTML =
+      `<div class="recon-coords-inner">
+         <div class="d-flex align-items-center flex-wrap gap-2">
+           <i class="fas fa-map-location-dot text-secondary"></i>
+           <span>Coordinate column detected as</span>
+           <select id="recon-coord-format" class="form-select form-select-sm" style="width:auto">${opts}</select>
+           ${detection.ambiguous ? '<span class="badge bg-warning text-dark">lat/lon order ambiguous — check the sample and change if wrong</span>' : ''}
+         </div>
+         <div class="small text-muted mt-1">Converts <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} checked to WGS84 · ${sampleHtml(cov, 'no values parsed with this format — pick another')}</div>
+       </div>`;
+    box.classList.remove('d-none');
+    const sel = el('recon-coord-format');
+    if (sel) sel.addEventListener('change', () => { project.coordFormat = sel.value; persist(); renderCoords(); });
+  } else if (latIdx >= 0 && lonIdx >= 0) {
+    const swapped = !!project.coordSwap;
+    const cov = pairCoverage(latIdx, lonIdx, swapped);
+    box.innerHTML =
+      `<div class="recon-coords-inner">
+         <div class="d-flex align-items-center flex-wrap gap-2">
+           <i class="fas fa-map-location-dot text-secondary"></i>
+           <span>Latitude + Longitude columns (decimal degrees)</span>
+           <label class="small mb-0"><input type="checkbox" id="recon-coord-swap"${swapped ? ' checked' : ''}> swap lat/lon</label>
+         </div>
+         <div class="small text-muted mt-1">Converts <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} checked · ${sampleHtml(cov, 'no valid decimal pairs — try swapping lat/lon')}</div>
+       </div>`;
+    box.classList.remove('d-none');
+    const sw = el('recon-coord-swap');
+    if (sw) sw.addEventListener('change', () => { project.coordSwap = sw.checked; persist(); renderCoords(); });
+  } else {
+    box.classList.add('d-none');
+    box.innerHTML = '';
+  }
+}
+
 function renderMapping() {
   el('recon-map-body').innerHTML = project.columns.map((c, i) =>
     `<tr>
@@ -180,6 +260,7 @@ function renderMapping() {
       project.columns[i].role = sel.value;
       sel.className = `form-select form-select-sm recon-role-select role-${sel.value}`;
       persist();
+      renderCoords();        // coords/lat/lon mapping affects the coordinate panel
       refreshReconSection(); // name/country mapping affects what can be reconciled
     });
   });
@@ -200,6 +281,7 @@ function renderAll() {
     `row${project.total === 1 ? '' : 's'} · <strong>${project.columns.length}</strong> ` +
     `column${project.columns.length === 1 ? '' : 's'}${delimNote} · imported ${fmtTime(project.importedAt)}.`;
   renderMapping();
+  renderCoords();
   renderPreview();
   refreshReconSection();
 }
@@ -222,7 +304,7 @@ function resetUI() {
   el('recon-progress-wrap').classList.add('d-none');
   el('recon-results-wrap').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
-    'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
+    'recon-coords', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
   });
   const input = el('recon-file'); if (input) input.value = '';
