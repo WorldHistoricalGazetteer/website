@@ -28,8 +28,164 @@ function isoNum(s) {
   return neg ? -v : v;
 }
 
+// ── Calendrical extensions: regnal years, feast days, Julian/Gregorian ───────
+// Data verified against Cheney, *Handbook of Dates for Students of British History* (CUP),
+// the Univ. of Nottingham dating guide, and Wikipedia's regnal-years table.
+
+// Julian Day Number conversions (integer arithmetic) — for computus + Julian/Gregorian conversion.
+function gregToJDN(Y, M, D) {
+  const a = Math.floor((14 - M) / 12), y = Y + 4800 - a, m = M + 12 * a - 3;
+  return D + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+}
+function jdnToGreg(j) {
+  let a = j + 32044, b = Math.floor((4 * a + 3) / 146097), c = a - Math.floor(146097 * b / 4);
+  let d = Math.floor((4 * c + 3) / 1461), e = c - Math.floor(1461 * d / 4), m = Math.floor((5 * e + 2) / 153);
+  return [100 * b + d - 4800 + Math.floor(m / 10), m + 3 - 12 * Math.floor(m / 10), e - Math.floor((153 * m + 2) / 5) + 1];
+}
+function julToJDN(Y, M, D) {
+  return 367 * Y - Math.floor(7 * (Y + 5001 + Math.floor((M - 9) / 7)) / 4) + Math.floor(275 * M / 9) + D + 1729777;
+}
+function jdnToJul(j) {
+  let c = j + 32082, d = Math.floor((4 * c + 3) / 1461), e = c - Math.floor(1461 * d / 4), m = Math.floor((5 * e + 2) / 153);
+  return [d - 4800 + Math.floor(m / 10), m + 3 - 12 * Math.floor(m / 10), e - Math.floor((153 * m + 2) / 5) + 1];
+}
+// Convert an Old-Style (Julian) date to a proleptic-Gregorian date (same physical day).
+export function julianToGregorian(Y, M, D) { return jdnToGreg(julToJDN(Y, M, D)); }
+export function gregorianToJulian(Y, M, D) { return jdnToJul(gregToJDN(Y, M, D)); }
+
+// Easter Sunday on the Julian calendar (Meeus) — used for movable feasts in OS English dating.
+function julianEaster(Y) {
+  const a = Y % 4, b = Y % 7, c = Y % 19, d = (19 * c + 15) % 30, e = (2 * a + 4 * b - d + 34) % 7;
+  const f = d + e + 114;
+  return [Math.floor(f / 31), (f % 31) + 1]; // [month, day]
+}
+
+// Monarch name variants (lowercased, dots stripped) → canonical key. Researched & cited: English
+// scribal + statute-citation forms, and Latin nominative AND genitive (the genitive is what appears
+// in roll dating clauses, e.g. "anno regni regis Henrici Sexti octavo"). Sources: TNA Latin guide
+// ("How to decline personal names"); Statutes Project chronological table; Cheney, Handbook of Dates.
+const MONARCH_KEY = {
+  edward: 'edward', edwardus: 'edward', edwardi: 'edward', edw: 'edward', edwd: 'edward', ed: 'edward', e: 'edward',
+  henry: 'henry', henricus: 'henry', henrici: 'henry', hen: 'henry', henr: 'henry', hy: 'henry', h: 'henry',
+  richard: 'richard', ricardus: 'richard', ricardi: 'richard', rich: 'richard', ricd: 'richard', ric: 'richard', rd: 'richard', r: 'richard',
+  john: 'john', johannes: 'john', johannis: 'john', joh: 'john', jo: 'john',
+  elizabeth: 'elizabeth', elizabetha: 'elizabeth', elizabethae: 'elizabeth', elizab: 'elizabeth', eliz: 'elizabeth',
+  mary: 'mary', maria: 'mary', mariae: 'mary', mar: 'mary',
+  james: 'james', jacobus: 'james', jacobi: 'james', jas: 'james', jac: 'james', ja: 'james',
+  charles: 'charles', carolus: 'charles', caroli: 'charles', chas: 'charles', char: 'charles', cha: 'charles', car: 'charles',
+  william: 'william', gulielmus: 'william', gulielmi: 'william', willelmus: 'william', willelmi: 'william', will: 'william', wm: 'william', gul: 'william', w: 'william',
+  anne: 'anne', anna: 'anne', annae: 'anne', ann: 'anne',
+  george: 'george', georgius: 'george', georgii: 'george', geo: 'george', geor: 'george',
+};
+// Latin ordinal words (single-word forms) → integer, for the monarch ordinal ("Sexti") and the
+// regnal year ("octavo"/"8vo"). Compound tens ("vicesimo primo") are noted as future.
+const LATIN_ORD = {
+  primo: 1, primi: 1, primus: 1, secundo: 2, secundi: 2, tertio: 3, tertii: 3, quarto: 4, quarti: 4,
+  quinto: 5, quinti: 5, sexto: 6, sexti: 6, septimo: 7, septimi: 7, octavo: 8, octavi: 8, nono: 9, noni: 9,
+  decimo: 10, decimi: 10, undecimo: 11, duodecimo: 12, tertiodecimo: 13, quartodecimo: 14, quintodecimo: 15,
+  sextodecimo: 16, septimodecimo: 17, octavodecimo: 18, nonodecimo: 19,
+  vicesimo: 20, vigesimo: 20, tricesimo: 30, trigesimo: 30, quadragesimo: 40, quinquagesimo: 50,
+};
+// Accession dates (Old Style / Julian), keyed "canonical|ordinal". Regnal year N runs from the
+// (N−1)th to the Nth anniversary of accession.
+const ACCESSION = {
+  'edward|1': [1272, 11, 20], 'edward|2': [1307, 7, 8], 'edward|3': [1327, 1, 25],
+  'richard|2': [1377, 6, 22], 'richard|3': [1483, 6, 26],
+  'henry|4': [1399, 9, 30], 'henry|5': [1413, 3, 21], 'henry|6': [1422, 9, 1], 'henry|7': [1485, 8, 22], 'henry|8': [1509, 4, 22],
+  'edward|4': [1461, 3, 4], 'edward|5': [1483, 4, 9], 'edward|6': [1547, 1, 28],
+  'mary|1': [1553, 7, 6], 'elizabeth|1': [1558, 11, 17],
+  'james|1': [1603, 3, 24], 'charles|1': [1625, 3, 27], 'charles|2': [1649, 1, 30], // Charles II: legal reign from 1649
+  'james|2': [1685, 2, 6], 'william|3': [1689, 2, 13], 'mary|2': [1689, 2, 13], 'anne|1': [1702, 3, 8],
+  'george|1': [1714, 8, 1], 'george|2': [1727, 6, 11],
+};
+
+function romanToInt(s) {
+  const M = { i: 1, v: 5, x: 10, l: 50, c: 100, d: 500, m: 1000 };
+  s = s.toLowerCase(); if (!/^[ivxlcdm]+$/.test(s)) return null;
+  let t = 0; for (let i = 0; i < s.length; i++) { const a = M[s[i]], b = M[s[i + 1]]; t += (b && a < b) ? -a : a; }
+  return t;
+}
+const asInt = (s) => {
+  const l = String(s).toLowerCase().replace(/[.º°]/g, '');
+  if (/^\d+$/.test(l)) return parseInt(l, 10);
+  if (LATIN_ORD[l] != null) return LATIN_ORD[l];
+  return romanToInt(l);
+};
+function dayBefore(y, m, d) {
+  if (d > 1) return [y, m, d - 1];
+  if (m > 1) return [y, m - 1, daysInMonth(y, m - 1)];
+  return [y - 1, 12, 31];
+}
+
+// Regnal-year dating → the regnal year's anniversary range. Handles both the English/statute order
+// "<year> <name> <ordinal>" (8 Henry VI · 27 Hen. 8 · 12 Cha. II) and the Latin roll-clause order
+// "<name> <ordinal> <year>" (anno regni regis Henrici Sexti octavo). year/ordinal may be Arabic,
+// Roman (incl. IIII), or a Latin ordinal word. NB Charles II is counted from 1649 (legal fiction).
+function parseRegnal(s) {
+  const t = s.trim()
+    .replace(/^anno\s+(regni\s+)?(regis\s+|regine\s+|reginae\s+)?/i, '')
+    .replace(/\s+/g, ' ').trim();
+  const toks = t.split(' ');
+  if (toks.length !== 3) return null;
+  const nameKey = (tok) => MONARCH_KEY[tok.toLowerCase().replace(/\./g, '')];
+  const k0 = nameKey(toks[0]), k1 = nameKey(toks[1]);
+  let year, key, ord;
+  if (!k0 && k1) { year = asInt(toks[0]); key = k1; ord = asInt(toks[2]); }        // <year> <name> <ordinal>
+  else if (k0 && !k1) { key = k0; ord = asInt(toks[1]); year = asInt(toks[2]); }   // <name> <ordinal> <year>
+  else return null;
+  if (!year || !key || !ord) return null;
+  const acc = ACCESSION[`${key}|${ord}`];
+  if (!acc) return null;
+  const [ay, am, ad] = acc;
+  const [ey, em, ed] = dayBefore(ay + year, am, ad);
+  return { gran: 'regnal', y: ay + year - 1, startISO: iso(ay + year - 1, am, ad), endISO: iso(ey, em, ed) };
+}
+
+const FEAST_FIXED = {
+  'circumcision': [1, 1], 'new year': [1, 1], 'epiphany': [1, 6], 'twelfth day': [1, 6],
+  'candlemas': [2, 2], 'purification': [2, 2], 'st matthias': [2, 24],
+  'lady day': [3, 25], 'ladymas': [3, 25], 'annunciation': [3, 25], 'st george': [4, 23],
+  'may day': [5, 1], 'invention of the cross': [5, 3], 'midsummer': [6, 24], 'nativity of st john the baptist': [6, 24],
+  'st john the baptist': [6, 24], 'ss peter and paul': [6, 29], 'st swithin': [7, 15], 'st mary magdalene': [7, 22],
+  'st james': [7, 25], 'lammas': [8, 1], 'assumption': [8, 15], 'st bartholomew': [8, 24],
+  'nativity of the bvm': [9, 8], 'holy cross': [9, 14], 'holy rood': [9, 14], 'st matthew': [9, 21],
+  'michaelmas': [9, 29], 'st michael': [9, 29], 'st luke': [10, 18], 'ss simon and jude': [10, 28],
+  'all saints': [11, 1], 'all hallows': [11, 1], 'hallowmas': [11, 1], 'all souls': [11, 2],
+  'martinmas': [11, 11], 'st martin': [11, 11], 'st edmund': [11, 20], 'st catherine': [11, 25],
+  'st andrew': [11, 30], 'st nicholas': [12, 6], 'conception of the bvm': [12, 8], 'st thomas': [12, 21],
+  'christmas': [12, 25], 'nativity': [12, 25], 'st stephen': [12, 26], 'st john the evangelist': [12, 27],
+  'holy innocents': [12, 28], 'childermas': [12, 28], 'st silvester': [12, 31],
+};
+// Movable feasts — offset in days from Easter Sunday.
+const FEAST_MOVABLE = {
+  'septuagesima': -63, 'sexagesima': -56, 'quinquagesima': -49, 'shrove tuesday': -47, 'ash wednesday': -46,
+  'quadragesima': -42, 'palm sunday': -7, 'maundy thursday': -3, 'good friday': -2, 'holy saturday': -1,
+  'easter': 0, 'easter sunday': 0, 'easter monday': 1, 'hock monday': 15, 'hock tuesday': 16,
+  'rogation sunday': 35, 'ascension': 39, 'ascension day': 39, 'whitsun': 49, 'whitsunday': 49, 'pentecost': 49,
+  'trinity': 56, 'trinity sunday': 56, 'corpus christi': 60,
+};
+function normFeast(s) { return s.toLowerCase().replace(/[.'’]/g, '').replace(/\bthe\b/g, '').replace(/&/g, 'and').replace(/\s+/g, ' ').trim(); }
+
+// "Michaelmas 1505", "Easter 1450", "Whitsun 1432" → the feast's date in that year (OS/Julian).
+function parseFeast(s) {
+  const m = s.match(/^(.+?)\s+(\d{3,4})$/);
+  if (!m) return null;
+  const name = normFeast(m[1]), yr = parseInt(m[2], 10);
+  if (FEAST_FIXED[name]) return { gran: 'day', y: yr, m: FEAST_FIXED[name][0], d: FEAST_FIXED[name][1] };
+  if (FEAST_MOVABLE[name] != null) {
+    const [em, ed] = julianEaster(yr);
+    const [fy, fm, fd] = jdnToJul(julToJDN(yr, em, ed) + FEAST_MOVABLE[name]);
+    return { gran: 'day', y: fy, m: fm, d: fd };
+  }
+  return null;
+}
+
 // Parse a single (non-range) date token → { y, m, d, gran, ambiguous } | null. y is era-signed.
 function parseSingle(raw, opts) {
+  {
+    const rg = parseRegnal(String(raw).trim()); if (rg) return rg;
+    const ft = parseFeast(String(raw).trim().replace(/\s+/g, ' ')); if (ft) return ft;
+  }
   let s = String(raw).trim().replace(/\s+/g, ' ');
   if (!s) return null;
   let ambiguous = false;
@@ -57,6 +213,14 @@ function parseSingle(raw, opts) {
     if (m[3] != null) return { y, m: +m[2], d: +m[3], gran: 'day', ambiguous };
     if (m[2] != null) return { y, m: +m[2], d: null, gran: 'month', ambiguous };
     return { y, m: null, d: null, gran: 'year', ambiguous };
+  }
+
+  // Old-Style/New-Style dual dating, e.g. "1641/2", "1650/51" → the New-Style (1-Jan) year.
+  if ((m = s.match(/^(\d{3,4})\/(\d{1,2})$/))) {
+    const y1 = parseInt(m[1], 10), base = Math.pow(10, m[2].length);
+    let ns = Math.floor(y1 / base) * base + parseInt(m[2], 10);
+    if (ns <= y1) ns += base;
+    return { y: ns, m: null, d: null, gran: 'year', ambiguous: false };
   }
 
   // Numeric d/m/y or m/d/y with / . - separators
@@ -94,11 +258,12 @@ function parseSingle(raw, opts) {
   return null;
 }
 
-const startOf = (p) => p.gran === 'day' ? iso(p.y, p.m, p.d)
+const startOf = (p) => p.startISO ? p.startISO
+  : p.gran === 'day' ? iso(p.y, p.m, p.d)
   : p.gran === 'month' ? iso(p.y, p.m, 1)
-  : p.gran === 'century' ? iso(p.y, 1, 1)
   : iso(p.y, 1, 1);
-const endOf = (p) => p.gran === 'day' ? iso(p.y, p.m, p.d)
+const endOf = (p) => p.endISO ? p.endISO
+  : p.gran === 'day' ? iso(p.y, p.m, p.d)
   : p.gran === 'month' ? iso(p.y, p.m, daysInMonth(p.y, p.m))
   : p.gran === 'century' ? iso(p.y + 99, 12, 31)
   : iso(p.y, 12, 31);
