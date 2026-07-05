@@ -10,6 +10,7 @@
 
 import '../css/reconciliation.css';
 import { COORD_FORMATS, detectCoordFormat, parseCoord, parseLatLonPair } from './recon-coords.js';
+import { parseDate } from './recon-dates.js';
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -319,6 +320,87 @@ function renderCoordReport(res) {
   box.innerHTML = html;
 }
 
+// ── Date-parsing panel ──────────────────────────────────────────────────────
+function renderDates() {
+  const box = el('recon-dates');
+  const idx = colIndexByRole('date');
+  if (idx < 0) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+
+  let sample = null, parsed = 0, checked = 0;
+  const cap = Math.min(project.rows.length, 500);
+  for (let i = 0; i < cap; i++) {
+    const v = project.rows[i][idx];
+    if (v == null || String(v).trim() === '') continue;
+    checked++;
+    const r = parseDate(v, { locale: 'uk' });
+    if (r) { parsed++; if (!sample) sample = { raw: v, r }; }
+  }
+  const sh = sample
+    ? `e.g. <code>${truncate(sample.raw, 34)}</code> → <strong>${sample.r.startISO || '…'} … ${sample.r.endISO || '…'}</strong>` +
+      (sample.r.approximate ? ' <span class="badge bg-secondary">approx</span>' : '')
+    : '<span class="text-warning">no values parsed — check the column</span>';
+
+  box.innerHTML =
+    `<div class="recon-coords-inner">
+       <div class="d-flex align-items-center flex-wrap gap-2">
+         <i class="fas fa-calendar-days text-secondary"></i>
+         <span>Date column → ISO start/end (UK day/month order; BCE/CE aware)</span>
+       </div>
+       <div class="small text-muted mt-1">Sample: <strong>${parsed.toLocaleString()}</strong> of ${checked.toLocaleString()} parsed · ${sh}</div>
+       <div class="mt-2">
+         <button type="button" id="recon-date-checkall" class="btn btn-sm btn-outline-secondary">
+           <i class="fas fa-list-check me-1"></i>Validate all ${project.total.toLocaleString()} rows
+         </button>
+       </div>
+       <div id="recon-date-report" class="recon-coord-report mt-2"></div>
+     </div>`;
+  box.classList.remove('d-none');
+  const chk = el('recon-date-checkall');
+  if (chk) chk.addEventListener('click', checkAllDates);
+}
+
+// Validate EVERY row's date and report the ones that cannot be parsed.
+function checkAllDates() {
+  const idx = colIndexByRole('date');
+  if (idx < 0) return;
+  let valid = 0, blank = 0, ambiguous = 0;
+  const failures = [];
+  const total = project.rows.length;
+  for (let i = 0; i < total; i++) {
+    const v = project.rows[i][idx];
+    if (v == null || String(v).trim() === '') { blank++; continue; }
+    const r = parseDate(v, { locale: 'uk' });
+    if (r) { valid++; if (r.ambiguous) ambiguous++; }
+    else failures.push({ row: i + 1, raw: v });
+  }
+  renderDateReport({ valid, blank, ambiguous, failures, total });
+}
+
+function renderDateReport(res) {
+  const box = el('recon-date-report');
+  if (!box) return;
+  const bad = res.failures.length;
+  const good = bad === 0;
+  let html =
+    `<div class="${good ? 'text-success' : 'text-danger'}">` +
+    `<i class="fas ${good ? 'fa-circle-check' : 'fa-triangle-exclamation'} me-1"></i>` +
+    `<strong>${res.valid.toLocaleString()}</strong> of ${res.total.toLocaleString()} rows parsed to ISO dates` +
+    (res.blank ? ` · <span class="text-muted">${res.blank.toLocaleString()} blank</span>` : '') +
+    (res.ambiguous ? ` · <span class="text-muted">${res.ambiguous.toLocaleString()} ambiguous day/month (assumed UK)</span>` : '') +
+    (bad ? ` · <strong>${bad.toLocaleString()} could not be parsed</strong>` : ' — all good.') +
+    `</div>`;
+  if (bad) {
+    const show = res.failures.slice(0, 100);
+    html += `<div class="recon-coord-failures mt-1"><table class="table table-sm mb-1">` +
+      `<thead><tr><th style="width:5rem">Row</th><th>Unparseable value</th></tr></thead><tbody>` +
+      show.map((f) => `<tr><td>${f.row}</td><td><code>${truncate(f.raw, 70)}</code></td></tr>`).join('') +
+      `</tbody></table>` +
+      (bad > show.length ? `<div class="small text-muted">…and ${(bad - show.length).toLocaleString()} more.</div>` : '') +
+      `</div>`;
+  }
+  box.innerHTML = html;
+}
+
 function renderMapping() {
   el('recon-map-body').innerHTML = project.columns.map((c, i) =>
     `<tr>
@@ -334,6 +416,7 @@ function renderMapping() {
       sel.className = `form-select form-select-sm recon-role-select role-${sel.value}`;
       persist();
       renderCoords();        // coords/lat/lon mapping affects the coordinate panel
+      renderDates();         // date mapping affects the date panel
       refreshReconSection(); // name/country mapping affects what can be reconciled
     });
   });
@@ -355,6 +438,7 @@ function renderAll() {
     `column${project.columns.length === 1 ? '' : 's'}${delimNote} · imported ${fmtTime(project.importedAt)}.`;
   renderMapping();
   renderCoords();
+  renderDates();
   renderPreview();
   refreshReconSection();
 }
@@ -377,7 +461,7 @@ function resetUI() {
   el('recon-progress-wrap').classList.add('d-none');
   el('recon-results-wrap').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
-    'recon-coords', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
+    'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
   });
   const input = el('recon-file'); if (input) input.value = '';
