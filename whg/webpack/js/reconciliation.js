@@ -345,11 +345,14 @@ function keyForRow(built, i) {
 }
 
 async function postReconcile(queries, csrf, attempt = 0) {
+  // Send OpenRefine-standard form encoding (`queries=<json>`). The service reads this via
+  // request.POST; the application/json path reads request.body, which raises RawPostDataException
+  // under DRF (the auth layer has already consumed the request stream). Same contract, safe path.
   const res = await fetch(RECON_ENDPOINT, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
-    body: JSON.stringify({ queries }),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': csrf },
+    body: 'queries=' + encodeURIComponent(JSON.stringify(queries)),
   });
   if (res.status === 429 || res.status >= 500) {
     if (attempt >= 4) throw new Error(`server ${res.status} after retries`);
