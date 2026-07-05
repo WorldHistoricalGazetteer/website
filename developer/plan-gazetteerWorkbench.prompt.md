@@ -125,6 +125,42 @@ Proven in the `gazetteer-of-the-world` repo (`WHG-LESSONS.md` §2b):
 user's *own* rows (group the CP40 "Newton"s; propose near-duplicates) before any network call — cheap
 retrieval in the browser, authoritative reconciliation on the server. Optional, lazily loaded.
 
+### 1d. Prior art — Locolligo (`docuracy/Locolligo`)
+
+Stephen's earlier hand-coded, client-side reconciliation/preparation tool (jQuery SPA on GitHub Pages;
+JSONata, PapaParse, proj4+geodesy, Fuse.js, MapLibre, shp2geojson+JSZip, Citation.js). Mine it for
+**techniques and config schemas, not code** (it is a jQuery-era 154 KB monolith). Borrowable ideas,
+by priority:
+
+- **JSONata as a transform substrate (architectural).** Every format conversion (KML→GeoJSON-T,
+  lp.csv→LPF, …) is an *editable JSONata expression* in `templates/mappings.json`, so new
+  import/export formats are **config, not code**. Consider adopting an expression language as the
+  substrate for both the ROLE-mapping and LPF export, generalising the Phase 9 cleaning pipeline.
+- **Coordinate-format detection over a wide range** (proj4 + geodesy `osgridref.js`): decimal
+  lat/lon, DMS, **OS National Grid** and **Irish Grid** *string* refs (e.g. `SK690965`), UTM — with
+  the detected format shown and user-overridable when ambiguous. *(Being built now — see §Phase 8 /
+  the coordinate-mapping step; our own driver `Places.json` uses `NationalGridRef`.)*
+- **Auto-confirm with per-source score thresholds** (`libraryMappings.json`: `autoConfirm`,
+  `maxScore`, distance + name similarity): auto-accept high-confidence matches so reviewers see only
+  genuine ambiguity. *(Folds into Phase 4; being built now.)*
+- **Bbox enrichment from non-gazetteer sources** — nearby Wikipedia, Geograph photos, PAS finds,
+  OSM roads, Wikidata heritage (parameterised SPARQL). A distinct *enrich-a-located-place* mode
+  beyond name→ID reconciliation. New roadmap capability.
+- **Shapefile (.zip) + KML import** (shp2geojson+JSZip; fast-xml-parser) — cheap import-coverage wins
+  for historical GIS data.
+- **Dataset-level provenance/citation capture** — schema.org `Dataset` (ORCID creators, licence,
+  temporal/spatial coverage) + Citation.js / `CITATION.cff`; dovetails with the WHG citations/licensing
+  work. (Their template defaults to CC-BY 4.0.)
+- **`polylabel`** representative points (pole-of-inaccessibility, better than centroid) — relevant to
+  WHG's `repr_point` and the `geometries.hull`/`repr_point` fallback issue.
+- **NER geocoding of free-text/prose** input (Google NL API) — a non-tabular ingestion mode our
+  tabular-only design has not anticipated (large; needs an NER backend).
+- **`w3id.org` PID minting** — a concrete, resolvable mechanism for the roadmap's placeholder minting.
+
+Already covered by our plan (Locolligo just confirms): candidate review, LPF/LP-TSV, CRS reprojection,
+fuzzy matching, multi-source recon, type-vocabulary mapping. Skip: its 22 hard-coded UK-specific
+sources and Peripleo/GitHub-Pages publishing (WHG has its own publication path).
+
 ---
 
 ## 2. Architecture
