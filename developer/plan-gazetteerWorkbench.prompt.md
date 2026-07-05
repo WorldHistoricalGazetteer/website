@@ -1,9 +1,13 @@
 # Plan — Browser-based, local-first Gazetteer Workbench
 
-> **Status:** DRAFT — awaiting colleague discussion of the proposal
+> **Status:** DRAFT — updated 2026-07-03 with team-meeting outcomes; still awaiting fuller
+> colleague sign-off of the proposal
 > ([`WorldHistoricalGazetteer/place#111`](https://github.com/WorldHistoricalGazetteer/place/issues/111)).
 > **Owner:** Stephen Gadd (WHG Technical Director)
 > **Created:** 2026-07-02
+> **Related:** collaborative/group editing is tracked separately in
+> [`WorldHistoricalGazetteer/place#112`](https://github.com/WorldHistoricalGazetteer/place/issues/112)
+> and qualifies the local-first invariant below (see §2d, Phase 11).
 > **Scope:** dual-repo — front-end in **`whg3`** (Django + webpack; this plan lives here in
 > `whg3/developer/`), backend adapter in **`indexing`** (`gateway/`), where the reconciliation
 > service and the Symphonym model (`hf/`) — the two backend touch-points — live.
@@ -24,6 +28,12 @@ WHG's existing API, and (b) an explicit user-initiated submission of selected ro
 Read the consolidated issue #111 for the full rationale, feature list and caveats. This plan is the
 build order.
 
+**Design for n=1 as well as n=50k (2026-07-03 meeting).** Although the driving examples are large
+spreadsheets, the UI must be **good for the single-place submission use case** — a user contributing
+*one* place. Import, mapping, review, enrichment and the contribute flow should all feel natural and
+un-bureaucratic at a single row, not only in bulk. Treat "add/reconcile/submit one place" as a
+first-class, low-friction path through the same machinery, and check it explicitly in MVP acceptance.
+
 ### Positioning (what this is *not*, and what it could grow into)
 
 - **Not a replacement for WHG's curated "authority" ingestion pipeline.** Large / complex /
@@ -39,7 +49,11 @@ build order.
 
 ### Design invariants (do not violate)
 
-1. **No server-side persistence of user data.** Only queries and (opt-in) final submissions leave.
+1. **No server-side persistence of user data** *(for the solo flow)*. Only queries and (opt-in) final
+   submissions leave. **Exception — collaboration (#112):** group editing deliberately relaxes this,
+   introducing an explicit **pre-upload / shared working copy** so teammates can check out the same
+   gazetteer. That is opt-in and scoped to the collaborative case; the default solo flow stays
+   strictly local-first. See §2d and Phase 11.
 2. **Resumability is sacred.** A researcher may spend days on a 50k-row project. State must survive
    reloads, tab crashes, and — via a downloadable project file — browser eviction.
 3. **Deduplicate before the network.** Identical query-constraint tuples reconcile once.
@@ -186,6 +200,29 @@ modules, and compose them into thin front-ends:
 - *Curation (single record)* is the tiny **correction widget** embedded on a place page — reuses
   `recon` + `review` + `contribute` for one row, feeding WHG's existing correction / veracity model.
 
+### 2d. Collaboration model (group editing — #112)
+
+The default flow keeps everything in one browser. **Collaborative editing (#112)** requires a
+**shared server-side working copy** the group edits against — a deliberate, opt-in departure from
+invariant #1, because teammates cannot reach each other's IndexedDB. Design sketch (details to be
+worked out in #112):
+
+- **Groups own gazetteers.** A gazetteer can be owned by a group (project/corporate/collaboration),
+  with a simple role model (owner / editor / viewer). Members share editing/correction rights.
+- **Pre-upload / check-out.** To collaborate, a user makes an explicit **pre-upload (shared
+  submission)** of the working gazetteer so other members can **check out the same gazetteer** and
+  edit it. This shared working store is **distinct from the published index** and from the solo
+  local-first store.
+- **Per-record granularity.** Model collaboration at the **per-record** level (check out / edit
+  individual records) rather than whole-gazetteer locks, so members work different records in
+  parallel.
+- **Conflict resolution on push.** Each record carries a **version/revision**; on **push**, detect
+  conflicts (two members editing or reconciling the same record differently) via optimistic
+  concurrency and present conflicting versions for resolution. Needs a concrete merge model (§6).
+- **Module impact.** `store` gains a sync/remote-working-copy backend behind its interface; `recon`,
+  `review`, `transform`, `contribute` should be usable against either the local or the shared store
+  without change. Factor `store` so the shared backend slots in without rewriting the front-ends.
+
 ---
 
 ## 3. Phased delivery
@@ -286,7 +323,13 @@ This phase is about *using* it well, not building it:
 - "Update Dataset": re-upload revised file, match on user-selected primary key/index, preserve matched
   rows, append/patch the rest.
 - Service worker for offline review of already-fetched candidates.
-- Shared read-only/editable session (design later; needs a state-sync decision — likely out-of-band).
+- **Group collaboration (#112).** The full model in §2d: groups own gazetteers with shared
+  editing/correction rights; **pre-upload → check-out** a shared working copy; **per-record** editing;
+  **conflict resolution on push** (per-record revisions, optimistic concurrency, human resolution of
+  conflicts). This is larger than a "shared session" and has its own issue
+  ([#112](https://github.com/WorldHistoricalGazetteer/place/issues/112)); it should be designed
+  alongside this plan because it qualifies the local-first invariant (§2d). Needs the shared
+  server-side working store and a state-sync/merge decision (§6).
 
 ### Phase 12 — Curation surface for existing gazetteers (enhancement; separate front-end)
 Reuses the §2c shared modules — this is a *front-end*, not a second app. Two modes:
@@ -331,6 +374,28 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
   query→gateway mapping (the gateway's `/api/reconcile` already accepts `fclasses`/`types`/`bounds`/
   years), and add a small conformance test. Treat this as a verification task, not assumed work.
 
+### 4a. Onboarding & activity monitoring (server-side; 2026-07-03 meeting)
+
+Because reconciliation runs against the authenticated `/reconcile` service, WHG can observe when a
+user *starts and how they progress* through a reconciliation **from API hits alone** — no dataset
+upload needed. This gives us a light, privacy-respecting engagement layer (only query metadata is
+observed, never the user's rows):
+
+- **Welcome / onboarding email on first reconciliation.** Detect a user's *first* reconciliation
+  activity (the first authenticated `/reconcile` hits in a session/project) and send a welcome email
+  with orientation and an offer of help. Trigger off **monitored API hits**, not a client ping.
+- **Feed Palak's Gazetteer Submission Tracker** *(to be built).* Surface active reconciliation users
+  in the tracker, including **which part of the world they are working on** — deducible from the
+  spatial footprint of their queries (`ccodes` / `bounds` / coordinate hints already present in recon
+  requests).
+- **Snag / give-up detection → proactive help.** From the activity stream, detect users who **stall
+  or appear to give up** — e.g. a run that goes quiet part-way, a burst of no-match/rejected results,
+  or reconciliation that stops well short of the session's row count — and **offer help by email**.
+- **Where it lives.** This is backend/admin work (Django `api` + whatever store backs the tracker),
+  *not* part of the Workbench SPA. It reuses existing request logging/analytics where possible.
+  Scope, thresholds, and email cadence (avoid nagging) are open (§6). Coordinate with Palak on the
+  tracker's data model so the Workbench emits/labels activity in a shape it can consume.
+
 ---
 
 ## 5. Cross-cutting concerns
@@ -370,6 +435,15 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
 8. **Curation scope & timing.** Is the curation surface (Phase 12) in the first release or a
    fast-follow? Either way, confirm the §2c module boundaries now so nothing needs a rewrite. Also:
    does `whg3` already expose gazetteer-export-to-LPF and a correction/patch intake, or are these new?
+9. **Collaboration model (#112).** Group model (reuse Django `Group`s vs a Team/Project model with
+   roles); where the shared working copy lives vs the local store and the published index; check-out
+   granularity (per-record vs per-column vs subset; optimistic vs hard locks); the conflict/merge
+   model and what a "record revision" is. Design with #112, not after it — it qualifies invariant #1.
+10. **Onboarding/monitoring thresholds (§4a).** What counts as "started", "stalled", or "gave up";
+    email cadence to stay helpful not naggy; and the tracker's data contract with Palak.
+11. **Documentation.** Update the public/technical docs in due course to cover the Workbench, the
+    onboarding/monitoring behaviour (§4a), and collaboration (#112) — noted here so it isn't
+    forgotten; do it as features land, not before.
 
 ---
 
@@ -388,7 +462,9 @@ The Workbench consumes this contract directly (Phase 3/5/6). Backend work is lim
 
 ## 8. References
 
-- Proposal: `WorldHistoricalGazetteer/place#111` (consolidated body).
+- Proposal: `WorldHistoricalGazetteer/place#111` (consolidated body; 2026-07-03 meeting notes in
+  its comments).
+- Collaboration/group editing: `WorldHistoricalGazetteer/place#112`.
 - **Standard OpenRefine service (existing):** `whg3/api/reconcile.py`, `api/crc_client.py`,
   `api/urls_root.py`; user docs at <https://docs.whgazetteer.org/content/technical/apis.html>.
 - Backend: `indexing/gateway/reconcile.py`, `places.py`, `extend.py`, `es_helpers.py`, `spatial.py`.
