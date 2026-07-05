@@ -1,6 +1,9 @@
 # private local, untracked files
 _local/
 
+# Local-only store of real-world example datasets (Gazetteer Workbench testing) — never committed
+developer/user_examples/
+
 node_modules/
 cache/
 sitemap_cache/
