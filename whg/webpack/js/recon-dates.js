@@ -302,7 +302,7 @@ function splitRange(s) {
   if ((m = s.split(/\s+to\s+/i)).length === 2) return m;
   if ((m = s.split(/\s*[–—]\s*/)).length === 2) return m;            // en/em dash
   if ((m = s.match(/^(-?\d{1,4}-\d{1,2}-\d{1,2})\s*-\s*(-?\d{1,4}-\d{1,2}-\d{1,2})$/))) return [m[1], m[2]]; // ISO collision
-  if ((m = s.match(/^(-?\d{1,4})\s*-\s*(-?\d{1,4})$/))) return [m[1], m[2]];   // Y-Y
+  if ((m = s.match(/^(-?\d{3,4})\s*-\s*(-?\d{3,4})$/))) return [m[1], m[2]];   // Y-Y (both full years; avoids eating ISO "YYYY-MM")
   if ((m = s.split(/\s+-\s+/)).length === 2) return m;               // spaced hyphen
   if ((m = s.match(/^(\d{3,4})\/(\d{3,4})$/))) return [m[1], m[2]];  // Y/Y
   return null;
