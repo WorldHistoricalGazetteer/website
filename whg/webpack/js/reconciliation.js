@@ -469,12 +469,13 @@ function renderAll() {
   renderPreview();
   refreshReconSection();
   updatePaneSummaries();
-  // Once a dataset is loaded, collapse the (completed) import pane to keep the focus on mapping.
-  if (!_importAutoCollapsed) { setPaneCollapsed('recon-pane-import', true); _importAutoCollapsed = true; }
+  openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
 }
 
-let _importAutoCollapsed = false;
-function setPaneCollapsed(id, collapsed) { const p = el(id); if (p) p.classList.toggle('recon-collapsed', collapsed); }
+// Strict accordion — open one pane, collapse all the others (keeps their headers + summaries visible).
+function openPane(id) {
+  document.querySelectorAll('.recon-pane').forEach((p) => p.classList.toggle('recon-collapsed', p.id !== id));
+}
 function updatePaneSummaries() {
   if (!project) return;
   const sr = el('recon-pane-sum-result');
@@ -503,7 +504,7 @@ function resetUI() {
   project = null;
   stopRequested = true;
   reviewMeta = []; reviewPos = 0;
-  _importAutoCollapsed = false; setPaneCollapsed('recon-pane-import', false);
+  document.querySelectorAll('.recon-pane').forEach((p) => p.classList.remove('recon-collapsed')); // expand import again
   el('recon-result').classList.add('d-none');
   el('recon-resume').classList.add('d-none');
   el('recon-recon').classList.add('d-none');
@@ -1012,6 +1013,7 @@ async function reconcileAll() {
   let done = total - entries.length;
 
   toggleRunning(true);
+  openPane('recon-recon'); // focus the reconcile step (accordion collapses the others)
   stopRequested = false;
   updateProgress(done, total);
   const csrf = getCsrf();
@@ -1086,10 +1088,12 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
-  // Accordion: clicking a pane header toggles its body (collapsed panes keep header + summary visible).
+  // Accordion (strict): opening a pane collapses the others; clicking the open one collapses it.
   document.querySelectorAll('.recon-pane-toggle').forEach((btn) => btn.addEventListener('click', () => {
     const p = document.getElementById(btn.dataset.pane);
-    if (p) p.classList.toggle('recon-collapsed');
+    if (!p) return;
+    if (p.classList.contains('recon-collapsed')) openPane(btn.dataset.pane);
+    else p.classList.add('recon-collapsed');
   }));
 
   // Phase 4 — candidate review: keyboard-first + the "review all" toggle.
