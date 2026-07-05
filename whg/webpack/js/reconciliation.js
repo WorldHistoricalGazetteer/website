@@ -654,7 +654,7 @@ async function buildExportRecords(opts, onProgress) {
   // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
   if (opts.enrich) {
     const ids = [];
-    if (built) built.map.forEach((v, key) => { const d = decisions[key]; if (d && d.status === 'accepted' && d.place_id && !(d.place_id in _candCoord)) ids.push(d.place_id); });
+    if (built) built.map.forEach((v, key) => { acceptedList(decisions[key]).forEach((a) => { if (a.place_id && !(a.place_id in _candCoord)) ids.push(a.place_id); }); });
     for (let k = 0; k < ids.length; k++) { await fetchCandidateCoord(ids[k]); if (onProgress) onProgress(`enriching ${k + 1} / ${ids.length}…`); }
   }
 
@@ -684,24 +684,27 @@ async function buildExportRecords(opts, onProgress) {
     }
     if (opts.match || opts.enrich) {
       const dec = info && decisions[info.key];
-      if (dec && dec.status === 'accepted') {
-        const cand = ((matches[info.key] && matches[info.key].candidates) || [])[dec.ci] || null;
-        match = { id: dec.place_id, title: dec.label, score: dec.score, source: nsName(dec.place_id), cand };
+      const accepted = acceptedList(dec);
+      if (accepted.length) {
+        const cands = (matches[info.key] && matches[info.key].candidates) || [];
+        match = { list: accepted.map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null })) };
+        match.first = match.list[0];
       }
     }
     if (opts.match) {
-      aug.whg_match_id = match ? match.id : '';
-      aug.whg_match_title = match ? match.title : '';
-      aug.whg_match_score = match ? match.score : '';
-      aug.whg_match_source = match ? match.source : '';
+      aug.whg_match_id = match ? match.list.map((x) => x.id).join('; ') : '';
+      aug.whg_match_title = match ? match.list.map((x) => x.title).join('; ') : '';
+      aug.whg_match_score = match ? match.list.map((x) => x.score).join('; ') : '';
+      aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
     }
     if (opts.enrich) {
-      const mc = match && (_candCoord[match.id] || null);
+      const f = match && match.first;
+      const mc = f && (_candCoord[f.id] || null);
       aug.whg_match_lon = mc ? +mc.lon.toFixed(6) : '';
       aug.whg_match_lat = mc ? +mc.lat.toFixed(6) : '';
-      aug.whg_match_variants = (match && match.cand && (match.cand.alt_names || [])).join('; ') || '';
-      aug.whg_match_description = (match && match.cand && match.cand.description) || '';
-      aug.whg_match_types = (match && match.cand && (match.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
+      aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || [])).join('; ') || '';
+      aug.whg_match_description = (f && f.cand && f.cand.description) || '';
+      aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
     }
     records.push({ orig, aug, coord, geom, whenStart, whenEnd, match });
   }
@@ -757,9 +760,9 @@ function serializeLPTSV(data) {
       start: rec.whenStart, end: rec.whenEnd,
       lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
       geowkt: (rec.geom && !isPoint) ? geojsonToWKT(rec.geom) : '',
-      matches: rec.match ? rec.match.id : '',
+      matches: rec.match ? rec.match.list.map((x) => x.id).join(';') : '',
       parent_name: countyIdx >= 0 ? rec.orig[countyIdx] : '',
-      description: rec.match ? `closeMatch: ${rec.match.title} (${rec.match.source})` : '',
+      description: rec.match ? 'closeMatch: ' + rec.match.list.map((x) => `${x.title} (${x.source})`).join('; ') : '',
     };
     lines.push(cols.map((c) => cell(row[c])).join('\t'));
   });
@@ -782,7 +785,7 @@ function serializeLPF(data) {
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
-    if (rec.match) feat.links = [{ type: 'closeMatch', identifier: rec.match.id }];
+    if (rec.match) feat.links = rec.match.list.map((x) => ({ type: 'closeMatch', identifier: x.id }));
     return feat;
   });
   return JSON.stringify({
@@ -986,12 +989,20 @@ function effectiveStatus(key) {
   if (m && m.top) return isAutoConfirmed(m.top, getThreshold()) ? 'auto' : 'candidate';
   return 'none';
 }
-// The candidate accepted for a key (explicit accept, or auto-confirmed top), or null.
+// Accepted candidates for a key as an array [{ci, place_id, label, score}]. A place may closeMatch
+// more than one WHG record (multi-select). Migrates the legacy single-accept shape transparently.
+function acceptedList(dec) {
+  if (!dec || dec.status !== 'accepted') return [];
+  if (Array.isArray(dec.accepted)) return dec.accepted;
+  if (dec.place_id != null) return [{ ci: dec.ci, place_id: dec.place_id, label: dec.label, score: dec.score }];
+  return [];
+}
+// The first candidate accepted for a key (explicit accept, or auto-confirmed top), or null.
 function acceptedCandidate(key) {
   const m = project.matches && project.matches[key];
   if (!m) return null;
   const dec = project.decisions && project.decisions[key];
-  if (dec) return dec.status === 'accepted' ? (m.candidates && m.candidates[dec.ci]) || null : null;
+  if (dec) { const a = acceptedList(dec)[0]; return a ? (m.candidates && m.candidates[a.ci]) || null : null; }
   return (m.top && isAutoConfirmed(m.top, getThreshold())) ? m.top : null;
 }
 
@@ -1106,10 +1117,13 @@ function renderReviewCard() {
   const m = project.matches[meta.key];
   const dec = project.decisions && project.decisions[meta.key];
   const auto = m.top && isAutoConfirmed(m.top, getThreshold());
-  const acceptedCi = dec && dec.status === 'accepted' ? dec.ci : (auto && !dec ? 0 : -1);
+  // Multi-select: a set of accepted candidate indices (auto-confirm previews candidate 0).
+  const acceptedCis = new Set(acceptedList(dec).map((a) => a.ci));
+  if (!dec && auto) acceptedCis.add(0);
   const list = (m.candidates || []).map((c, i) =>
-    `<li class="recon-cand${i === acceptedCi ? ' recon-cand--accepted' : ''}" data-ci="${i}">
+    `<li class="recon-cand${acceptedCis.has(i) ? ' recon-cand--accepted' : ''}" data-ci="${i}">
        <span class="recon-cand-key" style="background:${RECON_COLORS[i % RECON_COLORS.length]}">${i + 1}</span>
+       <span class="recon-cand-check" title="${acceptedCis.has(i) ? 'selected — click to unselect' : 'click to select (you can pick more than one)'}">${acceptedCis.has(i) ? '✓' : ''}</span>
        <span class="recon-cand-body">
          <span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
     (c.match ? '<span class="badge bg-success ms-1">exact</span>' : '') +
@@ -1342,7 +1356,7 @@ async function geomAction(kind, key) {
   if (kind === 'clone') {
     const m = project.matches[key]; if (!m) return;
     const dec = project.decisions && project.decisions[key];
-    const ci = dec && dec.status === 'accepted' ? dec.ci : 0;
+    const ci = acceptedList(dec).length ? acceptedList(dec)[0].ci : 0; // clone the first accepted match
     const cand = (m.candidates || [])[ci] || m.top; if (!cand) return;
     const s = el('recon-geom-status'); if (s) s.textContent = 'fetching match geometry…';
     const g = await fetchCandidateGeometry(cand.id);
@@ -1353,12 +1367,20 @@ async function geomAction(kind, key) {
     persist(); updateGeomStatus(key); refreshExport();
   }
 }
+// Toggle a candidate's acceptance. More than one may be accepted (each becomes a closeMatch); the
+// card stays put so the reviewer can pick several, then advances with Next / →.
 function acceptCandidate(ci) {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   const c = (project.matches[meta.key].candidates || [])[ci]; if (!c) return;
   project.decisions = project.decisions || {};
-  project.decisions[meta.key] = { status: 'accepted', ci, place_id: c.id, label: c.name, score: c.score };
-  afterDecision(true);
+  const cur = project.decisions[meta.key];
+  const list = (cur && cur.status === 'accepted') ? acceptedList(cur).slice() : [];
+  const at = list.findIndex((a) => a.ci === ci);
+  if (at >= 0) list.splice(at, 1);
+  else list.push({ ci, place_id: c.id, label: c.name, score: c.score });
+  if (list.length) project.decisions[meta.key] = { status: 'accepted', accepted: list };
+  else delete project.decisions[meta.key]; // unselected the last → back to undecided
+  afterDecision(false); // don't auto-advance; multi-select stays on the card
 }
 function reviewAction(act) {
   if (act === 'next') return advance(1);

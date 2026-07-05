@@ -306,3 +306,7 @@
 .recon-geom-tools #recon-geom-status { font-style: italic; }
 .recon-ns-item { cursor: help; }
 
+/* Multi-select candidate tick */
+.recon-cand-check { display:inline-block; width:1em; color:#2e7d32; font-weight:700; margin-right:.15rem; }
+.recon-cand--accepted { background: rgba(46,125,50,0.08); }
+
