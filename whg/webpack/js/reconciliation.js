@@ -639,7 +639,9 @@ async function buildExportRecords(opts, onProgress) {
   const built = buildUniqueQueries();
   const decisions = project.decisions || {};
   const matches = project.matches || {};
-  if (opts.coords) await loadCoords();
+  // Load the coord parser whenever a coordinate column exists — even if the WGS84 columns aren't
+  // requested — so LPF/LP-TSV geometry and geometry-override centroids can be computed.
+  if (opts.coords || hasCoordRole()) await loadCoords();
   if (opts.dates) await loadDates();
 
   const dateIdx = colIndexByRole('date');
@@ -660,10 +662,15 @@ async function buildExportRecords(opts, onProgress) {
   for (let i = 0; i < project.rows.length; i++) {
     const orig = project.rows[i].map((v) => (v == null ? '' : v));
     const aug = {};
-    let coord = null, whenStart = '', whenEnd = '', match = null;
+    let whenStart = '', whenEnd = '', match = null;
+    const info = built && keyForRow(built, i);
+
+    // A geometry override (cloned from a match or drawn on the map) wins over the dataset coordinate.
+    const ov = (project.geom && info && project.geom[info.key]) || null;
+    const geom = ov ? ov.geometry : null;
+    const coord = geom ? firstLngLat(geom) : (hasCoordRole() ? rowCoordValue(i) : null);
 
     if (opts.coords) {
-      coord = rowCoordValue(i);
       aug.wgs84_lat = coord ? +coord.lat.toFixed(6) : '';
       aug.wgs84_lon = coord ? +coord.lon.toFixed(6) : '';
     }
@@ -676,7 +683,6 @@ async function buildExportRecords(opts, onProgress) {
       aug.date_end = whenEnd;
     }
     if (opts.match || opts.enrich) {
-      const info = built && keyForRow(built, i);
       const dec = info && decisions[info.key];
       if (dec && dec.status === 'accepted') {
         const cand = ((matches[info.key] && matches[info.key].candidates) || [])[dec.ci] || null;
@@ -697,9 +703,20 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_description = (match && match.cand && match.cand.description) || '';
       aug.whg_match_types = (match && match.cand && (match.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
     }
-    records.push({ orig, aug, coord, whenStart, whenEnd, match });
+    records.push({ orig, aug, coord, geom, whenStart, whenEnd, match });
   }
   return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
+}
+
+// Minimal GeoJSON-geometry → WKT (Point / LineString / Polygon) for the LP-TSV geowkt column.
+function geojsonToWKT(g) {
+  if (!g) return '';
+  const pair = (c) => `${+(+c[0]).toFixed(6)} ${+(+c[1]).toFixed(6)}`;
+  const ring = (r) => r.map(pair).join(', ');
+  if (g.type === 'Point') return `POINT (${pair(g.coordinates)})`;
+  if (g.type === 'LineString') return `LINESTRING (${ring(g.coordinates)})`;
+  if (g.type === 'Polygon') return `POLYGON (${g.coordinates.map((r) => `(${ring(r)})`).join(', ')})`;
+  return '';
 }
 
 function csvCell(v) {
@@ -725,11 +742,13 @@ function serializeJSON(data) {
 function serializeLPTSV(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name');
   const countryIdx = colIndexByRole('country'), countyIdx = colIndexByRole('county');
-  const cols = ['id', 'title', 'title_source', 'ccodes', 'start', 'end', 'lon', 'lat', 'matches', 'parent_name', 'description'];
+  const cols = ['id', 'title', 'title_source', 'ccodes', 'start', 'end', 'lon', 'lat', 'geowkt', 'matches', 'parent_name', 'description'];
   const src = project.fileName || 'workbench';
   const lines = [cols.join('\t')];
   data.records.forEach((rec, i) => {
     const cell = (v) => String(v == null ? '' : v).replace(/[\t\r\n]/g, ' ');
+    // A point geometry travels as lon/lat; lines and polygons travel as geowkt (WKT).
+    const isPoint = !rec.geom || rec.geom.type === 'Point';
     const row = {
       id: idIdx >= 0 ? rec.orig[idIdx] : (i + 1),
       title: nameIdx >= 0 ? rec.orig[nameIdx] : '',
@@ -737,6 +756,7 @@ function serializeLPTSV(data) {
       ccodes: countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? String(rec.orig[countryIdx]).toUpperCase() : '',
       start: rec.whenStart, end: rec.whenEnd,
       lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
+      geowkt: (rec.geom && !isPoint) ? geojsonToWKT(rec.geom) : '',
       matches: rec.match ? rec.match.id : '',
       parent_name: countyIdx >= 0 ? rec.orig[countyIdx] : '',
       description: rec.match ? `closeMatch: ${rec.match.title} (${rec.match.source})` : '',
@@ -760,7 +780,8 @@ function serializeLPF(data) {
       names: title ? [{ toponym: title }] : [],
     };
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
-    if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
+    if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
+    else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
     if (rec.match) feat.links = [{ type: 'closeMatch', identifier: rec.match.id }];
     return feat;
   });
@@ -1118,9 +1139,21 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-warning" data-act="nomatch">No match <kbd>n</kbd></button>
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo">Undo <kbd>u</kbd></button>
        <button type="button" class="btn btn-sm btn-primary ms-auto" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
+     </div>
+     <div class="recon-geom-tools d-flex flex-wrap align-items-center gap-1 mt-2 small">
+       <span class="text-muted me-1"><i class="fas fa-location-dot"></i> Location:</span>
+       <button type="button" class="btn btn-sm btn-outline-primary" data-geom="clone" title="Copy the selected match's coordinates into your dataset (point, line, or polygon)">Use match location</button>
+       <span class="text-muted mx-1">or draw:</span>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="point">Point</button>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="line">Line</button>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="polygon">Polygon</button>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="finish">Finish</button>
+       <button type="button" class="btn btn-sm btn-outline-danger" data-geom="clear"${(project.geom && project.geom[meta.key]) ? '' : ' disabled'}>Clear</button>
+       <span id="recon-geom-status" class="text-muted ms-1">${esc(geomStatusText(meta.key))}</span>
      </div>`;
   card.querySelectorAll('.recon-cand').forEach((li) => li.addEventListener('click', () => acceptCandidate(Number(li.dataset.ci))));
   card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
+  card.querySelectorAll('[data-geom]').forEach((b) => b.addEventListener('click', () => geomAction(b.dataset.geom, meta.key)));
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
 }
 
@@ -1163,14 +1196,38 @@ function updateSourcesLabel() {
   lbl.textContent = f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
     : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources';
 }
-function populateSourcesModal() {
+// Gazetteer descriptions for the source-picker tooltips, from the registry via /api/attribution/.
+let _nsDesc = null;
+async function loadNsDescriptions(nslist) {
+  if (_nsDesc) return _nsDesc;
+  _nsDesc = {};
+  try {
+    const res = await fetch('/api/attribution/?namespaces=' + encodeURIComponent(nslist.join(',')),
+      { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const data = await res.json();
+      const sources = (data && data.sources) || {};
+      Object.keys(sources).forEach((ns) => { _nsDesc[ns] = sources[ns].citation || sources[ns].name || ''; });
+    }
+  } catch (_) { /* tooltips are a nicety; ignore failures */ }
+  return _nsDesc;
+}
+async function populateSourcesModal() {
   const f = getNsFilter();
   const modeInput = document.querySelector(`input[name="recon-ns-mode"][value="${f.mode}"]`);
   if (modeInput) modeInput.checked = true;
   const box = el('recon-ns-list');
-  if (box) box.innerHTML = availableNamespaces().map((ns) =>
-    `<label class="recon-ns-item"><input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
+  const nss = availableNamespaces();
+  if (box) box.innerHTML = nss.map((ns) =>
+    `<label class="recon-ns-item" data-ns="${esc(ns)}" title="${esc(NS_NAMES[ns] || ns.toUpperCase())}">` +
+    `<input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
     `${esc(NS_NAMES[ns] || ns.toUpperCase())} <span class="text-muted small">(${esc(ns)})</span></label>`).join('');
+  // Enrich each item's tooltip with its full registry description (async; a nicety, non-blocking).
+  const desc = await loadNsDescriptions(nss);
+  if (box) box.querySelectorAll('.recon-ns-item').forEach((lab) => {
+    const ns = lab.dataset.ns; const d = desc[ns];
+    lab.title = d ? `${NS_NAMES[ns] || ns.toUpperCase()} — ${d}` : (NS_NAMES[ns] || ns.toUpperCase());
+  });
 }
 function applyNsFilter() {
   const mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
@@ -1233,8 +1290,68 @@ async function updateReviewMap(key) {
   box.classList.remove('d-none');
   try {
     const mod = await loadReconMap();
-    if (token === _mapToken) mod.renderReviewMap(box, points, rowPoint, (ci) => acceptCandidate(ci));
+    if (token === _mapToken) mod.renderReviewMap(box, points, rowPoint, {
+      onAccept: (ci) => acceptCandidate(ci),
+      onGeom: (g) => onReviewGeom(key, g),                         // user drew / cleared on the map
+      override: (project.geom && project.geom[key] && project.geom[key].geometry) || null,
+    });
   } catch (err) { console.error('[recon] review map failed', err); box.classList.add('d-none'); }
+}
+// Full geometry (point / line / polygon) for a candidate — used when cloning a match's location.
+async function fetchCandidateGeometry(id) {
+  try {
+    const res = await fetch(`/entity/${encodeURIComponent(id)}/api`, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(String(res.status));
+    const feat = await res.json();
+    return (feat && feat.geometry) || null;
+  } catch (_) { return null; }
+}
+// Record / clear a geometry override for a place (all rows sharing the key). Overrides win on export.
+function onReviewGeom(key, geometry) {
+  project.geom = project.geom || {};
+  if (geometry) project.geom[key] = { source: 'drawn', geometry };
+  else delete project.geom[key];
+  persist();
+  updateGeomStatus(key);
+  refreshExport();
+}
+function geomStatusText(key) {
+  const g = project.geom && project.geom[key];
+  if (!g) return 'from dataset coordinates';
+  const t = (g.geometry && g.geometry.type) || 'geometry';
+  return `${g.source === 'match' ? 'cloned from match' : 'drawn'} · ${t}`;
+}
+function updateGeomStatus(key) {
+  const s = el('recon-geom-status'); if (s) s.textContent = geomStatusText(key);
+  const card = el('recon-review-card');
+  if (card) card.querySelectorAll('[data-geom]').forEach((b) => {
+    if (b.dataset.geom === 'clear') b.disabled = !(project.geom && project.geom[key]);
+  });
+}
+// Toolbar actions for the location picker in the review card.
+async function geomAction(kind, key) {
+  const mod = await loadReconMap();
+  if (kind === 'point' || kind === 'line' || kind === 'polygon') {
+    mod.startDraw(kind);
+    const s = el('recon-geom-status');
+    if (s) s.textContent = kind === 'point' ? 'click the map to place a point' : `click to add points, then Finish (${kind})`;
+    return;
+  }
+  if (kind === 'finish') { mod.finishDraw(); return; }
+  if (kind === 'clear') { mod.clearGeom(); return; } // fires onGeom(null) → onReviewGeom clears it
+  if (kind === 'clone') {
+    const m = project.matches[key]; if (!m) return;
+    const dec = project.decisions && project.decisions[key];
+    const ci = dec && dec.status === 'accepted' ? dec.ci : 0;
+    const cand = (m.candidates || [])[ci] || m.top; if (!cand) return;
+    const s = el('recon-geom-status'); if (s) s.textContent = 'fetching match geometry…';
+    const g = await fetchCandidateGeometry(cand.id);
+    if (!g) { if (s) s.textContent = 'no geometry available for this match'; return; }
+    project.geom = project.geom || {};
+    project.geom[key] = { source: 'match', geometry: g };
+    mod.setOverride(g);
+    persist(); updateGeomStatus(key); refreshExport();
+  }
 }
 function acceptCandidate(ci) {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
@@ -1388,10 +1505,18 @@ function init() {
   ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('recon-dropzone--over'); }));
   dz.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
 
+  // "Clear my data" opens a styled confirmation modal (not the browser-native confirm).
+  const openClearModal = () => {
+    const m = el('recon-clear-modal');
+    if (m && window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(m).show();
+    else clearData(); // graceful fallback if Bootstrap JS is unavailable
+  };
   const clear = el('recon-clear');
-  if (clear) clear.addEventListener('click', clearData);
+  if (clear) clear.addEventListener('click', openClearModal);
   const startover = el('recon-startover');
-  if (startover) startover.addEventListener('click', clearData);
+  if (startover) startover.addEventListener('click', openClearModal);
+  const clearConfirm = el('recon-clear-confirm');
+  if (clearConfirm) clearConfirm.addEventListener('click', clearData);
 
   const run = el('recon-run');
   if (run) run.addEventListener('click', reconcileAll);

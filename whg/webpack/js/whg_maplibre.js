@@ -1341,7 +1341,9 @@ maplibregl.Map = function (options = {}) {
 		$(mapInstance.getContainer().querySelector('.maplibregl-control-container'))
 		.tooltip({
 	    	selector: 'button:not(.dateline-button), select, summary.maplibregl-ctrl-attrib-button, #dateline.expanded .dateline-button',
-	    	container: '#map'
+	    	// Scope tooltips to this map's own container. Was hard-coded '#map', which is null on any
+	    	// page whose map container isn't #map (e.g. the reconciliation review map) → Bootstrap threw.
+	    	container: mapInstance.getContainer()
 		})
 		
     });

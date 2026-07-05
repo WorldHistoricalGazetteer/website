@@ -268,6 +268,30 @@
     </div>
   </section>
 
+  <!-- Clear-data confirmation (replaces the browser-native confirm) -->
+  <div class="modal fade" id="recon-clear-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-clear-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="recon-clear-title"><i class="fas fa-triangle-exclamation text-danger me-2"></i>Clear your data?</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">This removes the imported dataset, your column choices, reconciliation
+            matches, and review decisions from this browser.</p>
+          <p class="small text-muted mb-0">It can't be undone. If you might want this work again,
+            close this dialog and use <strong>Save</strong> to keep a local backup first.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-danger" id="recon-clear-confirm" data-bs-dismiss="modal">
+            <i class="fas fa-trash-alt me-1"></i>Clear my data
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Source-gazetteer picker (namespaces): prioritise or restrict; persisted across reloads -->
   <div class="modal fade" id="recon-sources-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-sources-title">
     <div class="modal-dialog modal-dialog-scrollable">
@@ -278,9 +302,10 @@
         </div>
         <div class="modal-body">
           <p class="small text-muted mb-2">
-            Choose how the source gazetteers (namespaces) affect reconciliation. Your choice is saved
-            and persists across page loads. Changing <em>restrict</em> needs a re-run to take effect;
-            <em>prioritise</em> re-orders existing candidates immediately.
+            Choose how the source gazetteers (namespaces) affect reconciliation, then tick the sources
+            below. Your choice is saved and persists across page loads. <em>Only selected</em> filters
+            the query, so it takes effect on the next reconcile run; <em>Prioritise selected</em>
+            re-orders the existing candidates immediately. Hover a source for its description.
           </p>
           <div class="btn-group btn-group-sm w-100 mb-3" role="group" aria-label="Source mode">
             <input type="radio" class="btn-check" name="recon-ns-mode" id="recon-ns-all" value="all" autocomplete="off">

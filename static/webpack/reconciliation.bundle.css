@@ -298,3 +298,11 @@
 }
 .recon-contribute a { font-weight: 600; }
 
+/* Review-pane geometry picker (clone / draw point-line-polygon) */
+.recon-geom-tools {
+  border-top: 1px dashed #e2e2e2; padding-top: .5rem;
+}
+.recon-geom-tools .btn { padding: .1rem .45rem; font-size: .78rem; }
+.recon-geom-tools #recon-geom-status { font-style: italic; }
+.recon-ns-item { cursor: help; }
+
