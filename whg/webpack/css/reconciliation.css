@@ -160,6 +160,23 @@
 .recon-map-col { font-weight: 600; word-break: break-word; }
 .recon-role-select { max-width: 220px; }
 
+/* --- Reconcile step: progress + results --- */
+.recon-progress-wrap { margin: .25rem 0 .5rem; }
+.recon-progress { height: 9px; background: #ececec; border-radius: 5px; overflow: hidden; }
+.recon-progress-bar { height: 100%; width: 0; background: #c2410c; transition: width .2s ease; }
+.recon-recon-summary { line-height: 1.6; }
+.recon-results-wrap { max-height: 460px; overflow-y: auto; }
+.recon-results { font-size: .82rem; border-collapse: separate; border-spacing: 0; }
+.recon-results thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #eef1f4;
+  box-shadow: inset 0 -1px 0 #dee2e6;
+}
+.recon-results tbody td { background: #fff; vertical-align: middle; }
+.recon-results .badge { font-weight: 600; }
+
 /* Left accent on a role <select> to echo the role's colour, mirroring the preview scheme */
 .recon-role-select { border-left-width: 4px; }
 .recon-role-select.role-name    { border-left-color: #1565c0; }

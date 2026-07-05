@@ -17,6 +17,7 @@
 
 {% block content %}
 <div class="container recon-wrap py-3">
+  {% csrf_token %}{# used by reconciliation.js for the same-origin POST /reconcile call #}
 
   <!-- Unpublished-feature signal -->
   <div class="recon-unpublished-banner" role="note">
@@ -108,10 +109,44 @@
         <tbody id="recon-preview-body"></tbody>
       </table>
     </div>
-    <p class="text-muted small mb-0">
-      Reconciliation (querying WHG's <code>/reconcile</code> service), candidate review, enrichment and
-      selective submission are the next phases (see <code>developer/plan-gazetteerWorkbench.prompt.md</code>).
+  </section>
+
+  <!-- Reconcile step (Phase 3): query WHG's standard /reconcile service for the mapped 'name' column -->
+  <section class="recon-card d-none" id="recon-recon" aria-labelledby="recon-recon-title">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <h2 id="recon-recon-title" class="h5 mb-0">3 · Reconcile against WHG</h2>
+      <div class="d-flex align-items-center gap-2">
+        <button type="button" id="recon-run" class="btn btn-sm btn-primary">
+          <i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile
+        </button>
+        <button type="button" id="recon-stop" class="btn btn-sm btn-outline-secondary d-none">
+          <i class="fas fa-stop me-1"></i>Stop
+        </button>
+      </div>
+    </div>
+    <p class="text-muted small mb-2" id="recon-recon-help">
+      Sends only <strong>de-duplicated place-name queries</strong> (with a country hint where available)
+      to WHG's <code>/reconcile</code> service — never your rows. Identical names are queried once and the
+      result fanned out. Best matches appear below; per-candidate review comes in the next phase.
     </p>
+
+    <div class="recon-progress-wrap d-none" id="recon-progress-wrap">
+      <div class="recon-progress"><div class="recon-progress-bar" id="recon-progress-bar"></div></div>
+      <div class="small text-muted mt-1" id="recon-progress-text"></div>
+    </div>
+
+    <div id="recon-recon-summary" class="recon-recon-summary small my-2"></div>
+
+    <div class="table-responsive recon-results-wrap d-none" id="recon-results-wrap">
+      <table class="table table-sm table-bordered recon-results">
+        <thead>
+          <tr><th style="width:34%">Your place</th><th style="width:10%">Status</th>
+              <th>Top WHG match</th><th style="width:8%">Score</th></tr>
+        </thead>
+        <tbody id="recon-results-body"></tbody>
+      </table>
+      <p class="small text-muted mb-0" id="recon-results-note"></p>
+    </div>
   </section>
 
 </div>

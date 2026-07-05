@@ -11,6 +11,10 @@
 import '../css/reconciliation.css';
 
 const PREVIEW_ROWS = 20;
+const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
+const RECON_BATCH = 25;                // queries per POST (service cap is 50)
+const RECON_CAND_LIMIT = 5;            // candidates requested per query
+const RECON_RESULTS_PREVIEW = 200;     // rows shown in the results table (summary counts cover all)
 const DB_NAME = 'whg-recon-workbench';
 const DB_VERSION = 1;
 const STORE = 'project';
@@ -126,7 +130,15 @@ function fromDelimited(text) {
 let project = null; // { id, fileName, importedAt, columns:[{name,role}], rows:[[...]], total, delimiter? }
 
 function el(id) { return document.getElementById(id); }
-function truncate(v, max = 80) { const s = String(v == null ? '' : v); return s.length > max ? s.slice(0, max - 1) + '…' : s; }
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+// Truncate then HTML-escape — every value rendered via innerHTML passes through here.
+function truncate(v, max = 80) {
+  const raw = String(v == null ? '' : v);
+  return esc(raw.length > max ? raw.slice(0, max - 1) + '…' : raw);
+}
 function firstSample(colIndex) {
   if (!project) return '';
   for (const r of project.rows) { if (r[colIndex] != null && r[colIndex] !== '') return r[colIndex]; }
@@ -168,6 +180,7 @@ function renderMapping() {
       project.columns[i].role = sel.value;
       sel.className = `form-select form-select-sm recon-role-select role-${sel.value}`;
       persist();
+      refreshReconSection(); // name/country mapping affects what can be reconciled
     });
   });
 }
@@ -188,6 +201,7 @@ function renderAll() {
     `column${project.columns.length === 1 ? '' : 's'}${delimNote} · imported ${fmtTime(project.importedAt)}.`;
   renderMapping();
   renderPreview();
+  refreshReconSection();
 }
 
 function showResume() {
@@ -201,9 +215,14 @@ function showResume() {
 
 function resetUI() {
   project = null;
+  stopRequested = true;
   el('recon-result').classList.add('d-none');
   el('recon-resume').classList.add('d-none');
-  ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved'].forEach((id) => {
+  el('recon-recon').classList.add('d-none');
+  el('recon-progress-wrap').classList.add('d-none');
+  el('recon-results-wrap').classList.add('d-none');
+  ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
+    'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
   });
   const input = el('recon-file'); if (input) input.value = '';
@@ -283,6 +302,176 @@ async function loadSaved() {
   } catch (err) { console.error('[recon] could not load saved project', err); }
 }
 
+// ── Reconciliation engine (Phase 3) ─────────────────────────────────────────
+// Sends de-duplicated place-name queries to WHG's standard /reconcile service (same-origin,
+// authenticated by the logged-in session + CSRF), caches candidates per unique key, and fans
+// results back to every row sharing that key. Candidate review / accept-reject is Phase 4.
+let running = false;
+let stopRequested = false;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function getCsrf() {
+  const input = document.querySelector('input[name=csrfmiddlewaretoken]');
+  if (input && input.value) return input.value;
+  const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+function normName(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
+function colIndexByRole(role) { return project ? project.columns.findIndex((c) => c.role === role) : -1; }
+const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
+
+// Build the map of unique (name[, country]) queries → the rows that share each.
+function buildUniqueQueries() {
+  const nameIdx = colIndexByRole('name');
+  if (nameIdx < 0) return null;
+  const countryIdx = colIndexByRole('country');
+  const map = new Map(); // key -> { query, country, rows:[rowIndex,...] }
+  project.rows.forEach((r, i) => {
+    const name = String(r[nameIdx] == null ? '' : r[nameIdx]).trim();
+    if (!name) return;
+    const country = (countryIdx >= 0 && isCcode(r[countryIdx])) ? String(r[countryIdx]).trim().toUpperCase() : '';
+    const key = normName(name) + '|' + country;
+    if (!map.has(key)) map.set(key, { query: name, country, rows: [] });
+    map.get(key).rows.push(i);
+  });
+  return { nameIdx, countryIdx, map };
+}
+function keyForRow(built, i) {
+  const r = project.rows[i];
+  const name = String(r[built.nameIdx] == null ? '' : r[built.nameIdx]).trim();
+  if (!name) return null;
+  const country = (built.countryIdx >= 0 && isCcode(r[built.countryIdx])) ? String(r[built.countryIdx]).trim().toUpperCase() : '';
+  return { name, country, key: normName(name) + '|' + country };
+}
+
+async function postReconcile(queries, csrf, attempt = 0) {
+  const res = await fetch(RECON_ENDPOINT, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+    body: JSON.stringify({ queries }),
+  });
+  if (res.status === 429 || res.status >= 500) {
+    if (attempt >= 4) throw new Error(`server ${res.status} after retries`);
+    await sleep(500 * Math.pow(2, attempt)); // exponential backoff
+    return postReconcile(queries, csrf, attempt + 1);
+  }
+  if (res.status === 401 || res.status === 403) throw new Error(`not authorised (${res.status}); please log in as staff`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+function setReconSummary(html) { el('recon-recon-summary').innerHTML = html; }
+function toggleRunning(on) {
+  running = on;
+  el('recon-run').classList.toggle('d-none', on);
+  el('recon-stop').classList.toggle('d-none', !on);
+}
+function updateProgress(done, total) {
+  el('recon-progress-wrap').classList.remove('d-none');
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  el('recon-progress-bar').style.width = pct + '%';
+  el('recon-progress-text').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} unique queries (${pct}%)`;
+}
+
+function renderResults(built) {
+  const matches = project.matches || {};
+  let matched = 0, nomatch = 0, pending = 0, rowsMatched = 0;
+  built.map.forEach((v, key) => {
+    const m = matches[key];
+    if (!m) { pending += 1; return; }
+    if (m.top) { matched += 1; rowsMatched += v.rows.length; } else { nomatch += 1; }
+  });
+  setReconSummary(
+    `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> · ` +
+    `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
+    `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
+    `across <strong>${built.map.size.toLocaleString()}</strong> unique names, ` +
+    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
+
+  const rowsToShow = Math.min(project.rows.length, RECON_RESULTS_PREVIEW);
+  const body = [];
+  for (let i = 0; i < rowsToShow; i++) {
+    const info = keyForRow(built, i);
+    if (!info) continue;
+    const m = matches[info.key];
+    let status, top = '', score = '';
+    if (!m) status = '<span class="badge bg-secondary">pending</span>';
+    else if (m.top) {
+      status = m.top.match ? '<span class="badge bg-success">match</span>'
+                           : '<span class="badge bg-info text-dark">candidate</span>';
+      top = `${truncate(m.top.name, 50)} <span class="text-muted small">${truncate(m.top.description || '', 30)}</span>`;
+      score = m.top.score;
+    } else status = '<span class="badge bg-warning text-dark">no match</span>';
+    body.push(`<tr><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}</td>` +
+              `<td>${status}</td><td>${top}</td><td>${score}</td></tr>`);
+  }
+  el('recon-results-body').innerHTML = body.join('');
+  el('recon-results-wrap').classList.remove('d-none');
+  el('recon-results-note').textContent = project.rows.length > RECON_RESULTS_PREVIEW
+    ? `Showing the first ${RECON_RESULTS_PREVIEW} rows; summary counts cover all ${project.total.toLocaleString()}.` : '';
+}
+
+// Show/refresh the reconcile section based on whether a 'name' column is mapped.
+function refreshReconSection() {
+  const hasName = colIndexByRole('name') >= 0;
+  el('recon-recon').classList.toggle('d-none', !hasName);
+  el('recon-recon-help').classList.toggle('d-none', false);
+  if (hasName && project.matches && Object.keys(project.matches).length) {
+    const built = buildUniqueQueries();
+    if (built) renderResults(built);
+  }
+}
+
+async function reconcileAll() {
+  if (running) return;
+  const built = buildUniqueQueries();
+  if (!built || !built.map.size) {
+    setReconSummary('<span class="text-warning">Map a “Place name” column first (Step 2).</span>');
+    return;
+  }
+  project.matches = project.matches || {};
+  const entries = [...built.map.entries()].filter(([key]) => !project.matches[key]); // resume: skip done
+  const total = built.map.size;
+  let done = total - entries.length;
+
+  toggleRunning(true);
+  stopRequested = false;
+  updateProgress(done, total);
+  const csrf = getCsrf();
+
+  for (let b = 0; b < entries.length && !stopRequested; b += RECON_BATCH) {
+    const slice = entries.slice(b, b + RECON_BATCH);
+    const queries = {};
+    slice.forEach(([, v], j) => {
+      const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
+      if (v.country) q.countries = [v.country];
+      queries['q' + j] = q;
+    });
+    let data;
+    try { data = await postReconcile(queries, csrf); }
+    catch (err) {
+      console.error('[recon] batch failed', err);
+      setReconSummary(`<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Reconciliation stopped: ${esc(err.message)}</span>`);
+      break;
+    }
+    slice.forEach(([key], j) => {
+      const result = (data['q' + j] && data['q' + j].result) || [];
+      project.matches[key] = { candidates: result, top: result[0] || null, at: new Date().toISOString() };
+    });
+    done += slice.length;
+    updateProgress(done, total);
+    renderResults(built);
+    await persist();
+    if (!stopRequested && b + RECON_BATCH < entries.length) await sleep(150); // gentle throttle
+  }
+
+  toggleRunning(false);
+  renderResults(built);
+  await persist();
+  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'}: ${done}/${total} unique queries`);
+}
+
 function init() {
   const dz = el('recon-dropzone');
   const input = el('recon-file');
@@ -301,6 +490,11 @@ function init() {
   if (clear) clear.addEventListener('click', clearData);
   const startover = el('recon-startover');
   if (startover) startover.addEventListener('click', clearData);
+
+  const run = el('recon-run');
+  if (run) run.addEventListener('click', reconcileAll);
+  const stop = el('recon-stop');
+  if (stop) stop.addEventListener('click', () => { stopRequested = true; });
 
   showCapabilities();
   loadSaved();
