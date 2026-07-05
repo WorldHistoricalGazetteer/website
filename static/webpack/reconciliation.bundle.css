@@ -68,6 +68,10 @@
   background: #fff;
 }
 
+/* --- Source-gazetteer (namespace) picker modal --- */
+.recon-ns-list { display: flex; flex-direction: column; gap: .35rem; }
+.recon-ns-item { display: flex; align-items: center; gap: .45rem; cursor: pointer; margin-bottom: 0; }
+
 /* --- Accordion panes (the numbered steps) --- */
 .recon-pane-header { display: flex; align-items: center; gap: .5rem; }
 .recon-pane-toggle {
@@ -208,6 +212,9 @@
 }
 .recon-results tbody td { background: #fff; vertical-align: middle; }
 .recon-results .badge { font-weight: 600; }
+/* virtualised results table: scroll container + uniform single-line rows */
+.recon-results-wrap { max-height: 440px; overflow-y: auto; }
+.recon-results tbody td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
 
 /* --- Candidate review (Phase 4) --- */
 #recon-review-card { border-radius: 6px; }

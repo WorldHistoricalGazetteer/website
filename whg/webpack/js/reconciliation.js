@@ -755,27 +755,54 @@ function renderResultsTable(built) {
     `across <strong>${built.map.size.toLocaleString()}</strong> unique names, ` +
     `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
 
-  const rowsToShow = Math.min(project.rows.length, RECON_RESULTS_PREVIEW);
-  const body = [];
-  for (let i = 0; i < rowsToShow; i++) {
-    const info = keyForRow(built, i);
-    if (!info) continue;
-    const m = matches[info.key];
-    let status, top = '', score = '';
-    if (!m) status = '<span class="badge bg-secondary">pending</span>';
-    else {
-      status = REVIEW_BADGE[effectiveStatus(info.key)] || '';
-      const show = acceptedCandidate(info.key) || m.top;
-      if (show) { top = `${truncate(show.name, 50)} <span class="text-muted small">${truncate(show.description || '', 30)}</span>`; score = show.score; }
-    }
-    body.push(`<tr><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}</td>` +
-              `<td>${status}</td><td>${top}</td><td>${score}</td></tr>`);
-  }
-  el('recon-results-body').innerHTML = body.join('');
+  // Build the full ordered row-info list once; the table is virtualised (only the visible window is
+  // in the DOM), so it copes with very large datasets — off-screen rows are evicted on scroll.
+  _resultRows = [];
+  for (let i = 0; i < project.rows.length; i++) { const info = keyForRow(built, i); if (info) _resultRows.push(info); }
   el('recon-results-wrap').classList.remove('d-none');
-  el('recon-results-note').textContent = project.rows.length > RECON_RESULTS_PREVIEW
-    ? `Showing the first ${RECON_RESULTS_PREVIEW} rows; summary counts cover all ${project.total.toLocaleString()}.` : '';
+  el('recon-results-note').textContent = _resultRows.length
+    ? `${_resultRows.length.toLocaleString()} rows — scroll to load more (off-screen rows are evicted).` : '';
+  renderResultsWindow(true);
   updatePaneSummaries();
+}
+
+// ── Virtualised results table (lazy load + auto-eviction) ────────────────────
+let _resultRows = [];        // full ordered list of row infos {name, country, key}
+let RESULT_ROW_H = 34;       // px per row; self-calibrated from the first render
+
+function resultRowHtml(info) {
+  const m = project.matches[info.key];
+  let status, top = '', score = '';
+  if (!m) status = '<span class="badge bg-secondary">pending</span>';
+  else {
+    status = REVIEW_BADGE[effectiveStatus(info.key)] || '';
+    const show = acceptedCandidate(info.key) || m.top;
+    if (show) { top = `${truncate(show.name, 50)} <span class="text-muted small">${truncate(show.description || '', 30)}</span>`; score = show.score; }
+  }
+  return `<tr data-row><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}</td>` +
+         `<td>${status}</td><td>${top}</td><td>${score}</td></tr>`;
+}
+function renderResultsWindow(calibrate) {
+  const wrap = el('recon-results-wrap'), tb = el('recon-results-body');
+  if (!wrap || !tb) return;
+  const total = _resultRows.length;
+  const viewH = wrap.clientHeight || 440;
+  const buffer = 8;
+  const first = Math.max(0, Math.floor(wrap.scrollTop / RESULT_ROW_H) - buffer);
+  const count = Math.ceil(viewH / RESULT_ROW_H) + buffer * 2;
+  const last = Math.min(total, first + count);
+  const spacer = (h) => (h > 0 ? `<tr aria-hidden="true"><td colspan="4" style="height:${h}px;padding:0;border:0"></td></tr>` : '');
+  const rows = [];
+  for (let i = first; i < last; i++) rows.push(resultRowHtml(_resultRows[i]));
+  tb.innerHTML = spacer(first * RESULT_ROW_H) + rows.join('') + spacer((total - last) * RESULT_ROW_H);
+  // Self-calibrate the row height from a real rendered row (once), then re-render if it was off.
+  if (calibrate) {
+    const sample = tb.querySelector('tr[data-row]');
+    if (sample && sample.offsetHeight && Math.abs(sample.offsetHeight - RESULT_ROW_H) > 1) {
+      RESULT_ROW_H = sample.offsetHeight;
+      renderResultsWindow(false);
+    }
+  }
 }
 function renderResults(built) { renderResultsTable(built); refreshReview(); }
 
@@ -868,6 +895,60 @@ const NS_NAMES = {
 function nsFromId(id) { const p = String(id || '').split(':'); return p.length >= 3 ? p[1] : 'whg'; }
 function nsName(id) { const ns = nsFromId(id); return NS_NAMES[ns] || ns.toUpperCase(); }
 
+// ── Source-gazetteer (namespace) picker: prioritise / restrict, persisted ─────
+const NS_LS_KEY = 'whg-recon-ns';
+function getNsFilter() {
+  if (project && project.nsFilter) return project.nsFilter;
+  try { const s = JSON.parse(localStorage.getItem(NS_LS_KEY) || 'null'); if (s && s.mode) return s; } catch (_) { /* */ }
+  return { mode: 'all', namespaces: [] };
+}
+function availableNamespaces() {
+  const set = new Set(['gn', 'wd', 'tgn', 'osm', 'ohm', 'pl', 'whg', 'chgis', 'hgis', 'alc', 'gb1900']);
+  if (project && project.matches) Object.values(project.matches).forEach((m) => (m.candidates || []).forEach((c) => set.add(nsFromId(c.id))));
+  return [...set];
+}
+function sortByNsPriority(cands, namespaces) {
+  const pri = (c) => (namespaces.includes(nsFromId(c.id)) ? 0 : 1);
+  return cands.map((c, i) => ({ c, i })).sort((a, b) => (pri(a.c) - pri(b.c)) || (b.c.score - a.c.score) || (a.i - b.i)).map((x) => x.c);
+}
+// Apply the current filter to a freshly-fetched candidate list (prioritise re-orders; only is enforced
+// server-side via the query, but re-filter defensively too).
+function applyNsToCandidates(result) {
+  const f = getNsFilter();
+  if (!f.namespaces.length) return result;
+  if (f.mode === 'only') return result.filter((c) => f.namespaces.includes(nsFromId(c.id)));
+  if (f.mode === 'prioritise') return sortByNsPriority(result, f.namespaces);
+  return result;
+}
+function updateSourcesLabel() {
+  const f = getNsFilter(); const lbl = el('recon-sources-label'); if (!lbl) return;
+  lbl.textContent = f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
+    : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources';
+}
+function populateSourcesModal() {
+  const f = getNsFilter();
+  const modeInput = document.querySelector(`input[name="recon-ns-mode"][value="${f.mode}"]`);
+  if (modeInput) modeInput.checked = true;
+  const box = el('recon-ns-list');
+  if (box) box.innerHTML = availableNamespaces().map((ns) =>
+    `<label class="recon-ns-item"><input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
+    `${esc(NS_NAMES[ns] || ns.toUpperCase())} <span class="text-muted small">(${esc(ns)})</span></label>`).join('');
+}
+function applyNsFilter() {
+  const mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
+  const namespaces = [...document.querySelectorAll('.recon-ns-cb:checked')].map((c) => c.value);
+  const f = { mode, namespaces };
+  if (project) { project.nsFilter = f; }
+  try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* */ }
+  updateSourcesLabel();
+  // 'prioritise' re-orders existing candidates immediately; 'only'/'all' take effect on the next run.
+  if (project && project.matches && Object.keys(project.matches).length && mode === 'prioritise') {
+    Object.values(project.matches).forEach((m) => { if (m.candidates) { m.candidates = sortByNsPriority(m.candidates, namespaces); m.top = m.candidates[0] || null; } });
+  }
+  if (project) persist();
+  if (project && project.matches) { const built = buildUniqueQueries(); if (built) renderResults(built); }
+}
+
 // ── Review map: fetch candidate coordinates and plot them ────────────────────
 const _candCoord = {}; // candidate id -> {lon,lat} | null (cache)
 function firstLngLat(geom) {
@@ -942,10 +1023,12 @@ async function loadMoreCandidates() {
   const btn = el('recon-review-card').querySelector('.recon-loadmore');
   if (btn) { btn.textContent = 'loading…'; btn.disabled = true; }
   try {
+    const nsf = getNsFilter();
     const q = { q0: { query: meta.name, type: 'place', limit: want } };
     if (meta.country) q.q0.countries = [meta.country];
+    if (nsf.mode === 'only' && nsf.namespaces.length) q.q0.namespaces = nsf.namespaces;
     const data = await postReconcile(q, getCsrf());
-    const result = (data.q0 && data.q0.result) || [];
+    const result = applyNsToCandidates((data.q0 && data.q0.result) || []);
     m.candidates = result;
     m.top = result[0] || null;
     m.exhausted = result.length < want; // fewer than asked → no more to fetch
@@ -1021,9 +1104,11 @@ async function reconcileAll() {
   for (let b = 0; b < entries.length && !stopRequested; b += RECON_BATCH) {
     const slice = entries.slice(b, b + RECON_BATCH);
     const queries = {};
+    const nsf = getNsFilter();
     slice.forEach(([, v], j) => {
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
       if (v.country) q.countries = [v.country];
+      if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       queries['q' + j] = q;
     });
     let data;
@@ -1034,7 +1119,7 @@ async function reconcileAll() {
       break;
     }
     slice.forEach(([key], j) => {
-      const result = (data['q' + j] && data['q' + j].result) || [];
+      const result = applyNsToCandidates((data['q' + j] && data['q' + j].result) || []);
       project.matches[key] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at: new Date().toISOString() };
     });
     done += slice.length;
@@ -1088,6 +1173,9 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
+  const rw = el('recon-results-wrap');
+  if (rw) rw.addEventListener('scroll', () => { if (_resultRows.length) requestAnimationFrame(() => renderResultsWindow(false)); });
+
   // Accordion (strict): opening a pane collapses the others; clicking the open one collapses it.
   document.querySelectorAll('.recon-pane-toggle').forEach((btn) => btn.addEventListener('click', () => {
     const p = document.getElementById(btn.dataset.pane);
@@ -1100,6 +1188,13 @@ function init() {
   document.addEventListener('keydown', reviewKeydown);
   const revAll = el('recon-review-all');
   if (revAll) revAll.addEventListener('change', () => { reviewPos = 0; refreshReview(); });
+
+  // Source-gazetteer (namespace) picker modal.
+  const sourcesModal = el('recon-sources-modal');
+  if (sourcesModal) sourcesModal.addEventListener('show.bs.modal', populateSourcesModal);
+  const nsApply = el('recon-ns-apply');
+  if (nsApply) nsApply.addEventListener('click', applyNsFilter);
+  updateSourcesLabel();
 
   showCapabilities();
   loadSaved();
