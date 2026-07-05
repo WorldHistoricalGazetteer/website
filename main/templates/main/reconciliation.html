@@ -89,8 +89,8 @@
       <div class="d-flex align-items-center gap-2">
         <span id="recon-saved" class="recon-saved small text-success"></span>
         <button type="button" id="recon-backup" class="btn btn-sm btn-outline-secondary"
-                title="Download a .whgproj backup of this whole project (data, mapping, matches, decisions)">
-          <i class="fas fa-download me-1"></i>Backup
+                title="Save a .whgproj backup of this whole project (data, mapping, matches, decisions) to a file">
+          <i class="fas fa-floppy-disk me-1"></i>Backup
         </button>
         <button type="button" id="recon-clear" class="btn btn-sm btn-outline-secondary">
           <i class="fas fa-trash-alt me-1"></i>Clear my data
@@ -190,8 +190,10 @@
       <kbd>1</kbd>–<kbd>9</kbd> accept · <kbd>x</kbd> reject · <kbd>s</kbd> skip ·
       <kbd>n</kbd> no&nbsp;match · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>u</kbd> undo.
     </p>
-    <div id="recon-review-card" tabindex="0"></div>
-    <div class="recon-review-map d-none" id="recon-review-map"></div>
+    <div class="recon-review-layout">
+      <div id="recon-review-card" tabindex="0"></div>
+      <div class="recon-review-map d-none" id="recon-review-map"></div>
+    </div>
   </section>
 
 </div>

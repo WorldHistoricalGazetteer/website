@@ -29,7 +29,9 @@ const loadReconMap = async () => (ReconMap || (ReconMap = await import(/* webpac
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
 const RECON_BATCH = 25;                // queries per POST (service cap is 50)
-const RECON_CAND_LIMIT = 5;            // candidates requested per query
+const RECON_CAND_LIMIT = 10;           // candidates requested per query initially ('load more' fetches extra)
+// Candidate palette — shared with recon-map.js so the list number badges match the map markers.
+const RECON_COLORS = ['#1565c0', '#c2410c', '#2e7d32', '#6a1b9a', '#00838f', '#b26a00', '#455a64', '#c2185b', '#5d4037'];
 const RECON_RESULTS_PREVIEW = 200;     // rows shown in the results table (summary counts cover all)
 const DB_NAME = 'whg-recon-workbench';
 const DB_VERSION = 1;
@@ -551,7 +553,7 @@ function downloadBackup() {
   a.download = (project.fileName ? project.fileName.replace(/\.[^.]+$/, '') : 'workbench') + '.whgproj';
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  flashSaved('Backup downloaded');
+  flashSaved('Backup saved');
 }
 function restoreBackup(file) {
   const reader = new FileReader();
@@ -804,15 +806,23 @@ function renderReviewCard() {
   const dec = project.decisions && project.decisions[meta.key];
   const auto = m.top && isAutoConfirmed(m.top, getThreshold());
   const acceptedCi = dec && dec.status === 'accepted' ? dec.ci : (auto && !dec ? 0 : -1);
-  const list = (m.candidates || []).slice(0, 9).map((c, i) =>
+  const list = (m.candidates || []).map((c, i) =>
     `<li class="recon-cand${i === acceptedCi ? ' recon-cand--accepted' : ''}" data-ci="${i}">
-       <span class="recon-cand-key">${i + 1}</span>
-       <span class="recon-cand-body"><span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
+       <span class="recon-cand-key" style="background:${RECON_COLORS[i % RECON_COLORS.length]}">${i + 1}</span>
+       <span class="recon-cand-body">
+         <span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
     (c.match ? '<span class="badge bg-success ms-1">exact</span>' : '') +
-    `<span class="text-muted small ms-1">${truncate(c.description || '', 40)}</span>` +
-    `<span class="text-muted small ms-1">${esc(c.id || '')}</span></span>
+    `<span class="recon-cand-ns ms-1">${esc(nsName(c.id))}</span>` +
+    `<span class="text-muted small ms-1">${truncate(c.description || '', 36)}</span>` +
+    (c.alt_names && c.alt_names.length
+      ? `<span class="recon-cand-alt">also: ${c.alt_names.slice(0, 8).map((n) => truncate(n, 28)).join(', ')}${c.alt_names.length > 8 ? '…' : ''}</span>`
+      : '') +
+    `</span>
        <span class="recon-cand-score">${c.score}</span>
      </li>`).join('');
+  const loadMore = !m.top ? ''
+    : m.exhausted ? '<div class="small text-muted mt-1">all candidates shown.</div>'
+    : `<div class="mt-1"><button type="button" class="btn btn-sm btn-link p-0 recon-loadmore" data-act="more">load more candidates</button></div>`;
   card.innerHTML =
     `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
        <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
@@ -820,6 +830,7 @@ function renderReviewCard() {
        <div>${REVIEW_BADGE[effectiveStatus(meta.key)] || ''}</div>
      </div>
      <ol class="recon-cand-list">${list || '<li class="text-muted">No candidates were returned for this name.</li>'}</ol>
+     ${loadMore}
      <div class="recon-review-actions d-flex flex-wrap align-items-center gap-2 mt-2">
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" title="Back (←)"><i class="fas fa-arrow-left"></i></button>
        <button type="button" class="btn btn-sm btn-outline-danger" data-act="reject">Reject <kbd>x</kbd></button>
@@ -832,6 +843,15 @@ function renderReviewCard() {
   card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
 }
+
+// Candidate source namespace (from the id, e.g. "place:gn:745044" → "gn") → a human name.
+const NS_NAMES = {
+  gn: 'GeoNames', wd: 'Wikidata', tgn: 'Getty TGN', osm: 'OpenStreetMap', ohm: 'OpenHistoricalMap',
+  pl: 'Pleiades', pleiades: 'Pleiades', whg: 'World Historical Gazetteer', chgis: 'CHGIS',
+  hgis: 'HGIS de las Indias', alc: 'Alcedo', gb1900: 'GB1900',
+};
+function nsFromId(id) { const p = String(id || '').split(':'); return p.length >= 3 ? p[1] : 'whg'; }
+function nsName(id) { const ns = nsFromId(id); return NS_NAMES[ns] || ns.toUpperCase(); }
 
 // ── Review map: fetch candidate coordinates and plot them ────────────────────
 const _candCoord = {}; // candidate id -> {lon,lat} | null (cache)
@@ -866,9 +886,12 @@ let _mapToken = 0;
 async function updateReviewMap(key) {
   const box = el('recon-review-map'); if (!box) return;
   const token = ++_mapToken; // guard against out-of-order results when navigating fast
-  const m = project.matches[key]; const cands = (m.candidates || []).slice(0, 9);
+  const m = project.matches[key]; const cands = (m.candidates || []).slice(0, 15);
   const points = [];
-  await Promise.all(cands.map(async (c, i) => { const pt = await fetchCandidateCoord(c.id); if (pt) points.push({ ci: i, lon: pt.lon, lat: pt.lat, name: c.name }); }));
+  await Promise.all(cands.map(async (c, i) => {
+    const pt = await fetchCandidateCoord(c.id);
+    if (pt) points.push({ ci: i, lon: pt.lon, lat: pt.lat, name: c.name, namespace: nsName(c.id), altNames: c.alt_names || [], score: c.score });
+  }));
   let rowPoint = null;
   try { rowPoint = await rowOwnCoord(key); } catch (_) { /* ignore */ }
   if (token !== _mapToken) return; // a newer card was requested meanwhile
@@ -889,11 +912,34 @@ function acceptCandidate(ci) {
 function reviewAction(act) {
   if (act === 'next') return advance(1);
   if (act === 'prev') return advance(-1);
+  if (act === 'more') return loadMoreCandidates();
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   if (act === 'undo') { if (project.decisions) delete project.decisions[meta.key]; return afterDecision(false); }
   project.decisions = project.decisions || {};
   project.decisions[meta.key] = { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' };
   afterDecision(true);
+}
+// Fetch a larger batch of candidates for the current name (re-query with a higher limit).
+async function loadMoreCandidates() {
+  const meta = reviewMeta[reviewPos]; if (!meta) return;
+  const m = project.matches[meta.key];
+  const want = ((m.candidates && m.candidates.length) || 0) + 10;
+  const btn = el('recon-review-card').querySelector('.recon-loadmore');
+  if (btn) { btn.textContent = 'loading…'; btn.disabled = true; }
+  try {
+    const q = { q0: { query: meta.name, type: 'place', limit: want } };
+    if (meta.country) q.q0.countries = [meta.country];
+    const data = await postReconcile(q, getCsrf());
+    const result = (data.q0 && data.q0.result) || [];
+    m.candidates = result;
+    m.top = result[0] || null;
+    m.exhausted = result.length < want; // fewer than asked → no more to fetch
+    await persist();
+    renderReviewCard();
+  } catch (err) {
+    console.error('[recon] load more failed', err);
+    if (btn) { btn.textContent = 'load more failed — retry'; btn.disabled = false; }
+  }
 }
 function afterDecision(advanceAfter) {
   persist();
@@ -973,7 +1019,7 @@ async function reconcileAll() {
     }
     slice.forEach(([key], j) => {
       const result = (data['q' + j] && data['q' + j].result) || [];
-      project.matches[key] = { candidates: result, top: result[0] || null, at: new Date().toISOString() };
+      project.matches[key] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at: new Date().toISOString() };
     });
     done += slice.length;
     updateProgress(done, total);
