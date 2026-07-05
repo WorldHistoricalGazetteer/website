@@ -325,6 +325,12 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
 - **Add/edit columns**, incl. **URL/template columns** (`{col}`/`{authority.qid}` interpolation) and
   free-text notes.
 - Export: **CSV, JSON, LPF (first-class), LP-TSV**; all client-side (FileSaver).
+- **Include the augmented/derived columns on download (requested 2026-07-05).** The export must offer
+  to add the columns the workbench *computed*: the **WGS84 lat/lon** derived from a coordinate column
+  or grid-ref (when the coordinate detector converted any), and the **normalised ISO date(s)**
+  (`start`/`end`, from the date parser — including regnal/feast/global-calendar conversions) when any
+  were parsed. Present as opt-in extra columns (e.g. `wgs84_lat`, `wgs84_lon`, `date_start_iso`,
+  `date_end_iso`) so a user can download their original data *plus* the reconciled + converted values.
 - **LPF import** too (round-trips as an interchange format).
 - **"Contribute to WHG" enjoinder (MVP).** A reasonably-prominent, friendly (non-nagging)
   call-to-action inviting the user to give their finished, reconciled gazetteer back to WHG — because
