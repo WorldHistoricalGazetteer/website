@@ -192,6 +192,30 @@
 .recon-results tbody td { background: #fff; vertical-align: middle; }
 .recon-results .badge { font-weight: 600; }
 
+/* --- Candidate review (Phase 4) --- */
+#recon-review-card { border-radius: 6px; }
+#recon-review-card:focus { outline: 2px solid rgba(194, 65, 12, 0.35); outline-offset: 3px; }
+.recon-review-head { margin-bottom: .5rem; }
+.recon-cand-list { list-style: none; margin: 0; padding: 0; }
+.recon-cand {
+  display: flex; align-items: center; gap: .6rem;
+  border: 1px solid #e2e2e2; border-radius: 6px;
+  padding: .4rem .6rem; margin-bottom: .35rem; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.recon-cand:hover { background: #fff3e6; border-color: #c2410c; }
+.recon-cand--accepted { background: #eef7ee; border-color: #2e7d32; }
+.recon-cand-key {
+  flex: 0 0 auto; width: 1.5rem; height: 1.5rem; border-radius: 4px;
+  background: #455a64; color: #fff; font-size: .8rem; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.recon-cand--accepted .recon-cand-key { background: #2e7d32; }
+.recon-cand-body { flex: 1 1 auto; min-width: 0; }
+.recon-cand-name { font-weight: 600; }
+.recon-cand-score { flex: 0 0 auto; font-variant-numeric: tabular-nums; color: #555; font-weight: 600; }
+.recon-review kbd { font-size: .7rem; padding: .1rem .3rem; }
+
 /* Left accent on a role <select> to echo the role's colour, mirroring the preview scheme */
 .recon-role-select { border-left-width: 4px; }
 .recon-role-select.role-name    { border-left-color: #1565c0; }

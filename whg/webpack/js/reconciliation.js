@@ -474,13 +474,16 @@ function showResume() {
 function resetUI() {
   project = null;
   stopRequested = true;
+  reviewMeta = []; reviewPos = 0;
   el('recon-result').classList.add('d-none');
   el('recon-resume').classList.add('d-none');
   el('recon-recon').classList.add('d-none');
   el('recon-progress-wrap').classList.add('d-none');
   el('recon-results-wrap').classList.add('d-none');
+  el('recon-review').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
-    'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text'].forEach((id) => {
+    'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
+    'recon-review-card', 'recon-review-progress'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
   });
   const input = el('recon-file'); if (input) input.value = '';
@@ -645,26 +648,54 @@ function isAutoConfirmed(top, threshold) {
   return !!top && (top.match || Number(top.score) >= threshold);
 }
 
-function renderResults(built) {
+// ── Candidate review (Phase 4) ───────────────────────────────────────────────
+let reviewMeta = []; // [{key, rows, name, country}] — reviewable unique names, highest-impact first
+let reviewPos = 0;
+
+const REVIEW_BADGE = {
+  accepted: '<span class="badge bg-success">accepted ✓</span>',
+  auto: '<span class="badge bg-success">auto ✓</span>',
+  candidate: '<span class="badge bg-info text-dark">candidate</span>',
+  rejected: '<span class="badge bg-dark">rejected</span>',
+  skipped: '<span class="badge bg-secondary">skipped</span>',
+  nomatch: '<span class="badge bg-warning text-dark">no match</span>',
+  none: '<span class="badge bg-warning text-dark">no match</span>',
+};
+// Effective status of a unique key: explicit decision > auto-confirm > candidate/no-match.
+function effectiveStatus(key) {
+  const dec = project.decisions && project.decisions[key];
+  if (dec) return dec.status;
+  const m = project.matches && project.matches[key];
+  if (m && m.top) return isAutoConfirmed(m.top, getThreshold()) ? 'auto' : 'candidate';
+  return 'none';
+}
+// The candidate accepted for a key (explicit accept, or auto-confirmed top), or null.
+function acceptedCandidate(key) {
+  const m = project.matches && project.matches[key];
+  if (!m) return null;
+  const dec = project.decisions && project.decisions[key];
+  if (dec) return dec.status === 'accepted' ? (m.candidates && m.candidates[dec.ci]) || null : null;
+  return (m.top && isAutoConfirmed(m.top, getThreshold())) ? m.top : null;
+}
+
+function renderResultsTable(built) {
   const matches = project.matches || {};
   const threshold = getThreshold();
-  let matched = 0, auto = 0, nomatch = 0, pending = 0, rowsMatched = 0, rowsAuto = 0;
+  let matched = 0, auto = 0, nomatch = 0, pending = 0, rowsMatched = 0, accepted = 0;
   built.map.forEach((v, key) => {
     const m = matches[key];
     if (!m) { pending += 1; return; }
-    if (m.top) {
-      matched += 1; rowsMatched += v.rows.length;
-      if (isAutoConfirmed(m.top, threshold)) { auto += 1; rowsAuto += v.rows.length; }
-    } else nomatch += 1;
+    if (m.top) { matched += 1; rowsMatched += v.rows.length; if (isAutoConfirmed(m.top, threshold)) auto += 1; }
+    else nomatch += 1;
+    if (project.decisions && project.decisions[key] && project.decisions[key].status === 'accepted') accepted += 1;
   });
   setReconSummary(
     `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> ` +
-    `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto-confirmed)</span> · ` +
+    `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto, <strong>${accepted.toLocaleString()}</strong> accepted)</span> · ` +
     `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
     `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
     `across <strong>${built.map.size.toLocaleString()}</strong> unique names, ` +
-    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows ` +
-    `(${rowsAuto.toLocaleString()} auto-confirmed).`);
+    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
 
   const rowsToShow = Math.min(project.rows.length, RECON_RESULTS_PREVIEW);
   const body = [];
@@ -674,13 +705,11 @@ function renderResults(built) {
     const m = matches[info.key];
     let status, top = '', score = '';
     if (!m) status = '<span class="badge bg-secondary">pending</span>';
-    else if (m.top) {
-      status = isAutoConfirmed(m.top, threshold)
-        ? '<span class="badge bg-success">auto ✓</span>'
-        : '<span class="badge bg-info text-dark">candidate</span>';
-      top = `${truncate(m.top.name, 50)} <span class="text-muted small">${truncate(m.top.description || '', 30)}</span>`;
-      score = m.top.score;
-    } else status = '<span class="badge bg-warning text-dark">no match</span>';
+    else {
+      status = REVIEW_BADGE[effectiveStatus(info.key)] || '';
+      const show = acceptedCandidate(info.key) || m.top;
+      if (show) { top = `${truncate(show.name, 50)} <span class="text-muted small">${truncate(show.description || '', 30)}</span>`; score = show.score; }
+    }
     body.push(`<tr><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}</td>` +
               `<td>${status}</td><td>${top}</td><td>${score}</td></tr>`);
   }
@@ -688,6 +717,124 @@ function renderResults(built) {
   el('recon-results-wrap').classList.remove('d-none');
   el('recon-results-note').textContent = project.rows.length > RECON_RESULTS_PREVIEW
     ? `Showing the first ${RECON_RESULTS_PREVIEW} rows; summary counts cover all ${project.total.toLocaleString()}.` : '';
+}
+function renderResults(built) { renderResultsTable(built); refreshReview(); }
+
+// Reviewable unique names (those with ≥1 candidate), highest row-impact first.
+function reviewableKeys(built) {
+  const arr = [];
+  built.map.forEach((v, key) => { const m = project.matches[key]; if (m && m.top) arr.push({ key, rows: v.rows.length, name: v.query, country: v.country }); });
+  arr.sort((a, b) => b.rows - a.rows);
+  return arr;
+}
+function needsReview(key) {
+  const m = project.matches[key];
+  return !(project.decisions && project.decisions[key]) && m && m.top && !isAutoConfirmed(m.top, getThreshold());
+}
+function refreshReview() {
+  const sec = el('recon-review');
+  if (!sec) return;
+  const built = buildUniqueQueries();
+  if (!built || !project.matches || !Object.keys(project.matches).length) { sec.classList.add('d-none'); return; }
+  reviewMeta = reviewableKeys(built);
+  if (!reviewMeta.length) { sec.classList.add('d-none'); return; }
+  sec.classList.remove('d-none');
+  if (reviewPos >= reviewMeta.length) reviewPos = 0;
+  const all = el('recon-review-all') && el('recon-review-all').checked;
+  if (!all && !needsReview(reviewMeta[reviewPos].key)) {
+    const j = reviewMeta.findIndex((r) => needsReview(r.key));
+    if (j >= 0) reviewPos = j;
+  }
+  renderReviewCard();
+  updateReviewProgress();
+}
+function updateReviewProgress() {
+  const pending = reviewMeta.filter((r) => needsReview(r.key)).length;
+  const decided = reviewMeta.filter((r) => project.decisions && project.decisions[r.key]).length;
+  const p = el('recon-review-progress');
+  if (p) p.textContent = `${decided.toLocaleString()} decided · ${pending.toLocaleString()} to review · ${reviewMeta.length.toLocaleString()} unique names`;
+}
+function renderReviewCard() {
+  const card = el('recon-review-card');
+  if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
+  const meta = reviewMeta[reviewPos];
+  const m = project.matches[meta.key];
+  const dec = project.decisions && project.decisions[meta.key];
+  const auto = m.top && isAutoConfirmed(m.top, getThreshold());
+  const acceptedCi = dec && dec.status === 'accepted' ? dec.ci : (auto && !dec ? 0 : -1);
+  const list = (m.candidates || []).slice(0, 9).map((c, i) =>
+    `<li class="recon-cand${i === acceptedCi ? ' recon-cand--accepted' : ''}" data-ci="${i}">
+       <span class="recon-cand-key">${i + 1}</span>
+       <span class="recon-cand-body"><span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
+    (c.match ? '<span class="badge bg-success ms-1">exact</span>' : '') +
+    `<span class="text-muted small ms-1">${truncate(c.description || '', 40)}</span>` +
+    `<span class="text-muted small ms-1">${esc(c.id || '')}</span></span>
+       <span class="recon-cand-score">${c.score}</span>
+     </li>`).join('');
+  card.innerHTML =
+    `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
+       <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
+         <span class="text-muted small ms-2">${meta.rows.toLocaleString()} row${meta.rows === 1 ? '' : 's'} · ${reviewPos + 1} of ${reviewMeta.length}</span></div>
+       <div>${REVIEW_BADGE[effectiveStatus(meta.key)] || ''}</div>
+     </div>
+     <ol class="recon-cand-list">${list || '<li class="text-muted">No candidates were returned for this name.</li>'}</ol>
+     <div class="recon-review-actions d-flex flex-wrap align-items-center gap-2 mt-2">
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" title="Back (←)"><i class="fas fa-arrow-left"></i></button>
+       <button type="button" class="btn btn-sm btn-outline-danger" data-act="reject">Reject <kbd>x</kbd></button>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-act="skip">Skip <kbd>s</kbd></button>
+       <button type="button" class="btn btn-sm btn-outline-warning" data-act="nomatch">No match <kbd>n</kbd></button>
+       <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo">Undo <kbd>u</kbd></button>
+       <button type="button" class="btn btn-sm btn-primary ms-auto" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
+     </div>`;
+  card.querySelectorAll('.recon-cand').forEach((li) => li.addEventListener('click', () => acceptCandidate(Number(li.dataset.ci))));
+  card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
+}
+function acceptCandidate(ci) {
+  const meta = reviewMeta[reviewPos]; if (!meta) return;
+  const c = (project.matches[meta.key].candidates || [])[ci]; if (!c) return;
+  project.decisions = project.decisions || {};
+  project.decisions[meta.key] = { status: 'accepted', ci, place_id: c.id, label: c.name, score: c.score };
+  afterDecision(true);
+}
+function reviewAction(act) {
+  if (act === 'next') return advance(1);
+  if (act === 'prev') return advance(-1);
+  const meta = reviewMeta[reviewPos]; if (!meta) return;
+  if (act === 'undo') { if (project.decisions) delete project.decisions[meta.key]; return afterDecision(false); }
+  project.decisions = project.decisions || {};
+  project.decisions[meta.key] = { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' };
+  afterDecision(true);
+}
+function afterDecision(advanceAfter) {
+  persist();
+  const built = buildUniqueQueries(); if (built) renderResultsTable(built);
+  updateReviewProgress();
+  if (advanceAfter) advance(1); else renderReviewCard();
+}
+function advance(dir) {
+  if (!reviewMeta.length) return;
+  const all = el('recon-review-all') && el('recon-review-all').checked;
+  let i = reviewPos + dir;
+  if (!all) { while (i >= 0 && i < reviewMeta.length && !needsReview(reviewMeta[i].key)) i += dir; }
+  reviewPos = Math.max(0, Math.min(reviewMeta.length - 1, i));
+  renderReviewCard();
+  updateReviewProgress();
+}
+function reviewKeydown(e) {
+  const sec = el('recon-review');
+  if (!sec || sec.classList.contains('d-none')) return;
+  const a = document.activeElement;
+  if (a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA')) return;
+  const k = e.key;
+  if (k >= '1' && k <= '9') acceptCandidate(Number(k) - 1);
+  else if (k === 'x' || k === 'X') reviewAction('reject');
+  else if (k === 's' || k === 'S') reviewAction('skip');
+  else if (k === 'n' || k === 'N') reviewAction('nomatch');
+  else if (k === 'u' || k === 'U') reviewAction('undo');
+  else if (k === 'ArrowRight') advance(1);
+  else if (k === 'ArrowLeft') advance(-1);
+  else return;
+  e.preventDefault();
 }
 
 // Show/refresh the reconcile section based on whether a 'name' column is mapped.
@@ -783,6 +930,11 @@ function init() {
     const built = buildUniqueQueries();
     if (built && project.matches && Object.keys(project.matches).length) renderResults(built);
   });
+
+  // Phase 4 — candidate review: keyboard-first + the "review all" toggle.
+  document.addEventListener('keydown', reviewKeydown);
+  const revAll = el('recon-review-all');
+  if (revAll) revAll.addEventListener('change', () => { reviewPos = 0; refreshReview(); });
 
   showCapabilities();
   loadSaved();

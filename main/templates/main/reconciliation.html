@@ -163,6 +163,23 @@
     </div>
   </section>
 
+  <!-- Candidate review (Phase 4): keyboard-first accept/reject/skip/no-match per unique name -->
+  <section class="recon-card d-none" id="recon-review" aria-labelledby="recon-review-title">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <h2 id="recon-review-title" class="h5 mb-0">4 · Review &amp; confirm matches</h2>
+      <div class="d-flex align-items-center gap-3 small">
+        <label class="mb-0"><input type="checkbox" id="recon-review-all"> review all (incl. auto-confirmed)</label>
+        <span id="recon-review-progress" class="text-muted"></span>
+      </div>
+    </div>
+    <p class="text-muted small mb-2">
+      Decisions apply to every row sharing the name and save automatically. Keyboard:
+      <kbd>1</kbd>–<kbd>9</kbd> accept · <kbd>x</kbd> reject · <kbd>s</kbd> skip ·
+      <kbd>n</kbd> no&nbsp;match · <kbd>→</kbd> next · <kbd>←</kbd> back · <kbd>u</kbd> undo.
+    </p>
+    <div id="recon-review-card" tabindex="0"></div>
+  </section>
+
 </div>
 {% endblock %}
 
