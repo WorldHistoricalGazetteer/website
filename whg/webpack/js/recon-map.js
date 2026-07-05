@@ -14,6 +14,7 @@ const COLORS = ['#1565c0', '#c2410c', '#2e7d32', '#6a1b9a', '#00838f', '#b26a00'
 let map = null;
 let markers = [];
 let hoverPopup = null;
+let ro = null; // ResizeObserver — keeps MapLibre sized when the accordion pane expands
 
 const ML = () => window.whg_maplibre; // the wrapped MapLibre (Map/Marker/Popup/LngLatBounds)
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
@@ -45,7 +46,34 @@ function ensureMap(container) {
     fullscreenControl: true,
   });
   hoverPopup = new M.Popup({ closeButton: false, closeOnClick: false, offset: 16, className: 'recon-map-popup' });
+
+  // The map is created inside a collapsed accordion pane (ancestor display:none → container 0×0).
+  // When the pane expands the container gains its real size; MapLibre must be told to resize or it
+  // stays blank. A ResizeObserver catches every such transition (pane expand, fullscreen, window).
+  if (ro) { try { ro.disconnect(); } catch (_) { /* ignore */ } }
+  if (typeof ResizeObserver !== 'undefined') {
+    ro = new ResizeObserver((entries) => {
+      for (const e of entries) {
+        const r = e.contentRect;
+        if (map && r.width > 0 && r.height > 0) { map.resize(); refit(); }
+      }
+    });
+    ro.observe(container);
+  }
   return map;
+}
+
+let lastBounds = null; // remembered so a resize can re-fit once the pane becomes visible
+function refit() {
+  if (map && lastBounds && !lastBounds.isEmpty()) {
+    map.fitBounds(lastBounds, { padding: 48, maxZoom: 10, duration: 0 });
+  }
+}
+
+// Called from the workbench when the review pane is expanded, as a belt-and-braces companion to
+// the ResizeObserver (some browsers coalesce the observer callback a frame late).
+export function resizeReviewMap() {
+  if (map) { map.resize(); refit(); }
 }
 
 // points: [{ci, lon, lat, name, namespace, altNames, score}]; rowPoint: {lon,lat}|null; onAccept: (ci)=>void
@@ -77,13 +105,15 @@ export function renderReviewMap(container, points, rowPoint, onAccept) {
     bounds.extend([rowPoint.lon, rowPoint.lat]);
   }
 
+  lastBounds = bounds;
   const fit = () => {
+    m.resize(); // container may have gained size since creation (accordion expand)
     if (!bounds.isEmpty()) m.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });
-    m.resize();
   };
   if (m.loaded()) fit(); else m.once('load', fit);
 }
 
 export function destroyReviewMap() {
-  if (map) { try { map.remove(); } catch (_) { /* ignore */ } map = null; markers = []; hoverPopup = null; }
+  if (ro) { try { ro.disconnect(); } catch (_) { /* ignore */ } ro = null; }
+  if (map) { try { map.remove(); } catch (_) { /* ignore */ } map = null; markers = []; hoverPopup = null; lastBounds = null; }
 }

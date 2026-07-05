@@ -475,6 +475,11 @@ function renderAll() {
 // Strict accordion — open one pane, collapse all the others (keeps their headers + summaries visible).
 function openPane(id) {
   document.querySelectorAll('.recon-pane').forEach((p) => p.classList.toggle('recon-collapsed', p.id !== id));
+  // The review map is created inside this (previously collapsed) pane, so its MapLibre container was
+  // 0×0 at init. Now that the pane is visible, tell the map to resize — otherwise it renders blank.
+  if (id === 'recon-review' && ReconMap && ReconMap.resizeReviewMap) {
+    requestAnimationFrame(() => ReconMap.resizeReviewMap());
+  }
 }
 function updatePaneSummaries() {
   if (!project) return;
