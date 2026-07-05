@@ -298,6 +298,16 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
 - Pause/resume; reconciled/total counter; recover cleanly on refocus (background-throttle mitigation).
 - **Acceptance:** reconcile the Lewis England set (~16k rows, heavy name repetition) with query count
   ≪ row count; pause, reload, resume to completion.
+- **TODO — hierarchical / two-pass reconciliation (admin-parent first).** When a dataset has an
+  **administrative-parent column** (not just a country — e.g. county, parish, province, region),
+  let the user first **pick a namespaced source gazetteer** (from the registry: gn, wd, tgn, a WHG
+  authority…) and **reconcile the parent column against it**, then use each row's resolved parent as
+  a **containment constraint** for the place-name reconciliation. Maps onto the gateway's existing
+  `contained_in` / `containment` (`within`/`intersects`) and `namespaces` filters — so the place
+  query is scoped to (or scored by) its reconciled parent. Sharpens disambiguation of same-name
+  places (the CP40 "Newton"s) far more than a flat country hint. Requires: a parent-column role +
+  a source-gazetteer picker, a first reconciliation pass over the (deduped) parent values, and
+  threading the accepted parent `place_id`/geometry into the name pass. (Added 2026-07-05.)
 
 ### Phase 4 — Candidate review & disambiguation (MVP)
 - Review panel: ranked candidates (label, type, country, coords, authority IDs) per row.
