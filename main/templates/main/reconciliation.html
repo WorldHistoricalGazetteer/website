@@ -1,0 +1,103 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{#
+  Gazetteer Workbench — browser-based, local-first Reconciliation UI.
+  STAFF-ONLY, UNPUBLISHED preview. Server-side gate is in main.views.reconciliation_view
+  (non-staff receive a 404). See WorldHistoricalGazetteer/place#111 (spec) and #112 (collaboration).
+  This is the Phase 1 skeleton: page shell, unpublished-feature signalling, privacy statement,
+  and a purely in-browser file-inspection proof-of-concept. No data leaves the browser.
+#}
+
+{% block title %}<title>WHG · Reconciliation (staff preview)</title>{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/reconciliation.bundle.css' %}" rel="stylesheet"/>
+{% endblock %}
+
+{% block content %}
+<div class="container recon-wrap py-3">
+
+  <!-- Unpublished-feature signal -->
+  <div class="recon-unpublished-banner" role="note">
+    <i class="fas fa-flask me-2"></i>
+    <span><strong>Unpublished feature — staff preview.</strong>
+      This is an early skeleton of the Gazetteer Workbench (issue
+      <a href="https://github.com/WorldHistoricalGazetteer/place/issues/111" target="_blank"
+         rel="noopener noreferrer">place#111</a>). It is visible only to staff and is not linked
+      for the public.</span>
+  </div>
+
+  <header class="recon-header">
+    <h1 class="h3 mb-1">
+      Reconciliation <span class="recon-beta-pill">beta</span>
+    </h1>
+    <p class="text-muted mb-0">
+      Take a tabular place dataset from raw file to reconciled, submission-ready gazetteer —
+      <strong>entirely in your browser</strong>. Works for a single place or thousands of rows.
+    </p>
+  </header>
+
+  <!-- Privacy statement (MVP requirement) -->
+  <div class="recon-privacy" role="note">
+    <i class="fas fa-lock me-2"></i>
+    <span>Your dataset stays on <strong>this device, in this browser</strong>. Nothing is uploaded.
+      When reconciliation is wired up, only minimal, de-duplicated queries will be sent to WHG —
+      never your rows — and only the rows you explicitly choose will ever be contributed.</span>
+  </div>
+
+  <!-- Import step (Phase 1 proof-of-concept: local parse only) -->
+  <section class="recon-card" aria-labelledby="recon-import-title">
+    <h2 id="recon-import-title" class="h5">1 · Import a dataset</h2>
+    <p class="text-muted small mb-2">
+      CSV, TSV or JSON. Parsed locally to preview columns and detect roles — a first step towards the
+      full import → reconcile → enrich → submit workflow. (XLSX/LPF and persistence come next.)
+    </p>
+
+    <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
+         role="button" aria-label="Choose or drop a data file">
+      <input id="recon-file" type="file" class="d-none"
+             accept=".csv,.tsv,.txt,.json,text/csv,text/tab-separated-values,application/json"/>
+      <i class="fas fa-file-import recon-dropzone-icon"></i>
+      <div class="recon-dropzone-text">
+        <strong>Choose a file</strong> or drag it here
+      </div>
+      <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON — never leaves your browser</div>
+    </div>
+
+    <div class="recon-caps small text-muted mt-2" id="recon-caps"></div>
+  </section>
+
+  <!-- Local preview (populated by reconciliation.js) -->
+  <section class="recon-card d-none" id="recon-result" aria-labelledby="recon-result-title">
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <h2 id="recon-result-title" class="h5 mb-0">2 · Detected structure</h2>
+      <button type="button" id="recon-clear" class="btn btn-sm btn-outline-secondary">
+        <i class="fas fa-trash-alt me-1"></i>Clear my data
+      </button>
+    </div>
+    <div id="recon-summary" class="recon-summary small text-muted my-2"></div>
+    <div id="recon-columns" class="recon-columns mb-2"></div>
+    <div class="table-responsive">
+      <table class="table table-sm table-bordered recon-preview">
+        <thead id="recon-preview-head"></thead>
+        <tbody id="recon-preview-body"></tbody>
+      </table>
+    </div>
+    <p class="text-muted small mb-0">
+      Showing a local preview only. Column-mapping confirmation, persistence, and reconciliation
+      are the next phases (see the plan in <code>developer/plan-gazetteerWorkbench.prompt.md</code>).
+    </p>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block deferredScripts %}
+  var scripts = [
+    {
+      src: '{% static 'webpack/reconciliation.bundle.js' %}',
+      type: 'module',
+    },
+  ]
+{% endblock %}

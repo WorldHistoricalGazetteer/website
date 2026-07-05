@@ -114,6 +114,9 @@ urlpatterns = [
                   # more static content - 2024-01
                   path('workbench/', TemplateView.as_view(template_name="main/workbench_3col.html"), name="workbench"),
 
+                  # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)
+                  path('reconciliation/', views.reconciliation_view, name="reconciliation"),
+
                   # yet more static content - 2024-02
                   path('main_regions/', TemplateView.as_view(template_name="main/regions.html"), name="main-regions"),
                   path('journeys_routes/', TemplateView.as_view(template_name="main/journeys_routes.html"),

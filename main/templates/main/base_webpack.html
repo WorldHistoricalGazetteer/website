@@ -184,6 +184,18 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'teaching' %}">Teaching</a>
                     </li>
+                    {% if user.is_staff %}
+                    {# Reconciliation UI — STAFF-ONLY, unpublished preview (place#111/#112).
+                       Burnt-orange pill signals an in-development feature not yet public. #}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'reconciliation' %}"
+                           title="Staff preview — unpublished Gazetteer Workbench (place#111)">
+                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                                Reconciliation <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
+                            </span>
+                        </a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                            aria-expanded="false">

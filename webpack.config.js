@@ -44,6 +44,7 @@ module.exports = {
 		places: './whg/webpack/js/places.js',
 		portal: './whg/webpack/js/portal.js',
 		profile: './whg/webpack/js/profile.js',
+		reconciliation: './whg/webpack/js/reconciliation.js',
 		review: './whg/webpack/js/review.js',
 		search: './whg/webpack/js/search.js',
 		search_functions: './whg/webpack/js/search_resources.js',

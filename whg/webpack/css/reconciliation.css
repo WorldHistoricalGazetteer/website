@@ -1,0 +1,124 @@
+/* reconciliation.css
+   Gazetteer Workbench — Reconciliation UI (staff preview, unpublished).
+   The burnt-orange accent is a deliberate "not published / staff-only" signal, matching the
+   coloured navbar tab. See place#111 / developer/plan-gazetteerWorkbench.prompt.md. */
+
+.recon-wrap {
+  max-width: 1100px;
+}
+
+/* --- Unpublished-feature banner --- */
+.recon-unpublished-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: .25rem;
+  background: repeating-linear-gradient(
+    45deg, #fff3e6, #fff3e6 12px, #ffe9d1 12px, #ffe9d1 24px);
+  border: 1px solid #f0a35e;
+  border-left: 4px solid #c2410c;
+  color: #7a2e00;
+  border-radius: 6px;
+  padding: .6rem .85rem;
+  font-size: .9rem;
+  margin-bottom: 1rem;
+}
+.recon-unpublished-banner a { color: #9a3412; text-decoration: underline; }
+
+/* --- Header --- */
+.recon-header { margin-bottom: 1rem; }
+.recon-beta-pill {
+  display: inline-block;
+  vertical-align: middle;
+  background: #c2410c;
+  color: #fff;
+  font-size: .55em;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  padding: .15em .5em;
+  position: relative;
+  top: -2px;
+}
+
+/* --- Privacy note --- */
+.recon-privacy {
+  display: flex;
+  align-items: flex-start;
+  gap: .25rem;
+  background: #eef7ee;
+  border: 1px solid #bcdcbc;
+  border-left: 4px solid #2e7d32;
+  color: #1b4d1f;
+  border-radius: 6px;
+  padding: .6rem .85rem;
+  font-size: .9rem;
+  margin-bottom: 1.25rem;
+}
+
+/* --- Cards --- */
+.recon-card {
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  padding: 1rem 1.15rem;
+  margin-bottom: 1.25rem;
+  background: #fff;
+}
+
+/* --- Dropzone --- */
+.recon-dropzone {
+  border: 2px dashed #c8a07a;
+  border-radius: 8px;
+  padding: 1.75rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  background: #fffaf5;
+}
+.recon-dropzone:hover,
+.recon-dropzone:focus { border-color: #c2410c; background: #fff3e6; outline: none; }
+.recon-dropzone--over { border-color: #c2410c; background: #ffe9d1; }
+.recon-dropzone-icon { font-size: 1.8rem; color: #c2410c; margin-bottom: .4rem; }
+.recon-dropzone-text { font-size: 1rem; }
+
+/* --- Column chips (guessed roles) --- */
+.recon-columns { display: flex; flex-wrap: wrap; gap: .4rem; }
+.recon-col-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  background: #f4f4f5;
+  border: 1px solid #dcdcdc;
+  border-radius: 14px;
+  padding: .15rem .3rem .15rem .6rem;
+  font-size: .82rem;
+}
+.recon-col-role {
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #fff;
+  background: #9e9e9e;
+  border-radius: 10px;
+  padding: .05rem .45rem;
+}
+/* role accent colours */
+.recon-col-chip.role-name    .recon-col-role { background: #1565c0; }
+.recon-col-chip.role-county  .recon-col-role,
+.recon-col-chip.role-country .recon-col-role { background: #6a1b9a; }
+.recon-col-chip.role-type    .recon-col-role { background: #00838f; }
+.recon-col-chip.role-lat     .recon-col-role,
+.recon-col-chip.role-lon     .recon-col-role,
+.recon-col-chip.role-coords  .recon-col-role { background: #2e7d32; }
+.recon-col-chip.role-date    .recon-col-role { background: #b26a00; }
+.recon-col-chip.role-id      .recon-col-role { background: #455a64; }
+
+/* --- Preview table --- */
+.recon-preview { font-size: .8rem; }
+.recon-preview th {
+  position: sticky;
+  top: 0;
+  background: #f8f9fa;
+  white-space: nowrap;
+}
+.recon-preview td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

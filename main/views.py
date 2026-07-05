@@ -10,7 +10,7 @@ from django.contrib.auth.models import Group
 from django.core.mail import BadHeaderError
 from django.db.models import Q
 from django.db.models.functions import Lower
-from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseServerError
+from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseServerError, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -486,6 +486,16 @@ def submit_dataset(request):
         return redirect(url)
     messages.info(request, "Dataset submission is being set up — please check back soon, or contact us in the meantime.")
     return redirect('home')
+
+
+# Gazetteer Workbench — browser-based, local-first Reconciliation UI.
+# STAFF-ONLY, UNPUBLISHED preview (see WorldHistoricalGazetteer/place#111 spec, #112 collaboration).
+# Non-staff receive a 404 so the feature's existence is not disclosed while it is unpublished.
+@login_required
+def reconciliation_view(request):
+    if not request.user.is_staff:
+        raise Http404()
+    return render(request, "main/reconciliation.html")
 
 
 # gets the correct view based on user group
