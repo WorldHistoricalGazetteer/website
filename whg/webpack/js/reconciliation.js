@@ -207,43 +207,116 @@ function renderCoords() {
   const latIdx = colIndexByRole('lat');
   const lonIdx = colIndexByRole('lon');
 
+  let head = '';
   if (coordsIdx >= 0) {
     const detection = detectCoordFormat(coordColumnSamples(coordsIdx));
     const chosen = project.coordFormat || detection.format;
     const cov = coordCoverage(chosen, coordsIdx);
     const opts = COORD_FORMATS.map(([id, l]) => `<option value="${id}"${id === chosen ? ' selected' : ''}>${esc(l)}</option>`).join('');
-    box.innerHTML =
-      `<div class="recon-coords-inner">
-         <div class="d-flex align-items-center flex-wrap gap-2">
-           <i class="fas fa-map-location-dot text-secondary"></i>
-           <span>Coordinate column detected as</span>
-           <select id="recon-coord-format" class="form-select form-select-sm" style="width:auto">${opts}</select>
-           ${detection.ambiguous ? '<span class="badge bg-warning text-dark">lat/lon order ambiguous — check the sample and change if wrong</span>' : ''}
-         </div>
-         <div class="small text-muted mt-1">Converts <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} checked to WGS84 · ${sampleHtml(cov, 'no values parsed with this format — pick another')}</div>
-       </div>`;
-    box.classList.remove('d-none');
-    const sel = el('recon-coord-format');
-    if (sel) sel.addEventListener('change', () => { project.coordFormat = sel.value; persist(); renderCoords(); });
+    head =
+      `<div class="d-flex align-items-center flex-wrap gap-2">
+         <i class="fas fa-map-location-dot text-secondary"></i>
+         <span>Coordinate column detected as</span>
+         <select id="recon-coord-format" class="form-select form-select-sm" style="width:auto">${opts}</select>
+         ${detection.ambiguous ? '<span class="badge bg-warning text-dark">lat/lon order ambiguous — check the sample and change if wrong</span>' : ''}
+       </div>
+       <div class="small text-muted mt-1">Sample: <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} → WGS84 · ${sampleHtml(cov, 'no values parsed with this format — pick another')}</div>`;
   } else if (latIdx >= 0 && lonIdx >= 0) {
     const swapped = !!project.coordSwap;
     const cov = pairCoverage(latIdx, lonIdx, swapped);
-    box.innerHTML =
-      `<div class="recon-coords-inner">
-         <div class="d-flex align-items-center flex-wrap gap-2">
-           <i class="fas fa-map-location-dot text-secondary"></i>
-           <span>Latitude + Longitude columns (decimal degrees)</span>
-           <label class="small mb-0"><input type="checkbox" id="recon-coord-swap"${swapped ? ' checked' : ''}> swap lat/lon</label>
-         </div>
-         <div class="small text-muted mt-1">Converts <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} checked · ${sampleHtml(cov, 'no valid decimal pairs — try swapping lat/lon')}</div>
-       </div>`;
-    box.classList.remove('d-none');
-    const sw = el('recon-coord-swap');
-    if (sw) sw.addEventListener('change', () => { project.coordSwap = sw.checked; persist(); renderCoords(); });
+    head =
+      `<div class="d-flex align-items-center flex-wrap gap-2">
+         <i class="fas fa-map-location-dot text-secondary"></i>
+         <span>Latitude + Longitude columns (decimal degrees)</span>
+         <label class="small mb-0"><input type="checkbox" id="recon-coord-swap"${swapped ? ' checked' : ''}> swap lat/lon</label>
+       </div>
+       <div class="small text-muted mt-1">Sample: <strong>${cov.parsed.toLocaleString()}</strong> of ${cov.checked.toLocaleString()} · ${sampleHtml(cov, 'no valid decimal pairs — try swapping lat/lon')}</div>`;
   } else {
     box.classList.add('d-none');
     box.innerHTML = '';
+    return;
   }
+
+  box.innerHTML =
+    `<div class="recon-coords-inner">
+       ${head}
+       <div class="mt-2">
+         <button type="button" id="recon-coord-checkall" class="btn btn-sm btn-outline-secondary">
+           <i class="fas fa-list-check me-1"></i>Validate all ${project.total.toLocaleString()} rows
+         </button>
+       </div>
+       <div id="recon-coord-report" class="recon-coord-report mt-2"></div>
+     </div>`;
+  box.classList.remove('d-none');
+
+  const sel = el('recon-coord-format');
+  if (sel) sel.addEventListener('change', () => { project.coordFormat = sel.value; persist(); renderCoords(); });
+  const sw = el('recon-coord-swap');
+  if (sw) sw.addEventListener('change', () => { project.coordSwap = sw.checked; persist(); renderCoords(); });
+  const chk = el('recon-coord-checkall');
+  if (chk) chk.addEventListener('click', checkAllCoords);
+}
+
+function currentCoordFormat() {
+  const sel = el('recon-coord-format');
+  if (sel) return sel.value;
+  const coordsIdx = colIndexByRole('coords');
+  if (coordsIdx >= 0) return project.coordFormat || detectCoordFormat(coordColumnSamples(coordsIdx)).format;
+  return null;
+}
+
+// Validate EVERY row against the chosen coordinate format and report the ones that cannot convert.
+function checkAllCoords() {
+  const coordsIdx = colIndexByRole('coords');
+  const latIdx = colIndexByRole('lat');
+  const lonIdx = colIndexByRole('lon');
+  const single = coordsIdx >= 0;
+  const fmt = single ? currentCoordFormat() : null;
+  const swap = !!project.coordSwap;
+  const blankStr = (v) => v == null || String(v).trim() === '';
+
+  let valid = 0, blank = 0;
+  const failures = [];
+  const total = project.rows.length;
+  for (let i = 0; i < total; i++) {
+    const r = project.rows[i];
+    let c, raw, isBlank;
+    if (single) {
+      raw = r[coordsIdx]; c = parseCoord(fmt, raw); isBlank = blankStr(raw);
+    } else {
+      raw = `${blankStr(r[latIdx]) ? '' : r[latIdx]}, ${blankStr(r[lonIdx]) ? '' : r[lonIdx]}`;
+      c = parseLatLonPair(r[latIdx], r[lonIdx], swap);
+      isBlank = blankStr(r[latIdx]) && blankStr(r[lonIdx]);
+    }
+    if (c) valid++;
+    else if (isBlank) blank++;
+    else failures.push({ row: i + 1, raw });
+  }
+  renderCoordReport({ valid, blank, failures, total });
+}
+
+function renderCoordReport(res) {
+  const box = el('recon-coord-report');
+  if (!box) return;
+  const bad = res.failures.length;
+  const allGood = bad === 0;
+  let html =
+    `<div class="${allGood ? 'text-success' : 'text-danger'}">` +
+    `<i class="fas ${allGood ? 'fa-circle-check' : 'fa-triangle-exclamation'} me-1"></i>` +
+    `<strong>${res.valid.toLocaleString()}</strong> of ${res.total.toLocaleString()} rows convert to valid WGS84` +
+    (res.blank ? ` · <span class="text-muted">${res.blank.toLocaleString()} blank</span>` : '') +
+    (bad ? ` · <strong>${bad.toLocaleString()} could not be converted</strong>` : ' — all good.') +
+    `</div>`;
+  if (bad) {
+    const show = res.failures.slice(0, 100);
+    html += `<div class="recon-coord-failures mt-1"><table class="table table-sm mb-1">` +
+      `<thead><tr><th style="width:5rem">Row</th><th>Unconvertible value</th></tr></thead><tbody>` +
+      show.map((f) => `<tr><td>${f.row}</td><td><code>${truncate(f.raw, 70)}</code></td></tr>`).join('') +
+      `</tbody></table>` +
+      (bad > show.length ? `<div class="small text-muted">…and ${(bad - show.length).toLocaleString()} more.</div>` : '') +
+      `</div>`;
+  }
+  box.innerHTML = html;
 }
 
 function renderMapping() {
