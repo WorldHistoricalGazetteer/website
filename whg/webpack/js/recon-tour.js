@@ -120,7 +120,7 @@ function tourSteps() {
       title: '5 · See it on the map',
       body: `Your whole dataset on one map, built from the converted coordinates. Points
         <strong>cluster</strong> as you zoom out and a heatmap takes over at low zoom, so it stays fast
-        even with thousands of places. Click any point for its details.`,
+        even with thousands of places. Hover any point for its details.`,
     },
     {
       key: 'export',
