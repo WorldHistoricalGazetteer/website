@@ -1559,7 +1559,9 @@ function applyNsFilter() {
     if (col >= 0) { project.colConfig = project.colConfig || {}; project.colConfig[col] = Object.assign({}, project.colConfig[col], { nsFilter: f }); }
     else project.nsFilter = f;
   }
-  try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* remembered as the default for new columns */ }
+  // Only a project-wide (non per-column) choice updates the remembered default — a per-column pick
+  // must NOT leak into the other columns' defaults (e.g. County's ukhc shouldn't become Parish's).
+  if (col < 0) { try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* */ } }
   updateSourcesLabel();
   // 'prioritise' re-orders THIS column's existing candidates immediately; 'only'/'all' take effect on
   // the next run of the column.
