@@ -352,8 +352,16 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
     onward. Levels are UNBOUNDED (any count of county/region columns). Verified live: County↔Parish
     reorder updates button/Sources/help/pills instantly and persists. (Fixed a crash: resultRowHtml
     now guards `project.matches`, moveAdmin routes through refreshReconSection.)
-    Still open for full generic use: all admin-parents share the one 'county/region' role (distinguished
-    only by order) — fine in practice, but no distinct Province/District/Parish role labels.
+  - DONE (2026-07-06) — REDESIGN: containment expressed as role links, sorter dropped (Stephen). The
+    generic "County / region" role + ◀▶ sorter are replaced by a per-column "↳ Contains ‹child›" role
+    (role 'contains' + child index) chosen in the Role dropdown, using real column names. reconChain()
+    is derived by walking those links from the 'name' leaf up to the root (cycle-guarded). Re-ordering
+    the hierarchy = editing the links (verified: County→contains Place + Parish→contains County flips
+    the chain to Parish→County→Place, button follows). Agnostic + self-documenting; levels unbounded.
+    initChain() auto-links coarse→fine on import; migrateLegacyChain() converts old 'county'+chainOrder
+    projects on load; primaryAdminCol() (coarsest container) replaces colIndexByRole('county'). Also
+    fixed: role change now refreshes the switcher/review (was stale). This resolves the earlier
+    "admin-parents share one role / no reorder UI" limitation — the role IS the hierarchy now.
 
 - **DONE (2026-07-06) — guided "Take a tour" live demo.** Built as `whg/webpack/js/recon-tour.js`
   (bespoke overlay, no external lib/CDN — CSP/local-first) lazy-loaded via `import()` in its own webpack
