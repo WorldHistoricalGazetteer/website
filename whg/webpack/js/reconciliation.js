@@ -860,6 +860,40 @@ async function runExport() {
   }
 }
 
+// One-click contribute: build the LPF in the background and submit it straight to WHG's dataset
+// validation/creation pipeline (POST /datasets/validate/), reusing the whole existing flow — no
+// manual export/upload. Lands the user on WHG's validation-progress page; the local project stays in
+// the browser. (The same build-LPF-and-submit path will serve collaborative reconciliation, #112.)
+async function contributeToWHG() {
+  if (!project) return;
+  const btn = el('recon-contribute-btn');
+  const status = el('recon-contribute-status');
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = 'building Linked Places file…';
+  try {
+    const data = await buildExportRecords(
+      { coords: hasCoordRole(), dates: colIndexByRole('date') >= 0, match: true, enrich: false },
+      (msg) => { if (status) status.textContent = msg; });
+    const base = project.fileName ? project.fileName.replace(/\.[^.]+$/, '') : 'workbench';
+    const file = new File([serializeLPF(data)], base + '.geojson', { type: 'application/geo+json' });
+    const form = document.createElement('form');
+    form.method = 'POST'; form.action = '/datasets/validate/'; form.enctype = 'multipart/form-data'; form.style.display = 'none';
+    const addHidden = (name, value) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = name; i.value = value; form.appendChild(i); };
+    addHidden('csrfmiddlewaretoken', getCsrf());
+    addHidden('title', truncate(project.fileName || base, 100));
+    const fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.name = 'file';
+    const dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; // programmatically attach the file
+    form.appendChild(fileInput);
+    document.body.appendChild(form);
+    if (status) status.textContent = 'uploading to WHG…';
+    form.submit(); // navigates to the validation/progress page; the local project remains in this browser
+  } catch (err) {
+    console.error('[recon] contribute failed', err);
+    if (status) status.textContent = 'contribution failed — see console';
+    if (btn) btn.disabled = false;
+  }
+}
+
 // Show the export pane once a dataset is loaded; enable match/enrich only when there are matches.
 function refreshExport() {
   const sec = el('recon-export');
@@ -1762,6 +1796,8 @@ function init() {
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
   const exportBtn = el('recon-export-btn');
   if (exportBtn) exportBtn.addEventListener('click', runExport);
+  const contribBtn = el('recon-contribute-btn');
+  if (contribBtn) contribBtn.addEventListener('click', contributeToWHG);
 
   // Phonetic (vector) matching (Symphonym, in-browser) — default on; toggle + language persist.
   const phon = el('recon-phonetic');

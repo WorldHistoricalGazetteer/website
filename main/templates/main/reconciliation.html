@@ -59,7 +59,7 @@
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-pane-import">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-title">1 · Import a dataset</span>
+        <span class="recon-pane-num">1</span><span class="recon-pane-title">Import a dataset</span>
         <span class="recon-pane-summary" id="recon-pane-sum-import"></span>
       </button>
     </div>
@@ -85,7 +85,7 @@
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-result">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-title">2 · Confirm column roles</span>
+        <span class="recon-pane-num">2</span><span class="recon-pane-title">Confirm column roles</span>
         <span class="recon-pane-summary" id="recon-pane-sum-result"></span>
       </button>
       <div class="recon-pane-actions d-flex align-items-center gap-2">
@@ -140,7 +140,7 @@
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-recon">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-title">3 · Reconcile against WHG</span>
+        <span class="recon-pane-num">3</span><span class="recon-pane-title">Reconcile against WHG</span>
         <span class="recon-pane-summary" id="recon-pane-sum-recon"></span>
       </button>
       <div class="recon-pane-actions d-flex align-items-center gap-2">
@@ -209,7 +209,7 @@
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-review">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-title">4 · Review &amp; confirm matches</span>
+        <span class="recon-pane-num">4</span><span class="recon-pane-title">Review &amp; confirm matches</span>
         <span class="recon-pane-summary" id="recon-pane-sum-review"></span>
       </button>
       <div class="recon-pane-actions d-flex align-items-center gap-3 small">
@@ -236,7 +236,7 @@
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-export">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-title">5 · Enrich &amp; export</span>
+        <span class="recon-pane-num">5</span><span class="recon-pane-title">Enrich &amp; export</span>
         <span class="recon-pane-summary" id="recon-pane-sum-export"></span>
       </button>
     </div>
@@ -273,11 +273,16 @@
       </div>
       <div class="recon-contribute mt-3">
         <i class="fas fa-hand-holding-heart me-1"></i>
-        <strong>Consider contributing to WHG.</strong>
-        Reconciled, standardised place data is far more valuable when shared. When you're ready, the
-        <a href="/datasets/" target="_blank" rel="noopener">upload &amp; publication workflow</a>
-        will publish your places into WHG and link them with records for the same places from other
-        datasets. The <strong>Linked Places (LPF GeoJSON)</strong> export above is the best starting point.
+        <strong>Contribute to WHG.</strong>
+        Reconciled, standardised place data is far more valuable when shared. Send it straight to WHG —
+        the Linked Places file is built and uploaded for you (no manual export needed), and you'll land
+        on WHG's validation page to review and publish it. Your local copy stays in this browser.
+        <div class="mt-2 d-flex align-items-center gap-2">
+          <button type="button" id="recon-contribute-btn" class="btn btn-sm btn-success">
+            <i class="fas fa-cloud-arrow-up me-1"></i>Contribute to WHG
+          </button>
+          <span id="recon-contribute-status" class="small text-muted"></span>
+        </div>
       </div>
     </div>
   </section>

@@ -321,3 +321,20 @@
 /* Multi-column reconciliation: column switcher (parent → child) */
 .recon-col-switcher { display:flex; align-items:center; flex-wrap:wrap; gap:.15rem; padding:.4rem .6rem; background:#f8f9fa; border:1px solid #e2e2e2; border-radius:6px; }
 .recon-col-switcher .recon-col-pill { padding:.1rem .5rem; font-size:.8rem; }
+
+/* Numbered-stage styling: circular badges + subtle per-stage colour accents */
+.recon-pane-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.6rem; height: 1.6rem; flex: 0 0 1.6rem; margin-right: .55rem;
+  border-radius: 50%; background: #6c757d; color: #fff;
+  font-size: .85rem; font-weight: 700; line-height: 1;
+}
+.recon-pane { border-left: 4px solid #dfe3e6; transition: border-color .15s ease; }
+#recon-pane-import { border-left-color: #1565c0; } #recon-pane-import .recon-pane-num { background: #1565c0; }
+#recon-result      { border-left-color: #00838f; } #recon-result .recon-pane-num      { background: #00838f; }
+#recon-recon       { border-left-color: #6a1b9a; } #recon-recon .recon-pane-num       { background: #6a1b9a; }
+#recon-review      { border-left-color: #c2410c; } #recon-review .recon-pane-num      { background: #c2410c; }
+#recon-export      { border-left-color: #2e7d32; } #recon-export .recon-pane-num      { background: #2e7d32; }
+/* Collapsed panes read as muted; the active (expanded) one gets its full accent */
+.recon-pane.recon-collapsed { border-left-color: #e2e2e2; }
+.recon-pane.recon-collapsed .recon-pane-num { opacity: .85; }
