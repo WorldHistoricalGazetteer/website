@@ -1707,3 +1707,37 @@ class AttributionView(APIView):
             namespaces |= namespaces_from_ids(
                 [i.strip() for i in ids_param.split(',') if i.strip()])
         return Response(attribution_block(namespaces))
+
+
+class SourceGazetteersView(APIView):
+    """List the source gazetteers (authority namespaces) available for
+    reconciliation, drawn from the gazetteer registry. Public registry
+    metadata — no token required.
+
+    GET /api/sources/
+
+    Returns ``{"sources": [{namespace, name, description, record_count,
+    core, gazetteer_type, temporal_extent}, …]}`` ordered core-first, then by
+    size. Only ``authority``-class rows are returned (per-dataset ``whg``
+    sub-namespaces are not selectable sources). Replaces the hard-coded
+    namespace list in the reconciliation UI so the source pickers reflect
+    exactly what is indexed (e.g. ``ukhc`` — UK Historic Counties).
+    """
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        from api.models import GazetteerRegistryEntry
+        qs = (GazetteerRegistryEntry.objects
+              .filter(entry_class='authority', status='published')
+              .order_by('-core', '-record_count', 'name'))
+        sources = [{
+            'namespace': e.namespace,
+            'name': e.name,
+            'description': e.description or '',
+            'record_count': e.record_count,
+            'core': e.core,
+            'gazetteer_type': e.gazetteer_type,
+            'temporal_extent': e.temporal_extent or [],
+        } for e in qs]
+        return Response({'sources': sources})

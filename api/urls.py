@@ -11,6 +11,8 @@ from . import views
 urlpatterns = [
     # gazetteer attribution for a set of namespaces / place ids (citations §4.7)
     path('attribution/', views.AttributionView.as_view(), name='api-attribution'),
+    # source gazetteers (authority namespaces) available for reconciliation — from the registry
+    path('sources/', views.SourceGazetteersView.as_view(), name='api-sources'),
     # database places to be DEPRECATED
     path('db/', views.SearchAPIView.as_view(), name='api-search'),
     # index docs

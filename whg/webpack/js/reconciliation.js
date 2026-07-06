@@ -1400,13 +1400,25 @@ function renderReviewCard() {
 }
 
 // Candidate source namespace (from the id, e.g. "place:gn:745044" → "gn") → a human name.
+// Fallback display names for common namespaces; the authoritative list + names + descriptions come
+// from the gazetteer registry (/api/sources/), loaded once and cached in _sources.
 const NS_NAMES = {
   gn: 'GeoNames', wd: 'Wikidata', tgn: 'Getty TGN', osm: 'OpenStreetMap', ohm: 'OpenHistoricalMap',
   pl: 'Pleiades', pleiades: 'Pleiades', whg: 'World Historical Gazetteer', chgis: 'CHGIS',
-  hgis: 'HGIS de las Indias', alc: 'Alcedo', gb1900: 'GB1900',
+  hgis: 'HGIS de las Indias', alc: 'Alcedo', gb1900: 'GB1900', ukhc: 'UK Historic Counties',
 };
+let _sources = null;   // [{namespace,name,description,record_count,core,gazetteer_type,temporal_extent}]
+let _sourcesByNs = {}; // namespace -> entry
+async function loadSources() {
+  if (_sources) return _sources;
+  try {
+    const res = await fetch('/api/sources/', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+    if (res.ok) { const d = await res.json(); _sources = (d && d.sources) || []; _sourcesByNs = {}; _sources.forEach((s) => { _sourcesByNs[s.namespace] = s; }); }
+  } catch (_) { /* fall back to the static NS_NAMES list */ }
+  return _sources || [];
+}
 function nsFromId(id) { const p = String(id || '').split(':'); return p.length >= 3 ? p[1] : 'whg'; }
-function nsName(id) { const ns = nsFromId(id); return NS_NAMES[ns] || ns.toUpperCase(); }
+function nsName(id) { const ns = nsFromId(id); return (_sourcesByNs[ns] && _sourcesByNs[ns].name) || NS_NAMES[ns] || ns.toUpperCase(); }
 
 // ── Source-gazetteer (namespace) picker: prioritise / restrict, persisted ─────
 const NS_LS_KEY = 'whg-recon-ns';
@@ -1416,7 +1428,10 @@ function getNsFilter() {
   return { mode: 'all', namespaces: [] };
 }
 function availableNamespaces() {
-  const set = new Set(['gn', 'wd', 'tgn', 'osm', 'ohm', 'pl', 'whg', 'chgis', 'hgis', 'alc', 'gb1900']);
+  // Curated baseline (so a partially-seeded registry never drops known-good sources) ∪ registry
+  // authorities (adds e.g. ukhc, supplies names/counts) ∪ namespaces seen in the current matches.
+  const set = new Set(Object.keys(NS_NAMES));
+  if (_sources && _sources.length) _sources.forEach((s) => set.add(s.namespace));
   if (project && project.matches) Object.values(project.matches).forEach((m) => (m.candidates || []).forEach((c) => set.add(nsFromId(c.id))));
   return [...set];
 }
@@ -1438,38 +1453,22 @@ function updateSourcesLabel() {
   lbl.textContent = f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
     : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources';
 }
-// Gazetteer descriptions for the source-picker tooltips, from the registry via /api/attribution/.
-let _nsDesc = null;
-async function loadNsDescriptions(nslist) {
-  if (_nsDesc) return _nsDesc;
-  _nsDesc = {};
-  try {
-    const res = await fetch('/api/attribution/?namespaces=' + encodeURIComponent(nslist.join(',')),
-      { credentials: 'same-origin', headers: { Accept: 'application/json' } });
-    if (res.ok) {
-      const data = await res.json();
-      const sources = (data && data.sources) || {};
-      Object.keys(sources).forEach((ns) => { _nsDesc[ns] = sources[ns].citation || sources[ns].name || ''; });
-    }
-  } catch (_) { /* tooltips are a nicety; ignore failures */ }
-  return _nsDesc;
-}
 async function populateSourcesModal() {
+  await loadSources(); // registry-driven list (names, record counts, descriptions)
   const f = getNsFilter();
   const modeInput = document.querySelector(`input[name="recon-ns-mode"][value="${f.mode}"]`);
   if (modeInput) modeInput.checked = true;
   const box = el('recon-ns-list');
   const nss = availableNamespaces();
-  if (box) box.innerHTML = nss.map((ns) =>
-    `<label class="recon-ns-item" data-ns="${esc(ns)}" title="${esc(NS_NAMES[ns] || ns.toUpperCase())}">` +
-    `<input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
-    `${esc(NS_NAMES[ns] || ns.toUpperCase())} <span class="text-muted small">(${esc(ns)})</span></label>`).join('');
-  // Enrich each item's tooltip with its full registry description (async; a nicety, non-blocking).
-  const desc = await loadNsDescriptions(nss);
-  if (box) box.querySelectorAll('.recon-ns-item').forEach((lab) => {
-    const ns = lab.dataset.ns; const d = desc[ns];
-    lab.title = d ? `${NS_NAMES[ns] || ns.toUpperCase()} — ${d}` : (NS_NAMES[ns] || ns.toUpperCase());
-  });
+  if (box) box.innerHTML = nss.map((ns) => {
+    const s = _sourcesByNs[ns];
+    const label = (s && s.name) || NS_NAMES[ns] || ns.toUpperCase();
+    const count = s && s.record_count ? ` <span class="text-muted small">· ${Number(s.record_count).toLocaleString()} records</span>` : '';
+    const tip = s && s.description ? `${label} — ${s.description}` : label;
+    return `<label class="recon-ns-item" data-ns="${esc(ns)}" title="${esc(tip)}">` +
+      `<input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
+      `${esc(label)} <span class="text-muted small">(${esc(ns)})</span>${count}</label>`;
+  }).join('');
 }
 function applyNsFilter() {
   const mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
@@ -1932,6 +1931,9 @@ function init() {
   const nsApply = el('recon-ns-apply');
   if (nsApply) nsApply.addEventListener('click', applyNsFilter);
   updateSourcesLabel();
+  // Warm the registry source list so candidate/source labels use real names (e.g. "UK Historic
+  // Counties" not "UKHC"); re-render once it lands if matches are already on screen.
+  loadSources().then(() => { if (project && project.matches && Object.keys(project.matches).length) { const built = buildUniqueQueries(); if (built) renderResults(built); } });
 
   showCapabilities();
   loadSaved();
