@@ -313,7 +313,7 @@ function fullPopupHTML(p) {
   </div>`;
 }
 function ensureFullLayers() {
-  if (!fullMap || !fullMap.isStyleLoaded || !fullMap.isStyleLoaded() || fullMap.getSource('recon-full')) return;
+  if (!fullMap || fullMap.getSource('recon-full')) return; // idempotent; retried on load/styledata/idle
   try {
     fullMap.addSource('recon-full', { type: 'geojson', data: fullData || { type: 'FeatureCollection', features: [] }, cluster: true, clusterMaxZoom: 12, clusterRadius: 46 });
     // Density heatmap — visible only when zoomed out (a fast read on large datasets).
@@ -351,7 +351,9 @@ export function renderFullMap(container, geojson) {
     fullPopup = new M.Popup({ closeButton: true, closeOnClick: true, maxWidth: '300px', className: 'recon-map-popup' });
     if (fullRo) { try { fullRo.disconnect(); } catch (_) { /* ignore */ } }
     if (typeof ResizeObserver !== 'undefined') { fullRo = new ResizeObserver((es) => { for (const e of es) if (e.contentRect.width > 0 && e.contentRect.height > 0) fullMap.resize(); }); fullRo.observe(container); }
-    fullMap.on('styledata', () => { ensureFullLayers(); const s = fullMap.getSource('recon-full'); if (s) s.setData(fullData); });
+    const reapply = () => { ensureFullLayers(); const s = fullMap.getSource('recon-full'); if (s) s.setData(fullData); };
+    fullMap.on('styledata', reapply);
+    fullMap.on('idle', reapply); // fires once the style is fully loaded — reliable point to add the layers
   }
   const apply = () => {
     fullMap.resize();
