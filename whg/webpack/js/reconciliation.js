@@ -41,9 +41,10 @@ const STORE = 'project';
 const CURRENT = 'current';
 
 // Roles a column can play — used now as preview hints and later as reconciliation query constraints.
+// Fixed (single-select) roles. Containment is expressed separately as a "contains:<childCol>" role
+// (see roleSelectHTML / reconChain) so the spatial hierarchy is agnostic and self-ordering.
 const ROLES = [
   ['name', 'Place name'],
-  ['county', 'County / region'],
   ['country', 'Country / ccode'],
   ['type', 'Feature type'],
   ['lat', 'Latitude'],
@@ -55,9 +56,11 @@ const ROLES = [
 ];
 
 // Guess a column's role from its name — conservative synonym/regex hints; the user confirms/overrides.
+// 'container' is a transient marker for admin/area columns; initChain() wires the actual containment
+// links (contains:<child>) once all columns are known.
 const ROLE_HINTS = [
   ['name', /^(place|placename|name|toponym|title|label)s?$/i],
-  ['county', /^(county|adm2|admin2|region|parish|province|state|district)$/i],
+  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough)$/i],
   ['country', /^(country|ccode|iso|nation)$/i],
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
@@ -71,6 +74,34 @@ function detectRole(columnName) {
   const n = String(columnName || '').trim();
   for (const [role, re] of ROLE_HINTS) if (re.test(n)) return role;
   return 'other';
+}
+
+// Turn the transient 'container' markers into a default containment chain: link the detected
+// container columns (in dataset order, coarse → fine) down to the 'name' column via contains:<child>.
+// If no name column was detected, the deepest container becomes the name (the toponym reconciled).
+function initChain(columns) {
+  const containers = columns.map((c, i) => i).filter((i) => columns[i].role === 'container');
+  let nameIdx = columns.findIndex((c) => c.role === 'name');
+  if (nameIdx < 0 && containers.length) { nameIdx = containers.pop(); columns[nameIdx].role = 'name'; }
+  const seq = nameIdx >= 0 ? [...containers, nameIdx] : containers;
+  columns.forEach((c) => { if (c.role === 'container') { c.role = 'other'; delete c.child; } }); // any leftover marker
+  for (let k = 0; k < seq.length - 1; k++) { columns[seq[k]].role = 'contains'; columns[seq[k]].child = seq[k + 1]; }
+  return columns;
+}
+
+// Migrate a project saved under the old model (role 'county' admin columns + project.chainOrder) to
+// the containment-link model, preserving the previous parent → child order.
+function migrateLegacyChain() {
+  if (!project || !project.columns.some((c) => c.role === 'county')) return;
+  const admin = project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'county');
+  const order = (project.chainOrder || []).filter((i) => admin.includes(i));
+  const seq = [...order, ...admin.filter((i) => !order.includes(i))];
+  const nameIdx = project.columns.findIndex((c) => c.role === 'name');
+  const full = nameIdx >= 0 ? [...seq, nameIdx] : seq;
+  project.columns.forEach((c) => { if (c.role === 'county') c.role = 'other'; });
+  for (let k = 0; k < full.length - 1; k++) { project.columns[full[k]].role = 'contains'; project.columns[full[k]].child = full[k + 1]; }
+  delete project.chainOrder;
+  persist();
 }
 
 // ── IndexedDB (tiny promise wrapper; no dependency) ─────────────────────────
@@ -180,10 +211,15 @@ async function persist() {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
-function roleSelectHTML(colIndex, role) {
-  const opts = ROLES.map(([val, label]) =>
-    `<option value="${val}"${val === role ? ' selected' : ''}>${label}</option>`).join('');
-  return `<select class="form-select form-select-sm recon-role-select role-${role}" data-col="${colIndex}">${opts}</select>`;
+function roleSelectHTML(colIndex, col) {
+  const cur = col.role === 'contains' ? `contains:${col.child}` : col.role;
+  const std = ROLES.map(([val, label]) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`);
+  // Containment options: this column CONTAINS another column (its child). Selecting one places this
+  // column one level up in the spatial hierarchy — the chain is derived from these links (no sorter).
+  const links = project.columns.map((c2, j) => (j === colIndex ? '' :
+    `<option value="contains:${j}"${cur === `contains:${j}` ? ' selected' : ''}>↳ Contains “${esc(truncate(c2.name, 22))}”</option>`)).filter(Boolean);
+  const grp = links.length ? `<optgroup label="Spatial hierarchy">${links.join('')}</optgroup>` : '';
+  return `<select class="form-select form-select-sm recon-role-select role-${col.role}" data-col="${colIndex}">${std.join('')}${grp}</select>`;
 }
 
 // ── Coordinate-format detection panel ───────────────────────────────────────
@@ -430,15 +466,25 @@ function renderMapping() {
   el('recon-map-body').innerHTML = project.columns.map((c, i) =>
     `<tr>
        <td class="recon-map-col">${truncate(c.name, 50)}</td>
-       <td>${roleSelectHTML(i, c.role)}</td>
+       <td>${roleSelectHTML(i, c)}</td>
        <td class="text-muted">${truncate(firstSample(i), 60)}</td>
      </tr>`).join('');
 
   el('recon-map-body').querySelectorAll('.recon-role-select').forEach((sel) => {
     sel.addEventListener('change', () => {
       const i = Number(sel.dataset.col);
-      project.columns[i].role = sel.value;
-      sel.className = `form-select form-select-sm recon-role-select role-${sel.value}`;
+      const before = reconChain().join(',');
+      const v = sel.value;
+      if (v.startsWith('contains:')) { project.columns[i].role = 'contains'; project.columns[i].child = Number(v.slice(9)); }
+      else { project.columns[i].role = v; delete project.columns[i].child; }
+      sel.className = `form-select form-select-sm recon-role-select role-${project.columns[i].role}`;
+      // A change that alters the reconciliation chain invalidates existing matches (they were scoped by
+      // the old containment) — reset them so the columns are reconciled again with the new hierarchy.
+      if (reconChain().join(',') !== before && project.matches && Object.keys(project.matches).length) {
+        project.matches = {}; project.decisions = {}; reconActiveIdx = -1;
+        reconStaleNote = 'Hierarchy changed — reconciliation was reset; reconcile the columns again.';
+      }
+      renderMapping();       // dropdowns show contextual "Contains …" state; re-render so all stay in sync
       persist();
       renderPreview();       // 'other' (ignore) columns are hidden in the preview
       renderCoords();        // coords/lat/lon mapping affects the coordinate panel
@@ -446,6 +492,7 @@ function renderMapping() {
       refreshReconSection(); // name/country mapping affects what can be reconciled
       renderColSwitcher();   // the chain (which columns/levels) may have changed → refresh the pills
       refreshReview();       // and the review pane's active column may no longer exist
+      refreshFullMapPane(); refreshExport();
     });
   });
 }
@@ -563,7 +610,7 @@ function handleFile(file) {
         id: CURRENT,
         fileName: file.name,
         importedAt: new Date().toISOString(),
-        columns: parsed.columns.map((name) => ({ name, role: detectRole(name) })),
+        columns: initChain(parsed.columns.map((name) => ({ name, role: detectRole(name) }))),
         rows: parsed.rows,
         total: parsed.total,
         delimiter: parsed.delimiter || null,
@@ -779,7 +826,7 @@ function serializeJSON(data) {
 // WHG LP-TSV (a subset of the canonical columns — enough as a starting point for contribution).
 function serializeLPTSV(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name');
-  const countryIdx = colIndexByRole('country'), countyIdx = colIndexByRole('county');
+  const countryIdx = colIndexByRole('country'), countyIdx = primaryAdminCol();
   const cols = ['id', 'title', 'title_source', 'ccodes', 'start', 'end', 'lon', 'lat', 'geowkt', 'matches', 'parent_name', 'description'];
   const src = project.fileName || 'workbench';
   const lines = [cols.join('\t')];
@@ -934,7 +981,7 @@ function refreshFullMapPane() {
 }
 async function updateFullMap() {
   const box = el('recon-fullmap'); if (!box || !project) return;
-  const nameCol = colIndexByRole('name'), countyIdx = colIndexByRole('county'), dateIdx = colIndexByRole('date');
+  const nameCol = colIndexByRole('name'), countyIdx = primaryAdminCol(), dateIdx = colIndexByRole('date');
   const decisions = project.decisions || {}, matches = project.matches || {};
   if (hasCoordRole()) await loadCoords();
   const feats = [];
@@ -1026,6 +1073,7 @@ async function loadSaved() {
     const saved = await getProject();
     if (saved && saved.columns && saved.rows) {
       project = saved;
+      migrateLegacyChain(); // convert old 'county'-role + chainOrder projects to contains: links
       renderAll();
       showResume();
       console.log(`[recon] resumed saved project: ${project.total} rows`);
@@ -1052,55 +1100,27 @@ function colIndexByRole(role) { return project ? project.columns.findIndex((c) =
 const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
 
 // ── Multi-column (iterative, containment-chained) reconciliation ─────────────
-// Reconcile more than one column, parent → child: the admin-parent columns (role "county/region",
-// in dataset order) first, then the place-name column. Each child column's query is scoped by the
-// parent column's resolved place_id (contained_in), so e.g. a Parish is matched within its County and
-// a Name within its Parish — sharpening disambiguation of same-name places. The reconciliation chain
-// is the ordered list of column indices.
-// The admin-parent (county/region) columns, ordered parent → child. Order follows the user's explicit
-// project.chainOrder when set, else dataset column order; new/removed columns reconcile in gracefully
-// (kept in order if still admin, appended if newly admin, dropped if no longer admin).
-function orderedAdminCols() {
-  if (!project) return [];
-  const admin = project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'county');
-  const order = (project.chainOrder || []).filter((i) => admin.includes(i));
-  const rest = admin.filter((i) => !order.includes(i));
-  return [...order, ...rest];
-}
+// The spatial hierarchy is expressed per-column: a container column has role 'contains' with a
+// `child` index (the column it directly contains). The reconciliation chain is DERIVED by walking
+// those links from the 'name' (leaf) column up to the root — coarsest parent first, name last. Each
+// child column's query is scoped by the parent's resolved place_id (contained_in), so e.g. a Parish is
+// matched within its County. Re-ordering the hierarchy is just editing the 'contains' links (no sorter).
 function reconChain() {
   if (!project) return [];
-  const chain = orderedAdminCols();
   const nameIdx = colIndexByRole('name');
-  if (nameIdx >= 0) chain.push(nameIdx);
+  if (nameIdx < 0) return [];
+  const chain = [nameIdx];
+  let cur = nameIdx, guard = 0;
+  while (guard++ < project.columns.length) {
+    const parent = project.columns.findIndex((c) => c.role === 'contains' && c.child === cur);
+    if (parent < 0 || chain.includes(parent)) break; // reached the root, or a cycle
+    chain.unshift(parent);
+    cur = parent;
+  }
   return chain;
 }
-// Reorder the admin hierarchy: swap the admin column at adminPos with its neighbour (dir -1 earlier /
-// +1 later). Re-ordering changes containment, so matches/decisions from the swap point onward are
-// cleared (columns before it keep their confirmed work); the affected columns must be reconciled again.
-function moveAdmin(adminPos, dir) {
-  if (!project) return;
-  const admin = orderedAdminCols();
-  const j = adminPos + dir;
-  if (adminPos < 0 || j < 0 || adminPos >= admin.length || j >= admin.length) return;
-  const tmp = admin[adminPos]; admin[adminPos] = admin[j]; admin[j] = tmp;
-  project.chainOrder = admin.slice();
-  const newChain = reconChain();
-  const minPos = Math.min(adminPos, j);
-  let cleared = false;
-  for (let p = minPos; p < newChain.length; p++) {
-    const c = String(newChain[p]);
-    if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) { delete project.matches[k]; cleared = true; } }
-    if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
-  }
-  reconStaleNote = cleared ? 'Hierarchy re-ordered — the affected columns were reset; reconcile them again.' : '';
-  reconActiveIdx = -1;
-  persist();
-  refreshReconSection(); // renders results if any matches remain, else clears them; updates the button
-  renderColSwitcher();
-  refreshReview();
-  refreshFullMapPane();
-  refreshExport();
-}
+// The primary admin column for display (place popups / export context): the coarsest container (root).
+function primaryAdminCol() { const chain = reconChain(); return chain.length >= 2 ? chain[0] : -1; }
 let reconActiveIdx = -1; // which chain position the review/results panes focus; -1 → derive (current stage)
 function activeReconCol() {
   const chain = reconChain();
@@ -1379,7 +1399,6 @@ function renderColSwitcher() {
   const chain = reconChain();
   if (chain.length <= 1) { boxes.forEach((b) => { b.innerHTML = ''; b.classList.add('d-none'); }); return; }
   const active = activeReconCol();
-  const adminCount = orderedAdminCols().length; // chain positions 0..adminCount-1 are re-orderable admin cols
   const STATE_ICON = { locked: '<i class="fas fa-lock me-1"></i>', ready: '<i class="far fa-circle me-1"></i>', review: '<i class="fas fa-list-check me-1"></i>', confirmed: '<i class="fas fa-check me-1"></i>' };
   const pills = chain.map((ci, idx) => {
     const state = columnState(idx);
@@ -1387,12 +1406,6 @@ function renderColSwitcher() {
     const cls = `recon-col-pill recon-col-pill--${state}${ci === active ? ' recon-col-pill--active' : ''}`;
     const pill = `<button type="button" class="${cls}" data-idx="${idx}" title="${esc(project.columns[ci].name)} — ${state}"${state === 'locked' ? ' disabled' : ''}>${STATE_ICON[state]}${esc(name)}</button>`;
     const arrow = idx < chain.length - 1 ? '<i class="fas fa-angle-right mx-1 text-muted"></i>' : '';
-    // Re-order controls on admin (parent) pills — move earlier (towards root) / later. Name col is fixed last.
-    if (adminCount >= 2 && idx < adminCount) {
-      const left = idx > 0 ? `<button type="button" class="recon-col-move" data-move="${idx}:-1" title="Move ${esc(project.columns[ci].name)} earlier (towards the root)"><i class="fas fa-chevron-left"></i></button>` : '';
-      const right = idx < adminCount - 1 ? `<button type="button" class="recon-col-move" data-move="${idx}:1" title="Move ${esc(project.columns[ci].name)} later"><i class="fas fa-chevron-right"></i></button>` : '';
-      return `<span class="recon-col-item">${left}${pill}${right}</span>${arrow}`;
-    }
     return `${pill}${arrow}`;
   }).join('');
   const note = reconStaleNote ? `<div class="recon-col-stale small mt-1"><i class="fas fa-triangle-exclamation me-1"></i>${esc(reconStaleNote)}</div>` : '';
@@ -1405,11 +1418,6 @@ function renderColSwitcher() {
       reconActiveIdx = Number(b.dataset.idx);
       const built = buildUniqueQueries(); if (built) renderResults(built);
       updateReconButton();   // focus changed → refresh the Re-reconcile button + Sources target
-    }));
-    box.querySelectorAll('.recon-col-move').forEach((b) => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const [pos, dir] = b.dataset.move.split(':').map(Number);
-      moveAdmin(pos, dir);
     }));
   });
 }

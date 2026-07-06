@@ -282,7 +282,7 @@
 /* Left accent on a role <select> to echo the role's colour, mirroring the preview scheme */
 .recon-role-select { border-left-width: 4px; }
 .recon-role-select.role-name    { border-left-color: #1565c0; }
-.recon-role-select.role-county,
+.recon-role-select.role-contains,
 .recon-role-select.role-country { border-left-color: #6a1b9a; }
 .recon-role-select.role-type    { border-left-color: #00838f; }
 .recon-role-select.role-lat,
@@ -338,15 +338,6 @@
 .recon-col-pill--locked    { color:#9aa5b1; background:#f1f3f5; border-color:#e2e6ea; cursor:not-allowed; }
 .recon-col-pill--active    { box-shadow:0 0 0 2px rgba(21,101,192,.45); font-weight:600; }
 .recon-col-stale { color:#8a5a00; }
-/* Hierarchy re-order controls on admin (parent) pills */
-.recon-col-item { display:inline-flex; align-items:center; }
-.recon-col-move {
-  border:1px solid #cfd4da; background:#fff; color:#667788; cursor:pointer;
-  font-size:.62rem; line-height:1; padding:.18rem .28rem; border-radius:10px;
-}
-.recon-col-move:first-child { margin-right:.15rem; }
-.recon-col-move:last-child { margin-left:.15rem; }
-.recon-col-move:hover { background:#eef2f7; color:#1565c0; border-color:#1565c0; }
 
 /* Numbered-stage styling: circular badges + subtle per-stage colour accents */
 .recon-pane-num {
