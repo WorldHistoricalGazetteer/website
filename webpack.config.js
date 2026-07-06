@@ -82,6 +82,7 @@ module.exports = {
 		new BundleAnalyzerPlugin({
 			analyzerMode: 'static', // `server` option is very slow
 			reportFilename: 'webpackReport.html',
+			openAnalyzer: false, // still writes the report, but don't auto-open it (was stealing browser focus)
 			generateStatsFile: true,
 			statsFilename: 'stats.json',
 		}),
