@@ -1071,12 +1071,63 @@ function activeReconCol() {
 }
 // The place_id resolved for a (column,row): an explicit accept, else an auto-confirmed top match.
 function resolvedPlaceId(colIndex, rowIdx) {
+  return resolvedPlaceIds(colIndex, rowIdx)[0] || null;
+}
+// ALL resolved place_ids for a (column,row) — a row may closeMatch several records (multi-accept),
+// and every one is passed as containment for the child column so it's scoped "within any of them".
+function resolvedPlaceIds(colIndex, rowIdx) {
   const key = colIndex + ':' + rowIdx;
-  const a = acceptedList(project.decisions && project.decisions[key])[0];
-  if (a) return a.place_id;
+  const acc = acceptedList(project.decisions && project.decisions[key]);
+  if (acc.length) return acc.map((a) => a.place_id).filter(Boolean);
   const m = project.matches && project.matches[key];
-  if (m && m.top && isAutoConfirmed(m.top, getThreshold())) return m.top.id;
-  return null;
+  if (m && m.top && isAutoConfirmed(m.top, getThreshold())) return [m.top.id];
+  return [];
+}
+
+// ── Stage state machine (iterative, review-gated reconciliation) ─────────────
+// A column is reconciled only after the column above it in the chain has been reviewed & confirmed,
+// so each child inherits containment from confirmed parents. State is DERIVED from matches/decisions
+// (never stored) so it can't drift from the source of truth.
+//   locked    — a parent isn't confirmed yet; can't reconcile/review this column
+//   ready     — parent confirmed (or top of chain); reconcile can run here
+//   review    — reconciled, but rows still need decisions
+//   confirmed — every sub-threshold row decided (auto-confirmed rows count automatically)
+function colKeys(col) {
+  const out = [];
+  if (project && project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === String(col)) out.push(k); }
+  return out;
+}
+function colHasMatches(col) { return colKeys(col).length > 0; }
+function colPendingReview(col) { let n = 0; colKeys(col).forEach((k) => { if (needsReview(k)) n += 1; }); return n; }
+function columnState(pos) {
+  const chain = reconChain();
+  const col = chain[pos];
+  if (!colHasMatches(col)) return (pos === 0 || columnState(pos - 1) === 'confirmed') ? 'ready' : 'locked';
+  return colPendingReview(col) > 0 ? 'review' : 'confirmed';
+}
+// First chain position that's actionable (ready or in review); === chain.length when all confirmed.
+function currentStagePos() {
+  const chain = reconChain();
+  for (let p = 0; p < chain.length; p++) { const s = columnState(p); if (s === 'ready' || s === 'review') return p; }
+  return chain.length;
+}
+// Changing a confirmed parent's decision makes already-reconciled child columns stale (their
+// containment used the old parent ids). Clear those children's matches/decisions/geom so they
+// re-lock and must be reconciled again with the corrected containment. Returns true if anything was
+// cleared.
+let reconStaleNote = '';
+function invalidateDownstream(col) {
+  const chain = reconChain();
+  const pos = chain.indexOf(col);
+  if (pos < 0 || pos >= chain.length - 1) return false;
+  let changed = false;
+  for (let p = pos + 1; p < chain.length; p++) {
+    const c = String(chain[p]);
+    if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) { delete project.matches[k]; changed = true; } }
+    if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
+    if (project.geom) for (const k in project.geom) { if (k.slice(0, k.indexOf(':')) === c) delete project.geom[k]; }
+  }
+  return changed;
 }
 
 // Every row is reconciled INDIVIDUALLY — no de-duplication by name (users have already disambiguated,
@@ -1274,15 +1325,18 @@ function renderColSwitcher() {
   if (chain.length <= 1) { box.innerHTML = ''; box.classList.add('d-none'); return; }
   box.classList.remove('d-none');
   const active = activeReconCol();
-  const matches = project.matches || {};
+  const STATE_ICON = { locked: '<i class="fas fa-lock me-1"></i>', ready: '<i class="far fa-circle me-1"></i>', review: '<i class="fas fa-list-check me-1"></i>', confirmed: '<i class="fas fa-check me-1"></i>' };
   const pills = chain.map((ci, idx) => {
+    const state = columnState(idx);
     const name = truncate(project.columns[ci].name, 22);
-    let n = 0; for (const k in matches) { if (k.slice(0, k.indexOf(':')) === String(ci) && matches[k] && matches[k].top) n += 1; }
+    const cls = `recon-col-pill recon-col-pill--${state}${ci === active ? ' recon-col-pill--active' : ''}`;
     const arrow = idx < chain.length - 1 ? '<i class="fas fa-angle-right mx-1 text-muted"></i>' : '';
-    return `<button type="button" class="btn btn-sm ${ci === active ? 'btn-primary' : 'btn-outline-secondary'} recon-col-pill" data-idx="${idx}" title="${esc(project.columns[ci].name)}">${esc(name)}${n ? ` <span class="badge bg-light text-dark ms-1">${n.toLocaleString()}</span>` : ''}</button>${arrow}`;
+    return `<button type="button" class="${cls}" data-idx="${idx}" title="${esc(project.columns[ci].name)} — ${state}"${state === 'locked' ? ' disabled' : ''}>${STATE_ICON[state]}${esc(name)}</button>${arrow}`;
   }).join('');
-  box.innerHTML = `<span class="text-muted small me-2"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}`;
+  const note = reconStaleNote ? `<div class="recon-col-stale small mt-1"><i class="fas fa-triangle-exclamation me-1"></i>${esc(reconStaleNote)}</div>` : '';
+  box.innerHTML = `<div class="d-flex align-items-center flex-wrap gap-1"><span class="text-muted small me-1"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}</div>${note}`;
   box.querySelectorAll('.recon-col-pill').forEach((b) => b.addEventListener('click', () => {
+    if (b.disabled) return; // locked columns aren't reviewable yet
     reconActiveIdx = Number(b.dataset.idx);
     const built = buildUniqueQueries(); if (built) renderResults(built);
   }));
@@ -1422,10 +1476,22 @@ function nsName(id) { const ns = nsFromId(id); return (_sourcesByNs[ns] && _sour
 
 // ── Source-gazetteer (namespace) picker: prioritise / restrict, persisted ─────
 const NS_LS_KEY = 'whg-recon-ns';
-function getNsFilter() {
+// Per-column source filter. Each chain column can restrict/prioritise its own source gazetteers
+// (e.g. UK Historic Counties for the County column, a parishes gazetteer for Parish). Falls back to
+// the project-wide default, then the last-used localStorage value, then "all".
+function getNsFilter(col) {
+  if (project && col != null && project.colConfig && project.colConfig[col] && project.colConfig[col].nsFilter) return project.colConfig[col].nsFilter;
   if (project && project.nsFilter) return project.nsFilter;
   try { const s = JSON.parse(localStorage.getItem(NS_LS_KEY) || 'null'); if (s && s.mode) return s; } catch (_) { /* */ }
   return { mode: 'all', namespaces: [] };
+}
+// Which column the Sources picker configures: the current stage's column while reconciliation is in
+// progress, else the column currently shown in the review/results panes.
+function sourcesTargetCol() {
+  const chain = reconChain();
+  if (!chain.length) return -1;
+  const p = currentStagePos();
+  return p < chain.length ? chain[p] : activeReconCol();
 }
 function availableNamespaces() {
   // Registry authorities are the source of truth; NS_NAMES is only a pre-fetch fallback (before
@@ -1443,21 +1509,28 @@ function sortByNsPriority(cands, namespaces) {
 }
 // Apply the current filter to a freshly-fetched candidate list (prioritise re-orders; only is enforced
 // server-side via the query, but re-filter defensively too).
-function applyNsToCandidates(result) {
-  const f = getNsFilter();
+function applyNsToCandidates(result, col) {
+  const f = getNsFilter(col);
   if (!f.namespaces.length) return result;
   if (f.mode === 'only') return result.filter((c) => f.namespaces.includes(nsFromId(c.id)));
   if (f.mode === 'prioritise') return sortByNsPriority(result, f.namespaces);
   return result;
 }
 function updateSourcesLabel() {
-  const f = getNsFilter(); const lbl = el('recon-sources-label'); if (!lbl) return;
-  lbl.textContent = f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
-    : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources';
+  const lbl = el('recon-sources-label'); if (!lbl) return;
+  const col = sourcesTargetCol();
+  const f = getNsFilter(col >= 0 ? col : undefined);
+  const colName = (col >= 0 && project && reconChain().length > 1) ? ` · ${truncate(project.columns[col].name, 14)}` : '';
+  lbl.textContent = (f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
+    : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources') + colName;
 }
 async function populateSourcesModal() {
   await loadSources(); // registry-driven list (names, record counts, descriptions)
-  const f = getNsFilter();
+  const col = sourcesTargetCol();
+  const f = getNsFilter(col >= 0 ? col : undefined);
+  const title = el('recon-sources-title');
+  if (title) title.textContent = (col >= 0 && project && reconChain().length > 1)
+    ? `Source gazetteers — ${truncate(project.columns[col].name, 30)}` : 'Source gazetteers';
   const modeInput = document.querySelector(`input[name="recon-ns-mode"][value="${f.mode}"]`);
   if (modeInput) modeInput.checked = true;
   const box = el('recon-ns-list');
@@ -1476,12 +1549,20 @@ function applyNsFilter() {
   const mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
   const namespaces = [...document.querySelectorAll('.recon-ns-cb:checked')].map((c) => c.value);
   const f = { mode, namespaces };
-  if (project) { project.nsFilter = f; }
-  try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* */ }
+  const col = sourcesTargetCol();
+  if (project) {
+    if (col >= 0) { project.colConfig = project.colConfig || {}; project.colConfig[col] = Object.assign({}, project.colConfig[col], { nsFilter: f }); }
+    else project.nsFilter = f;
+  }
+  try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* remembered as the default for new columns */ }
   updateSourcesLabel();
-  // 'prioritise' re-orders existing candidates immediately; 'only'/'all' take effect on the next run.
+  // 'prioritise' re-orders THIS column's existing candidates immediately; 'only'/'all' take effect on
+  // the next run of the column.
   if (project && project.matches && Object.keys(project.matches).length && mode === 'prioritise') {
-    Object.values(project.matches).forEach((m) => { if (m.candidates) { m.candidates = sortByNsPriority(m.candidates, namespaces); m.top = m.candidates[0] || null; } });
+    for (const k in project.matches) {
+      if (col >= 0 && k.slice(0, k.indexOf(':')) !== String(col)) continue;
+      const m = project.matches[k]; if (m && m.candidates) { m.candidates = sortByNsPriority(m.candidates, namespaces); m.top = m.candidates[0] || null; }
+    }
   }
   if (project) persist();
   if (project && project.matches) { const built = buildUniqueQueries(); if (built) renderResults(built); }
@@ -1634,12 +1715,13 @@ async function loadMoreCandidates() {
   const btn = el('recon-review-card').querySelector('.recon-loadmore');
   if (btn) { btn.textContent = 'loading…'; btn.disabled = true; }
   try {
-    const nsf = getNsFilter();
+    const revCol = activeReconCol();
+    const nsf = getNsFilter(revCol);
     const q = { q0: { query: meta.name, type: 'place', limit: want } };
     if (meta.country) q.q0.countries = [meta.country];
     if (nsf.mode === 'only' && nsf.namespaces.length) q.q0.namespaces = nsf.namespaces;
     const data = await postReconcile(q, getCsrf());
-    const result = applyNsToCandidates((data.q0 && data.q0.result) || []);
+    const result = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
     m.candidates = result;
     m.top = result[0] || null;
     m.exhausted = result.length < want; // fewer than asked → no more to fetch
@@ -1651,9 +1733,16 @@ async function loadMoreCandidates() {
   }
 }
 function afterDecision(advanceAfter) {
+  // A decision on a parent column invalidates already-reconciled child columns (their containment
+  // used the old parent ids) — clear & re-lock them so they're reconciled again.
+  if (invalidateDownstream(activeReconCol())) {
+    reconStaleNote = 'A parent decision changed — downstream columns were reset and must be reconciled again.';
+  }
   persist();
   const built = buildUniqueQueries(); if (built) renderResultsTable(built);
   updateReviewProgress();
+  renderColSwitcher();
+  updateReconButton();
   refreshExport();
   if (advanceAfter) advance(1); else renderReviewCard();
 }
@@ -1693,35 +1782,98 @@ function refreshReconSection() {
     const built = buildUniqueQueries();
     if (built) renderResults(built);
   }
+  updateReconButton();
 }
 
-async function reconcileAll() {
-  if (running) return;
+// Drive the Reconcile button + help text from the current stage: reconcile one column, review it,
+// then the next column unlocks.
+function updateReconButton() {
+  const btn = el('recon-run'); if (!btn || !project) return;
+  const help = el('recon-recon-help');
   const chain = reconChain();
-  if (!chain.length) {
-    setReconSummary('<span class="text-warning">Map a “Place name” column first (Step 2).</span>');
+  if (chain.length <= 1) { // single (name) column — the classic one-shot
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
     return;
   }
+  const pos = currentStagePos();
+  if (pos >= chain.length) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-check me-1"></i>All columns confirmed';
+    if (help) help.innerHTML = 'Every column in the chain has been reconciled and confirmed. Review any column via its pill above, or continue to the map/export.';
+    return;
+  }
+  const col = chain[pos];
+  const colName = esc(truncate(project.columns[col].name, 20));
+  const parentName = pos > 0 ? esc(truncate(project.columns[chain[pos - 1]].name, 18)) : '';
+  if (columnState(pos) === 'review') {
+    btn.disabled = true;
+    const isLast = pos >= chain.length - 1;
+    btn.innerHTML = `<i class="fas fa-list-check me-1"></i>${isLast ? `Review ${colName}` : `Confirm ${colName} to continue`}`;
+    if (help) help.innerHTML = isLast
+      ? `Reconciled <strong>${colName}</strong> — the final column. <strong>Review &amp; confirm</strong> its matches (Step 4).`
+      : `Reconciled <strong>${colName}</strong>. <strong>Review &amp; confirm</strong> its matches (Step 4) — then <strong>${esc(truncate(project.columns[chain[pos + 1]].name, 18))}</strong> unlocks, scoped within the places you confirmed here.`;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile ${colName}${parentName ? ` within ${parentName}` : ''}`;
+    if (help) help.innerHTML = parentName
+      ? `Reconcile the <strong>${colName}</strong> column, scoped <em>within</em> the confirmed <strong>${parentName}</strong> places (containment). Choose its <strong>Sources</strong> first if it needs a specific gazetteer.`
+      : `Reconcile the <strong>${colName}</strong> column first. Choose its <strong>Sources</strong> (e.g. UK Historic Counties) if it needs a specific gazetteer; you'll review it before the next column unlocks.`;
+  }
+}
+
+// Reconcile the CURRENT stage's column only (review-gated). The child columns stay locked until this
+// one is confirmed; each inherits containment from the confirmed parents.
+async function reconcileStage() {
+  if (running || !project) return;
+  const chain = reconChain();
+  if (!chain.length) { setReconSummary('<span class="text-warning">Map a “Place name” column first (Step 2).</span>'); return; }
+  const pos = currentStagePos();
+  if (pos >= chain.length) { setReconSummary('<span class="text-success"><i class="fas fa-check me-1"></i>All columns reconciled &amp; confirmed.</span>'); return; }
+  if (columnState(pos) === 'review') { setReconSummary('<span class="text-warning">Confirm this column’s matches (Step 4) before reconciling the next.</span>'); return; }
+  reconStaleNote = ''; // a fresh run clears any "parent changed" notice
   project.matches = project.matches || {};
   toggleRunning(true);
-  openPane('recon-recon'); // focus the reconcile step (accordion collapses the others)
+  openPane('recon-recon');
   stopRequested = false;
-  const csrf = getCsrf();
-
-  // Reconcile each column of the chain, parent → child. Each child column's query is scoped by the
-  // parent column's resolved place_id (contained_in), so Parish is matched within its County and Name
-  // within its Parish — sharpening disambiguation of same-name places.
-  for (let p = 0; p < chain.length && !stopRequested; p++) {
-    await reconcilePass(chain[p], p > 0 ? chain[p - 1] : -1, csrf, p, chain.length);
-  }
-
+  await reconcilePass(chain[pos], pos > 0 ? chain[pos - 1] : -1, getCsrf(), pos, chain.length);
   toggleRunning(false);
-  reconActiveIdx = chain.length - 1; // land on the name column for review
+  reconActiveIdx = pos; // review/results panes follow the column we just ran
   const built = buildUniqueQueries();
   if (built) renderResults(built);
   renderColSwitcher();
+  updateReconButton();
+  reviewPos = 0; refreshReview();
   await persist();
-  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'} — ${chain.length} column(s)`);
+  console.log(`[recon] reconciled column ${pos + 1}/${chain.length} (${project.columns[chain[pos]].name}) — ${stopRequested ? 'stopped' : 'done'}`);
+}
+
+// Demo helper for the guided tour: run the WHOLE chain end-to-end, auto-confirming any rows still
+// needing review between columns so the tour flows through to the name column (the real UI is
+// review-gated; this shortcut is only for the walkthrough).
+async function tourReconcileAll() {
+  const chain = reconChain();
+  for (let guard = 0; guard <= chain.length + 1; guard++) {
+    const pos = currentStagePos();
+    if (pos >= chain.length) break;
+    if (columnState(pos) === 'ready') { await reconcileStage(); await waitUntil(() => !running); }
+    // Auto-confirm the top candidate for any pending rows so the next column can unlock.
+    if (columnState(currentStagePos() < chain.length ? currentStagePos() : pos) === 'review') {
+      const col = chain[currentStagePos() < chain.length ? currentStagePos() : pos];
+      colKeys(col).forEach((k) => {
+        if (!needsReview(k)) return;
+        const m = project.matches[k];
+        if (m && m.candidates && m.candidates[0]) {
+          project.decisions = project.decisions || {};
+          project.decisions[k] = { status: 'accepted', accepted: [{ ci: 0, place_id: m.candidates[0].id, label: m.candidates[0].name, score: m.candidates[0].score }] };
+        }
+      });
+      await persist();
+    }
+  }
+  reconActiveIdx = chain.length - 1;
+  const built = buildUniqueQueries(); if (built) renderResults(built);
+  renderColSwitcher(); updateReconButton();
 }
 
 // Reconcile one column of the chain. parentCol < 0 for the top of the chain.
@@ -1756,16 +1908,17 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   for (let b = 0; b < entries.length && !stopRequested; b += RECON_BATCH) {
     const slice = entries.slice(b, b + RECON_BATCH);
     const queries = {};
-    const nsf = getNsFilter();
+    const nsf = getNsFilter(colIndex); // this column's own source gazetteers
     slice.forEach(([key, v], j) => {
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
-      // Containment: scope this column's query by the parent column's resolved place for the same row.
+      // Containment: scope this column's query by ALL the parent column's confirmed places for the
+      // same row (a parent may closeMatch several records) — "within any of them".
       if (parentCol >= 0) {
-        const pid = resolvedPlaceId(parentCol, key.slice(key.indexOf(':') + 1));
-        if (pid) { q.contained_in = [pid]; q.containment = 'fuzzy'; q.relation = 'within'; }
+        const pids = resolvedPlaceIds(parentCol, key.slice(key.indexOf(':') + 1));
+        if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'within'; }
       }
       queries['q' + j] = q;
     });
@@ -1778,7 +1931,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       break;
     }
     slice.forEach(([key], j) => {
-      const result = applyNsToCandidates((data['q' + j] && data['q' + j].result) || []);
+      const result = applyNsToCandidates((data['q' + j] && data['q' + j].result) || [], colIndex);
       project.matches[key] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at: new Date().toISOString() };
     });
     done += slice.length;
@@ -1823,7 +1976,7 @@ function tourApi() {
       if (!(project && project.fileName === 'reconciliation-demo.csv')) await loadSampleDataset();
     },
     reconcile: async () => {
-      if (!(project && project.matches && Object.keys(project.matches).length)) await reconcileAll();
+      await tourReconcileAll();
       await waitUntil(() => !running);
     },
   };
@@ -1871,7 +2024,7 @@ function init() {
   if (clearConfirm) clearConfirm.addEventListener('click', clearData);
 
   const run = el('recon-run');
-  if (run) run.addEventListener('click', reconcileAll);
+  if (run) run.addEventListener('click', reconcileStage);
   const stop = el('recon-stop');
   if (stop) stop.addEventListener('click', () => { stopRequested = true; });
 
@@ -1882,6 +2035,7 @@ function init() {
     persist();
     const built = buildUniqueQueries();
     if (built && project.matches && Object.keys(project.matches).length) renderResults(built);
+    updateReconButton(); // threshold changes which rows auto-confirm → which stage is current
   });
 
   const showIgn = el('recon-show-ignored');

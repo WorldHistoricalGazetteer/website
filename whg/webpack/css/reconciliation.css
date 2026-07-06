@@ -329,9 +329,15 @@
 .recon-phonetic-groups .recon-phon-group { margin: .15rem 0; line-height: 1.8; }
 .recon-phonetic-groups .badge { font-weight: 500; }
 
-/* Multi-column reconciliation: column switcher (parent → child) */
-.recon-col-switcher { display:flex; align-items:center; flex-wrap:wrap; gap:.15rem; padding:.4rem .6rem; background:#f8f9fa; border:1px solid #e2e2e2; border-radius:6px; }
-.recon-col-switcher .recon-col-pill { padding:.1rem .5rem; font-size:.8rem; }
+/* Multi-column reconciliation: column switcher (parent → child) with per-stage state */
+.recon-col-switcher { padding:.4rem .6rem; background:#f8f9fa; border:1px solid #e2e2e2; border-radius:6px; }
+.recon-col-pill { padding:.12rem .55rem; font-size:.8rem; border:1px solid #cfd4da; background:#fff; border-radius:14px; cursor:pointer; line-height:1.35; }
+.recon-col-pill--ready     { border-color:#1565c0; color:#1565c0; }
+.recon-col-pill--review    { border-color:#c2410c; color:#c2410c; background:#fff7f2; }
+.recon-col-pill--confirmed { border-color:#2e7d32; color:#2e7d32; background:#f2f9f2; }
+.recon-col-pill--locked    { color:#9aa5b1; background:#f1f3f5; border-color:#e2e6ea; cursor:not-allowed; }
+.recon-col-pill--active    { box-shadow:0 0 0 2px rgba(21,101,192,.45); font-weight:600; }
+.recon-col-stale { color:#8a5a00; }
 
 /* Numbered-stage styling: circular badges + subtle per-stage colour accents */
 .recon-pane-num {
