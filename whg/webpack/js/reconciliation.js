@@ -1093,8 +1093,11 @@ function moveAdmin(adminPos, dir) {
   reconStaleNote = cleared ? 'Hierarchy re-ordered — the affected columns were reset; reconcile them again.' : '';
   reconActiveIdx = -1;
   persist();
-  const built = buildUniqueQueries(); if (built) renderResults(built);
-  renderColSwitcher(); updateReconButton(); refreshReview();
+  refreshReconSection(); // renders results if any matches remain, else clears them; updates the button
+  renderColSwitcher();
+  refreshReview();
+  refreshFullMapPane();
+  refreshExport();
 }
 let reconActiveIdx = -1; // which chain position the review/results panes focus; -1 → derive (current stage)
 function activeReconCol() {
@@ -1329,7 +1332,7 @@ let _resultRows = [];        // full ordered list of row infos {name, country, k
 let RESULT_ROW_H = 34;       // px per row; self-calibrated from the first render
 
 function resultRowHtml(info) {
-  const m = project.matches[info.key];
+  const m = (project.matches || {})[info.key];
   let status, top = '', score = '';
   if (!m) status = '<span class="badge bg-secondary">pending</span>';
   else {
