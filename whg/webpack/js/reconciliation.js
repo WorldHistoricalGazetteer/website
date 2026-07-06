@@ -1893,6 +1893,15 @@ function init() {
   const contribBtn = el('recon-contribute-btn');
   if (contribBtn) contribBtn.addEventListener('click', contributeToWHG);
 
+  // Contribute submits a form that navigates to WHG's validation page, leaving the button disabled
+  // and showing "uploading to WHG…". If the user comes Back — especially via the bfcache, which
+  // restores the DOM exactly as it was left and does NOT re-run init() — those stay frozen. Reset
+  // them on pageshow so the button is usable again.
+  window.addEventListener('pageshow', () => {
+    if (contribBtn) contribBtn.disabled = false;
+    const cs = el('recon-contribute-status'); if (cs) cs.textContent = '';
+  });
+
   // Phonetic (vector) matching (Symphonym, in-browser) — default on; toggle + language persist.
   const phon = el('recon-phonetic');
   if (phon) {

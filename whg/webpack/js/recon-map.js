@@ -330,11 +330,17 @@ function ensureFullLayers() {
       const f = e.features[0];
       fullMap.getSource('recon-full').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) fullMap.easeTo({ center: f.geometry.coordinates, zoom: z }); });
     });
-    fullMap.on('click', 'recon-full-pt', (e) => { const f = e.features[0]; fullPopup.setLngLat(f.geometry.coordinates).setHTML(fullPopupHTML(f.properties)).addTo(fullMap); });
-    ['recon-full-clusters', 'recon-full-pt'].forEach((id) => {
-      fullMap.on('mouseenter', id, () => { fullMap.getCanvas().style.cursor = 'pointer'; });
-      fullMap.on('mouseleave', id, () => { fullMap.getCanvas().style.cursor = ''; });
+    // Point details on hover (not click): mousemove keeps the popup on the point under the cursor
+    // even as you slide between nearby points; mouseleave hides it when the cursor leaves the layer.
+    fullMap.on('mousemove', 'recon-full-pt', (e) => {
+      if (!e.features.length) return;
+      const f = e.features[0];
+      fullMap.getCanvas().style.cursor = 'pointer';
+      fullPopup.setLngLat(f.geometry.coordinates).setHTML(fullPopupHTML(f.properties)).addTo(fullMap);
     });
+    fullMap.on('mouseleave', 'recon-full-pt', () => { fullMap.getCanvas().style.cursor = ''; fullPopup.remove(); });
+    fullMap.on('mouseenter', 'recon-full-clusters', () => { fullMap.getCanvas().style.cursor = 'pointer'; });
+    fullMap.on('mouseleave', 'recon-full-clusters', () => { fullMap.getCanvas().style.cursor = ''; });
   } catch (err) { console.error('[recon] full-map layers failed', err); }
 }
 // geojson: FeatureCollection of Point features with { title, admin, date, match, score, coord } properties.
@@ -348,7 +354,7 @@ export function renderFullMap(container, geojson) {
       style: process.env.TILEBOSS ? ['whg-portal', 'Satellite'] : { version: 8, sources: {}, layers: [] },
       center: [0, 20], zoom: 1, maxZoom: 17, terrainControl: !!process.env.TILEBOSS, fullscreenControl: true,
     });
-    fullPopup = new M.Popup({ closeButton: true, closeOnClick: true, maxWidth: '300px', className: 'recon-map-popup' });
+    fullPopup = new M.Popup({ closeButton: false, closeOnClick: false, maxWidth: '300px', className: 'recon-map-popup recon-map-popup--hover' });
     if (fullRo) { try { fullRo.disconnect(); } catch (_) { /* ignore */ } }
     if (typeof ResizeObserver !== 'undefined') { fullRo = new ResizeObserver((es) => { for (const e of es) if (e.contentRect.width > 0 && e.contentRect.height > 0) fullMap.resize(); }); fullRo.observe(container); }
     const reapply = () => { ensureFullLayers(); const s = fullMap.getSource('recon-full'); if (s) s.setData(fullData); };
