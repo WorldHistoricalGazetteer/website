@@ -1428,10 +1428,12 @@ function getNsFilter() {
   return { mode: 'all', namespaces: [] };
 }
 function availableNamespaces() {
-  // Curated baseline (so a partially-seeded registry never drops known-good sources) ∪ registry
-  // authorities (adds e.g. ukhc, supplies names/counts) ∪ namespaces seen in the current matches.
-  const set = new Set(Object.keys(NS_NAMES));
+  // Registry authorities are the source of truth; NS_NAMES is only a pre-fetch fallback (before
+  // /api/sources/ resolves). Union in any namespaces present in the current matches so nothing
+  // selectable can vanish.
+  const set = new Set();
   if (_sources && _sources.length) _sources.forEach((s) => set.add(s.namespace));
+  else Object.keys(NS_NAMES).forEach((ns) => set.add(ns));
   if (project && project.matches) Object.values(project.matches).forEach((m) => (m.candidates || []).forEach((c) => set.add(nsFromId(c.id))));
   return [...set];
 }
