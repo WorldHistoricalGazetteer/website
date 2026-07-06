@@ -314,6 +314,28 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
   major feature; the per-row model (each row already reconciled individually) is the right foundation,
   and the gateway `contained_in`/`containment`/`relation` params already exist.
 
+  **DONE (2026-07-06).** Implemented review-gated, per-column reconciliation:
+  - `/api/sources/` (SourceGazetteersView) lists registry authorities (22, incl. `ukhc` UK Historic
+    Counties); the Sources modal is now registry-driven (names/counts/descriptions), NS_NAMES is a
+    fallback only. Note the registry namespaces: gn wd tgn osm gb(=GB1900) ohm chgis tm pl iv alc ofs
+    clio hgis po og nl dgsd dp un(ISO3166) ukhc whg.
+  - Derived stage state machine (locked/ready/review/confirmed) from matches+decisions; a child column
+    stays LOCKED until its parent is confirmed. `reconcileStage()` reconciles one column at a time;
+    the Reconcile button + help are stage-aware ("Reconcile County" → "Reconcile Parish within
+    County" → … → "All columns confirmed"). Column-switcher pills show per-stage state + lock icons.
+  - Per-column Sources: `project.colConfig[col].nsFilter`; the Sources modal/button retarget the
+    current stage column (title "Source gazetteers — <col>"). Containment passes ALL of a parent
+    row's confirmed place_ids (`resolvedPlaceIds`). Editing a confirmed parent clears & re-locks
+    downstream columns (`invalidateDownstream`) with a notice.
+  - Verified live: County→Parish→Place gating, per-column Sources targeting, Place locked until Parish
+    confirmed. Commits on `main` (registry endpoint + iterative rework), deployed to prod.
+  - FOLLOW-UPS: (a) no affordance to RE-reconcile an already-confirmed column with different sources
+    (e.g. realise County needs `ukhc` after confirming it) — only Clear & restart; add a
+    "re-reconcile this column" action that invalidates downstream. (b) Re-importing a dataset over a
+    reconciled one leaves a stale recon results table until reload (handleFile should clear recon DOM).
+    (c) auto-confirm on exact-name is too eager without a source restriction (Devon→AU); per-column
+    `ukhc` is the intended fix but consider a country-hint guard for admin columns.
+
 - **DONE (2026-07-06) — guided "Take a tour" live demo.** Built as `whg/webpack/js/recon-tour.js`
   (bespoke overlay, no external lib/CDN — CSP/local-first) lazy-loaded via `import()` in its own webpack
   chunk (`recon-tour.bundle.js`) so it costs nothing unless requested. A "Take a tour" button in the
