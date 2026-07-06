@@ -101,11 +101,12 @@ function draftGeom() {
 function ensureGeomLayers() {
   if (!map || !map.isStyleLoaded || !map.isStyleLoaded() || map.getSource('recon-geom')) return;
   try {
+    // Filters must be consistent modern expressions — mixing legacy '$type' with ['get',…] is rejected.
     map.addSource('recon-geom', { type: 'geojson', data: emptyFC() });
-    map.addLayer({ id: 'recon-geom-fill', type: 'fill', source: 'recon-geom', filter: ['==', '$type', 'Polygon'], paint: { 'fill-color': GEOM_COLOR, 'fill-opacity': 0.15 } });
-    map.addLayer({ id: 'recon-geom-line', type: 'line', source: 'recon-geom', filter: ['in', '$type', 'LineString', 'Polygon'], paint: { 'line-color': GEOM_COLOR, 'line-width': 2 } });
-    map.addLayer({ id: 'recon-geom-vtx', type: 'circle', source: 'recon-geom', filter: ['all', ['==', '$type', 'Point'], ['==', ['get', 'v'], 1]], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': GEOM_COLOR, 'circle-stroke-width': 2 } });
-    map.addLayer({ id: 'recon-geom-pt', type: 'circle', source: 'recon-geom', filter: ['all', ['==', '$type', 'Point'], ['!=', ['get', 'v'], 1]], paint: { 'circle-radius': 7, 'circle-color': GEOM_COLOR, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'recon-geom-fill', type: 'fill', source: 'recon-geom', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': GEOM_COLOR, 'fill-opacity': 0.15 } });
+    map.addLayer({ id: 'recon-geom-line', type: 'line', source: 'recon-geom', filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'Polygon']], paint: { 'line-color': GEOM_COLOR, 'line-width': 2 } });
+    map.addLayer({ id: 'recon-geom-vtx', type: 'circle', source: 'recon-geom', filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'v'], 1]], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': GEOM_COLOR, 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'recon-geom-pt', type: 'circle', source: 'recon-geom', filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'v'], 1]], paint: { 'circle-radius': 7, 'circle-color': GEOM_COLOR, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   } catch (_) { /* style not ready yet; the next styledata/load will re-add */ }
 }
 function redrawGeom() {
