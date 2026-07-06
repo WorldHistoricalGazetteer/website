@@ -444,6 +444,8 @@ function renderMapping() {
       renderCoords();        // coords/lat/lon mapping affects the coordinate panel
       renderDates();         // date mapping affects the date panel
       refreshReconSection(); // name/country mapping affects what can be reconciled
+      renderColSwitcher();   // the chain (which columns/levels) may have changed → refresh the pills
+      refreshReview();       // and the review pane's active column may no longer exist
     });
   });
 }
