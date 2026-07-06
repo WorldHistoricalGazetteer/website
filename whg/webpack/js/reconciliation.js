@@ -1055,12 +1055,46 @@ const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
 // parent column's resolved place_id (contained_in), so e.g. a Parish is matched within its County and
 // a Name within its Parish — sharpening disambiguation of same-name places. The reconciliation chain
 // is the ordered list of column indices.
+// The admin-parent (county/region) columns, ordered parent → child. Order follows the user's explicit
+// project.chainOrder when set, else dataset column order; new/removed columns reconcile in gracefully
+// (kept in order if still admin, appended if newly admin, dropped if no longer admin).
+function orderedAdminCols() {
+  if (!project) return [];
+  const admin = project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'county');
+  const order = (project.chainOrder || []).filter((i) => admin.includes(i));
+  const rest = admin.filter((i) => !order.includes(i));
+  return [...order, ...rest];
+}
 function reconChain() {
   if (!project) return [];
-  const chain = project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'county');
+  const chain = orderedAdminCols();
   const nameIdx = colIndexByRole('name');
   if (nameIdx >= 0) chain.push(nameIdx);
   return chain;
+}
+// Reorder the admin hierarchy: swap the admin column at adminPos with its neighbour (dir -1 earlier /
+// +1 later). Re-ordering changes containment, so matches/decisions from the swap point onward are
+// cleared (columns before it keep their confirmed work); the affected columns must be reconciled again.
+function moveAdmin(adminPos, dir) {
+  if (!project) return;
+  const admin = orderedAdminCols();
+  const j = adminPos + dir;
+  if (adminPos < 0 || j < 0 || adminPos >= admin.length || j >= admin.length) return;
+  const tmp = admin[adminPos]; admin[adminPos] = admin[j]; admin[j] = tmp;
+  project.chainOrder = admin.slice();
+  const newChain = reconChain();
+  const minPos = Math.min(adminPos, j);
+  let cleared = false;
+  for (let p = minPos; p < newChain.length; p++) {
+    const c = String(newChain[p]);
+    if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) { delete project.matches[k]; cleared = true; } }
+    if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
+  }
+  reconStaleNote = cleared ? 'Hierarchy re-ordered — the affected columns were reset; reconcile them again.' : '';
+  reconActiveIdx = -1;
+  persist();
+  const built = buildUniqueQueries(); if (built) renderResults(built);
+  renderColSwitcher(); updateReconButton(); refreshReview();
 }
 let reconActiveIdx = -1; // which chain position the review/results panes focus; -1 → derive (current stage)
 function activeReconCol() {
@@ -1340,13 +1374,21 @@ function renderColSwitcher() {
   const chain = reconChain();
   if (chain.length <= 1) { boxes.forEach((b) => { b.innerHTML = ''; b.classList.add('d-none'); }); return; }
   const active = activeReconCol();
+  const adminCount = orderedAdminCols().length; // chain positions 0..adminCount-1 are re-orderable admin cols
   const STATE_ICON = { locked: '<i class="fas fa-lock me-1"></i>', ready: '<i class="far fa-circle me-1"></i>', review: '<i class="fas fa-list-check me-1"></i>', confirmed: '<i class="fas fa-check me-1"></i>' };
   const pills = chain.map((ci, idx) => {
     const state = columnState(idx);
     const name = truncate(project.columns[ci].name, 22);
     const cls = `recon-col-pill recon-col-pill--${state}${ci === active ? ' recon-col-pill--active' : ''}`;
+    const pill = `<button type="button" class="${cls}" data-idx="${idx}" title="${esc(project.columns[ci].name)} — ${state}"${state === 'locked' ? ' disabled' : ''}>${STATE_ICON[state]}${esc(name)}</button>`;
     const arrow = idx < chain.length - 1 ? '<i class="fas fa-angle-right mx-1 text-muted"></i>' : '';
-    return `<button type="button" class="${cls}" data-idx="${idx}" title="${esc(project.columns[ci].name)} — ${state}"${state === 'locked' ? ' disabled' : ''}>${STATE_ICON[state]}${esc(name)}</button>${arrow}`;
+    // Re-order controls on admin (parent) pills — move earlier (towards root) / later. Name col is fixed last.
+    if (adminCount >= 2 && idx < adminCount) {
+      const left = idx > 0 ? `<button type="button" class="recon-col-move" data-move="${idx}:-1" title="Move ${esc(project.columns[ci].name)} earlier (towards the root)"><i class="fas fa-chevron-left"></i></button>` : '';
+      const right = idx < adminCount - 1 ? `<button type="button" class="recon-col-move" data-move="${idx}:1" title="Move ${esc(project.columns[ci].name)} later"><i class="fas fa-chevron-right"></i></button>` : '';
+      return `<span class="recon-col-item">${left}${pill}${right}</span>${arrow}`;
+    }
+    return `${pill}${arrow}`;
   }).join('');
   const note = reconStaleNote ? `<div class="recon-col-stale small mt-1"><i class="fas fa-triangle-exclamation me-1"></i>${esc(reconStaleNote)}</div>` : '';
   const html = `<div class="d-flex align-items-center flex-wrap gap-1"><span class="text-muted small me-1"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}</div>${note}`;
@@ -1358,6 +1400,11 @@ function renderColSwitcher() {
       reconActiveIdx = Number(b.dataset.idx);
       const built = buildUniqueQueries(); if (built) renderResults(built);
       updateReconButton();   // focus changed → refresh the Re-reconcile button + Sources target
+    }));
+    box.querySelectorAll('.recon-col-move').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const [pos, dir] = b.dataset.move.split(':').map(Number);
+      moveAdmin(pos, dir);
     }));
   });
 }
@@ -1495,14 +1542,11 @@ function nsFromId(id) { const p = String(id || '').split(':'); return p.length >
 function nsName(id) { const ns = nsFromId(id); return (_sourcesByNs[ns] && _sourcesByNs[ns].name) || NS_NAMES[ns] || ns.toUpperCase(); }
 
 // ── Source-gazetteer (namespace) picker: prioritise / restrict, persisted ─────
-const NS_LS_KEY = 'whg-recon-ns';
 // Per-column source filter. Each chain column can restrict/prioritise its own source gazetteers
-// (e.g. UK Historic Counties for the County column, a parishes gazetteer for Parish). Falls back to
-// the project-wide default, then the last-used localStorage value, then "all".
+// (e.g. UK Historic Counties for the County column, a parishes gazetteer for Parish). A column with
+// no explicit choice defaults to ALL sources — a per-column pick never seeds another column's default.
 function getNsFilter(col) {
   if (project && col != null && project.colConfig && project.colConfig[col] && project.colConfig[col].nsFilter) return project.colConfig[col].nsFilter;
-  if (project && project.nsFilter) return project.nsFilter;
-  try { const s = JSON.parse(localStorage.getItem(NS_LS_KEY) || 'null'); if (s && s.mode) return s; } catch (_) { /* */ }
   return { mode: 'all', namespaces: [] };
 }
 // The Sources picker (and the Re-reconcile button) configure the FOCUSED column — the one shown in
@@ -1566,13 +1610,9 @@ function applyNsFilter() {
   const namespaces = [...document.querySelectorAll('.recon-ns-cb:checked')].map((c) => c.value);
   const f = { mode, namespaces };
   const col = sourcesTargetCol();
-  if (project) {
-    if (col >= 0) { project.colConfig = project.colConfig || {}; project.colConfig[col] = Object.assign({}, project.colConfig[col], { nsFilter: f }); }
-    else project.nsFilter = f;
-  }
-  // Only a project-wide (non per-column) choice updates the remembered default — a per-column pick
-  // must NOT leak into the other columns' defaults (e.g. County's ukhc shouldn't become Parish's).
-  if (col < 0) { try { localStorage.setItem(NS_LS_KEY, JSON.stringify(f)); } catch (_) { /* */ } }
+  if (project && col >= 0) { project.colConfig = project.colConfig || {}; project.colConfig[col] = Object.assign({}, project.colConfig[col], { nsFilter: f }); }
+  // The choice lives only on that column (project.colConfig) — it is NOT remembered as a global
+  // default, so every other/fresh column stays on "all sources" until explicitly set.
   updateSourcesLabel();
   // 'prioritise' re-orders THIS column's existing candidates immediately; 'only'/'all' take effect on
   // the next run of the column.
