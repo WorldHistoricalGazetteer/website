@@ -297,3 +297,70 @@ export function destroyReviewMap() {
   if (ro) { try { ro.disconnect(); } catch (_) { /* ignore */ } ro = null; }
   if (map) { try { map.remove(); } catch (_) { /* ignore */ } map = null; markers = []; hoverPopup = null; lastBounds = null; clickBound = false; }
 }
+
+// ── Full-dataset map (pane 5) ────────────────────────────────────────────────
+// Plots EVERY located row as one GeoJSON source rendered by a GPU circle layer (NOT DOM markers), with
+// clustering — so it scales to tens of thousands of points client-side without choking the DOM. A
+// heatmap layer takes over at low zoom for a density read on very large sets. Local-first: no tiles/server.
+let fullMap = null, fullPopup = null, fullRo = null, fullData = null;
+function fullPopupHTML(p) {
+  return `<div class="recon-fullpop">
+    <div class="recon-fullpop-title">${esc(p.title || '')}</div>
+    ${p.admin ? `<div class="text-muted small">${esc(p.admin)}</div>` : ''}
+    ${p.date ? `<div class="small"><i class="fas fa-calendar-days me-1 text-secondary"></i>${esc(p.date)}</div>` : ''}
+    ${p.match ? `<div class="small"><i class="fas fa-check text-success me-1"></i>${esc(p.match)}${p.score ? ` <span class="text-muted">(${esc(p.score)})</span>` : ''}</div>` : ''}
+    ${p.coord ? `<div class="small text-muted">${esc(p.coord)}</div>` : ''}
+  </div>`;
+}
+function ensureFullLayers() {
+  if (!fullMap || !fullMap.isStyleLoaded || !fullMap.isStyleLoaded() || fullMap.getSource('recon-full')) return;
+  try {
+    fullMap.addSource('recon-full', { type: 'geojson', data: fullData || { type: 'FeatureCollection', features: [] }, cluster: true, clusterMaxZoom: 12, clusterRadius: 46 });
+    // Density heatmap — visible only when zoomed out (a fast read on large datasets).
+    fullMap.addLayer({ id: 'recon-full-heat', type: 'heatmap', source: 'recon-full', maxzoom: 6,
+      paint: { 'heatmap-radius': 14, 'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.7, 6, 0] } });
+    fullMap.addLayer({ id: 'recon-full-clusters', type: 'circle', source: 'recon-full', filter: ['has', 'point_count'],
+      paint: { 'circle-color': '#1565c0', 'circle-opacity': 0.8, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
+        'circle-radius': ['step', ['get', 'point_count'], 15, 50, 20, 500, 27, 5000, 34] } });
+    fullMap.addLayer({ id: 'recon-full-count', type: 'symbol', source: 'recon-full', filter: ['has', 'point_count'],
+      layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }, paint: { 'text-color': '#fff' } });
+    fullMap.addLayer({ id: 'recon-full-pt', type: 'circle', source: 'recon-full', filter: ['!', ['has', 'point_count']], minzoom: 4,
+      paint: { 'circle-color': '#c2410c', 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+    fullMap.on('click', 'recon-full-clusters', (e) => {
+      const f = e.features[0];
+      fullMap.getSource('recon-full').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) fullMap.easeTo({ center: f.geometry.coordinates, zoom: z }); });
+    });
+    fullMap.on('click', 'recon-full-pt', (e) => { const f = e.features[0]; fullPopup.setLngLat(f.geometry.coordinates).setHTML(fullPopupHTML(f.properties)).addTo(fullMap); });
+    ['recon-full-clusters', 'recon-full-pt'].forEach((id) => {
+      fullMap.on('mouseenter', id, () => { fullMap.getCanvas().style.cursor = 'pointer'; });
+      fullMap.on('mouseleave', id, () => { fullMap.getCanvas().style.cursor = ''; });
+    });
+  } catch (_) { /* style not ready; next styledata re-adds */ }
+}
+// geojson: FeatureCollection of Point features with { title, admin, date, match, score, coord } properties.
+export function renderFullMap(container, geojson) {
+  const M = ML();
+  fullData = geojson || { type: 'FeatureCollection', features: [] };
+  if (!fullMap || fullMap.getContainer() !== container) {
+    if (fullMap) { try { fullMap.remove(); } catch (_) { /* ignore */ } }
+    fullMap = new M.Map({
+      container,
+      style: process.env.TILEBOSS ? ['whg-portal', 'Satellite'] : { version: 8, sources: {}, layers: [] },
+      center: [0, 20], zoom: 1, maxZoom: 17, terrainControl: !!process.env.TILEBOSS, fullscreenControl: true,
+    });
+    fullPopup = new M.Popup({ closeButton: true, closeOnClick: true, maxWidth: '300px', className: 'recon-map-popup' });
+    if (fullRo) { try { fullRo.disconnect(); } catch (_) { /* ignore */ } }
+    if (typeof ResizeObserver !== 'undefined') { fullRo = new ResizeObserver((es) => { for (const e of es) if (e.contentRect.width > 0 && e.contentRect.height > 0) fullMap.resize(); }); fullRo.observe(container); }
+    fullMap.on('styledata', () => { ensureFullLayers(); const s = fullMap.getSource('recon-full'); if (s) s.setData(fullData); });
+  }
+  const apply = () => {
+    fullMap.resize();
+    ensureFullLayers();
+    const s = fullMap.getSource('recon-full'); if (s) s.setData(fullData);
+    const b = new M.LngLatBounds();
+    fullData.features.forEach((f) => b.extend(f.geometry.coordinates));
+    if (!b.isEmpty()) fullMap.fitBounds(b, { padding: 40, maxZoom: 9, duration: 0 });
+  };
+  if (fullMap.loaded()) apply(); else fullMap.once('load', apply);
+}
+export function resizeFullMap() { if (fullMap) fullMap.resize(); }

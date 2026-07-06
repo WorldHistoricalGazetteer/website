@@ -342,3 +342,9 @@
 .recon-pane.recon-collapsed { border-left-color: #e2e2e2; }
 .recon-pane.recon-collapsed .recon-pane-num { opacity: .85; }
 
+/* Full-dataset map (pane 5) */
+.recon-fullmap { height: 540px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
+.recon-fullpop .recon-fullpop-title { font-weight: 600; }
+#recon-fullmap-pane { border-left-color: #ad1457; }
+#recon-fullmap-pane .recon-pane-num { background: #ad1457; }
+

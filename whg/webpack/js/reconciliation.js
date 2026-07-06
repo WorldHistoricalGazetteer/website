@@ -472,6 +472,7 @@ function renderAll() {
   refreshReconSection();
   renderColSwitcher();
   refreshReview();  // show pane 4's header (with a "reconcile first" placeholder) even before matches
+  refreshFullMapPane();
   refreshExport();
   renderLangControl(); // populate the phonetic-matching language selector (default detected from data)
   updatePaneSummaries();
@@ -486,6 +487,8 @@ function openPane(id) {
   if (id === 'recon-review' && ReconMap && ReconMap.resizeReviewMap) {
     requestAnimationFrame(() => ReconMap.resizeReviewMap());
   }
+  // The full-dataset map is built lazily — only when this pane is opened.
+  if (id === 'recon-fullmap-pane') requestAnimationFrame(() => updateFullMap());
 }
 function updatePaneSummaries() {
   if (!project) return;
@@ -523,6 +526,7 @@ function resetUI() {
   el('recon-results-wrap').classList.add('d-none');
   el('recon-review').classList.add('d-none');
   el('recon-review-map').classList.add('d-none');
+  el('recon-fullmap-pane').classList.add('d-none');
   el('recon-export').classList.add('d-none');
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
@@ -917,6 +921,42 @@ function refreshExport() {
   }
 }
 
+// ── Full-dataset map (pane between Review and Export) ────────────────────────
+// Shown once a dataset has locatable rows. Built lazily (only when the pane is opened) to avoid the
+// O(rows) work + coord parsing on large datasets until the user asks for it; a GPU circle layer with
+// clustering (in recon-map.js) then handles tens of thousands of points client-side.
+function refreshFullMapPane() {
+  const sec = el('recon-fullmap-pane'); if (!sec || !project) return;
+  const locatable = hasCoordRole() || (project.geom && Object.keys(project.geom).length > 0);
+  sec.classList.toggle('d-none', !locatable);
+}
+async function updateFullMap() {
+  const box = el('recon-fullmap'); if (!box || !project) return;
+  const nameCol = colIndexByRole('name'), countyIdx = colIndexByRole('county'), dateIdx = colIndexByRole('date');
+  const decisions = project.decisions || {}, matches = project.matches || {};
+  if (hasCoordRole()) await loadCoords();
+  const feats = [];
+  for (let i = 0; i < project.rows.length; i++) {
+    const ov = project.geom && project.geom[nameCol + ':' + i];
+    const c = ov ? firstLngLat(ov.geometry) : (hasCoordRole() ? rowCoordValue(i) : null);
+    if (!c) continue;
+    const key = nameCol + ':' + i;
+    const acc = acceptedList(decisions[key])[0]
+      || (matches[key] && matches[key].top && isAutoConfirmed(matches[key].top, getThreshold()) ? { label: matches[key].top.name, score: matches[key].top.score } : null);
+    const cell = (idx) => (idx >= 0 ? String(project.rows[i][idx] == null ? '' : project.rows[i][idx]) : '');
+    feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [+c.lon.toFixed(6), +c.lat.toFixed(6)] }, properties: {
+      title: cell(nameCol), admin: cell(countyIdx), date: cell(dateIdx),
+      match: acc ? acc.label : '', score: acc ? acc.score : '',
+      coord: c.lat.toFixed(4) + ', ' + c.lon.toFixed(4),
+    } });
+  }
+  const sum = el('recon-fullmap-sum');
+  if (sum) sum.textContent = `${feats.length.toLocaleString()} located place${feats.length === 1 ? '' : 's'}` +
+    (project.rows.length > feats.length ? ` · ${(project.rows.length - feats.length).toLocaleString()} without coordinates` : '');
+  try { const mod = await loadReconMap(); mod.renderFullMap(box, { type: 'FeatureCollection', features: feats }); }
+  catch (err) { console.error('[recon] full map failed', err); }
+}
+
 // ── Phonetic (vector) matching: language-conditioned Symphonym embeddings sent with reconcile ─────
 // The in-browser Symphonym model embeds each row's name (int8, 128-d) and the vector rides along on
 // the reconcile request, so the gateway ranks candidates by phonetic/vector similarity — offloading
@@ -1224,7 +1264,7 @@ function renderResultsWindow(calibrate) {
     }
   }
 }
-function renderResults(built) { renderColSwitcher(); renderResultsTable(built); refreshReview(); refreshExport(); }
+function renderResults(built) { renderColSwitcher(); renderResultsTable(built); refreshReview(); refreshFullMapPane(); refreshExport(); }
 
 // Column switcher (multi-column reconciliation): pills for each chain column, parent → child, showing
 // which column the results/review panes are currently displaying. Hidden for single-column datasets.

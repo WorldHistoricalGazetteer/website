@@ -238,11 +238,29 @@
     </div>
   </section>
 
+  <!-- 5 · Map (accordion pane) — full-dataset visualisation -->
+  <section class="recon-card recon-pane d-none" id="recon-fullmap-pane">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="recon-fullmap-pane">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-num">5</span><span class="recon-pane-title">Map</span>
+        <span class="recon-pane-summary" id="recon-fullmap-sum"></span>
+      </button>
+    </div>
+    <div class="recon-pane-body">
+      <p class="text-muted small mb-2">
+        Every located place on one map — click a point for its details. Points cluster as you zoom out,
+        so it stays fast for large datasets. Uses your converted coordinates (or a drawn/cloned geometry).
+      </p>
+      <div class="recon-fullmap" id="recon-fullmap"></div>
+    </div>
+  </section>
+
   <section class="recon-card recon-pane d-none" id="recon-export">
     <div class="recon-pane-header">
       <button type="button" class="recon-pane-toggle" data-pane="recon-export">
         <i class="fas fa-chevron-down recon-pane-chevron"></i>
-        <span class="recon-pane-num">5</span><span class="recon-pane-title">Enrich &amp; export</span>
+        <span class="recon-pane-num">6</span><span class="recon-pane-title">Enrich &amp; export</span>
         <span class="recon-pane-summary" id="recon-pane-sum-export"></span>
       </button>
     </div>
