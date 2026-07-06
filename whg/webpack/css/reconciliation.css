@@ -306,3 +306,9 @@
 /* Multi-select candidate tick */
 .recon-cand-check { display:inline-block; width:1em; color:#2e7d32; font-weight:700; margin-right:.15rem; }
 .recon-cand--accepted { background: rgba(46,125,50,0.08); }
+
+/* Candidate hover/selection feedback between the list and the map (#2) */
+.recon-map-marker { transition: transform .1s ease, box-shadow .1s ease; }
+.recon-map-marker--selected { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2e7d32; }
+.recon-map-marker--hover { transform: scale(1.35); box-shadow: 0 0 0 2px #fff, 0 0 0 5px rgba(21,101,192,0.65); }
+.recon-cand--maphover { outline: 2px solid rgba(21,101,192,0.55); outline-offset: -2px; }

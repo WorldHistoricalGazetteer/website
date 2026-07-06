@@ -716,10 +716,16 @@ function geojsonToWKT(g) {
   if (!g) return '';
   const pair = (c) => `${+(+c[0]).toFixed(6)} ${+(+c[1]).toFixed(6)}`;
   const ring = (r) => r.map(pair).join(', ');
-  if (g.type === 'Point') return `POINT (${pair(g.coordinates)})`;
-  if (g.type === 'LineString') return `LINESTRING (${ring(g.coordinates)})`;
-  if (g.type === 'Polygon') return `POLYGON (${g.coordinates.map((r) => `(${ring(r)})`).join(', ')})`;
-  return '';
+  const poly = (p) => p.map((r) => `(${ring(r)})`).join(', ');
+  switch (g.type) {
+    case 'Point': return `POINT (${pair(g.coordinates)})`;
+    case 'LineString': return `LINESTRING (${ring(g.coordinates)})`;
+    case 'Polygon': return `POLYGON (${poly(g.coordinates)})`;
+    case 'MultiPoint': return `MULTIPOINT (${ring(g.coordinates)})`;
+    case 'MultiLineString': return `MULTILINESTRING (${g.coordinates.map((l) => `(${ring(l)})`).join(', ')})`;
+    case 'MultiPolygon': return `MULTIPOLYGON (${g.coordinates.map((p) => `(${poly(p)})`).join(', ')})`;
+    default: return '';
+  }
 }
 
 function csvCell(v) {
@@ -997,6 +1003,18 @@ function acceptedList(dec) {
   if (dec.place_id != null) return [{ ci: dec.ci, place_id: dec.place_id, label: dec.label, score: dec.score }];
   return [];
 }
+// Candidate indices to show as "selected" (ringed) on the map: explicit accepts, or the auto-confirmed top.
+function selectedCis(key) {
+  const dec = project.decisions && project.decisions[key];
+  const cis = acceptedList(dec).map((a) => a.ci);
+  if (!dec) { const m = project.matches && project.matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold())) cis.push(0); }
+  return cis;
+}
+// Highlight the list row for candidate `ci` (called when its marker is hovered on the map).
+function highlightCandidateRow(ci) {
+  const card = el('recon-review-card'); if (!card) return;
+  card.querySelectorAll('.recon-cand').forEach((li) => li.classList.toggle('recon-cand--maphover', Number(li.dataset.ci) === ci));
+}
 // The first candidate accepted for a key (explicit accept, or auto-confirmed top), or null.
 function acceptedCandidate(key) {
   const m = project.matches && project.matches[key];
@@ -1165,7 +1183,13 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-danger" data-geom="clear"${(project.geom && project.geom[meta.key]) ? '' : ' disabled'}>Clear</button>
        <span id="recon-geom-status" class="text-muted ms-1">${esc(geomStatusText(meta.key))}</span>
      </div>`;
-  card.querySelectorAll('.recon-cand').forEach((li) => li.addEventListener('click', () => acceptCandidate(Number(li.dataset.ci))));
+  card.querySelectorAll('.recon-cand').forEach((li) => {
+    const ci = Number(li.dataset.ci);
+    li.addEventListener('click', () => acceptCandidate(ci));
+    // Hovering a candidate in the list highlights its marker on the map (and vice versa).
+    li.addEventListener('mouseenter', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(ci); });
+    li.addEventListener('mouseleave', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(null); });
+  });
   card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
   card.querySelectorAll('[data-geom]').forEach((b) => b.addEventListener('click', () => geomAction(b.dataset.geom, meta.key)));
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
@@ -1308,6 +1332,8 @@ async function updateReviewMap(key) {
       onAccept: (ci) => acceptCandidate(ci),
       onGeom: (g) => onReviewGeom(key, g),                         // user drew / cleared on the map
       override: (project.geom && project.geom[key] && project.geom[key].geometry) || null,
+      selected: selectedCis(key),                                 // accepted candidates get a ring
+      onHover: (ci) => highlightCandidateRow(ci),                 // map hover → highlight the list row
     });
   } catch (err) { console.error('[recon] review map failed', err); box.classList.add('d-none'); }
 }
@@ -1348,7 +1374,9 @@ async function geomAction(kind, key) {
   if (kind === 'point' || kind === 'line' || kind === 'polygon') {
     mod.startDraw(kind);
     const s = el('recon-geom-status');
-    if (s) s.textContent = kind === 'point' ? 'click the map to place a point' : `click to add points, then Finish (${kind})`;
+    if (s) s.textContent = kind === 'point'
+      ? `click the map to place a point (click ${kind} again to add another → Multi)`
+      : `click to add points, then Finish · click ${kind} again to add another part (→ Multi)`;
     return;
   }
   if (kind === 'finish') { mod.finishDraw(); return; }

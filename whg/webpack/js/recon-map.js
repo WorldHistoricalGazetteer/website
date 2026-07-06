@@ -28,7 +28,7 @@ let clickBound = false;
 // Geometry-picker state.
 let onGeomCb = null;              // callback(geometry|null) fired when the override changes
 let currentGeom = null;          // committed override geometry for the current place (GeoJSON geometry)
-let draw = { mode: null, verts: [] }; // in-progress drawing
+let draw = { mode: null, verts: [], parts: [] }; // in-progress drawing (parts → Multi* geometries)
 
 const ML = () => window.whg_maplibre; // the wrapped MapLibre (Map/Marker/Popup/LngLatBounds)
 const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
@@ -81,45 +81,79 @@ function hookLayerPersistence(container) {
   }
 }
 
-// ── Geometry picker (#1) ────────────────────────────────────────────────────
+// ── Geometry picker (#1) — supports point/line/polygon and their Multi- variants ─────────────
+// Re-selecting the same shape button adds another *part* to the existing geometry, promoting it to
+// MultiPoint / MultiLineString / MultiPolygon. `draw.parts` holds the parts committed so far in the
+// current session; each part's coordinates match the single-geometry shape for that base kind.
 function emptyFC() { return { type: 'FeatureCollection', features: [] }; }
-function collectVertices(g) {
-  if (!g) return [];
-  if (g.type === 'Point') return [g.coordinates];
-  if (g.type === 'LineString') return g.coordinates;
-  if (g.type === 'Polygon') return g.coordinates[0] || [];
-  return [];
+// Flatten any geometry's coordinates to a list of [lng,lat] pairs (for fitting bounds).
+function allCoords(g) {
+  if (!g || !g.coordinates) return [];
+  const out = [];
+  (function walk(c) {
+    if (Array.isArray(c) && typeof c[0] === 'number') out.push(c);
+    else if (Array.isArray(c)) c.forEach(walk);
+  }(g.coordinates));
+  return out;
 }
-function draftGeom() {
-  const v = draw.verts;
-  if (!v.length) return null;
-  if (draw.mode === 'point') return { type: 'Point', coordinates: v[0] };
-  if (draw.mode === 'line') return v.length >= 2 ? { type: 'LineString', coordinates: v } : null;
-  if (draw.mode === 'polygon') return v.length >= 3 ? { type: 'Polygon', coordinates: [v.concat([v[0]])] } : { type: 'LineString', coordinates: v };
+function baseOf(type) {
+  if (type === 'Point' || type === 'MultiPoint') return 'point';
+  if (type === 'LineString' || type === 'MultiLineString') return 'line';
+  if (type === 'Polygon' || type === 'MultiPolygon') return 'polygon';
   return null;
 }
+// Break a committed geometry into an array of single-part coordinates (for that base kind).
+function toParts(g) {
+  if (!g) return [];
+  switch (g.type) {
+    case 'Point': case 'LineString': case 'Polygon': return [g.coordinates];
+    case 'MultiPoint': case 'MultiLineString': case 'MultiPolygon': return g.coordinates.slice();
+    default: return [];
+  }
+}
+// Build a geometry of base `kind` from single-part coordinates — single or Multi by count.
+function fromParts(kind, parts) {
+  if (!parts.length) return null;
+  const multi = parts.length > 1;
+  if (kind === 'point') return { type: multi ? 'MultiPoint' : 'Point', coordinates: multi ? parts : parts[0] };
+  if (kind === 'line') return { type: multi ? 'MultiLineString' : 'LineString', coordinates: multi ? parts : parts[0] };
+  if (kind === 'polygon') return { type: multi ? 'MultiPolygon' : 'Polygon', coordinates: multi ? parts : parts[0] };
+  return null;
+}
+// The in-progress part's coordinates from the vertices collected so far (line/polygon only).
+function draftPart() {
+  const v = draw.verts;
+  if (draw.mode === 'line') return v.length >= 2 ? v.slice() : null;
+  if (draw.mode === 'polygon') return v.length >= 3 ? [v.concat([v[0]])] : null;
+  return null;
+}
+// What to render: the parts committed this drawing session (or the standing geometry when idle).
+function committedPreview() { return draw.mode ? fromParts(draw.mode, draw.parts) : currentGeom; }
 function ensureGeomLayers() {
   if (!map || !map.isStyleLoaded || !map.isStyleLoaded() || map.getSource('recon-geom')) return;
   try {
-    // Filters must be consistent modern expressions — mixing legacy '$type' with ['get',…] is rejected.
+    // Filters must be consistent modern expressions and match Multi* variants too.
     map.addSource('recon-geom', { type: 'geojson', data: emptyFC() });
-    map.addLayer({ id: 'recon-geom-fill', type: 'fill', source: 'recon-geom', filter: ['==', ['geometry-type'], 'Polygon'], paint: { 'fill-color': GEOM_COLOR, 'fill-opacity': 0.15 } });
-    map.addLayer({ id: 'recon-geom-line', type: 'line', source: 'recon-geom', filter: ['any', ['==', ['geometry-type'], 'LineString'], ['==', ['geometry-type'], 'Polygon']], paint: { 'line-color': GEOM_COLOR, 'line-width': 2 } });
-    map.addLayer({ id: 'recon-geom-vtx', type: 'circle', source: 'recon-geom', filter: ['all', ['==', ['geometry-type'], 'Point'], ['==', ['get', 'v'], 1]], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': GEOM_COLOR, 'circle-stroke-width': 2 } });
-    map.addLayer({ id: 'recon-geom-pt', type: 'circle', source: 'recon-geom', filter: ['all', ['==', ['geometry-type'], 'Point'], ['!=', ['get', 'v'], 1]], paint: { 'circle-radius': 7, 'circle-color': GEOM_COLOR, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'recon-geom-fill', type: 'fill', source: 'recon-geom', filter: ['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false], paint: { 'fill-color': GEOM_COLOR, 'fill-opacity': 0.15 } });
+    map.addLayer({ id: 'recon-geom-line', type: 'line', source: 'recon-geom', filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'], true, false], paint: { 'line-color': GEOM_COLOR, 'line-width': 2 } });
+    map.addLayer({ id: 'recon-geom-vtx', type: 'circle', source: 'recon-geom', filter: ['all', ['match', ['geometry-type'], ['Point', 'MultiPoint'], true, false], ['==', ['get', 'v'], 1]], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': GEOM_COLOR, 'circle-stroke-width': 2 } });
+    map.addLayer({ id: 'recon-geom-pt', type: 'circle', source: 'recon-geom', filter: ['all', ['match', ['geometry-type'], ['Point', 'MultiPoint'], true, false], ['!=', ['get', 'v'], 1]], paint: { 'circle-radius': 7, 'circle-color': GEOM_COLOR, 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   } catch (_) { /* style not ready yet; the next styledata/load will re-add */ }
 }
 function redrawGeom() {
   if (!map || !map.getSource('recon-geom')) return;
   const feats = [];
-  const g = draw.mode ? draftGeom() : currentGeom;
+  const g = committedPreview();
   if (g) feats.push({ type: 'Feature', geometry: g, properties: {} });
-  // Vertex handles while drawing a line/polygon.
-  if (draw.mode && draw.mode !== 'point') draw.verts.forEach((pt) => feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: pt }, properties: { v: 1 } }));
+  // In-progress part of a line/polygon: the connecting segment plus vertex handles.
+  if (draw.mode && draw.mode !== 'point') {
+    if (draw.verts.length >= 2) feats.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: draw.verts }, properties: {} });
+    draw.verts.forEach((pt) => feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: pt }, properties: { v: 1 } }));
+  }
   map.getSource('recon-geom').setData({ type: 'FeatureCollection', features: feats });
 }
 function commitGeom(g) {
-  draw = { mode: null, verts: [] };
+  draw = { mode: null, verts: [], parts: [] };
   currentGeom = g;
   if (map) map.getCanvas().style.cursor = '';
   redrawGeom();
@@ -128,22 +162,27 @@ function commitGeom(g) {
 function onMapClick(e) {
   if (!draw.mode) return;
   const pt = [e.lngLat.lng, e.lngLat.lat];
-  if (draw.mode === 'point') { draw.verts = [pt]; commitGeom({ type: 'Point', coordinates: pt }); return; }
+  if (draw.mode === 'point') { draw.parts.push(pt); commitGeom(fromParts('point', draw.parts)); return; }
   draw.verts.push(pt);
   redrawGeom();
 }
-// Public picker API, called from the review card.
+// Public picker API, called from the review card. Re-selecting the same base shape seeds the existing
+// geometry's parts, so the next drawing appends a part (→ Multi*); a different shape starts fresh.
 export function startDraw(kind) {
   if (!map) return;
-  draw = { mode: kind, verts: [] };
-  currentGeom = null;
+  const seed = (currentGeom && baseOf(currentGeom.type) === kind) ? toParts(currentGeom) : [];
+  draw = { mode: kind, verts: [], parts: seed };
   map.getCanvas().style.cursor = 'crosshair';
   redrawGeom();
 }
-export function finishDraw() { commitGeom(draftGeom()); }
+export function finishDraw() {
+  if (!draw.mode) return;
+  if (draw.mode !== 'point') { const dp = draftPart(); if (dp) draw.parts.push(dp); }
+  commitGeom(fromParts(draw.mode, draw.parts));
+}
 export function clearGeom() { commitGeom(null); }
 // Set an override without going through drawing (e.g. cloned from a match), without firing onGeom.
-export function setOverride(g) { draw = { mode: null, verts: [] }; currentGeom = g || null; redrawGeom(); }
+export function setOverride(g) { draw = { mode: null, verts: [], parts: [] }; currentGeom = g || null; redrawGeom(); }
 
 function ensureMap(container) {
   const M = ML();
@@ -189,29 +228,46 @@ export function resizeReviewMap() {
   if (map) { map.resize(); refit(); }
 }
 
+// Highlight the marker for candidate `ci` (called on list hover; null clears). Also raises it.
+export function setMarkerHover(ci) {
+  Object.keys(markerByCi).forEach((k) => {
+    const el = markerByCi[k];
+    const on = String(ci) === k;
+    el.classList.toggle('recon-map-marker--hover', on);
+    if (on) el.style.zIndex = '3';
+    else el.style.removeProperty('z-index');
+  });
+}
+
 // points: [{ci, lon, lat, name, namespace, altNames, score}]; rowPoint: {lon,lat}|null
-// opts: { onAccept(ci), onGeom(geometry|null), override: <GeoJSON geometry>|null }
+// opts: { onAccept(ci), onGeom(geometry|null), override: <GeoJSON geometry>|null,
+//         selected: [ci,…] accepted candidates, onHover(ci|null): reflect map-hover back to the list }
+let markerByCi = {};
 export function renderReviewMap(container, points, rowPoint, opts) {
   opts = opts || {};
   const onAccept = opts.onAccept || (() => {});
+  const onHover = opts.onHover || (() => {});
+  const selected = new Set(opts.selected || []);
   const M = ML();
   const m = ensureMap(container);
   onGeomCb = opts.onGeom || null;
   currentGeom = opts.override || null;
-  draw = { mode: null, verts: [] };
+  draw = { mode: null, verts: [], parts: [] };
   markers.forEach((mk) => mk.remove());
   markers = [];
+  markerByCi = {};
   const bounds = new M.LngLatBounds();
 
   points.forEach((p) => {
     const el = document.createElement('div');
-    el.className = 'recon-map-marker';
+    el.className = 'recon-map-marker' + (selected.has(p.ci) ? ' recon-map-marker--selected' : '');
     el.style.background = COLORS[p.ci % COLORS.length];
     el.style.cursor = 'pointer';
     el.textContent = String(p.ci + 1);
     el.addEventListener('click', () => onAccept(p.ci));
-    el.addEventListener('mouseenter', () => hoverPopup.setLngLat([p.lon, p.lat]).setHTML(popupHTML(p)).addTo(m));
-    el.addEventListener('mouseleave', () => hoverPopup.remove());
+    el.addEventListener('mouseenter', () => { hoverPopup.setLngLat([p.lon, p.lat]).setHTML(popupHTML(p)).addTo(m); setMarkerHover(p.ci); onHover(p.ci); });
+    el.addEventListener('mouseleave', () => { hoverPopup.remove(); setMarkerHover(null); onHover(null); });
+    markerByCi[p.ci] = el;
     markers.push(new M.Marker({ element: el }).setLngLat([p.lon, p.lat]).addTo(m));
     bounds.extend([p.lon, p.lat]);
   });
@@ -223,7 +279,7 @@ export function renderReviewMap(container, points, rowPoint, opts) {
     markers.push(new M.Marker({ element: el }).setLngLat([rowPoint.lon, rowPoint.lat]).addTo(m));
     bounds.extend([rowPoint.lon, rowPoint.lat]);
   }
-  collectVertices(currentGeom).forEach((pt) => bounds.extend(pt));
+  allCoords(currentGeom).forEach((pt) => bounds.extend(pt));
 
   lastBounds = bounds;
   const onReady = () => {
