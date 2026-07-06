@@ -8,7 +8,13 @@ import * as ort from 'onnxruntime-web/wasm';
 import { tokenise } from './recon-symphonym-preprocess.js';
 
 const BASE = '/static/webpack/symphonym/';
-ort.env.wasm.wasmPaths = BASE;      // self-hosted ort-wasm-simd-threaded.{wasm,mjs}
+// The ESM loader is shipped with a .js extension: Django static serves .mjs as
+// application/octet-stream, which browsers refuse to import() as a module. .js is served as
+// application/javascript. The .wasm is served correctly (application/wasm).
+ort.env.wasm.wasmPaths = {
+  wasm: BASE + 'ort-wasm-simd-threaded.wasm',
+  mjs: BASE + 'ort-wasm-simd-threaded.mjs.js',
+};
 ort.env.wasm.numThreads = 1;        // single-threaded: no SAB, works without COOP/COEP headers
 
 let session = null;
