@@ -329,9 +329,12 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
     downstream columns (`invalidateDownstream`) with a notice.
   - Verified live: County→Parish→Place gating, per-column Sources targeting, Place locked until Parish
     confirmed. Commits on `main` (registry endpoint + iterative rework), deployed to prod.
-  - FOLLOW-UPS: (a) no affordance to RE-reconcile an already-confirmed column with different sources
-    (e.g. realise County needs `ukhc` after confirming it) — only Clear & restart; add a
-    "re-reconcile this column" action that invalidates downstream. (b) Re-importing a dataset over a
+  - FOLLOW-UPS: (a) DONE (2026-07-06) — "Re-reconcile <col>" button + column switcher now in the
+    reconcile pane; the Sources modal/button + re-reconcile target the FOCUSED column (pill-selected,
+    default = current stage). `reReconcileColumn()` clears the column + downstream, re-runs it.
+    Verified live: focus County → Sources=ukhc (Only selected) → Re-reconcile County → Devon AU→GB,
+    Surrey CA→GB, 13 matched/1 no-match. Also fixed a leak where a per-column source pick was written
+    to localStorage as the global default (Parish inherited County's ukhc). (b) Re-importing a dataset over a
     reconciled one leaves a stale recon results table until reload (handleFile should clear recon DOM).
     (c) auto-confirm on exact-name is too eager without a source restriction (Devon→AU); per-column
     `ukhc` is the intended fix but consider a country-hint guard for admin columns.
