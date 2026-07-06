@@ -1320,12 +1320,14 @@ function renderResultsWindow(calibrate) {
 function renderResults(built) { renderColSwitcher(); renderResultsTable(built); refreshReview(); refreshFullMapPane(); refreshExport(); }
 
 // Column switcher (multi-column reconciliation): pills for each chain column, parent → child, showing
-// which column the results/review panes are currently displaying. Hidden for single-column datasets.
+// each column's stage state and which one the results/review panes focus. Rendered into BOTH the
+// reconcile pane and the review pane (all .recon-col-switcher containers) so the user can focus a
+// column and act on it (Sources, Re-reconcile) without hopping panes. Hidden for single-column sets.
 function renderColSwitcher() {
-  const box = el('recon-col-switcher'); if (!box || !project) return;
+  const boxes = document.querySelectorAll('.recon-col-switcher');
+  if (!boxes.length || !project) return;
   const chain = reconChain();
-  if (chain.length <= 1) { box.innerHTML = ''; box.classList.add('d-none'); return; }
-  box.classList.remove('d-none');
+  if (chain.length <= 1) { boxes.forEach((b) => { b.innerHTML = ''; b.classList.add('d-none'); }); return; }
   const active = activeReconCol();
   const STATE_ICON = { locked: '<i class="fas fa-lock me-1"></i>', ready: '<i class="far fa-circle me-1"></i>', review: '<i class="fas fa-list-check me-1"></i>', confirmed: '<i class="fas fa-check me-1"></i>' };
   const pills = chain.map((ci, idx) => {
@@ -1336,14 +1338,17 @@ function renderColSwitcher() {
     return `<button type="button" class="${cls}" data-idx="${idx}" title="${esc(project.columns[ci].name)} — ${state}"${state === 'locked' ? ' disabled' : ''}>${STATE_ICON[state]}${esc(name)}</button>${arrow}`;
   }).join('');
   const note = reconStaleNote ? `<div class="recon-col-stale small mt-1"><i class="fas fa-triangle-exclamation me-1"></i>${esc(reconStaleNote)}</div>` : '';
-  box.innerHTML = `<div class="d-flex align-items-center flex-wrap gap-1"><span class="text-muted small me-1"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}</div>${note}`;
-  box.querySelectorAll('.recon-col-pill').forEach((b) => b.addEventListener('click', () => {
-    if (b.disabled) return; // locked columns aren't reviewable yet
-    reconActiveIdx = Number(b.dataset.idx);
-    const built = buildUniqueQueries(); if (built) renderResults(built);
-    updateReconButton();   // focus changed → refresh the Re-reconcile button…
-    updateSourcesLabel();  // …and which column the Sources picker targets
-  }));
+  const html = `<div class="d-flex align-items-center flex-wrap gap-1"><span class="text-muted small me-1"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}</div>${note}`;
+  boxes.forEach((box) => {
+    box.classList.remove('d-none');
+    box.innerHTML = html;
+    box.querySelectorAll('.recon-col-pill').forEach((b) => b.addEventListener('click', () => {
+      if (b.disabled) return; // locked columns aren't reviewable yet
+      reconActiveIdx = Number(b.dataset.idx);
+      const built = buildUniqueQueries(); if (built) renderResults(built);
+      updateReconButton();   // focus changed → refresh the Re-reconcile button + Sources target
+    }));
+  });
 }
 
 // Reviewable rows (those with ≥1 candidate).
