@@ -1062,12 +1062,13 @@ function reconChain() {
   if (nameIdx >= 0) chain.push(nameIdx);
   return chain;
 }
-let reconActiveIdx = -1; // which chain position the review/results panes show; -1 → the name column (last)
+let reconActiveIdx = -1; // which chain position the review/results panes focus; -1 → derive (current stage)
 function activeReconCol() {
   const chain = reconChain();
   if (!chain.length) return -1;
-  if (reconActiveIdx < 0 || reconActiveIdx >= chain.length) return chain[chain.length - 1]; // default: name
-  return chain[reconActiveIdx];
+  if (reconActiveIdx >= 0 && reconActiveIdx < chain.length) return chain[reconActiveIdx]; // explicit focus
+  const p = currentStagePos(); // default: the column you'd act on next, else the last
+  return chain[p < chain.length ? p : chain.length - 1];
 }
 // The place_id resolved for a (column,row): an explicit accept, else an auto-confirmed top match.
 function resolvedPlaceId(colIndex, rowIdx) {
@@ -1179,6 +1180,7 @@ function toggleRunning(on) {
   running = on;
   el('recon-run').classList.toggle('d-none', on);
   el('recon-stop').classList.toggle('d-none', !on);
+  const rr = el('recon-rerun'); if (rr && on) rr.classList.add('d-none'); // restored by updateRerunButton after the run
 }
 function updateProgress(done, total) {
   el('recon-progress-wrap').classList.remove('d-none');
@@ -1339,6 +1341,8 @@ function renderColSwitcher() {
     if (b.disabled) return; // locked columns aren't reviewable yet
     reconActiveIdx = Number(b.dataset.idx);
     const built = buildUniqueQueries(); if (built) renderResults(built);
+    updateReconButton();   // focus changed → refresh the Re-reconcile button…
+    updateSourcesLabel();  // …and which column the Sources picker targets
   }));
 }
 
@@ -1485,14 +1489,10 @@ function getNsFilter(col) {
   try { const s = JSON.parse(localStorage.getItem(NS_LS_KEY) || 'null'); if (s && s.mode) return s; } catch (_) { /* */ }
   return { mode: 'all', namespaces: [] };
 }
-// Which column the Sources picker configures: the current stage's column while reconciliation is in
-// progress, else the column currently shown in the review/results panes.
-function sourcesTargetCol() {
-  const chain = reconChain();
-  if (!chain.length) return -1;
-  const p = currentStagePos();
-  return p < chain.length ? chain[p] : activeReconCol();
-}
+// The Sources picker (and the Re-reconcile button) configure the FOCUSED column — the one shown in
+// the review/results panes (selected via a switcher pill, defaulting to the current stage). This lets
+// you revisit a confirmed column, change its sources, and re-reconcile it.
+function sourcesTargetCol() { return activeReconCol(); }
 function availableNamespaces() {
   // Registry authorities are the source of truth; NS_NAMES is only a pre-fetch fallback (before
   // /api/sources/ resolves). Union in any namespaces present in the current matches so nothing
@@ -1791,6 +1791,8 @@ function updateReconButton() {
   const btn = el('recon-run'); if (!btn || !project) return;
   const help = el('recon-recon-help');
   const chain = reconChain();
+  updateRerunButton(chain);
+  updateSourcesLabel(); // keep the Sources button label pointed at the focused column
   if (chain.length <= 1) { // single (name) column — the classic one-shot
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
@@ -1822,6 +1824,19 @@ function updateReconButton() {
   }
 }
 
+// Show a "Re-reconcile <col>" button when the FOCUSED column already has matches, so the user can
+// change its Sources and run it again (multi-column chains only).
+function updateRerunButton(chain) {
+  const rr = el('recon-rerun'); if (!rr) return;
+  const focus = activeReconCol();
+  const show = chain.length > 1 && focus >= 0 && colHasMatches(focus) && !running;
+  rr.classList.toggle('d-none', !show);
+  if (show) {
+    const lbl = el('recon-rerun-label');
+    if (lbl) lbl.textContent = `Re-reconcile ${truncate(project.columns[focus].name, 18)}`;
+  }
+}
+
 // Reconcile the CURRENT stage's column only (review-gated). The child columns stay locked until this
 // one is confirmed; each inherits containment from the confirmed parents.
 async function reconcileStage() {
@@ -1838,7 +1853,8 @@ async function reconcileStage() {
   stopRequested = false;
   await reconcilePass(chain[pos], pos > 0 ? chain[pos - 1] : -1, getCsrf(), pos, chain.length);
   toggleRunning(false);
-  reconActiveIdx = pos; // review/results panes follow the column we just ran
+  reconActiveIdx = pos; // review/results panes follow the column we just ran…
+  if (currentStagePos() > pos) reconActiveIdx = Math.min(currentStagePos(), chain.length - 1); // …unless it auto-confirmed → advance focus to the next stage
   const built = buildUniqueQueries();
   if (built) renderResults(built);
   renderColSwitcher();
@@ -1846,6 +1862,23 @@ async function reconcileStage() {
   reviewPos = 0; refreshReview();
   await persist();
   console.log(`[recon] reconciled column ${pos + 1}/${chain.length} (${project.columns[chain[pos]].name}) — ${stopRequested ? 'stopped' : 'done'}`);
+}
+
+// Re-reconcile an already-reconciled column (typically after changing its Sources): clear its
+// matches + decisions, invalidate & re-lock downstream columns (their containment is now stale),
+// then run it again as the current stage.
+async function reReconcileColumn(col) {
+  if (running || !project) return;
+  const chain = reconChain();
+  if (chain.indexOf(col) < 0) return;
+  const c = String(col);
+  if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) delete project.matches[k]; }
+  if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
+  invalidateDownstream(col);
+  reconStaleNote = '';
+  reconActiveIdx = chain.indexOf(col); // focus the column we're about to re-run
+  await persist();
+  await reconcileStage(); // col is now the earliest non-confirmed column → this runs it
 }
 
 // Demo helper for the guided tour: run the WHOLE chain end-to-end, auto-confirming any rows still
@@ -2025,6 +2058,8 @@ function init() {
 
   const run = el('recon-run');
   if (run) run.addEventListener('click', reconcileStage);
+  const rerun = el('recon-rerun');
+  if (rerun) rerun.addEventListener('click', () => reReconcileColumn(activeReconCol()));
   const stop = el('recon-stop');
   if (stop) stop.addEventListener('click', () => { stopRequested = true; });
 
