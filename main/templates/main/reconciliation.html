@@ -43,7 +43,7 @@
   <div class="recon-privacy" role="note">
     <i class="fas fa-lock me-2"></i>
     <span>Your dataset stays on <strong>this device, in this browser</strong>. Nothing is uploaded.
-      When reconciliation is wired up, only minimal, de-duplicated queries will be sent to WHG —
+      When reconciliation is wired up, only minimal per-row name queries will be sent to WHG —
       never your rows — and only the rows you explicitly choose will ever be contributed.</span>
   </div>
 
@@ -159,9 +159,9 @@
     </div>
     <div class="recon-pane-body">
     <p class="text-muted small mb-2" id="recon-recon-help">
-      Sends only <strong>de-duplicated place-name queries</strong> (with a country hint where available)
-      to WHG's <code>/reconcile</code> service — never your rows. Identical names are queried once and the
-      result fanned out. Best matches appear below; per-candidate review comes in the next phase.
+      Sends a <strong>place-name query per row</strong> (with a country hint where available) to WHG's
+      <code>/reconcile</code> service — just the name, never your full rows. Best matches appear below;
+      per-candidate review comes in the next phase.
     </p>
 
     <div class="d-flex align-items-center gap-2 small mb-2 recon-autoconf" id="recon-autoconf">
@@ -171,13 +171,18 @@
       <span class="text-muted">or the name matches exactly — so review can focus on the rest.</span>
     </div>
 
-    <div class="d-flex align-items-center flex-wrap gap-2 small mb-2 recon-phonetic-bar">
+    <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-phonetic-bar">
       <label class="mb-0"><input type="checkbox" id="recon-phonetic" checked>
-        Phonetic grouping <span class="text-muted">(Symphonym, in-browser — groups variant spellings; on by default)</span></label>
-      <button type="button" id="recon-find-similar" class="btn btn-sm btn-outline-secondary py-0">Find similar names now</button>
-      <span id="recon-phonetic-status" class="text-muted"></span>
+        Phonetic matching <span class="text-muted">(Symphonym embeddings, computed in-browser — ranks candidates by how the name sounds; on by default)</span></label>
+      <label class="mb-0 d-flex align-items-center gap-1">Language
+        <select id="recon-lang" class="form-select form-select-sm py-0" style="width:auto"></select>
+        <span class="text-muted">(auto-detected — override if wrong)</span>
+      </label>
     </div>
-    <div id="recon-phonetic-groups" class="recon-phonetic-groups mb-2"></div>
+    <p class="text-muted small mb-2">
+      <i class="fas fa-circle-info me-1"></i>Every row is reconciled <strong>individually</strong> — identical
+      names are <em>not</em> merged, so each row can be matched to a different place.
+    </p>
 
     <div class="recon-progress-wrap d-none" id="recon-progress-wrap">
       <div class="recon-progress"><div class="recon-progress-bar" id="recon-progress-bar"></div></div>

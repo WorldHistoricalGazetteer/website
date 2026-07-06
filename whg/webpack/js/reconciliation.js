@@ -471,7 +471,7 @@ function renderAll() {
   renderPreview();
   refreshReconSection();
   refreshExport();
-  renderPhoneticGroups(); // restore any saved phonetic groups on resume
+  renderLangControl(); // populate the phonetic-matching language selector (default detected from data)
   updatePaneSummaries();
   openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
 }
@@ -865,43 +865,49 @@ function refreshExport() {
   }
 }
 
-// ── Phase 7: in-browser Symphonym phonetic grouping ─────────────────────────
-// Embeds the user's unique place names locally (ONNX in a worker) and groups variant spellings /
-// near-duplicates by cosine similarity — a data-cleaning aid computed before any network call.
+// ── Phonetic (vector) matching: language-conditioned Symphonym embeddings sent with reconcile ─────
+// The in-browser Symphonym model embeds each row's name (int8, 128-d) and the vector rides along on
+// the reconcile request, so the gateway ranks candidates by phonetic/vector similarity — offloading
+// the server embed and letting the user set the query language.
 function phoneticEnabled() {
   const box = el('recon-phonetic');
   if (box) return box.checked;
   return !(project && project.phonetic === false); // default on
 }
-async function runPhonetic() {
-  if (!project) return;
-  const built = buildUniqueQueries(); if (!built) return;
-  const entries = [...built.map.entries()].map(([, v]) => v.query);
-  const status = el('recon-phonetic-status');
-  const box = el('recon-phonetic-groups');
-  if (!entries.length) { if (box) box.innerHTML = ''; return; }
-  if (status) status.textContent = 'loading model (first run downloads ~21 MB, then cached)…';
-  try {
-    const mod = await loadSymphonym();
-    const groups = await mod.clusterNames(entries, {
-      threshold: 0.9,
-      onProgress: (d, t) => { if (status) status.textContent = `embedding ${d.toLocaleString()} / ${t.toLocaleString()}…`; },
-    });
-    project._phonetic = groups.map((g) => g.map((i) => entries[i]));
-    persist();
-    renderPhoneticGroups();
-    if (status) status.textContent = `${groups.length.toLocaleString()} group${groups.length === 1 ? '' : 's'} of similar names`;
-  } catch (err) {
-    console.error('[recon] phonetic grouping failed', err);
-    if (status) status.textContent = 'phonetic grouping unavailable (see console)';
+// Languages offered in the override dropdown (value = Symphonym lang code; 'und' = undetermined).
+const RECON_LANGS = [
+  ['und', 'Undetermined'], ['en', 'English'], ['fr', 'French'], ['de', 'German'], ['es', 'Spanish'],
+  ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['ru', 'Russian'], ['pl', 'Polish'],
+  ['ar', 'Arabic'], ['zh', 'Chinese'], ['ja', 'Japanese'], ['ko', 'Korean'], ['el', 'Greek'],
+  ['he', 'Hebrew'], ['tr', 'Turkish'], ['hi', 'Hindi'], ['th', 'Thai'],
+];
+// Guess a default language from the dominant non-Latin script across the dataset's names; Latin → English.
+function detectLang() {
+  const nameIdx = colIndexByRole('name'); if (nameIdx < 0) return 'und';
+  const RANGES = [['ru', 0x0400, 0x04FF], ['ar', 0x0600, 0x06FF], ['el', 0x0370, 0x03FF], ['he', 0x0590, 0x05FF],
+    ['th', 0x0E00, 0x0E7F], ['hi', 0x0900, 0x097F], ['ja', 0x3040, 0x30FF], ['ko', 0xAC00, 0xD7AF], ['zh', 0x4E00, 0x9FFF]];
+  const counts = {}; let latin = 0, total = 0;
+  const cap = Math.min(project.rows.length, 300);
+  for (let i = 0; i < cap; i++) {
+    const v = project.rows[i][nameIdx]; if (v == null || v === '') continue;
+    for (const ch of String(v)) {
+      const cp = ch.codePointAt(0); total++;
+      if ((cp >= 0x41 && cp <= 0x7A) || (cp >= 0xC0 && cp <= 0x24F)) { latin++; continue; }
+      for (const [lg, lo, hi] of RANGES) if (cp >= lo && cp <= hi) { counts[lg] = (counts[lg] || 0) + 1; break; }
+    }
   }
+  let best = null, n = 0; for (const k in counts) if (counts[k] > n) { best = k; n = counts[k]; }
+  if (best && n > (total - latin) * 0.5 && n > total * 0.15) return best; // a non-Latin script dominates
+  return 'en';
 }
-function renderPhoneticGroups() {
-  const box = el('recon-phonetic-groups'); if (!box) return;
-  const groups = (project && project._phonetic) || [];
-  if (!groups.length) { box.innerHTML = '<div class="text-muted small">No groups of similar names found yet.</div>'; return; }
-  box.innerHTML = groups.map((g) =>
-    `<div class="recon-phon-group"><i class="fas fa-code-branch text-secondary me-1"></i>${g.map((n) => `<span class="badge bg-light text-dark border">${esc(n)}</span>`).join(' ')}</div>`).join('');
+function getLang() {
+  const sel = el('recon-lang'); if (sel && sel.value) return sel.value;
+  return (project && project.lang) || 'und';
+}
+function renderLangControl() {
+  const sel = el('recon-lang'); if (!sel || !project) return;
+  if (!project.lang) project.lang = detectLang(); // default from the data (once); user can override
+  sel.innerHTML = RECON_LANGS.map(([v, l]) => `<option value="${v}"${v === project.lang ? ' selected' : ''}>${esc(l)}</option>`).join('');
 }
 
 async function showCapabilities() {
@@ -934,7 +940,7 @@ async function loadSaved() {
 }
 
 // ── Reconciliation engine (Phase 3) ─────────────────────────────────────────
-// Sends de-duplicated place-name queries to WHG's standard /reconcile service (same-origin,
+// Sends one place-name query PER ROW to WHG's standard /reconcile service (same-origin,
 // authenticated by the logged-in session + CSRF), caches candidates per unique key, and fans
 // results back to every row sharing that key. Candidate review / accept-reject is Phase 4.
 let running = false;
@@ -951,19 +957,20 @@ function normName(s) { return String(s == null ? '' : s).trim().toLowerCase().re
 function colIndexByRole(role) { return project ? project.columns.findIndex((c) => c.role === role) : -1; }
 const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
 
-// Build the map of unique (name[, country]) queries → the rows that share each.
+// Every row is reconciled INDIVIDUALLY — no de-duplication by name. Users have already disambiguated
+// their places, so two rows with the same toponym may be different places and each deserves its own
+// match/decision/geometry. The key is therefore the row index. (Downstream — matches, decisions,
+// review, export — is keyed by this key, so one key ↔ one row.)
 function buildUniqueQueries() {
   const nameIdx = colIndexByRole('name');
   if (nameIdx < 0) return null;
   const countryIdx = colIndexByRole('country');
-  const map = new Map(); // key -> { query, country, rows:[rowIndex,...] }
+  const map = new Map(); // key(row index) -> { query, country, rows:[i] }
   project.rows.forEach((r, i) => {
     const name = String(r[nameIdx] == null ? '' : r[nameIdx]).trim();
     if (!name) return;
     const country = (countryIdx >= 0 && isCcode(r[countryIdx])) ? String(r[countryIdx]).trim().toUpperCase() : '';
-    const key = normName(name) + '|' + country;
-    if (!map.has(key)) map.set(key, { query: name, country, rows: [] });
-    map.get(key).rows.push(i);
+    map.set(String(i), { query: name, country, rows: [i] });
   });
   return { nameIdx, countryIdx, map };
 }
@@ -972,7 +979,7 @@ function keyForRow(built, i) {
   const name = String(r[built.nameIdx] == null ? '' : r[built.nameIdx]).trim();
   if (!name) return null;
   const country = (built.countryIdx >= 0 && isCcode(r[built.countryIdx])) ? String(r[built.countryIdx]).trim().toUpperCase() : '';
-  return { name, country, key: normName(name) + '|' + country };
+  return { name, country, key: String(i) };
 }
 
 async function postReconcile(queries, csrf, attempt = 0) {
@@ -1005,7 +1012,7 @@ function updateProgress(done, total) {
   el('recon-progress-wrap').classList.remove('d-none');
   const pct = total ? Math.round((done / total) * 100) : 0;
   el('recon-progress-bar').style.width = pct + '%';
-  el('recon-progress-text').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} unique queries (${pct}%)`;
+  el('recon-progress-text').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} rows (${pct}%)`;
 }
 
 function getThreshold() {
@@ -1019,7 +1026,7 @@ function isAutoConfirmed(top, threshold) {
 }
 
 // ── Candidate review (Phase 4) ───────────────────────────────────────────────
-let reviewMeta = []; // [{key, rows, name, country}] — reviewable unique names, highest-impact first
+let reviewMeta = []; // [{key, rows, name, country}] — one per reviewable row
 let reviewPos = 0;
 
 const REVIEW_BADGE = {
@@ -1084,7 +1091,7 @@ function renderResultsTable(built) {
     `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto, <strong>${accepted.toLocaleString()}</strong> accepted)</span> · ` +
     `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
     `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
-    `across <strong>${built.map.size.toLocaleString()}</strong> unique names, ` +
+    `across <strong>${built.map.size.toLocaleString()}</strong> rows, ` +
     `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
 
   // Build the full ordered row-info list once; the table is virtualised (only the visible window is
@@ -1138,7 +1145,7 @@ function renderResultsWindow(calibrate) {
 }
 function renderResults(built) { renderResultsTable(built); refreshReview(); refreshExport(); }
 
-// Reviewable unique names (those with ≥1 candidate), highest row-impact first.
+// Reviewable rows (those with ≥1 candidate).
 function reviewableKeys(built) {
   const arr = [];
   built.map.forEach((v, key) => { const m = project.matches[key]; if (m && m.top) arr.push({ key, rows: v.rows.length, name: v.query, country: v.country }); });
@@ -1170,7 +1177,7 @@ function updateReviewProgress() {
   const pending = reviewMeta.filter((r) => needsReview(r.key)).length;
   const decided = reviewMeta.filter((r) => project.decisions && project.decisions[r.key]).length;
   const p = el('recon-review-progress');
-  if (p) p.textContent = `${decided.toLocaleString()} decided · ${pending.toLocaleString()} to review · ${reviewMeta.length.toLocaleString()} unique names`;
+  if (p) p.textContent = `${decided.toLocaleString()} decided · ${pending.toLocaleString()} to review · ${reviewMeta.length.toLocaleString()} rows`;
 }
 function renderReviewCard() {
   const card = el('recon-review-card');
@@ -1552,14 +1559,33 @@ async function reconcileAll() {
   updateProgress(done, total);
   const csrf = getCsrf();
 
+  // Language-conditioned Symphonym embeddings (int8, 128-d) for phonetic matching — generated in the
+  // browser and sent per row so the gateway ranks candidates by vector similarity (offloading its own
+  // embed). Skipped when phonetic matching is off or the model can't load (falls back to text matching).
+  let embByKey = null;
+  if (phoneticEnabled() && entries.length) {
+    try {
+      const mod = await loadSymphonym();
+      const lang = getLang();
+      const names = entries.map(([, v]) => v.query);
+      const int8 = await mod.embedNames(names, {
+        lang,
+        onProgress: (d, t) => setReconSummary(`<i class="fas fa-spinner fa-spin me-1"></i>generating phonetic embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`),
+      });
+      embByKey = {};
+      entries.forEach(([key], idx) => { embByKey[key] = Array.from(int8.subarray(idx * 128, idx * 128 + 128)); });
+    } catch (err) { console.error('[recon] embedding failed; using text matching', err); }
+  }
+
   for (let b = 0; b < entries.length && !stopRequested; b += RECON_BATCH) {
     const slice = entries.slice(b, b + RECON_BATCH);
     const queries = {};
     const nsf = getNsFilter();
-    slice.forEach(([, v], j) => {
+    slice.forEach(([key, v], j) => {
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
+      if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
       queries['q' + j] = q;
     });
     let data;
@@ -1583,8 +1609,7 @@ async function reconcileAll() {
   toggleRunning(false);
   renderResults(built);
   await persist();
-  if (!stopRequested && phoneticEnabled()) runPhonetic(); // embed the names locally for phonetic grouping
-  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'}: ${done}/${total} unique queries`);
+  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'}: ${done}/${total} rows`);
 }
 
 function init() {
@@ -1636,14 +1661,14 @@ function init() {
   const exportBtn = el('recon-export-btn');
   if (exportBtn) exportBtn.addEventListener('click', runExport);
 
-  // Phonetic grouping (Symphonym, in-browser) — default on; toggle persists; manual re-run button.
+  // Phonetic (vector) matching (Symphonym, in-browser) — default on; toggle + language persist.
   const phon = el('recon-phonetic');
   if (phon) {
     if (project && project.phonetic === false) phon.checked = false;
     phon.addEventListener('change', () => { if (project) { project.phonetic = phon.checked; persist(); } });
   }
-  const findSim = el('recon-find-similar');
-  if (findSim) findSim.addEventListener('click', runPhonetic);
+  const langSel = el('recon-lang');
+  if (langSel) langSel.addEventListener('change', () => { if (project) { project.lang = langSel.value; persist(); } });
   const rw = el('recon-results-wrap');
   if (rw) rw.addEventListener('scroll', () => { if (_resultRows.length) requestAnimationFrame(() => renderResultsWindow(false)); });
 

@@ -16,7 +16,6 @@ function ensureWorker() {
     const p = pending.get(m.id);
     if (!p) return;
     if (m.type === 'error') { pending.delete(m.id); p.reject(new Error(m.error)); return; }
-    if (m.type === 'clusters') { pending.delete(m.id); p.resolve(m.groups); return; }
     if (m.type === 'embeddings') { pending.delete(m.id); p.resolve(m.embs); return; }
   };
   worker.onerror = (err) => { pending.forEach((p) => p.reject(err)); pending.clear(); };
@@ -32,13 +31,8 @@ function call(payload, onProgress) {
   });
 }
 
-// Group phonetically-similar / near-duplicate names. Returns arrays of indices into `names`
-// (only groups of ≥2). threshold ~0.9 (cosine) is a sensible default; higher = stricter.
-export function clusterNames(names, opts = {}) {
-  return call({ type: 'cluster', names, threshold: opts.threshold, lang: opts.lang }, opts.onProgress);
-}
-
-// Raw embeddings (Float32Array N*128) if a caller wants to do its own similarity work.
+// Int8Array(N*128) of language-conditioned Symphonym embeddings, quantised to match the gateway's
+// KNN vectors. Sent per row on reconcile so the server ranks by phonetic (vector) similarity.
 export function embedNames(names, opts = {}) {
   return call({ type: 'embed', names, lang: opts.lang }, opts.onProgress);
 }

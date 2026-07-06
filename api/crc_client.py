@@ -99,6 +99,14 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         "size": normalised_query.get("size", 50),
     }
 
+    # Client-supplied Symphonym query embedding (int8, 128-d, language-conditioned in the browser).
+    # Forward it as query_vector and force phonetic mode so the gateway ranks by it directly, skipping
+    # its own server-side embed. Harmless on older gateways (they ignore the unknown field).
+    embedding = raw.get("embedding")
+    if isinstance(embedding, (list, tuple)) and len(embedding) == 128:
+        body["query_vector"] = list(embedding)
+        body["mode"] = "phonetic"
+
     # Country codes – accept list ["US","GB"] or comma-delimited string "US,GB"
     countries = raw.get("countries")
     if countries:

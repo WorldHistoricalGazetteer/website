@@ -57,49 +57,34 @@ async function embedOne(text, lang) {
   return out.embedding.data; // Float32Array(128)
 }
 
-// Embed a list of names, reporting progress. Returns Float32Array(N*128).
+// Quantise an fp32 L2-normalised embedding to int8 EXACTLY as the gateway does
+// (symphonym.quantize_to_byte): round(v*127) clipped to [-128,127]. The stored toponym vectors and
+// the server-side query vectors use this, so the client vector must match for KNN to be comparable.
+function quantiseByte(emb, out, off) {
+  for (let k = 0; k < 128; k++) {
+    let q = Math.round(emb[k] * 127);
+    if (q > 127) q = 127; else if (q < -128) q = -128;
+    out[off + k] = q;
+  }
+}
+
+// Embed a list of names → Int8Array(N*128), reporting progress.
 async function embedAll(names, lang) {
   const N = names.length;
-  const embs = new Float32Array(N * 128);
+  const out = new Int8Array(N * 128);
   for (let i = 0; i < N; i++) {
     const e = await embedOne(names[i], lang);
-    embs.set(e, i * 128);
+    quantiseByte(e, out, i * 128);
     if ((i & 31) === 0 || i === N - 1) self.postMessage({ type: 'progress', done: i + 1, total: N });
   }
-  return embs;
-}
-
-function cosine(a, ai, b, bi) {
-  let dot = 0;
-  for (let k = 0; k < 128; k++) dot += a[ai * 128 + k] * b[bi * 128 + k]; // both L2-normalised → dot = cosine
-  return dot;
-}
-
-// Single-link clustering by cosine ≥ threshold (union-find). Returns groups of size ≥ 2.
-function cluster(embs, N, threshold) {
-  const parent = new Int32Array(N).map((_, i) => i);
-  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
-  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
-  for (let i = 0; i < N; i++) {
-    for (let j = i + 1; j < N; j++) {
-      if (cosine(embs, i, embs, j) >= threshold) union(i, j);
-    }
-  }
-  const groups = new Map();
-  for (let i = 0; i < N; i++) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(i); }
-  return [...groups.values()].filter((g) => g.length > 1);
+  return out;
 }
 
 self.onmessage = async (e) => {
   const msg = e.data || {};
   try {
     await init();
-    if (msg.type === 'cluster') {
-      const names = msg.names || [];
-      const embs = await embedAll(names, msg.lang);
-      const groups = cluster(embs, names.length, msg.threshold != null ? msg.threshold : 0.9);
-      self.postMessage({ type: 'clusters', id: msg.id, groups });
-    } else if (msg.type === 'embed') {
+    if (msg.type === 'embed') {
       const embs = await embedAll(msg.names || [], msg.lang);
       self.postMessage({ type: 'embeddings', id: msg.id, embs }, [embs.buffer]);
     }
