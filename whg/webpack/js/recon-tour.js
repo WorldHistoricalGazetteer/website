@@ -61,10 +61,12 @@ function tourSteps() {
       target: q('#recon-map-body'),
       enter: async () => { api.openPane('recon-result'); scrollTo('#recon-map-body'); },
       title: '2 · Confirm column roles',
-      body: `The Workbench guessed a <em>role</em> for each column: <strong>County</strong> &amp;
-        <strong>Parish</strong> become administrative context, <strong>Place</strong> is the name to
-        match, <strong>gridref</strong> holds coordinates, and <strong>date</strong> a time span. You can
-        change any that are wrong — here they're all correct.`,
+      body: `The Workbench guessed a <em>role</em> for each column, and the spatial hierarchy is set
+        right in the role dropdown: <strong>County</strong> is “Contains Parish”, <strong>Parish</strong>
+        is “Contains Place”, and <strong>Place</strong> is the name to match. <strong>gridref</strong>
+        holds coordinates and <strong>date</strong> a time span. Change any that are wrong — the
+        containment order follows the “Contains” links automatically, so there's nothing separate to
+        re-order.`,
     },
     {
       key: 'coords',
@@ -88,10 +90,12 @@ function tourSteps() {
       target: q('#recon-run'),
       enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-run'); },
       title: '3 · Reconcile against WHG',
-      body: `Now we match each place to WHG. Only the <strong>name</strong> of each row is sent — never
-        your full table — with a country hint where we have one. Columns reconcile as a chain:
-        <strong>Parish within County</strong>, <strong>Place within Parish</strong>, so same-named
-        places disambiguate. Phonetic matching runs in-browser too.`,
+      body: `Now we match each place to WHG — one column at a time. Only the <strong>name</strong> of each
+        row is sent, never your full table. You reconcile the outermost column first
+        (<strong>County</strong>) and confirm it, then the next unlocks — <strong>Parish within
+        County</strong>, <strong>Place within Parish</strong> — so same-named places disambiguate by
+        containment. Each column can use its own <strong>Sources</strong> (e.g. UK Historic Counties for
+        County). Phonetic matching runs in-browser. We'll drive the whole chain for you now.`,
       nextLabel: '<i class="fas fa-wand-magic-sparkles me-1"></i>Run reconciliation',
       advance: async () => { await api.reconcile(); },
     },
@@ -101,8 +105,9 @@ function tourSteps() {
       enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-recon-summary'); },
       title: 'Matches — row by row',
       body: `Every row was reconciled <strong>individually</strong>: the three different <em>Newton</em>s
-        each found their own match rather than being merged. High-confidence hits
-        <strong>auto-confirm</strong> so review can focus on the uncertain ones.`,
+        each found their own match rather than being merged. A <strong>clear</strong> top match
+        auto-confirms; anything ambiguous — several equally-good candidates for the same name — is held
+        back for review rather than guessed.`,
     },
     {
       key: 'review',
