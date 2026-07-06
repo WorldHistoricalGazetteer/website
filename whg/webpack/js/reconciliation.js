@@ -89,6 +89,24 @@ function initChain(columns) {
   return columns;
 }
 
+// Drop any containment link whose child is no longer a valid place/area column (e.g. it was set to
+// Ignore or a coordinate/date role, or removed). Cascades: an orphaned container above it is dropped
+// too. Keeps the hierarchy consistent after a role change.
+function normalizeChain() {
+  if (!project) return;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    project.columns.forEach((c, i) => {
+      if (c.role !== 'contains') return;
+      const ch = c.child;
+      const valid = Number.isInteger(ch) && ch >= 0 && ch < project.columns.length && ch !== i
+        && (project.columns[ch].role === 'name' || project.columns[ch].role === 'contains');
+      if (!valid) { c.role = 'other'; delete c.child; changed = true; }
+    });
+  }
+}
+
 // Migrate a project saved under the old model (role 'county' admin columns + project.chainOrder) to
 // the containment-link model, preserving the previous parent → child order.
 function migrateLegacyChain() {
@@ -211,12 +229,14 @@ async function persist() {
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
+function isChildRole(role) { return role === 'name' || role === 'contains'; } // a valid containment child
 function roleSelectHTML(colIndex, col) {
   const cur = col.role === 'contains' ? `contains:${col.child}` : col.role;
   const std = ROLES.map(([val, label]) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`);
-  // Containment options: this column CONTAINS another column (its child). Selecting one places this
-  // column one level up in the spatial hierarchy — the chain is derived from these links (no sorter).
-  const links = project.columns.map((c2, j) => (j === colIndex ? '' :
+  // Containment options: this column CONTAINS another column (its child). Only place/area columns —
+  // the place name or another container — are offered as children; ignored/coordinate/date/… columns
+  // are not. Selecting one makes THIS column their container (one level up in the hierarchy).
+  const links = project.columns.map((c2, j) => (j === colIndex || !isChildRole(c2.role) ? '' :
     `<option value="contains:${j}"${cur === `contains:${j}` ? ' selected' : ''}>↳ Contains “${esc(truncate(c2.name, 22))}”</option>`)).filter(Boolean);
   const grp = links.length ? `<optgroup label="Spatial hierarchy">${links.join('')}</optgroup>` : '';
   return `<select class="form-select form-select-sm recon-role-select role-${col.role}" data-col="${colIndex}">${std.join('')}${grp}</select>`;
@@ -478,6 +498,7 @@ function renderMapping() {
       if (v.startsWith('contains:')) { project.columns[i].role = 'contains'; project.columns[i].child = Number(v.slice(9)); }
       else { project.columns[i].role = v; delete project.columns[i].child; }
       sel.className = `form-select form-select-sm recon-role-select role-${project.columns[i].role}`;
+      normalizeChain();      // drop any containment links this change orphaned (e.g. an ignored child)
       // A change that alters the reconciliation chain invalidates existing matches (they were scoped by
       // the old containment) — reset them so the columns are reconciled again with the new hierarchy.
       if (reconChain().join(',') !== before && project.matches && Object.keys(project.matches).length) {
@@ -1074,6 +1095,7 @@ async function loadSaved() {
     if (saved && saved.columns && saved.rows) {
       project = saved;
       migrateLegacyChain(); // convert old 'county'-role + chainOrder projects to contains: links
+      normalizeChain();     // defensively drop any orphaned containment links
       renderAll();
       showResume();
       console.log(`[recon] resumed saved project: ${project.total} rows`);
