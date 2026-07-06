@@ -341,10 +341,19 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
     ties the top score; ambiguous ties (Devon GB vs AU, both 100) go to review instead of an auto-guess.
     Same-place multi-source duplicates (identical name+description) are not treated as ambiguous.
     Verified: County on all-sources now auto-confirms only 6/14 (the unique ones); Devon/Surrey/Kent →
-    review. Combined with per-column `ukhc` (unique → auto-confirms). Remaining niggle: localStorage
-    still seeds a fresh column's default source from the last global pick (legacy; per-column picks no
-    longer leak). LIMITATION for generic use: hierarchy order = dataset column order (no UI to reorder
-    parent→child); all admin-parents share the one 'county/region' role.
+    review. Combined with per-column `ukhc` (unique → auto-confirms).
+  - DONE (2026-07-06) — Fresh columns default to ALL sources: getNsFilter no longer falls back to a
+    global/localStorage default and applyNsFilter no longer writes one; a per-column pick lives only on
+    that column (colConfig). Removed the NS_LS_KEY machinery.
+  - DONE (2026-07-06) — Re-orderable hierarchy (generic multi-level): parent→child order is no longer
+    locked to dataset column order. project.chainOrder holds the admin cols' order; reconChain() uses
+    it (role changes reconcile gracefully). ◀ ▶ move controls on each admin pill in the column switcher
+    (name col fixed last); moveAdmin() swaps neighbours + clears matches/decisions from the swap point
+    onward. Levels are UNBOUNDED (any count of county/region columns). Verified live: County↔Parish
+    reorder updates button/Sources/help/pills instantly and persists. (Fixed a crash: resultRowHtml
+    now guards `project.matches`, moveAdmin routes through refreshReconSection.)
+    Still open for full generic use: all admin-parents share the one 'county/region' role (distinguished
+    only by order) — fine in practice, but no distinct Province/District/Parish role labels.
 
 - **DONE (2026-07-06) — guided "Take a tour" live demo.** Built as `whg/webpack/js/recon-tour.js`
   (bespoke overlay, no external lib/CDN — CSP/local-first) lazy-loaded via `import()` in its own webpack
