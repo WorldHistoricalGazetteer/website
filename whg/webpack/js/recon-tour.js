@@ -1,0 +1,354 @@
+// recon-tour.js — guided "Take a tour" product tour for the Reconciliation workbench.
+//
+// Drives the REAL UI — loads the sample dataset, runs reconciliation, opens each pane — while a
+// spotlight dims the page and a coachmark narrates what is happening at each step. This is the
+// "JS drives the process with highlighted indicators" onboarding Stephen asked for.
+//
+// Decoupled from reconciliation.js: startTour() receives a small `api` of driving hooks
+// ({ loadSample, reconcile, openPane, hasProject, isRunning }) and otherwise works against the
+// live DOM. Lazy-loaded (its own webpack chunk) so it costs nothing until the user asks for it.
+
+let root = null;      // fixed-position container holding catch/ring/tip
+let elCatch = null;   // transparent full-screen layer that swallows page clicks while touring
+let elRing = null;    // spotlight — a box-shadow "hole" that dims everything but the target
+let elTip = null;     // coachmark card
+let steps = [];
+let idx = 0;
+let active = false;
+let api = null;
+let onResize = null;
+let busy = false;     // an async advance() (load / reconcile) is in flight
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ── Step definitions ────────────────────────────────────────────────────────
+// Each step:
+//   target()   → the element to spotlight (null = centred, full-screen dim)
+//   enter()    → prepare the view before the step shows (open a pane, scroll into view)
+//   advance()  → async work run when the user clicks the primary button, BEFORE moving on
+//   nextLabel  → override the primary-button text
+function tourSteps() {
+  const q = (sel) => () => document.querySelector(sel);
+
+  return [
+    {
+      key: 'welcome',
+      target: null,
+      title: 'Welcome to the Gazetteer Workbench',
+      body: `This quick tour turns a raw table into <strong>reconciled, submission-ready</strong> place
+        data — every step running <strong>in your browser</strong>. We'll load a small demo dataset and
+        drive the whole flow for you, pausing to explain each stage.
+        <div class="recon-tour-note"><i class="fas fa-lock me-1"></i>Nothing is uploaded; only per-row
+        name queries ever reach WHG.</div>`,
+      nextLabel: 'Start tour',
+    },
+    {
+      key: 'import',
+      target: q('#recon-load-sample'),
+      enter: async () => { api.openPane('recon-pane-import'); scrollTo('#recon-load-sample'); },
+      title: '1 · Import a dataset',
+      body: `Everything starts with a table — CSV, TSV or JSON. We'll use the built-in demo: <strong>14
+        English places</strong> with county &amp; parish columns, British grid references, and messy
+        historical dates. Click below and the Workbench parses it locally.`,
+      nextLabel: '<i class="fas fa-vial me-1"></i>Load the sample',
+      advance: async () => { await api.loadSample(); },
+    },
+    {
+      key: 'roles',
+      target: q('#recon-map-body'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-map-body'); },
+      title: '2 · Confirm column roles',
+      body: `The Workbench guessed a <em>role</em> for each column: <strong>County</strong> &amp;
+        <strong>Parish</strong> become administrative context, <strong>Place</strong> is the name to
+        match, <strong>gridref</strong> holds coordinates, and <strong>date</strong> a time span. You can
+        change any that are wrong — here they're all correct.`,
+    },
+    {
+      key: 'coords',
+      target: q('#recon-coords'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-coords'); },
+      title: 'Coordinates — converted for you',
+      body: `It recognised <strong>British National Grid</strong> references (e.g. <code>SU 123 456</code>)
+        and converted all of them to WGS-84 latitude/longitude — no spreadsheet formulas, no lookup
+        tables.`,
+    },
+    {
+      key: 'dates',
+      target: q('#recon-dates'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-dates'); },
+      title: 'Dates — parsed from free text',
+      body: `Free-text dates become ISO start/end spans: <code>c.1200</code>, <code>15th century</code>,
+        date ranges, even regnal years like <code>8 Henry VI</code> — all interpreted automatically.`,
+    },
+    {
+      key: 'reconcile',
+      target: q('#recon-run'),
+      enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-run'); },
+      title: '3 · Reconcile against WHG',
+      body: `Now we match each place to WHG. Only the <strong>name</strong> of each row is sent — never
+        your full table — with a country hint where we have one. Columns reconcile as a chain:
+        <strong>Parish within County</strong>, <strong>Place within Parish</strong>, so same-named
+        places disambiguate. Phonetic matching runs in-browser too.`,
+      nextLabel: '<i class="fas fa-wand-magic-sparkles me-1"></i>Run reconciliation',
+      advance: async () => { await api.reconcile(); },
+    },
+    {
+      key: 'results',
+      target: q('#recon-results-wrap'),
+      enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-recon-summary'); },
+      title: 'Matches — row by row',
+      body: `Every row was reconciled <strong>individually</strong>: the three different <em>Newton</em>s
+        each found their own match rather than being merged. High-confidence hits
+        <strong>auto-confirm</strong> so review can focus on the uncertain ones.`,
+    },
+    {
+      key: 'review',
+      target: q('#recon-review-card'),
+      enter: async () => { api.openPane('recon-review'); scrollTo('#recon-review-card'); },
+      title: '4 · Review &amp; confirm',
+      body: `Anything below the threshold lands here for a human decision — keyboard-first
+        (<kbd>1</kbd>–<kbd>9</kbd> accept, <kbd>x</kbd> reject, <kbd>→</kbd> next), with a map and the
+        full candidate list. You can accept more than one candidate as close matches.`,
+    },
+    {
+      key: 'map',
+      target: q('#recon-fullmap'),
+      enter: async () => { api.openPane('recon-fullmap-pane'); scrollTo('#recon-fullmap'); await wait(700); },
+      title: '5 · See it on the map',
+      body: `Your whole dataset on one map, built from the converted coordinates. Points
+        <strong>cluster</strong> as you zoom out and a heatmap takes over at low zoom, so it stays fast
+        even with thousands of places. Click any point for its details.`,
+    },
+    {
+      key: 'export',
+      target: q('#recon-contribute-btn'),
+      enter: async () => { api.openPane('recon-export'); scrollTo('#recon-contribute-btn'); },
+      title: '6 · Enrich, export — or contribute',
+      body: `Add augmented columns (WGS-84 coordinates, ISO dates, the confirmed WHG match, or enriched
+        detail) and export as CSV, JSON or Linked Places. Or <strong>Contribute to WHG</strong> — the
+        Linked Places file is built and handed to WHG's validation page for you.`,
+    },
+    {
+      key: 'done',
+      target: null,
+      title: 'That’s the tour!',
+      body: `The demo dataset is loaded and reconciled — explore any pane freely. When you're ready,
+        <strong>Clear my data</strong> (top of the column-roles pane) and drop in your own file.
+        Everything you just saw runs the same way on a single place or thousands of rows.`,
+      nextLabel: 'Finish',
+    },
+  ];
+}
+
+// ── Chrome (overlay + spotlight + coachmark) ─────────────────────────────────
+function buildChrome() {
+  root = document.createElement('div');
+  root.className = 'recon-tour';
+  root.setAttribute('role', 'dialog');
+  root.setAttribute('aria-modal', 'true');
+  root.setAttribute('aria-label', 'Guided tour');
+
+  elCatch = document.createElement('div');
+  elCatch.className = 'recon-tour-catch';
+
+  elRing = document.createElement('div');
+  elRing.className = 'recon-tour-ring';
+
+  elTip = document.createElement('div');
+  elTip.className = 'recon-tour-tip';
+
+  root.appendChild(elCatch);
+  root.appendChild(elRing);
+  root.appendChild(elTip);
+  document.body.appendChild(root);
+
+  onResize = () => reposition();
+  window.addEventListener('resize', onResize, { passive: true });
+  window.addEventListener('scroll', onResize, { passive: true, capture: true });
+}
+
+function teardownChrome() {
+  window.removeEventListener('resize', onResize);
+  window.removeEventListener('scroll', onResize, { capture: true });
+  if (root && root.parentNode) root.parentNode.removeChild(root);
+  root = elCatch = elRing = elTip = onResize = null;
+}
+
+function scrollTo(sel) {
+  const n = document.querySelector(sel);
+  if (n) try { n.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (_) { n.scrollIntoView(); }
+}
+
+function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+// Poll until cond() is truthy (or timeout). Used to await async view changes (pane render, map draw).
+async function waitFor(cond, timeout = 15000, interval = 120) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try { if (cond()) return true; } catch (_) { /* keep polling */ }
+    await wait(interval);
+  }
+  return false;
+}
+
+// Place the spotlight ring over the current target (or shrink to nothing for a centred step).
+function positionSpotlight(target) {
+  if (!elRing) return;
+  if (!target) {
+    // Centred step: a zero-size ring in the middle → full-screen dim, no visible cutout.
+    elRing.style.width = elRing.style.height = '0px';
+    elRing.style.left = '50%';
+    elRing.style.top = '50%';
+    elRing.classList.add('recon-tour-ring--empty');
+    return;
+  }
+  const r = target.getBoundingClientRect();
+  const pad = 8;
+  elRing.classList.remove('recon-tour-ring--empty');
+  elRing.style.left = Math.max(0, r.left - pad) + 'px';
+  elRing.style.top = Math.max(0, r.top - pad) + 'px';
+  elRing.style.width = Math.min(window.innerWidth, r.width + pad * 2) + 'px';
+  elRing.style.height = r.height + pad * 2 + 'px';
+}
+
+// Place the coachmark near the target, flipping above/below and clamping to the viewport.
+function positionTip(target) {
+  if (!elTip) return;
+  const tip = elTip.getBoundingClientRect();
+  const vw = window.innerWidth, vh = window.innerHeight, gap = 14, margin = 12;
+  elTip.classList.remove('recon-tour-tip--top', 'recon-tour-tip--bottom', 'recon-tour-tip--center');
+
+  if (!target) {
+    elTip.style.left = Math.round((vw - tip.width) / 2) + 'px';
+    elTip.style.top = Math.round((vh - tip.height) / 2) + 'px';
+    elTip.classList.add('recon-tour-tip--center');
+    return;
+  }
+  const r = target.getBoundingClientRect();
+  const below = r.bottom + gap;
+  const placeBelow = below + tip.height + margin <= vh || r.top - gap - tip.height < margin;
+  let top = placeBelow ? below : r.top - gap - tip.height;
+  top = Math.min(Math.max(margin, top), vh - tip.height - margin);
+
+  let left = r.left + r.width / 2 - tip.width / 2;
+  left = Math.min(Math.max(margin, left), vw - tip.width - margin);
+
+  elTip.style.left = Math.round(left) + 'px';
+  elTip.style.top = Math.round(top) + 'px';
+  elTip.classList.add(placeBelow ? 'recon-tour-tip--bottom' : 'recon-tour-tip--top');
+
+  // Caret points at the target's horizontal centre (clamped within the card).
+  const caretX = Math.min(Math.max(18, r.left + r.width / 2 - left), tip.width - 18);
+  elTip.style.setProperty('--caret-x', Math.round(caretX) + 'px');
+}
+
+function reposition() {
+  if (!active) return;
+  const step = steps[idx];
+  const target = step && step.target ? step.target() : null;
+  positionSpotlight(target && isOnscreen(target) ? target : (target || null));
+  positionTip(target && isOnscreen(target) ? target : null);
+}
+
+function isOnscreen(node) {
+  const r = node.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+// ── Rendering a step ─────────────────────────────────────────────────────────
+function renderTip(step) {
+  const n = idx + 1, total = steps.length;
+  const nextLabel = idx === total - 1 ? (step.nextLabel || 'Finish') : (step.nextLabel || 'Next');
+  const backDisabled = idx === 0 || busy;
+  elTip.innerHTML = `
+    <div class="recon-tour-caret"></div>
+    <button type="button" class="recon-tour-x" aria-label="End tour" data-act="end">&times;</button>
+    <div class="recon-tour-step">Step ${n} of ${total}</div>
+    <h4 class="recon-tour-title">${step.title}</h4>
+    <div class="recon-tour-body">${step.body || ''}</div>
+    <div class="recon-tour-dots">${steps.map((_, i) =>
+      `<span class="recon-tour-dot${i === idx ? ' is-on' : ''}"></span>`).join('')}</div>
+    <div class="recon-tour-actions">
+      <button type="button" class="recon-tour-skip" data-act="end">Skip tour</button>
+      <div class="recon-tour-nav">
+        <button type="button" class="btn btn-sm btn-outline-secondary recon-tour-back" data-act="back"${backDisabled ? ' disabled' : ''}>Back</button>
+        <button type="button" class="btn btn-sm btn-primary recon-tour-next" data-act="next">${nextLabel}</button>
+      </div>
+    </div>`;
+  elTip.querySelectorAll('[data-act]').forEach((b) =>
+    b.addEventListener('click', () => onAct(b.dataset.act)));
+}
+
+async function showStep() {
+  const step = steps[idx];
+  if (step.enter) { try { await step.enter(); } catch (err) { console.error('[tour] enter failed', err); } }
+  renderTip(step);
+  // Let scroll/layout settle, then measure & place.
+  await wait(step.enter ? 260 : 60);
+  reposition();
+  // Nudge into place again once smooth-scroll has finished.
+  await wait(220);
+  reposition();
+}
+
+function onAct(act) {
+  if (busy) return;
+  if (act === 'end') return endTour(false);
+  if (act === 'back') { if (idx > 0) { idx--; showStep(); } return; }
+  if (act === 'next') return goNext();
+}
+
+async function goNext() {
+  const step = steps[idx];
+  if (step.advance) {
+    busy = true;
+    const btn = elTip.querySelector('.recon-tour-next');
+    let label = '';
+    if (btn) { label = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Working…'; }
+    const back = elTip.querySelector('.recon-tour-back'); if (back) back.disabled = true;
+    try { await step.advance(); }
+    catch (err) { console.error('[tour] advance failed', err); }
+    finally {
+      busy = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = label; }
+    }
+  }
+  if (idx >= steps.length - 1) return endTour(true);
+  idx++;
+  showStep();
+}
+
+// ── Public API ───────────────────────────────────────────────────────────────
+export function startTour(hooks) {
+  if (active) return;
+  api = hooks || {};
+  steps = tourSteps();
+  idx = 0;
+  active = true;
+  busy = false;
+  document.body.classList.add('recon-tour-open');
+  buildChrome();
+  document.addEventListener('keydown', keydown, true);
+  showStep();
+}
+
+function endTour(completed) {
+  if (!active) return;
+  active = false;
+  document.removeEventListener('keydown', keydown, true);
+  document.body.classList.remove('recon-tour-open');
+  teardownChrome();
+  if (api && typeof api.onEnd === 'function') { try { api.onEnd(completed); } catch (_) { /* */ } }
+}
+
+export function isTourActive() { return active; }
+
+function keydown(e) {
+  if (!active) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); endTour(false); }
+  else if ((e.key === 'ArrowRight' || e.key === 'Enter') && !busy) { e.preventDefault(); e.stopPropagation(); goNext(); }
+  else if (e.key === 'ArrowLeft' && !busy && idx > 0) { e.preventDefault(); e.stopPropagation(); idx--; showStep(); }
+}

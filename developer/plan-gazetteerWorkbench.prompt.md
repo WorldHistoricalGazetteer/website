@@ -308,6 +308,44 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
   places (the CP40 "Newton"s) far more than a flat country hint. Requires: a parent-column role +
   a source-gazetteer picker, a first reconciliation pass over the (deduped) parent values, and
   threading the accepted parent `place_id`/geometry into the name pass. (Added 2026-07-05.)
+  **Reframed 2026-07-06 (Stephen): "iterative reconciliation of more than one column".** Generalise
+  beyond one parent: reconcile column A → confirm → use its `place_id`s as `contained_in` for column B,
+  and so on, so later columns inherit proper containment ids from earlier ones. Now the natural NEXT
+  major feature; the per-row model (each row already reconciled individually) is the right foundation,
+  and the gateway `contained_in`/`containment`/`relation` params already exist.
+
+- **DONE (2026-07-06) — guided "Take a tour" live demo.** Built as `whg/webpack/js/recon-tour.js`
+  (bespoke overlay, no external lib/CDN — CSP/local-first) lazy-loaded via `import()` in its own webpack
+  chunk (`recon-tour.bundle.js`) so it costs nothing unless requested. A "Take a tour" button in the
+  Reconciliation header drives the REAL workbench through Import → Confirm roles (coord/date detection)
+  → Reconcile (multi-column chain + phonetic) → Results → Review → Map → Enrich/Contribute, spotlighting
+  each active element (box-shadow cutout + dim) with a captioned coachmark, step dots, Back/Next/Skip,
+  and keyboard nav (→/Enter/←/Esc). Async steps (load sample, reconcile) show a spinner and auto-advance
+  when the real work completes (awaits the actual render / `running` flag). Decoupled: the tour receives
+  a small `api` of driving hooks (`loadSample`, `reconcile`, `openPane`) from reconciliation.js.
+
+- **COSMETIC — colour-code the numbered stages + circular number badges (Stephen, 2026-07-06).**
+  The accordion panels are all black-on-white; give each stage a subtle colour and put its number in a
+  circular badge for a more attractive, legible progression. Low priority; fold into UI work.
+
+- **BUG — panel 4 (Review) header should always show (Stephen, 2026-07-06).** Currently `refreshReview`
+  adds `d-none` to `#recon-review` when there are no matches, so the whole panel (header included)
+  disappears before reconciliation. Instead the header should stay visible with a "reconcile first"
+  indicator/summary when empty, like the other panes. Fix as part of the multi-column review rework.
+
+- **TODO — one-click "Contribute to WHG" (Stephen, 2026-07-06).** No manual export should be needed to
+  contribute: a single button in the Workbench builds the **LPF in the background** and submits it
+  directly to WHG (programmatic dataset creation from the LPF, via the upload/publication API), rather
+  than making the user download LPF then upload it. (Keep the manual LPF export too, as a local copy.)
+  **The same submission path is needed for the collaborative reconciliation feature (#112)** — build it
+  reusably. Needs: the WHG dataset-create-from-LPF endpoint/contract; auth (session); progress + result
+  UI; and a decision on where the contributed dataset lands (draft in My Data for review before publish).
+
+- **TODO — audit OpenRefine functionality (Stephen, 2026-07-06).** Do a deliberate pass over
+  OpenRefine's feature set (facets/filters, clustering algorithms, cell transforms/GREL, reconciliation
+  add-columns-from-reconciled-values, undo/redo history, templating export, etc.) and identify which
+  features the Workbench should replicate or deliberately diverge from. Feed the findings back into this
+  plan. (Note: the review pane already borrows OpenRefine's keyboard-first accept-candidate-N idiom.)
 
 ### Phase 4 — Candidate review & disambiguation (MVP)
 - Review panel: ranked candidates (label, type, country, coords, authority IDs) per row.

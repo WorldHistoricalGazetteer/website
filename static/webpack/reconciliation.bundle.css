@@ -28,7 +28,18 @@
 .recon-unpublished-banner a { color: #9a3412; text-decoration: underline; }
 
 /* --- Header --- */
-.recon-header { margin-bottom: 1rem; }
+.recon-header {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.recon-header-text { min-width: 0; }
+.recon-tour-btn { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 575.98px) {
+  .recon-header { flex-direction: column; }
+}
 .recon-beta-pill {
   display: inline-block;
   vertical-align: middle;
@@ -347,4 +358,60 @@
 .recon-fullpop .recon-fullpop-title { font-weight: 600; }
 #recon-fullmap-pane { border-left-color: #ad1457; }
 #recon-fullmap-pane .recon-pane-num { background: #ad1457; }
+
+/* ── Guided "Take a tour" product tour (recon-tour.js) ─────────────────────── */
+.recon-tour-open { overflow: hidden; } /* freeze page scroll while touring */
+.recon-tour { position: fixed; inset: 0; z-index: 20000; }
+/* Transparent full-screen layer: swallows page clicks so the tour drives the flow uninterrupted. */
+.recon-tour-catch { position: fixed; inset: 0; z-index: 1; }
+/* Spotlight: a box-shadow "hole" dims everything except the cutout around the target. */
+.recon-tour-ring {
+  position: fixed; z-index: 2; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, .62), 0 0 0 3px rgba(21, 101, 192, .9);
+  transition: left .25s ease, top .25s ease, width .25s ease, height .25s ease;
+}
+.recon-tour-ring--empty { box-shadow: 0 0 0 9999px rgba(15, 23, 42, .62); border-radius: 0; }
+
+/* Coachmark card */
+.recon-tour-tip {
+  position: fixed; z-index: 3; width: min(380px, calc(100vw - 24px));
+  background: #fff; color: #1f2933; border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .32); padding: 1rem 1.1rem 0.9rem;
+  transition: left .2s ease, top .2s ease;
+}
+.recon-tour-step { font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #1565c0; margin-bottom: .25rem; }
+.recon-tour-title { font-size: 1.08rem; font-weight: 700; margin: 0 0 .45rem; line-height: 1.25; }
+.recon-tour-body { font-size: .9rem; line-height: 1.5; color: #3a4553; }
+.recon-tour-body code { background: #f1f3f5; padding: .05em .35em; border-radius: 4px; font-size: .85em; }
+.recon-tour-body kbd { font-size: .78em; }
+.recon-tour-note { margin-top: .55rem; font-size: .8rem; color: #52606d; background: #f0f4f8; border-radius: 6px; padding: .4rem .55rem; }
+.recon-tour-x {
+  position: absolute; top: .5rem; right: .6rem; border: 0; background: none;
+  font-size: 1.35rem; line-height: 1; color: #9aa5b1; cursor: pointer;
+}
+.recon-tour-x:hover { color: #52606d; }
+.recon-tour-dots { display: flex; gap: 5px; margin: .75rem 0 .3rem; }
+.recon-tour-dot { width: 6px; height: 6px; border-radius: 50%; background: #cbd2d9; transition: background .2s; }
+.recon-tour-dot.is-on { background: #1565c0; }
+.recon-tour-actions { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .5rem; }
+.recon-tour-skip { border: 0; background: none; color: #829ab1; font-size: .82rem; cursor: pointer; padding: 0; }
+.recon-tour-skip:hover { color: #52606d; text-decoration: underline; }
+.recon-tour-nav { display: flex; gap: .4rem; }
+.recon-tour-next { min-width: 84px; }
+
+/* Caret pointing at the spotlight (hidden for centred steps). */
+.recon-tour-caret { position: absolute; left: var(--caret-x, 50%); width: 0; height: 0; }
+.recon-tour-tip--bottom .recon-tour-caret {
+  top: -9px; margin-left: -9px;
+  border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 9px solid #fff;
+}
+.recon-tour-tip--top .recon-tour-caret {
+  bottom: -9px; margin-left: -9px;
+  border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 9px solid #fff;
+}
+.recon-tour-tip--center .recon-tour-caret { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .recon-tour-ring, .recon-tour-tip { transition: none; }
+}
 

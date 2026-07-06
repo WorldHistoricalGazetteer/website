@@ -1788,6 +1788,46 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   }
 }
 
+// Fetch + parse the bundled demo dataset. Resolves once the mapping pane (step 2) has rendered, so
+// callers (the sample button, the guided tour) can await a fully-loaded project.
+async function loadSampleDataset() {
+  try {
+    const res = await fetch('/static/webpack/samples/reconciliation-demo.csv', { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    handleFile(new File([await res.text()], 'reconciliation-demo.csv', { type: 'text/csv' }));
+  } catch (err) {
+    console.error('[recon] load sample failed', err);
+    const caps = el('recon-caps'); if (caps) caps.innerHTML = '<span class="text-danger">Could not load the sample dataset.</span>';
+    throw err;
+  }
+  // handleFile parses via FileReader (async) then renderAll(); wait for the mapping table to appear.
+  await waitUntil(() => project && !el('recon-result').classList.contains('d-none') && el('recon-map-body').children.length > 0);
+}
+
+// Small poller used by the guided tour to await async view changes (parse, reconcile, map draw).
+async function waitUntil(cond, timeout = 20000, interval = 120) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) { try { if (cond()) return true; } catch (_) { /* keep polling */ } await sleep(interval); }
+  return false;
+}
+
+// Driving hooks handed to the guided tour (recon-tour.js) so it can run the real workbench.
+function tourApi() {
+  return {
+    hasProject: () => !!project,
+    isRunning: () => running,
+    openPane: (id) => openPane(id),
+    loadSample: async () => {
+      // If the demo is already loaded, don't re-fetch; otherwise (re)load it fresh for the tour.
+      if (!(project && project.fileName === 'reconciliation-demo.csv')) await loadSampleDataset();
+    },
+    reconcile: async () => {
+      if (!(project && project.matches && Object.keys(project.matches).length)) await reconcileAll();
+      await waitUntil(() => !running);
+    },
+  };
+}
+
 function init() {
   const dz = el('recon-dropzone');
   const input = el('recon-file');
@@ -1800,16 +1840,16 @@ function init() {
 
   // Load a bundled sample dataset (fetched from a static URL) for demonstration — no file picker.
   const sampleBtn = el('recon-load-sample');
-  if (sampleBtn) sampleBtn.addEventListener('click', async () => {
-    sampleBtn.disabled = true;
-    try {
-      const res = await fetch('/static/webpack/samples/reconciliation-demo.csv', { credentials: 'same-origin' });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      handleFile(new File([await res.text()], 'reconciliation-demo.csv', { type: 'text/csv' }));
-    } catch (err) {
-      console.error('[recon] load sample failed', err);
-      const caps = el('recon-caps'); if (caps) caps.innerHTML = '<span class="text-danger">Could not load the sample dataset.</span>';
-    } finally { sampleBtn.disabled = false; }
+  if (sampleBtn) sampleBtn.addEventListener('click', () => { sampleBtn.disabled = true; loadSampleDataset().finally(() => { sampleBtn.disabled = false; }); });
+
+  // "Take a tour" — guided product tour that drives the whole flow on the sample data. The tour
+  // engine is lazy-loaded (its own chunk) so it costs nothing until requested.
+  const tourBtn = el('recon-take-tour');
+  if (tourBtn) tourBtn.addEventListener('click', async () => {
+    tourBtn.disabled = true;
+    try { const mod = await import(/* webpackChunkName: "recon-tour" */ './recon-tour.js'); mod.startTour(tourApi()); }
+    catch (err) { console.error('[recon] tour failed to load', err); }
+    finally { tourBtn.disabled = false; }
   });
 
   ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('recon-dropzone--over'); }));
