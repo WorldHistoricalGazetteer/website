@@ -321,3 +321,7 @@
 .recon-phonetic-groups .recon-phon-group { margin: .15rem 0; line-height: 1.8; }
 .recon-phonetic-groups .badge { font-weight: 500; }
 
+/* Multi-column reconciliation: column switcher (parent → child) */
+.recon-col-switcher { display:flex; align-items:center; flex-wrap:wrap; gap:.15rem; padding:.4rem .6rem; background:#f8f9fa; border:1px solid #e2e2e2; border-radius:6px; }
+.recon-col-switcher .recon-col-pill { padding:.1rem .5rem; font-size:.8rem; }
+

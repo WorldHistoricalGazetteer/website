@@ -470,6 +470,8 @@ function renderAll() {
   renderDates();
   renderPreview();
   refreshReconSection();
+  renderColSwitcher();
+  refreshReview();  // show pane 4's header (with a "reconcile first" placeholder) even before matches
   refreshExport();
   renderLangControl(); // populate the phonetic-matching language selector (default detected from data)
   updatePaneSummaries();
@@ -639,9 +641,13 @@ function currentExportOptions() {
 // Assemble a per-row augmented record set. Returns { origHeaders, augHeaders, records } where each
 // record is { orig:[cellValues], aug:{header:value}, coord:{lat,lon}|null, whenStart, whenEnd, match }.
 async function buildExportRecords(opts, onProgress) {
-  const built = buildUniqueQueries();
+  const nameCol = colIndexByRole('name');
+  const built = buildUniqueQueries(nameCol); // export the NAME column's match as the primary whg_match_*
   const decisions = project.decisions || {};
   const matches = project.matches || {};
+  // Parent columns reconciled ahead of the name (County, Parish, …) get their own match columns.
+  const adminCols = reconChain().filter((c) => c !== nameCol);
+  const colSlug = (i) => String(project.columns[i].name).trim().replace(/\W+/g, '_').toLowerCase().replace(/^_|_$/g, '') || ('col' + i);
   // Load the coord parser whenever a coordinate column exists — even if the WGS84 columns aren't
   // requested — so LPF/LP-TSV geometry and geometry-override centroids can be computed.
   if (opts.coords || hasCoordRole()) await loadCoords();
@@ -651,7 +657,10 @@ async function buildExportRecords(opts, onProgress) {
   const augHeaders = [];
   if (opts.coords) augHeaders.push('wgs84_lat', 'wgs84_lon');
   if (opts.dates) augHeaders.push('date_start', 'date_end');
-  if (opts.match) augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
+  if (opts.match) {
+    augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
+    adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`)); // parent containment matches
+  }
   if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types', 'whg_wikipedia');
 
   // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
@@ -699,6 +708,15 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_title = match ? match.list.map((x) => x.title).join('; ') : '';
       aug.whg_match_score = match ? match.list.map((x) => x.score).join('; ') : '';
       aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
+      // Parent-column (containment) matches: accepted, else the auto-confirmed top.
+      adminCols.forEach((c) => {
+        const key = c + ':' + i;
+        const a = acceptedList(decisions[key])[0];
+        let id = a && a.place_id, title = a && a.label;
+        if (!id) { const m = matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold())) { id = m.top.id; title = m.top.name; } }
+        aug[`${colSlug(c)}_whg_id`] = id || '';
+        aug[`${colSlug(c)}_whg_title`] = title || '';
+      });
     }
     if (opts.enrich) {
       const f = match && match.first;
@@ -957,29 +975,58 @@ function normName(s) { return String(s == null ? '' : s).trim().toLowerCase().re
 function colIndexByRole(role) { return project ? project.columns.findIndex((c) => c.role === role) : -1; }
 const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
 
-// Every row is reconciled INDIVIDUALLY — no de-duplication by name. Users have already disambiguated
-// their places, so two rows with the same toponym may be different places and each deserves its own
-// match/decision/geometry. The key is therefore the row index. (Downstream — matches, decisions,
-// review, export — is keyed by this key, so one key ↔ one row.)
-function buildUniqueQueries() {
+// ── Multi-column (iterative, containment-chained) reconciliation ─────────────
+// Reconcile more than one column, parent → child: the admin-parent columns (role "county/region",
+// in dataset order) first, then the place-name column. Each child column's query is scoped by the
+// parent column's resolved place_id (contained_in), so e.g. a Parish is matched within its County and
+// a Name within its Parish — sharpening disambiguation of same-name places. The reconciliation chain
+// is the ordered list of column indices.
+function reconChain() {
+  if (!project) return [];
+  const chain = project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'county');
   const nameIdx = colIndexByRole('name');
-  if (nameIdx < 0) return null;
+  if (nameIdx >= 0) chain.push(nameIdx);
+  return chain;
+}
+let reconActiveIdx = -1; // which chain position the review/results panes show; -1 → the name column (last)
+function activeReconCol() {
+  const chain = reconChain();
+  if (!chain.length) return -1;
+  if (reconActiveIdx < 0 || reconActiveIdx >= chain.length) return chain[chain.length - 1]; // default: name
+  return chain[reconActiveIdx];
+}
+// The place_id resolved for a (column,row): an explicit accept, else an auto-confirmed top match.
+function resolvedPlaceId(colIndex, rowIdx) {
+  const key = colIndex + ':' + rowIdx;
+  const a = acceptedList(project.decisions && project.decisions[key])[0];
+  if (a) return a.place_id;
+  const m = project.matches && project.matches[key];
+  if (m && m.top && isAutoConfirmed(m.top, getThreshold())) return m.top.id;
+  return null;
+}
+
+// Every row is reconciled INDIVIDUALLY — no de-duplication by name (users have already disambiguated,
+// so two rows with the same toponym may be different places). Keyed by "<colIndex>:<rowIndex>" so each
+// reconciled column keeps its own per-row matches/decisions. Defaults to the active chain column.
+function buildUniqueQueries(colIndex) {
+  if (colIndex == null) colIndex = activeReconCol();
+  if (colIndex < 0) return null;
   const countryIdx = colIndexByRole('country');
-  const map = new Map(); // key(row index) -> { query, country, rows:[i] }
+  const map = new Map(); // key "<col>:<row>" -> { query, country, rows:[i] }
   project.rows.forEach((r, i) => {
-    const name = String(r[nameIdx] == null ? '' : r[nameIdx]).trim();
-    if (!name) return;
+    const val = String(r[colIndex] == null ? '' : r[colIndex]).trim();
+    if (!val) return;
     const country = (countryIdx >= 0 && isCcode(r[countryIdx])) ? String(r[countryIdx]).trim().toUpperCase() : '';
-    map.set(String(i), { query: name, country, rows: [i] });
+    map.set(colIndex + ':' + i, { query: val, country, rows: [i] });
   });
-  return { nameIdx, countryIdx, map };
+  return { colIndex, nameIdx: colIndex, countryIdx, map };
 }
 function keyForRow(built, i) {
   const r = project.rows[i];
-  const name = String(r[built.nameIdx] == null ? '' : r[built.nameIdx]).trim();
-  if (!name) return null;
+  const val = String(r[built.colIndex] == null ? '' : r[built.colIndex]).trim();
+  if (!val) return null;
   const country = (built.countryIdx >= 0 && isCcode(r[built.countryIdx])) ? String(r[built.countryIdx]).trim().toUpperCase() : '';
-  return { name, country, key: String(i) };
+  return { name: val, country, key: built.colIndex + ':' + i };
 }
 
 async function postReconcile(queries, csrf, attempt = 0) {
@@ -1143,7 +1190,29 @@ function renderResultsWindow(calibrate) {
     }
   }
 }
-function renderResults(built) { renderResultsTable(built); refreshReview(); refreshExport(); }
+function renderResults(built) { renderColSwitcher(); renderResultsTable(built); refreshReview(); refreshExport(); }
+
+// Column switcher (multi-column reconciliation): pills for each chain column, parent → child, showing
+// which column the results/review panes are currently displaying. Hidden for single-column datasets.
+function renderColSwitcher() {
+  const box = el('recon-col-switcher'); if (!box || !project) return;
+  const chain = reconChain();
+  if (chain.length <= 1) { box.innerHTML = ''; box.classList.add('d-none'); return; }
+  box.classList.remove('d-none');
+  const active = activeReconCol();
+  const matches = project.matches || {};
+  const pills = chain.map((ci, idx) => {
+    const name = truncate(project.columns[ci].name, 22);
+    let n = 0; for (const k in matches) { if (k.slice(0, k.indexOf(':')) === String(ci) && matches[k] && matches[k].top) n += 1; }
+    const arrow = idx < chain.length - 1 ? '<i class="fas fa-angle-right mx-1 text-muted"></i>' : '';
+    return `<button type="button" class="btn btn-sm ${ci === active ? 'btn-primary' : 'btn-outline-secondary'} recon-col-pill" data-idx="${idx}" title="${esc(project.columns[ci].name)}">${esc(name)}${n ? ` <span class="badge bg-light text-dark ms-1">${n.toLocaleString()}</span>` : ''}</button>${arrow}`;
+  }).join('');
+  box.innerHTML = `<span class="text-muted small me-2"><i class="fas fa-layer-group me-1"></i>Columns (parent → child):</span>${pills}`;
+  box.querySelectorAll('.recon-col-pill').forEach((b) => b.addEventListener('click', () => {
+    reconActiveIdx = Number(b.dataset.idx);
+    const built = buildUniqueQueries(); if (built) renderResults(built);
+  }));
+}
 
 // Reviewable rows (those with ≥1 candidate).
 function reviewableKeys(built) {
@@ -1160,10 +1229,20 @@ function refreshReview() {
   const sec = el('recon-review');
   if (!sec) return;
   const built = buildUniqueQueries();
-  if (!built || !project.matches || !Object.keys(project.matches).length) { sec.classList.add('d-none'); return; }
-  reviewMeta = reviewableKeys(built);
-  if (!reviewMeta.length) { sec.classList.add('d-none'); return; }
-  sec.classList.remove('d-none');
+  if (!built) { sec.classList.add('d-none'); return; } // no reconcilable column mapped yet
+  sec.classList.remove('d-none'); // header stays visible once a name column is mapped
+  const hasMatches = project.matches && Object.keys(project.matches).length;
+  reviewMeta = hasMatches ? reviewableKeys(built) : [];
+  if (!reviewMeta.length) {
+    const card = el('recon-review-card');
+    if (card) card.innerHTML = `<div class="text-muted small py-3"><i class="fas fa-circle-info me-1"></i>${
+      hasMatches
+        ? 'Nothing to review for this column — matches were auto-confirmed. Tick “review all” to revisit them.'
+        : 'Run <strong>reconciliation</strong> first (Step 3), then confirm matches here.'}</div>`;
+    const map = el('recon-review-map'); if (map) map.classList.add('d-none');
+    updateReviewProgress();
+    return;
+  }
   if (reviewPos >= reviewMeta.length) reviewPos = 0;
   const all = el('recon-review-all') && el('recon-review-all').checked;
   if (!all && !needsReview(reviewMeta[reviewPos].key)) {
@@ -1543,25 +1622,47 @@ function refreshReconSection() {
 
 async function reconcileAll() {
   if (running) return;
-  const built = buildUniqueQueries();
-  if (!built || !built.map.size) {
+  const chain = reconChain();
+  if (!chain.length) {
     setReconSummary('<span class="text-warning">Map a “Place name” column first (Step 2).</span>');
     return;
   }
   project.matches = project.matches || {};
-  const entries = [...built.map.entries()].filter(([key]) => !project.matches[key]); // resume: skip done
-  const total = built.map.size;
-  let done = total - entries.length;
-
   toggleRunning(true);
   openPane('recon-recon'); // focus the reconcile step (accordion collapses the others)
   stopRequested = false;
-  updateProgress(done, total);
   const csrf = getCsrf();
 
-  // Language-conditioned Symphonym embeddings (int8, 128-d) for phonetic matching — generated in the
-  // browser and sent per row so the gateway ranks candidates by vector similarity (offloading its own
-  // embed). Skipped when phonetic matching is off or the model can't load (falls back to text matching).
+  // Reconcile each column of the chain, parent → child. Each child column's query is scoped by the
+  // parent column's resolved place_id (contained_in), so Parish is matched within its County and Name
+  // within its Parish — sharpening disambiguation of same-name places.
+  for (let p = 0; p < chain.length && !stopRequested; p++) {
+    await reconcilePass(chain[p], p > 0 ? chain[p - 1] : -1, csrf, p, chain.length);
+  }
+
+  toggleRunning(false);
+  reconActiveIdx = chain.length - 1; // land on the name column for review
+  const built = buildUniqueQueries();
+  if (built) renderResults(built);
+  renderColSwitcher();
+  await persist();
+  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'} — ${chain.length} column(s)`);
+}
+
+// Reconcile one column of the chain. parentCol < 0 for the top of the chain.
+async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
+  const built = buildUniqueQueries(colIndex);
+  if (!built || !built.map.size) return;
+  reconActiveIdx = passNo; // show this column's progress/results while it runs
+  renderColSwitcher();
+  const colName = truncate(project.columns[colIndex].name, 30);
+  const passLabel = passTotal > 1 ? `<span class="text-muted">column ${passNo + 1}/${passTotal} · <strong>${esc(colName)}</strong></span> · ` : '';
+  const entries = [...built.map.entries()].filter(([key]) => !project.matches[key]); // resume: skip done
+  const total = built.map.size;
+  let done = total - entries.length;
+  updateProgress(done, total);
+
+  // Language-conditioned Symphonym embeddings (int8, 128-d) for this column's values.
   let embByKey = null;
   if (phoneticEnabled() && entries.length) {
     try {
@@ -1570,7 +1671,7 @@ async function reconcileAll() {
       const names = entries.map(([, v]) => v.query);
       const int8 = await mod.embedNames(names, {
         lang,
-        onProgress: (d, t) => setReconSummary(`<i class="fas fa-spinner fa-spin me-1"></i>generating phonetic embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`),
+        onProgress: (d, t) => setReconSummary(`${passLabel}<i class="fas fa-spinner fa-spin me-1"></i>embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`),
       });
       embByKey = {};
       entries.forEach(([key], idx) => { embByKey[key] = Array.from(int8.subarray(idx * 128, idx * 128 + 128)); });
@@ -1586,6 +1687,11 @@ async function reconcileAll() {
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
+      // Containment: scope this column's query by the parent column's resolved place for the same row.
+      if (parentCol >= 0) {
+        const pid = resolvedPlaceId(parentCol, key.slice(key.indexOf(':') + 1));
+        if (pid) { q.contained_in = [pid]; q.containment = 'fuzzy'; q.relation = 'within'; }
+      }
       queries['q' + j] = q;
     });
     let data;
@@ -1593,6 +1699,7 @@ async function reconcileAll() {
     catch (err) {
       console.error('[recon] batch failed', err);
       setReconSummary(`<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Reconciliation stopped: ${esc(err.message)}</span>`);
+      stopRequested = true;
       break;
     }
     slice.forEach(([key], j) => {
@@ -1605,11 +1712,6 @@ async function reconcileAll() {
     await persist();
     if (!stopRequested && b + RECON_BATCH < entries.length) await sleep(150); // gentle throttle
   }
-
-  toggleRunning(false);
-  renderResults(built);
-  await persist();
-  console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'}: ${done}/${total} rows`);
 }
 
 function init() {
