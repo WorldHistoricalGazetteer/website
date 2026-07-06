@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "script_to_id": {
+    "LATIN": 0,
+    "CYRILLIC": 1,
+    "GREEK": 2,
+    "ARABIC": 3,
+    "HEBREW": 4,
+    "DEVANAGARI": 5,
+    "BENGALI": 6,
+    "TAMIL": 7,
+    "TELUGU": 8,
+    "MALAYALAM": 9,
+    "KANNADA": 10,
+    "GUJARATI": 11,
+    "THAI": 12,
+    "GEORGIAN": 13,
+    "ARMENIAN": 14,
+    "HANGUL": 15,
+    "CJK": 16,
+    "HIRAGANA": 17,
+    "KATAKANA": 18,
+    "OTHER": 19
+  }
+}

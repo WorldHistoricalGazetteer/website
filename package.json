@@ -37,6 +37,7 @@
     "maplibre-gl": "^5.3.1",
     "mini-css-extract-plugin": "^2.7.6",
     "moment": "^2.29.4",
+    "onnxruntime-web": "^1.27.0",
     "proj4": "^2.20.9",
     "raw-loader": "^4.0.2",
     "sass": "^1.50.2",

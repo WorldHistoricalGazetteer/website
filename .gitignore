@@ -139,3 +139,7 @@ package-lock.json
 # Ignore all config.json files in server-configuration
 server-configuration/secret.yaml
 /cliopatria/
+
+# onnxruntime-web bundler-emitted wasm/mjs (superseded at runtime by ort.env.wasm.wasmPaths → static/webpack/symphonym/) onnxruntime-emitted
+/static/webpack/*.wasm
+/static/webpack/[0-9a-f]*.mjs

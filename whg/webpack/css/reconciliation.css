@@ -312,3 +312,8 @@
 .recon-map-marker--selected { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2e7d32; }
 .recon-map-marker--hover { transform: scale(1.35); box-shadow: 0 0 0 2px #fff, 0 0 0 5px rgba(21,101,192,0.65); }
 .recon-cand--maphover { outline: 2px solid rgba(21,101,192,0.55); outline-offset: -2px; }
+
+/* Phase 7 — in-browser phonetic grouping (Symphonym) */
+.recon-phonetic-bar { border: 1px dashed #e2e2e2; border-radius: 6px; padding: .4rem .6rem; }
+.recon-phonetic-groups .recon-phon-group { margin: .15rem 0; line-height: 1.8; }
+.recon-phonetic-groups .badge { font-weight: 500; }

@@ -25,6 +25,8 @@ let ReconMap = null; // { renderReviewMap } — MapLibre map for the review pane
 const loadCoords = async () => (Coords || (Coords = await import(/* webpackChunkName: "recon-coords" */ './recon-coords.js')));
 const loadDates = async () => (Dates || (Dates = await import(/* webpackChunkName: "recon-dates" */ './recon-dates.js')));
 const loadReconMap = async () => (ReconMap || (ReconMap = await import(/* webpackChunkName: "recon-map" */ './recon-map.js')));
+let Symphonym = null; // in-browser phonetic encoder (Phase 7) — clusters variant spellings locally
+const loadSymphonym = async () => (Symphonym || (Symphonym = await import(/* webpackChunkName: "recon-symphonym" */ './recon-symphonym.js')));
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -469,6 +471,7 @@ function renderAll() {
   renderPreview();
   refreshReconSection();
   refreshExport();
+  renderPhoneticGroups(); // restore any saved phonetic groups on resume
   updatePaneSummaries();
   openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
 }
@@ -858,6 +861,45 @@ function refreshExport() {
     if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
     sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
   }
+}
+
+// ── Phase 7: in-browser Symphonym phonetic grouping ─────────────────────────
+// Embeds the user's unique place names locally (ONNX in a worker) and groups variant spellings /
+// near-duplicates by cosine similarity — a data-cleaning aid computed before any network call.
+function phoneticEnabled() {
+  const box = el('recon-phonetic');
+  if (box) return box.checked;
+  return !(project && project.phonetic === false); // default on
+}
+async function runPhonetic() {
+  if (!project) return;
+  const built = buildUniqueQueries(); if (!built) return;
+  const entries = [...built.map.entries()].map(([, v]) => v.query);
+  const status = el('recon-phonetic-status');
+  const box = el('recon-phonetic-groups');
+  if (!entries.length) { if (box) box.innerHTML = ''; return; }
+  if (status) status.textContent = 'loading model (first run downloads ~21 MB, then cached)…';
+  try {
+    const mod = await loadSymphonym();
+    const groups = await mod.clusterNames(entries, {
+      threshold: 0.9,
+      onProgress: (d, t) => { if (status) status.textContent = `embedding ${d.toLocaleString()} / ${t.toLocaleString()}…`; },
+    });
+    project._phonetic = groups.map((g) => g.map((i) => entries[i]));
+    persist();
+    renderPhoneticGroups();
+    if (status) status.textContent = `${groups.length.toLocaleString()} group${groups.length === 1 ? '' : 's'} of similar names`;
+  } catch (err) {
+    console.error('[recon] phonetic grouping failed', err);
+    if (status) status.textContent = 'phonetic grouping unavailable (see console)';
+  }
+}
+function renderPhoneticGroups() {
+  const box = el('recon-phonetic-groups'); if (!box) return;
+  const groups = (project && project._phonetic) || [];
+  if (!groups.length) { box.innerHTML = '<div class="text-muted small">No groups of similar names found yet.</div>'; return; }
+  box.innerHTML = groups.map((g) =>
+    `<div class="recon-phon-group"><i class="fas fa-code-branch text-secondary me-1"></i>${g.map((n) => `<span class="badge bg-light text-dark border">${esc(n)}</span>`).join(' ')}</div>`).join('');
 }
 
 async function showCapabilities() {
@@ -1539,6 +1581,7 @@ async function reconcileAll() {
   toggleRunning(false);
   renderResults(built);
   await persist();
+  if (!stopRequested && phoneticEnabled()) runPhonetic(); // embed the names locally for phonetic grouping
   console.log(`[recon] reconciliation ${stopRequested ? 'stopped' : 'complete'}: ${done}/${total} unique queries`);
 }
 
@@ -1590,6 +1633,15 @@ function init() {
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
   const exportBtn = el('recon-export-btn');
   if (exportBtn) exportBtn.addEventListener('click', runExport);
+
+  // Phonetic grouping (Symphonym, in-browser) — default on; toggle persists; manual re-run button.
+  const phon = el('recon-phonetic');
+  if (phon) {
+    if (project && project.phonetic === false) phon.checked = false;
+    phon.addEventListener('change', () => { if (project) { project.phonetic = phon.checked; persist(); } });
+  }
+  const findSim = el('recon-find-similar');
+  if (findSim) findSim.addEventListener('click', runPhonetic);
   const rw = el('recon-results-wrap');
   if (rw) rw.addEventListener('scroll', () => { if (_resultRows.length) requestAnimationFrame(() => renderResultsWindow(false)); });
 

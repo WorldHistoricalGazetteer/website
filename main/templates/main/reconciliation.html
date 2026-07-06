@@ -171,6 +171,14 @@
       <span class="text-muted">or the name matches exactly — so review can focus on the rest.</span>
     </div>
 
+    <div class="d-flex align-items-center flex-wrap gap-2 small mb-2 recon-phonetic-bar">
+      <label class="mb-0"><input type="checkbox" id="recon-phonetic" checked>
+        Phonetic grouping <span class="text-muted">(Symphonym, in-browser — groups variant spellings; on by default)</span></label>
+      <button type="button" id="recon-find-similar" class="btn btn-sm btn-outline-secondary py-0">Find similar names now</button>
+      <span id="recon-phonetic-status" class="text-muted"></span>
+    </div>
+    <div id="recon-phonetic-groups" class="recon-phonetic-groups mb-2"></div>
+
     <div class="recon-progress-wrap d-none" id="recon-progress-wrap">
       <div class="recon-progress"><div class="recon-progress-bar" id="recon-progress-bar"></div></div>
       <div class="small text-muted mt-1" id="recon-progress-text"></div>
