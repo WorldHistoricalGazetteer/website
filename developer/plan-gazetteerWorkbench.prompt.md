@@ -334,10 +334,17 @@ Each phase is independently demoable. MVP = Phases 1–5. Everything after is en
     default = current stage). `reReconcileColumn()` clears the column + downstream, re-runs it.
     Verified live: focus County → Sources=ukhc (Only selected) → Re-reconcile County → Devon AU→GB,
     Surrey CA→GB, 13 matched/1 no-match. Also fixed a leak where a per-column source pick was written
-    to localStorage as the global default (Parish inherited County's ukhc). (b) Re-importing a dataset over a
-    reconciled one leaves a stale recon results table until reload (handleFile should clear recon DOM).
-    (c) auto-confirm on exact-name is too eager without a source restriction (Devon→AU); per-column
-    `ukhc` is the intended fix but consider a country-hint guard for admin columns.
+    to localStorage as the global default (Parish inherited County's ukhc). (b) DONE (2026-07-06) —
+    refreshReconSection now clears the stale results body/summary + hides the results/progress wrappers
+    when a re-imported project has no matches yet. (c) DONE (2026-07-06) — isAutoConfirmed() now takes
+    the candidate list and withholds auto-confirm when a DISTINCT candidate (different name/description)
+    ties the top score; ambiguous ties (Devon GB vs AU, both 100) go to review instead of an auto-guess.
+    Same-place multi-source duplicates (identical name+description) are not treated as ambiguous.
+    Verified: County on all-sources now auto-confirms only 6/14 (the unique ones); Devon/Surrey/Kent →
+    review. Combined with per-column `ukhc` (unique → auto-confirms). Remaining niggle: localStorage
+    still seeds a fresh column's default source from the last global pick (legacy; per-column picks no
+    longer leak). LIMITATION for generic use: hierarchy order = dataset column order (no UI to reorder
+    parent→child); all admin-parents share the one 'county/region' role.
 
 - **DONE (2026-07-06) — guided "Take a tour" live demo.** Built as `whg/webpack/js/recon-tour.js`
   (bespoke overlay, no external lib/CDN — CSP/local-first) lazy-loaded via `import()` in its own webpack
