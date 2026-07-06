@@ -717,7 +717,7 @@ async function buildExportRecords(opts, onProgress) {
         const key = c + ':' + i;
         const a = acceptedList(decisions[key])[0];
         let id = a && a.place_id, title = a && a.label;
-        if (!id) { const m = matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold())) { id = m.top.id; title = m.top.name; } }
+        if (!id) { const m = matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) { id = m.top.id; title = m.top.name; } }
         aug[`${colSlug(c)}_whg_id`] = id || '';
         aug[`${colSlug(c)}_whg_title`] = title || '';
       });
@@ -942,7 +942,7 @@ async function updateFullMap() {
     if (!c) continue;
     const key = nameCol + ':' + i;
     const acc = acceptedList(decisions[key])[0]
-      || (matches[key] && matches[key].top && isAutoConfirmed(matches[key].top, getThreshold()) ? { label: matches[key].top.name, score: matches[key].top.score } : null);
+      || (matches[key] && matches[key].top && isAutoConfirmed(matches[key].top, getThreshold(), matches[key].candidates) ? { label: matches[key].top.name, score: matches[key].top.score } : null);
     const cell = (idx) => (idx >= 0 ? String(project.rows[i][idx] == null ? '' : project.rows[i][idx]) : '');
     feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [+c.lon.toFixed(6), +c.lat.toFixed(6)] }, properties: {
       title: cell(nameCol), admin: cell(countyIdx), date: cell(dateIdx),
@@ -1081,7 +1081,7 @@ function resolvedPlaceIds(colIndex, rowIdx) {
   const acc = acceptedList(project.decisions && project.decisions[key]);
   if (acc.length) return acc.map((a) => a.place_id).filter(Boolean);
   const m = project.matches && project.matches[key];
-  if (m && m.top && isAutoConfirmed(m.top, getThreshold())) return [m.top.id];
+  if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) return [m.top.id];
   return [];
 }
 
@@ -1194,9 +1194,20 @@ function getThreshold() {
   const n = box ? parseInt(box.value, 10) : NaN;
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 90;
 }
-// Auto-confirm a top candidate when the name matched exactly, or its score clears the threshold.
-function isAutoConfirmed(top, threshold) {
-  return !!top && (top.match || Number(top.score) >= threshold);
+// Auto-confirm a top candidate when the name matched exactly, or its score clears the threshold —
+// UNLESS another DISTINCT candidate ties the top score. An exact tie between different places (e.g.
+// "Devon" in GB vs AU, both 100) is genuinely ambiguous and belongs in review, not an auto-guess.
+// Same-place duplicates from multiple sources (identical name + description) are NOT ambiguous.
+function isAutoConfirmed(top, threshold, cands) {
+  if (!top) return false;
+  if (!(top.match || Number(top.score) >= threshold)) return false;
+  if (cands && cands.length > 1) {
+    const t = cands[0];
+    for (let i = 1; i < cands.length && Number(cands[i].score) >= Number(t.score); i++) {
+      if (cands[i].name !== t.name || (cands[i].description || '') !== (t.description || '')) return false;
+    }
+  }
+  return true;
 }
 
 // ── Candidate review (Phase 4) ───────────────────────────────────────────────
@@ -1217,7 +1228,7 @@ function effectiveStatus(key) {
   const dec = project.decisions && project.decisions[key];
   if (dec) return dec.status;
   const m = project.matches && project.matches[key];
-  if (m && m.top) return isAutoConfirmed(m.top, getThreshold()) ? 'auto' : 'candidate';
+  if (m && m.top) return isAutoConfirmed(m.top, getThreshold(), m.candidates) ? 'auto' : 'candidate';
   return 'none';
 }
 // Accepted candidates for a key as an array [{ci, place_id, label, score}]. A place may closeMatch
@@ -1232,7 +1243,7 @@ function acceptedList(dec) {
 function selectedCis(key) {
   const dec = project.decisions && project.decisions[key];
   const cis = acceptedList(dec).map((a) => a.ci);
-  if (!dec) { const m = project.matches && project.matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold())) cis.push(0); }
+  if (!dec) { const m = project.matches && project.matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) cis.push(0); }
   return cis;
 }
 // Highlight the list row for candidate `ci` (called when its marker is hovered on the map).
@@ -1246,7 +1257,7 @@ function acceptedCandidate(key) {
   if (!m) return null;
   const dec = project.decisions && project.decisions[key];
   if (dec) { const a = acceptedList(dec)[0]; return a ? (m.candidates && m.candidates[a.ci]) || null : null; }
-  return (m.top && isAutoConfirmed(m.top, getThreshold())) ? m.top : null;
+  return (m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) ? m.top : null;
 }
 
 function renderResultsTable(built) {
@@ -1256,7 +1267,7 @@ function renderResultsTable(built) {
   built.map.forEach((v, key) => {
     const m = matches[key];
     if (!m) { pending += 1; return; }
-    if (m.top) { matched += 1; rowsMatched += v.rows.length; if (isAutoConfirmed(m.top, threshold)) auto += 1; }
+    if (m.top) { matched += 1; rowsMatched += v.rows.length; if (isAutoConfirmed(m.top, threshold, m.candidates)) auto += 1; }
     else nomatch += 1;
     if (project.decisions && project.decisions[key] && project.decisions[key].status === 'accepted') accepted += 1;
   });
@@ -1360,7 +1371,7 @@ function reviewableKeys(built) {
 }
 function needsReview(key) {
   const m = project.matches[key];
-  return !(project.decisions && project.decisions[key]) && m && m.top && !isAutoConfirmed(m.top, getThreshold());
+  return !(project.decisions && project.decisions[key]) && m && m.top && !isAutoConfirmed(m.top, getThreshold(), m.candidates);
 }
 function refreshReview() {
   const sec = el('recon-review');
@@ -1401,7 +1412,7 @@ function renderReviewCard() {
   const meta = reviewMeta[reviewPos];
   const m = project.matches[meta.key];
   const dec = project.decisions && project.decisions[meta.key];
-  const auto = m.top && isAutoConfirmed(m.top, getThreshold());
+  const auto = m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates);
   // Multi-select: a set of accepted candidate indices (auto-confirm previews candidate 0).
   const acceptedCis = new Set(acceptedList(dec).map((a) => a.ci));
   if (!dec && auto) acceptedCis.add(0);
@@ -1788,6 +1799,14 @@ function refreshReconSection() {
   if (hasName && project.matches && Object.keys(project.matches).length) {
     const built = buildUniqueQueries();
     if (built) renderResults(built);
+  } else {
+    // No matches yet (a freshly imported or re-imported dataset) — clear any stale results/summary
+    // left in the DOM from a previous dataset so they don't misrepresent the new one.
+    const rb = el('recon-results-body'); if (rb) rb.innerHTML = '';
+    _resultRows = [];
+    el('recon-results-wrap').classList.add('d-none');
+    setReconSummary('');
+    el('recon-progress-wrap').classList.add('d-none');
   }
   updateReconButton();
 }
