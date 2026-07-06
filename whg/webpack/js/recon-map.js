@@ -335,7 +335,7 @@ function ensureFullLayers() {
       fullMap.on('mouseenter', id, () => { fullMap.getCanvas().style.cursor = 'pointer'; });
       fullMap.on('mouseleave', id, () => { fullMap.getCanvas().style.cursor = ''; });
     });
-  } catch (_) { /* style not ready; next styledata re-adds */ }
+  } catch (err) { console.error('[recon] full-map layers failed', err); }
 }
 // geojson: FeatureCollection of Point features with { title, admin, date, match, score, coord } properties.
 export function renderFullMap(container, geojson) {
