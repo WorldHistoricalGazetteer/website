@@ -1374,9 +1374,10 @@ async function geomAction(kind, key) {
   if (kind === 'point' || kind === 'line' || kind === 'polygon') {
     mod.startDraw(kind);
     const s = el('recon-geom-status');
+    const Btn = kind.charAt(0).toUpperCase() + kind.slice(1); // Point / Line / Polygon
     if (s) s.textContent = kind === 'point'
-      ? `click the map to place a point (click ${kind} again to add another → Multi)`
-      : `click to add points, then Finish · click ${kind} again to add another part (→ Multi)`;
+      ? `click the map to place a point — press the “${Btn}” button again to add more (→ Multi)`
+      : `click the map to add points, then Finish — press the “${Btn}” button again for another part (→ Multi)`;
     return;
   }
   if (kind === 'finish') { mod.finishDraw(); return; }
