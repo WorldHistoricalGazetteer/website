@@ -1758,6 +1758,20 @@ function init() {
   dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
   input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); });
 
+  // Load a bundled sample dataset (fetched from a static URL) for demonstration — no file picker.
+  const sampleBtn = el('recon-load-sample');
+  if (sampleBtn) sampleBtn.addEventListener('click', async () => {
+    sampleBtn.disabled = true;
+    try {
+      const res = await fetch('/static/webpack/samples/reconciliation-demo.csv', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      handleFile(new File([await res.text()], 'reconciliation-demo.csv', { type: 'text/csv' }));
+    } catch (err) {
+      console.error('[recon] load sample failed', err);
+      const caps = el('recon-caps'); if (caps) caps.innerHTML = '<span class="text-danger">Could not load the sample dataset.</span>';
+    } finally { sampleBtn.disabled = false; }
+  });
+
   ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('recon-dropzone--over'); }));
   ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('recon-dropzone--over'); }));
   dz.addEventListener('drop', (e) => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) handleFile(f); });
