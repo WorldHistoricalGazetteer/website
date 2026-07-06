@@ -201,6 +201,26 @@ def geoms_to_geojson(src):
     return {"type": "FeatureCollection", "features": features} if features else None
 
 
+def wikipedia_links(links):
+    """Extract Wikipedia article links from a place's ``links`` list.
+
+    The indexing pipeline stores Wikidata sitelinks as ``{type: "seeAlso",
+    identifier: "https://<lang>.wikipedia.org/wiki/<title>"}``. Return a compact
+    ``[{lang, url}]`` list so the Workbench (and other clients) can offer Wikipedia
+    enrichment for Wikidata-backed candidates. Empty when the place carries none.
+    """
+    out = []
+    for link in links or []:
+        ident = link.get("identifier", "") if isinstance(link, dict) else ""
+        if ".wikipedia.org/wiki/" in ident:
+            try:
+                lang = ident.split("//", 1)[1].split(".wikipedia.org", 1)[0]
+            except (IndexError, AttributeError):
+                lang = ""
+            out.append({"lang": lang, "url": ident})
+    return out
+
+
 def make_candidate(hit, query_text, max_score, schema_space):
     src = hit["_source"]
     name = get_canonical_name(src, hit["_id"])
@@ -223,6 +243,9 @@ def make_candidate(hit, query_text, max_score, schema_space):
         "alt_names": alt_names,
         "description": f"Country: {', '.join(ccodes)}",
         "has_geom": bool(has_geom),
+        # Wikipedia article links (from Wikidata sitelinks in the index) — empty unless the place
+        # carries them. Additive: lets the Workbench enrich Wikidata-backed matches with Wikipedia.
+        "wikipedia": wikipedia_links(src.get("links")),
         "type": [
             {
                 "id": schema_space + "#Place",

@@ -472,6 +472,9 @@ def _adapt_hits(data: dict) -> list[dict]:
                 # True iff the place has a full polygon geometry (usable as a contained_in
                 # region). The gateway flags this per geometry; surface it for the candidate.
                 "has_geom": any(isinstance(g, dict) and g.get("has_geom") for g in geometries),
+                # Forward the gateway's authority/Wikipedia links so make_candidate can surface
+                # Wikipedia enrichment for Wikidata-backed candidates (previously dropped here).
+                "links": hit.get("links", []) or [],
                 # Mark as CRC-sourced so make_candidate can optionally tag it
                 "_crc_source": True,
             },

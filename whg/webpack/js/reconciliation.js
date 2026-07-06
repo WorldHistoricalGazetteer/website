@@ -652,7 +652,7 @@ async function buildExportRecords(opts, onProgress) {
   if (opts.coords) augHeaders.push('wgs84_lat', 'wgs84_lon');
   if (opts.dates) augHeaders.push('date_start', 'date_end');
   if (opts.match) augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
-  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types');
+  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types', 'whg_wikipedia');
 
   // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
   if (opts.enrich) {
@@ -708,6 +708,8 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || [])).join('; ') || '';
       aug.whg_match_description = (f && f.cand && f.cand.description) || '';
       aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
+      // Wikipedia article URLs (from Wikidata sitelinks surfaced by /reconcile) across accepted matches.
+      aug.whg_wikipedia = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
     }
     records.push({ orig, aug, coord, geom, whenStart, whenEnd, match });
   }
