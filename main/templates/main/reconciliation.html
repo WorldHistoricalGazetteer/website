@@ -515,6 +515,43 @@
     </div>
   </div>
 
+  <!-- Cell transforms: clean a column's values in place (common transforms + find/replace, with preview) -->
+  <div class="modal fade" id="recon-transform-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-transform-title">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="recon-transform-title">Transform column</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-muted mb-2">
+            Clean this column's values <em>in place</em>. The preview shows exactly what will change —
+            nothing is applied until you click Apply. A reconciled column is re-queued after a change.
+          </p>
+          <div class="mb-2">
+            <div class="small text-muted mb-1">Common transforms</div>
+            <div id="recon-transform-common" class="d-flex flex-wrap gap-1"></div>
+          </div>
+          <div class="mb-2">
+            <div class="small text-muted mb-1">Find &amp; replace</div>
+            <div class="d-flex align-items-center gap-1 flex-wrap">
+              <input type="text" id="recon-tf-find" class="form-control form-control-sm" style="max-width:160px" placeholder="find" autocomplete="off">
+              <i class="fas fa-arrow-right text-muted"></i>
+              <input type="text" id="recon-tf-replace" class="form-control form-control-sm" style="max-width:160px" placeholder="replace" autocomplete="off">
+              <label class="small mb-0 ms-1"><input type="checkbox" id="recon-tf-regex"> regex</label>
+              <label class="small mb-0 ms-1"><input type="checkbox" id="recon-tf-case"> case-sensitive</label>
+            </div>
+          </div>
+          <div id="recon-transform-preview" class="recon-transform-preview"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-sm btn-primary" id="recon-transform-apply" data-bs-dismiss="modal" disabled>Apply</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 {% endblock %}
 

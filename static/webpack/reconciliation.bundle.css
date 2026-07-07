@@ -93,6 +93,14 @@
 .recon-scope-map { height: 320px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
 .recon-scope-whg-results { max-height: 180px; overflow-y: auto; }
 
+/* Cell-transform modal preview */
+.recon-transform-preview { border: 1px solid #e2e2e2; border-radius: 6px; padding: .4rem .55rem; background: #fbfbfc; max-height: 200px; overflow-y: auto; }
+.recon-tf-prevrow { font-size: .82rem; padding: .05rem 0; }
+.recon-tf-before { color: #a33; text-decoration: line-through; text-decoration-color: #d8b0b0; }
+.recon-tf-after { color: #178a3a; }
+.recon-transform-btn { color: #8a94a0; }
+.recon-transform-btn:hover { color: #0d6efd; }
+
 /* Facets & filters panel (pane 3) */
 .recon-filters { border: 1px solid #e2e2e2; border-radius: 6px; padding: .45rem .6rem; margin-bottom: .6rem; background: #fbfbfc; }
 .recon-filters-head { margin-bottom: .35rem; }

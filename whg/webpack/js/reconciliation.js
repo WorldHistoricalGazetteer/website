@@ -487,11 +487,14 @@ function renderDateReport(res) {
 function renderMapping() {
   el('recon-map-body').innerHTML = project.columns.map((c, i) =>
     `<tr>
-       <td class="recon-map-col">${truncate(c.name, 50)}</td>
+       <td class="recon-map-col">${truncate(c.name, 50)}
+         <button type="button" class="btn btn-sm btn-link p-0 ms-1 recon-transform-btn" data-col="${i}" title="Clean / transform this column's values"><i class="fas fa-wand-magic-sparkles"></i></button>
+       </td>
        <td>${roleSelectHTML(i, c)}</td>
        <td class="text-muted">${truncate(firstSample(i), 60)}</td>
      </tr>`).join('');
 
+  el('recon-map-body').querySelectorAll('.recon-transform-btn').forEach((b) => b.addEventListener('click', () => openTransformModal(Number(b.dataset.col))));
   el('recon-map-body').querySelectorAll('.recon-role-select').forEach((sel) => {
     sel.addEventListener('change', () => {
       const i = Number(sel.dataset.col);
@@ -518,6 +521,107 @@ function renderMapping() {
       refreshFullMapPane(); refreshExport();
     });
   });
+}
+
+// ── Cell transforms (light, OpenRefine-style) — clean a column's values in place ──────────────────
+// A menu of common text transforms plus find/replace (literal or regex) on one column, with a live
+// preview. Applying mutates project.rows and records an undo op (before-snapshot). Transforming a column
+// that's already reconciled invalidates its matches (they were computed on the old values).
+function stripDiacritics(s) { return String(s == null ? '' : s).normalize('NFKD').replace(/[̀-ͯ]/g, ''); }
+function titleCase(s) { return String(s == null ? '' : s).toLowerCase().replace(/\b(\p{L})/gu, (m, c) => c.toUpperCase()); }
+const CELL_TRANSFORMS = [
+  { id: 'trim', label: 'Trim whitespace', fn: (v) => String(v == null ? '' : v).trim() },
+  { id: 'collapse', label: 'Collapse spaces', fn: (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim() },
+  { id: 'upper', label: 'UPPERCASE', fn: (v) => String(v == null ? '' : v).toUpperCase() },
+  { id: 'lower', label: 'lowercase', fn: (v) => String(v == null ? '' : v).toLowerCase() },
+  { id: 'title', label: 'Title Case', fn: (v) => titleCase(v) },
+  { id: 'accents', label: 'Strip accents', fn: (v) => stripDiacritics(v) },
+];
+let _transformCol = -1;
+let _pendingTransform = null; // { fn, label }
+let _undoStack = [];          // reversible ops (consumed by the undo/redo feature) — cells snapshots etc.
+function pushUndo(op) { _undoStack.push(op); if (_undoStack.length > 50) _undoStack.shift(); }
+
+function openTransformModal(col) {
+  _transformCol = col; _pendingTransform = null;
+  const m = el('recon-transform-modal'); if (!m) return;
+  const title = el('recon-transform-title'); if (title) title.textContent = `Transform column — ${truncate(project.columns[col].name, 40)}`;
+  const box = el('recon-transform-common');
+  if (box) box.innerHTML = CELL_TRANSFORMS.map((t) => `<button type="button" class="btn btn-sm btn-outline-secondary recon-tf-common" data-id="${t.id}">${esc(t.label)}</button>`).join('');
+  const fi = el('recon-tf-find'); if (fi) fi.value = '';
+  const ri = el('recon-tf-replace'); if (ri) ri.value = '';
+  const rx = el('recon-tf-regex'); if (rx) rx.checked = false;
+  const ci = el('recon-tf-case'); if (ci) ci.checked = false;
+  renderTransformPreview();
+  if (box) box.querySelectorAll('.recon-tf-common').forEach((b) => b.addEventListener('click', () => {
+    const t = CELL_TRANSFORMS.find((x) => x.id === b.dataset.id);
+    box.querySelectorAll('.recon-tf-common').forEach((x) => x.classList.remove('active', 'btn-primary'));
+    b.classList.add('active', 'btn-primary');
+    _pendingTransform = { fn: t.fn, label: t.label };
+    renderTransformPreview();
+  }));
+  if (window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(m).show();
+}
+// Build the transform fn from the find/replace inputs (returns null if 'find' is empty or the regex is bad).
+function findReplaceTransform() {
+  const find = (el('recon-tf-find') || {}).value || '';
+  if (!find) return null;
+  const replace = (el('recon-tf-replace') || {}).value || '';
+  const useRe = !!(el('recon-tf-regex') || {}).checked;
+  const flags = 'g' + ((el('recon-tf-case') || {}).checked ? '' : 'i');
+  let re;
+  try { re = useRe ? new RegExp(find, flags) : new RegExp(find.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags); }
+  catch (err) { return { error: err.message }; }
+  return { fn: (v) => String(v == null ? '' : v).replace(re, replace), label: `replace “${find}”` };
+}
+function onFindReplaceInput() {
+  el('recon-transform-common').querySelectorAll('.recon-tf-common').forEach((x) => x.classList.remove('active', 'btn-primary'));
+  const fr = findReplaceTransform();
+  if (fr && fr.error) { _pendingTransform = null; el('recon-transform-preview').innerHTML = `<span class="text-danger small">Invalid regex: ${esc(fr.error)}</span>`; return; }
+  _pendingTransform = fr;
+  renderTransformPreview();
+}
+function renderTransformPreview() {
+  const box = el('recon-transform-preview'); const applyBtn = el('recon-transform-apply');
+  if (!box) return;
+  if (!_pendingTransform) { box.innerHTML = '<span class="text-muted small">Choose a transform to preview.</span>'; if (applyBtn) applyBtn.disabled = true; return; }
+  const fn = _pendingTransform.fn;
+  const col = _transformCol;
+  let changed = 0; const samples = []; const seen = new Set();
+  for (let i = 0; i < project.rows.length; i++) {
+    const old = project.rows[i][col]; const nv = fn(old);
+    if (String(old == null ? '' : old) !== String(nv == null ? '' : nv)) {
+      changed += 1;
+      const k = String(old);
+      if (samples.length < 8 && !seen.has(k)) { seen.add(k); samples.push([old, nv]); }
+    }
+  }
+  const rows = samples.map(([o, nv]) => `<div class="recon-tf-prevrow"><span class="recon-tf-before">${esc(truncate(String(o == null ? '' : o), 34))}</span> <i class="fas fa-arrow-right text-muted mx-1"></i> <span class="recon-tf-after">${esc(truncate(String(nv == null ? '' : nv), 34))}</span></div>`).join('');
+  box.innerHTML = changed
+    ? `<div class="small text-muted mb-1"><strong>${changed.toLocaleString()}</strong> of ${project.rows.length.toLocaleString()} cells will change:</div>${rows}`
+    : '<span class="text-muted small">No cells would change.</span>';
+  if (applyBtn) applyBtn.disabled = !changed;
+}
+function applyTransform() {
+  if (!_pendingTransform || _transformCol < 0 || !project) return;
+  const col = _transformCol; const fn = _pendingTransform.fn;
+  const before = project.rows.map((r) => r[col]);
+  let changed = 0;
+  project.rows.forEach((r) => { const nv = fn(r[col]); if (String(r[col] == null ? '' : r[col]) !== String(nv == null ? '' : nv)) { r[col] = nv; changed += 1; } });
+  if (!changed) return;
+  pushUndo({ type: 'cells', col, before, label: `${_pendingTransform.label} · ${project.columns[col].name}` });
+  // Transforming a reconciled column invalidates its matches (they were run on the old values).
+  if (colHasMatches(col)) {
+    colKeys(col).forEach((k) => { delete project.matches[k]; if (project.decisions) delete project.decisions[k]; if (project.geom) delete project.geom[k]; });
+    invalidateDownstream(col);
+    reconStaleNote = 'Column values changed — reconcile the affected column(s) again.';
+    reconActiveIdx = -1;
+  }
+  persist();
+  // Values changed everywhere → re-render the dependent panes.
+  renderMapping(); renderPreview(); renderCoords(); renderDates();
+  refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); refreshExport();
+  flashSaved(`${_pendingTransform.label} applied to ${changed.toLocaleString()} cell${changed === 1 ? '' : 's'}`);
 }
 
 function renderPreview() {
@@ -2837,6 +2941,11 @@ function init() {
   // AAT place-type pickers (Scope filter + submission types) — wire each instance's events.
   scopeAat.init();
   submissionAat.init();
+  // Cell-transform modal: live preview on find/replace edits, and Apply.
+  ['recon-tf-find', 'recon-tf-replace'].forEach((id) => { const e = el(id); if (e) e.addEventListener('input', onFindReplaceInput); });
+  ['recon-tf-regex', 'recon-tf-case'].forEach((id) => { const e = el(id); if (e) e.addEventListener('change', onFindReplaceInput); });
+  const tfApply = el('recon-transform-apply');
+  if (tfApply) tfApply.addEventListener('click', applyTransform);
   const scopeApply = el('recon-scope-apply');
   if (scopeApply) scopeApply.addEventListener('click', applyScope);
   const scopeClear = el('recon-scope-clear');
