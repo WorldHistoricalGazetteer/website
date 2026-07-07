@@ -457,8 +457,10 @@ def _years_from_label(label):
     the authoritative bounds live in the gateway record; labels are the cheap fallback."""
     if not label:
         return None, None
-    s = label.replace('–', '-').replace('—', '-')
-    # Grab up to two signed year tokens, each optionally followed by an era marker.
+    # A dash BETWEEN two year numbers is a range separator, not a minus sign
+    # ("1368-1644" → "1368 1644"); a genuine leading "-500" is left intact.
+    s = re.sub(r'(\d)\s*[-–—]\s*(?=\d)', r'\1 ', label)
+    # Grab signed year tokens, each optionally followed by an era marker.
     toks = re.findall(r'(-?\d{1,4})\s*(BCE|BC|CE|AD)?', s, flags=re.IGNORECASE)
     years = []
     for num, era in toks:
@@ -538,7 +540,9 @@ class PeriodSuggestView(APIView):
         if not q and not bounds and not contained_in:
             return JsonResponse({'result': []})
 
-        raw = {'namespaces': ['po'], 'mode': 'fuzzy'}
+        # 'default' (best_fields) gives the best name recall — incl. single words like "Ming",
+        # which 'fuzzy'/'starts' miss. Mode is irrelevant for a name-less (spatial-only) suggest.
+        raw = {'namespaces': ['po'], 'mode': 'default' if q else 'fuzzy'}
         if ccodes:
             raw['countries'] = ccodes
         if start is not None:
