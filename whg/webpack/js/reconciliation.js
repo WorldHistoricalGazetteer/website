@@ -1508,6 +1508,12 @@ function resolvedPlaceIds(colIndex, rowIdx) {
   if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) return [m.top.id];
   return [];
 }
+// The /reconcile containment resolver expects a BARE gazetteer id (e.g. `ukhc:CMB`, `wd:Q23306`,
+// `5297709`), but our candidate ids carry a `place:` prefix. Passing the prefixed form fails to resolve
+// the container, so the service silently returns UN-contained results (a Parish query "within" a county
+// then matches same-named parishes in *other* counties). Strip the prefix before sending `contained_in`.
+// Keep the prefixed id everywhere else (it is the identifier we surface and export). See place#111.
+function barePlaceId(id) { return typeof id === 'string' && id.startsWith('place:') ? id.slice(6) : id; }
 
 // ── Stage state machine (iterative, review-gated reconciliation) ─────────────
 // A column is reconciled only after the column above it in the chain has been reviewed & confirmed,
@@ -1614,7 +1620,7 @@ function applyGlobalScopeToQuery(q, isRoot, hasRowCountry) {
   }
   // Spatial region — root column only, and never over an existing parent containment.
   if (isRoot && !q.contained_in) {
-    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [r.place.id]; q.containment = 'fuzzy'; q.relation = 'within'; }
+    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [barePlaceId(r.place.id)]; q.containment = 'fuzzy'; q.relation = 'within'; }
     else if (r.mode === 'draw' && r.geometry) { q.bounds = r.geometry; }
   }
 }
@@ -2977,7 +2983,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // Containment: scope this column's query by ALL the parent column's confirmed places for the
       // same row (a parent may closeMatch several records) — "within any of them".
       if (parentCol >= 0) {
-        const pids = resolvedPlaceIds(parentCol, key.slice(key.indexOf(':') + 1));
+        const pids = resolvedPlaceIds(parentCol, key.slice(key.indexOf(':') + 1)).map(barePlaceId);
         if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'within'; }
       }
       applyGlobalScopeToQuery(q, parentCol < 0, !!v.country); // dataset-wide scope (country/date/type/region)
