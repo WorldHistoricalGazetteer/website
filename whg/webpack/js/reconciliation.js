@@ -35,6 +35,20 @@ const RECON_CAND_LIMIT = 10;           // candidates requested per query initial
 // Candidate palette — shared with recon-map.js so the list number badges match the map markers.
 const RECON_COLORS = ['#1565c0', '#c2410c', '#2e7d32', '#6a1b9a', '#00838f', '#b26a00', '#455a64', '#c2185b', '#5d4037'];
 const RECON_RESULTS_PREVIEW = 200;     // rows shown in the results table (summary counts cover all)
+// GeoNames feature classes offered in the dataset-wide Scope picker — codes + labels mirror the WHG
+// validation schema's `whg:allowedValues` (api/reconcile.py VALID_FCLASSES); the ES/CRC query accepts
+// these letters (an "X" is added server-side). Order is by likely usefulness for a place dataset.
+const FCLASSES = [
+  ['P', 'Populated place'],
+  ['A', 'Administrative boundary'],
+  ['H', 'Hydrographic (river, lake…)'],
+  ['L', 'Area'],
+  ['T', 'Hypsographic (mountain, hill…)'],
+  ['S', 'Spot / Building / Farm'],
+  ['R', 'Road / Railroad'],
+  ['V', 'Vegetation'],
+  ['U', 'Undersea'],
+];
 const DB_NAME = 'whg-recon-workbench';
 const DB_VERSION = 1;
 const STORE = 'project';
@@ -1212,6 +1226,75 @@ function invalidateDownstream(col) {
   return changed;
 }
 
+// ── Dataset-wide scope (country / date / feature-type / region) ───────────────
+// A single filter applied to EVERY reconcile query, narrowing the whole dataset to a place, period, or
+// kind before per-row matching. Lives on `project.scope` (so it persists with the project). The spatial
+// region can be expressed three ways — a set of country codes, a WHG place chosen by name (used as a
+// `contained_in` container), or a polygon drawn on a map (used as `bounds`). See place#111.
+function defaultScope() {
+  return { region: { mode: 'none', ccodes: [], place: null, geometry: null }, start: null, end: null, undated: false, fclasses: [] };
+}
+function getScope() { return (project && project.scope) || null; }
+function scopeRegion() { const s = getScope(); return (s && s.region) || { mode: 'none' }; }
+// Is any facet of the scope actually constraining the query?
+function scopeActive() {
+  const s = getScope(); if (!s) return false;
+  const r = s.region || {};
+  const hasRegion = (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry);
+  return !!(hasRegion || s.start != null || s.end != null || (s.fclasses && s.fclasses.length));
+}
+// Short human summary for the Scope button label (kept compact).
+function scopeSummary() {
+  const s = getScope(); if (!s) return '';
+  const bits = [];
+  const r = s.region || {};
+  if (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) bits.push(r.ccodes.slice(0, 3).join(', ') + (r.ccodes.length > 3 ? '…' : ''));
+  else if (r.mode === 'whg' && r.place) bits.push('in ' + truncateText(r.place.title, 16));
+  else if (r.mode === 'draw' && r.geometry) bits.push('drawn area');
+  if (s.start != null || s.end != null) bits.push((s.start != null ? s.start : '…') + '–' + (s.end != null ? s.end : '…'));
+  if (s.fclasses && s.fclasses.length) bits.push(s.fclasses.join('/'));
+  return bits.join(' · ');
+}
+// Plain (un-escaped, un-truncated-to-HTML) truncation helper for building label strings.
+function truncateText(v, max) { const r = String(v == null ? '' : v); return r.length > max ? r.slice(0, max - 1) + '…' : r; }
+
+// Mutate a per-row reconcile query `q` with the dataset-wide scope. Attribute filters (country, date,
+// feature class) apply to every column; the spatial *region* applies only to the ROOT column, because
+// child columns are already spatially scoped by their parent's confirmed places (`contained_in`) and a
+// dataset-wide region would either duplicate or fight that. Never overrides a per-row country hint or
+// an existing containment. `isRoot` = this column has no parent; `hasRowCountry` = the row set q.countries.
+function applyGlobalScopeToQuery(q, isRoot, hasRowCountry) {
+  const s = getScope(); if (!s) return;
+  const r = s.region || {};
+  // Country codes — a dataset-wide default; a per-row country hint always wins.
+  if (!hasRowCountry && !q.countries && r.mode === 'ccodes' && r.ccodes && r.ccodes.length) q.countries = r.ccodes.slice();
+  // Feature classes (GeoNames letters). Both back-ends read `fclasses`.
+  if (!q.fclasses && s.fclasses && s.fclasses.length) q.fclasses = s.fclasses.slice();
+  // Temporal window. Legacy WHG ES needs `temporal` + `start`/`end`; the CRC gateway reads `start`/`end`.
+  if (s.start != null || s.end != null) {
+    q.temporal = true;
+    if (s.start != null) q.start = s.start;
+    if (s.end != null) q.end = s.end;
+    if (s.undated) q.undated = true;
+  }
+  // Spatial region — root column only, and never over an existing parent containment.
+  if (isRoot && !q.contained_in) {
+    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [r.place.id]; q.containment = 'fuzzy'; q.relation = 'within'; }
+    else if (r.mode === 'draw' && r.geometry) { q.bounds = r.geometry; }
+  }
+}
+
+// Changing the scope invalidates ALL existing matches (every query was run under the old scope). Wipe
+// matches/decisions/geometry across every column so the whole dataset is reconciled again — mirrors the
+// hierarchy-change reset. Returns true if anything was cleared.
+function invalidateAllMatches() {
+  if (!project) return false;
+  const had = (project.matches && Object.keys(project.matches).length) || (project.decisions && Object.keys(project.decisions).length);
+  project.matches = {}; project.decisions = {}; project.geom = {};
+  reconActiveIdx = -1;
+  return !!had;
+}
+
 // Every row is reconciled INDIVIDUALLY — no de-duplication by name (users have already disambiguated,
 // so two rows with the same toponym may be different places). Keyed by "<colIndex>:<rowIndex>" so each
 // reconciled column keeps its own per-row matches/decisions. Defaults to the active chain column.
@@ -1661,6 +1744,131 @@ function applyNsFilter() {
   if (project && project.matches) { const built = buildUniqueQueries(); if (built) renderResults(built); }
 }
 
+// ── Dataset-wide Scope picker (country / date / feature-type / region) ────────
+// Staged region selections that aren't plain form fields (the WHG place and the drawn geometry) live
+// here while the modal is open; they're committed to project.scope only on Apply.
+let _scopeDraft = { whgPlace: null, geometry: null };
+
+function parseCcodes(text) {
+  return [...new Set(String(text || '').toUpperCase().match(/[A-Z]{2}/g) || [])];
+}
+function updateScopeLabel() {
+  const lbl = el('recon-scope-label'); if (!lbl) return;
+  const sum = scopeActive() ? scopeSummary() : '';
+  lbl.textContent = sum ? `Scope: ${sum}` : 'Scope';
+  const btn = el('recon-scope-btn');
+  if (btn) { const on = scopeActive(); btn.classList.toggle('btn-primary', on); btn.classList.toggle('btn-outline-secondary', !on); }
+}
+// Show one region-method panel, hide the others; lazy-init the draw map when its panel opens.
+function showScopeRegionMode(mode) {
+  [['ccodes', 'recon-scope-region-ccodes'], ['whg', 'recon-scope-region-whg'], ['draw', 'recon-scope-region-draw']]
+    .forEach(([m, id]) => { const p = el(id); if (p) p.classList.toggle('d-none', m !== mode); });
+  if (mode === 'draw') initScopeMap();
+}
+function populateScopeModal() {
+  const s = project ? (project.scope || defaultScope()) : defaultScope();
+  const r = s.region || { mode: 'none' };
+  _scopeDraft = { whgPlace: r.place ? Object.assign({}, r.place) : null, geometry: r.geometry || null };
+  // Region mode radio
+  const modeInput = document.querySelector(`input[name="recon-scope-region-mode"][value="${r.mode || 'none'}"]`);
+  if (modeInput) modeInput.checked = true;
+  const cc = el('recon-scope-ccodes'); if (cc) cc.value = (r.ccodes || []).join(', ');
+  renderScopeWhgSelected();
+  updateScopeDrawStatus();
+  el('recon-scope-whg-results') && (el('recon-scope-whg-results').innerHTML = '');
+  el('recon-scope-whg-q') && (el('recon-scope-whg-q').value = '');
+  // Temporal
+  const st = el('recon-scope-start'); if (st) st.value = s.start != null ? s.start : '';
+  const en = el('recon-scope-end'); if (en) en.value = s.end != null ? s.end : '';
+  const ud = el('recon-scope-undated'); if (ud) ud.checked = !!s.undated;
+  // Feature classes
+  const box = el('recon-scope-fclasses');
+  if (box) box.innerHTML = FCLASSES.map(([code, label]) =>
+    `<label class="recon-ns-item" title="${esc(label)} (${esc(code)})">` +
+    `<input type="checkbox" class="recon-scope-fc" value="${esc(code)}"${(s.fclasses || []).includes(code) ? ' checked' : ''}> ` +
+    `${esc(label)} <span class="text-muted small">(${esc(code)})</span></label>`).join('');
+  showScopeRegionMode(r.mode || 'none');
+}
+function renderScopeWhgSelected() {
+  const box = el('recon-scope-whg-selected'); if (!box) return;
+  const p = _scopeDraft.whgPlace;
+  box.innerHTML = p
+    ? `<span class="badge bg-primary">${esc(truncateText(p.title, 40))}</span> <span class="text-muted small">${esc(p.id)}</span> ` +
+      `<button type="button" class="btn btn-sm btn-link p-0 ms-1" id="recon-scope-whg-clear">clear</button>`
+    : '<span class="text-muted small">No place selected.</span>';
+  const clr = el('recon-scope-whg-clear');
+  if (clr) clr.addEventListener('click', () => { _scopeDraft.whgPlace = null; renderScopeWhgSelected(); });
+}
+function updateScopeDrawStatus() {
+  const st = el('recon-scope-draw-status'); if (!st) return;
+  st.textContent = _scopeDraft.geometry ? 'Area drawn — will scope reconciliation to inside it.' : 'No area drawn yet.';
+}
+// Search WHG by place name (reuses the /reconcile service) so a region can be chosen by name and used
+// as a `contained_in` container. Best results come from picking an administrative area (a country,
+// region, or county) that has polygon geometry.
+async function searchScopeWhg() {
+  const q = (el('recon-scope-whg-q') || {}).value;
+  const box = el('recon-scope-whg-results'); if (!box) return;
+  if (!q || !q.trim()) { box.innerHTML = ''; return; }
+  box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching…</span>';
+  try {
+    const data = await postReconcile({ q0: { query: q.trim(), type: 'place', limit: 8 } }, getCsrf());
+    const results = (data.q0 && data.q0.result) || [];
+    if (!results.length) { box.innerHTML = '<span class="text-muted small">No places found.</span>'; return; }
+    box.innerHTML = results.map((c) =>
+      `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 recon-scope-whg-hit" data-id="${esc(c.id)}" data-title="${esc(c.name)}">` +
+      `${truncate(c.name, 44)} <span class="recon-cand-ns ms-1">${esc(nsName(c.id))}</span>` +
+      (c.description ? ` <span class="text-muted small">${truncate(c.description, 30)}</span>` : '') + '</button>').join('');
+    box.querySelectorAll('.recon-scope-whg-hit').forEach((b) => b.addEventListener('click', () => {
+      _scopeDraft.whgPlace = { id: b.dataset.id, title: b.dataset.title };
+      renderScopeWhgSelected();
+    }));
+  } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; }
+}
+async function initScopeMap() {
+  const container = el('recon-scope-map'); if (!container) return;
+  try {
+    const mod = await loadReconMap();
+    mod.renderScopeMap(container, _scopeDraft.geometry, (geom) => { _scopeDraft.geometry = geom; updateScopeDrawStatus(); });
+  } catch (err) { console.error('[recon] scope map failed', err); }
+}
+async function scopeDrawAction(kind) {
+  const mod = ReconMap || (await loadReconMap());
+  if (kind === 'polygon') mod.scopeDraw('polygon');
+  else if (kind === 'finish') mod.scopeFinish();
+  else if (kind === 'clear') { mod.scopeClear(); _scopeDraft.geometry = null; updateScopeDrawStatus(); }
+}
+// Read the modal into a fresh scope object, commit it, and (if it changed) reset existing matches so
+// the dataset is reconciled again under the new scope.
+function applyScope() {
+  if (!project) return;
+  const mode = (document.querySelector('input[name="recon-scope-region-mode"]:checked') || {}).value || 'none';
+  const scope = defaultScope();
+  scope.region.mode = mode;
+  if (mode === 'ccodes') scope.region.ccodes = parseCcodes((el('recon-scope-ccodes') || {}).value);
+  else if (mode === 'whg') scope.region.place = _scopeDraft.whgPlace || null;
+  else if (mode === 'draw') scope.region.geometry = _scopeDraft.geometry || null;
+  // A region method with nothing chosen falls back to "no region".
+  if ((mode === 'ccodes' && !scope.region.ccodes.length) || (mode === 'whg' && !scope.region.place) || (mode === 'draw' && !scope.region.geometry)) scope.region.mode = 'none';
+  const start = parseInt((el('recon-scope-start') || {}).value, 10);
+  const end = parseInt((el('recon-scope-end') || {}).value, 10);
+  scope.start = Number.isFinite(start) ? start : null;
+  scope.end = Number.isFinite(end) ? end : null;
+  scope.undated = !!(el('recon-scope-undated') || {}).checked;
+  scope.fclasses = [...document.querySelectorAll('.recon-scope-fc:checked')].map((c) => c.value);
+
+  const before = JSON.stringify(project.scope || defaultScope());
+  const after = JSON.stringify(scope);
+  project.scope = scope;
+  if (before !== after && invalidateAllMatches()) {
+    reconStaleNote = 'Scope changed — reconciliation was reset; reconcile the columns again with the new scope.';
+    setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Scope changed — reconcile again to apply it.</span>');
+  }
+  persist();
+  updateScopeLabel();
+  refreshReconSection();
+}
+
 // ── Review map: fetch candidate coordinates and plot them ────────────────────
 const _candCoord = {}; // candidate id -> {lon,lat} | null (cache)
 function firstLngLat(geom) {
@@ -1894,6 +2102,7 @@ function updateReconButton() {
   const chain = reconChain();
   updateRerunButton(chain);
   updateSourcesLabel(); // keep the Sources button label pointed at the focused column
+  updateScopeLabel();   // reflect any saved dataset-wide scope (e.g. after resume)
   if (chain.length <= 1) { // single (name) column — the classic one-shot
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
@@ -2054,6 +2263,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
         const pids = resolvedPlaceIds(parentCol, key.slice(key.indexOf(':') + 1));
         if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'within'; }
       }
+      applyGlobalScopeToQuery(q, parentCol < 0, !!v.country); // dataset-wide scope (country/date/type/region)
       queries['q' + j] = q;
     });
     let data;
@@ -2223,6 +2433,31 @@ function init() {
   const nsApply = el('recon-ns-apply');
   if (nsApply) nsApply.addEventListener('click', applyNsFilter);
   updateSourcesLabel();
+
+  // Dataset-wide Scope picker modal (country / date / feature-type / region).
+  const scopeModal = el('recon-scope-modal');
+  if (scopeModal) scopeModal.addEventListener('show.bs.modal', populateScopeModal);
+  document.querySelectorAll('input[name="recon-scope-region-mode"]').forEach((r) =>
+    r.addEventListener('change', () => showScopeRegionMode(r.value)));
+  const scopeSearch = el('recon-scope-whg-search');
+  if (scopeSearch) scopeSearch.addEventListener('click', searchScopeWhg);
+  const scopeQ = el('recon-scope-whg-q');
+  if (scopeQ) scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
+  document.querySelectorAll('[data-scope-draw]').forEach((b) => b.addEventListener('click', () => scopeDrawAction(b.dataset.scopeDraw)));
+  const scopeApply = el('recon-scope-apply');
+  if (scopeApply) scopeApply.addEventListener('click', applyScope);
+  const scopeClear = el('recon-scope-clear');
+  if (scopeClear) scopeClear.addEventListener('click', () => {
+    document.querySelectorAll('.recon-scope-fc').forEach((c) => { c.checked = false; });
+    const ccb = el('recon-scope-ccodes'); if (ccb) ccb.value = '';
+    const stb = el('recon-scope-start'); if (stb) stb.value = '';
+    const enb = el('recon-scope-end'); if (enb) enb.value = '';
+    const udb = el('recon-scope-undated'); if (udb) udb.checked = false;
+    const none = document.querySelector('input[name="recon-scope-region-mode"][value="none"]'); if (none) none.checked = true;
+    _scopeDraft = { whgPlace: null, geometry: null };
+    renderScopeWhgSelected(); updateScopeDrawStatus(); showScopeRegionMode('none');
+  });
+  updateScopeLabel();
   // Warm the registry source list so candidate/source labels use real names (e.g. "UK Historic
   // Counties" not "UKHC"); re-render once it lands if matches are already on screen.
   loadSources().then(() => { if (project && project.matches && Object.keys(project.matches).length) { const built = buildUniqueQueries(); if (built) renderResults(built); } });

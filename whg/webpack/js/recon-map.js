@@ -372,3 +372,88 @@ export function renderFullMap(container, geojson) {
   if (fullMap.loaded()) apply(); else fullMap.once('load', apply);
 }
 export function resizeFullMap() { if (fullMap) fullMap.resize(); }
+
+// ── Scope map (dataset-wide region picker) ────────────────────────────────────
+// A standalone map for the Scope modal: draw one bounding polygon to constrain reconciliation to inside
+// it. Kept fully independent of the review map (its own singletons) so the two never clash. Reuses the
+// module's geometry helpers (emptyFC / allCoords) and marker colour.
+let scopeMap = null, scopeRo = null, scopeCb = null;
+let scopeGeom = null;   // committed polygon (GeoJSON Polygon | null)
+let scopeVerts = [];    // in-progress vertices
+let scopeDrawing = false;
+
+function scopePolygonFrom(verts) {
+  return verts.length >= 3 ? { type: 'Polygon', coordinates: [verts.concat([verts[0]])] } : null;
+}
+function ensureScopeLayers() {
+  if (!scopeMap || !scopeMap.isStyleLoaded || !scopeMap.isStyleLoaded() || scopeMap.getSource('scope-geom')) return;
+  try {
+    scopeMap.addSource('scope-geom', { type: 'geojson', data: emptyFC() });
+    scopeMap.addLayer({ id: 'scope-fill', type: 'fill', source: 'scope-geom', filter: ['match', ['geometry-type'], ['Polygon', 'MultiPolygon'], true, false], paint: { 'fill-color': GEOM_COLOR, 'fill-opacity': 0.15 } });
+    scopeMap.addLayer({ id: 'scope-line', type: 'line', source: 'scope-geom', filter: ['match', ['geometry-type'], ['LineString', 'MultiLineString', 'Polygon', 'MultiPolygon'], true, false], paint: { 'line-color': GEOM_COLOR, 'line-width': 2 } });
+    scopeMap.addLayer({ id: 'scope-vtx', type: 'circle', source: 'scope-geom', filter: ['==', ['geometry-type'], 'Point'], paint: { 'circle-radius': 5, 'circle-color': '#fff', 'circle-stroke-color': GEOM_COLOR, 'circle-stroke-width': 2 } });
+  } catch (_) { /* style not ready; retried on styledata */ }
+}
+function redrawScope() {
+  if (!scopeMap || !scopeMap.getSource('scope-geom')) return;
+  const feats = [];
+  const g = scopeDrawing ? scopePolygonFrom(scopeVerts) : scopeGeom;
+  if (g) feats.push({ type: 'Feature', geometry: g, properties: {} });
+  if (scopeDrawing) {
+    if (scopeVerts.length >= 2) feats.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: scopeVerts }, properties: {} });
+    scopeVerts.forEach((pt) => feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: pt }, properties: {} }));
+  }
+  scopeMap.getSource('scope-geom').setData({ type: 'FeatureCollection', features: feats });
+}
+function onScopeClick(e) {
+  if (!scopeDrawing) return;
+  scopeVerts.push([e.lngLat.lng, e.lngLat.lat]);
+  redrawScope();
+}
+export function scopeDraw() {
+  if (!scopeMap) return;
+  scopeDrawing = true; scopeVerts = [];
+  scopeMap.getCanvas().style.cursor = 'crosshair';
+  redrawScope();
+}
+export function scopeFinish() {
+  if (!scopeDrawing) return;
+  const poly = scopePolygonFrom(scopeVerts);
+  if (poly) scopeGeom = poly; // fewer than 3 vertices → keep the previous geometry
+  scopeDrawing = false; scopeVerts = [];
+  if (scopeMap) scopeMap.getCanvas().style.cursor = '';
+  redrawScope();
+  if (scopeCb) scopeCb(scopeGeom);
+}
+export function scopeClear() {
+  scopeGeom = null; scopeDrawing = false; scopeVerts = [];
+  if (scopeMap) scopeMap.getCanvas().style.cursor = '';
+  redrawScope();
+  if (scopeCb) scopeCb(null);
+}
+// container: the map div; existingGeom: a previously-committed polygon to show; onChange(geometry|null).
+export function renderScopeMap(container, existingGeom, onChange) {
+  const M = ML();
+  scopeCb = onChange || null;
+  scopeGeom = existingGeom || null;
+  scopeDrawing = false; scopeVerts = [];
+  if (!scopeMap || scopeMap.getContainer() !== container) {
+    if (scopeMap) { try { scopeMap.remove(); } catch (_) { /* ignore */ } }
+    scopeMap = new M.Map({
+      container,
+      style: process.env.TILEBOSS ? ['whg-portal', 'Satellite'] : { version: 8, sources: {}, layers: [] },
+      center: [0, 20], zoom: 1, maxZoom: 17, terrainControl: !!process.env.TILEBOSS, fullscreenControl: true,
+    });
+    if (scopeRo) { try { scopeRo.disconnect(); } catch (_) { /* ignore */ } }
+    if (typeof ResizeObserver !== 'undefined') { scopeRo = new ResizeObserver((es) => { for (const e of es) if (e.contentRect.width > 0 && e.contentRect.height > 0) scopeMap.resize(); }); scopeRo.observe(container); }
+    scopeMap.on('styledata', () => { ensureScopeLayers(); redrawScope(); });
+    scopeMap.on('click', onScopeClick);
+  }
+  const apply = () => {
+    scopeMap.resize(); // container was likely 0×0 while the modal was hidden
+    ensureScopeLayers();
+    redrawScope();
+    if (scopeGeom) { const b = new M.LngLatBounds(); allCoords(scopeGeom).forEach((pt) => b.extend(pt)); if (!b.isEmpty()) scopeMap.fitBounds(b, { padding: 40, maxZoom: 9, duration: 0 }); }
+  };
+  if (scopeMap.loaded()) apply(); else scopeMap.once('load', apply);
+}

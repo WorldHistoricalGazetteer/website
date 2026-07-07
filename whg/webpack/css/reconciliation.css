@@ -80,6 +80,10 @@
 .recon-ns-list { display: flex; flex-direction: column; gap: .35rem; }
 .recon-ns-item { display: flex; align-items: center; gap: .45rem; cursor: pointer; margin-bottom: 0; }
 
+/* --- Dataset-wide Scope picker modal --- */
+.recon-scope-map { height: 320px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
+.recon-scope-whg-results { max-height: 180px; overflow-y: auto; }
+
 /* --- Accordion panes (the numbered steps) --- */
 .recon-pane-header { display: flex; align-items: center; gap: .5rem; }
 .recon-pane-toggle {
