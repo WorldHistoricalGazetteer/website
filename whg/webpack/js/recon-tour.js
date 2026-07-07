@@ -88,6 +88,26 @@ function tourSteps() {
         adds the parsed dates to your table.`,
     },
     {
+      key: 'browser',
+      target: q('#recon-preview-scroll'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-preview-scroll'); },
+      title: 'Browse &amp; edit your data',
+      body: `The <strong>Data</strong> table shows <em>every</em> row (not just a sample) and stays fast on
+        large files. <strong>Search all columns</strong> to filter, and switch on <strong>Edit cells</strong>
+        to fix values inline — every edit is undoable, and if a matched column changes, that row is re-flagged
+        for reconciliation.`,
+    },
+    {
+      key: 'types',
+      target: q('#recon-type-prompt'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-type-prompt'); },
+      title: 'Place types — only if you contribute',
+      body: `A Getty <strong>AAT place type</strong> is needed to <em>contribute</em> to WHG, but is
+        <strong>optional</strong> for CSV/JSON export. If your data has no type column, add one here; then in
+        <strong>Edit cells</strong> mode click a type cell to pick from the AAT hierarchy — with a one-click
+        option to apply it to every row sharing that value. Not contributing? You can skip this entirely.`,
+    },
+    {
       key: 'scope',
       target: q('#recon-scope-btn'),
       enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-scope-btn'); },
@@ -149,22 +169,15 @@ function tourSteps() {
         stays fast even with thousands of places. Hover any point for its details.`,
     },
     {
-      key: 'types',
-      target: q('#recon-types-box'),
-      enter: async () => { api.openPane('recon-export'); scrollTo('#recon-types-box'); },
-      title: '6 · Place types (required)',
-      body: `WHG needs every place to carry a Getty <strong>AAT place type</strong>. Assign
-        <strong>one type for all</strong> rows, or map <strong>a column's values</strong> (town, river,
-        castle…) each to their own type. This is the one thing you usually add before contributing.`,
-    },
-    {
       key: 'validate',
       target: q('#recon-validate-panel'),
       enter: async () => { api.openPane('recon-export'); scrollTo('#recon-validate-panel'); },
-      title: 'Export or contribute — validated first',
-      body: `Export as CSV, JSON or Linked Places (LPF). Or <strong>Contribute to WHG</strong> — the LPF is
-        built and validated <em>in your browser</em> against WHG's own schema; the button stays disabled and
-        lists what's missing until every place passes, so nothing gets rejected on submission.`,
+      title: '6 · That’s a gazetteer — export or contribute',
+      body: `Your table is now a <strong>gazetteer</strong>: located, dated, standardised, place-linked data.
+        Export it as CSV, JSON or Linked Places (LPF) any time. Or <strong>Contribute to WHG</strong> — the LPF
+        is built and validated <em>in your browser</em> first; the button stays disabled and lists what's
+        missing (a place type on every row among them) until it all passes, so nothing is rejected on
+        submission.`,
     },
     {
       key: 'done',

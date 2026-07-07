@@ -237,6 +237,19 @@
 .recon-cell-input { width: 100%; box-sizing: border-box; border: 1px solid #86b7fe; border-radius: 2px; font-size: .8rem; padding: 2px 6px; height: 100%; min-height: 26px; outline: none; }
 .recon-preview-edit--on { background-color: #cfe2ff; border-color: #9ec5fe; }
 
+/* --- Place types in the browser --- */
+.recon-type-prompt { background: #fff8e1; border: 1px solid #ffe08a; border-radius: .25rem; padding: .4rem .6rem; }
+.recon-type-chip { display: inline-block; background: #e7f1ff; border: 1px solid #b6d4fe; border-radius: 10px; padding: 0 .5em; font-size: .72rem; line-height: 1.5; color: #0a58ca; }
+.recon-type-hint { color: #adb5bd; font-style: italic; margin-right: .4em; }
+.recon-type-assign { display: none; color: #6c757d; font-size: .72rem; }
+.recon-preview-scroll.recon-editing .recon-type-empty .recon-type-assign { display: inline; }
+.recon-preview-scroll.recon-editing .recon-type-cell:hover { background: #fff8e1; }
+
+/* --- "That's a gazetteer" banner (Pane 6) --- */
+.recon-gazetteer-banner { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap;
+  background: linear-gradient(90deg, #eef6ff, #f6fff2); border: 1px solid #cfe2d8; border-radius: .35rem; padding: .5rem .75rem; }
+.recon-gazetteer-badge { font-weight: 600; color: #0f5132; white-space: nowrap; }
+
 /* --- Resume banner --- */
 .recon-resume {
   display: flex;

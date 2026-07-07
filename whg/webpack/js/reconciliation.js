@@ -487,7 +487,7 @@ async function insertIsoDateColumns() {
 // ALL of that from an old→new index map so nothing drifts.
 let _dragCol = -1;
 function rerenderData() {
-  renderMapping(); renderPreview(); renderCoords(); renderDates();
+  renderMapping(); renderPreview(); renderTypePrompt(); renderCoords(); renderDates();
   refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); refreshExport(); updatePaneSummaries();
 }
 function columnSnapshot() {
@@ -865,7 +865,21 @@ function paintPreviewWindow() {
     const ri = view ? view[vi] : vi;
     const r = project.rows[ri];
     let tds = '';
-    for (let c = 0; c < nc; c++) { const ci = vis[c]; const raw = r[ci]; tds += `<td data-ci="${ci}" title="${esc(raw)}">${truncate(raw, 60)}</td>`; }
+    for (let c = 0; c < nc; c++) {
+      const ci = vis[c]; const raw = r[ci];
+      if (project.columns[ci].role === 'type') {
+        const types = rowTypesFor(ri);
+        if (types.length) {
+          tds += `<td data-ci="${ci}" class="recon-type-cell" title="${esc(types.map((t) => t.text).join(', '))}">` +
+            types.map((t) => `<span class="recon-type-chip">${truncate(t.text, 22)}</span>`).join(' ') + '</td>';
+        } else {
+          const hint = raw != null && String(raw).trim() !== '' ? `<span class="recon-type-hint">${truncate(raw, 22)}</span>` : '';
+          tds += `<td data-ci="${ci}" class="recon-type-cell recon-type-empty" title="${esc(raw)}">${hint}<span class="recon-type-assign">+ type</span></td>`;
+        }
+      } else {
+        tds += `<td data-ci="${ci}" title="${esc(raw)}">${truncate(raw, 60)}</td>`;
+      }
+    }
     parts.push(`<tr data-ri="${ri}">${tds}</tr>`);
   }
   parts.push(`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${Math.max(0, (total - last) * rowH)}px"></td></tr>`);
@@ -996,12 +1010,12 @@ function renderAll() {
   renderCoords();
   renderDates();
   renderPreview();
+  renderTypePrompt();
   refreshReconSection();
   renderColSwitcher();
   refreshReview();  // show pane 4's header (with a "reconcile first" placeholder) even before matches
   refreshFullMapPane();
   refreshExport();
-  submissionAat.reset(submissionTypes()); // reflect the saved submission place-type(s) in the picker
   renderLangControl(); // populate the phonetic-matching language selector (default detected from data)
   updatePaneSummaries();
   openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
@@ -1258,7 +1272,7 @@ async function buildExportRecords(opts, onProgress) {
       // Wikipedia article URLs (from Wikidata sitelinks surfaced by /reconcile) across accepted matches.
       aug.whg_wikipedia = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
     }
-    records.push({ orig, aug, coord, geom, whenStart, whenEnd, match });
+    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match });
   }
   return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
 }
@@ -1330,8 +1344,6 @@ function serializeLPTSV(data) {
 // Build the LPF FeatureCollection OBJECT (used both for serialisation and for in-browser validation).
 function buildLPF(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name'), countryIdx = colIndexByRole('country');
-  const blanket = submissionTypes();                                      // fallback type(s) for every record
-  const blanketLpf = blanket.length ? blanket.map((t) => ({ identifier: t.id, label: t.text })) : null;
   const features = data.records.map((rec, i) => {
     const title = nameIdx >= 0 ? String(rec.orig[nameIdx] || '') : '';
     const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
@@ -1347,10 +1359,9 @@ function buildLPF(data) {
       properties: props,
       names: title ? [{ toponym: title }] : [],
     };
-    // Place types: a per-value column mapping (targeted) wins; otherwise the blanket type.
-    const mapped = typeMapForValue(rec.orig);
-    const ftypes = mapped ? mapped.map((t) => ({ identifier: t.id, label: t.text })) : blanketLpf;
-    if (ftypes) feat.types = ftypes;                                     // LPF place types (WHG requirement)
+    // Place types: assigned per row in the table editor (project.rowTypes, keyed by source row index).
+    const rt = rowTypesFor(rec.row);
+    if (rt.length) feat.types = rt.map((t) => ({ identifier: t.id, label: t.text }));  // LPF place types (needed to contribute)
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
@@ -1449,7 +1460,6 @@ function refreshExport() {
     if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
     sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
   }
-  renderSubmissionTypes();
 }
 
 // ── Contribution validation: check the LPF against WHG's schema before enabling "Contribute" ──────
@@ -1493,7 +1503,7 @@ const VALIDATE_LABELS = {
   names: 'have no name variant',
   geometry: 'have no location (coordinates or drawn geometry)',
   when: 'have no date/period',
-  types: 'have no place type (AAT) — required for contribution',
+  types: 'have no place type (AAT) — needed only to contribute',
 };
 function renderValidation(v) {
   const body = el('recon-validate-body'); if (!body || !v) return;
@@ -1514,7 +1524,7 @@ function renderValidation(v) {
   const note = v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
   body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
     ((issues.length || schemaLines.length) ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}${schemaLines.join('')}</ul>` : '') +
-    '<div class="small text-muted">Resolve the items above (add place types below, map a coordinate/date column, …), then re-check.</div>';
+    '<div class="small text-muted">Resolve the items above (assign a place type to each row in the table at Step 2, map a coordinate/date column, …), then re-check.</div>';
 }
 // Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
 function updateContributeGate() {
@@ -2652,91 +2662,78 @@ const scopeAat = createAatPicker(
   { q: 'recon-scope-aat-q', search: 'recon-scope-aat-search', results: 'recon-scope-aat-results', selected: 'recon-scope-aat-selected', tree: 'recon-scope-aat-tree', browse: 'recon-scope-aat-browse' },
   { emptyText: 'No place types selected — any type is allowed.', checkboxTitle: 'scope to this type and its descendants' },
 );
-// Submission place-types instance (Enrich & export pane) — AAT type(s) written onto every exported/
-// contributed record's LPF `types`. WHG requires each place to carry a type, so these satisfy that.
-const submissionAat = createAatPicker(
-  { q: 'recon-types-aat-q', search: 'recon-types-aat-search', results: 'recon-types-aat-results', selected: 'recon-types-aat-selected', tree: 'recon-types-aat-tree', browse: 'recon-types-aat-browse' },
-  { emptyText: 'No place type assigned yet.', checkboxTitle: 'apply this type to every submitted record',
-    onChange: (sel) => { if (project) { project.submissionTypes = sel; persist(); refreshExport(); runValidation(); } } },
-);
-function submissionTypes() { return (project && project.submissionTypes) || []; }
-// Copy the Scope filter's chosen type(s) onto the submission (a common case: you scoped to "cities", so
-// the reconciled rows ARE cities). Reuses the same picker; user can then adjust.
-function copyScopeTypesToSubmission() {
-  const sel = ((project && project.scope && project.scope.types && project.scope.types.selected) || []).map((t) => ({ id: t.id, text: t.text }));
-  submissionAat.reset(sel);
-  project.submissionTypes = sel; persist(); refreshExport(); runValidation();
+// ── Per-row AAT place types ──────────────────────────────────────────────────────────────────────
+// Types are assigned per row in the data-browser table (turn on Edit cells → click a cell in the
+// type-role column → AAT picker). Stored in project.rowTypes = { rowIndex: [{id,text}] }; the LPF build
+// reads them per row. Needed only to CONTRIBUTE to WHG — plain CSV/JSON export never requires them.
+function rowTypesFor(i) { return (project && project.rowTypes && project.rowTypes[i]) || []; }
+function untypedRowCount() { if (!project) return 0; let n = 0; for (let i = 0; i < project.rows.length; i++) if (!rowTypesFor(i).length) n += 1; return n; }
+// Append a blank type-role column ("Place type") when the dataset has none. Undoable (column snapshot).
+function addPlaceTypeColumn() {
+  if (!project) return;
+  const snap = columnSnapshot();
+  project.columns.push({ name: 'Place type', role: 'type' });
+  project.rows.forEach((r) => r.push(''));
+  pushUndo({ type: 'columns', label: 'add Place type column', snapshot: snap });
+  persist(); rerenderData();
+  flashSaved('Added a “Place type” column — switch on “Edit cells” and click its cells to assign AAT types');
 }
-
-// ── Targeted (per-column) place types ─────────────────────────────────────────────────────────────
-// Map the distinct values of a chosen column (e.g. a "feature type" column with town/river/castle…) to
-// AAT place types, so each row gets the right LPF `types` from its value. project.typeMap = {col, values}.
-function typeMap() { return (project && project.typeMap) || { col: -1, values: {} }; }
-// Resolve a row's AAT types from the value mapping (returns [{id,text}] or null → falls back to blanket).
-function typeMapForValue(orig) {
-  const tm = project && project.typeMap;
-  if (!tm || tm.col == null || tm.col < 0 || !tm.values) return null;
-  const v = String(orig[tm.col] == null ? '' : orig[tm.col]).trim();
-  const sel = tm.values[v];
-  return (sel && sel.length) ? sel : null;
+// Early nudge (Step 2): shown only when rows are untyped, framed as optional (contribute-only).
+function renderTypePrompt() {
+  const box = el('recon-type-prompt'); if (!box || !project) return;
+  const untyped = untypedRowCount();
+  if (!untyped) { box.classList.add('d-none'); return; }
+  box.classList.remove('d-none');
+  const typeCol = colIndexByRole('type');
+  const optional = '<span class="text-muted">Optional — needed only to contribute to WHG.</span>';
+  if (typeCol < 0) {
+    box.innerHTML = `<i class="fas fa-shapes me-1 text-secondary"></i>No place-type column detected. ` +
+      `<button type="button" class="btn btn-sm btn-link p-0 align-baseline" id="recon-add-type-col">Add a “Place type” column</button> ` +
+      `to classify your places with Getty AAT types. ${optional}`;
+    const b = el('recon-add-type-col'); if (b) b.addEventListener('click', addPlaceTypeColumn);
+  } else {
+    box.innerHTML = `<i class="fas fa-shapes me-1 text-secondary"></i><strong>${untyped.toLocaleString()}</strong> of ${project.rows.length.toLocaleString()} rows have no place type. ` +
+      `Switch on <strong>Edit cells</strong> and click a cell in the <em>${esc(truncate(project.columns[typeCol].name, 24))}</em> column to pick a Getty AAT type. ${optional}`;
+  }
 }
-// Distinct non-empty values of the mapping column, with row counts.
-function typeMapValues() {
-  const tm = typeMap(); const out = {};
-  if (tm.col < 0 || !project) return out;
-  project.rows.forEach((r) => { const v = String(r[tm.col] == null ? '' : r[tm.col]).trim(); if (v) out[v] = (out[v] || 0) + 1; });
-  return out;
-}
-let _typeMapValue = null; // the value currently being assigned in the type-map modal
+let _typeRow = -1; // the row whose place type is being assigned in the picker modal
 // Type-map picker instance (its own modal).
 const typeMapAat = createAatPicker(
   { q: 'recon-tm-aat-q', search: 'recon-tm-aat-search', results: 'recon-tm-aat-results', selected: 'recon-tm-aat-selected', tree: 'recon-tm-aat-tree', browse: 'recon-tm-aat-browse' },
   { emptyText: 'No type assigned to this value yet.', checkboxTitle: 'apply this type to rows with this value' },
 );
-function openTypeMapModal(value) {
-  _typeMapValue = value;
-  const m = el('recon-typemap-modal'); if (!m) return;
-  const title = el('recon-typemap-title'); if (title) title.textContent = `Place type for “${truncate(value, 40)}”`;
-  const tm = typeMap();
-  typeMapAat.reset((tm.values && tm.values[value]) || []);
+// Open the AAT picker (shared modal) to assign type(s) to a single row — reached by clicking a cell in
+// the type-role column while the data browser is in edit mode.
+function openRowTypeModal(rowIndex) {
+  _typeRow = rowIndex;
+  const m = el('recon-typemap-modal'); if (!m || !project) return;
+  const col = colIndexByRole('type');
+  const val = col >= 0 ? String(project.rows[rowIndex][col] == null ? '' : project.rows[rowIndex][col]).trim() : '';
+  const title = el('recon-typemap-title'); if (title) title.textContent = val ? `Place type for “${truncate(val, 40)}”` : `Place type for row ${rowIndex + 1}`;
+  // Bulk option: apply to every row sharing this cell's value (fast for a repeated "kind" column).
+  const wrap = el('recon-typemap-applyall-wrap'), cb = el('recon-typemap-applyall');
+  if (wrap && cb) {
+    let n = 0; if (col >= 0) project.rows.forEach((r) => { if (String(r[col] == null ? '' : r[col]).trim() === val) n += 1; });
+    if (col >= 0 && n > 1) {
+      wrap.classList.remove('d-none'); cb.checked = false;
+      const en = el('recon-typemap-applyall-n'), ev = el('recon-typemap-applyall-val');
+      if (en) en.textContent = n.toLocaleString(); if (ev) ev.textContent = truncate(val || '(blank)', 24);
+    } else wrap.classList.add('d-none');
+  }
+  typeMapAat.reset(rowTypesFor(rowIndex));
   if (window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(m).show();
 }
-function applyTypeMap() {
-  if (_typeMapValue == null || !project) return;
-  project.typeMap = project.typeMap || { col: colIndexByRole('type'), values: {} };
-  project.typeMap.values = project.typeMap.values || {};
-  const sel = typeMapAat.getSelection();
-  if (sel.length) project.typeMap.values[_typeMapValue] = sel; else delete project.typeMap.values[_typeMapValue];
-  persist(); refreshExport(); runValidation();
-}
-function setTypeMapColumn(col) {
-  project.typeMap = { col, values: (project.typeMap && project.typeMap.col === col && project.typeMap.values) || {} };
-  persist(); refreshExport(); runValidation();
-}
-// Render the submission-types UI: mode toggle (blanket vs per-column) + the per-value assignment list.
-function renderSubmissionTypes() {
-  if (!project) return;
-  const tm = typeMap();
-  const mode = tm.col >= 0 ? 'col' : 'all';
-  const rb = document.querySelector(`input[name="recon-types-mode"][value="${mode}"]`); if (rb) rb.checked = true;
-  const blanket = el('recon-types-blanket'), targeted = el('recon-types-targeted');
-  if (blanket) blanket.classList.toggle('d-none', mode !== 'all');
-  if (targeted) targeted.classList.toggle('d-none', mode !== 'col');
-  if (mode !== 'col') return;
-  const sel = el('recon-types-col');
-  if (sel) sel.innerHTML = project.columns.map((c, j) => `<option value="${j}"${tm.col === j ? ' selected' : ''}>${esc(truncate(c.name, 24))}</option>`).join('');
-  const list = el('recon-types-valuelist'); if (!list) return;
-  const entries = Object.entries(typeMapValues()).sort((a, b) => b[1] - a[1]);
-  list.innerHTML = entries.length ? entries.map(([v, n]) => {
-    const assigned = (tm.values && tm.values[v]) || [];
-    const chips = assigned.length
-      ? assigned.map((t) => `<span class="recon-aat-chip">${esc(truncateText(t.text, 20))}</span>`).join(' ')
-      : '<span class="text-muted small">no type</span>';
-    return `<div class="recon-tm-row"><span class="recon-tm-value">${esc(truncate(v, 24))} <span class="text-muted small">(${n})</span></span>` +
-      `<span class="recon-tm-chips">${chips}</span>` +
-      `<button type="button" class="btn btn-sm btn-outline-secondary recon-tm-set" data-val="${esc(v)}">Set type</button></div>`;
-  }).join('') : '<span class="text-muted small">No values in this column.</span>';
-  list.querySelectorAll('.recon-tm-set').forEach((b) => b.addEventListener('click', () => openTypeMapModal(b.dataset.val)));
+function applyRowType() {
+  if (_typeRow < 0 || !project) return;
+  project.rowTypes = project.rowTypes || {};
+  const sel = typeMapAat.getSelection().map((t) => ({ id: t.id, text: t.text }));
+  const setRow = (i) => { if (sel.length) project.rowTypes[i] = sel.slice(); else delete project.rowTypes[i]; };
+  const col = colIndexByRole('type'), cb = el('recon-typemap-applyall'), wrap = el('recon-typemap-applyall-wrap');
+  if (col >= 0 && cb && cb.checked && wrap && !wrap.classList.contains('d-none')) {
+    const val = String(project.rows[_typeRow][col] == null ? '' : project.rows[_typeRow][col]).trim();
+    project.rows.forEach((r, i) => { if (String(r[col] == null ? '' : r[col]).trim() === val) setRow(i); });
+  } else setRow(_typeRow);
+  persist(); paintPreviewWindow(); renderTypePrompt(); refreshExport(); runValidation();
 }
 
 // Read the modal into a fresh scope object, commit it, and (if it changed) reset existing matches so
@@ -3328,8 +3325,11 @@ function init() {
     const td = e.target.closest && e.target.closest('td[data-ci]');
     if (!td || td.querySelector('input')) return; // ignore spacers / the cell already being edited
     const tr = td.closest('tr[data-ri]'); if (!tr) return;
-    e.preventDefault(); // don't start a text selection; we focus our own input
-    startCellEdit(Number(tr.dataset.ri), Number(td.dataset.ci));
+    e.preventDefault(); // don't start a text selection; we focus our own input / open the picker
+    const ci = Number(td.dataset.ci), ri = Number(tr.dataset.ri);
+    // A type-role cell opens the AAT picker instead of free-text editing.
+    if (project.columns[ci].role === 'type') { openRowTypeModal(ri); return; }
+    startCellEdit(ri, ci);
   });
 
   const backupBtn = el('recon-backup');
@@ -3353,8 +3353,6 @@ function init() {
   // export options (which change the built LPF) change.
   const recheck = el('recon-validate-recheck');
   if (recheck) recheck.addEventListener('click', runValidation);
-  const copyScope = el('recon-types-copy-scope');
-  if (copyScope) copyScope.addEventListener('click', copyScopeTypesToSubmission);
   ['recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
     const box = el(id); if (box) box.addEventListener('change', () => { if (!el('recon-export').classList.contains('recon-collapsed')) runValidation(); });
   });
@@ -3409,19 +3407,11 @@ function init() {
   const scopeQ = el('recon-scope-whg-q');
   if (scopeQ) scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
   document.querySelectorAll('[data-scope-draw]').forEach((b) => b.addEventListener('click', () => scopeDrawAction(b.dataset.scopeDraw)));
-  // AAT place-type pickers (Scope filter + submission types + per-value type map) — wire each instance.
+  // AAT place-type pickers: the Scope filter, and the shared per-row type modal (data-browser cells).
   scopeAat.init();
-  submissionAat.init();
   typeMapAat.init();
-  // Submission-types mode toggle (blanket vs per-column) + the type-column selector + type-map modal.
-  document.querySelectorAll('input[name="recon-types-mode"]').forEach((r) => r.addEventListener('change', () => {
-    if (r.value === 'col') setTypeMapColumn(project.typeMap && project.typeMap.col >= 0 ? project.typeMap.col : Math.max(0, colIndexByRole('type')));
-    else { if (project) project.typeMap = { col: -1, values: (project.typeMap && project.typeMap.values) || {} }; persist(); refreshExport(); runValidation(); }
-  }));
-  const tmCol = el('recon-types-col');
-  if (tmCol) tmCol.addEventListener('change', () => setTypeMapColumn(Number(tmCol.value)));
   const tmApply = el('recon-typemap-apply');
-  if (tmApply) tmApply.addEventListener('click', applyTypeMap);
+  if (tmApply) tmApply.addEventListener('click', applyRowType);
   // Cell-transform modal: live preview on find/replace edits, and Apply.
   ['recon-tf-find', 'recon-tf-replace'].forEach((id) => { const e = el(id); if (e) e.addEventListener('input', onFindReplaceInput); });
   ['recon-tf-regex', 'recon-tf-case'].forEach((id) => { const e = el(id); if (e) e.addEventListener('change', onFindReplaceInput); });
