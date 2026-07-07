@@ -1992,9 +1992,16 @@ function needsReview(key) {
 function refreshReview() {
   const sec = el('recon-review');
   if (!sec) return;
+  if (!project) { sec.classList.add('d-none'); return; }
+  sec.classList.remove('d-none'); // header always visible once a dataset is loaded
   const built = buildUniqueQueries();
-  if (!built) { sec.classList.add('d-none'); return; } // no reconcilable column mapped yet
-  sec.classList.remove('d-none'); // header stays visible once a name column is mapped
+  if (!built) { // no reconcilable (place-name) column mapped yet — keep the header, guide the user
+    const card = el('recon-review-card');
+    if (card) card.innerHTML = '<div class="text-muted small py-3"><i class="fas fa-circle-info me-1"></i>Map a <strong>“Place name”</strong> column in Step 2 and reconcile it (Step 3) — matches then appear here to confirm.</div>';
+    const map = el('recon-review-map'); if (map) map.classList.add('d-none');
+    reviewMeta = []; updateReviewProgress();
+    return;
+  }
   const hasMatches = project.matches && Object.keys(project.matches).length;
   reviewMeta = hasMatches ? reviewableKeys(built) : [];
   if (!reviewMeta.length) {
@@ -2703,8 +2710,9 @@ function reviewKeydown(e) {
 
 // Show/refresh the reconcile section based on whether a 'name' column is mapped.
 function refreshReconSection() {
+  if (!project) return;
   const hasName = colIndexByRole('name') >= 0;
-  el('recon-recon').classList.toggle('d-none', !hasName);
+  el('recon-recon').classList.remove('d-none'); // header always visible once a dataset is loaded
   const thr = el('recon-threshold');
   if (thr && project && project.autoThreshold != null) thr.value = project.autoThreshold;
   if (hasName && project.matches && Object.keys(project.matches).length) {
@@ -2731,6 +2739,12 @@ function updateReconButton() {
   updateRerunButton(chain);
   updateSourcesLabel(); // keep the Sources button label pointed at the focused column
   updateScopeLabel();   // reflect any saved dataset-wide scope (e.g. after resume)
+  if (colIndexByRole('name') < 0) { // no place-name column yet → guide the user to map one
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
+    if (help) help.innerHTML = 'Map a <strong>“Place name”</strong> column in <strong>Step 2</strong> (Confirm column roles) — then you can reconcile it against WHG here.';
+    return;
+  }
   if (chain.length <= 1) { // single (name) column — the classic one-shot
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
