@@ -99,6 +99,14 @@
 .recon-col-del { visibility: hidden; }
 .recon-map-row:hover .recon-col-del { visibility: visible; }
 
+/* Targeted per-value type mapping */
+.recon-tm-valuelist { max-height: 220px; overflow-y: auto; border: 1px solid #e2e2e2; border-radius: 6px; padding: .3rem .4rem; }
+.recon-tm-row { display: flex; align-items: center; gap: .5rem; padding: .15rem .1rem; border-bottom: 1px dashed #eee; }
+.recon-tm-row:last-child { border-bottom: 0; }
+.recon-tm-value { flex: 0 0 34%; font-size: .82rem; }
+.recon-tm-chips { flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: .2rem; }
+.recon-tm-row .recon-tm-set { flex: 0 0 auto; }
+
 /* Cell-transform modal preview */
 .recon-transform-preview { border: 1px solid #e2e2e2; border-radius: 6px; padding: .4rem .55rem; background: #fbfbfc; max-height: 200px; overflow-y: auto; }
 .recon-tf-prevrow { font-size: .82rem; padding: .05rem 0; }
