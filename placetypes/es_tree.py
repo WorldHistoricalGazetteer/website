@@ -210,6 +210,7 @@ def search_types(query, limit=30):
         }},
         sort=["_score"], source=["aat_id", "term", "ancestors", "path"], size=pool,
     )
+    ql = q.lower()
     results = []
     for doc in docs:
         text, guide = _clean_label(doc.get("term", ""))
@@ -224,10 +225,36 @@ def search_types(query, limit=30):
         anc_set = set(ancestors)
         if len(anc_set) > 1 and not (_PLACE_ROOTS & anc_set):
             continue
-        results.append({"aat_id": doc["aat_id"], "text": text, "ancestors": ancestors})
-        if len(results) >= limit:
-            break
-    return results
+        results.append({"aat_id": doc["aat_id"], "text": text, "ancestors": ancestors,
+                        "_tier": _match_tier(text, ql)})
+    # Re-rank exact/leading matches to the top. ES _score alone buries the term you typed under longer
+    # compounds that happen to score higher (e.g. "town" → "town halls" above "towns"). A stable sort by
+    # tier keeps ES relevance order *within* each tier, so "towns"/"town" lead, then "town …" phrases.
+    results.sort(key=lambda r: r["_tier"])
+    for r in results:
+        del r["_tier"]
+    return results[:limit]
+
+
+def _match_tier(text, ql):
+    """Rank bucket for a label against a lower-cased query — lower is better. Handles simple
+    English plural/singular so "town" matches the canonical AAT plural "towns"."""
+    base = re.sub(r"\s*\([^)]*\)\s*$", "", text).strip().lower()  # drop a trailing "(qualifier)"
+    parts = base.split()
+    first = parts[0] if parts else base
+
+    def eqish(a):
+        return a == ql or a == ql + "s" or a == ql + "es" or a + "s" == ql or a + "es" == ql
+
+    if eqish(base):
+        return 0                       # whole label is (a plural/singular of) the query
+    if eqish(first):
+        return 1                       # label's first word is the query — "town halls" for "town"
+    if base.startswith(ql):
+        return 2                       # label begins with the query string
+    if re.search(r"\b" + re.escape(ql), base):
+        return 3                       # query begins some later word
+    return 4                           # prefix-only / mid-word match
 
 
 def get_descendant_ids(aat_id, include_self=True):
