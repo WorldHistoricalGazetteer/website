@@ -319,10 +319,11 @@ async function renderCoords() {
   box.innerHTML =
     `<div class="recon-coords-inner">
        ${head}
-       <div class="mt-2">
+       <div class="mt-2 d-flex flex-wrap gap-1">
          <button type="button" id="recon-coord-checkall" class="btn btn-sm btn-outline-secondary">
            <i class="fas fa-list-check me-1"></i>Validate all ${project.total.toLocaleString()} rows
          </button>
+         ${coordsIdx >= 0 ? '<button type="button" id="recon-coord-insert" class="btn btn-sm btn-outline-primary" title="Add converted WGS84 latitude &amp; longitude as columns in your table"><i class="fas fa-table-columns me-1"></i>Insert WGS84 columns</button>' : ''}
        </div>
        <div id="recon-coord-report" class="recon-coord-report mt-2"></div>
      </div>`;
@@ -334,6 +335,27 @@ async function renderCoords() {
   if (sw) sw.addEventListener('change', () => { project.coordSwap = sw.checked; persist(); renderCoords(); });
   const chk = el('recon-coord-checkall');
   if (chk) chk.addEventListener('click', checkAllCoords);
+  const ins = el('recon-coord-insert');
+  if (ins) ins.addEventListener('click', insertWgs84Columns);
+}
+// Materialise the converted WGS84 lat/lon as real columns (roles lat/lon), superseding the source
+// grid-ref column (set to 'ignore'). Appends columns so existing column indices — and thus match keys —
+// are unchanged. Records an undo op.
+async function insertWgs84Columns() {
+  const coordsIdx = colIndexByRole('coords'); if (coordsIdx < 0) return;
+  await loadCoords();
+  const fmt = currentCoordFormat();
+  const start = project.columns.length;
+  project.columns.push({ name: 'wgs84_lat', role: 'lat' }, { name: 'wgs84_lon', role: 'lon' });
+  const srcRole = project.columns[coordsIdx].role;
+  project.rows.forEach((r) => { const c = Coords.parseCoord(fmt, r[coordsIdx]); r.push(c ? +c.lat.toFixed(6) : '', c ? +c.lon.toFixed(6) : ''); });
+  project.columns[coordsIdx].role = 'other'; // superseded by the decimal columns
+  project.showIgnored = true;                 // so the (now-ignored) source column stays visible
+  normalizeChain();
+  pushUndo({ type: 'addcols', start, count: 2, sourceCol: coordsIdx, sourceRole: srcRole });
+  persist();
+  renderMapping(); renderCoords(); renderPreview(); refreshReconSection(); refreshFullMapPane(); refreshExport(); updatePaneSummaries();
+  flashSaved('Added wgs84_lat / wgs84_lon columns');
 }
 
 function currentCoordFormat() {
@@ -429,16 +451,37 @@ async function renderDates() {
            (Hijri, Hebrew, Śaka, French Republican…)</span>
        </div>
        <div class="small text-muted mt-1">Sample: <strong>${parsed.toLocaleString()}</strong> of ${checked.toLocaleString()} parsed · ${sh}</div>
-       <div class="mt-2">
+       <div class="mt-2 d-flex flex-wrap gap-1">
          <button type="button" id="recon-date-checkall" class="btn btn-sm btn-outline-secondary">
            <i class="fas fa-list-check me-1"></i>Validate all ${project.total.toLocaleString()} rows
          </button>
+         <button type="button" id="recon-date-insert" class="btn btn-sm btn-outline-primary" title="Add the parsed ISO start &amp; end dates as columns in your table"><i class="fas fa-table-columns me-1"></i>Insert ISO date columns</button>
        </div>
        <div id="recon-date-report" class="recon-coord-report mt-2"></div>
      </div>`;
   box.classList.remove('d-none');
   const chk = el('recon-date-checkall');
   if (chk) chk.addEventListener('click', checkAllDates);
+  const ins = el('recon-date-insert');
+  if (ins) ins.addEventListener('click', insertIsoDateColumns);
+}
+// Materialise the parsed ISO start/end dates as real columns. Appended (indices/keys unchanged), role
+// 'other' (data, not a reconciliation hint) but shown via showIgnored. Records an undo op.
+async function insertIsoDateColumns() {
+  const idx = colIndexByRole('date'); if (idx < 0) return;
+  await loadDates();
+  const start = project.columns.length;
+  project.columns.push({ name: 'date_start_iso', role: 'other' }, { name: 'date_end_iso', role: 'other' });
+  project.rows.forEach((r) => {
+    const raw = r[idx];
+    const d = (raw != null && String(raw).trim() !== '') ? Dates.parseDate(raw, { locale: 'uk' }) : null;
+    r.push((d && d.startISO) || '', (d && d.endISO) || '');
+  });
+  project.showIgnored = true;
+  pushUndo({ type: 'addcols', start, count: 2 });
+  persist();
+  renderMapping(); renderDates(); renderPreview(); refreshExport(); updatePaneSummaries();
+  flashSaved('Added date_start_iso / date_end_iso columns');
 }
 
 // Validate EVERY row's date and report the ones that cannot be parsed.
@@ -814,8 +857,7 @@ function rowCoordValue(i) {
 function currentExportOptions() {
   const fmtEl = document.querySelector('input[name="recon-exp-fmt"]:checked');
   return {
-    coords: !!(el('recon-exp-coords') && el('recon-exp-coords').checked) && hasCoordRole(),
-    dates: !!(el('recon-exp-dates') && el('recon-exp-dates').checked) && colIndexByRole('date') >= 0,
+    // Coordinates + ISO dates are materialised as columns in Step 2, so they're no longer export toggles.
     match: !!(el('recon-exp-match') && el('recon-exp-match').checked),
     enrich: !!(el('recon-exp-enrich') && el('recon-exp-enrich').checked),
     format: fmtEl ? fmtEl.value : 'csv',
@@ -834,13 +876,14 @@ async function buildExportRecords(opts, onProgress) {
   const colSlug = (i) => String(project.columns[i].name).trim().replace(/\W+/g, '_').toLowerCase().replace(/^_|_$/g, '') || ('col' + i);
   // Load the coord parser whenever a coordinate column exists — even if the WGS84 columns aren't
   // requested — so LPF/LP-TSV geometry and geometry-override centroids can be computed.
-  if (opts.coords || hasCoordRole()) await loadCoords();
-  if (opts.dates) await loadDates();
-
   const dateIdx = colIndexByRole('date');
+  // Coordinates (for LPF geometry + map) and parsed dates (for LPF `when`) are always derived from the
+  // column roles — users materialise them as columns in Step 2 (the coordinate/date panels) if they want
+  // them in a CSV/JSON export, so they are no longer per-export toggles.
+  if (hasCoordRole()) await loadCoords();
+  if (dateIdx >= 0) await loadDates();
+
   const augHeaders = [];
-  if (opts.coords) augHeaders.push('wgs84_lat', 'wgs84_lon');
-  if (opts.dates) augHeaders.push('date_start', 'date_end');
   if (opts.match) {
     augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
     adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`)); // parent containment matches
@@ -866,17 +909,12 @@ async function buildExportRecords(opts, onProgress) {
     const geom = ov ? ov.geometry : null;
     const coord = geom ? firstLngLat(geom) : (hasCoordRole() ? rowCoordValue(i) : null);
 
-    if (opts.coords) {
-      aug.wgs84_lat = coord ? +coord.lat.toFixed(6) : '';
-      aug.wgs84_lon = coord ? +coord.lon.toFixed(6) : '';
-    }
-    if (opts.dates) {
+    // Parsed ISO start/end for the LPF `when` (always, when a date column exists).
+    if (dateIdx >= 0) {
       const raw = project.rows[i][dateIdx];
       const d = (raw != null && String(raw).trim() !== '') ? Dates.parseDate(raw, { locale: 'uk' }) : null;
       whenStart = (d && d.startISO) || '';
       whenEnd = (d && d.endISO) || '';
-      aug.date_start = whenStart;
-      aug.date_end = whenEnd;
     }
     if (opts.match || opts.enrich) {
       const dec = info && decisions[info.key];
@@ -1065,7 +1103,7 @@ async function contributeToWHG() {
   if (status) status.textContent = 'building Linked Places file…';
   try {
     const data = await buildExportRecords(
-      { coords: hasCoordRole(), dates: colIndexByRole('date') >= 0, match: true, enrich: false },
+      { match: true, enrich: false },
       (msg) => { if (status) status.textContent = msg; });
     const base = project.fileName ? project.fileName.replace(/\.[^.]+$/, '') : 'workbench';
     const file = new File([serializeLPF(data)], base + '.geojson', { type: 'application/geo+json' });
@@ -1094,14 +1132,7 @@ function refreshExport() {
   const nameIdx = colIndexByRole('name');
   sec.classList.toggle('d-none', nameIdx < 0 && !hasCoordRole() && colIndexByRole('date') < 0);
   const hasMatches = !!(project.matches && Object.keys(project.matches).length);
-  const cn = el('recon-exp-coords-note'); if (cn) cn.textContent = hasCoordRole() ? '' : '(no coordinate column)';
-  const dn = el('recon-exp-dates-note'); if (dn) dn.textContent = colIndexByRole('date') >= 0 ? '' : '(no date column)';
-  ['recon-exp-coords', 'recon-exp-dates', 'recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
-    const box = el(id); if (!box) return;
-    if (id === 'recon-exp-coords') box.disabled = !hasCoordRole();
-    if (id === 'recon-exp-dates') box.disabled = colIndexByRole('date') < 0;
-    if (id === 'recon-exp-match' || id === 'recon-exp-enrich') box.disabled = !hasMatches;
-  });
+  ['recon-exp-match', 'recon-exp-enrich'].forEach((id) => { const box = el(id); if (box) box.disabled = !hasMatches; });
   const sum = el('recon-pane-sum-export');
   if (sum) {
     let accepted = 0;
@@ -1121,7 +1152,7 @@ async function runValidation() {
   if (body) body.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>checking…</span>';
   let data;
   try {
-    data = await buildExportRecords({ coords: hasCoordRole(), dates: colIndexByRole('date') >= 0, match: true, enrich: false }, null);
+    data = await buildExportRecords({ match: true, enrich: false }, null);
   } catch (e) {
     if (body) body.innerHTML = `<span class="text-danger small">Could not build the Linked Places file: ${esc(e.message)}</span>`;
     return null;
@@ -2884,7 +2915,7 @@ function init() {
   if (recheck) recheck.addEventListener('click', runValidation);
   const copyScope = el('recon-types-copy-scope');
   if (copyScope) copyScope.addEventListener('click', copyScopeTypesToSubmission);
-  ['recon-exp-coords', 'recon-exp-dates', 'recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
+  ['recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
     const box = el(id); if (box) box.addEventListener('change', () => { if (!el('recon-export').classList.contains('recon-collapsed')) runValidation(); });
   });
 

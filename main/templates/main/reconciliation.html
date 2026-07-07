@@ -293,14 +293,12 @@
       <div class="recon-export-grid">
         <fieldset class="recon-export-box">
           <legend class="small text-muted mb-1">Add columns</legend>
-          <label class="d-block small"><input type="checkbox" id="recon-exp-coords" checked>
-            WGS84 latitude &amp; longitude <span class="text-muted" id="recon-exp-coords-note"></span></label>
-          <label class="d-block small"><input type="checkbox" id="recon-exp-dates" checked>
-            ISO start &amp; end dates <span class="text-muted" id="recon-exp-dates-note"></span></label>
           <label class="d-block small"><input type="checkbox" id="recon-exp-match" checked>
             Confirmed WHG match <span class="text-muted">(id, title, score, source)</span></label>
           <label class="d-block small"><input type="checkbox" id="recon-exp-enrich">
             Enrich from WHG <span class="text-muted">(matched coordinates, variant names, description, type — fetches from WHG)</span></label>
+          <p class="small text-muted mb-0 mt-1">Converted coordinates &amp; ISO dates: add them as columns in
+            <strong>Step 2</strong> (the coordinate/date panels) — they then export like any other column.</p>
         </fieldset>
         <fieldset class="recon-export-box">
           <legend class="small text-muted mb-1">Format</legend>
