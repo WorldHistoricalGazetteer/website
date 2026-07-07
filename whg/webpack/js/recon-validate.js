@@ -29,10 +29,22 @@ async function getValidator() {
   return _validate;
 }
 
-// Validate an LPF FeatureCollection object against the WHG schema.
-// Returns { ok:boolean, errors:[ajv error objects] } (errors carry instancePath like /features/3/...).
+// Validate an LPF FeatureCollection against the WHG schema.
+// Returns { ok, errorCount, summary:[{msg, count}] } — errors grouped by field+message across features
+// so the panel can show "@id must match pattern (14×)" rather than 42 raw entries.
 export async function validateLPF(fc) {
   const validate = await getValidator();
   const ok = validate(fc);
-  return { ok, errors: ok ? [] : (validate.errors || []) };
+  const errors = ok ? [] : (validate.errors || []);
+  const groups = {};
+  for (const e of errors) {
+    // Drop numeric (array-index) segments so per-feature errors collapse: /features/3/@id → "@id".
+    const parts = (e.instancePath || '').split('/').filter((p) => p && !/^\d+$/.test(p));
+    const field = parts.length ? parts[parts.length - 1] : '(feature)';
+    const msg = e.keyword === 'required' ? `missing ${(e.params && e.params.missingProperty) || 'property'}`
+      : `${field} ${e.message}`;
+    groups[msg] = (groups[msg] || 0) + 1;
+  }
+  const summary = Object.entries(groups).sort((a, b) => b[1] - a[1]).map(([msg, count]) => ({ msg, count }));
+  return { ok, errorCount: errors.length, summary };
 }

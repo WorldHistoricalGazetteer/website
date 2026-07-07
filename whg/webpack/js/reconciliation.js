@@ -887,8 +887,12 @@ function buildLPF(data) {
     const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
     const props = { title };
     if (cc.length) props.ccodes = cc;
+    // LPF @id must be a URL or a namespace term (word:term). A bare id-column value or row index isn't,
+    // so wrap non-conforming ids as `row:<value>` (a within-dataset local identifier).
+    let atId = String(idIdx >= 0 && rec.orig[idIdx] != null && rec.orig[idIdx] !== '' ? rec.orig[idIdx] : (i + 1));
+    if (!/^\w+:[^\s]+$/.test(atId) && !/^https?:\/\//.test(atId)) atId = 'row:' + atId.trim().replace(/\s+/g, '_');
     const feat = {
-      '@id': String(idIdx >= 0 ? rec.orig[idIdx] : (i + 1)),
+      '@id': atId,
       type: 'Feature',
       properties: props,
       names: title ? [{ toponym: title }] : [],
@@ -1029,10 +1033,10 @@ async function runValidation() {
     if (!(f.types && f.types.length) && !(f.properties && f.properties.fclasses)) miss.types += 1;
   });
   // Authoritative schema pass (Ajv, same schema the server uses). Null if the validator can't load.
-  let schemaOk = null; let schemaErrs = 0;
-  try { const mod = await loadValidate(); const res = await mod.validateLPF(fc); schemaOk = res.ok; schemaErrs = res.errors.length; }
+  let schemaOk = null; let schemaErrs = 0; let schemaSummary = [];
+  try { const mod = await loadValidate(); const res = await mod.validateLPF(fc); schemaOk = res.ok; schemaErrs = res.errorCount; schemaSummary = res.summary; }
   catch (e) { console.error('[recon] LPF validator unavailable', e); }
-  _validation = { total: n, miss, schemaOk, schemaErrs };
+  _validation = { total: n, miss, schemaOk, schemaErrs, schemaSummary };
   renderValidation(_validation);
   updateContributeGate();
   return _validation;
@@ -1052,13 +1056,18 @@ function renderValidation(v) {
   const valid = v.schemaOk === true && !issues.length;
   if (valid) {
     body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${v.total.toLocaleString()} places pass WHG's Linked Places validation.</div>`;
-  } else {
-    const schemaNote = v.schemaOk === false ? ` <span class="text-muted">(${v.schemaErrs.toLocaleString()} schema error${v.schemaErrs === 1 ? '' : 's'})</span>`
-      : v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
-    body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${schemaNote}</div>` +
-      (issues.length ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}</ul>` : '') +
-      '<div class="small text-muted">Fix the items above (add place types below, map a coordinate/date column, etc.), then re-check.</div>';
+    return;
   }
+  // Schema-error groups the friendly checks don't already cover (e.g. bad @id, malformed dates).
+  const covered = /place name|name variant|location|date\/period|place type/;
+  const schemaLines = (v.schemaSummary || [])
+    .filter((g) => !covered.test(g.msg))
+    .slice(0, 6)
+    .map((g) => `<li>${esc(g.msg)}${g.count > 1 ? ` <span class="text-muted">(${g.count}×)</span>` : ''}</li>`);
+  const note = v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
+  body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
+    ((issues.length || schemaLines.length) ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}${schemaLines.join('')}</ul>` : '') +
+    '<div class="small text-muted">Resolve the items above (add place types below, map a coordinate/date column, …), then re-check.</div>';
 }
 // Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
 function updateContributeGate() {
