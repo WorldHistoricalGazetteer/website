@@ -548,6 +548,11 @@ let _redoStack = [];
 function resetHistory() { _undoStack = []; _redoStack = []; updateUndoButtons(); }
 // Apply op's stored "restore", returning the inverse op for the opposite stack.
 function applyOpInverse(op) {
+  if (op.type === 'cell') { // single-cell edit from the data browser
+    const cur = project.rows[op.row][op.col];
+    project.rows[op.row][op.col] = op.before;
+    return { type: 'cell', col: op.col, row: op.row, before: cur, label: op.label };
+  }
   if (op.type === 'cells') {
     const cur = project.rows.map((r) => r[op.col]);
     project.rows.forEach((r, i) => { r[op.col] = op.before[i]; });
@@ -778,20 +783,210 @@ function applyTransform() {
   flashSaved(`${_pendingTransform.label} applied to ${changed.toLocaleString()} cell${changed === 1 ? '' : 's'}`);
 }
 
-function renderPreview() {
+// ── Data browser (virtualised, filterable, editable) ─────────────────────────────────────────────
+// The whole dataset is already in memory (project.rows), so this is DOM virtualisation, not fetching:
+// only the visible window of rows lives in the DOM; off-screen rows are evicted and re-rendered on
+// scroll. A text filter narrows the view; edit mode commits per-cell changes (undoable, re-invalidating
+// any affected matches). Row height is measured once so the scroll maths survive font/border variation.
+let _previewFilter = '';        // lower-cased text search across visible columns
+let _previewEdit = false;       // edit-mode toggle
+let _previewView = null;        // filtered row indices, or null = all rows (identity mapping)
+let _previewVisCols = [];       // visible column indices (respects showIgnored)
+let _previewColW = [];          // px width per visible column — stable, so windowed rows don't jitter
+let _previewRowH = 31;          // measured data-row height
+let _previewScrollWired = false;
+let _previewEditing = null;     // { ri, ci } cell currently open for editing
+const PREVIEW_OVERSCAN = 8;
+
+function previewVisibleCols() {
   const showIgnored = !!project.showIgnored;
-  const box = el('recon-show-ignored'); if (box) box.checked = showIgnored;
-  // Columns mapped to role 'other' (ignore) are hidden by default; the toggle reveals them.
-  const vis = project.columns.map((c, i) => i).filter((i) => showIgnored || project.columns[i].role !== 'other');
-  el('recon-preview-head').innerHTML = '<tr>' + vis.map((i) => `<th>${truncate(project.columns[i].name, 40)}</th>`).join('') + '</tr>';
-  el('recon-preview-body').innerHTML = project.rows.slice(0, PREVIEW_ROWS).map((r) =>
-    '<tr>' + vis.map((i) => `<td>${truncate(r[i])}</td>`).join('') + '</tr>').join('');
+  return project.columns.map((c, i) => i).filter((i) => showIgnored || project.columns[i].role !== 'other');
+}
+function buildPreviewView() {
+  const q = _previewFilter;
+  if (!q) { _previewView = null; return; }
+  const rows = project.rows, vis = _previewVisCols, out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    for (let c = 0; c < vis.length; c++) { const v = r[vis[c]]; if (v != null && String(v).toLowerCase().includes(q)) { out.push(i); break; } }
+  }
+  _previewView = out;
+}
+function previewColWidth(ci) {
+  // Stable width estimate from the header + a capped sample of values, so table-layout:fixed keeps
+  // columns aligned no matter which rows the virtualiser happens to have painted.
+  let maxLen = String(project.columns[ci].name || '').length;
+  const n = Math.min(project.rows.length, 200);
+  for (let i = 0; i < n; i++) { const v = project.rows[i][ci]; if (v != null) { const L = String(v).length; if (L > maxLen) maxLen = L; } }
+  return Math.max(70, Math.min(320, maxLen * 7 + 22));
+}
+function renderPreview() {
+  if (!project) return;
+  const box = el('recon-show-ignored'); if (box) box.checked = !!project.showIgnored;
+  _previewVisCols = previewVisibleCols();
+  _previewColW = _previewVisCols.map(previewColWidth);
+  const table = el('recon-preview-scroll') && el('recon-preview-scroll').querySelector('table');
+  if (table) {
+    table.style.width = _previewColW.reduce((a, b) => a + b, 0) + 'px';
+    let cg = table.querySelector('colgroup');
+    if (!cg) { cg = document.createElement('colgroup'); table.insertBefore(cg, table.firstChild); }
+    cg.innerHTML = _previewColW.map((w) => `<col style="width:${w}px">`).join('');
+  }
+  el('recon-preview-head').innerHTML = '<tr>' + _previewVisCols.map((i) =>
+    `<th title="${esc(project.columns[i].name)}">${truncate(project.columns[i].name, 40)}</th>`).join('') + '</tr>';
+  buildPreviewView();
+  const scroll = el('recon-preview-scroll');
+  if (scroll) scroll.classList.toggle('recon-editing', _previewEdit);
+  if (!_previewScrollWired && scroll) {
+    let raf = null;
+    scroll.addEventListener('scroll', () => { if (raf) return; raf = requestAnimationFrame(() => { raf = null; paintPreviewWindow(); }); });
+    _previewScrollWired = true;
+  }
+  paintPreviewWindow();
+  if (measurePreviewRowH()) paintPreviewWindow(); // self-correct the row height, then repaint once
+  updatePreviewCount();
+}
+function measurePreviewRowH() {
+  const tr = el('recon-preview-body') && el('recon-preview-body').querySelector('tr[data-ri]');
+  if (tr) { const h = tr.getBoundingClientRect().height; if (h && Math.abs(h - _previewRowH) > 0.5) { _previewRowH = h; return true; } }
+  return false;
+}
+function paintPreviewWindow() {
+  const scroll = el('recon-preview-scroll'), body = el('recon-preview-body');
+  if (!scroll || !body || !project) return;
+  const vis = _previewVisCols, view = _previewView, nc = vis.length;
+  const total = view ? view.length : project.rows.length;
+  const rowH = _previewRowH || 31;
+  const vh = scroll.clientHeight || 420;
+  const first = Math.max(0, Math.floor(scroll.scrollTop / rowH) - PREVIEW_OVERSCAN);
+  const last = Math.min(total, first + Math.ceil(vh / rowH) + PREVIEW_OVERSCAN * 2);
+  const parts = [`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${first * rowH}px"></td></tr>`];
+  for (let vi = first; vi < last; vi++) {
+    const ri = view ? view[vi] : vi;
+    const r = project.rows[ri];
+    let tds = '';
+    for (let c = 0; c < nc; c++) { const ci = vis[c]; const raw = r[ci]; tds += `<td data-ci="${ci}" title="${esc(raw)}">${truncate(raw, 60)}</td>`; }
+    parts.push(`<tr data-ri="${ri}">${tds}</tr>`);
+  }
+  parts.push(`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${Math.max(0, (total - last) * rowH)}px"></td></tr>`);
+  body.innerHTML = parts.join('');
+}
+function updatePreviewCount() {
+  const c = el('recon-preview-count'); if (!c || !project) return;
+  const total = project.rows.length;
+  const shown = _previewView ? _previewView.length : total;
+  c.textContent = _previewFilter ? `${shown.toLocaleString()} of ${total.toLocaleString()} rows` : `${total.toLocaleString()} row${total === 1 ? '' : 's'}`;
+}
+
+// ── Data-browser edit mode ────────────────────────────────────────────────────────────────────────
+let _persistTimer = null;
+function schedulePersist() { clearTimeout(_persistTimer); _persistTimer = setTimeout(() => { _persistTimer = null; persist(); }, 400); }
+// A cell edit in a reconciled column makes that row's match (and its children's, via containment) stale.
+// Drop just those per-row entries — not the whole column — so one edit doesn't discard thousands of good
+// matches. Returns true if anything was cleared (cf. applyTransform's whole-column analogue).
+function invalidateRowMatches(col, row) {
+  const chain = reconChain();
+  const pos = chain.indexOf(col);
+  if (pos < 0) return false;
+  let changed = false;
+  for (let p = pos; p < chain.length; p++) {
+    const k = chain[p] + ':' + row;
+    if (project.matches && project.matches[k]) { delete project.matches[k]; changed = true; }
+    if (project.decisions) delete project.decisions[k];
+    if (project.geom) delete project.geom[k];
+  }
+  if (changed) reconStaleNote = 'A value changed after matching — re-reconcile the affected column(s) to refresh those rows.';
+  return changed;
+}
+function setPreviewEdit(on) {
+  _previewEdit = !!on;
+  if (!_previewEdit) cancelCellEdit();
+  const scroll = el('recon-preview-scroll'); if (scroll) scroll.classList.toggle('recon-editing', _previewEdit);
+  const btn = el('recon-preview-edit');
+  if (btn) {
+    btn.classList.toggle('recon-preview-edit--on', _previewEdit);
+    btn.setAttribute('aria-pressed', _previewEdit ? 'true' : 'false');
+    btn.innerHTML = _previewEdit ? '<i class="fas fa-check me-1"></i>Done editing' : '<i class="fas fa-pen-to-square me-1"></i>Edit cells';
+  }
+}
+function previewCellEl(ri, ci) {
+  const body = el('recon-preview-body'); if (!body) return null;
+  const tr = body.querySelector(`tr[data-ri="${ri}"]`);
+  return tr ? tr.querySelector(`td[data-ci="${ci}"]`) : null;
+}
+function startCellEdit(ri, ci) {
+  cancelCellEdit();
+  const td = previewCellEl(ri, ci); if (!td) return;
+  _previewEditing = { ri, ci };
+  td.classList.add('recon-cell-editing');
+  td.innerHTML = `<input class="recon-cell-input" type="text" value="${esc(project.rows[ri][ci])}">`;
+  const inp = td.querySelector('input');
+  inp.focus(); inp.select();
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commitCellEdit(); startCellEditRelative(ri, ci, 1, 0); }
+    else if (e.key === 'Tab') { e.preventDefault(); commitCellEdit(); startCellEditRelative(ri, ci, 0, e.shiftKey ? -1 : 1); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelCellEdit(); }
+  });
+  inp.addEventListener('blur', () => { if (_previewEditing && _previewEditing.ri === ri && _previewEditing.ci === ci) commitCellEdit(); });
+}
+function cancelCellEdit() {
+  if (!_previewEditing) return;
+  const { ri, ci } = _previewEditing; _previewEditing = null;
+  const td = previewCellEl(ri, ci);
+  if (td) { td.classList.remove('recon-cell-editing'); td.innerHTML = truncate(project.rows[ri][ci], 60); }
+}
+function commitCellEdit() {
+  if (!_previewEditing) return;
+  const { ri, ci } = _previewEditing; _previewEditing = null;
+  const td = previewCellEl(ri, ci); const inp = td && td.querySelector('input');
+  if (!inp) return;
+  const before = project.rows[ri][ci], after = inp.value;
+  if (String(before == null ? '' : before) === String(after)) { td.classList.remove('recon-cell-editing'); td.innerHTML = truncate(before, 60); return; }
+  pushUndo({ type: 'cell', col: ci, row: ri, before, label: `edit ${project.columns[ci].name}` });
+  project.rows[ri][ci] = after;
+  const invalidated = invalidateRowMatches(ci, ri);
+  td.classList.remove('recon-cell-editing'); td.title = esc(after); td.innerHTML = truncate(after, 60);
+  schedulePersist();
+  refreshAfterCellEdit(ci, invalidated);
+}
+function startCellEditRelative(ri, ci, dRow, dCol) {
+  if (!_previewEdit) return;
+  const view = _previewView, vis = _previewVisCols;
+  const total = view ? view.length : project.rows.length;
+  let vi = view ? view.indexOf(ri) : ri;
+  let cIdx = vis.indexOf(ci);
+  if (vi < 0 || cIdx < 0) return;
+  vi += dRow; cIdx += dCol;
+  if (cIdx < 0) { cIdx = vis.length - 1; vi -= 1; }
+  else if (cIdx >= vis.length) { cIdx = 0; vi += 1; }
+  if (vi < 0 || vi >= total) return;
+  ensurePreviewRowVisible(vi);
+  paintPreviewWindow();
+  startCellEdit(view ? view[vi] : vi, vis[cIdx]);
+}
+function ensurePreviewRowVisible(vi) {
+  const scroll = el('recon-preview-scroll'); if (!scroll) return;
+  const rowH = _previewRowH || 31, y = vi * rowH;
+  const headH = (el('recon-preview-head') && el('recon-preview-head').offsetHeight) || 0;
+  if (y < scroll.scrollTop) scroll.scrollTop = y;
+  else if (y + rowH > scroll.scrollTop + scroll.clientHeight - headH) scroll.scrollTop = y + rowH - scroll.clientHeight + headH;
+}
+function refreshAfterCellEdit(ci, invalidated) {
+  const role = project.columns[ci].role;
+  if (role === 'coords' || role === 'lat' || role === 'lon') renderCoords();
+  if (role === 'date') renderDates();
+  if (invalidated) { reconActiveIdx = -1; refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); }
+  refreshExport(); updatePaneSummaries();
 }
 
 function renderAll() {
   el('recon-result').classList.remove('d-none');
   resetFilters();  // a freshly loaded/imported project starts unfiltered (filters are session-only)
   resetHistory();  // undo/redo history is session-only, cleared on load
+  // Data-browser state is session-only too: clear filter/edit-mode and scroll back to the top.
+  _previewFilter = ''; _previewView = null; _previewEditing = null; setPreviewEdit(false);
+  const psearch = el('recon-preview-search'); if (psearch) psearch.value = '';
+  const pscroll = el('recon-preview-scroll'); if (pscroll) pscroll.scrollTop = 0;
   const delimNote = project.delimiter ? ` · delimiter <code>${project.delimiter === '\t' ? 'TAB' : project.delimiter}</code>` : ' · JSON';
   el('recon-summary').innerHTML =
     `<strong>${truncate(project.fileName, 60)}</strong> — <strong>${project.total.toLocaleString()}</strong> ` +
@@ -3109,6 +3304,33 @@ function init() {
 
   const showIgn = el('recon-show-ignored');
   if (showIgn) showIgn.addEventListener('change', () => { if (!project) return; project.showIgnored = showIgn.checked; persist(); renderPreview(); });
+
+  // Data browser: text filter, edit-mode toggle, and click-to-edit (delegated on the tbody).
+  const psearch = el('recon-preview-search');
+  if (psearch) {
+    let t = null;
+    psearch.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        if (!project) return;
+        _previewFilter = psearch.value.trim().toLowerCase();
+        buildPreviewView();
+        const s = el('recon-preview-scroll'); if (s) s.scrollTop = 0;
+        paintPreviewWindow(); updatePreviewCount();
+      }, 200);
+    });
+  }
+  const peditBtn = el('recon-preview-edit');
+  if (peditBtn) peditBtn.addEventListener('click', () => { if (project) setPreviewEdit(!_previewEdit); });
+  const pbody = el('recon-preview-body');
+  if (pbody) pbody.addEventListener('mousedown', (e) => {
+    if (!_previewEdit || !project) return;
+    const td = e.target.closest && e.target.closest('td[data-ci]');
+    if (!td || td.querySelector('input')) return; // ignore spacers / the cell already being edited
+    const tr = td.closest('tr[data-ri]'); if (!tr) return;
+    e.preventDefault(); // don't start a text selection; we focus our own input
+    startCellEdit(Number(tr.dataset.ri), Number(td.dataset.ci));
+  });
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);

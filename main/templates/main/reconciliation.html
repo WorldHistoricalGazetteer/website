@@ -141,12 +141,19 @@
     <!-- Date-parsing panel (shown when a Date column is mapped) — populated by reconciliation.js -->
     <div class="recon-coords d-none" id="recon-dates"></div>
 
-    <div class="d-flex align-items-center justify-content-between mt-3 mb-1">
-      <h3 class="h6 mb-0">Preview</h3>
-      <label class="small text-muted mb-0"><input type="checkbox" id="recon-show-ignored"> show ignored columns</label>
+    <div class="d-flex align-items-center justify-content-between mt-3 mb-1 flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <h3 class="h6 mb-0">Data</h3>
+        <input type="search" id="recon-preview-search" class="form-control form-control-sm" style="max-width:220px" placeholder="search all columns…" autocomplete="off">
+        <span class="small text-muted" id="recon-preview-count"></span>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        <button type="button" id="recon-preview-edit" class="btn btn-sm btn-outline-secondary" aria-pressed="false"><i class="fas fa-pen-to-square me-1"></i>Edit cells</button>
+        <label class="small text-muted mb-0"><input type="checkbox" id="recon-show-ignored"> show ignored columns</label>
+      </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-sm table-bordered recon-preview">
+    <div id="recon-preview-scroll" class="recon-preview-scroll">
+      <table class="table table-sm table-bordered recon-preview mb-0">
         <thead id="recon-preview-head"></thead>
         <tbody id="recon-preview-body"></tbody>
       </table>

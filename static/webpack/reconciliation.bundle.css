@@ -217,15 +217,25 @@
 .recon-col-chip.role-date    .recon-col-role { background: #b26a00; }
 .recon-col-chip.role-id      .recon-col-role { background: #455a64; }
 
-/* --- Preview table --- */
-.recon-preview { font-size: .8rem; }
+/* --- Data browser (virtualised preview) --- */
+.recon-preview-scroll { max-height: 60vh; overflow: auto; border: 1px solid #dee2e6; border-radius: .25rem; }
+.recon-preview { font-size: .8rem; table-layout: fixed; min-width: 100%; margin-bottom: 0; }
 .recon-preview th {
   position: sticky;
   top: 0;
+  z-index: 3;
   background: #f8f9fa;
   white-space: nowrap;
 }
-.recon-preview td { max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recon-preview td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
+/* Virtualisation spacers stand in for the off-screen rows above/below the rendered window. */
+.recon-vspacer td { padding: 0 !important; border: 0 !important; }
+/* Edit mode: cells are click-to-edit. */
+.recon-preview-scroll.recon-editing tbody td[data-ci] { cursor: cell; }
+.recon-preview-scroll.recon-editing tbody td[data-ci]:hover { background: #fff8e1; }
+.recon-cell-editing { padding: 0 !important; }
+.recon-cell-input { width: 100%; box-sizing: border-box; border: 1px solid #86b7fe; border-radius: 2px; font-size: .8rem; padding: 2px 6px; height: 100%; min-height: 26px; outline: none; }
+.recon-preview-edit--on { background-color: #cfe2ff; border-color: #9ec5fe; }
 
 /* --- Resume banner --- */
 .recon-resume {
