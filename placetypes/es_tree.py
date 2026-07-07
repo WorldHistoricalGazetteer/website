@@ -185,6 +185,13 @@ def search_types(query, limit=30):
     q = (query or "").strip()
     if len(q) < 2:
         return []
+    # Over-fetch a wide pool, not just `limit`: the score-ranked window can fill with matches that are
+    # is_place_type=True but not geographic places (e.g. art-style "… region styles"), which the ancestor
+    # gate below then drops — starving genuine place types that match the query only via prefix and so score
+    # lower. A prefix like "region" hit exactly this: its exact-token matches ("… region style") outranked
+    # the real "regions (geographic)" types, filling a 30-doc window that was then wholly discarded. The
+    # types index is small (~5.8k docs), so fetching a generous pool and truncating after filtering is cheap.
+    pool = max(limit * 10, 300)
     docs = _search(
         {"bool": {
             # match_phrase_prefix → typeahead (a word beginning with the query, e.g. "mon" → monastery);
@@ -201,7 +208,7 @@ def search_types(query, limit=30):
                 {"regexp": {"term.keyword": "aat:[0-9]+"}},  # raw ID terms
             ],
         }},
-        sort=["_score"], source=["aat_id", "term", "ancestors", "path"], size=limit,
+        sort=["_score"], source=["aat_id", "term", "ancestors", "path"], size=pool,
     )
     results = []
     for doc in docs:
@@ -218,6 +225,8 @@ def search_types(query, limit=30):
         if len(anc_set) > 1 and not (_PLACE_ROOTS & anc_set):
             continue
         results.append({"aat_id": doc["aat_id"], "text": text, "ancestors": ancestors})
+        if len(results) >= limit:
+            break
     return results
 
 
