@@ -509,18 +509,21 @@ class PeriodSuggestView(APIView):
             return JsonResponse({'result': []})
 
         qs = period_public_queryset(request.user)
+        # Geography is a *ranking* signal, not a hard filter: Period.ccodes is only
+        # populated once the periodo-places enrichment has run, so filtering on it would
+        # silently drop everything where it hasn't. Narrow the scan by name (q) and/or
+        # temporal window; when only ccodes is given, fall back to an (optional) overlap.
         if q:
             qs = qs.filter(chrononyms__label__icontains=q).distinct()
-        if ccodes:
-            qs = qs.filter(ccodes__overlap=ccodes)
-        # Temporal DB pre-filter only when it's the sole constraint, to bound the scan;
-        # otherwise ccodes/q already narrow the set and temporal just re-ranks in Python.
-        if not ccodes and not q and (start is not None or end is not None):
+        if start is not None or end is not None:
             if end is not None:
                 qs = qs.filter(bounds__kind='start', bounds__earliestYear__lte=end)
             if start is not None:
                 qs = qs.filter(bounds__kind='stop', bounds__latestYear__gte=start)
             qs = qs.distinct()
+        elif not q and ccodes:
+            # ccodes-only: attempt an overlap (harmless no-op until ccodes are populated).
+            qs = qs.filter(ccodes__overlap=ccodes)
 
         periods = list(qs[:500])
 
