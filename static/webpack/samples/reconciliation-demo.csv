@@ -1,15 +1,22 @@
-County,Parish,Place,gridref,date
-Devon,Newton St Cyres,Newton,SX880985,c. 1200
-Lancashire,Newton-with-Scales,Newton,SD440305,1332
-Cambridgeshire,Newton,Newton,TL435495,1086
-Nottinghamshire,Bassetlaw,Retford,SK705810,25/06/1471
-Surrey,Sutton,Cheam,TQ242638,1200-1250
-Cambridgeshire,Sutton,Sutton,TL447790,1216
-Kent,Dover,Deal,TR375525,1801
-Norfolk,South Norfolk,Diss,TM117796,1509
-North Yorkshire,Harrogate,Ripon,SE313712,8 Henry VI
-Somerset,Bath and North East Somerset,Weston,ST730660,15th century
-Warwickshire,Birmingham,Aston,SP086895,1642-1651
-Durham,Darlington,Newton Aycliffe,NZ285245,1183
-Lincolnshire,South Holland,Sutton Bridge,TF480210,1340-1350
-Gloucestershire,Cotswold,Northleach,SP113145,1348
+type,County,Parish,Place,gridref,date,source_ref
+city,North Yorkshire,Richmondshire,Richmond,NZ170010,1071,VCH i/1
+Town,Greater London,Richmond upon Thames,Richmond,TQ180745,1501,
+TOWN,Cambridgeshire,Sutton,Sutton,TL447790,1216,VCH iv
+town ,Greater London,Sutton,Sutton,TQ255645,c.1180,
+ town,Shropshire,Whitchurch,Whitchurch,SJ541417,1200-1250,
+village,Hampshire,Whitchurch,Whitchurch,SU 465 480,909,VCH
+village,Devon,Newton St Cyres,Newton,sx880985,c. 1200,VCH ii
+VILLAGE,Lancashire,Newton-with-Scales,Newton,SD440305,1332,
+village,Cambridgeshire,Newton,Newton,TL435495,1086,
+town,Lincolnshire,Boston,Boston,TF325440,1204,
+castle,Northumberland,Bamburgh,Bamburgh,NU183351,1095,OS
+priory,Norfolk,Castle Acre,Castle Acre,TF815152,1090,
+city,North Yorkshire,Harrogate,Ripon,SE313712,8 Henry VI,VCH iii
+town,Norfolk,South Norfolk,Diss,TM117796,1509,
+town,Kent,Dover,Deal,TR375525,1801,
+town,Nottinghamshire,Bassetlaw,Retford,SK705810,25/06/1471,
+town,Somerset,Bath and North East Somerset,Weston,ST730660,15th century,
+town ,Warwickshire,Birmingham,Aston,SP086895,1642-1651,
+town,Gloucestershire,Cotswold,Northleach,SP113145,1348,
+village,Durham,Darlington,Newton Aycliffe,NZ285245,before 1300,
+village,Lincolnshire,South Holland,Sutton Bridge,TF480210,1340-1350,
