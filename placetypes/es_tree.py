@@ -187,7 +187,15 @@ def search_types(query, limit=30):
         return []
     docs = _search(
         {"bool": {
-            "must": [{"match": {"term": q}}, {"term": {"is_place_type": True}}],
+            # match_phrase_prefix → typeahead (a word beginning with the query, e.g. "mon" → monastery);
+            # match → whole-word relevance (e.g. "temple" → "temple complexes"). Either can satisfy.
+            "must": [
+                {"bool": {"should": [
+                    {"match_phrase_prefix": {"term": {"query": q, "max_expansions": 50}}},
+                    {"match": {"term": q}},
+                ], "minimum_should_match": 1}},
+                {"term": {"is_place_type": True}},
+            ],
             "must_not": [
                 {"prefix": {"term.keyword": "<"}},          # guide terms
                 {"regexp": {"term.keyword": "aat:[0-9]+"}},  # raw ID terms
