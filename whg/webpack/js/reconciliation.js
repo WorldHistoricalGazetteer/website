@@ -484,6 +484,65 @@ async function insertIsoDateColumns() {
   flashSaved('Added date_start_iso / date_end_iso columns');
 }
 
+// ── Column management — reorder (drag) and delete ─────────────────────────────────────────────────
+// Reordering/deleting columns changes column indices, which would break the colIndex-keyed matches /
+// decisions / geometry / source-config and the containment `child` references. remapColumns() rebuilds
+// ALL of that from an old→new index map so nothing drifts.
+let _dragCol = -1;
+function rerenderData() {
+  renderMapping(); renderPreview(); renderCoords(); renderDates();
+  refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); refreshExport(); updatePaneSummaries();
+}
+function columnSnapshot() {
+  return {
+    columns: project.columns.map((c) => Object.assign({}, c)),
+    rows: project.rows.map((r) => r.slice()),
+    matches: project.matches, decisions: project.decisions, geom: project.geom, colConfig: project.colConfig,
+  };
+}
+function restoreColumnSnapshot(s) {
+  project.columns = s.columns; project.rows = s.rows;
+  project.matches = s.matches; project.decisions = s.decisions; project.geom = s.geom; project.colConfig = s.colConfig;
+  reconActiveIdx = -1; normalizeChain();
+}
+// mapping[newIdx] = oldIdx. Columns absent from mapping are deleted.
+function remapColumns(mapping) {
+  const oldCols = project.columns;
+  const inv = {}; // old index -> new index (absent ⇒ deleted)
+  mapping.forEach((oldIdx, newIdx) => { inv[oldIdx] = newIdx; });
+  project.columns = mapping.map((o) => oldCols[o]);
+  project.rows = project.rows.map((r) => mapping.map((o) => r[o]));
+  project.columns.forEach((c) => { if (c.child != null) { const nc = inv[c.child]; if (nc == null) { delete c.child; if (c.role === 'contains') c.role = 'other'; } else c.child = nc; } });
+  const remapKeyed = (obj) => {
+    if (!obj) return obj; const out = {};
+    for (const k in obj) { const ci = Number(k.slice(0, k.indexOf(':'))); if (inv[ci] != null) out[inv[ci] + k.slice(k.indexOf(':'))] = obj[k]; }
+    return out;
+  };
+  project.matches = remapKeyed(project.matches);
+  project.decisions = remapKeyed(project.decisions);
+  project.geom = remapKeyed(project.geom);
+  if (project.colConfig) { const nc = {}; for (const k in project.colConfig) { if (inv[k] != null) nc[inv[k]] = project.colConfig[k]; } project.colConfig = nc; }
+  reconActiveIdx = -1; normalizeChain();
+}
+function moveColumn(from, to) {
+  if (from === to || from < 0 || to < 0) return;
+  const snap = columnSnapshot();
+  const order = project.columns.map((_, i) => i);
+  const [m] = order.splice(from, 1); order.splice(to, 0, m);
+  remapColumns(order);
+  pushUndo({ type: 'columns', label: 'reorder columns', snapshot: snap });
+  persist(); rerenderData();
+}
+function deleteColumn(col) {
+  if (!project || project.columns.length <= 1) return;
+  const name = project.columns[col].name;
+  const snap = columnSnapshot();
+  remapColumns(project.columns.map((_, i) => i).filter((i) => i !== col));
+  pushUndo({ type: 'columns', label: `delete “${name}”`, snapshot: snap });
+  persist(); rerenderData();
+  flashSaved(`Deleted column “${truncate(name, 24)}”`);
+}
+
 // Validate EVERY row's date and report the ones that cannot be parsed.
 async function checkAllDates() {
   await loadDates();
@@ -528,17 +587,32 @@ function renderDateReport(res) {
 }
 
 function renderMapping() {
-  el('recon-map-body').innerHTML = project.columns.map((c, i) =>
-    `<tr>
+  const tbody = el('recon-map-body');
+  tbody.innerHTML = project.columns.map((c, i) =>
+    `<tr class="recon-map-row${c.role === 'other' ? ' recon-map-ignored' : ''}" data-col="${i}">
+       <td class="recon-map-handle" draggable="true" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></td>
        <td class="recon-map-col">${truncate(c.name, 50)}
          <button type="button" class="btn btn-sm btn-link p-0 ms-1 recon-transform-btn" data-col="${i}" title="Clean / transform this column's values"><i class="fas fa-wand-magic-sparkles"></i></button>
        </td>
        <td>${roleSelectHTML(i, c)}</td>
        <td class="text-muted">${truncate(firstSample(i), 60)}</td>
+       <td class="text-end"><button type="button" class="btn btn-sm btn-link p-0 recon-col-del" data-col="${i}" title="Delete this column"><i class="fas fa-trash-alt text-danger"></i></button></td>
      </tr>`).join('');
 
-  el('recon-map-body').querySelectorAll('.recon-transform-btn').forEach((b) => b.addEventListener('click', () => openTransformModal(Number(b.dataset.col))));
-  el('recon-map-body').querySelectorAll('.recon-role-select').forEach((sel) => {
+  // Drag-to-reorder (handle initiates; rows are drop targets) — works for ignored columns too.
+  tbody.querySelectorAll('.recon-map-handle').forEach((h) => h.addEventListener('dragstart', (e) => {
+    _dragCol = Number(h.closest('tr').dataset.col); e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(_dragCol)); } catch (_) { /* ignore */ }
+  }));
+  tbody.querySelectorAll('.recon-map-row').forEach((tr) => {
+    tr.addEventListener('dragover', (e) => { if (_dragCol < 0) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; tr.classList.add('recon-map-dropover'); });
+    tr.addEventListener('dragleave', () => tr.classList.remove('recon-map-dropover'));
+    tr.addEventListener('drop', (e) => { e.preventDefault(); tr.classList.remove('recon-map-dropover'); const to = Number(tr.dataset.col); if (_dragCol >= 0 && _dragCol !== to) moveColumn(_dragCol, to); _dragCol = -1; });
+    tr.addEventListener('dragend', () => { tbody.querySelectorAll('.recon-map-row').forEach((x) => x.classList.remove('recon-map-dropover')); _dragCol = -1; });
+  });
+  tbody.querySelectorAll('.recon-col-del').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); deleteColumn(Number(b.dataset.col)); }));
+  tbody.querySelectorAll('.recon-transform-btn').forEach((b) => b.addEventListener('click', () => openTransformModal(Number(b.dataset.col))));
+  tbody.querySelectorAll('.recon-role-select').forEach((sel) => {
     sel.addEventListener('change', () => {
       const i = Number(sel.dataset.col);
       const before = reconChain().join(',');
