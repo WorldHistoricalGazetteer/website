@@ -2458,6 +2458,97 @@ let _scopeDraft = { whgPlace: null, geometry: null }; // AAT type selection live
 function parseCcodes(text) {
   return [...new Set(String(text || '').toUpperCase().match(/[A-Z]{2}/g) || [])];
 }
+// ── Country-code picker (Where → Country codes): validated, typeahead + removable badges ───────────
+// Backed by window.ccode_hash (code → {gnlabel}), lazy-loaded from /static/js/parents.js. Draft codes
+// live in _scopeCcodes while the modal is open; committed to scope.region.ccodes on Apply.
+let _scopeCcodes = [];
+let _ccodeList = null; // [{code, name}] cache, built once the hash is loaded
+let _ccodeActive = -1; // highlighted menu index for keyboard nav
+function ensureCcodeHash() {
+  if (window.ccode_hash) return Promise.resolve(window.ccode_hash);
+  if (ensureCcodeHash._p) return ensureCcodeHash._p;
+  ensureCcodeHash._p = new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = '/static/js/parents.js';
+    s.onload = () => resolve(window.ccode_hash || {});
+    s.onerror = () => resolve({});
+    document.head.appendChild(s);
+  });
+  return ensureCcodeHash._p;
+}
+function ccodeName(code) { const h = window.ccode_hash || {}; return (h[code] && h[code].gnlabel) || code; }
+function isKnownCcode(code) { return !!(window.ccode_hash && window.ccode_hash[code]); }
+function countryList() {
+  if (_ccodeList) return _ccodeList;
+  const h = window.ccode_hash; if (!h) return [];
+  _ccodeList = Object.keys(h)
+    .filter((c) => /^[A-Z]{2}$/.test(c) && h[c] && h[c].gnlabel && h[c].gnlabel !== 'unspecified')
+    .map((c) => ({ code: c, name: h[c].gnlabel.trim() }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return _ccodeList;
+}
+function renderScopeCcodeBadges() {
+  const box = el('recon-scope-ccode-badges'); if (!box) return;
+  box.innerHTML = _scopeCcodes.map((c) => {
+    const known = isKnownCcode(c);
+    return `<span class="recon-ccode-badge${known ? '' : ' recon-ccode-badge-bad'}" title="${esc(known ? ccodeName(c) : 'Unknown country code')}">` +
+      `${esc(c)}<button type="button" class="recon-ccode-badge-x" data-code="${esc(c)}" aria-label="remove">×</button></span>`;
+  }).join('');
+  box.querySelectorAll('.recon-ccode-badge-x').forEach((b) => b.addEventListener('click', () => removeScopeCcode(b.dataset.code)));
+}
+function addScopeCcode(code) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!/^[A-Z]{2}$/.test(c) || _scopeCcodes.includes(c)) return;
+  _scopeCcodes.push(c);
+  renderScopeCcodeBadges();
+}
+function removeScopeCcode(code) { _scopeCcodes = _scopeCcodes.filter((c) => c !== code); renderScopeCcodeBadges(); }
+function hideCcodeMenu() { const m = el('recon-scope-ccode-menu'); if (m) { m.classList.add('d-none'); m.innerHTML = ''; } _ccodeActive = -1; }
+function ccodeMatches(q) {
+  const list = countryList(); const s = q.trim().toLowerCase(); if (!s) return [];
+  const starts = [], contains = [];
+  for (const it of list) {
+    if (_scopeCcodes.includes(it.code)) continue;
+    const n = it.name.toLowerCase();
+    if (it.code.toLowerCase() === s || n.startsWith(s)) starts.push(it);
+    else if (n.includes(s)) contains.push(it);
+    if (starts.length >= 8) break;
+  }
+  return starts.concat(contains).slice(0, 8);
+}
+function renderCcodeMenu(items) {
+  const m = el('recon-scope-ccode-menu'); if (!m) return;
+  if (!items.length) { hideCcodeMenu(); return; }
+  m.innerHTML = items.map((it, i) =>
+    `<button type="button" class="recon-ccode-opt${i === _ccodeActive ? ' active' : ''}" data-code="${esc(it.code)}">` +
+    `<span class="recon-ccode-opt-code">${esc(it.code)}</span> ${esc(it.name)}</button>`).join('');
+  m.classList.remove('d-none');
+  m.querySelectorAll('.recon-ccode-opt').forEach((b) => b.addEventListener('mousedown', (e) => {
+    e.preventDefault(); addScopeCcode(b.dataset.code); const inp = el('recon-scope-ccode-input'); if (inp) inp.value = ''; hideCcodeMenu(); if (inp) inp.focus();
+  }));
+}
+function onCcodeInput() {
+  const inp = el('recon-scope-ccode-input'); if (!inp) return;
+  ensureCcodeHash().then(() => { _ccodeActive = -1; renderCcodeMenu(ccodeMatches(inp.value)); });
+}
+function onCcodeKeydown(e) {
+  const inp = el('recon-scope-ccode-input'); if (!inp) return;
+  const items = ccodeMatches(inp.value);
+  if (e.key === 'ArrowDown') { e.preventDefault(); if (items.length) { _ccodeActive = Math.min(_ccodeActive + 1, items.length - 1); renderCcodeMenu(items); } return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); if (items.length) { _ccodeActive = Math.max(_ccodeActive - 1, 0); renderCcodeMenu(items); } return; }
+  if (e.key === 'Escape') { hideCcodeMenu(); return; }
+  if (e.key === 'Backspace' && inp.value === '' && _scopeCcodes.length) { removeScopeCcode(_scopeCcodes[_scopeCcodes.length - 1]); return; }
+  if (e.key === 'Enter' || e.key === ',' || e.key === ' ') {
+    // Commit: a highlighted suggestion wins; else a raw valid 2-letter code; else the first suggestion.
+    const raw = inp.value.toUpperCase().trim();
+    const pick = _ccodeActive >= 0 ? items[_ccodeActive] : null;
+    let code = null;
+    if (pick) code = pick.code;
+    else if (/^[A-Z]{2}$/.test(raw)) code = raw;
+    else if (items.length) code = items[0].code;
+    if (code) { e.preventDefault(); addScopeCcode(code); inp.value = ''; hideCcodeMenu(); }
+  }
+}
 // How many of the three scope facets (where / when / what) are active — drives the button badge.
 function scopeFacetCount() {
   const s = getScope(); if (!s) return 0;
@@ -2491,7 +2582,11 @@ function populateScopeModal() {
   // Region mode radio
   const modeInput = document.querySelector(`input[name="recon-scope-region-mode"][value="${r.mode || 'none'}"]`);
   if (modeInput) modeInput.checked = true;
-  const cc = el('recon-scope-ccodes'); if (cc) cc.value = (r.ccodes || []).join(', ');
+  _scopeCcodes = (r.ccodes || []).map((c) => String(c).toUpperCase());
+  const cci = el('recon-scope-ccode-input'); if (cci) cci.value = '';
+  hideCcodeMenu();
+  ensureCcodeHash().then(renderScopeCcodeBadges); // labels/validity once the hash is available
+  renderScopeCcodeBadges();
   renderScopeWhgSelected();
   updateScopeDrawStatus();
   el('recon-scope-whg-results') && (el('recon-scope-whg-results').innerHTML = '');
@@ -2887,7 +2982,7 @@ async function applyScope() {
   const mode = (document.querySelector('input[name="recon-scope-region-mode"]:checked') || {}).value || 'none';
   const scope = defaultScope();
   scope.region.mode = mode;
-  if (mode === 'ccodes') scope.region.ccodes = parseCcodes((el('recon-scope-ccodes') || {}).value);
+  if (mode === 'ccodes') scope.region.ccodes = _scopeCcodes.slice();
   else if (mode === 'whg') scope.region.place = _scopeDraft.whgPlace || null;
   else if (mode === 'draw') scope.region.geometry = _scopeDraft.geometry || null;
   // A region method with nothing chosen falls back to "no region".
@@ -3550,7 +3645,22 @@ function init() {
   const scopeSearch = el('recon-scope-whg-search');
   if (scopeSearch) scopeSearch.addEventListener('click', searchScopeWhg);
   const scopeQ = el('recon-scope-whg-q');
-  if (scopeQ) scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
+  if (scopeQ) {
+    scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
+    // Typeahead: search-as-you-type (debounced) once ≥3 chars.
+    let wtimer = null;
+    scopeQ.addEventListener('input', () => { clearTimeout(wtimer); const v = scopeQ.value.trim(); if (v.length < 3) { const r = el('recon-scope-whg-results'); if (r) r.innerHTML = ''; return; } wtimer = setTimeout(searchScopeWhg, 300); });
+  }
+  // Country-code picker: typeahead + removable badges (Where → Country codes).
+  const ccInput = el('recon-scope-ccode-input');
+  if (ccInput) {
+    ensureCcodeHash();
+    ccInput.addEventListener('input', onCcodeInput);
+    ccInput.addEventListener('keydown', onCcodeKeydown);
+    ccInput.addEventListener('blur', () => setTimeout(hideCcodeMenu, 150));
+  }
+  const ccBox = el('recon-scope-ccode-box');
+  if (ccBox) ccBox.addEventListener('click', () => { const i = el('recon-scope-ccode-input'); if (i) i.focus(); });
   const scopePeriodSearch = el('recon-scope-period-search');
   if (scopePeriodSearch) scopePeriodSearch.addEventListener('click', searchScopePeriods);
   const scopePeriodQ = el('recon-scope-period-q');
@@ -3570,7 +3680,8 @@ function init() {
   if (scopeApply) scopeApply.addEventListener('click', applyScope);
   const scopeClear = el('recon-scope-clear');
   if (scopeClear) scopeClear.addEventListener('click', () => {
-    const ccb = el('recon-scope-ccodes'); if (ccb) ccb.value = '';
+    _scopeCcodes = []; renderScopeCcodeBadges(); hideCcodeMenu();
+    const cci = el('recon-scope-ccode-input'); if (cci) cci.value = '';
     const stb = el('recon-scope-start'); if (stb) stb.value = '';
     const enb = el('recon-scope-end'); if (enb) enb.value = '';
     const udb = el('recon-scope-undated'); if (udb) udb.checked = false;

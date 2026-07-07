@@ -448,9 +448,14 @@
               <label class="btn btn-outline-secondary" for="recon-scope-region-mode-draw">Draw area</label>
             </div>
             <div id="recon-scope-region-ccodes" class="d-none">
-              <input type="text" id="recon-scope-ccodes" class="form-control form-control-sm"
-                     placeholder="e.g. GB, FR, DE" autocomplete="off">
-              <div class="form-text small">Two-letter ISO country codes, comma-separated.</div>
+              <div class="recon-ccode-wrap position-relative">
+                <div id="recon-scope-ccode-box" class="recon-ccode-box form-control form-control-sm d-flex flex-wrap align-items-center gap-1">
+                  <span id="recon-scope-ccode-badges" class="d-flex flex-wrap gap-1"></span>
+                  <input type="text" id="recon-scope-ccode-input" class="recon-ccode-input flex-grow-1" placeholder="Type a country name or code…" autocomplete="off">
+                </div>
+                <div id="recon-scope-ccode-menu" class="recon-ccode-menu d-none"></div>
+              </div>
+              <div class="form-text small">Type a country name or 2-letter ISO code, then pick from the list (or press Enter). Click × to remove a country.</div>
             </div>
             <div id="recon-scope-region-whg" class="d-none">
               <div class="input-group input-group-sm mb-1">

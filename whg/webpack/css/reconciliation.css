@@ -143,6 +143,19 @@
   border: 1px solid #b6d4fe; border-radius: 12px; padding: .05rem .5rem; font-size: .82rem; }
 .recon-aat-chip-x { border: 0; background: transparent; color: inherit; cursor: pointer; line-height: 1; font-size: 1rem; padding: 0; }
 .recon-aat-chip-x:hover { color: #dc3545; }
+/* Country-code picker (Where → Country codes): badge box + typeahead menu */
+.recon-ccode-box { min-height: 31px; height: auto; cursor: text; }
+.recon-ccode-input { border: 0; outline: 0; min-width: 8rem; font-size: .85rem; background: transparent; padding: 0; }
+.recon-ccode-badge { display: inline-flex; align-items: center; gap: .25rem; background: #e7f1ff; color: #0a58ca;
+  border: 1px solid #b6d4fe; border-radius: 10px; padding: .02rem .2rem .02rem .45rem; font-size: .8rem; font-weight: 600; }
+.recon-ccode-badge-bad { background: #f8d7da; color: #842029; border-color: #f1aeb5; }
+.recon-ccode-badge-x { border: 0; background: transparent; color: inherit; cursor: pointer; line-height: 1; font-size: .95rem; padding: 0 .1rem; }
+.recon-ccode-badge-x:hover { color: #dc3545; }
+.recon-ccode-menu { position: absolute; z-index: 1080; left: 0; right: 0; margin-top: 2px; background: #fff;
+  border: 1px solid #ced4da; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.12); max-height: 220px; overflow-y: auto; }
+.recon-ccode-opt { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: .3rem .6rem; font-size: .85rem; cursor: pointer; }
+.recon-ccode-opt:hover, .recon-ccode-opt.active { background: #e7f1ff; }
+.recon-ccode-opt-code { display: inline-block; min-width: 1.9rem; font-weight: 700; color: #0a58ca; }
 .recon-scope-aat-tree { max-height: 260px; overflow: auto; border: 1px solid #e2e2e2; border-radius: 6px; padding: .35rem .5rem; }
 .aat-tree, .aat-children { list-style: none; margin: 0; padding-left: 0; }
 .aat-children { padding-left: 1.1rem; }
