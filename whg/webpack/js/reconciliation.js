@@ -532,6 +532,7 @@ function renderPreview() {
 
 function renderAll() {
   el('recon-result').classList.remove('d-none');
+  resetFilters(); // a freshly loaded/imported project starts unfiltered (filters are session-only)
   const delimNote = project.delimiter ? ` · delimiter <code>${project.delimiter === '\t' ? 'TAB' : project.delimiter}</code>` : ' · JSON';
   el('recon-summary').innerHTML =
     `<strong>${truncate(project.fileName, 60)}</strong> — <strong>${project.total.toLocaleString()}</strong> ` +
@@ -1094,8 +1095,10 @@ async function updateFullMap() {
   const nameCol = colIndexByRole('name'), countyIdx = primaryAdminCol(), dateIdx = colIndexByRole('date');
   const decisions = project.decisions || {}, matches = project.matches || {};
   if (hasCoordRole()) await loadCoords();
+  const fbuilt = buildUniqueQueries(); // active column, for filter predicates
   const feats = [];
   for (let i = 0; i < project.rows.length; i++) {
+    if (fbuilt && filtersActive() && fbuilt.map.has(fbuilt.colIndex + ':' + i) && !rowPasses(i, fbuilt)) continue;
     const ov = project.geom && project.geom[nameCol + ':' + i];
     const c = ov ? firstLngLat(ov.geometry) : (hasCoordRole() ? rowCoordValue(i) : null);
     if (!c) continue;
@@ -1527,10 +1530,10 @@ function renderResultsTable(built) {
   // Build the full ordered row-info list once; the table is virtualised (only the visible window is
   // in the DOM), so it copes with very large datasets — off-screen rows are evicted on scroll.
   _resultRows = [];
-  for (let i = 0; i < project.rows.length; i++) { const info = keyForRow(built, i); if (info) _resultRows.push(info); }
+  for (let i = 0; i < project.rows.length; i++) { const info = keyForRow(built, i); if (info && rowPasses(i, built)) _resultRows.push(info); }
   el('recon-results-wrap').classList.remove('d-none');
   el('recon-results-note').textContent = _resultRows.length
-    ? `${_resultRows.length.toLocaleString()} rows — scroll to load more (off-screen rows are evicted).` : '';
+    ? `${_resultRows.length.toLocaleString()}${filtersActive() ? ' filtered' : ''} rows — scroll to load more (off-screen rows are evicted).` : (filtersActive() ? 'No rows match the current filters.' : '');
   renderResultsWindow(true);
   updatePaneSummaries();
 }
@@ -1573,7 +1576,127 @@ function renderResultsWindow(calibrate) {
     }
   }
 }
-function renderResults(built) { renderColSwitcher(); renderResultsTable(built); refreshReview(); refreshFullMapPane(); refreshExport(); }
+// ── Facets & filters (OpenRefine-style) — slice the dataset by status / score / value / … ─────────
+// Session-only view state (NOT persisted, so a reload always shows every row). A row is visible when it
+// passes EVERY active facet; within one facet, any selected value matches (OpenRefine semantics). The
+// filtered row set drives the results table, the review queue and the full-dataset map. Facets read the
+// ACTIVE reconciliation column's matches.
+let _filters = { status: new Set(), score: new Set(), coord: 'any', date: 'any', col: -1, colVals: new Set(), text: '' };
+function filtersActive() {
+  return !!(_filters.status.size || _filters.score.size || _filters.coord !== 'any' || _filters.date !== 'any' || _filters.colVals.size || _filters.text);
+}
+function resetFilters() { _filters = { status: new Set(), score: new Set(), coord: 'any', date: 'any', col: -1, colVals: new Set(), text: '' }; }
+const STATUS_LABELS = { accepted: 'accepted', auto: 'auto-confirmed', candidate: 'needs review', rejected: 'rejected', skipped: 'skipped', nomatch: 'no match', none: 'no match' };
+const STATUS_ORDER = ['candidate', 'auto', 'accepted', 'nomatch', 'none', 'skipped', 'rejected'];
+const SCORE_LABELS = { 100: '100 (exact)', 90: '90–99', 80: '80–89', lt80: 'below 80', nomatch: 'no match' };
+const SCORE_ORDER = ['100', '90', '80', 'lt80', 'nomatch'];
+function scoreBand(key) {
+  const m = project.matches && project.matches[key];
+  if (!m || !m.top) return 'nomatch';
+  const s = m.top.score;
+  return s >= 100 ? '100' : s >= 90 ? '90' : s >= 80 ? '80' : 'lt80';
+}
+function rowHasCoordCheap(i) {
+  if (project.geom) { for (const k in project.geom) { if (k.slice(k.indexOf(':') + 1) === String(i)) return true; } }
+  const ciIdx = colIndexByRole('coords'), latIdx = colIndexByRole('lat'), lonIdx = colIndexByRole('lon');
+  const ne = (idx) => idx >= 0 && project.rows[i][idx] != null && String(project.rows[i][idx]).trim() !== '';
+  return ne(ciIdx) || (ne(latIdx) && ne(lonIdx));
+}
+function rowHasDateCheap(i) { const d = colIndexByRole('date'); return d >= 0 && project.rows[i][d] != null && String(project.rows[i][d]).trim() !== ''; }
+function cellVal(i, col) { return String(project.rows[i][col] == null ? '' : project.rows[i][col]).trim(); }
+function rowKeyIndex(key) { return Number(key.slice(key.indexOf(':') + 1)); }
+function rowPasses(i, built) {
+  const key = built.colIndex + ':' + i;
+  if (_filters.text) { const v = built.map.get(key); const name = (v ? v.query : cellVal(i, built.colIndex)).toLowerCase(); if (!name.includes(_filters.text)) return false; }
+  if (_filters.status.size && !_filters.status.has(effectiveStatus(key))) return false;
+  if (_filters.score.size && !_filters.score.has(scoreBand(key))) return false;
+  if (_filters.coord !== 'any' && (rowHasCoordCheap(i) !== (_filters.coord === 'yes'))) return false;
+  if (_filters.date !== 'any' && (rowHasDateCheap(i) !== (_filters.date === 'yes'))) return false;
+  if (_filters.col >= 0 && _filters.colVals.size && !_filters.colVals.has(cellVal(i, _filters.col))) return false;
+  return true;
+}
+// Re-render everything the filters affect.
+function applyFilters() { const built = buildUniqueQueries(); if (built) renderResults(built); }
+
+// The facet panel: chips with counts for status/score, yes/no toggles for coordinate/date, a text box,
+// and a "facet any column" value list. Counts are over all rows in the active column (not cross-filtered).
+function facetChip(kind, val, label, count, on) {
+  return `<button type="button" class="recon-facet-chip${on ? ' recon-facet-chip--on' : ''}" data-facet="${kind}" data-val="${esc(String(val))}">` +
+    `${esc(label)} <span class="recon-facet-n">${count.toLocaleString()}</span></button>`;
+}
+function renderFilters() {
+  const panel = el('recon-filters'); if (!panel || !project) return;
+  const built = buildUniqueQueries();
+  const hasMatches = built && project.matches && Object.keys(project.matches).length;
+  if (!hasMatches) { panel.classList.add('d-none'); return; }
+  panel.classList.remove('d-none');
+  const statusC = {}, scoreC = {}, colVals = {};
+  let coordYes = 0, dateYes = 0, total = 0;
+  built.map.forEach((v, key) => {
+    const i = rowKeyIndex(key); total += 1;
+    statusC[effectiveStatus(key)] = (statusC[effectiveStatus(key)] || 0) + 1;
+    scoreC[scoreBand(key)] = (scoreC[scoreBand(key)] || 0) + 1;
+    if (rowHasCoordCheap(i)) coordYes += 1;
+    if (rowHasDateCheap(i)) dateYes += 1;
+    if (_filters.col >= 0) { const cv = cellVal(i, _filters.col); colVals[cv] = (colVals[cv] || 0) + 1; }
+  });
+  const visible = [...built.map.keys()].filter((key) => rowPasses(rowKeyIndex(key), built)).length;
+  const statusChips = STATUS_ORDER.filter((s) => statusC[s]).map((s) => facetChip('status', s, STATUS_LABELS[s] || s, statusC[s], _filters.status.has(s))).join('');
+  const scoreChips = SCORE_ORDER.filter((s) => scoreC[s]).map((s) => facetChip('score', s, SCORE_LABELS[s], scoreC[s], _filters.score.has(s))).join('');
+  const triState = (kind, cur) => ['any', 'yes', 'no'].map((o) =>
+    `<button type="button" class="recon-facet-chip${cur === o ? ' recon-facet-chip--on' : ''}" data-facet="${kind}" data-val="${o}">${o}</button>`).join('');
+  const colOpts = project.columns.map((c, j) => `<option value="${j}"${_filters.col === j ? ' selected' : ''}>${esc(truncate(c.name, 24))}</option>`).join('');
+  const colValList = _filters.col >= 0 ? Object.entries(colVals).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([val, count]) =>
+    `<label class="recon-facet-cval"><input type="checkbox" data-facet="colval" value="${esc(val)}"${_filters.colVals.has(val) ? ' checked' : ''}> ${esc(truncate(val || '(blank)', 26))} <span class="recon-facet-n">${count.toLocaleString()}</span></label>`).join('') : '';
+  panel.innerHTML =
+    '<div class="recon-filters-head d-flex align-items-center gap-2 flex-wrap">' +
+      '<i class="fas fa-filter text-secondary"></i><strong class="small">Filter rows</strong>' +
+      `<input type="search" id="recon-filter-text" class="form-control form-control-sm" style="max-width:200px" placeholder="name contains…" value="${esc(_filters.text)}">` +
+      `<span class="small text-muted ms-auto">Showing <strong id="recon-filter-count">${visible.toLocaleString()}</strong> of ${total.toLocaleString()} rows</span>` +
+      `<button type="button" id="recon-filter-clear" class="btn btn-sm btn-link p-0${filtersActive() ? '' : ' d-none'}">clear filters</button>` +
+    '</div>' +
+    '<div class="recon-filter-groups">' +
+      (statusChips ? `<div class="recon-filter-group"><span class="recon-filter-label">Status</span>${statusChips}</div>` : '') +
+      (scoreChips ? `<div class="recon-filter-group"><span class="recon-filter-label">Score</span>${scoreChips}</div>` : '') +
+      (colIndexByRole('coords') >= 0 || colIndexByRole('lat') >= 0 ? `<div class="recon-filter-group"><span class="recon-filter-label">Has coordinate</span>${triState('coord', _filters.coord)} <span class="recon-facet-n">${coordYes}/${total}</span></div>` : '') +
+      (colIndexByRole('date') >= 0 ? `<div class="recon-filter-group"><span class="recon-filter-label">Has date</span>${triState('date', _filters.date)} <span class="recon-facet-n">${dateYes}/${total}</span></div>` : '') +
+      `<div class="recon-filter-group"><span class="recon-filter-label">Facet column</span><select id="recon-filter-col" class="form-select form-select-sm" style="width:auto"><option value="-1">— choose —</option>${colOpts}</select></div>` +
+      (colValList ? `<div class="recon-filter-cvals">${colValList}</div>` : '') +
+    '</div>';
+  // Wire the panel's controls.
+  panel.querySelectorAll('.recon-facet-chip[data-facet="status"], .recon-facet-chip[data-facet="score"]').forEach((b) => b.addEventListener('click', () => {
+    const set = b.dataset.facet === 'status' ? _filters.status : _filters.score;
+    if (set.has(b.dataset.val)) set.delete(b.dataset.val); else set.add(b.dataset.val);
+    applyFilters();
+  }));
+  panel.querySelectorAll('.recon-facet-chip[data-facet="coord"], .recon-facet-chip[data-facet="date"]').forEach((b) => b.addEventListener('click', () => { _filters[b.dataset.facet] = b.dataset.val; applyFilters(); }));
+  panel.querySelectorAll('input[data-facet="colval"]').forEach((cb) => cb.addEventListener('change', () => { if (cb.checked) _filters.colVals.add(cb.value); else _filters.colVals.delete(cb.value); applyFilters(); }));
+  const colSel = el('recon-filter-col');
+  if (colSel) colSel.addEventListener('change', () => { _filters.col = Number(colSel.value); _filters.colVals = new Set(); applyFilters(); });
+  const clr = el('recon-filter-clear'); if (clr) clr.addEventListener('click', () => { resetFilters(); applyFilters(); });
+  const txt = el('recon-filter-text');
+  if (txt) {
+    let t = null;
+    // Light path: re-filter the views + update the count/clear button WITHOUT rebuilding the panel, so
+    // the text box keeps focus while typing.
+    txt.addEventListener('input', () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        _filters.text = txt.value.trim().toLowerCase();
+        const b = buildUniqueQueries();
+        if (b) { renderResultsTable(b); refreshReview(); refreshFullMapPane(); refreshExport(); updateFilterCount(b); }
+      }, 250);
+    });
+  }
+}
+function updateFilterCount(built) {
+  const c = el('recon-filter-count'); if (!c) return;
+  const visible = [...built.map.keys()].filter((key) => rowPasses(rowKeyIndex(key), built)).length;
+  c.textContent = visible.toLocaleString();
+  const clr = el('recon-filter-clear'); if (clr) clr.classList.toggle('d-none', !filtersActive());
+}
+
+function renderResults(built) { renderColSwitcher(); renderFilters(); renderResultsTable(built); refreshReview(); refreshFullMapPane(); refreshExport(); }
 
 // Column switcher (multi-column reconciliation): pills for each chain column, parent → child, showing
 // each column's stage state and which one the results/review panes focus. Rendered into BOTH the
@@ -1611,7 +1734,7 @@ function renderColSwitcher() {
 // Reviewable rows (those with ≥1 candidate).
 function reviewableKeys(built) {
   const arr = [];
-  built.map.forEach((v, key) => { const m = project.matches[key]; if (m && m.top) arr.push({ key, rows: v.rows.length, name: v.query, country: v.country }); });
+  built.map.forEach((v, key) => { const m = project.matches[key]; if (m && m.top && rowPasses(rowKeyIndex(key), built)) arr.push({ key, rows: v.rows.length, name: v.query, country: v.country }); });
   arr.sort((a, b) => b.rows - a.rows);
   return arr;
 }
