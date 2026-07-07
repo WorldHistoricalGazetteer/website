@@ -44,7 +44,16 @@ function popupHTML(p) {
     ${p.altNames && p.altNames.length
       ? `<div class="recon-pop-alt"><span class="recon-pop-alt-label">also known as:</span> ${p.altNames.slice(0, 15).map(esc).join(', ')}${p.altNames.length > 15 ? '…' : ''}</div>`
       : ''}
+    ${wikiPopupHTML(p.wikipedia)}
   </div>`;
+}
+// Wikipedia link inside a candidate marker popup (Wikidata sitelinks from /reconcile — [{lang, url}]).
+function wikiPopupHTML(wiki) {
+  const w = wiki || [];
+  if (!w.length) return '';
+  const pick = w.find((x) => x.lang === 'en') || w[0];
+  const more = w.length > 1 ? ` (+${w.length - 1})` : '';
+  return `<div class="recon-pop-wiki"><a href="${esc(pick.url)}" target="_blank" rel="noopener noreferrer">Wikipedia${more}</a></div>`;
 }
 
 // ── Layer/basemap persistence (#2) ──────────────────────────────────────────

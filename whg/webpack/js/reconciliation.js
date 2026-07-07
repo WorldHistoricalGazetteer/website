@@ -1563,6 +1563,17 @@ function updateReviewProgress() {
   const p = el('recon-review-progress');
   if (p) p.textContent = `${decided.toLocaleString()} decided · ${pending.toLocaleString()} to review · ${reviewMeta.length.toLocaleString()} rows`;
 }
+// A candidate's Wikipedia link (from Wikidata sitelinks surfaced by /reconcile as [{lang, url}]).
+// Prefers English; shows "+N" when the article exists in more languages. Empty string when none.
+function wikiLinkHtml(wiki) {
+  const w = wiki || [];
+  if (!w.length) return '';
+  const pick = w.find((x) => x.lang === 'en') || w[0];
+  const more = w.length > 1 ? ` <span class="text-muted">+${w.length - 1}</span>` : '';
+  const title = w.length > 1 ? `Wikipedia (${w.map((x) => x.lang).join(', ')})` : `Wikipedia (${pick.lang})`;
+  return `<a class="recon-cand-wiki" href="${esc(pick.url)}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">` +
+    `<i class="fab fa-wikipedia-w"></i> Wikipedia${more}</a>`;
+}
 function renderReviewCard() {
   const card = el('recon-review-card');
   if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
@@ -1585,6 +1596,7 @@ function renderReviewCard() {
     (c.alt_names && c.alt_names.length
       ? `<span class="recon-cand-alt">also: ${c.alt_names.slice(0, 8).map((n) => truncate(n, 28)).join(', ')}${c.alt_names.length > 8 ? '…' : ''}</span>`
       : '') +
+    wikiLinkHtml(c.wikipedia) +
     `</span>
        <span class="recon-cand-score">${c.score}</span>
      </li>`).join('');
@@ -1618,6 +1630,8 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-danger" data-geom="clear"${(project.geom && project.geom[meta.key]) ? '' : ' disabled'}>Clear</button>
        <span id="recon-geom-status" class="text-muted ms-1">${esc(geomStatusText(meta.key))}</span>
      </div>`;
+  // A Wikipedia link inside a candidate must open the article, NOT toggle acceptance of the candidate.
+  card.querySelectorAll('.recon-cand-wiki').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
   card.querySelectorAll('.recon-cand').forEach((li) => {
     const ci = Number(li.dataset.ci);
     li.addEventListener('click', () => acceptCandidate(ci));
@@ -2034,7 +2048,7 @@ async function updateReviewMap(key) {
   const points = [];
   await Promise.all(cands.map(async (c, i) => {
     const pt = await fetchCandidateCoord(c.id);
-    if (pt) points.push({ ci: i, lon: pt.lon, lat: pt.lat, name: c.name, namespace: nsName(c.id), altNames: c.alt_names || [], score: c.score });
+    if (pt) points.push({ ci: i, lon: pt.lon, lat: pt.lat, name: c.name, namespace: nsName(c.id), altNames: c.alt_names || [], score: c.score, wikipedia: c.wikipedia || [] });
   }));
   let rowPoint = null;
   try { rowPoint = await rowOwnCoord(key); } catch (_) { /* ignore */ }

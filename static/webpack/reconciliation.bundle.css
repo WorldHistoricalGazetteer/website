@@ -286,6 +286,9 @@
 .recon-cand-ns { font-size: .6rem; text-transform: uppercase; letter-spacing: .03em; background: #eef1f4;
   color: #37474f; border: 1px solid #d5dde3; border-radius: 3px; padding: .05rem .3rem; white-space: nowrap; }
 .recon-cand-alt { display: block; font-size: .78rem; color: #667788; margin-top: .1rem; }
+.recon-cand-wiki { display: inline-block; margin-top: .1rem; font-size: .78rem; color: #3366cc; text-decoration: none; white-space: nowrap; }
+.recon-cand-wiki:hover { text-decoration: underline; }
+.recon-cand-wiki .fa-wikipedia-w { margin-right: .2rem; }
 
 /* --- Review map (numbered, coloured candidate markers) --- */
 /* Fixed height — MapLibre needs a definite height; height:100% in a grid cell with no definite
@@ -300,6 +303,9 @@
 .recon-pop-score { color: #666; font-size: .8rem; margin-top: .1rem; }
 .recon-pop-alt { font-size: .8rem; color: #444; margin-top: .3rem; line-height: 1.35; }
 .recon-pop-alt-label { color: #999; }
+.recon-pop-wiki { margin-top: .3rem; }
+.recon-pop-wiki a { font-size: .8rem; color: #3366cc; text-decoration: none; }
+.recon-pop-wiki a:hover { text-decoration: underline; }
 .recon-map-marker {
   width: 22px; height: 22px; border-radius: 50%; color: #fff;
   font-size: .75rem; font-weight: 700; line-height: 1; cursor: pointer;
