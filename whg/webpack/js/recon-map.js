@@ -326,6 +326,12 @@ function ensureFullLayers() {
       layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }, paint: { 'text-color': '#fff' } });
     fullMap.addLayer({ id: 'recon-full-pt', type: 'circle', source: 'recon-full', filter: ['!', ['has', 'point_count']], minzoom: 4,
       paint: { 'circle-color': '#c2410c', 'circle-radius': 6, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5 } });
+    // Place-name label beside each unclustered point (just the name — full detail is in the hover popup).
+    // text-optional + no overlap keeps it uncluttered: labels that would collide are dropped, not stacked.
+    fullMap.addLayer({ id: 'recon-full-label', type: 'symbol', source: 'recon-full', filter: ['!', ['has', 'point_count']], minzoom: 6,
+      layout: { 'text-field': ['get', 'title'], 'text-size': 11, 'text-offset': [0, 1.1], 'text-anchor': 'top',
+        'text-optional': true, 'text-allow-overlap': false, 'symbol-sort-key': ['-', 0, ['coalesce', ['to-number', ['get', 'score'], 0], 0]] },
+      paint: { 'text-color': '#333', 'text-halo-color': '#fff', 'text-halo-width': 1.4 } });
     fullMap.on('click', 'recon-full-clusters', (e) => {
       const f = e.features[0];
       fullMap.getSource('recon-full').getClusterExpansionZoom(f.properties.cluster_id, (err, z) => { if (!err) fullMap.easeTo({ center: f.geometry.coordinates, zoom: z }); });

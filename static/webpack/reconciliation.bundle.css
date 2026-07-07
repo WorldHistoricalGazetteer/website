@@ -83,6 +83,12 @@
 .recon-ns-list { display: flex; flex-direction: column; gap: .35rem; }
 .recon-ns-item { display: flex; align-items: center; gap: .45rem; cursor: pointer; margin-bottom: 0; }
 
+/* Circular count badge on the Sources / Scope buttons (hidden when nothing is set) */
+.recon-btn-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.15rem;
+  height: 1.15rem; padding: 0 .3rem; margin-left: .35rem; border-radius: 999px; font-size: .72rem;
+  font-weight: 600; line-height: 1; background: #fff; color: #0d6efd; border: 1px solid currentColor; }
+.btn-primary .recon-btn-badge { background: #fff; color: #0d6efd; border-color: #fff; }
+
 /* --- Dataset-wide Scope picker modal --- */
 .recon-scope-map { height: 320px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
 .recon-scope-whg-results { max-height: 180px; overflow-y: auto; }

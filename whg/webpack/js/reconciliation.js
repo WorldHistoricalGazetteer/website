@@ -1686,13 +1686,22 @@ function applyNsToCandidates(result, col) {
   if (f.mode === 'prioritise') return sortByNsPriority(result, f.namespaces);
   return result;
 }
+// Show/hide a small circular count badge on a pane-3 button.
+function setBtnBadge(id, count, title) {
+  const b = el(id); if (!b) return;
+  if (count > 0) { b.textContent = String(count); if (title) b.title = title; b.classList.remove('d-none'); }
+  else { b.classList.add('d-none'); b.removeAttribute('title'); }
+}
 function updateSourcesLabel() {
   const lbl = el('recon-sources-label'); if (!lbl) return;
   const col = sourcesTargetCol();
   const f = getNsFilter(col >= 0 ? col : undefined);
   const colName = (col >= 0 && project && reconChain().length > 1) ? ` · ${truncate(project.columns[col].name, 14)}` : '';
-  lbl.textContent = (f.mode === 'only' ? `Only ${f.namespaces.length} source${f.namespaces.length === 1 ? '' : 's'}`
-    : f.mode === 'prioritise' && f.namespaces.length ? `Prioritising ${f.namespaces.length}` : 'Sources') + colName;
+  lbl.textContent = 'Sources' + colName;
+  // Circular badge = number of chosen source gazetteers (only when restricting/prioritising, not "all").
+  const active = (f.mode === 'only' || f.mode === 'prioritise') && f.namespaces.length > 0;
+  setBtnBadge('recon-sources-badge', active ? f.namespaces.length : 0,
+    f.mode === 'only' ? `Only these ${f.namespaces.length} source(s)` : `Prioritising ${f.namespaces.length} source(s)`);
 }
 async function populateSourcesModal() {
   await loadSources(); // registry-driven list (names, record counts, descriptions)
@@ -1745,12 +1754,24 @@ let _aatTreeLoaded = false; // the browse tree is lazy-loaded on first expand
 function parseCcodes(text) {
   return [...new Set(String(text || '').toUpperCase().match(/[A-Z]{2}/g) || [])];
 }
+// How many of the three scope facets (where / when / what) are active — drives the button badge.
+function scopeFacetCount() {
+  const s = getScope(); if (!s) return 0;
+  const r = s.region || {};
+  const where = (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry);
+  const when = (s.start != null || s.end != null);
+  const what = s.types && s.types.selected && s.types.selected.length;
+  return (where ? 1 : 0) + (when ? 1 : 0) + (what ? 1 : 0);
+}
 function updateScopeLabel() {
   const lbl = el('recon-scope-label'); if (!lbl) return;
-  const sum = scopeActive() ? scopeSummary() : '';
+  const on = scopeActive();
+  const sum = on ? scopeSummary() : '';
   lbl.textContent = sum ? `Scope: ${sum}` : 'Scope';
   const btn = el('recon-scope-btn');
-  if (btn) { const on = scopeActive(); btn.classList.toggle('btn-primary', on); btn.classList.toggle('btn-outline-secondary', !on); }
+  if (btn) { btn.classList.toggle('btn-primary', on); btn.classList.toggle('btn-outline-secondary', !on); }
+  // Circular badge = number of active scope facets (where/when/what) constraining results.
+  setBtnBadge('recon-scope-badge', on ? scopeFacetCount() : 0, 'Active scope filters');
 }
 // Show one region-method panel, hide the others; lazy-init the draw map when its panel opens.
 function showScopeRegionMode(mode) {
@@ -2556,7 +2577,18 @@ function init() {
   const aatSearch = el('recon-scope-aat-search');
   if (aatSearch) aatSearch.addEventListener('click', searchAat);
   const aatQ = el('recon-scope-aat-q');
-  if (aatQ) aatQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchAat(); } });
+  if (aatQ) {
+    aatQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchAat(); } });
+    // Live suggestions: search as you type once ≥ 3 characters are entered (debounced so we don't
+    // fire a request per keystroke); clear the results below the threshold.
+    let aatTimer = null;
+    aatQ.addEventListener('input', () => {
+      clearTimeout(aatTimer);
+      const v = aatQ.value.trim();
+      if (v.length < 3) { const ar = el('recon-scope-aat-results'); if (ar) ar.innerHTML = ''; return; }
+      aatTimer = setTimeout(searchAat, 300);
+    });
+  }
   const aatBrowse = el('recon-scope-aat-browse');
   if (aatBrowse) aatBrowse.addEventListener('toggle', () => { if (aatBrowse.open) initAatTree(); });
   const scopeApply = el('recon-scope-apply');
