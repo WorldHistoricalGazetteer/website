@@ -53,8 +53,14 @@ module.exports = {
 		workbench: './whg/webpack/js/workbench.js',
 	},
 	output: {
-		filename: '[name].bundle.js',
+		filename: '[name].bundle.js', // entry bundles keep stable names (referenced by templates); busted via ?v=
+		// Async (lazy-import) chunks are content-hashed so a new deploy serves a new URL — browsers can't
+		// serve a stale chunk (this is what previously broke the workbench's lazy recon-* modules after a deploy).
+		chunkFilename: '[name].[contenthash].js',
 		path: path.resolve(__dirname, 'static/webpack'),
+		// Purge superseded hashed chunks each build so committed output doesn't accumulate old hashes.
+		// KEEP the hand-committed, non-webpack assets that also live here (demo data + the Symphonym model).
+		clean: { keep: (asset) => asset.startsWith('samples/') || asset.startsWith('symphonym/') },
 	},
 	module: {
 		rules: [
@@ -77,7 +83,8 @@ module.exports = {
 			path: './.env/.env',
 		}),
 		new MiniCssExtractPlugin({
-			filename: '[name].bundle.css',
+			filename: '[name].bundle.css', // entry CSS keeps stable names (referenced by templates); busted via ?v=
+			chunkFilename: '[name].[contenthash].css', // async CSS chunks are content-hashed like their JS chunks
 		}),
 		new BundleAnalyzerPlugin({
 			analyzerMode: 'static', // `server` option is very slow

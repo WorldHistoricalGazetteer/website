@@ -414,6 +414,7 @@ export function scopeDraw() {
   if (!scopeMap) return;
   scopeDrawing = true; scopeVerts = [];
   scopeMap.getCanvas().style.cursor = 'crosshair';
+  ensureScopeLayers(); // the source may not have been added yet if drawing starts very early
   redrawScope();
 }
 export function scopeFinish() {

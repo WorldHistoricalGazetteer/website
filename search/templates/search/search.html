@@ -6,7 +6,7 @@
 <script type="text/javascript">
 	const loadMaplibre = true;
 </script>
-<link href="{% static 'webpack/whg_maplibre.bundle.css' %}" rel="stylesheet"/>
+<link href="{% static 'webpack/whg_maplibre.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 {% endblock %}
 
 {% if toponym %}
@@ -58,7 +58,7 @@
 {% endif %}
 
 {% block extra_head %}
-<link href="{% static 'webpack/search.bundle.css' %}" rel="stylesheet"/>
+<link href="{% static 'webpack/search.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 <!-- Indexing-server sniffer: disables the page if the index is unreachable -->
 <link href="{% static 'search/index-sniffer.css' %}" rel="stylesheet"/>
 <script src="{% static 'search/index-sniffer.js' %}" defer></script>

@@ -6,7 +6,7 @@
 {% load dataset_extras %}
 {% block title %}<title>WHG::Create/Update Collection</title>{% endblock %}
 {% block extra_head %}
-  <link href="{% static 'webpack/builders-collection-place.bundle.css' %}" rel="stylesheet" />
+  <link href="{% static 'webpack/builders-collection-place.bundle.css' %}?v={{ asset_version }}" rel="stylesheet" />
 {% endblock %}
 
 {% block content %}

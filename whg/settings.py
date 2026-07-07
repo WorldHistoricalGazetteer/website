@@ -269,6 +269,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'whg.context_processors.environment',
                 'whg.context_processors.app_version',
+                'whg.context_processors.asset_version',
             ],
             'builtins': [
                 'whg.builtins',

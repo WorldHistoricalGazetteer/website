@@ -7,7 +7,7 @@
 
 {% block extra_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
-  <link href="{% static 'webpack/builders-dataset-status.bundle.css' %}" rel="stylesheet" />
+  <link href="{% static 'webpack/builders-dataset-status.bundle.css' %}?v={{ asset_version }}" rel="stylesheet" />
 {% endblock %}
 
 {% block title %}<title>Dataset::{{ ds.label }}</title>{% endblock %}

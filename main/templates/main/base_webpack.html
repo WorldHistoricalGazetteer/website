@@ -45,8 +45,8 @@
     </script>
     {% endblock %}
 
-    <script defer src="{% static 'webpack/base.bundle.js' %}"></script>
-    <link href="{% static 'webpack/base.bundle.css' %}" rel="stylesheet"/>
+    <script defer src="{% static 'webpack/base.bundle.js' %}?v={{ asset_version }}"></script>
+    <link href="{% static 'webpack/base.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
     <style>
         body {
             /* Hide until CDN css files are fully loaded */
@@ -82,7 +82,9 @@
                 if (index !== -1 && index < scripts.length) {
                     const script = scripts[index];
                     const scriptElement = document.createElement('script');
-                    scriptElement.src = script.src;
+                    // Append a per-deploy cache-buster so browsers fetch the new bundle after a deploy
+                    // (webpack entry filenames are un-hashed; lazy chunks are content-hashed separately).
+                    scriptElement.src = script.src + (script.src.indexOf('?') > -1 ? '&' : '?') + 'v={{ asset_version }}';
                     scriptElement.defer = true; // Prevent loading before base.bundle.js
                     if (script.type) {
                         scriptElement.type = script.type;

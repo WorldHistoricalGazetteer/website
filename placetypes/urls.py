@@ -13,6 +13,9 @@ urlpatterns = [
     path('tree/search/', views.type_tree_search, name='type-tree-search'),
     path('tree/<int:aat_id>/', views.type_tree, name='type-tree-children'),
 
+    # Expand selected AAT ids to include all descendants (for the reconciliation Scope picker)
+    path('expand/', views.type_expand, name='type-expand'),
+
     # Mapping UI
     path('mapping/', views_mapping.mapping_dashboard, name='mapping-dashboard'),
 

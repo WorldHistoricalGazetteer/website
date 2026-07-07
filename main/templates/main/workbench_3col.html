@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'webpack/workbench.bundle.css' %}" rel="stylesheet"/>
+<link href="{% static 'webpack/workbench.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 <style>
   #wb_columns .quick-start {
     position: unset;

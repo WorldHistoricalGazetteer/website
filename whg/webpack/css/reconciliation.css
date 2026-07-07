@@ -84,6 +84,22 @@
 .recon-scope-map { height: 320px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
 .recon-scope-whg-results { max-height: 180px; overflow-y: auto; }
 
+/* AAT place-type picker */
+.recon-scope-aat-results { max-height: 160px; overflow-y: auto; }
+.recon-scope-aat-selected { display: flex; flex-wrap: wrap; gap: .35rem; }
+.recon-aat-chip { display: inline-flex; align-items: center; gap: .3rem; background: #e7f1ff; color: #0a58ca;
+  border: 1px solid #b6d4fe; border-radius: 12px; padding: .05rem .5rem; font-size: .82rem; }
+.recon-aat-chip-x { border: 0; background: transparent; color: inherit; cursor: pointer; line-height: 1; font-size: 1rem; padding: 0; }
+.recon-aat-chip-x:hover { color: #dc3545; }
+.recon-scope-aat-tree { max-height: 260px; overflow: auto; border: 1px solid #e2e2e2; border-radius: 6px; padding: .35rem .5rem; }
+.aat-tree, .aat-children { list-style: none; margin: 0; padding-left: 0; }
+.aat-children { padding-left: 1.1rem; }
+.aat-row { display: flex; align-items: center; gap: .35rem; padding: .05rem 0; }
+.aat-caret { cursor: pointer; width: 1em; text-align: center; color: #6c757d; user-select: none; flex: 0 0 auto; }
+.aat-caret-spacer { display: inline-block; width: 1em; flex: 0 0 auto; }
+.aat-label { cursor: pointer; }
+.aat-label.aat-guide { cursor: default; color: #6c757d; font-style: italic; }
+
 /* --- Accordion panes (the numbered steps) --- */
 .recon-pane-header { display: flex; align-items: center; gap: .5rem; }
 .recon-pane-toggle {

@@ -12,7 +12,7 @@
 {% block title %}<title>WHG · Reconciliation (staff preview)</title>{% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'webpack/reconciliation.bundle.css' %}" rel="stylesheet"/>
+<link href="{% static 'webpack/reconciliation.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 {% endblock %}
 
 {% block content %}
@@ -158,7 +158,7 @@
       <div class="recon-pane-actions d-flex align-items-center gap-2">
         <button type="button" id="recon-scope-btn" class="btn btn-sm btn-outline-secondary"
                 data-bs-toggle="modal" data-bs-target="#recon-scope-modal"
-                title="Narrow the whole dataset to a place, period, or feature type before matching">
+                title="Narrow the whole dataset to a place, period, or place type before matching">
           <i class="fas fa-filter me-1"></i><span id="recon-scope-label">Scope</span>
         </button>
         <button type="button" id="recon-sources-btn" class="btn btn-sm btn-outline-secondary"
@@ -384,7 +384,7 @@
     </div>
   </div>
 
-  <!-- Dataset-wide Scope picker: constrain every reconcile query by place, period and feature type -->
+  <!-- Dataset-wide Scope picker: constrain every reconcile query by place, period and place type -->
   <div class="modal fade" id="recon-scope-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-scope-title">
     <div class="modal-dialog modal-dialog-scrollable modal-lg">
       <div class="modal-content">
@@ -452,11 +452,20 @@
             <div class="form-text small">Negative years are BCE. Leave both blank for no date constraint.</div>
           </fieldset>
 
-          <!-- What (feature type) -->
+          <!-- What (place types) — Getty AAT concept picker -->
           <fieldset class="mb-1">
-            <legend class="h6 mb-1"><i class="fas fa-shapes me-1 text-secondary"></i>What</legend>
-            <div id="recon-scope-fclasses" class="recon-ns-list"></div>
-            <div class="form-text small">Restrict to these GeoNames feature classes. Tick none to allow any.</div>
+            <legend class="h6 mb-1"><i class="fas fa-shapes me-1 text-secondary"></i>What <span class="text-muted fw-normal small">(place types)</span></legend>
+            <div class="input-group input-group-sm mb-1">
+              <input type="text" id="recon-scope-aat-q" class="form-control" placeholder="Search place types (e.g. city, river, temple, monastery)…" autocomplete="off">
+              <button type="button" class="btn btn-outline-secondary" id="recon-scope-aat-search"><i class="fas fa-search"></i></button>
+            </div>
+            <div id="recon-scope-aat-results" class="recon-scope-aat-results mb-1"></div>
+            <div id="recon-scope-aat-selected" class="recon-scope-aat-selected mb-2"></div>
+            <details id="recon-scope-aat-browse" class="recon-scope-aat-browse">
+              <summary class="small text-muted">Or browse the Getty AAT hierarchy</summary>
+              <div id="recon-scope-aat-tree" class="recon-scope-aat-tree mt-1"></div>
+            </details>
+            <div class="form-text small">Scopes to the selected Getty AAT place types <em>and everything beneath them</em>. Leave empty to allow any type.</div>
           </fieldset>
         </div>
         <div class="modal-footer">

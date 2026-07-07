@@ -4517,7 +4517,7 @@ eval("__webpack_require__.r(__webpack_exports__);\n/* harmony export */ __webpac
 /******/ 		// This function allow to reference async chunks
 /******/ 		__webpack_require__.u = (chunkId) => {
 /******/ 			// return url for filenames based on template
-/******/ 			return "" + chunkId + ".bundle.js";
+/******/ 			return "" + chunkId + "." + {"whg_webpack_js_csl-styles_apa-6th-edition_csl":"08de20b573a63657a305","whg_webpack_js_csl-styles_chicago-author-date_csl":"ee2277a21d1fbd2ac53c","whg_webpack_js_csl-styles_harvard-cite-them-right_csl":"e18c8588e75d74927a0f","whg_webpack_js_csl-styles_modern-language-association_csl":"64bb507c56bbe26aa427","whg_webpack_js_csl-styles_turabian-author-date_csl":"3b1d9905b377fe489def","whg_webpack_js_csl-styles_vancouver-author-date_csl":"b76b8eaf58964ff762e4"}[chunkId] + ".js";
 /******/ 		};
 /******/ 	})();
 /******/ 	
