@@ -447,7 +447,11 @@ export function renderScopeMap(container, existingGeom, onChange) {
     });
     if (scopeRo) { try { scopeRo.disconnect(); } catch (_) { /* ignore */ } }
     if (typeof ResizeObserver !== 'undefined') { scopeRo = new ResizeObserver((es) => { for (const e of es) if (e.contentRect.width > 0 && e.contentRect.height > 0) scopeMap.resize(); }); scopeRo.observe(container); }
+    // Re-add the geometry source/layers whenever the style settles. The whg-portal basemap + terrain
+    // trigger late style reloads that wipe custom sources; 'styledata' alone can miss the final one, so
+    // (as the full-dataset map does) also re-apply on 'idle' — the reliable "everything is loaded" signal.
     scopeMap.on('styledata', () => { ensureScopeLayers(); redrawScope(); });
+    scopeMap.on('idle', () => { ensureScopeLayers(); redrawScope(); });
     scopeMap.on('click', onScopeClick);
   }
   const apply = () => {
