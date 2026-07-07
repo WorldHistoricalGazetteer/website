@@ -27,6 +27,8 @@ const loadDates = async () => (Dates || (Dates = await import(/* webpackChunkNam
 const loadReconMap = async () => (ReconMap || (ReconMap = await import(/* webpackChunkName: "recon-map" */ './recon-map.js')));
 let Symphonym = null; // in-browser phonetic encoder (Phase 7) — clusters variant spellings locally
 const loadSymphonym = async () => (Symphonym || (Symphonym = await import(/* webpackChunkName: "recon-symphonym" */ './recon-symphonym.js')));
+let Validate = null; // Ajv LPF validator (Phase: contribution validation) — replicates server schema check
+const loadValidate = async () => (Validate || (Validate = await import(/* webpackChunkName: "recon-validate" */ './recon-validate.js')));
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -544,6 +546,7 @@ function renderAll() {
   refreshReview();  // show pane 4's header (with a "reconcile first" placeholder) even before matches
   refreshFullMapPane();
   refreshExport();
+  submissionAat.reset(submissionTypes()); // reflect the saved submission place-type(s) in the picker
   renderLangControl(); // populate the phonetic-matching language selector (default detected from data)
   updatePaneSummaries();
   openPane('recon-result'); // once a dataset is loaded, focus the mapping step (accordion: others close)
@@ -559,6 +562,8 @@ function openPane(id) {
   }
   // The full-dataset map is built lazily — only when this pane is opened.
   if (id === 'recon-fullmap-pane') requestAnimationFrame(() => updateFullMap());
+  // Validate the LPF against WHG's schema when the export/contribute pane is opened.
+  if (id === 'recon-export') runValidation();
 }
 function updatePaneSummaries() {
   if (!project) return;
@@ -872,8 +877,11 @@ function serializeLPTSV(data) {
   return lines.join('\n');
 }
 // Linked Places Format (LPF) GeoJSON FeatureCollection.
-function serializeLPF(data) {
+// Build the LPF FeatureCollection OBJECT (used both for serialisation and for in-browser validation).
+function buildLPF(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name'), countryIdx = colIndexByRole('country');
+  const subTypes = submissionTypes();                                     // AAT type(s) applied to every record
+  const lpfTypes = subTypes.length ? subTypes.map((t) => ({ identifier: t.id, label: t.text })) : null;
   const features = data.records.map((rec, i) => {
     const title = nameIdx >= 0 ? String(rec.orig[nameIdx] || '') : '';
     const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
@@ -885,18 +893,20 @@ function serializeLPF(data) {
       properties: props,
       names: title ? [{ toponym: title }] : [],
     };
+    if (lpfTypes) feat.types = lpfTypes;                                  // LPF place types (WHG requirement)
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
     if (rec.match) feat.links = rec.match.list.map((x) => ({ type: 'closeMatch', identifier: x.id }));
     return feat;
   });
-  return JSON.stringify({
+  return {
     type: 'FeatureCollection',
     '@context': 'https://raw.githubusercontent.com/LinkedPasts/linked-places-format/master/linkedplaces-context-v1.1.jsonld',
     features,
-  }, null, 2);
+  };
 }
+function serializeLPF(data) { return JSON.stringify(buildLPF(data), null, 2); }
 
 function downloadText(filename, text, mime) {
   const blob = new Blob([text], { type: mime + ';charset=utf-8' });
@@ -989,6 +999,76 @@ function refreshExport() {
     if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
     sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
   }
+}
+
+// ── Contribution validation: check the LPF against WHG's schema before enabling "Contribute" ──────
+// The server rejects LPF that fails validation/static/lpf_v2.0.jsonld (jsonschema Draft-7). We run the
+// same schema in the browser (Ajv) plus friendly per-record requirement checks, so problems surface —
+// and the Contribute button is gated — before anything is submitted.
+let _validation = null;
+async function runValidation() {
+  if (!project) return null;
+  const body = el('recon-validate-body');
+  if (body) body.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>checking…</span>';
+  let data;
+  try {
+    data = await buildExportRecords({ coords: hasCoordRole(), dates: colIndexByRole('date') >= 0, match: true, enrich: false }, null);
+  } catch (e) {
+    if (body) body.innerHTML = `<span class="text-danger small">Could not build the Linked Places file: ${esc(e.message)}</span>`;
+    return null;
+  }
+  const fc = buildLPF(data);
+  const n = fc.features.length;
+  // Friendly per-feature requirement counts (each of these is required by the LPF schema).
+  const miss = { title: 0, names: 0, geometry: 0, when: 0, types: 0 };
+  fc.features.forEach((f) => {
+    if (!(f.properties && f.properties.title)) miss.title += 1;
+    if (!(f.names && f.names.length)) miss.names += 1;
+    if (!f.geometry) miss.geometry += 1;
+    if (!f.when) miss.when += 1;
+    if (!(f.types && f.types.length) && !(f.properties && f.properties.fclasses)) miss.types += 1;
+  });
+  // Authoritative schema pass (Ajv, same schema the server uses). Null if the validator can't load.
+  let schemaOk = null; let schemaErrs = 0;
+  try { const mod = await loadValidate(); const res = await mod.validateLPF(fc); schemaOk = res.ok; schemaErrs = res.errors.length; }
+  catch (e) { console.error('[recon] LPF validator unavailable', e); }
+  _validation = { total: n, miss, schemaOk, schemaErrs };
+  renderValidation(_validation);
+  updateContributeGate();
+  return _validation;
+}
+const VALIDATE_LABELS = {
+  title: 'have no place name (title)',
+  names: 'have no name variant',
+  geometry: 'have no location (coordinates or drawn geometry)',
+  when: 'have no date/period',
+  types: 'have no place type (AAT) — required for contribution',
+};
+function renderValidation(v) {
+  const body = el('recon-validate-body'); if (!body || !v) return;
+  const issues = Object.keys(VALIDATE_LABELS)
+    .filter((k) => v.miss[k] > 0)
+    .map((k) => `<li${k === 'types' ? ' class="fw-semibold"' : ''}><strong>${v.miss[k].toLocaleString()}</strong> of ${v.total.toLocaleString()} ${VALIDATE_LABELS[k]}</li>`);
+  const valid = v.schemaOk === true && !issues.length;
+  if (valid) {
+    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${v.total.toLocaleString()} places pass WHG's Linked Places validation.</div>`;
+  } else {
+    const schemaNote = v.schemaOk === false ? ` <span class="text-muted">(${v.schemaErrs.toLocaleString()} schema error${v.schemaErrs === 1 ? '' : 's'})</span>`
+      : v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
+    body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${schemaNote}</div>` +
+      (issues.length ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}</ul>` : '') +
+      '<div class="small text-muted">Fix the items above (add place types below, map a coordinate/date column, etc.), then re-check.</div>';
+  }
+}
+// Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
+function updateContributeGate() {
+  const btn = el('recon-contribute-btn'); if (!btn) return;
+  const ok = _validation && _validation.schemaOk === true &&
+    !Object.keys(VALIDATE_LABELS).some((k) => _validation.miss[k] > 0);
+  // schemaOk === null (validator failed to load) → don't hard-block; let the server be the gate.
+  const block = _validation && _validation.schemaOk !== null && !ok;
+  btn.disabled = !!block;
+  btn.title = block ? 'Resolve the validation issues above before contributing' : '';
 }
 
 // ── Full-dataset map (pane between Review and Export) ────────────────────────
@@ -1762,8 +1842,7 @@ function applyNsFilter() {
 // ── Dataset-wide Scope picker (country / date / feature-type / region) ────────
 // Staged region selections that aren't plain form fields (the WHG place and the drawn geometry) live
 // here while the modal is open; they're committed to project.scope only on Apply.
-let _scopeDraft = { whgPlace: null, geometry: null, types: [] };
-let _aatTreeLoaded = false; // the browse tree is lazy-loaded on first expand
+let _scopeDraft = { whgPlace: null, geometry: null }; // AAT type selection lives in the scopeAat picker
 
 function parseCcodes(text) {
   return [...new Set(String(text || '').toUpperCase().match(/[A-Z]{2}/g) || [])];
@@ -1796,8 +1875,7 @@ function showScopeRegionMode(mode) {
 function populateScopeModal() {
   const s = project ? (project.scope || defaultScope()) : defaultScope();
   const r = s.region || { mode: 'none' };
-  const selTypes = (s.types && s.types.selected) ? s.types.selected.map((t) => Object.assign({}, t)) : [];
-  _scopeDraft = { whgPlace: r.place ? Object.assign({}, r.place) : null, geometry: r.geometry || null, types: selTypes };
+  _scopeDraft = { whgPlace: r.place ? Object.assign({}, r.place) : null, geometry: r.geometry || null };
   _scopeDrawing = false;
   // Region mode radio
   const modeInput = document.querySelector(`input[name="recon-scope-region-mode"][value="${r.mode || 'none'}"]`);
@@ -1811,13 +1889,8 @@ function populateScopeModal() {
   const st = el('recon-scope-start'); if (st) st.value = s.start != null ? s.start : '';
   const en = el('recon-scope-end'); if (en) en.value = s.end != null ? s.end : '';
   const ud = el('recon-scope-undated'); if (ud) ud.checked = !!s.undated;
-  // AAT place types
-  renderAatSelected();
-  const aq = el('recon-scope-aat-q'); if (aq) aq.value = '';
-  const ar = el('recon-scope-aat-results'); if (ar) ar.innerHTML = '';
-  _aatTreeLoaded = false; // reload the browse tree fresh each open (reflects current selection ticks)
-  const tree = el('recon-scope-aat-tree'); if (tree) tree.innerHTML = '';
-  const details = el('recon-scope-aat-browse'); if (details) details.open = false;
+  // AAT place types — reset the picker to the saved selection.
+  scopeAat.reset((s.types && s.types.selected) || []);
   showScopeRegionMode(r.mode || 'none');
 }
 function renderScopeWhgSelected() {
@@ -1875,99 +1948,133 @@ async function scopeDrawAction(kind) {
   else if (kind === 'clear') { mod.scopeClear(); _scopeDrawing = false; _scopeDraft.geometry = null; }
   updateScopeDrawStatus();
 }
-// ── AAT place-type picker (Getty AAT hierarchy via the placetypes /types endpoints) ───────────
-// Multi-select: the user picks one or more AAT concepts (branches of interest) by search or by browsing
-// the hierarchy. Selected concepts are staged in _scopeDraft.types ({id:'aat:…', text}); on Apply they're
-// expanded to all descendant ids (the reconcile types.identifier filter is exact-match — see /types/expand/).
-function aatSelectedIds() { return new Set(_scopeDraft.types.map((t) => t.id)); }
-function renderAatSelected() {
-  const box = el('recon-scope-aat-selected'); if (!box) return;
-  if (!_scopeDraft.types.length) { box.innerHTML = '<span class="text-muted small">No place types selected — any type is allowed.</span>'; return; }
-  box.innerHTML = _scopeDraft.types.map((t) =>
-    `<span class="recon-aat-chip">${esc(truncateText(t.text, 30))}` +
-    `<button type="button" class="recon-aat-chip-x" data-id="${esc(t.id)}" title="remove" aria-label="remove">×</button></span>`).join(' ');
-  box.querySelectorAll('.recon-aat-chip-x').forEach((b) => b.addEventListener('click', () => removeAatType(b.dataset.id)));
-}
-function addAatType(id, text) { if (!_scopeDraft.types.some((t) => t.id === id)) { _scopeDraft.types.push({ id, text }); renderAatSelected(); syncAatTreeChecks(); } }
-function removeAatType(id) { _scopeDraft.types = _scopeDraft.types.filter((t) => t.id !== id); renderAatSelected(); syncAatTreeChecks(); }
-function syncAatTreeChecks() {
-  const sel = aatSelectedIds();
-  document.querySelectorAll('#recon-scope-aat-tree .aat-cb').forEach((cb) => { const li = cb.closest('.aat-node'); if (li) cb.checked = sel.has(li.dataset.id); });
-}
+// ── Reusable AAT place-type picker (Getty AAT hierarchy via the placetypes /types endpoints) ───
+// A self-contained multi-select widget: search (with live typeahead ≥3 chars) or browse the AAT
+// hierarchy, chosen concepts shown as removable chips. Instantiated once for the Scope filter and once
+// for the submission place-types control; each instance owns its own selection state + DOM element ids.
 async function fetchJson(url) {
   const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return res.json();
 }
-// One tree row. Guide terms (AAT organisational nodes) are expand-only — no checkbox.
-function aatNodeHtml(node) {
-  const sel = aatSelectedIds();
-  const caret = node.children === true ? '<span class="aat-caret" role="button" title="expand">▸</span>' : '<span class="aat-caret-spacer"></span>';
-  const cb = node.guide ? '' : `<input type="checkbox" class="aat-cb"${sel.has(node.id) ? ' checked' : ''} title="scope to this type and its descendants">`;
-  const fc = (node.fclasses && node.fclasses.length) ? ` <span class="text-muted small">${esc(node.fclasses.join(''))}</span>` : '';
-  return `<li class="aat-node" data-id="${esc(node.id)}" data-loaded="0">` +
-    `<div class="aat-row">${caret}${cb}<span class="aat-label${node.guide ? ' aat-guide' : ''}">${esc(node.text)}</span>${fc}</div>` +
-    '<ul class="aat-children d-none"></ul></li>';
-}
-async function initAatTree() {
-  if (_aatTreeLoaded) return;
-  const tree = el('recon-scope-aat-tree'); if (!tree) return;
-  tree.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>loading…</span>';
-  try {
-    const nodes = await fetchJson('/types/tree/');
-    tree.innerHTML = `<ul class="aat-tree">${nodes.map(aatNodeHtml).join('')}</ul>`;
-    _aatTreeLoaded = true;
-  } catch (err) { tree.innerHTML = `<span class="text-danger small">Could not load types: ${esc(err.message)}</span>`; }
-}
-async function expandAatNode(li) {
-  const ul = li.querySelector(':scope > .aat-children');
-  const caret = li.querySelector(':scope > .aat-row .aat-caret');
-  if (li.dataset.loaded === '1') { ul.classList.toggle('d-none'); if (caret) caret.textContent = ul.classList.contains('d-none') ? '▸' : '▾'; return; }
-  if (caret) caret.textContent = '⟳';
-  try {
-    const kids = await fetchJson(`/types/tree/${li.dataset.id.slice(4)}/`);
-    ul.innerHTML = kids.map(aatNodeHtml).join('');
-    li.dataset.loaded = '1'; ul.classList.remove('d-none'); if (caret) caret.textContent = '▾';
-  } catch (err) { if (caret) caret.textContent = '▸'; }
-}
-function toggleAatFromNode(li, on) {
-  const on2 = !!on; const id = li.dataset.id;
-  const text = li.querySelector(':scope > .aat-row .aat-label').textContent;
-  if (on2) addAatType(id, text); else removeAatType(id);
-}
-function bindAatTree() {
-  const tree = el('recon-scope-aat-tree'); if (!tree || tree.dataset.bound) return;
-  tree.dataset.bound = '1';
-  tree.addEventListener('click', (e) => {
-    const caret = e.target.closest('.aat-caret');
-    if (caret) { const li = caret.closest('.aat-node'); if (li) expandAatNode(li); return; }
-    const label = e.target.closest('.aat-label');
-    if (label && !label.classList.contains('aat-guide')) {
-      const li = label.closest('.aat-node'); const cb = li.querySelector(':scope > .aat-row .aat-cb');
-      if (cb) { cb.checked = !cb.checked; toggleAatFromNode(li, cb.checked); }
+function createAatPicker(ids, opts) {
+  opts = opts || {};
+  let selection = [];      // [{id, text}]
+  let treeLoaded = false;
+  const selIds = () => new Set(selection.map((t) => t.id));
+  const notify = () => { if (opts.onChange) opts.onChange(getSelection()); };
+  function renderSelected() {
+    const box = el(ids.selected); if (!box) return;
+    if (!selection.length) { box.innerHTML = `<span class="text-muted small">${esc(opts.emptyText || 'None selected.')}</span>`; return; }
+    box.innerHTML = selection.map((t) =>
+      `<span class="recon-aat-chip">${esc(truncateText(t.text, 30))}` +
+      `<button type="button" class="recon-aat-chip-x" data-id="${esc(t.id)}" title="remove" aria-label="remove">×</button></span>`).join(' ');
+    box.querySelectorAll('.recon-aat-chip-x').forEach((b) => b.addEventListener('click', () => remove(b.dataset.id)));
+  }
+  function add(id, text) { if (!selection.some((t) => t.id === id)) { selection.push({ id, text }); renderSelected(); syncChecks(); notify(); } }
+  function remove(id) { selection = selection.filter((t) => t.id !== id); renderSelected(); syncChecks(); notify(); }
+  function syncChecks() {
+    const tree = el(ids.tree); if (!tree) return; const sel = selIds();
+    tree.querySelectorAll('.aat-cb').forEach((cb) => { const li = cb.closest('.aat-node'); if (li) cb.checked = sel.has(li.dataset.id); });
+  }
+  // One tree row. Guide terms (AAT organisational nodes) are expand-only — no checkbox.
+  function nodeHtml(node) {
+    const sel = selIds();
+    const caret = node.children === true ? '<span class="aat-caret" role="button" title="expand">▸</span>' : '<span class="aat-caret-spacer"></span>';
+    const cb = node.guide ? '' : `<input type="checkbox" class="aat-cb"${sel.has(node.id) ? ' checked' : ''} title="${esc(opts.checkboxTitle || 'select this type')}">`;
+    const fc = (node.fclasses && node.fclasses.length) ? ` <span class="text-muted small">${esc(node.fclasses.join(''))}</span>` : '';
+    return `<li class="aat-node" data-id="${esc(node.id)}" data-loaded="0">` +
+      `<div class="aat-row">${caret}${cb}<span class="aat-label${node.guide ? ' aat-guide' : ''}">${esc(node.text)}</span>${fc}</div>` +
+      '<ul class="aat-children d-none"></ul></li>';
+  }
+  async function initTree() {
+    if (treeLoaded) return;
+    const tree = el(ids.tree); if (!tree) return;
+    tree.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>loading…</span>';
+    try { const nodes = await fetchJson('/types/tree/'); tree.innerHTML = `<ul class="aat-tree">${nodes.map(nodeHtml).join('')}</ul>`; treeLoaded = true; }
+    catch (err) { tree.innerHTML = `<span class="text-danger small">Could not load types: ${esc(err.message)}</span>`; }
+  }
+  async function expandNode(li) {
+    const ul = li.querySelector(':scope > .aat-children');
+    const caret = li.querySelector(':scope > .aat-row .aat-caret');
+    if (li.dataset.loaded === '1') { ul.classList.toggle('d-none'); if (caret) caret.textContent = ul.classList.contains('d-none') ? '▸' : '▾'; return; }
+    if (caret) caret.textContent = '⟳';
+    try { const kids = await fetchJson(`/types/tree/${li.dataset.id.slice(4)}/`); ul.innerHTML = kids.map(nodeHtml).join(''); li.dataset.loaded = '1'; ul.classList.remove('d-none'); if (caret) caret.textContent = '▾'; }
+    catch (err) { if (caret) caret.textContent = '▸'; }
+  }
+  function toggleFromNode(li, on) { const text = li.querySelector(':scope > .aat-row .aat-label').textContent; if (on) add(li.dataset.id, text); else remove(li.dataset.id); }
+  function bindTree() {
+    const tree = el(ids.tree); if (!tree || tree.dataset.bound) return;
+    tree.dataset.bound = '1';
+    tree.addEventListener('click', (e) => {
+      const caret = e.target.closest('.aat-caret');
+      if (caret) { const li = caret.closest('.aat-node'); if (li) expandNode(li); return; }
+      const label = e.target.closest('.aat-label');
+      if (label && !label.classList.contains('aat-guide')) { const li = label.closest('.aat-node'); const cb = li.querySelector(':scope > .aat-row .aat-cb'); if (cb) { cb.checked = !cb.checked; toggleFromNode(li, cb.checked); } }
+    });
+    tree.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('aat-cb')) toggleFromNode(e.target.closest('.aat-node'), e.target.checked); });
+  }
+  async function search() {
+    const q = (el(ids.q) || {}).value;
+    const box = el(ids.results); if (!box) return;
+    if (!q || q.trim().length < 2) { box.innerHTML = '<span class="text-muted small">Type at least 2 letters.</span>'; return; }
+    box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching…</span>';
+    try {
+      const results = await fetchJson(`/types/tree/search/?q=${encodeURIComponent(q.trim())}`);
+      if (!results.length) { box.innerHTML = '<span class="text-muted small">No matching types.</span>'; return; }
+      const sel = selIds();
+      box.innerHTML = results.map((r) => { const id = 'aat:' + r.aat_id;
+        return `<button type="button" class="btn btn-sm ${sel.has(id) ? 'btn-primary' : 'btn-outline-secondary'} text-start d-block w-100 mb-1 recon-aat-hit" data-id="${esc(id)}" data-text="${esc(r.text)}">` +
+          `${truncate(r.text, 44)} <span class="text-muted small">aat:${esc(String(r.aat_id))}</span></button>`; }).join('');
+      box.querySelectorAll('.recon-aat-hit').forEach((b) => b.addEventListener('click', () => {
+        if (selection.some((t) => t.id === b.dataset.id)) remove(b.dataset.id); else add(b.dataset.id, b.dataset.text);
+        b.classList.toggle('btn-primary'); b.classList.toggle('btn-outline-secondary');
+      }));
+    } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; }
+  }
+  function reset(newSelection) {
+    selection = (newSelection || []).map((t) => ({ id: t.id, text: t.text }));
+    treeLoaded = false;
+    const tree = el(ids.tree); if (tree) tree.innerHTML = '';
+    const browse = el(ids.browse); if (browse) browse.open = false;
+    const q = el(ids.q); if (q) q.value = '';
+    const results = el(ids.results); if (results) results.innerHTML = '';
+    renderSelected();
+  }
+  function getSelection() { return selection.map((t) => ({ id: t.id, text: t.text })); }
+  function init() {
+    bindTree();
+    const s = el(ids.search); if (s) s.addEventListener('click', search);
+    const q = el(ids.q);
+    if (q) {
+      q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+      let timer = null;
+      q.addEventListener('input', () => { clearTimeout(timer); const v = q.value.trim(); if (v.length < 3) { const r = el(ids.results); if (r) r.innerHTML = ''; return; } timer = setTimeout(search, 300); });
     }
-  });
-  tree.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('aat-cb')) toggleAatFromNode(e.target.closest('.aat-node'), e.target.checked); });
+    const browse = el(ids.browse); if (browse) browse.addEventListener('toggle', () => { if (browse.open) initTree(); });
+  }
+  return { init, reset, getSelection };
 }
-async function searchAat() {
-  const q = (el('recon-scope-aat-q') || {}).value;
-  const box = el('recon-scope-aat-results'); if (!box) return;
-  if (!q || q.trim().length < 2) { box.innerHTML = '<span class="text-muted small">Type at least 2 letters.</span>'; return; }
-  box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching…</span>';
-  try {
-    const results = await fetchJson(`/types/tree/search/?q=${encodeURIComponent(q.trim())}`);
-    if (!results.length) { box.innerHTML = '<span class="text-muted small">No matching types.</span>'; return; }
-    const sel = aatSelectedIds();
-    box.innerHTML = results.map((r) => {
-      const id = 'aat:' + r.aat_id;
-      return `<button type="button" class="btn btn-sm ${sel.has(id) ? 'btn-primary' : 'btn-outline-secondary'} text-start d-block w-100 mb-1 recon-aat-hit" data-id="${esc(id)}" data-text="${esc(r.text)}">` +
-        `${truncate(r.text, 44)} <span class="text-muted small">aat:${esc(String(r.aat_id))}</span></button>`;
-    }).join('');
-    box.querySelectorAll('.recon-aat-hit').forEach((b) => b.addEventListener('click', () => {
-      if (_scopeDraft.types.some((t) => t.id === b.dataset.id)) removeAatType(b.dataset.id); else addAatType(b.dataset.id, b.dataset.text);
-      b.classList.toggle('btn-primary'); b.classList.toggle('btn-outline-secondary');
-    }));
-  } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; }
+
+// Scope-filter instance (in the Scope modal's "What" section).
+const scopeAat = createAatPicker(
+  { q: 'recon-scope-aat-q', search: 'recon-scope-aat-search', results: 'recon-scope-aat-results', selected: 'recon-scope-aat-selected', tree: 'recon-scope-aat-tree', browse: 'recon-scope-aat-browse' },
+  { emptyText: 'No place types selected — any type is allowed.', checkboxTitle: 'scope to this type and its descendants' },
+);
+// Submission place-types instance (Enrich & export pane) — AAT type(s) written onto every exported/
+// contributed record's LPF `types`. WHG requires each place to carry a type, so these satisfy that.
+const submissionAat = createAatPicker(
+  { q: 'recon-types-aat-q', search: 'recon-types-aat-search', results: 'recon-types-aat-results', selected: 'recon-types-aat-selected', tree: 'recon-types-aat-tree', browse: 'recon-types-aat-browse' },
+  { emptyText: 'No place type assigned yet.', checkboxTitle: 'apply this type to every submitted record',
+    onChange: (sel) => { if (project) { project.submissionTypes = sel; persist(); refreshExport(); runValidation(); } } },
+);
+function submissionTypes() { return (project && project.submissionTypes) || []; }
+// Copy the Scope filter's chosen type(s) onto the submission (a common case: you scoped to "cities", so
+// the reconciled rows ARE cities). Reuses the same picker; user can then adjust.
+function copyScopeTypesToSubmission() {
+  const sel = ((project && project.scope && project.scope.types && project.scope.types.selected) || []).map((t) => ({ id: t.id, text: t.text }));
+  submissionAat.reset(sel);
+  project.submissionTypes = sel; persist(); refreshExport(); runValidation();
 }
 
 // Read the modal into a fresh scope object, commit it, and (if it changed) reset existing matches so
@@ -1989,7 +2096,7 @@ async function applyScope() {
   scope.end = Number.isFinite(end) ? end : null;
   scope.undated = !!(el('recon-scope-undated') || {}).checked;
   // AAT types: keep the picked concepts for display, expand to descendant ids for the query.
-  const selected = _scopeDraft.types.map((t) => ({ id: t.id, text: t.text }));
+  const selected = scopeAat.getSelection();
   let ids = [];
   if (selected.length) {
     try {
@@ -2535,6 +2642,15 @@ function init() {
   if (exportBtn) exportBtn.addEventListener('click', runExport);
   const contribBtn = el('recon-contribute-btn');
   if (contribBtn) contribBtn.addEventListener('click', contributeToWHG);
+  // Contribution validation: re-check button, "use Scope type(s)" shortcut, and re-validate when the
+  // export options (which change the built LPF) change.
+  const recheck = el('recon-validate-recheck');
+  if (recheck) recheck.addEventListener('click', runValidation);
+  const copyScope = el('recon-types-copy-scope');
+  if (copyScope) copyScope.addEventListener('click', copyScopeTypesToSubmission);
+  ['recon-exp-coords', 'recon-exp-dates', 'recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
+    const box = el(id); if (box) box.addEventListener('change', () => { if (!el('recon-export').classList.contains('recon-collapsed')) runValidation(); });
+  });
 
   // Contribute submits a form that navigates to WHG's validation page, leaving the button disabled
   // and showing "uploading to WHG…". If the user comes Back — especially via the bfcache, which
@@ -2586,25 +2702,9 @@ function init() {
   const scopeQ = el('recon-scope-whg-q');
   if (scopeQ) scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
   document.querySelectorAll('[data-scope-draw]').forEach((b) => b.addEventListener('click', () => scopeDrawAction(b.dataset.scopeDraw)));
-  // AAT place-type picker: search box, lazy browse tree, and its expand-on-first-open.
-  bindAatTree();
-  const aatSearch = el('recon-scope-aat-search');
-  if (aatSearch) aatSearch.addEventListener('click', searchAat);
-  const aatQ = el('recon-scope-aat-q');
-  if (aatQ) {
-    aatQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchAat(); } });
-    // Live suggestions: search as you type once ≥ 3 characters are entered (debounced so we don't
-    // fire a request per keystroke); clear the results below the threshold.
-    let aatTimer = null;
-    aatQ.addEventListener('input', () => {
-      clearTimeout(aatTimer);
-      const v = aatQ.value.trim();
-      if (v.length < 3) { const ar = el('recon-scope-aat-results'); if (ar) ar.innerHTML = ''; return; }
-      aatTimer = setTimeout(searchAat, 300);
-    });
-  }
-  const aatBrowse = el('recon-scope-aat-browse');
-  if (aatBrowse) aatBrowse.addEventListener('toggle', () => { if (aatBrowse.open) initAatTree(); });
+  // AAT place-type pickers (Scope filter + submission types) — wire each instance's events.
+  scopeAat.init();
+  submissionAat.init();
   const scopeApply = el('recon-scope-apply');
   if (scopeApply) scopeApply.addEventListener('click', applyScope);
   const scopeClear = el('recon-scope-clear');
@@ -2614,9 +2714,8 @@ function init() {
     const enb = el('recon-scope-end'); if (enb) enb.value = '';
     const udb = el('recon-scope-undated'); if (udb) udb.checked = false;
     const none = document.querySelector('input[name="recon-scope-region-mode"][value="none"]'); if (none) none.checked = true;
-    _scopeDraft = { whgPlace: null, geometry: null, types: [] };
-    renderScopeWhgSelected(); updateScopeDrawStatus(); renderAatSelected(); syncAatTreeChecks();
-    const ar = el('recon-scope-aat-results'); if (ar) ar.innerHTML = '';
+    _scopeDraft = { whgPlace: null, geometry: null };
+    renderScopeWhgSelected(); updateScopeDrawStatus(); scopeAat.reset([]);
     showScopeRegionMode('none');
   });
   updateScopeLabel();

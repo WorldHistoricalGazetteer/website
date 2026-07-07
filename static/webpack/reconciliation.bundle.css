@@ -93,6 +93,11 @@
 .recon-scope-map { height: 320px; border: 1px solid #e2e2e2; border-radius: 6px; overflow: hidden; }
 .recon-scope-whg-results { max-height: 180px; overflow-y: auto; }
 
+/* Contribution validation panel */
+.recon-validate-panel { border: 1px solid #e2e2e2; border-radius: 6px; padding: .5rem .6rem; background: #fbfbfc; }
+.recon-validate-issues { margin: 0; padding-left: 1.1rem; }
+.recon-validate-issues li { margin-bottom: .1rem; }
+
 /* AAT place-type picker */
 .recon-scope-aat-results { max-height: 160px; overflow-y: auto; }
 .recon-scope-aat-selected { display: flex; flex-wrap: wrap; gap: .35rem; }
