@@ -37,10 +37,10 @@ function tourSteps() {
     {
       key: 'welcome',
       target: null,
-      title: 'Welcome to the Gazetteer Workbench',
-      body: `This quick tour turns a raw table into <strong>reconciled, submission-ready</strong> place
-        data — every step running <strong>in your browser</strong>. We'll load a small demo dataset and
-        drive the whole flow for you, pausing to explain each stage.
+      title: 'Welcome to Map your Data',
+      body: `This quick tour turns a raw table of place names into <strong>located, dated, standardised</strong>
+        places — matched to the World Historical Gazetteer, every step running <strong>in your browser</strong>.
+        We'll load a small demo dataset and drive the whole flow for you, pausing to explain each stage.
         <div class="recon-tour-note"><i class="fas fa-lock me-1"></i>Nothing is uploaded; only per-row
         name queries ever reach WHG.</div>`,
       nextLabel: 'Start tour',
@@ -52,7 +52,7 @@ function tourSteps() {
       title: '1 · Import a dataset',
       body: `Everything starts with a table — CSV, TSV or JSON. We'll use the built-in demo: <strong>14
         English places</strong> with county &amp; parish columns, British grid references, and messy
-        historical dates. Click below and the Workbench parses it locally.`,
+        historical dates. Click below and it's parsed locally.`,
       nextLabel: '<i class="fas fa-vial me-1"></i>Load the sample',
       advance: async () => { await api.loadSample(); },
     },
@@ -61,12 +61,13 @@ function tourSteps() {
       target: q('#recon-map-body'),
       enter: async () => { api.openPane('recon-result'); scrollTo('#recon-map-body'); },
       title: '2 · Confirm column roles',
-      body: `The Workbench guessed a <em>role</em> for each column, and the spatial hierarchy is set
-        right in the role dropdown: <strong>County</strong> is “Contains Parish”, <strong>Parish</strong>
-        is “Contains Place”, and <strong>Place</strong> is the name to match. <strong>gridref</strong>
-        holds coordinates and <strong>date</strong> a time span. Change any that are wrong — the
-        containment order follows the “Contains” links automatically, so there's nothing separate to
-        re-order.`,
+      body: `A <em>role</em> is guessed for each column, and the spatial hierarchy is set right in the role
+        dropdown: <strong>County</strong> “Contains Parish”, <strong>Parish</strong> “Contains Place”,
+        <strong>Place</strong> is the name to match. Change any that are wrong.
+        <div class="recon-tour-note">Each row also has a <i class="fas fa-grip-vertical"></i> drag handle to
+        <strong>reorder</strong>, a <i class="fas fa-wand-magic-sparkles"></i> button to <strong>clean/transform</strong>
+        its values (trim, case, find &amp; replace…), and a <i class="fas fa-trash-alt"></i> to delete it —
+        all undoable with <kbd>Ctrl</kbd>+<kbd>Z</kbd>.</div>`,
     },
     {
       key: 'coords',
@@ -74,8 +75,8 @@ function tourSteps() {
       enter: async () => { api.openPane('recon-result'); scrollTo('#recon-coords'); },
       title: 'Coordinates — converted for you',
       body: `It recognised <strong>British National Grid</strong> references (e.g. <code>SU 123 456</code>)
-        and converted all of them to WGS-84 latitude/longitude — no spreadsheet formulas, no lookup
-        tables.`,
+        and converts them to WGS-84 latitude/longitude. <strong>Insert WGS84 columns</strong> adds them to
+        your table as real columns — no spreadsheet formulas, no lookup tables.`,
     },
     {
       key: 'dates',
@@ -83,7 +84,18 @@ function tourSteps() {
       enter: async () => { api.openPane('recon-result'); scrollTo('#recon-dates'); },
       title: 'Dates — parsed from free text',
       body: `Free-text dates become ISO start/end spans: <code>c.1200</code>, <code>15th century</code>,
-        date ranges, even regnal years like <code>8 Henry VI</code> — all interpreted automatically.`,
+        ranges, even regnal years like <code>8 Henry VI</code>. <strong>Insert ISO date columns</strong>
+        adds the parsed dates to your table.`,
+    },
+    {
+      key: 'scope',
+      target: q('#recon-scope-btn'),
+      enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-scope-btn'); },
+      title: 'Scope — narrow before matching',
+      body: `Optionally constrain the <em>whole</em> dataset before matching — to a place (country codes,
+        a WHG region, or an area you draw on a map), a date range, and a Getty <strong>AAT place type</strong>.
+        Sharper scope means fewer wrong candidates. <strong>Sources</strong> similarly restricts which
+        gazetteers a column uses.`,
     },
     {
       key: 'reconcile',
@@ -92,10 +104,9 @@ function tourSteps() {
       title: '3 · Reconcile against WHG',
       body: `Now we match each place to WHG — one column at a time. Only the <strong>name</strong> of each
         row is sent, never your full table. You reconcile the outermost column first
-        (<strong>County</strong>) and confirm it, then the next unlocks — <strong>Parish within
-        County</strong>, <strong>Place within Parish</strong> — so same-named places disambiguate by
-        containment. Each column can use its own <strong>Sources</strong> (e.g. UK Historic Counties for
-        County). Phonetic matching runs in-browser. We'll drive the whole chain for you now.`,
+        (<strong>County</strong>) and confirm it, then the next unlocks — <strong>Parish within County</strong>,
+        <strong>Place within Parish</strong> — so same-named places disambiguate by containment. Phonetic
+        matching runs in-browser. We'll drive the whole chain for you now.`,
       nextLabel: '<i class="fas fa-wand-magic-sparkles me-1"></i>Run reconciliation',
       advance: async () => { await api.reconcile(); },
     },
@@ -106,8 +117,17 @@ function tourSteps() {
       title: 'Matches — row by row',
       body: `Every row was reconciled <strong>individually</strong>: the three different <em>Newton</em>s
         each found their own match rather than being merged. A <strong>clear</strong> top match
-        auto-confirms; anything ambiguous — several equally-good candidates for the same name — is held
-        back for review rather than guessed.`,
+        auto-confirms; anything ambiguous is held back for review rather than guessed.`,
+    },
+    {
+      key: 'filters',
+      target: q('#recon-filters'),
+      enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-filters'); },
+      title: 'Filter to what needs attention',
+      body: `Slice the results by <strong>status</strong> (needs review / auto-confirmed / no match),
+        <strong>score</strong>, a column's values, coordinate/date presence, or a name search. The filter
+        drives the results table, the review queue <em>and</em> the map — so on a big dataset you can focus
+        on just the rows that need a decision.`,
     },
     {
       key: 'review',
@@ -115,32 +135,42 @@ function tourSteps() {
       enter: async () => { api.openPane('recon-review'); scrollTo('#recon-review-card'); },
       title: '4 · Review &amp; confirm',
       body: `Anything below the threshold lands here for a human decision — keyboard-first
-        (<kbd>1</kbd>–<kbd>9</kbd> accept, <kbd>x</kbd> reject, <kbd>→</kbd> next), with a map and the
-        full candidate list. You can accept more than one candidate as close matches.`,
+        (<kbd>1</kbd>–<kbd>9</kbd> accept, <kbd>x</kbd> reject, <kbd>→</kbd> next), with a map, the full
+        candidate list, and a <strong>Wikipedia</strong> link where a Wikidata match has one. You can accept
+        more than one candidate as close matches.`,
     },
     {
       key: 'map',
       target: q('#recon-fullmap'),
       enter: async () => { api.openPane('recon-fullmap-pane'); scrollTo('#recon-fullmap'); await wait(700); },
       title: '5 · See it on the map',
-      body: `Your whole dataset on one map, built from the converted coordinates. Points
-        <strong>cluster</strong> as you zoom out and a heatmap takes over at low zoom, so it stays fast
-        even with thousands of places. Hover any point for its details.`,
+      body: `Your whole dataset on one map, built from the converted coordinates, each point labelled with its
+        place name. Points <strong>cluster</strong> as you zoom out and a heatmap takes over at low zoom, so it
+        stays fast even with thousands of places. Hover any point for its details.`,
     },
     {
-      key: 'export',
-      target: q('#recon-contribute-btn'),
-      enter: async () => { api.openPane('recon-export'); scrollTo('#recon-contribute-btn'); },
-      title: '6 · Enrich, export — or contribute',
-      body: `Add augmented columns (WGS-84 coordinates, ISO dates, the confirmed WHG match, or enriched
-        detail) and export as CSV, JSON or Linked Places. Or <strong>Contribute to WHG</strong> — the
-        Linked Places file is built and handed to WHG's validation page for you.`,
+      key: 'types',
+      target: q('#recon-types-box'),
+      enter: async () => { api.openPane('recon-export'); scrollTo('#recon-types-box'); },
+      title: '6 · Place types (required)',
+      body: `WHG needs every place to carry a Getty <strong>AAT place type</strong>. Assign
+        <strong>one type for all</strong> rows, or map <strong>a column's values</strong> (town, river,
+        castle…) each to their own type. This is the one thing you usually add before contributing.`,
+    },
+    {
+      key: 'validate',
+      target: q('#recon-validate-panel'),
+      enter: async () => { api.openPane('recon-export'); scrollTo('#recon-validate-panel'); },
+      title: 'Export or contribute — validated first',
+      body: `Export as CSV, JSON or Linked Places (LPF). Or <strong>Contribute to WHG</strong> — the LPF is
+        built and validated <em>in your browser</em> against WHG's own schema; the button stays disabled and
+        lists what's missing until every place passes, so nothing gets rejected on submission.`,
     },
     {
       key: 'done',
       target: null,
       title: 'That’s the tour!',
-      body: `The demo dataset is loaded and reconciled — explore any pane freely. When you're ready,
+      body: `The demo is loaded and reconciled — explore any pane freely. When you're ready,
         <strong>Clear my data</strong> (top of the column-roles pane) and drop in your own file.
         Everything you just saw runs the same way on a single place or thousands of rows.`,
       nextLabel: 'Finish',
