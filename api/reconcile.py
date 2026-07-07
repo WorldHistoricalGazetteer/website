@@ -17,6 +17,7 @@ import json
 import logging
 import math
 import os
+import re
 import urllib
 
 from django.contrib.postgres.search import TrigramSimilarity
@@ -449,37 +450,55 @@ class ReconciliationView(APIView):
             return 70
 
 
-def _period_span(period):
-    """Numeric [start, stop] years for a Period from its prefetched temporal bounds.
-    start = earliest known year of the 'start' bound; stop = latest known year of the
-    'stop' bound. Either may be None when PeriodO leaves the bound open/unknown."""
-    start = stop = None
-    for b in period.bounds.all():
-        if b.kind == 'start':
-            y = b.earliestYear if b.earliestYear is not None else b.latestYear
-            if y is not None:
-                start = y if start is None else min(start, y)
-        elif b.kind == 'stop':
-            y = b.latestYear if b.latestYear is not None else b.earliestYear
-            if y is not None:
-                stop = y if stop is None else max(stop, y)
-    return start, stop
+def _years_from_label(label):
+    """Best-effort [start, stop] years parsed from a PeriodO label. Many labels embed
+    their span, e.g. "Ming dynasty, 1368-1644", "AD 1099-1750", "Iron Age (800 BC - AD 43)".
+    Returns (start, stop) ints (negative = BCE) or (None, None). Display/seeding only —
+    the authoritative bounds live in the gateway record; labels are the cheap fallback."""
+    if not label:
+        return None, None
+    s = label.replace('–', '-').replace('—', '-')
+    # Grab up to two signed year tokens, each optionally followed by an era marker.
+    toks = re.findall(r'(-?\d{1,4})\s*(BCE|BC|CE|AD)?', s, flags=re.IGNORECASE)
+    years = []
+    for num, era in toks:
+        try:
+            y = int(num)
+        except ValueError:
+            continue
+        if era and era.upper() in ('BC', 'BCE') and y > 0:
+            y = -y
+        years.append(y)
+    if not years:
+        return None, None
+    if len(years) == 1:
+        return years[0], years[0]
+    return min(years), max(years)
 
 
 class PeriodSuggestView(APIView):
     """
-    Suggest PeriodO periods for a whole dataset's *scope* — ranked by geographic
-    (ISO country-code) and temporal (year-range) overlap with the dataset, and/or
-    by an optional name fragment. Powers the "When → historical period" hints in
-    the Map-your-Data Scope picker. Unlike /reconcile (name-based, per-row), this
-    is a scope-level, filter-based lookup.
+    Suggest PeriodO periods for a whole dataset's *scope* — matched against the
+    dataset's geographic (bounding box / country codes) and temporal (year-range)
+    scope and/or an optional name fragment. Powers the "When → historical period"
+    hints in the Map-your-Data Scope picker.
+
+    Queries PeriodO as the ES gazetteer namespace ``po`` via the CRC gateway (the
+    same infra place reconciliation uses) — so geographic matching runs natively
+    against period geometry, and the canonical PeriodO ARK comes from the record id.
+    (Superseded the earlier Django-``periods``-DB implementation once ``po`` was
+    indexed in the gateway — see developer notes.)
 
     GET params:
-      ccodes  comma/space-separated ISO-2 codes (the dataset's geographic scope)
-      start   integer year (negative = BCE)  — the dataset's temporal scope
-      end     integer year
-      q       optional name fragment to match against period labels (chrononyms)
-      limit   max results (default 12, max 50)
+      q            optional name fragment (period label)
+      bounds       optional GeoJSON Polygon (the dataset's bounding box) — JSON string
+      contained_in optional bare place_id of a WHG region (the scope region)
+      ccodes       comma/space ISO-2 codes (the dataset's country scope)
+      start / end  integer years (negative = BCE) — the dataset's temporal scope
+      limit        max results (default 12, max 50)
+
+    A name-less query needs a spatial constraint (bounds or contained_in); with
+    neither q nor a region, returns ``[]`` (the client then offers curated seeds).
     """
     authentication_classes = [SessionAuthentication, TokenQueryOrBearerAuthentication]
     permission_classes = []  # public reference data
@@ -500,71 +519,90 @@ class PeriodSuggestView(APIView):
         start = _int('start')
         end = _int('end')
         q = (request.GET.get('q') or '').strip()
+        contained_in = (request.GET.get('contained_in') or '').strip()
+        bounds = None
+        raw_bounds = request.GET.get('bounds')
+        if raw_bounds:
+            try:
+                b = json.loads(raw_bounds)
+                if isinstance(b, dict) and b.get('type') and b.get('coordinates'):
+                    bounds = b
+            except (ValueError, TypeError):
+                bounds = None
         try:
             limit = max(1, min(int(request.GET.get('limit', 12)), 50))
         except (TypeError, ValueError):
             limit = 12
 
-        if not ccodes and start is None and end is None and not q:
+        # The gateway rejects a name-less query that has no spatial constraint.
+        if not q and not bounds and not contained_in:
             return JsonResponse({'result': []})
 
-        qs = period_public_queryset(request.user)
-        # Geography is a *ranking* signal, not a hard filter: Period.ccodes is only
-        # populated once the periodo-places enrichment has run, so filtering on it would
-        # silently drop everything where it hasn't. Narrow the scan by name (q) and/or
-        # temporal window; when only ccodes is given, fall back to an (optional) overlap.
-        if q:
-            qs = qs.filter(chrononyms__label__icontains=q).distinct()
-        if start is not None or end is not None:
-            if end is not None:
-                qs = qs.filter(bounds__kind='start', bounds__earliestYear__lte=end)
-            if start is not None:
-                qs = qs.filter(bounds__kind='stop', bounds__latestYear__gte=start)
-            qs = qs.distinct()
-        elif not q and ccodes:
-            # ccodes-only: attempt an overlap (harmless no-op until ccodes are populated).
-            qs = qs.filter(ccodes__overlap=ccodes)
+        raw = {'namespaces': ['po'], 'mode': 'fuzzy'}
+        if ccodes:
+            raw['countries'] = ccodes
+        if start is not None:
+            raw['start'] = start
+        if end is not None:
+            raw['end'] = end
+        if contained_in:
+            raw['contained_in'] = [contained_in]
+            raw['containment'] = 'fuzzy'
+            raw['relation'] = 'intersects'
+        nq = {'query_text': q, 'raw': raw, 'size': min(limit * 4, 100)}
+        if bounds:
+            nq['bounds'] = bounds
 
-        periods = list(qs[:500])
+        try:
+            hits = crc_reconcile_search(nq, user=request.user)
+        except Exception as e:
+            logger.warning('PeriodSuggest gateway error: %s', e)
+            hits = []
 
-        def score(period):
-            s = 0.0
-            pstart, pstop = _period_span(period)
-            if start is not None or end is not None:
-                qs_ = start if start is not None else (pstart if pstart is not None else -10**7)
-                qe_ = end if end is not None else (pstop if pstop is not None else 10**7)
-                if pstart is not None and pstop is not None and pstop >= pstart:
-                    overlap = min(qe_, pstop) - max(qs_, pstart)
-                    if overlap > 0:
-                        pspan = max(1, pstop - pstart)
-                        qspan = max(1, qe_ - qs_)
-                        s += 2.0 * (overlap / max(pspan, qspan))
-            if ccodes:
-                inter = len(set(period.ccodes or []) & set(ccodes))
+        def temporal_score(pstart, pstop):
+            if start is None and end is None:
+                return 0.0
+            qs_ = start if start is not None else (pstart if pstart is not None else -10**7)
+            qe_ = end if end is not None else (pstop if pstop is not None else 10**7)
+            if pstart is None or pstop is None or pstop < pstart:
+                return 0.0
+            overlap = min(qe_, pstop) - max(qs_, pstart)
+            if overlap <= 0:
+                return 0.0
+            return overlap / max(1, max(pstop - pstart, qe_ - qs_))
+
+        results, seen = [], set()
+        for h in hits:
+            src = h.get('_source', {})
+            pid = str(src.get('place_id', ''))          # e.g. "po:p0fp7wv2s8c"
+            if not pid or pid in seen:
+                continue
+            seen.add(pid)
+            periodo_id = pid.split(':', 1)[1] if ':' in pid else pid
+            label = src.get('title') or ''
+            pstart, pstop = _years_from_label(label)
+            hit_cc = src.get('ccodes') or []
+            geo = 0.0
+            if ccodes and hit_cc:
+                inter = len(set(hit_cc) & set(ccodes))
                 if inter:
-                    s += 1.5 * (inter / len(ccodes))
-            if q and period.chrononym and period.chrononym.lower().startswith(q.lower()):
-                s += 0.5
-            return s
-
-        ranked = sorted(periods, key=lambda p: (score(p), p.chrononym or ''), reverse=True)
-
-        results = []
-        for p in ranked[:limit]:
-            pstart, pstop = _period_span(p)
+                    geo = inter / len(ccodes)
+            gw = float(h.get('_score') or 0.0)
             results.append({
-                'id': f'period:{p.id}',
-                # Canonical PeriodO identifier (same ARK the entity view redirects to);
-                # p.url / p.sameAs hold secondary external authority links (LoC, BM…).
-                'uri': f'http://n2t.net/ark:/99152/{p.id}',
-                'label': p.chrononym or '',
+                'id': f'place:po:{periodo_id}',
+                'uri': f'http://n2t.net/ark:/99152/{periodo_id}',
+                'label': label,
                 'start': pstart,
                 'stop': pstop,
-                'ccodes': p.ccodes or [],
-                'coverage': p.spatialCoverageDescription or '',
-                'score': round(score(p), 3),
+                'ccodes': hit_cc,
+                'coverage': ', '.join(hit_cc[:6]) if hit_cc else '',
+                'has_geom': bool(src.get('has_geom')),
+                # Rank: gateway relevance (name/spatial) + temporal overlap + ccode overlap.
+                'score': round(gw + 3.0 * temporal_score(pstart, pstop) + 1.5 * geo, 3),
             })
-        return JsonResponse({'result': results})
+
+        results.sort(key=lambda r: r['score'], reverse=True)
+        return JsonResponse({'result': results[:limit]})
 
 
 @method_decorator(csrf_exempt, name="dispatch")

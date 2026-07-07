@@ -2704,6 +2704,32 @@ function datasetTemporalHint() {
   }
   return { start, end };
 }
+// Bounding box (GeoJSON Polygon) of the dataset's own coordinates — the geographic scope of the data.
+// Used as the spatial constraint for PeriodO suggestions (the gateway needs one for a name-less query).
+function datasetBBoxHint() {
+  if (!project || !hasCoordRole() || !Coords) return null;
+  let minLon = Infinity, minLat = Infinity, maxLon = -Infinity, maxLat = -Infinity, n = 0, seen = 0;
+  for (let i = 0; i < project.rows.length; i++) {
+    const c = rowCoordValue(i);
+    if (!c || !isFinite(c.lon) || !isFinite(c.lat) || Math.abs(c.lat) > 90 || Math.abs(c.lon) > 180) continue;
+    if (c.lon < minLon) minLon = c.lon; if (c.lon > maxLon) maxLon = c.lon;
+    if (c.lat < minLat) minLat = c.lat; if (c.lat > maxLat) maxLat = c.lat;
+    seen += 1; if (++n >= 800) break;
+  }
+  if (!seen || !isFinite(minLon)) return null;
+  const padLon = Math.max((maxLon - minLon) * 0.05, 0.1), padLat = Math.max((maxLat - minLat) * 0.05, 0.1);
+  minLon -= padLon; maxLon += padLon; minLat = Math.max(minLat - padLat, -90); maxLat = Math.min(maxLat + padLat, 90);
+  return { type: 'Polygon', coordinates: [[[minLon, minLat], [maxLon, minLat], [maxLon, maxLat], [minLon, maxLat], [minLon, minLat]]] };
+}
+// The spatial constraint for period suggestions: an explicit scope region wins, else the data's bbox.
+function scopeSpatialParams() {
+  const s = getScope(); const r = (s && s.region) || {};
+  if (r.mode === 'draw' && r.geometry) return { bounds: r.geometry };
+  if (r.mode === 'whg' && r.place && r.place.id) return { contained_in: barePlaceId(r.place.id) };
+  const bbox = datasetBBoxHint();
+  if (bbox) return { bounds: bbox };
+  return {};
+}
 function renderScopePeriods() {
   const box = el('recon-scope-period-selected'); if (!box) return;
   if (!_scopePeriods.length) { box.innerHTML = '<span class="text-muted small">No period selected — the dataset carries no canonical period.</span>'; return; }
@@ -2748,26 +2774,40 @@ function periodSeedHtml() {
 function bindPeriodSeeds(box) {
   box.querySelectorAll('.recon-period-seed').forEach((b) => b.addEventListener('click', () => { const q = el('recon-scope-period-q'); if (q) q.value = b.textContent; searchScopePeriods(); }));
 }
-async function loadPeriodSuggestions() {
-  const box = el('recon-scope-period-suggest'); if (!box) return;
+// Add the data's geo/temporal scope to a period-suggest query. `spatial` toggles sending the spatial
+// constraint (required for a name-less suggest; optional-but-useful for ranking a name search).
+function addPeriodScopeParams(params, spatial) {
   const cc = datasetCcodesHint(); const t = datasetTemporalHint();
-  if (!cc.length && t.start == null && t.end == null) {
-    box.innerHTML = `<div class="text-muted small">Set a country scope (Where) or date range (above) for tailored suggestions — or search / pick a common period below.</div>${periodSeedHtml()}`;
-    bindPeriodSeeds(box); return;
-  }
-  const label = [cc.length ? cc.slice(0, 4).join(', ') + (cc.length > 4 ? '…' : '') : '', (t.start != null || t.end != null) ? fmtSpan(t.start, t.end) : ''].filter(Boolean).join(' · ');
-  box.innerHTML = `<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>suggesting periods for your data${label ? ` (${esc(label)})` : ''}…</div>`;
-  const params = new URLSearchParams();
   if (cc.length) params.set('ccodes', cc.join(','));
   if (t.start != null) params.set('start', t.start);
   if (t.end != null) params.set('end', t.end);
-  params.set('limit', '8');
+  if (spatial) {
+    const sp = scopeSpatialParams();
+    if (sp.bounds) params.set('bounds', JSON.stringify(sp.bounds));
+    else if (sp.contained_in) params.set('contained_in', sp.contained_in);
+    return sp;
+  }
+  return {};
+}
+async function loadPeriodSuggestions() {
+  const box = el('recon-scope-period-suggest'); if (!box) return;
+  const t = datasetTemporalHint();
+  const params = new URLSearchParams(); params.set('limit', '8');
+  const sp = addPeriodScopeParams(params, true);
+  // PeriodO lives in the ES gateway (namespace `po`); a name-less suggest needs a spatial constraint.
+  if (!sp.bounds && !sp.contained_in) {
+    box.innerHTML = `<div class="text-muted small">Add coordinates or set a region (Where above) for suggestions tailored to your data — or search by name / pick a common period below.</div>${periodSeedHtml()}`;
+    bindPeriodSeeds(box); return;
+  }
+  const where = sp.contained_in ? 'your region' : "your data's area";
+  const label = (t.start != null || t.end != null) ? `${where} · ${fmtSpan(t.start, t.end)}` : where;
+  box.innerHTML = `<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>suggesting periods for ${esc(label)}…</div>`;
   try {
     const data = await fetchJson(`/reconcile/periods/suggest?${params.toString()}`);
     const hits = (data && data.result) || [];
     box.innerHTML = (hits.length
-      ? `<div class="text-muted small mb-1">Suggested for your data${label ? ` <span class="fst-italic">(${esc(label)})</span>` : ''}:</div>` + hits.map(periodHitButton).join('')
-      : `<div class="text-muted small">No PeriodO periods matched the data's scope — try a search or a common period.</div>`) + periodSeedHtml();
+      ? `<div class="text-muted small mb-1">Suggested for <span class="fst-italic">${esc(label)}</span>:</div>` + hits.map(periodHitButton).join('')
+      : `<div class="text-muted small">No PeriodO periods matched your data's scope — try a search or a common period.</div>`) + periodSeedHtml();
     bindPeriodHits(box); bindPeriodSeeds(box);
   } catch (err) {
     box.innerHTML = `<div class="text-danger small">Suggestions failed: ${esc(err.message)}</div>${periodSeedHtml()}`;
@@ -2779,11 +2819,9 @@ async function searchScopePeriods() {
   const box = el('recon-scope-period-results'); if (!box) return;
   if (!q || q.trim().length < 2) { box.innerHTML = '<span class="text-muted small">Type at least 2 letters.</span>'; return; }
   box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching PeriodO…</span>';
-  const cc = datasetCcodesHint(); const t = datasetTemporalHint();
+  // Pure name search — no spatial/ccodes/temporal, which the gateway would apply as hard filters and
+  // could drop a legitimately-named period outside the data's area/time.
   const params = new URLSearchParams(); params.set('q', q.trim()); params.set('limit', '12');
-  if (cc.length) params.set('ccodes', cc.join(','));  // rank name matches by the data's scope
-  if (t.start != null) params.set('start', t.start);
-  if (t.end != null) params.set('end', t.end);
   try {
     const data = await fetchJson(`/reconcile/periods/suggest?${params.toString()}`);
     const hits = (data && data.result) || [];
