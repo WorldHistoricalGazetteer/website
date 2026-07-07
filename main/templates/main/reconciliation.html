@@ -9,7 +9,7 @@
   persistence so a dataset survives reloads (resumability). No data leaves the browser.
 {% endcomment %}
 
-{% block title %}<title>WHG · Reconciliation (staff preview)</title>{% endblock %}
+{% block title %}<title>WHG · Map your Data (staff preview)</title>{% endblock %}
 
 {% block extra_head %}
 <link href="{% static 'webpack/reconciliation.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
@@ -32,11 +32,12 @@
   <header class="recon-header">
     <div class="recon-header-text">
       <h1 class="h3 mb-1">
-        Reconciliation <span class="recon-beta-pill">beta</span>
+        <i class="fas fa-map-location-dot text-secondary me-1"></i>Map your Data <span class="recon-beta-pill">beta</span>
       </h1>
       <p class="text-muted mb-0">
-        Take a tabular place dataset from raw file to reconciled, submission-ready gazetteer —
-        <strong>entirely in your browser</strong>. Works for a single place or thousands of rows.
+        Turn a list of place names into <strong>located, dated, standardised places</strong> — matched to
+        the World Historical Gazetteer, cleaned up, and ready to map or share, <strong>entirely in your
+        browser</strong>. Works for a single place or thousands of rows.
       </p>
     </div>
     <button type="button" id="recon-take-tour" class="btn btn-outline-primary recon-tour-btn"
@@ -102,6 +103,12 @@
       </button>
       <div class="recon-pane-actions d-flex align-items-center gap-2">
         <span id="recon-saved" class="recon-saved small text-success"></span>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Undo/redo">
+          <button type="button" id="recon-undo" class="btn btn-outline-secondary" title="Nothing to undo" disabled>
+            <i class="fas fa-rotate-left"></i></button>
+          <button type="button" id="recon-redo" class="btn btn-outline-secondary" title="Nothing to redo" disabled>
+            <i class="fas fa-rotate-right"></i></button>
+        </div>
         <button type="button" id="recon-backup" class="btn btn-sm btn-outline-secondary"
                 title="Save a .whgproj backup of this whole project (data, mapping, matches, decisions) to a file">
           <i class="fas fa-floppy-disk me-1"></i>Backup

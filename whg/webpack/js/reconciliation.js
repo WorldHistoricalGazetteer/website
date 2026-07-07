@@ -344,17 +344,15 @@ async function renderCoords() {
 async function insertWgs84Columns() {
   const coordsIdx = colIndexByRole('coords'); if (coordsIdx < 0) return;
   await loadCoords();
+  const snap = columnSnapshot();
   const fmt = currentCoordFormat();
-  const start = project.columns.length;
   project.columns.push({ name: 'wgs84_lat', role: 'lat' }, { name: 'wgs84_lon', role: 'lon' });
-  const srcRole = project.columns[coordsIdx].role;
   project.rows.forEach((r) => { const c = Coords.parseCoord(fmt, r[coordsIdx]); r.push(c ? +c.lat.toFixed(6) : '', c ? +c.lon.toFixed(6) : ''); });
   project.columns[coordsIdx].role = 'other'; // superseded by the decimal columns
   project.showIgnored = true;                 // so the (now-ignored) source column stays visible
   normalizeChain();
-  pushUndo({ type: 'addcols', start, count: 2, sourceCol: coordsIdx, sourceRole: srcRole });
-  persist();
-  renderMapping(); renderCoords(); renderPreview(); refreshReconSection(); refreshFullMapPane(); refreshExport(); updatePaneSummaries();
+  pushUndo({ type: 'columns', label: 'add WGS84 columns', snapshot: snap });
+  persist(); rerenderData();
   flashSaved('Added wgs84_lat / wgs84_lon columns');
 }
 
@@ -470,7 +468,7 @@ async function renderDates() {
 async function insertIsoDateColumns() {
   const idx = colIndexByRole('date'); if (idx < 0) return;
   await loadDates();
-  const start = project.columns.length;
+  const snap = columnSnapshot();
   project.columns.push({ name: 'date_start_iso', role: 'other' }, { name: 'date_end_iso', role: 'other' });
   project.rows.forEach((r) => {
     const raw = r[idx];
@@ -478,9 +476,8 @@ async function insertIsoDateColumns() {
     r.push((d && d.startISO) || '', (d && d.endISO) || '');
   });
   project.showIgnored = true;
-  pushUndo({ type: 'addcols', start, count: 2 });
-  persist();
-  renderMapping(); renderDates(); renderPreview(); refreshExport(); updatePaneSummaries();
+  pushUndo({ type: 'columns', label: 'add ISO date columns', snapshot: snap });
+  persist(); rerenderData();
   flashSaved('Added date_start_iso / date_end_iso columns');
 }
 
@@ -541,6 +538,44 @@ function deleteColumn(col) {
   pushUndo({ type: 'columns', label: `delete “${name}”`, snapshot: snap });
   persist(); rerenderData();
   flashSaved(`Deleted column “${truncate(name, 24)}”`);
+}
+
+// ── Undo / redo (session history of data mutations: transforms, column ops, role changes) ─────────
+// Each op is symmetric: applying its inverse both reverts the change AND produces the op needed to
+// re-apply it, so the same routine drives undo and redo (swap between the two stacks). Review decisions
+// have their own in-card undo and are NOT in this stack. Session-only (not persisted).
+let _redoStack = [];
+function resetHistory() { _undoStack = []; _redoStack = []; updateUndoButtons(); }
+// Apply op's stored "restore", returning the inverse op for the opposite stack.
+function applyOpInverse(op) {
+  if (op.type === 'cells') {
+    const cur = project.rows.map((r) => r[op.col]);
+    project.rows.forEach((r, i) => { r[op.col] = op.before[i]; });
+    return { type: 'cells', col: op.col, before: cur, label: op.label };
+  }
+  if (op.type === 'columns') {
+    const cur = columnSnapshot();
+    restoreColumnSnapshot(op.snapshot);
+    return { type: 'columns', snapshot: cur, label: op.label };
+  }
+  return null;
+}
+function undo() {
+  if (!_undoStack.length) return;
+  const op = _undoStack.pop();
+  const inv = applyOpInverse(op); if (inv) _redoStack.push(inv);
+  persist(); rerenderData(); updateUndoButtons(); flashSaved(`Undid: ${op.label}`);
+}
+function redo() {
+  if (!_redoStack.length) return;
+  const op = _redoStack.pop();
+  const inv = applyOpInverse(op); if (inv) _undoStack.push(inv);
+  persist(); rerenderData(); updateUndoButtons(); flashSaved(`Redid: ${op.label}`);
+}
+function updateUndoButtons() {
+  const u = el('recon-undo'), r = el('recon-redo');
+  if (u) { u.disabled = !_undoStack.length; u.title = _undoStack.length ? `Undo: ${_undoStack[_undoStack.length - 1].label}` : 'Nothing to undo'; }
+  if (r) { r.disabled = !_redoStack.length; r.title = _redoStack.length ? `Redo: ${_redoStack[_redoStack.length - 1].label}` : 'Nothing to redo'; }
 }
 
 // Validate EVERY row's date and report the ones that cannot be parsed.
@@ -615,8 +650,10 @@ function renderMapping() {
   tbody.querySelectorAll('.recon-role-select').forEach((sel) => {
     sel.addEventListener('change', () => {
       const i = Number(sel.dataset.col);
+      const snap = columnSnapshot(); // role changes can reset matches → snapshot for undo
       const before = reconChain().join(',');
       const v = sel.value;
+      pushUndo({ type: 'columns', label: `role of “${truncate(project.columns[i].name, 20)}”`, snapshot: snap });
       if (v.startsWith('contains:')) { project.columns[i].role = 'contains'; project.columns[i].child = Number(v.slice(9)); }
       else { project.columns[i].role = v; delete project.columns[i].child; }
       sel.className = `form-select form-select-sm recon-role-select role-${project.columns[i].role}`;
@@ -657,7 +694,7 @@ const CELL_TRANSFORMS = [
 let _transformCol = -1;
 let _pendingTransform = null; // { fn, label }
 let _undoStack = [];          // reversible ops (consumed by the undo/redo feature) — cells snapshots etc.
-function pushUndo(op) { _undoStack.push(op); if (_undoStack.length > 50) _undoStack.shift(); }
+function pushUndo(op) { _undoStack.push(op); if (_undoStack.length > 50) _undoStack.shift(); _redoStack = []; updateUndoButtons(); }
 
 function openTransformModal(col) {
   _transformCol = col; _pendingTransform = null;
@@ -753,7 +790,8 @@ function renderPreview() {
 
 function renderAll() {
   el('recon-result').classList.remove('d-none');
-  resetFilters(); // a freshly loaded/imported project starts unfiltered (filters are session-only)
+  resetFilters();  // a freshly loaded/imported project starts unfiltered (filters are session-only)
+  resetHistory();  // undo/redo history is session-only, cleared on load
   const delimNote = project.delimiter ? ` · delimiter <code>${project.delimiter === '\t' ? 'TAB' : project.delimiter}</code>` : ' · JSON';
   el('recon-summary').innerHTML =
     `<strong>${truncate(project.fileName, 60)}</strong> — <strong>${project.total.toLocaleString()}</strong> ` +
@@ -2979,6 +3017,17 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
+  // Undo / redo (data mutations: transforms, column ops, role changes) — buttons + Ctrl/Cmd+Z / Y.
+  const undoBtn = el('recon-undo'); if (undoBtn) undoBtn.addEventListener('click', undo);
+  const redoBtn = el('recon-redo'); if (redoBtn) redoBtn.addEventListener('click', redo);
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag) || (e.target && e.target.isContentEditable)) return; // don't hijack text editing
+    const k = (e.key || '').toLowerCase();
+    if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+  });
   const exportBtn = el('recon-export-btn');
   if (exportBtn) exportBtn.addEventListener('click', runExport);
   const contribBtn = el('recon-contribute-btn');
