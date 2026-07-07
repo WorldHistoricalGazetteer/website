@@ -19,12 +19,17 @@ import unicodedata
 from django.conf import settings
 
 from placetypes.aat_config import (
+    AAT_ENTRY_POINTS,
     AAT_TREE_PROMOTE_TO_ROOT,
     AAT_TREE_SKIP_NODES,
 )
 
 TYPES_INDEX = "types"
 _skip_and_promote = AAT_TREE_SKIP_NODES | AAT_TREE_PROMOTE_TO_ROOT
+# The genuine place-type roots. `is_place_type` is marked True on the generic AAT facets too
+# (Objects/Agents/Concepts…, as ancestors of place types), so `depth:0` would surface those. Rooting
+# the browse tree — and gating search — on these explicit entry points keeps it place-focused.
+_PLACE_ROOTS = set(AAT_ENTRY_POINTS) | AAT_TREE_PROMOTE_TO_ROOT
 _ES_TIMEOUT = 8
 
 
@@ -134,22 +139,9 @@ def get_type_tree(root_aat_id=None):
     """Root-level place-type nodes (root_aat_id=None) or a node's visible children."""
     if root_aat_id is None:
         roots = _search(
-            {"bool": {"must": [{"term": {"depth": 0}}, {"term": {"is_place_type": True}}]}},
-            sort=[{"term.keyword": "asc"}], source=_NODE_SOURCE,
+            {"bool": {"must": [{"terms": {"aat_id": list(_PLACE_ROOTS)}}, {"term": {"is_place_type": True}}]}},
+            source=_NODE_SOURCE, size=50,
         )
-        seen = {d["aat_id"] for d in roots}
-        if AAT_TREE_PROMOTE_TO_ROOT:
-            promoted = _search(
-                {"bool": {"must": [
-                    {"terms": {"aat_id": list(AAT_TREE_PROMOTE_TO_ROOT)}},
-                    {"term": {"is_place_type": True}},
-                ]}},
-                source=_NODE_SOURCE,
-            )
-            for d in promoted:
-                if d["aat_id"] not in seen:
-                    roots.append(d)
-                    seen.add(d["aat_id"])
         nodes = [_to_node(d, _has_children(d["path"], d["depth"])) for d in roots]
         nodes.sort(key=lambda n: n["text"].lower())
         return nodes
@@ -211,6 +203,12 @@ def search_types(query, limit=30):
         ancestors = doc.get("ancestors")
         if not ancestors:
             ancestors = [int(x) for x in doc["path"].split(".")] if doc.get("path") else [doc["aat_id"]]
+        # Keep only genuine place types: a node with a real hierarchy path must descend from one of the
+        # place-type entry points. Drops object/concept matches (e.g. "city maps", "city noise") that are
+        # is_place_type=True only because they share a facet ancestor. Lenient when there is no path.
+        anc_set = set(ancestors)
+        if len(anc_set) > 1 and not (_PLACE_ROOTS & anc_set):
+            continue
         results.append({"aat_id": doc["aat_id"], "text": text, "ancestors": ancestors})
     return results
 
