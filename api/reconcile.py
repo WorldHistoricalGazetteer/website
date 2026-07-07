@@ -554,7 +554,9 @@ class PeriodSuggestView(APIView):
             pstart, pstop = _period_span(p)
             results.append({
                 'id': f'period:{p.id}',
-                'uri': p.url or p.sameAs or '',
+                # Canonical PeriodO identifier (same ARK the entity view redirects to);
+                # p.url / p.sameAs hold secondary external authority links (LoC, BM…).
+                'uri': f'http://n2t.net/ark:/99152/{p.id}',
                 'label': p.chrononym or '',
                 'start': pstart,
                 'stop': pstop,
