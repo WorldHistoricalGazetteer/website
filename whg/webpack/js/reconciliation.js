@@ -2725,10 +2725,14 @@ function addScopePeriod(p) {
 }
 function periodHitButton(p) {
   const span = fmtSpan(p.start, p.stop);
-  const cc = (p.ccodes && p.ccodes.length) ? ` <span class="recon-cand-ns ms-1">${esc(p.ccodes.slice(0, 4).join(' '))}</span>` : '';
+  // Geographic cue: structured ccodes when populated, else the free-text coverage description
+  // (the latter is what's available until Period.ccodes is synced from the enrichment pipeline).
+  const geo = (p.ccodes && p.ccodes.length)
+    ? ` <span class="recon-cand-ns ms-1">${esc(p.ccodes.slice(0, 4).join(' '))}</span>`
+    : (p.coverage ? ` <span class="text-muted small fst-italic">${esc(truncate(p.coverage, 28))}</span>` : '');
   return `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 recon-period-hit" ` +
     `data-id="${esc(p.id)}" data-uri="${esc(p.uri || '')}" data-label="${esc(p.label)}" data-start="${p.start == null ? '' : p.start}" data-stop="${p.stop == null ? '' : p.stop}">` +
-    `${esc(truncate(p.label, 40))}${span ? ` <span class="text-muted small">${esc(span)}</span>` : ''}${cc}</button>`;
+    `${esc(truncate(p.label, 40))}${span ? ` <span class="text-muted small">${esc(span)}</span>` : ''}${geo}</button>`;
 }
 function bindPeriodHits(box) {
   box.querySelectorAll('.recon-period-hit').forEach((b) => b.addEventListener('click', () => addScopePeriod({
