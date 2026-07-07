@@ -7,6 +7,7 @@ time) and category identifier lookups (used to build the search UI).
 """
 
 import logging
+import re
 
 from django.core.cache import cache
 
@@ -320,11 +321,16 @@ def _strip_diacritics(text):
 def search_types(query, limit=30):
     """
     Search the Type table for terms matching *query* (case-insensitive,
-    accent-insensitive).
+    accent-insensitive), ranked by relevance.
 
-    Returns a list of dicts with ``aat_id``, ``text``, and ``ancestors``
-    (the materialized-path AAT ids from root to the matched node,
-    inclusive).  Guide terms are excluded.
+    Matching is **word-boundary** aware: the query must begin a word in the
+    term (so "city" matches "city", "city gates", "inner city" — but NOT the
+    mid-word "authenticity"/"capacity"). Results are ranked exact → word-prefix
+    of the whole term → word-boundary → shorter-term/alphabetical, so the most
+    relevant concepts surface first instead of being cut off by an alphabetical
+    cap. Returns dicts with ``aat_id``, ``text``, and ``ancestors`` (the
+    materialized-path AAT ids from root to the matched node, inclusive). Guide
+    terms are excluded.
     """
     from placetypes.models import Type
 
@@ -332,37 +338,41 @@ def search_types(query, limit=30):
         return []
 
     query_folded = _strip_diacritics(query).lower()
-
-    # Fetch candidates using the DB icontains (catches most matches)
-    # plus a broader pass with the accent-stripped form, then filter
-    # in Python to cover accented terms the DB lookup would miss.
+    # Narrow at the DB first (substring), then rank + word-boundary-filter in Python.
     candidates = (
         Type.objects
-        .filter(is_place_type=True)
+        .filter(is_place_type=True, term__icontains=query)
         .exclude(term__startswith='<')
         .exclude(term__regex=r'^aat:\d+$')
-        .order_by('term')
     )
+    word_start = re.compile(r'(?:^|[\s(/,-])' + re.escape(query_folded))
 
-    results = []
+    scored = []
     for m in candidates.iterator():
-        term_folded = _strip_diacritics(m.term).lower()
-        if query_folded not in term_folded:
-            continue
         text, guide = _clean_label(m.term)
         if guide or text is None:
             continue
+        term_folded = _strip_diacritics(text).lower()
+        if query_folded not in term_folded:
+            continue
+        if term_folded == query_folded:
+            rank = 0                        # exact
+        elif term_folded.startswith(query_folded):
+            rank = 1                        # term starts with the query
+        elif word_start.search(term_folded):
+            rank = 2                        # query starts a word inside the term
+        else:
+            continue                        # mid-word substring only — drop (e.g. authentiCITY)
+        scored.append((rank, len(text), text, m))
+
+    scored.sort(key=lambda x: (x[0], x[1], x[2].lower()))
+    results = []
+    for _rank, _len, text, m in scored[:limit]:
         ancestors = (
             [int(x) for x in m.path.split('.')]
             if m.path else [m.aat_id]
         )
-        results.append({
-            'aat_id': m.aat_id,
-            'text': text,
-            'ancestors': ancestors,
-        })
-        if len(results) >= limit:
-            break
+        results.append({'aat_id': m.aat_id, 'text': text, 'ancestors': ancestors})
     return results
 
 
