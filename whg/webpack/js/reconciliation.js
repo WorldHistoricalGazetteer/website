@@ -1363,6 +1363,9 @@ function buildLPF(data) {
     const rt = rowTypesFor(rec.row);
     if (rt.length) feat.types = rt.map((t) => ({ identifier: t.id, label: t.text }));  // LPF place types (needed to contribute)
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
+    // Dataset-scope PeriodO period(s) apply to every place (scope-level, not per row).
+    const scp = scopePeriods();
+    if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
     if (rec.match) feat.links = rec.match.list.map((x) => ({ type: 'closeMatch', identifier: x.id }));
@@ -1774,7 +1777,9 @@ function invalidateDownstream(col) {
 function defaultScope() {
   // types.selected = the AAT concepts the user picked ({id:'aat:…', text}); types.ids = those expanded
   // to include all descendants (what the query actually filters on, since types.identifier is exact-match).
-  return { region: { mode: 'none', ccodes: [], place: null, geometry: null }, start: null, end: null, undated: false, types: { selected: [], ids: [] } };
+  // periods = dataset-scope PeriodO periods ({id:'period:…', uri, label, start, stop}); scope-level only
+  // (not per row). Selecting one seeds start/end and travels into LPF `when.periods`.
+  return { region: { mode: 'none', ccodes: [], place: null, geometry: null }, start: null, end: null, undated: false, types: { selected: [], ids: [] }, periods: [] };
 }
 function getScope() { return (project && project.scope) || null; }
 function scopeRegion() { const s = getScope(); return (s && s.region) || { mode: 'none' }; }
@@ -1784,8 +1789,10 @@ function scopeActive() {
   const r = s.region || {};
   const hasRegion = (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry);
   const hasTypes = s.types && s.types.selected && s.types.selected.length;
-  return !!(hasRegion || s.start != null || s.end != null || hasTypes);
+  const hasPeriods = s.periods && s.periods.length;
+  return !!(hasRegion || s.start != null || s.end != null || hasTypes || hasPeriods);
 }
+function scopePeriods() { const s = getScope(); return (s && s.periods) || []; }
 function scopeTypes() { const s = getScope(); return (s && s.types) || { selected: [], ids: [] }; }
 // Short human summary for the Scope button label (kept compact).
 function scopeSummary() {
@@ -1795,7 +1802,10 @@ function scopeSummary() {
   if (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) bits.push(r.ccodes.slice(0, 3).join(', ') + (r.ccodes.length > 3 ? '…' : ''));
   else if (r.mode === 'whg' && r.place) bits.push('in ' + truncateText(r.place.title, 16));
   else if (r.mode === 'draw' && r.geometry) bits.push('drawn area');
-  if (s.start != null || s.end != null) bits.push((s.start != null ? s.start : '…') + '–' + (s.end != null ? s.end : '…'));
+  const per = (s.periods && s.periods) || [];
+  if (per.length === 1) bits.push(truncateText(per[0].label, 16));
+  else if (per.length > 1) bits.push(per.length + ' periods');
+  else if (s.start != null || s.end != null) bits.push((s.start != null ? s.start : '…') + '–' + (s.end != null ? s.end : '…'));
   const sel = (s.types && s.types.selected) || [];
   if (sel.length === 1) bits.push(truncateText(sel[0].text, 16));
   else if (sel.length > 1) bits.push(sel.length + ' types');
@@ -2453,7 +2463,7 @@ function scopeFacetCount() {
   const s = getScope(); if (!s) return 0;
   const r = s.region || {};
   const where = (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry);
-  const when = (s.start != null || s.end != null);
+  const when = (s.start != null || s.end != null || (s.periods && s.periods.length));
   const what = s.types && s.types.selected && s.types.selected.length;
   return (where ? 1 : 0) + (when ? 1 : 0) + (what ? 1 : 0);
 }
@@ -2490,6 +2500,12 @@ function populateScopeModal() {
   const st = el('recon-scope-start'); if (st) st.value = s.start != null ? s.start : '';
   const en = el('recon-scope-end'); if (en) en.value = s.end != null ? s.end : '';
   const ud = el('recon-scope-undated'); if (ud) ud.checked = !!s.undated;
+  // PeriodO period(s) — restore selection and load data-tailored suggestions.
+  _scopePeriods = (s.periods || []).map((p) => Object.assign({}, p));
+  el('recon-scope-period-q') && (el('recon-scope-period-q').value = '');
+  el('recon-scope-period-results') && (el('recon-scope-period-results').innerHTML = '');
+  renderScopePeriods();
+  loadPeriodSuggestions();
   // AAT place types — reset the picker to the saved selection.
   scopeAat.reset((s.types && s.types.selected) || []);
   showScopeRegionMode(r.mode || 'none');
@@ -2548,6 +2564,133 @@ async function scopeDrawAction(kind) {
   else if (kind === 'finish') { mod.scopeFinish(); _scopeDrawing = false; }
   else if (kind === 'clear') { mod.scopeClear(); _scopeDrawing = false; _scopeDraft.geometry = null; }
   updateScopeDrawStatus();
+}
+
+// ── Dataset-scope PeriodO period(s) (the Scope "When" section) ─────────────────────────────────────
+// Scope-level only (place#… / follow-up): match the WHOLE dataset's temporal scope to canonical PeriodO
+// period(s) — never per row. Suggestions are ranked server-side by the data's geographic (ccodes) and
+// temporal (year) scope; a curated list of broad eras is always offered as name-search seeds ("hard-coded
+// scope values"). Selecting a period seeds the From/To years and travels into LPF `when.periods`.
+let _scopePeriods = []; // draft [{id, uri, label, start, stop}] while the modal is open
+// Region-neutral eras always offered as search seeds — the hard-coded scope values.
+const PERIOD_SEEDS = ['Prehistoric', 'Bronze Age', 'Iron Age', 'Classical antiquity', 'Roman', 'Late antiquity', 'Early Middle Ages', 'Middle Ages', 'Early modern', 'Modern', 'Contemporary'];
+function fmtYear(y) { if (y == null || y === '') return ''; const n = Number(y); if (!Number.isFinite(n)) return String(y); return n < 0 ? (Math.abs(n) + ' BCE') : String(n); }
+function fmtSpan(a, b) { const s = fmtYear(a), e = fmtYear(b); return (s || e) ? `${s || '…'} – ${e || '…'}` : ''; }
+// Geographic scope of the data: scope ccodes (if any) ∪ valid 2-letter codes from a country column.
+function datasetCcodesHint() {
+  const out = []; const seen = new Set();
+  const s = getScope();
+  if (s && s.region && s.region.mode === 'ccodes') (s.region.ccodes || []).forEach((c) => { const u = String(c).toUpperCase(); if (/^[A-Z]{2}$/.test(u) && !seen.has(u)) { seen.add(u); out.push(u); } });
+  const ci = colIndexByRole('country');
+  if (ci >= 0 && project) for (const r of project.rows) { const u = String(r[ci] == null ? '' : r[ci]).toUpperCase().trim(); if (/^[A-Z]{2}$/.test(u) && !seen.has(u)) { seen.add(u); out.push(u); if (out.length >= 12) break; } }
+  return out;
+}
+// Temporal scope of the data: the scope years if set, else the min/max parsed year of a date column.
+function datasetTemporalHint() {
+  const s = getScope();
+  let start = s && s.start != null ? s.start : null;
+  let end = s && s.end != null ? s.end : null;
+  if (start == null && end == null && Dates && project) {
+    const di = colIndexByRole('date');
+    if (di >= 0) {
+      let mn = null, mx = null, n = 0;
+      for (const r of project.rows) {
+        const v = r[di]; if (v == null || String(v).trim() === '') continue;
+        let d = null; try { d = Dates.parseDate(String(v), { locale: 'uk' }); } catch (e) { d = null; }
+        if (!d) continue;
+        const y0 = d.startISO ? parseInt(d.startISO, 10) : null;
+        const y1 = d.endISO ? parseInt(d.endISO, 10) : null;
+        if (y0 != null && !Number.isNaN(y0)) mn = mn == null ? y0 : Math.min(mn, y0);
+        if (y1 != null && !Number.isNaN(y1)) mx = mx == null ? y1 : Math.max(mx, y1);
+        if (++n >= 400) break;
+      }
+      start = mn; end = mx;
+    }
+  }
+  return { start, end };
+}
+function renderScopePeriods() {
+  const box = el('recon-scope-period-selected'); if (!box) return;
+  if (!_scopePeriods.length) { box.innerHTML = '<span class="text-muted small">No period selected — the dataset carries no canonical period.</span>'; return; }
+  box.innerHTML = _scopePeriods.map((p) => {
+    const span = fmtSpan(p.start, p.stop);
+    return `<span class="recon-aat-chip">${esc(truncateText(p.label, 28))}${span ? ` <span class="text-muted">${esc(span)}</span>` : ''}` +
+      `<button type="button" class="recon-aat-chip-x" data-id="${esc(p.id)}" title="remove" aria-label="remove">×</button></span>`;
+  }).join(' ');
+  box.querySelectorAll('.recon-aat-chip-x').forEach((b) => b.addEventListener('click', () => { _scopePeriods = _scopePeriods.filter((x) => x.id !== b.dataset.id); renderScopePeriods(); }));
+}
+function addScopePeriod(p) {
+  if (!p || !p.id || _scopePeriods.some((x) => x.id === p.id)) return;
+  _scopePeriods.push({ id: p.id, uri: p.uri || '', label: p.label || '', start: p.start != null ? p.start : null, stop: p.stop != null ? p.stop : null });
+  // Seed From/To years from the period bounds when the user hasn't set them.
+  const st = el('recon-scope-start'), en = el('recon-scope-end');
+  if (st && st.value === '' && p.start != null) st.value = p.start;
+  if (en && en.value === '' && p.stop != null) en.value = p.stop;
+  renderScopePeriods();
+}
+function periodHitButton(p) {
+  const span = fmtSpan(p.start, p.stop);
+  const cc = (p.ccodes && p.ccodes.length) ? ` <span class="recon-cand-ns ms-1">${esc(p.ccodes.slice(0, 4).join(' '))}</span>` : '';
+  return `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 recon-period-hit" ` +
+    `data-id="${esc(p.id)}" data-uri="${esc(p.uri || '')}" data-label="${esc(p.label)}" data-start="${p.start == null ? '' : p.start}" data-stop="${p.stop == null ? '' : p.stop}">` +
+    `${esc(truncate(p.label, 40))}${span ? ` <span class="text-muted small">${esc(span)}</span>` : ''}${cc}</button>`;
+}
+function bindPeriodHits(box) {
+  box.querySelectorAll('.recon-period-hit').forEach((b) => b.addEventListener('click', () => addScopePeriod({
+    id: b.dataset.id, uri: b.dataset.uri, label: b.dataset.label,
+    start: b.dataset.start === '' ? null : Number(b.dataset.start), stop: b.dataset.stop === '' ? null : Number(b.dataset.stop),
+  })));
+}
+// Curated era seeds (always available) — each runs a PeriodO name search when clicked.
+function periodSeedHtml() {
+  return `<div class="mt-2"><span class="text-muted small me-1">Common periods:</span>` +
+    PERIOD_SEEDS.map((n) => `<button type="button" class="btn btn-sm btn-link p-0 me-2 align-baseline recon-period-seed">${esc(n)}</button>`).join('') + `</div>`;
+}
+function bindPeriodSeeds(box) {
+  box.querySelectorAll('.recon-period-seed').forEach((b) => b.addEventListener('click', () => { const q = el('recon-scope-period-q'); if (q) q.value = b.textContent; searchScopePeriods(); }));
+}
+async function loadPeriodSuggestions() {
+  const box = el('recon-scope-period-suggest'); if (!box) return;
+  const cc = datasetCcodesHint(); const t = datasetTemporalHint();
+  if (!cc.length && t.start == null && t.end == null) {
+    box.innerHTML = `<div class="text-muted small">Set a country scope (Where) or date range (above) for tailored suggestions — or search / pick a common period below.</div>${periodSeedHtml()}`;
+    bindPeriodSeeds(box); return;
+  }
+  const label = [cc.length ? cc.slice(0, 4).join(', ') + (cc.length > 4 ? '…' : '') : '', (t.start != null || t.end != null) ? fmtSpan(t.start, t.end) : ''].filter(Boolean).join(' · ');
+  box.innerHTML = `<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>suggesting periods for your data${label ? ` (${esc(label)})` : ''}…</div>`;
+  const params = new URLSearchParams();
+  if (cc.length) params.set('ccodes', cc.join(','));
+  if (t.start != null) params.set('start', t.start);
+  if (t.end != null) params.set('end', t.end);
+  params.set('limit', '8');
+  try {
+    const data = await fetchJson(`/reconcile/periods/suggest?${params.toString()}`);
+    const hits = (data && data.result) || [];
+    box.innerHTML = (hits.length
+      ? `<div class="text-muted small mb-1">Suggested for your data${label ? ` <span class="fst-italic">(${esc(label)})</span>` : ''}:</div>` + hits.map(periodHitButton).join('')
+      : `<div class="text-muted small">No PeriodO periods matched the data's scope — try a search or a common period.</div>`) + periodSeedHtml();
+    bindPeriodHits(box); bindPeriodSeeds(box);
+  } catch (err) {
+    box.innerHTML = `<div class="text-danger small">Suggestions failed: ${esc(err.message)}</div>${periodSeedHtml()}`;
+    bindPeriodSeeds(box);
+  }
+}
+async function searchScopePeriods() {
+  const q = (el('recon-scope-period-q') || {}).value;
+  const box = el('recon-scope-period-results'); if (!box) return;
+  if (!q || q.trim().length < 2) { box.innerHTML = '<span class="text-muted small">Type at least 2 letters.</span>'; return; }
+  box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching PeriodO…</span>';
+  const cc = datasetCcodesHint(); const t = datasetTemporalHint();
+  const params = new URLSearchParams(); params.set('q', q.trim()); params.set('limit', '12');
+  if (cc.length) params.set('ccodes', cc.join(','));  // rank name matches by the data's scope
+  if (t.start != null) params.set('start', t.start);
+  if (t.end != null) params.set('end', t.end);
+  try {
+    const data = await fetchJson(`/reconcile/periods/suggest?${params.toString()}`);
+    const hits = (data && data.result) || [];
+    box.innerHTML = hits.length ? hits.map(periodHitButton).join('') : '<span class="text-muted small">No matching PeriodO periods.</span>';
+    bindPeriodHits(box);
+  } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; }
 }
 // ── Reusable AAT place-type picker (Getty AAT hierarchy via the placetypes /types endpoints) ───
 // A self-contained multi-select widget: search (with live typeahead ≥3 chars) or browse the AAT
@@ -2754,6 +2897,8 @@ async function applyScope() {
   scope.start = Number.isFinite(start) ? start : null;
   scope.end = Number.isFinite(end) ? end : null;
   scope.undated = !!(el('recon-scope-undated') || {}).checked;
+  // PeriodO scope period(s) — dataset-level canonical period(s).
+  scope.periods = _scopePeriods.map((p) => Object.assign({}, p));
   // AAT types: keep the picked concepts for display, expand to descendant ids for the query.
   const selected = scopeAat.getSelection();
   let ids = [];
@@ -3406,6 +3551,10 @@ function init() {
   if (scopeSearch) scopeSearch.addEventListener('click', searchScopeWhg);
   const scopeQ = el('recon-scope-whg-q');
   if (scopeQ) scopeQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopeWhg(); } });
+  const scopePeriodSearch = el('recon-scope-period-search');
+  if (scopePeriodSearch) scopePeriodSearch.addEventListener('click', searchScopePeriods);
+  const scopePeriodQ = el('recon-scope-period-q');
+  if (scopePeriodQ) scopePeriodQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopePeriods(); } });
   document.querySelectorAll('[data-scope-draw]').forEach((b) => b.addEventListener('click', () => scopeDrawAction(b.dataset.scopeDraw)));
   // AAT place-type pickers: the Scope filter, and the shared per-row type modal (data-browser cells).
   scopeAat.init();
@@ -3427,6 +3576,10 @@ function init() {
     const udb = el('recon-scope-undated'); if (udb) udb.checked = false;
     const none = document.querySelector('input[name="recon-scope-region-mode"][value="none"]'); if (none) none.checked = true;
     _scopeDraft = { whgPlace: null, geometry: null };
+    _scopePeriods = [];
+    const pq = el('recon-scope-period-q'); if (pq) pq.value = '';
+    const pr = el('recon-scope-period-results'); if (pr) pr.innerHTML = '';
+    renderScopePeriods(); loadPeriodSuggestions();
     renderScopeWhgSelected(); updateScopeDrawStatus(); scopeAat.reset([]);
     showScopeRegionMode('none');
   });

@@ -449,6 +449,119 @@ class ReconciliationView(APIView):
             return 70
 
 
+def _period_span(period):
+    """Numeric [start, stop] years for a Period from its prefetched temporal bounds.
+    start = earliest known year of the 'start' bound; stop = latest known year of the
+    'stop' bound. Either may be None when PeriodO leaves the bound open/unknown."""
+    start = stop = None
+    for b in period.bounds.all():
+        if b.kind == 'start':
+            y = b.earliestYear if b.earliestYear is not None else b.latestYear
+            if y is not None:
+                start = y if start is None else min(start, y)
+        elif b.kind == 'stop':
+            y = b.latestYear if b.latestYear is not None else b.earliestYear
+            if y is not None:
+                stop = y if stop is None else max(stop, y)
+    return start, stop
+
+
+class PeriodSuggestView(APIView):
+    """
+    Suggest PeriodO periods for a whole dataset's *scope* — ranked by geographic
+    (ISO country-code) and temporal (year-range) overlap with the dataset, and/or
+    by an optional name fragment. Powers the "When → historical period" hints in
+    the Map-your-Data Scope picker. Unlike /reconcile (name-based, per-row), this
+    is a scope-level, filter-based lookup.
+
+    GET params:
+      ccodes  comma/space-separated ISO-2 codes (the dataset's geographic scope)
+      start   integer year (negative = BCE)  — the dataset's temporal scope
+      end     integer year
+      q       optional name fragment to match against period labels (chrononyms)
+      limit   max results (default 12, max 50)
+    """
+    authentication_classes = [SessionAuthentication, TokenQueryOrBearerAuthentication]
+    permission_classes = []  # public reference data
+
+    def get(self, request, *args, **kwargs):
+        raw_cc = request.GET.get('ccodes', '') or ''
+        ccodes = [c for c in (parse_delimited_param(raw_cc, upper=True) or []) if len(c) == 2]
+
+        def _int(name):
+            v = request.GET.get(name)
+            if v is None or str(v).strip() == '':
+                return None
+            try:
+                return int(float(v))
+            except (TypeError, ValueError):
+                return None
+
+        start = _int('start')
+        end = _int('end')
+        q = (request.GET.get('q') or '').strip()
+        try:
+            limit = max(1, min(int(request.GET.get('limit', 12)), 50))
+        except (TypeError, ValueError):
+            limit = 12
+
+        if not ccodes and start is None and end is None and not q:
+            return JsonResponse({'result': []})
+
+        qs = period_public_queryset(request.user)
+        if q:
+            qs = qs.filter(chrononyms__label__icontains=q).distinct()
+        if ccodes:
+            qs = qs.filter(ccodes__overlap=ccodes)
+        # Temporal DB pre-filter only when it's the sole constraint, to bound the scan;
+        # otherwise ccodes/q already narrow the set and temporal just re-ranks in Python.
+        if not ccodes and not q and (start is not None or end is not None):
+            if end is not None:
+                qs = qs.filter(bounds__kind='start', bounds__earliestYear__lte=end)
+            if start is not None:
+                qs = qs.filter(bounds__kind='stop', bounds__latestYear__gte=start)
+            qs = qs.distinct()
+
+        periods = list(qs[:500])
+
+        def score(period):
+            s = 0.0
+            pstart, pstop = _period_span(period)
+            if start is not None or end is not None:
+                qs_ = start if start is not None else (pstart if pstart is not None else -10**7)
+                qe_ = end if end is not None else (pstop if pstop is not None else 10**7)
+                if pstart is not None and pstop is not None and pstop >= pstart:
+                    overlap = min(qe_, pstop) - max(qs_, pstart)
+                    if overlap > 0:
+                        pspan = max(1, pstop - pstart)
+                        qspan = max(1, qe_ - qs_)
+                        s += 2.0 * (overlap / max(pspan, qspan))
+            if ccodes:
+                inter = len(set(period.ccodes or []) & set(ccodes))
+                if inter:
+                    s += 1.5 * (inter / len(ccodes))
+            if q and period.chrononym and period.chrononym.lower().startswith(q.lower()):
+                s += 0.5
+            return s
+
+        ranked = sorted(periods, key=lambda p: (score(p), p.chrononym or ''), reverse=True)
+
+        results = []
+        for p in ranked[:limit]:
+            pstart, pstop = _period_span(p)
+            results.append({
+                'id': f'period:{p.id}',
+                'uri': p.url or p.sameAs or '',
+                'label': p.chrononym or '',
+                'start': pstart,
+                'stop': pstop,
+                'ccodes': p.ccodes or [],
+                'coverage': p.spatialCoverageDescription or '',
+                'score': round(score(p), 3),
+            })
+        return JsonResponse({'result': results})
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 @propose_properties_schema()
 class ExtendProposeView(APIView):

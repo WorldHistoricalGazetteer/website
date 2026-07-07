@@ -6,7 +6,7 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView
 from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 
 from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView, SuggestPropertyView, \
-    AuthorityDatasetsView, DummyView
+    AuthorityDatasetsView, DummyView, PeriodSuggestView
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
 from .views_indexing import (
@@ -41,6 +41,7 @@ urlpatterns = [
     path("reconcile", ReconciliationView.as_view(), name="reconcile"),
     path('reconcile/properties', ExtendProposeView.as_view(), name='extend-propose'),
     path('reconcile/authority-datasets', AuthorityDatasetsView.as_view(), name='authority-datasets'),
+    path('reconcile/periods/suggest', PeriodSuggestView.as_view(), name='reconcile-period-suggest'),
     path("suggest/entity", SuggestEntityView.as_view(), name="suggest_entity"),
     path("suggest/property", SuggestPropertyView.as_view(), name="suggest_property"),
 
