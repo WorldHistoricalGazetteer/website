@@ -14,8 +14,10 @@ async function getValidator() {
   const schema = await fetch(SCHEMA_URL, { credentials: 'same-origin', headers: { Accept: 'application/json' } })
     .then((r) => { if (!r.ok) throw new Error('schema HTTP ' + r.status); return r.json(); });
   // strict:false → tolerate the schema's draft-07 idioms / unknown formats without throwing;
-  // allErrors → collect every problem (not just the first) so we can summarise per feature.
-  const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: false });
+  // allErrors → collect every problem (not just the first) so we can summarise per feature;
+  // unicodeRegExp:false → compile `pattern` regexes WITHOUT the /u flag (the LPF schema uses \: / \-
+  // escapes that are invalid in unicode mode and would otherwise throw at compile time).
+  const ajv = new Ajv({ allErrors: true, strict: false, validateFormats: false, unicodeRegExp: false });
   _validate = ajv.compile(schema);
   return _validate;
 }
