@@ -742,6 +742,10 @@ def plausible_analyser_view(request):
     for row in countries_full:
         row['title'] = cnames.get(row['label'], '')
     country_map = {row['label']: row['visitors'] for row in countries_full if len(row['label']) == 2}
+    # Log-scaled values drive the choropleth colour (raw counts are hugely skewed — one hub country
+    # would otherwise flatten everything else); the raw map still feeds the tooltip + table.
+    import math
+    country_scaled = {code: round(math.log10(v + 1), 3) for code, v in country_map.items() if v > 0}
 
     sections = [
         {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
@@ -776,7 +780,8 @@ def plausible_analyser_view(request):
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
         'topline': topline, 'per_site': per_site, 'chart': chart,
-        'sections': sections, 'donuts': donuts, 'country_map': country_map,
+        'sections': sections, 'donuts': donuts,
+        'country_map': country_map, 'country_scaled': country_scaled,
         'funnel': funnel, 'others': others, 'base_v': base_v,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
