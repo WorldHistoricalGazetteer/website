@@ -34,36 +34,88 @@ const pool = new Pool({
   max: 8,
 });
 
-// Build a seed Yjs update from the project's stored snapshot.decisions (first-time open).
-async function seedFromSnapshot(documentName) {
-  const r = await pool.query('SELECT snapshot FROM workbench_project WHERE id = $1', [documentName]);
-  const decisions = (r.rows[0] && r.rows[0].snapshot && r.rows[0].snapshot.decisions) || {};
+// Doc mapping — MUST match whg/webpack/js/recon-collab-rt.js exactly:
+//   rows = Y.Array<Y.Map> (a Y.Map per row, keyed by column index "0","1",…)
+//   columns = Y.Array<Y.Map>; decisions|matches|geom|rowTypes = Y.Map; meta = Y.Map (everything else)
+const KEYED = ['matches', 'decisions', 'geom', 'rowTypes'];
+const META_EXCLUDE = new Set([
+  'rows', 'columns', 'matches', 'decisions', 'geom', 'rowTypes', 'id',
+  'serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal', 'sharedToken', 'sharedUrl',
+]);
+
+function projectToDoc(snapshot) {
   const doc = new Y.Doc();
-  const map = doc.getMap('decisions');
-  for (const [k, v] of Object.entries(decisions)) map.set(k, v);
-  return Buffer.from(Y.encodeStateAsUpdate(doc));
+  const s = snapshot || {};
+  doc.transact(() => {
+    const meta = doc.getMap('meta');
+    for (const k of Object.keys(s)) if (!META_EXCLUDE.has(k)) meta.set(k, s[k]);
+    const yCols = doc.getArray('columns');
+    (s.columns || []).forEach((col) => {
+      const m = new Y.Map();
+      for (const [k, v] of Object.entries(col || {})) m.set(k, v);
+      yCols.push([m]);
+    });
+    const yRows = doc.getArray('rows');
+    (s.rows || []).forEach((row) => {
+      const m = new Y.Map();
+      (row || []).forEach((v, j) => m.set(String(j), String(v == null ? '' : v)));
+      yRows.push([m]);
+    });
+    for (const kk of KEYED) {
+      const ym = doc.getMap(kk);
+      for (const [key, val] of Object.entries(s[kk] || {})) ym.set(key, val);
+    }
+  });
+  return doc;
 }
 
-// Flatten the live Yjs doc's `decisions` map back into the canonical snapshot + write a history row.
+function docToProject(doc) {
+  const p = {};
+  doc.getMap('meta').forEach((v, k) => { p[k] = v; });
+  p.columns = doc.getArray('columns').toArray().map((m) => {
+    const o = {};
+    if (m instanceof Y.Map) m.forEach((v, k) => { o[k] = v; });
+    return o;
+  });
+  const ncols = p.columns.length;
+  p.rows = doc.getArray('rows').toArray().map((m) => {
+    if (!(m instanceof Y.Map)) return [];
+    let max = ncols - 1;
+    m.forEach((v, k) => { const j = Number(k); if (j > max) max = j; });
+    const arr = [];
+    for (let j = 0; j <= max; j++) { const v = m.get(String(j)); arr.push(v == null ? '' : v); }
+    return arr;
+  });
+  p.total = p.rows.length;
+  for (const kk of KEYED) { p[kk] = {}; doc.getMap(kk).forEach((v, k) => { p[kk][k] = v; }); }
+  return p;
+}
+
+// Seed a fresh Yjs update from the project's stored snapshot (first-time open).
+async function seedFromSnapshot(documentName) {
+  const r = await pool.query('SELECT snapshot FROM workbench_project WHERE id = $1', [documentName]);
+  const snapshot = (r.rows[0] && r.rows[0].snapshot) || {};
+  return Buffer.from(Y.encodeStateAsUpdate(projectToDoc(snapshot)));
+}
+
+// Flatten the whole live Yjs doc back into the canonical snapshot + write a history row.
 async function flattenBack(documentName, state) {
   const doc = new Y.Doc();
   Y.applyUpdate(doc, state);
-  const decisions = doc.getMap('decisions').toJSON();
+  const snapshot = docToProject(doc);
   const upd = await pool.query(
     `UPDATE workbench_project
-       SET snapshot = jsonb_set(coalesce(snapshot, '{}'::jsonb), '{decisions}', $2::jsonb, true),
-           version = version + 1,
-           updated = now()
+       SET snapshot = $2::jsonb, version = version + 1, updated = now()
      WHERE id = $1
-     RETURNING version, snapshot`,
-    [documentName, JSON.stringify(decisions)]
+     RETURNING version`,
+    [documentName, JSON.stringify(snapshot)]
   );
   if (upd.rows[0]) {
     await pool.query(
       `INSERT INTO workbench_project_snapshot (project_id, version, snapshot, created)
-       VALUES ($1, $2, $3, now())
+       VALUES ($1, $2, $3::jsonb, now())
        ON CONFLICT (project_id, version) DO NOTHING`,
-      [documentName, upd.rows[0].version, upd.rows[0].snapshot]
+      [documentName, upd.rows[0].version, JSON.stringify(snapshot)]
     );
   }
 }

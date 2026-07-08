@@ -1,23 +1,60 @@
-// recon-collab-rt.js — real-time collaboration lazy chunk (Workbench Phase 2 spike, place#112).
+// recon-collab-rt.js — real-time collaboration (Workbench Phase 2, place#112).
 //
-// Connects a WorkbenchProject to the Hocuspocus WebSocket service and syncs the `decisions` map as a
-// Yjs shared type (Pass-1 spike scope — proves the round-trip; Pass 2 widens to rows/matches/…).
-// Loaded on demand from reconciliation.js only for team (non-personal) server projects; solo/personal
-// projects keep the Phase-1 REST sync and never load this chunk (bundle stays lean by default).
+// Models the WHOLE workbench `project` as a Yjs CRDT document so a team edits it together, live and
+// conflict-free: raw table cells, column roles, reconciliation matches, review decisions, drawn
+// geometry, row place-types and dataset-wide settings all merge per-field. Adds presence (who's here
+// + which cell they're on) and offline persistence (y-indexeddb), merging on reconnect.
+//
+// Architecture: the plain `project` object in reconciliation.js stays the UI's working copy (so the
+// 250 KB of rendering code is untouched). This module bidirectionally *mirrors* it to a Yjs doc:
+//   • mirror(project)   — reconcile the Yjs doc to match the local project (local edits → peers)
+//   • readProject()     — reconstruct a plain project from the Yjs doc (peers → local)
+// Only runs for team (non-personal) server projects; solo/personal projects never load this chunk.
+//
+// Doc shape:  rows = Y.Array<Y.Map>  (a Y.Map per row, keyed by column index "0","1",… → cell text)
+//             columns = Y.Array<Y.Map>  (a Y.Map per column: name/role/child/…)
+//             decisions|matches|geom|rowTypes = Y.Map  (keyed overlays, per key = JSON value)
+//             meta = Y.Map  (all remaining scalar/whole-value fields: scope, coordFormat, total, …)
 
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
+import { IndexeddbPersistence } from 'y-indexeddb';
+
+// Keyed-overlay collections mapped to their own top-level Y.Map.
+const KEYED = ['matches', 'decisions', 'geom', 'rowTypes'];
+// Fields NOT stored in `meta` (they have dedicated shared types, or are per-client sync metadata).
+const META_EXCLUDE = new Set([
+  'rows', 'columns', 'matches', 'decisions', 'geom', 'rowTypes', 'id',
+  'serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal', 'sharedToken', 'sharedUrl',
+]);
 
 let provider = null;
+let idb = null;
 let ydoc = null;
-let decisionsMap = null;
+let yRows = null, yCols = null, yMeta = null;
+const yKeyed = {};
+let cbs = {};
+let _remoteTimer = null;
 
 export function isConnected() { return !!(provider && provider.status === 'connected'); }
+export function isEmpty() {
+  return !ydoc || (yRows.length === 0 && yCols.length === 0 && yMeta.size === 0);
+}
 
-// opts: { serverId, token, wsUrl, onRemoteDecisions(decisionsObj), onStatus(status) }
+// opts: { serverId, token, wsUrl, user:{name,color}, offline, onStatus, onSynced, onRemote(project), onPresence(states) }
 export function connect(opts) {
   disconnect();
+  cbs = opts || {};
   ydoc = new Y.Doc();
+  yRows = ydoc.getArray('rows');
+  yCols = ydoc.getArray('columns');
+  yMeta = ydoc.getMap('meta');
+  KEYED.forEach((k) => { yKeyed[k] = ydoc.getMap(k); });
+
+  if (opts.offline !== false) {
+    try { idb = new IndexeddbPersistence('wb-' + opts.serverId, ydoc); } catch (_) { /* private mode */ }
+  }
+
   provider = new HocuspocusProvider({
     url: opts.wsUrl,
     name: opts.serverId,
@@ -25,36 +62,126 @@ export function connect(opts) {
     document: ydoc,
     onStatus: ({ status }) => { if (opts.onStatus) opts.onStatus(status); },
     onAuthenticationFailed: () => { if (opts.onStatus) opts.onStatus('unauthorized'); },
+    onSynced: () => { if (opts.onSynced) opts.onSynced(); },
   });
-  decisionsMap = ydoc.getMap('decisions');
-  // React only to REMOTE changes (transaction.local is false when applied from a peer update).
-  decisionsMap.observe((event, transaction) => {
-    if (transaction.local) return;
-    if (opts.onRemoteDecisions) opts.onRemoteDecisions(decisionsMap.toJSON());
-  });
+
+  // Presence (awareness): advertise who we are; notify on any change.
+  if (opts.user) provider.awareness.setLocalStateField('user', opts.user);
+  provider.awareness.on('change', () => { if (cbs.onPresence) cbs.onPresence(publicStates()); });
+
+  // Remote changes → debounced project rebuild (ignore our own local transactions).
+  const onDeep = (events, tx) => { if (!tx || !tx.local) scheduleRemote(); };
+  yRows.observeDeep(onDeep);
+  yCols.observeDeep(onDeep);
+  yMeta.observe((e, tx) => { if (!tx || !tx.local) scheduleRemote(); });
+  KEYED.forEach((k) => yKeyed[k].observeDeep(onDeep));
+
   return { provider, ydoc };
 }
 
-// Mirror the local `decisions` object into the shared map: set changed keys, delete removed ones.
-// One transaction (origin 'local') so the observer above ignores it as our own write.
-export function syncLocalDecisions(decisions) {
-  if (!decisionsMap || !ydoc) return;
-  const src = decisions || {};
+function scheduleRemote() {
+  clearTimeout(_remoteTimer);
+  _remoteTimer = setTimeout(() => { if (cbs.onRemote) cbs.onRemote(readProject()); }, 160);
+}
+
+// ── local project → Yjs (one transaction so observers see a single, self-tagged change) ──────────
+export function mirror(project) {
+  if (!ydoc || !project) return;
   ydoc.transact(() => {
-    const seen = new Set();
-    for (const [k, v] of Object.entries(src)) {
-      seen.add(k);
-      if (JSON.stringify(decisionsMap.get(k)) !== JSON.stringify(v)) decisionsMap.set(k, v);
+    // meta (everything scalar/whole-value)
+    for (const k of Object.keys(project)) {
+      if (META_EXCLUDE.has(k)) continue;
+      if (!jsonEq(yMeta.get(k), project[k])) yMeta.set(k, project[k]);
     }
-    for (const k of Array.from(decisionsMap.keys())) if (!seen.has(k)) decisionsMap.delete(k);
+    for (const k of Array.from(yMeta.keys())) if (!(k in project) || META_EXCLUDE.has(k)) yMeta.delete(k);
+
+    reconcileObjArray(yCols, project.columns || []);
+    reconcileRows(yRows, project.rows || []);
+
+    for (const kk of KEYED) {
+      const ymap = yKeyed[kk];
+      const src = project[kk] || {};
+      for (const [key, val] of Object.entries(src)) if (!jsonEq(ymap.get(key), val)) ymap.set(key, val);
+      for (const key of Array.from(ymap.keys())) if (!(key in src)) ymap.delete(key);
+    }
   }, 'local');
 }
 
-export function currentDecisions() { return decisionsMap ? decisionsMap.toJSON() : {}; }
+// ── Yjs → plain project ──────────────────────────────────────────────────────────────────────────
+export function readProject() {
+  const p = {};
+  yMeta.forEach((v, k) => { p[k] = v; });
+  p.columns = yCols.toArray().map((m) => (m instanceof Y.Map ? mapToObj(m) : m));
+  const ncols = p.columns.length;
+  p.rows = yRows.toArray().map((m) => {
+    if (!(m instanceof Y.Map)) return Array.isArray(m) ? m : [];
+    let max = ncols - 1;
+    m.forEach((v, k) => { const j = Number(k); if (j > max) max = j; });
+    const arr = [];
+    for (let j = 0; j <= max; j++) { const v = m.get(String(j)); arr.push(v == null ? '' : v); }
+    return arr;
+  });
+  p.total = p.rows.length;
+  for (const kk of KEYED) { p[kk] = {}; yKeyed[kk].forEach((v, k) => { p[kk][k] = v; }); }
+  return p;
+}
+
+// ── reconcilers ────────────────────────────────────────────────────────────────────────────────
+function reconcileRows(yarr, rows) {
+  while (yarr.length > rows.length) yarr.delete(yarr.length - 1, 1);
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || [];
+    let ym = yarr.get(i);
+    if (!(ym instanceof Y.Map)) {
+      const m = new Y.Map();
+      for (let j = 0; j < row.length; j++) m.set(String(j), cell(row[j]));
+      yarr.insert(i, [m]);
+      continue;
+    }
+    for (let j = 0; j < row.length; j++) { const cv = cell(row[j]); if (ym.get(String(j)) !== cv) ym.set(String(j), cv); }
+    for (const key of Array.from(ym.keys())) if (Number(key) >= row.length) ym.delete(key);
+  }
+}
+
+function reconcileObjArray(yarr, objs) {
+  while (yarr.length > objs.length) yarr.delete(yarr.length - 1, 1);
+  for (let i = 0; i < objs.length; i++) {
+    const obj = objs[i] || {};
+    let ym = yarr.get(i);
+    if (!(ym instanceof Y.Map)) {
+      const m = new Y.Map();
+      for (const [k, v] of Object.entries(obj)) m.set(k, v);
+      yarr.insert(i, [m]);
+      continue;
+    }
+    for (const [k, v] of Object.entries(obj)) if (!jsonEq(ym.get(k), v)) ym.set(k, v);
+    for (const k of Array.from(ym.keys())) if (!(k in obj)) ym.delete(k);
+  }
+}
+
+function mapToObj(m) { const o = {}; m.forEach((v, k) => { o[k] = v; }); return o; }
+function cell(v) { return String(v == null ? '' : v); }
+function jsonEq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+// ── presence ─────────────────────────────────────────────────────────────────────────────────────
+export function setCursor(cursor) {
+  if (provider) provider.awareness.setLocalStateField('cursor', cursor || null);
+}
+function publicStates() {
+  if (!provider) return [];
+  const me = provider.awareness.clientID;
+  const out = [];
+  provider.awareness.getStates().forEach((state, id) => {
+    if (id === me || !state || !state.user) return;
+    out.push({ id, user: state.user, cursor: state.cursor || null });
+  });
+  return out;
+}
 
 export function disconnect() {
+  clearTimeout(_remoteTimer);
   if (provider) { try { provider.destroy(); } catch (_) { /* ignore */ } }
-  provider = null;
-  ydoc = null;
-  decisionsMap = null;
+  if (idb) { try { idb.destroy(); } catch (_) { /* ignore */ } }
+  provider = idb = ydoc = yRows = yCols = yMeta = null;
+  cbs = {};
 }

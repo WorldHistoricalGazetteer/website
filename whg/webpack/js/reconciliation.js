@@ -886,6 +886,7 @@ function paintPreviewWindow() {
   }
   parts.push(`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${Math.max(0, (total - last) * rowH)}px"></td></tr>`);
   body.innerHTML = parts.join('');
+  if (_rtPresence.length) paintPresenceCursors(); // keep teammates' cursors as the window repaints
 }
 function updatePreviewCount() {
   const c = el('recon-preview-count'); if (!c || !project) return;
@@ -934,6 +935,7 @@ function startCellEdit(ri, ci) {
   cancelCellEdit();
   const td = previewCellEl(ri, ci); if (!td) return;
   _previewEditing = { ri, ci };
+  rtSetCursor({ row: ri, col: ci }); // tell teammates which cell I'm in
   td.classList.add('recon-cell-editing');
   td.innerHTML = `<input class="recon-cell-input" type="text" value="${esc(project.rows[ri][ci])}">`;
   const inp = td.querySelector('input');
@@ -947,12 +949,14 @@ function startCellEdit(ri, ci) {
 }
 function cancelCellEdit() {
   if (!_previewEditing) return;
+  rtSetCursor(null);
   const { ri, ci } = _previewEditing; _previewEditing = null;
   const td = previewCellEl(ri, ci);
   if (td) { td.classList.remove('recon-cell-editing'); td.innerHTML = truncate(project.rows[ri][ci], 60); }
 }
 function commitCellEdit() {
   if (!_previewEditing) return;
+  rtSetCursor(null);
   const { ri, ci } = _previewEditing; _previewEditing = null;
   const td = previewCellEl(ri, ci); const inp = td && td.querySelector('input');
   if (!inp) return;
@@ -1763,9 +1767,13 @@ let _pushTimer = null, _pushing = false, _pushQueued = false, _retryTimer = null
 let _pendingConflict = null; // { mine, merged, conflicts, version }
 
 // Real-time (Phase 2): lazy Yjs/Hocuspocus chunk, loaded only for team (non-personal) server
-// projects. When connected, the CRDT owns sync — the Phase-1 REST push is suppressed.
+// projects. When connected, the whole project is a CRDT — the Phase-1 REST push is suppressed and
+// the doc is mirrored bidirectionally (see recon-collab-rt.js).
 let RT = null;
-let _lastDecisionsJSON = null;
+let _applyingRemote = false;   // guard: don't mirror while adopting a peer's change
+let _mirrorTimer = null;       // debounce local→Yjs mirroring
+let _renderTimer = null;       // debounce remote→UI re-render
+let _rtPresence = [];          // other members' awareness states
 const loadRT = async () => (RT || (RT = await import(/* webpackChunkName: "recon-collab-rt" */ './recon-collab-rt.js')));
 function rtActive() { return !!(RT && RT.isConnected()); }
 
@@ -1795,19 +1803,19 @@ function applySnapshot(snap) {
 }
 
 function schedulePush() {
-  // While a real-time session is live, the CRDT owns sync — mirror decisions into the Yjs doc
-  // instead of doing the Phase-1 REST push.
-  if (rtActive()) { rtSyncDecisions(); return; }
+  // While a real-time session is live, the CRDT owns sync — mirror the whole project into the Yjs
+  // doc instead of doing the Phase-1 REST push.
+  if (rtActive()) { scheduleMirror(); return; }
   if (!canPush()) return;
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(doPush, 1200);
   setCollabBadge('syncing');
 }
 
-// ── Real-time orchestration (Phase 2 spike) ──────────────────────────────────
-// Connect a team (non-personal) server project to Hocuspocus and two-way-bind its `decisions`.
+// ── Real-time orchestration (Phase 2) ────────────────────────────────────────
+// Connect a team (non-personal) server project to Hocuspocus and mirror the whole project as a CRDT.
 async function maybeStartRealtime() {
-  if (!isServerProject() || project.teamPersonal) { return; }
+  if (!isServerProject() || project.teamPersonal) return;
   let tok;
   try { tok = await Sync.collabToken(project.serverId); }
   catch (_) { return; } // offline → stay on REST
@@ -1815,37 +1823,109 @@ async function maybeStartRealtime() {
   try {
     const mod = await loadRT();
     const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/collab';
-    _lastDecisionsJSON = JSON.stringify(project.decisions || {});
     mod.connect({
       serverId: project.serverId, token: tok.data.token, wsUrl,
+      user: rtIdentity(tok.data.token),
       onStatus: (s) => setCollabBadge(s === 'connected' ? 'live' : (s === 'unauthorized' ? 'offline' : 'syncing')),
-      onRemoteDecisions: applyRemoteDecisions,
+      onSynced: () => rtOnSynced(mod),
+      onRemote: applyRemoteProject,
+      onPresence: renderPresence,
     });
   } catch (err) { console.warn('[recon] realtime connect failed — staying on REST', err); }
 }
 
-function rtSyncDecisions() {
-  if (!rtActive() || !project) return;
-  const j = JSON.stringify(project.decisions || {});
-  if (j === _lastDecisionsJSON) return;
-  _lastDecisionsJSON = j;
-  RT.syncLocalDecisions(project.decisions || {});
+// On first sync: an empty shared doc adopts our local project (we seed it); a populated one is the
+// authoritative shared copy, so we reconstruct our project from it.
+function rtOnSynced(mod) {
+  if (mod.isEmpty()) mod.mirror(cleanSnapshot());
+  else applyRemoteProject(mod.readProject());
+  setCollabBadge('live');
 }
 
-function applyRemoteDecisions(decisions) {
-  if (!project) return;
-  project.decisions = decisions;
-  _lastDecisionsJSON = JSON.stringify(decisions);
+function scheduleMirror() {
+  if (_applyingRemote || !rtActive()) return;
+  clearTimeout(_mirrorTimer);
+  _mirrorTimer = setTimeout(() => { if (rtActive() && !_applyingRemote) RT.mirror(cleanSnapshot()); }, 300);
+}
+
+// A peer changed the doc → merge the reconstructed project into ours (keeping our sync metadata),
+// persist, and re-render. Debounced so a burst of remote edits repaints once.
+function applyRemoteProject(remote) {
+  if (!project || !remote) return;
+  _applyingRemote = true;
+  const meta = {};
+  for (const k of SYNC_KEYS) if (k in project) meta[k] = project[k];
+  project = Object.assign({}, remote, meta);
+  project.id = CURRENT;
   putProject(project);
-  const built = buildUniqueQueries();
-  if (built) renderResults(built);
-  refreshReview();
-  setCollabBadge('live');
+  clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(() => {
+    normalizeChain();
+    renderAll();
+    setCollabBadge('live');
+    _applyingRemote = false;
+  }, 60);
 }
 
 function stopRealtime() {
   if (RT) { try { RT.disconnect(); } catch (_) { /* ignore */ } }
-  _lastDecisionsJSON = null;
+  _applyingRemote = false;
+  _rtPresence = [];
+  renderPresence([]);
+}
+
+// Decode the (already-trusted) collab JWT to label this member; colour from the user id.
+function rtIdentity(token) {
+  try {
+    const p = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return { name: p.name || 'Someone', color: colorFor(String(p.sub || p.name || '')) };
+  } catch (_) { return { name: 'Someone', color: colorFor('anon') }; }
+}
+function colorFor(seed) {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 70% 45%)`;
+}
+
+// Publish where I'm working (a cell or a review row) so teammates see my cursor.
+function rtSetCursor(cursor) { if (rtActive()) RT.setCursor(cursor); }
+
+// ── Presence UI (awareness) ──────────────────────────────────────────────────
+function initials(name) {
+  return String(name || 'Someone').trim().split(/\s+/).map((w) => w[0] || '').slice(0, 2).join('').toUpperCase();
+}
+function renderPresence(states) {
+  _rtPresence = states || [];
+  const box = el('recon-presence');
+  if (box) {
+    box.innerHTML = _rtPresence.map((s) => {
+      const name = (s.user && s.user.name) || 'Someone';
+      const color = (s.user && s.user.color) || '#888';
+      return `<span class="recon-presence-chip" style="background:${color}" title="${esc(name)} is editing this project">${esc(initials(name))}</span>`;
+    }).join('');
+    box.classList.toggle('d-none', !_rtPresence.length);
+  }
+  paintPresenceCursors();
+}
+// Outline the cells teammates are editing (only those currently visible in the virtualised table).
+function paintPresenceCursors() {
+  const body = el('recon-preview-body');
+  if (!body) return;
+  body.querySelectorAll('.recon-cursor').forEach((td) => {
+    td.classList.remove('recon-cursor');
+    td.style.removeProperty('--cursor-color');
+    td.removeAttribute('data-cursor-name');
+  });
+  for (const s of _rtPresence) {
+    const c = s.cursor;
+    if (!c || c.row == null || c.col == null) continue;
+    const td = body.querySelector(`tr[data-ri="${c.row}"] td[data-ci="${c.col}"]`);
+    if (td) {
+      td.classList.add('recon-cursor');
+      td.style.setProperty('--cursor-color', (s.user && s.user.color) || '#888');
+      td.setAttribute('data-cursor-name', (s.user && s.user.name) || 'Someone');
+    }
+  }
 }
 
 async function doPush() {

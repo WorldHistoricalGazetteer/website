@@ -563,3 +563,27 @@ body.recon-viewer #recon-viewer-badge { cursor: help; }
 .recon-conflict { background: rgba(0, 0, 0, 0.02); }
 .recon-conflict code { white-space: normal; word-break: break-word; }
 
+/* ── Presence (real-time awareness, Phase 2) ─────────────────────────────── */
+.recon-presence { display: inline-flex; align-items: center; gap: 3px; }
+.recon-presence-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%;
+  color: #fff; font-size: 0.66rem; font-weight: 700; line-height: 1;
+  border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: default; user-select: none;
+}
+/* A teammate's cursor cell in the data browser */
+.recon-preview-body td.recon-cursor {
+  outline: 2px solid var(--cursor-color, #888);
+  outline-offset: -2px;
+  position: relative;
+}
+.recon-preview-body td.recon-cursor::after {
+  content: attr(data-cursor-name);
+  position: absolute; top: -1.15rem; left: -2px;
+  background: var(--cursor-color, #888); color: #fff;
+  font-size: 0.6rem; font-weight: 600; line-height: 1.4;
+  padding: 0 4px; border-radius: 3px 3px 3px 0; white-space: nowrap;
+  pointer-events: none; z-index: 3;
+}
+
