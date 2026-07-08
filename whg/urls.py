@@ -101,6 +101,7 @@ urlpatterns = [
 
                   # static content
                   path('about/', TemplateView.as_view(template_name="main/about.html"), name="about"),
+                  path('development/', views.beta_status_view, name="beta_status"),
                   # path('contributing/', TemplateView.as_view(template_name="main/../_local/_older/contributing.html"), name="contributing"),
 
                   path('people_overview/', TemplateView.as_view(template_name="main/people_overview.html"),

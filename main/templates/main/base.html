@@ -110,6 +110,9 @@
                     <hr class="dropdown-divider">
                   </li>
                   <li><a class="dropdown-item" href="{% url 'announcements-list' %}">News & announcements</a></li>
+                  {% if user.is_staff %}{# staff-only until ungated; page content is public-ready #}
+                  <li><a class="dropdown-item" href="{% url 'beta_status' %}">What we're building <span class="badge text-bg-warning">staff</span></a></li>
+                  {% endif %}
                   <li>
                     <hr class="dropdown-divider">
                   </li>

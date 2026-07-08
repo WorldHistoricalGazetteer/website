@@ -1,0 +1,55 @@
+{% extends "main/base_webpack.html" %}
+{% block title %}<title>WHG :: Development status</title>{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width:900px;">
+
+  <div class="d-flex flex-wrap align-items-baseline justify-content-between mt-3 mb-1">
+    <h3 class="mb-0">What we're building</h3>
+    <span class="small text-muted">WHG {{ app_version }} · updated {{ updated }}</span>
+  </div>
+
+  <p class="text-muted">
+    The World Historical Gazetteer is under continual development. This page is a plain-language
+    snapshot of what's being built, roughly how far along it is, and where things are heading — so
+    everyone who presents, teaches, writes about, or uses WHG can follow along without reading code.
+  </p>
+
+  <div class="d-flex flex-wrap gap-3 small text-muted border-top border-bottom py-2 mb-4">
+    <span><span class="badge text-bg-warning">Beta preview</span> staff &amp; invited testers only</span>
+    <span><span class="badge text-bg-secondary">In development</span> being built</span>
+    <span><span class="badge text-bg-success">Live</span> available now</span>
+    <span><span class="badge text-bg-info">Exploratory</span> planned direction</span>
+  </div>
+
+  {% for section in sections %}
+  <section class="mb-4">
+    <h5 class="mb-1">{{ section.heading }}</h5>
+    {% if section.note %}<p class="small text-muted mb-3">{{ section.note }}</p>{% endif %}
+    <div class="row g-3">
+      {% for item in section.items %}
+      <div class="col-12">
+        <div class="card h-100">
+          <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
+              <h6 class="card-title mb-0">{{ item.name }}</h6>
+              <span class="badge {{ item.stage_class }}">{{ item.stage_label }}</span>
+            </div>
+            <p class="card-text small mb-0">{{ item.body }}</p>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <hr class="mt-4">
+  <p class="small text-muted">
+    Beta features are gated to WHG staff and invited testers until they're ready for everyone. Dates
+    aren't promised here — this reflects direction and current status, which change as work proceeds.
+    Have feedback, or want to be an early tester? <a data-whg-modal="/contact_modal/">Get in touch</a>.
+  </p>
+
+</div>
+{% endblock %}

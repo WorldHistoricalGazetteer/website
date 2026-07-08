@@ -504,6 +504,97 @@ def reconciliation_view(request):
     })
 
 
+# ── Development status & roadmap ─────────────────────────────────────────────────────────────────
+# A single, plain-language view of what's being built, its stage, and roughly where it's heading —
+# so non-developer staff (and eventually the public) can track WHG's concurrent development without
+# reading commits. Written to be PUBLIC-READY: no internal infra, hosts, or credentials. Staff-only
+# for now via the gate below; to make public, delete the @login_required + is_staff check here and
+# remove the `{% if user.is_staff %}` guard around the About-menu link (search: 'beta_status').
+#
+# Stages: 'beta' = usable now by staff + invited testers, not yet public; 'dev' = being built, not
+# yet testable; 'shipped' = live for everyone / changes an existing workflow; 'horizon' = planned
+# direction, NOT a dated commitment. Edit BETA_STATUS_UPDATED whenever this list changes.
+BETA_STATUS_UPDATED = "8 July 2026"
+BETA_STATUS_SECTIONS = [
+    {
+        "heading": "In development & beta preview",
+        "note": "Available to WHG staff and invited beta testers while we refine them — not yet linked for the public.",
+        "items": [
+            {"name": "Map your Data", "stage": "beta",
+             "body": "Turn a spreadsheet or list of place names into located, dated, standardised places — "
+                     "matched to the World Historical Gazetteer, cleaned up, and ready to map, share, or "
+                     "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet; reconcile against WHG; "
+                     "add coordinates, dates, and place types; validate; and export or contribute — all in "
+                     "your browser, so your data stays on your device."},
+            {"name": "Collaborative Workbench", "stage": "beta",
+             "body": "Work on the same reconciliation project as a team, together and in real time, with "
+                     "shared roles and a project owned by your group rather than a single account."},
+            {"name": "Citations, licensing & contributor credit (CRediT)", "stage": "dev",
+             "body": "Build a proper citation for a dataset, a machine-readable CITATION.cff and schema.org "
+                     "record, and credit everyone who contributed by their role — carried with the data when "
+                     "it's shared or contributed to WHG."},
+            {"name": "Place-name extraction from text", "stage": "dev",
+             "body": "Paste or upload free text (a document, article, or web page) and pull the place names "
+                     "out into a table to start a dataset — with the option, later, to use your own AI key "
+                     "for higher-accuracy extraction that stays on your device."},
+        ],
+    },
+    {
+        "heading": "Recently shipped",
+        "note": "Live now for everyone, or a change to how an existing workflow behaves.",
+        "items": [
+            {"name": "Publish & index independent of reconciliation", "stage": "shipped",
+             "body": "A dataset can now be made public and searchable regardless of how far its "
+                     "reconciliation has progressed, with a clear warning about the trade-offs — removing a "
+                     "trap where public datasets could stay invisible in search."},
+            {"name": "Historical-period & Wikipedia enrichment", "stage": "shipped",
+             "body": "Reconcile against historical periods (PeriodO) and pull Wikipedia links through from "
+                     "matched records, directly in Map your Data."},
+        ],
+    },
+    {
+        "heading": "On the horizon",
+        "note": "The direction we're heading — shared for planning, not as committed release dates.",
+        "items": [
+            {"name": "Browser-first, collaborative Collections", "stage": "horizon",
+             "body": "Following the Map-your-Data model, build and curate Collections — of datasets and of "
+                     "places, and also Itineraries and Routes — directly in the browser and together as a "
+                     "team, rather than through multi-step server workflows."},
+            {"name": "WHG v4 — a graph data model", "stage": "horizon",
+             "body": "A re-architecture around a graph model (with the PLATO ontology) to represent places, "
+                     "the relationships between them, and how they change over time far more richly than a "
+                     "flat record allows."},
+            {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "horizon",
+             "body": "A new, exploration-led interface that clusters and reveals places adaptively as you "
+                     "pan and zoom, making very large gazetteers legible at every scale."},
+        ],
+    },
+]
+_BETA_STAGE_META = {
+    "beta": ("Beta preview", "text-bg-warning"),
+    "dev": ("In development", "text-bg-secondary"),
+    "shipped": ("Live", "text-bg-success"),
+    "horizon": ("Exploratory", "text-bg-info"),
+}
+
+
+@login_required  # remove to make public
+def beta_status_view(request):
+    # Staff-only for now (content is public-ready — see note above).
+    if not request.user.is_staff:
+        raise Http404()
+    sections = []
+    for sec in BETA_STATUS_SECTIONS:
+        items = [dict(it, stage_label=_BETA_STAGE_META[it["stage"]][0],
+                      stage_class=_BETA_STAGE_META[it["stage"]][1]) for it in sec["items"]]
+        sections.append(dict(sec, items=items))
+    return render(request, "main/beta_status.html", {
+        "sections": sections,
+        "app_version": settings.APP_VERSION,
+        "updated": BETA_STATUS_UPDATED,
+    })
+
+
 # ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────
 # Staff-only admin tool (dashboard_admin → Tools → "Analytics"). Aggregates all three WHG Plausible
 # sites (main / blog / docs) via the Stats API into one page — top-line metrics, a visitors-over-time
