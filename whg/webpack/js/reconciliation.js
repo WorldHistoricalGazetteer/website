@@ -1216,12 +1216,22 @@ function currentExportOptions() {
     // Coordinates + ISO dates are materialised as columns in Step 2, so they're no longer export toggles.
     match: !!(el('recon-exp-match') && el('recon-exp-match').checked),
     enrich: !!(el('recon-exp-enrich') && el('recon-exp-enrich').checked),
+    wikipedia: !!(el('recon-exp-wikipedia') && el('recon-exp-wikipedia').checked),
     format: fmtEl ? fmtEl.value : 'csv',
   };
 }
 
 // Assemble a per-row augmented record set. Returns { origHeaders, augHeaders, records } where each
 // record is { orig:[cellValues], aug:{header:value}, coord:{lat,lon}|null, whenStart, whenEnd, match }.
+// A header that can't collide with any name in `taken` (case-insensitive) — suffix _2, _3, … if needed.
+function uniqueHeader(base, taken) {
+  const lower = new Set(taken.map((h) => String(h).toLowerCase()));
+  if (!lower.has(base.toLowerCase())) return base;
+  let i = 2;
+  while (lower.has((base + '_' + i).toLowerCase())) i += 1;
+  return base + '_' + i;
+}
+
 async function buildExportRecords(opts, onProgress) {
   const nameCol = colIndexByRole('name');
   const built = buildUniqueQueries(nameCol); // export the NAME column's match as the primary whg_match_*
@@ -1244,7 +1254,11 @@ async function buildExportRecords(opts, onProgress) {
     augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
     adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`)); // parent containment matches
   }
-  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types', 'whg_wikipedia');
+  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types');
+  // Wikipedia link — a separate, explicit opt-in column, populated ONLY from Wikidata (wd) matches.
+  // Its header is made unique so it can never collide with an existing column (or another aug column).
+  const wikiHeader = opts.wikipedia ? uniqueHeader('wikipedia', project.columns.map((c) => c.name).concat(augHeaders)) : null;
+  if (wikiHeader) augHeaders.push(wikiHeader);
 
   // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
   if (opts.enrich) {
@@ -1272,7 +1286,7 @@ async function buildExportRecords(opts, onProgress) {
       whenStart = (d && d.startISO) || '';
       whenEnd = (d && d.endISO) || '';
     }
-    if (opts.match || opts.enrich) {
+    if (opts.match || opts.enrich || opts.wikipedia) {
       const dec = info && decisions[info.key];
       const accepted = acceptedList(dec);
       if (accepted.length) {
@@ -1304,8 +1318,11 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || [])).join('; ') || '';
       aug.whg_match_description = (f && f.cand && f.cand.description) || '';
       aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
-      // Wikipedia article URLs (from Wikidata sitelinks surfaced by /reconcile) across accepted matches.
-      aug.whg_wikipedia = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
+    }
+    if (wikiHeader) {
+      // Wikipedia article URL(s) from Wikidata sitelinks surfaced by /reconcile, across accepted
+      // matches. Blank unless the row was reconciled to a Wikidata (wd) record.
+      aug[wikiHeader] = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match });
   }
@@ -1493,7 +1510,7 @@ function refreshExport() {
   const nameIdx = colIndexByRole('name');
   sec.classList.toggle('d-none', nameIdx < 0 && !hasCoordRole() && colIndexByRole('date') < 0);
   const hasMatches = !!(project.matches && Object.keys(project.matches).length);
-  ['recon-exp-match', 'recon-exp-enrich'].forEach((id) => { const box = el(id); if (box) box.disabled = !hasMatches; });
+  ['recon-exp-match', 'recon-exp-enrich', 'recon-exp-wikipedia'].forEach((id) => { const box = el(id); if (box) box.disabled = !hasMatches; });
   const sum = el('recon-pane-sum-export');
   if (sum) {
     let accepted = 0;
