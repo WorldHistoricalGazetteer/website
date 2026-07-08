@@ -74,16 +74,26 @@
     </div>
     <div class="recon-pane-body">
       <p class="text-muted small mb-2">
-        CSV, TSV or JSON — or a saved <code>.whgproj</code> backup. Parsed locally and saved in your
-        browser (IndexedDB) so it survives a reload. Nothing leaves your browser.
+        CSV, TSV, JSON or Excel (<code>.xlsx</code>) — or a saved <code>.whgproj</code> backup. Parsed
+        locally and saved in your browser (IndexedDB) so it survives a reload. Nothing leaves your browser.
       </p>
       <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
            role="button" aria-label="Choose or drop a data file">
         <input id="recon-file" type="file" class="d-none"
-               accept=".csv,.tsv,.txt,.json,.whgproj,text/csv,text/tab-separated-values,application/json"/>
+               accept=".csv,.tsv,.txt,.json,.whgproj,.xlsx,.xls,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"/>
         <i class="fas fa-file-import recon-dropzone-icon"></i>
         <div class="recon-dropzone-text"><strong>Choose a file</strong> or drag it here</div>
-        <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON, or a <code>.whgproj</code> backup — never leaves your browser</div>
+        <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON / Excel, or a <code>.whgproj</code> backup — never leaves your browser</div>
+      </div>
+
+      <!-- Import from a shared Google Sheet URL (fetched as CSV via a same-origin proxy). -->
+      <div class="recon-gsheet mt-2">
+        <label class="small text-muted d-block mb-1"><i class="fab fa-google me-1"></i>…or import a shared <strong>Google&nbsp;Sheet</strong> (anyone-with-the-link can view):</label>
+        <div class="input-group input-group-sm" style="max-width:640px">
+          <input type="url" id="recon-gsheet-url" class="form-control" placeholder="https://docs.google.com/spreadsheets/d/…">
+          <button type="button" id="recon-gsheet-btn" class="btn btn-outline-primary">Import sheet</button>
+        </div>
+        <div id="recon-gsheet-msg" class="small mt-1"></div>
       </div>
       <div class="mt-2 small">
         <button type="button" id="recon-load-sample" class="btn btn-sm btn-outline-primary">
@@ -342,9 +352,13 @@
         </fieldset>
       </div>
 
-      <div class="mt-3 d-flex align-items-center gap-2">
+      <div class="mt-3 d-flex align-items-center gap-2 flex-wrap">
         <button type="button" id="recon-export-btn" class="btn btn-sm btn-primary">
           <i class="fas fa-file-export me-1"></i>Export
+        </button>
+        <button type="button" id="recon-xlsx-save" class="btn btn-sm btn-outline-secondary"
+                title="Save the working table as an Excel file. If you imported an .xlsx, the imported sheet is updated and every other sheet is kept intact.">
+          <i class="fas fa-file-excel me-1"></i>Save to Excel
         </button>
         <span id="recon-export-status" class="small text-muted"></span>
       </div>
@@ -370,6 +384,55 @@
             <i class="fas fa-cloud-arrow-up me-1"></i>Contribute to WHG
           </button>
           <span id="recon-contribute-status" class="small text-muted"></span>
+        </div>
+      </div>
+
+      <!-- Citation & provenance builder: dataset metadata → a formatted citation + CITATION.cff -->
+      <div class="recon-citation mt-3 pt-3 border-top">
+        <h6 class="small text-uppercase text-muted mb-1"><i class="fas fa-quote-right me-1"></i>Citation &amp; provenance</h6>
+        <p class="small text-muted mb-2">Describe your dataset so others can cite it. We build a formatted
+          citation and a <code>CITATION.cff</code> file — nothing is uploaded.</p>
+        <div class="row g-2 recon-citation-form" style="max-width:820px">
+          <div class="col-md-8"><label class="form-label small mb-0">Title</label>
+            <input type="text" id="cite-title" class="form-control form-control-sm"></div>
+          <div class="col-md-4"><label class="form-label small mb-0">Year</label>
+            <input type="number" id="cite-year" class="form-control form-control-sm" min="1" max="3000"></div>
+          <div class="col-12">
+            <label class="form-label small mb-0">Contributors
+              <a href="https://credit.niso.org/" target="_blank" rel="noopener" title="CRediT — Contributor Roles Taxonomy"><i class="fas fa-question-circle fa-xs"></i></a>
+              <span class="text-muted">— tag each with a <strong>CRediT</strong> role</span></label>
+            <ul id="cite-contrib-list" class="list-unstyled small mb-1"></ul>
+            <div class="row g-1 align-items-center">
+              <div class="col-12 col-md-3"><input type="text" id="cite-c-name" class="form-control form-control-sm" placeholder="Name or [Organisation]"></div>
+              <div class="col-6 col-md-2"><input type="text" id="cite-c-orcid" class="form-control form-control-sm" placeholder="ORCiD (optional)"></div>
+              <div class="col-6 col-md-2"><input type="text" id="cite-c-affil" class="form-control form-control-sm" placeholder="Affiliation"></div>
+              <div class="col-6 col-md-2"><select id="cite-c-role" class="form-select form-select-sm">
+                <option value="">Role…</option>
+                {% for val, label in credit_roles %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+              </select></div>
+              <div class="col-4 col-md-1"><select id="cite-c-degree" class="form-select form-select-sm" title="Degree of contribution">
+                <option value="">—</option>
+                {% for val, label in contribution_degrees %}<option value="{{ val }}">{{ label }}</option>{% endfor %}
+              </select></div>
+              <div class="col-3 col-md-1"><label class="small mb-0"><input type="checkbox" id="cite-c-corr"> corr.</label></div>
+              <div class="col-auto"><button type="button" id="cite-c-add" class="btn btn-sm btn-outline-primary">Add</button></div>
+            </div>
+          </div>
+          <div class="col-md-4"><label class="form-label small mb-0">Version</label>
+            <input type="text" id="cite-version" class="form-control form-control-sm"></div>
+          <div class="col-md-8"><label class="form-label small mb-0">Publisher / repository</label>
+            <input type="text" id="cite-publisher" class="form-control form-control-sm"></div>
+          <div class="col-md-8"><label class="form-label small mb-0">URL or DOI</label>
+            <input type="text" id="cite-url" class="form-control form-control-sm" placeholder="https://… or 10.xxxx/…"></div>
+          <div class="col-md-4"><label class="form-label small mb-0">Licence</label>
+            <input type="text" id="cite-license" class="form-control form-control-sm" placeholder="e.g. CC-BY-4.0"></div>
+        </div>
+        <p class="small mt-2 mb-1"><span class="text-muted">Preview:</span> <span id="cite-preview" class="fst-italic"></span></p>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="button" id="cite-copy" class="btn btn-sm btn-outline-secondary"><i class="fas fa-copy me-1"></i>Copy citation</button>
+          <button type="button" id="cite-cff" class="btn btn-sm btn-outline-primary"><i class="fas fa-download me-1"></i>CITATION.cff</button>
+          <button type="button" id="cite-jsonld" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download me-1"></i>schema.org JSON</button>
+          <span id="cite-status" class="small text-success align-self-center"></span>
         </div>
       </div>
     </div>
@@ -608,6 +671,20 @@
             </div>
           </div>
           <div id="recon-transform-preview" class="recon-transform-preview"></div>
+
+          <div class="mb-1 pt-2 mt-2 border-top">
+            <div class="small text-muted mb-1">Split into containment levels
+              <i class="fas fa-question-circle" data-bs-toggle="tooltip"
+                 title="For a single field holding several levels, e.g. “Rotherhithe, Surrey, England, UK” — split it into separate columns and wire them as a containment hierarchy (name + contains). Empty levels (e.g. “Rotherhithe, ,,UK”) are kept as placeholders so levels stay aligned across rows."></i>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <label class="small mb-0">Delimiter
+                <input type="text" id="recon-tf-splitdelim" class="form-control form-control-sm d-inline-block ms-1" style="width:52px" value="," autocomplete="off"></label>
+              <label class="small mb-0"><input type="checkbox" id="recon-tf-splitrev"> outermost level first <span class="text-muted">(e.g. country first)</span></label>
+              <button type="button" id="recon-tf-splitbtn" class="btn btn-sm btn-outline-primary" data-bs-dismiss="modal">Split into columns</button>
+            </div>
+            <div id="recon-tf-splitpreview" class="small text-muted mt-1"></div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>

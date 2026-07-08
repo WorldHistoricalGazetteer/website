@@ -50,6 +50,9 @@ export const pushSnapshot = (id, snapshot, baseVersion) =>
 // or 501 (realtime not configured) / 403 (not a member) → caller stays on the Phase-1 REST sync.
 export const collabToken = (id) => req('POST', `/projects/${id}/collab-token/`);
 
+// Fetch a shared Google Sheet as CSV via the server-side proxy (avoids browser CORS).
+export const importGSheet = (url) => req('POST', '/gsheet/', { url });
+
 // ── sharing (Phase 0) ─────────────────────────────────────────────────────────
 export const shareProject = (id) => req('POST', `/projects/${id}/share/`);
 export const unshareProject = (id) => req('DELETE', `/projects/${id}/share/`);

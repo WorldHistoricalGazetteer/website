@@ -29,6 +29,8 @@ let Symphonym = null; // in-browser phonetic encoder (Phase 7) — clusters vari
 const loadSymphonym = async () => (Symphonym || (Symphonym = await import(/* webpackChunkName: "recon-symphonym" */ './recon-symphonym.js')));
 let Validate = null; // Ajv LPF validator (Phase: contribution validation) — replicates server schema check
 const loadValidate = async () => (Validate || (Validate = await import(/* webpackChunkName: "recon-validate" */ './recon-validate.js')));
+let Xlsx = null; // SheetJS — loaded on demand only when a spreadsheet is imported (kept out of the initial bundle)
+const loadXlsx = async () => (Xlsx || (Xlsx = await import(/* webpackChunkName: "recon-xlsx" */ './recon-xlsx.js')));
 import * as Sync from './recon-sync.js'; // collaborative-project API (place#112, Phase 0/1) — tiny, always bundled
 
 const PREVIEW_ROWS = 20;
@@ -727,7 +729,10 @@ function openTransformModal(col) {
   const ri = el('recon-tf-replace'); if (ri) ri.value = '';
   const rx = el('recon-tf-regex'); if (rx) rx.checked = false;
   const ci = el('recon-tf-case'); if (ci) ci.checked = false;
+  const sd = el('recon-tf-splitdelim'); if (sd) sd.value = ',';
+  const sr = el('recon-tf-splitrev'); if (sr) sr.checked = false;
   renderTransformPreview();
+  renderSplitPreview();
   if (box) box.querySelectorAll('.recon-tf-common').forEach((b) => b.addEventListener('click', () => {
     const t = CELL_TRANSFORMS.find((x) => x.id === b.dataset.id);
     box.querySelectorAll('.recon-tf-common').forEach((x) => x.classList.remove('active', 'btn-primary'));
@@ -797,6 +802,66 @@ function applyTransform() {
   renderMapping(); renderPreview(); renderCoords(); renderDates();
   refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); refreshExport();
   flashSaved(`${_pendingTransform.label} applied to ${changed.toLocaleString()} cell${changed === 1 ? '' : 's'}`);
+}
+
+// ── Split one field into containment-level columns ──────────────────────────
+// A single field like "Rotherhithe, Surrey, England, UK" (or "Rotherhithe, ,,UK" with empty
+// placeholder levels that keep the levels aligned across rows) is split into separate columns wired as
+// a containment hierarchy: the innermost value becomes the place `name`, each outer value a `contains`
+// container of the next level in. Positional — token 0 is the innermost, unless "outermost first" is on.
+function splitDelimiter() { const v = (el('recon-tf-splitdelim') || {}).value; return (v && v.length) ? v : ','; }
+function splitReversed() { return !!((el('recon-tf-splitrev') || {}).checked); }
+function splitRowLevels(cell, delim, reversed) {
+  const toks = String(cell == null ? '' : cell).split(delim).map((s) => s.trim());
+  return reversed ? toks.reverse() : toks; // index 0 = innermost (place)
+}
+function splitStats(col, delim, reversed) {
+  let maxN = 0; let sample = null;
+  for (let i = 0; i < project.rows.length; i++) {
+    const t = splitRowLevels(project.rows[i][col], delim, reversed);
+    if (t.length > maxN) maxN = t.length;
+    if (!sample && t.filter((x) => x !== '').length >= 2) sample = t;
+  }
+  return { maxN, sample };
+}
+function renderSplitPreview() {
+  const box = el('recon-tf-splitpreview'); const btn = el('recon-tf-splitbtn');
+  if (!box || _transformCol < 0 || !project) return;
+  const { maxN, sample } = splitStats(_transformCol, splitDelimiter(), splitReversed());
+  if (maxN < 2) {
+    box.innerHTML = '<span class="text-warning">No rows have 2+ levels with this delimiter — nothing to split.</span>';
+    if (btn) btn.disabled = true; return;
+  }
+  const chips = (sample || []).map((v, i) => `<span class="badge ${i === 0 ? 'bg-primary' : 'bg-secondary'}">${esc(truncate(v || '∅', 18))}</span>`).join(' ');
+  box.innerHTML = `Creates up to <strong>${maxN}</strong> columns · innermost <span class="badge bg-primary">place</span> → outermost container.` +
+    (sample ? `<div class="mt-1">e.g. ${chips}</div>` : '');
+  if (btn) btn.disabled = false;
+}
+function applySplit() {
+  const col = _transformCol;
+  if (col < 0 || !project) return;
+  const delim = splitDelimiter(); const reversed = splitReversed();
+  const rowLevels = project.rows.map((r) => splitRowLevels(r[col], delim, reversed));
+  const N = rowLevels.reduce((m, t) => Math.max(m, t.length), 0);
+  if (N < 2) return;
+  const snap = columnSnapshot();
+  const src = project.columns[col].name;
+  const taken = project.columns.map((c) => c.name);
+  const startIdx = project.columns.length;
+  for (let i = 0; i < N; i++) {
+    const nm = uniqueHeader(`${src}_${i + 1}`, taken); taken.push(nm);
+    project.columns.push({ name: nm, role: 'other' });
+  }
+  project.rows.forEach((r, ri) => { const t = rowLevels[ri]; for (let i = 0; i < N; i++) r.push(i < t.length ? t[i] : ''); });
+  // Wire the hierarchy: index 0 = innermost place name; each outer level "contains" the level within it.
+  project.columns[startIdx].role = 'name';
+  for (let i = 1; i < N; i++) { const c = project.columns[startIdx + i]; c.role = 'contains'; c.child = startIdx + (i - 1); }
+  project.columns[col].role = 'other'; // the combined source is superseded by the split columns
+  project.showIgnored = true;
+  normalizeChain();
+  pushUndo({ type: 'columns', label: `split “${src}” into ${N} levels`, snapshot: snap });
+  persist(); rerenderData();
+  flashSaved(`Split “${truncate(src, 24)}” into ${N} containment columns`);
 }
 
 // ── Data browser (virtualised, filterable, editable) ─────────────────────────────────────────────
@@ -1128,7 +1193,50 @@ function bucketCount(n) {
   return '5000+';
 }
 
+// Turn a parsed { columns, rows, total, delimiter? } into the working project + render. Shared by
+// every importer (CSV/TSV/JSON file, Excel spreadsheet, Google Sheet URL).
+async function finishImport(parsed, fileName, format) {
+  project = {
+    id: CURRENT,
+    fileName,
+    importedAt: new Date().toISOString(),
+    columns: initChain(parsed.columns.map((name) => ({ name, role: detectRole(name) }))),
+    rows: parsed.rows,
+    total: parsed.total,
+    delimiter: parsed.delimiter || null,
+  };
+  el('recon-resume').classList.add('d-none'); // fresh import, not a resume
+  _tracked.clear(); // new dataset → let the once-per-dataset funnel events fire again
+  console.log(`[recon] imported "${fileName}" locally: ${project.total} rows, ${project.columns.length} cols`);
+  track('MyD: import', {
+    source: fileName === 'reconciliation-demo.csv' ? 'sample' : (format || 'file'),
+    format: format || 'csv',
+    rows: bucketCount(project.total),
+    cols: String(project.columns.length),
+  });
+  stopRealtime();               // a fresh import replaces any prior (server) project
+  setCollabBadge('local');      // …so it's device-only until saved (clear any stale badge)
+  renderAll();
+  if (navigator.storage && navigator.storage.persist) {
+    try { await navigator.storage.persist(); } catch (_) { /* best effort */ }
+  }
+  await persist();
+}
+
+function importError(name, err) {
+  console.error('[recon] import failed:', err);
+  el('recon-result').classList.remove('d-none');
+  el('recon-summary').innerHTML =
+    `<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>` +
+    `Could not import <strong>${esc(truncate(name, 60))}</strong>: ${esc(err.message)}</span>`;
+  el('recon-map-body').innerHTML = '';
+  el('recon-preview-head').innerHTML = '';
+  el('recon-preview-body').innerHTML = '';
+}
+
 function handleFile(file) {
+  // Excel workbooks are binary — read as an ArrayBuffer and parse with the lazy SheetJS chunk.
+  if (/\.(xlsx|xls)$/i.test(file.name)) { handleSpreadsheetFile(file); return; }
   const reader = new FileReader();
   reader.onload = async () => {
     try {
@@ -1149,44 +1257,79 @@ function handleFile(file) {
       }
       const isJSON = /\.json$/i.test(file.name) || text.trim().startsWith('[') || text.trim().startsWith('{');
       const parsed = isJSON ? fromJSON(JSON.parse(text)) : fromDelimited(text);
-      project = {
-        id: CURRENT,
-        fileName: file.name,
-        importedAt: new Date().toISOString(),
-        columns: initChain(parsed.columns.map((name) => ({ name, role: detectRole(name) }))),
-        rows: parsed.rows,
-        total: parsed.total,
-        delimiter: parsed.delimiter || null,
-      };
-      el('recon-resume').classList.add('d-none'); // fresh import, not a resume
-      _tracked.clear(); // new dataset → let the once-per-dataset funnel events fire again
-      console.log(`[recon] parsed "${file.name}" locally: ${project.total} rows, ${project.columns.length} cols`);
-      track('MyD: import', {
-        source: file.name === 'reconciliation-demo.csv' ? 'sample' : 'file',
-        format: isJSON ? 'json' : 'csv',
-        rows: bucketCount(project.total),
-        cols: String(project.columns.length),
-      });
-      stopRealtime();               // a fresh import replaces any prior (server) project
-      setCollabBadge('local');      // …so it's device-only until saved (clear any stale badge)
-      renderAll();
-      if (navigator.storage && navigator.storage.persist) {
-        try { await navigator.storage.persist(); } catch (_) { /* best effort */ }
-      }
-      await persist();
-    } catch (err) {
-      console.error('[recon] parse failed:', err);
-      el('recon-result').classList.remove('d-none');
-      el('recon-summary').innerHTML =
-        `<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>` +
-        `Could not parse <strong>${truncate(file.name, 60)}</strong>: ${err.message}</span>`;
-      el('recon-map-body').innerHTML = '';
-      el('recon-preview-head').innerHTML = '';
-      el('recon-preview-body').innerHTML = '';
-    }
+      await finishImport(parsed, file.name, isJSON ? 'json' : 'csv');
+    } catch (err) { importError(file.name, err); }
   };
   reader.onerror = () => console.error('[recon] file read error', reader.error);
   reader.readAsText(file);
+}
+
+async function handleSpreadsheetFile(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const mod = await loadXlsx();
+    const parsed = mod.parseWorkbook(buf);
+    await finishImport(parsed, file.name, 'xlsx');
+    // Keep the original workbook bytes so the user can save their edits back to Excel with every OTHER
+    // sheet intact (round-trip). Skip very large files to avoid bloating the local store. The ArrayBuffer
+    // rides along in IndexedDB (structured clone); it is NOT included in a JSON .whgproj backup.
+    if (buf.byteLength <= 12 * 1024 * 1024) {
+      project.sourceXlsx = { bytes: buf, sheet: parsed.sheet, fileName: file.name };
+      await persist();
+    }
+  } catch (err) { importError(file.name, err); }
+}
+
+// Save the current working table back to Excel. If the dataset arrived as an .xlsx, the imported sheet
+// is rewritten in-place and every other sheet is preserved; otherwise a fresh single-sheet workbook is
+// produced. Uses the lazy SheetJS chunk.
+async function saveAsExcel() {
+  if (!project) return;
+  const btn = el('recon-xlsx-save');
+  if (btn) btn.disabled = true;
+  try {
+    const mod = await loadXlsx();
+    const src = project.sourceXlsx || null;
+    const cols = project.columns.map((c) => c.name);
+    const bytes = mod.writeWorkbook(src && src.bytes, src && src.sheet, cols, project.rows);
+    const base = ((src && src.fileName) || project.fileName || 'workbook').replace(/\.[^.]+$/, '');
+    downloadText(base + '.xlsx', bytes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    flashSaved(src ? 'Saved to Excel (other sheets kept)' : 'Saved as Excel');
+  } catch (err) {
+    console.error('[recon] xlsx save failed', err);
+    flashSaved('⚠ could not save the Excel file');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Import a shared Google Sheet: the server fetches it as CSV (bypassing browser CORS), we parse it
+// locally like any other delimited file. The sheet must be shared "anyone with the link can view".
+async function importGoogleSheet() {
+  const input = el('recon-gsheet-url');
+  const msg = el('recon-gsheet-msg');
+  const btn = el('recon-gsheet-btn');
+  const url = (input && input.value || '').trim();
+  const setMsg = (html) => { if (msg) msg.innerHTML = html; };
+  if (!url) { setMsg('<span class="text-muted">Paste a Google Sheet link first.</span>'); return; }
+  if (btn) btn.disabled = true;
+  setMsg('<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Fetching the sheet…</span>');
+  try {
+    const res = await Sync.importGSheet(url);
+    if (res.status !== 200 || !res.data || res.data.csv == null) {
+      setMsg(`<span class="text-danger">${esc((res.data && res.data.error) || 'Could not fetch that sheet.')}</span>`);
+      return;
+    }
+    const parsed = fromDelimited(res.data.csv);
+    await finishImport(parsed, res.data.name || 'google-sheet.csv', 'gsheet');
+    setMsg('');
+    if (input) input.value = '';
+  } catch (err) {
+    console.warn('[recon] gsheet import failed', err);
+    setMsg('<span class="text-danger">Import failed — check the link and your connection, then try again.</span>');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function clearData() {
@@ -1552,6 +1695,181 @@ function refreshExport() {
     if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
     sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
   }
+  renderCitation();
+}
+
+// ── Citation & provenance builder (with CRediT) ─────────────────────────────
+// Collects schema.org Dataset-style metadata + CRediT-tagged contributors and produces a formatted
+// citation, a CITATION.cff file, and schema.org JSON-LD (whose contributor Roles carry the CRediT
+// term URIs). Everything lives on project.citation so it persists with the project.
+const CITE_FIELDS = ['title', 'year', 'version', 'publisher', 'url', 'license'];
+function citationDefaults() {
+  const base = (project && project.fileName ? project.fileName : 'My dataset').replace(/\.[^.]+$/, '');
+  return {
+    title: base, year: String(new Date().getFullYear()), version: '1.0',
+    publisher: 'World Historical Gazetteer', url: '', license: '', contributors: [],
+  };
+}
+function citationModel() { return Object.assign(citationDefaults(), (project && project.citation) || {}); }
+function citeContributors() { return (project && project.citation && Array.isArray(project.citation.contributors)) ? project.citation.contributors : []; }
+
+function renderCitation() {
+  if (!project) return;
+  const m = citationModel();
+  CITE_FIELDS.forEach((f) => { const inp = el('cite-' + f); if (inp && document.activeElement !== inp) inp.value = m[f] || ''; });
+  renderCiteContributors();
+  const prev = el('cite-preview'); if (prev) prev.textContent = formatCitation(currentCitation());
+}
+function currentCitation() {
+  const m = citationModel();
+  CITE_FIELDS.forEach((f) => { const inp = el('cite-' + f); if (inp) m[f] = inp.value; });
+  return m; // contributors are edited via add/remove, not free inputs
+}
+function saveCitation() {
+  if (!project) return;
+  project.citation = currentCitation();
+  const prev = el('cite-preview'); if (prev) prev.textContent = formatCitation(project.citation);
+  persist();
+}
+
+// CRediT role slug → human label, read from the server-rendered <select> (single source of truth).
+function creditRoleLabel(slug) {
+  const sel = el('cite-c-role');
+  if (sel) { const o = Array.from(sel.options).find((x) => x.value === slug); if (o) return o.text; }
+  return slug;
+}
+function renderCiteContributors() {
+  const ul = el('cite-contrib-list');
+  if (!ul) return;
+  const list = citeContributors();
+  if (!list.length) { ul.innerHTML = '<li class="text-muted">No contributors yet — add people or organisations with their CRediT role.</li>'; return; }
+  ul.innerHTML = list.map((c, i) => {
+    const orcid = c.orcid ? ` <a href="https://orcid.org/${esc(c.orcid.replace(/^https?:\/\/orcid\.org\//, ''))}" target="_blank" rel="noopener" title="ORCiD"><i class="fab fa-orcid"></i></a>` : '';
+    const role = c.role ? esc(creditRoleLabel(c.role)) : '<span class="text-muted">unspecified role</span>';
+    const deg = c.degree ? ` <span class="text-muted">(${esc(c.degree)})</span>` : '';
+    const corr = c.corresponding ? ' <span class="badge bg-light text-dark border">corresponding</span>' : '';
+    const affil = c.affiliation ? ` <span class="text-muted">· ${esc(c.affiliation)}</span>` : '';
+    return `<li class="mb-1"><span class="fw-semibold">${esc(c.name)}</span>${orcid} — ${role}${deg}${corr}${affil}` +
+      ` <a href="#" class="cite-contrib-del text-danger ms-1" data-i="${i}" title="Remove"><i class="fas fa-times fa-xs"></i></a></li>`;
+  }).join('');
+  ul.querySelectorAll('.cite-contrib-del').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); removeCiteContributor(Number(a.dataset.i)); }));
+}
+function addCiteContributor() {
+  const nameEl = el('cite-c-name');
+  const name = (nameEl && nameEl.value || '').trim();
+  if (!name) { if (nameEl) nameEl.focus(); return; }
+  if (!project.citation) project.citation = citationDefaults();
+  if (!Array.isArray(project.citation.contributors)) project.citation.contributors = [];
+  project.citation.contributors.push({
+    name,
+    orcid: ((el('cite-c-orcid') || {}).value || '').trim(),
+    affiliation: ((el('cite-c-affil') || {}).value || '').trim(),
+    role: (el('cite-c-role') || {}).value || '',
+    degree: (el('cite-c-degree') || {}).value || '',
+    corresponding: !!((el('cite-c-corr') || {}).checked),
+  });
+  ['cite-c-name', 'cite-c-orcid', 'cite-c-affil'].forEach((id) => { const x = el(id); if (x) x.value = ''; });
+  ['cite-c-role', 'cite-c-degree'].forEach((id) => { const x = el(id); if (x) x.value = ''; });
+  const corr = el('cite-c-corr'); if (corr) corr.checked = false;
+  saveCitation(); renderCiteContributors();
+  if (nameEl) nameEl.focus();
+}
+function removeCiteContributor(i) {
+  const list = citeContributors();
+  if (i < 0 || i >= list.length) return;
+  list.splice(i, 1);
+  saveCitation(); renderCiteContributors();
+}
+
+// One entry per unique person/org (a person tagged with several roles appears once), in add-order.
+function citeUniqueContributors() {
+  const seen = new Set(); const out = [];
+  citeContributors().forEach((c) => {
+    const key = (c.name || '').toLowerCase() + '|' + (c.orcid || '');
+    if (c.name && !seen.has(key)) { seen.add(key); out.push(c); }
+  });
+  return out;
+}
+function nameParts(name) {
+  const comma = String(name || '').indexOf(',');
+  if (comma > 0) return { family: name.slice(0, comma).trim(), given: name.slice(comma + 1).trim() };
+  return { name: String(name || '').trim() }; // organisation / single-token entity
+}
+function orcidUrl(o) { return o ? (/^https?:\/\//.test(o) ? o : 'https://orcid.org/' + o.replace(/^orcid\.org\//, '')) : ''; }
+
+function formatCitation(m) {
+  const authors = citeUniqueContributors().map((c) => c.name).join('; ');
+  const who = authors || (m.publisher || '');
+  const bits = [];
+  bits.push(`${who}${who ? ' ' : ''}(${m.year || 'n.d.'}).`);
+  bits.push(`${m.title || 'Untitled dataset'}${m.version ? ` (Version ${m.version})` : ''} [Data set].`);
+  if (m.publisher && m.publisher !== authors) bits.push(`${m.publisher}.`);
+  if (m.url) bits.push(m.url);
+  return bits.join(' ').replace(/\s+/g, ' ').trim();
+}
+function yamlStr(s) { return '"' + String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"'; }
+function buildCff(m) {
+  const authors = citeUniqueContributors();
+  const lines = [
+    'cff-version: 1.2.0',
+    'message: "If you use this dataset, please cite it as below."',
+    `title: ${yamlStr(m.title)}`,
+    'type: dataset',
+  ];
+  if (authors.length) {
+    lines.push('authors:');
+    authors.forEach((c) => {
+      const p = nameParts(c.name);
+      if (p.name) lines.push(`  - name: ${yamlStr(p.name)}`);
+      else { lines.push(`  - family-names: ${yamlStr(p.family)}`); lines.push(`    given-names: ${yamlStr(p.given)}`); }
+      if (c.orcid) lines.push(`    orcid: ${yamlStr(orcidUrl(c.orcid))}`);
+      if (c.affiliation) lines.push(`    affiliation: ${yamlStr(c.affiliation)}`);
+    });
+  }
+  if (m.version) lines.push(`version: ${yamlStr(m.version)}`);
+  if (m.year) lines.push(`date-released: ${yamlStr(m.year)}`);
+  if (m.url) lines.push(/^10\./.test(m.url.trim()) ? `doi: ${yamlStr(m.url.trim())}` : `url: ${yamlStr(m.url.trim())}`);
+  if (m.license) lines.push(`license: ${yamlStr(m.license)}`);
+  return lines.join('\n') + '\n';
+}
+function personNode(c) {
+  const p = nameParts(c.name);
+  const node = p.name
+    ? { '@type': 'Organization', name: p.name }
+    : { '@type': 'Person', familyName: p.family, givenName: p.given, name: `${p.given} ${p.family}`.trim() };
+  if (c.orcid) node['@id'] = orcidUrl(c.orcid);
+  if (c.affiliation) node.affiliation = { '@type': 'Organization', name: c.affiliation };
+  return node;
+}
+function buildSchemaOrg(m) {
+  const doc = { '@context': 'https://schema.org/', '@type': 'Dataset', name: m.title || 'Untitled dataset' };
+  if (m.year) doc.datePublished = m.year;
+  if (m.version) doc.version = m.version;
+  if (m.publisher) doc.publisher = { '@type': 'Organization', name: m.publisher };
+  if (m.license) doc.license = m.license;
+  if (m.url) { if (/^10\./.test(m.url.trim())) doc.identifier = 'https://doi.org/' + m.url.trim(); else doc.url = m.url.trim(); }
+  // Group contributions by person; each CRediT role becomes a schema.org Role wrapper carrying the
+  // canonical CRediT term URI (https://credit.niso.org/contributor-roles/<slug>/).
+  const order = []; const idx = {};
+  citeContributors().forEach((c) => {
+    const key = (c.name || '').toLowerCase() + '|' + (c.orcid || '');
+    if (!(key in idx)) { idx[key] = order.length; order.push({ person: personNode(c), roles: [] }); }
+    if (c.role) order[idx[key]].roles.push(c.role);
+  });
+  const creators = [];
+  order.forEach((e) => {
+    if (!e.roles.length) { creators.push(e.person); return; }
+    e.roles.forEach((r) => creators.push({
+      '@type': 'Role', roleName: `https://credit.niso.org/contributor-roles/${r}/`, contributor: e.person,
+    }));
+  });
+  if (creators.length) doc.creator = creators.length === 1 ? creators[0] : creators;
+  return JSON.stringify(doc, null, 2);
+}
+function citeFlash(msg) { const s = el('cite-status'); if (s) { s.textContent = msg; setTimeout(() => { if (s.textContent === msg) s.textContent = ''; }, 2500); } }
+function citeBaseName() {
+  const m = currentCitation();
+  return (m.title || 'dataset').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'dataset';
 }
 
 // ── Contribution validation: check the LPF against WHG's schema before enabling "Contribute" ──────
@@ -4227,6 +4545,12 @@ function init() {
   dz.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(); } });
   input.addEventListener('change', () => { if (input.files[0]) handleFile(input.files[0]); });
 
+  // Import from a shared Google Sheet URL.
+  const gsBtn = el('recon-gsheet-btn');
+  if (gsBtn) gsBtn.addEventListener('click', importGoogleSheet);
+  const gsUrl = el('recon-gsheet-url');
+  if (gsUrl) gsUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); importGoogleSheet(); } });
+
   // Load a bundled sample dataset (fetched from a static URL) for demonstration — no file picker.
   const sampleBtn = el('recon-load-sample');
   if (sampleBtn) sampleBtn.addEventListener('click', () => { sampleBtn.disabled = true; loadSampleDataset().finally(() => { sampleBtn.disabled = false; }); });
@@ -4328,6 +4652,26 @@ function init() {
   });
   const exportBtn = el('recon-export-btn');
   if (exportBtn) exportBtn.addEventListener('click', runExport);
+  const xlsxSaveBtn = el('recon-xlsx-save');
+  if (xlsxSaveBtn) xlsxSaveBtn.addEventListener('click', saveAsExcel);
+
+  // Citation & provenance builder: live preview + persist on edit; add contributors; copy / download.
+  CITE_FIELDS.forEach((f) => { const inp = el('cite-' + f); if (inp) inp.addEventListener('input', saveCitation); });
+  const citeAdd = el('cite-c-add');
+  if (citeAdd) citeAdd.addEventListener('click', addCiteContributor);
+  const citeCName = el('cite-c-name');
+  if (citeCName) citeCName.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCiteContributor(); } });
+  const citeCopy = el('cite-copy');
+  if (citeCopy) citeCopy.addEventListener('click', async () => {
+    const text = formatCitation(currentCitation());
+    try { await navigator.clipboard.writeText(text); citeFlash('Citation copied'); }
+    catch (_) { const t = el('cite-title'); if (t) { t.focus(); } citeFlash('Copy failed — select & copy the preview'); }
+  });
+  const citeCff = el('cite-cff');
+  if (citeCff) citeCff.addEventListener('click', () => { downloadText('CITATION.cff', buildCff(currentCitation()), 'application/x-yaml'); citeFlash('CITATION.cff downloaded'); });
+  const citeJsonld = el('cite-jsonld');
+  if (citeJsonld) citeJsonld.addEventListener('click', () => { downloadText(citeBaseName() + '.schema.json', buildSchemaOrg(currentCitation()), 'application/ld+json'); citeFlash('schema.org JSON downloaded'); });
+
   const contribBtn = el('recon-contribute-btn');
   if (contribBtn) contribBtn.addEventListener('click', contributeToWHG);
   // Contribution validation: re-check button, "use Scope type(s)" shortcut, and re-validate when the
@@ -4427,6 +4771,10 @@ function init() {
   ['recon-tf-regex', 'recon-tf-case'].forEach((id) => { const e = el(id); if (e) e.addEventListener('change', onFindReplaceInput); });
   const tfApply = el('recon-transform-apply');
   if (tfApply) tfApply.addEventListener('click', applyTransform);
+  // Split-into-containment-columns controls (in the same transform modal).
+  const sdEl = el('recon-tf-splitdelim'); if (sdEl) sdEl.addEventListener('input', renderSplitPreview);
+  const srEl = el('recon-tf-splitrev'); if (srEl) srEl.addEventListener('change', renderSplitPreview);
+  const splitBtn = el('recon-tf-splitbtn'); if (splitBtn) splitBtn.addEventListener('click', applySplit);
   const scopeApply = el('recon-scope-apply');
   if (scopeApply) scopeApply.addEventListener('click', applyScope);
   const scopeClear = el('recon-scope-clear');

@@ -496,7 +496,12 @@ def submit_dataset(request):
 def reconciliation_view(request):
     if not request.user.can_access_beta:
         raise Http404()
-    return render(request, "main/reconciliation.html")
+    # CRediT vocab for the in-browser citation builder (single source of truth = persons.CreditRole).
+    from persons.models import CreditRole, ContributionDegree
+    return render(request, "main/reconciliation.html", {
+        'credit_roles': CreditRole.choices,
+        'contribution_degrees': ContributionDegree.choices,
+    })
 
 
 # ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────

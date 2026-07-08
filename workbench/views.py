@@ -9,10 +9,12 @@ mirroring the existing ``postReconcile`` call in reconciliation.js).
 """
 import json
 import logging
+import re
 import time
 import uuid
 
 import jwt
+import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
@@ -307,6 +309,40 @@ def team_member_detail(request, tid, uid):
         return _err('cannot remove the team owner', 400)
     TeamMember.objects.filter(team=team, user_id=uid).delete()
     return JsonResponse({'ok': True})
+
+
+# ── Google Sheet import proxy (Map-your-Data) ──────────────────────────────────
+GSHEET_ID_RE = re.compile(r'docs\.google\.com/spreadsheets/d/([a-zA-Z0-9\-_]+)')
+GSHEET_GID_RE = re.compile(r'[#?&]gid=([0-9]+)')
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def gsheet_proxy(request):
+    """Fetch a shared Google Sheet as CSV, server-side, so the browser importer isn't blocked by CORS.
+    SSRF-safe: we extract the doc id from the pasted link and only ever fetch the fixed
+    ``docs.google.com/spreadsheets/d/<id>/export`` URL — never the user-supplied URL itself."""
+    url = (_body(request).get('url') or '').strip()
+    m = GSHEET_ID_RE.search(url)
+    if not m:
+        return _err('That doesn’t look like a Google Sheets link '
+                    '(expected docs.google.com/spreadsheets/d/…).')
+    doc_id = m.group(1)
+    gm = GSHEET_GID_RE.search(url)
+    gid = gm.group(1) if gm else '0'
+    export = f'https://docs.google.com/spreadsheets/d/{doc_id}/export?format=csv&gid={gid}'
+    try:
+        r = requests.get(export, timeout=15, allow_redirects=True)
+    except requests.RequestException:
+        return _err('Could not reach Google Sheets — please try again.', 502)
+    # A sheet that isn't link-shared redirects to an HTML sign-in page (still HTTP 200).
+    if r.status_code != 200 or 'text/csv' not in r.headers.get('Content-Type', ''):
+        return _err('Could not read that sheet — make sure it is shared so that '
+                    '“anyone with the link can view”.', 400)
+    if len(r.content) > 15 * 1024 * 1024:
+        return _err('That sheet is too large to import here (over 15 MB).', 413)
+    return JsonResponse({'csv': r.text, 'name': f'gsheet-{doc_id[:8]}.csv'})
 
 
 # ── Phase-2 real-time collab token ─────────────────────────────────────────────

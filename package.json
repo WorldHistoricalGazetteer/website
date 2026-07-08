@@ -52,6 +52,7 @@
     "webpack": "^5.89.0",
     "webpack-bundle-analyzer": "^4.10.1",
     "webpack-cli": "^5.1.4",
+    "xlsx": "^0.18.5",
     "y-indexeddb": "^9.0.12",
     "yjs": "^13.6.31"
   },

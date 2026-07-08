@@ -224,6 +224,22 @@ class ApiTests(TestCase):
             c = Client(); c.force_login(self.other)
             self.assertEqual(c.post(url).status_code, 403)
 
+    def test_gsheet_rejects_non_google_url(self):
+        # Invalid (non-Google) URL → 400, without any network call (SSRF-safe validation).
+        r = self.client.post(reverse('workbench:gsheet'),
+                             data=json.dumps({'url': 'https://evil.example.com/x'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Google Sheets', r.json()['error'])
+
+    def test_gsheet_beta_gated(self):
+        normal = make_user('dave', beta=False)
+        c = Client(); c.force_login(normal)
+        r = c.post(reverse('workbench:gsheet'),
+                   data=json.dumps({'url': 'https://docs.google.com/spreadsheets/d/abc/edit'}),
+                   content_type='application/json')
+        self.assertEqual(r.status_code, 404)
+
     def test_non_owner_cannot_invite(self):
         team = Team.objects.create(owner=self.owner, title='T', slug='t2')
         TeamMember.objects.create(team=team, user=self.owner, role='owner')
