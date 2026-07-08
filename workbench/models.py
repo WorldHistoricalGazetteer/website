@@ -137,3 +137,20 @@ class ProjectSnapshot(models.Model):
 
     def __str__(self):
         return f'{self.project_id} v{self.version}'
+
+
+class ProjectYDoc(models.Model):
+    """Binary Yjs document state for a project's real-time (Hocuspocus) session — Phase 2 (place#112).
+    The Node hocuspocus service reads/writes ``state`` (the persistence store); Django owns the schema
+    and flattens the doc back into ``WorkbenchProject.snapshot`` so the REST/snapshot path stays
+    authoritative for non-realtime clients, export, and publishing."""
+    project = models.OneToOneField(WorkbenchProject, related_name='ydoc', on_delete=models.CASCADE,
+                                   primary_key=True)
+    state = models.BinaryField(null=True, blank=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'workbench_ydoc'
+
+    def __str__(self):
+        return f'ydoc:{self.project_id}'

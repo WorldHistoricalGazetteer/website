@@ -1170,6 +1170,7 @@ function handleFile(file) {
 }
 
 async function clearData() {
+  stopRealtime(); // drop any live collab session before wiping local state
   try { await deleteProject(); } catch (err) { console.error('[recon] clear failed', err); }
   resetUI();
   console.log('[recon] local project cleared from IndexedDB');
@@ -1743,6 +1744,7 @@ async function loadSaved() {
       showResume();
       applyReadOnlyMode();
       setCollabBadge(collabState());
+      maybeStartRealtime();
       console.log(`[recon] resumed saved project: ${project.total} rows`);
     }
   } catch (err) { console.error('[recon] could not load saved project', err); }
@@ -1757,6 +1759,13 @@ async function loadSaved() {
 const SYNC_KEYS = ['serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal', 'sharedToken', 'sharedUrl'];
 let _pushTimer = null, _pushing = false, _pushQueued = false, _retryTimer = null;
 let _pendingConflict = null; // { mine, merged, conflicts, version }
+
+// Real-time (Phase 2): lazy Yjs/Hocuspocus chunk, loaded only for team (non-personal) server
+// projects. When connected, the CRDT owns sync — the Phase-1 REST push is suppressed.
+let RT = null;
+let _lastDecisionsJSON = null;
+const loadRT = async () => (RT || (RT = await import(/* webpackChunkName: "recon-collab-rt" */ './recon-collab-rt.js')));
+function rtActive() { return !!(RT && RT.isConnected()); }
 
 function cleanSnapshot() {
   const out = {};
@@ -1784,10 +1793,57 @@ function applySnapshot(snap) {
 }
 
 function schedulePush() {
+  // While a real-time session is live, the CRDT owns sync — mirror decisions into the Yjs doc
+  // instead of doing the Phase-1 REST push.
+  if (rtActive()) { rtSyncDecisions(); return; }
   if (!canPush()) return;
   clearTimeout(_pushTimer);
   _pushTimer = setTimeout(doPush, 1200);
   setCollabBadge('syncing');
+}
+
+// ── Real-time orchestration (Phase 2 spike) ──────────────────────────────────
+// Connect a team (non-personal) server project to Hocuspocus and two-way-bind its `decisions`.
+async function maybeStartRealtime() {
+  if (!isServerProject() || project.teamPersonal) { return; }
+  let tok;
+  try { tok = await Sync.collabToken(project.serverId); }
+  catch (_) { return; } // offline → stay on REST
+  if (!tok || tok.status !== 200 || !tok.data || !tok.data.token) return; // 501/403 → REST fallback
+  try {
+    const mod = await loadRT();
+    const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/collab';
+    _lastDecisionsJSON = JSON.stringify(project.decisions || {});
+    mod.connect({
+      serverId: project.serverId, token: tok.data.token, wsUrl,
+      onStatus: (s) => setCollabBadge(s === 'connected' ? 'live' : (s === 'unauthorized' ? 'offline' : 'syncing')),
+      onRemoteDecisions: applyRemoteDecisions,
+    });
+  } catch (err) { console.warn('[recon] realtime connect failed — staying on REST', err); }
+}
+
+function rtSyncDecisions() {
+  if (!rtActive() || !project) return;
+  const j = JSON.stringify(project.decisions || {});
+  if (j === _lastDecisionsJSON) return;
+  _lastDecisionsJSON = j;
+  RT.syncLocalDecisions(project.decisions || {});
+}
+
+function applyRemoteDecisions(decisions) {
+  if (!project) return;
+  project.decisions = decisions;
+  _lastDecisionsJSON = JSON.stringify(decisions);
+  putProject(project);
+  const built = buildUniqueQueries();
+  if (built) renderResults(built);
+  refreshReview();
+  setCollabBadge('live');
+}
+
+function stopRealtime() {
+  if (RT) { try { RT.disconnect(); } catch (_) { /* ignore */ } }
+  _lastDecisionsJSON = null;
 }
 
 async function doPush() {
@@ -1903,7 +1959,7 @@ function setCollabBadge(state) {
   if (!b) return;
   const map = { local: ['', ''], synced: ['✓ synced', 'text-success'], syncing: ['⋯ syncing', 'text-muted'],
                 offline: ['⚠ offline', 'text-warning'], conflict: ['⚠ conflict', 'text-danger'],
-                viewer: ['view only', 'text-muted'] };
+                viewer: ['view only', 'text-muted'], live: ['● live', 'text-success'] };
   const [txt, cls] = map[state] || map.local;
   b.textContent = txt;
   b.className = 'recon-collab-badge small ms-1 ' + cls;
@@ -2024,7 +2080,11 @@ async function ensureServer(team) {
   return true;
 }
 async function saveToServer(team) {
-  if (await ensureServer(team)) { if (team) { const s = el('recon-team-select'); project.teamTitle = s ? (s.options[s.selectedIndex] || {}).text : ''; } await renderCollab(); }
+  if (await ensureServer(team)) {
+    if (team) { const s = el('recon-team-select'); project.teamTitle = s ? (s.options[s.selectedIndex] || {}).text : ''; }
+    await renderCollab();
+    maybeStartRealtime(); // a team project goes live immediately
+  }
 }
 async function createTeamThenSave() {
   const name = (el('recon-new-team') || {}).value;
@@ -2097,6 +2157,7 @@ async function openServerProject(pid) {
   applySnapshot(d.snapshot);
   await putProject(project);
   setCollabBadge(collabState());
+  maybeStartRealtime();
   hideModal('recon-collab-modal');
   flashSaved('Opened the team project');
 }

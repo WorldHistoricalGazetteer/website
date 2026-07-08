@@ -9,8 +9,11 @@ mirroring the existing ``postReconcile`` call in reconciliation.js).
 """
 import json
 import logging
+import time
 import uuid
 
+import jwt
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -306,15 +309,30 @@ def team_member_detail(request, tid, uid):
     return JsonResponse({'ok': True})
 
 
-# ── Phase-2 stub ──────────────────────────────────────────────────────────────
+# ── Phase-2 real-time collab token ─────────────────────────────────────────────
 @login_required
 @_beta_required
 @require_http_methods(['POST'])
 def collab_token(request, pid):
-    """Phase-2 placeholder — will mint a short-lived Hocuspocus collab token after a membership
-    check. Not implemented; returns 501 so the client can feature-detect real-time availability."""
-    p = get_object_or_404(WorkbenchProject, pk=pid)
-    if p.role_for(request.user) is None:
+    """Mint a short-lived JWT the client presents to the Hocuspocus WebSocket service (Phase 2,
+    place#112). The service verifies it with the shared ``HOCUSPOCUS_SECRET`` and enforces the role
+    (viewer → read-only). 501 if the realtime service isn't configured, so the client feature-detects
+    and falls back to the Phase-1 REST sync."""
+    p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
+    role = p.role_for(request.user)
+    if role is None:
         return _err('not a member of this project’s team', 403)
-    return JsonResponse({'error': 'real-time collaboration (Phase 2) is not yet available'},
-                        status=501)
+    secret = getattr(settings, 'HOCUSPOCUS_SECRET', '')
+    if not secret:
+        return JsonResponse({'error': 'real-time collaboration is not available'}, status=501)
+    now = int(time.time())
+    payload = {
+        'sub': str(request.user.id),
+        'name': getattr(request.user, 'name', '') or request.user.username,
+        'project_id': str(p.id),
+        'role': role,
+        'iat': now,
+        'exp': now + 120,  # short TTL: only needs to survive the WS handshake
+    }
+    token = jwt.encode(payload, secret, algorithm='HS256')
+    return JsonResponse({'token': token, 'document': str(p.id), 'role': role})

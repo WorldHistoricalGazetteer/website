@@ -203,6 +203,27 @@ services:
     restart: unless-stopped
 {% endif %}
 
+{% if not ENV_CONTEXT == 'local' %}
+  # Real-time collaboration server (Hocuspocus / Yjs — Workbench Phase 2, place#112).
+  # Built on the host from ./hocuspocus; bound to 127.0.0.1 so only nginx (location /collab) reaches
+  # it. Additive: if it's down, only realtime collab is affected, not the main site.
+  hocuspocus:
+    networks:
+      - {{ ENV_CONTEXT }}
+    build:
+      context: {{ BASE_DIR }}/hocuspocus
+    container_name: hocuspocus_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_HOCUSPOCUS is defined %}
+    mem_limit: {{ MEM_LIMIT_HOCUSPOCUS }}
+    {% endif %}
+    env_file: {{ BASE_DIR }}/.env/.env
+    ports:
+      - "127.0.0.1:{{ HOCUSPOCUS_PORT }}:{{ HOCUSPOCUS_PORT }}"
+    depends_on:
+      - {{ DB_HOST }}
+    restart: unless-stopped
+{% endif %}
+
   {% if ENV_CONTEXT == 'local' %}
 
   portainer:

@@ -48,6 +48,11 @@ CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWA
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
 
+# Shared secret used to sign short-lived collab tokens for the Hocuspocus real-time service
+# (Workbench Phase 2, place#112). Same value is passed to the hocuspocus container via .env so it
+# can verify the JWTs. Empty in local dev where the realtime service isn't running.
+HOCUSPOCUS_SECRET = os.environ.get('HOCUSPOCUS_SECRET') or globals().get('HOCUSPOCUS_SECRET', '')
+
 # Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
 # Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only
 # link out to it from /contribute/. The default below is the live public form URL (not a

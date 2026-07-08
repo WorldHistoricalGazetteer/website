@@ -46,6 +46,10 @@ export const deleteProject = (id) => req('DELETE', `/projects/${id}/`);
 export const pushSnapshot = (id, snapshot, baseVersion) =>
   req('PUT', `/projects/${id}/`, { snapshot, base_version: baseVersion });
 
+// Mint a short-lived JWT for the Hocuspocus real-time service (Phase 2). 200 {token,document,role},
+// or 501 (realtime not configured) / 403 (not a member) → caller stays on the Phase-1 REST sync.
+export const collabToken = (id) => req('POST', `/projects/${id}/collab-token/`);
+
 // ── sharing (Phase 0) ─────────────────────────────────────────────────────────
 export const shareProject = (id) => req('POST', `/projects/${id}/share/`);
 export const unshareProject = (id) => req('DELETE', `/projects/${id}/share/`);

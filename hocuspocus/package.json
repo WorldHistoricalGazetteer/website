@@ -1,0 +1,17 @@
+{
+  "name": "whg-hocuspocus",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WHG Workbench real-time collaboration server (Yjs + Hocuspocus, place#112)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "^2.15.2",
+    "@hocuspocus/server": "^2.15.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.13.1",
+    "yjs": "^13.6.20"
+  }
+}

@@ -205,6 +205,25 @@ class ApiTests(TestCase):
         self.assertTrue(TeamMember.objects.filter(team_id=tid, user=self.other,
                                                   role=ROLE_EDITOR).exists())
 
+    def test_collab_token(self):
+        from django.test import override_settings
+        import jwt as _jwt
+        j = self._create()
+        url = reverse('workbench:collab-token', args=[j['id']])
+        # No secret configured → 501 (client falls back to REST sync)
+        with override_settings(HOCUSPOCUS_SECRET=''):
+            self.assertEqual(self.client.post(url).status_code, 501)
+        # Configured → signed JWT scoped to this document + role
+        with override_settings(HOCUSPOCUS_SECRET='test-secret'):
+            r = self.client.post(url)
+            self.assertEqual(r.status_code, 200, r.content)
+            payload = _jwt.decode(r.json()['token'], 'test-secret', algorithms=['HS256'])
+            self.assertEqual(payload['project_id'], j['id'])
+            self.assertEqual(payload['role'], 'owner')
+            # Non-member is refused a token
+            c = Client(); c.force_login(self.other)
+            self.assertEqual(c.post(url).status_code, 403)
+
     def test_non_owner_cannot_invite(self):
         team = Team.objects.create(owner=self.owner, title='T', slug='t2')
         TeamMember.objects.create(team=team, user=self.owner, role='owner')
