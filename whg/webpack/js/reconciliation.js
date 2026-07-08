@@ -1416,9 +1416,17 @@ function buildLPF(data) {
     const rt = rowTypesFor(rec.row);
     if (rt.length) feat.types = rt.map((t) => ({ identifier: t.id, label: t.text }));  // LPF place types (needed to contribute)
     else { const st = (scopeTypes().selected) || []; if (st.length) feat.types = st.map((t) => ({ identifier: t.id, label: t.text })); }
-    // Temporality: per-row parsed dates, else the global Scope → "When" year range (Scope period(s) below).
-    if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
-    else { const s = getScope(); if (s && (s.start != null || s.end != null)) feat.when = { timespans: [{ start: { in: s.start != null ? String(s.start) : undefined }, end: { in: s.end != null ? String(s.end) : undefined } }] }; }
+    // Temporality: per-row parsed dates, else the global Scope → "When" year range (Scope period(s)
+    // below). Build only the bounds that exist — an empty {in: undefined} fails LPF validation.
+    const timespanFrom = (a, b) => {
+      const t = {};
+      if (a !== '' && a != null) t.start = { in: String(a) };
+      if (b !== '' && b != null) t.end = { in: String(b) };
+      return (t.start || t.end) ? t : null;
+    };
+    let ts = timespanFrom(rec.whenStart, rec.whenEnd);
+    if (!ts) { const s = getScope(); if (s) ts = timespanFrom(s.start, s.end); }
+    if (ts) feat.when = { timespans: [ts] };
     // Dataset-scope PeriodO period(s) apply to every place (scope-level, not per row).
     const scp = scopePeriods();
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
