@@ -75,6 +75,12 @@ module.exports = {
 		    {
 		        test: /\.csl$/,
 		        use: 'raw-loader', // Use raw-loader for .csl files
+		    },
+		    {
+		        // pdfjs-dist (and other ESM packages) ship .mjs with extensionless internal imports;
+		        // relax webpack's strict ESM resolution so the lazy recon-pdfjs chunk builds cleanly.
+		        test: /\.m?js$/,
+		        resolve: { fullySpecified: false },
 		    }
 		],
 	},

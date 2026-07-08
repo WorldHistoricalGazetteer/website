@@ -240,6 +240,13 @@ class ApiTests(TestCase):
                    content_type='application/json')
         self.assertEqual(r.status_code, 404)
 
+    def test_gdoc_rejects_non_google_url(self):
+        r = self.client.post(reverse('workbench:gdoc'),
+                             data=json.dumps({'url': 'https://evil.example.com/x'}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+        self.assertIn('Google Docs', r.json()['error'])
+
     def test_ner_beta_gated(self):
         normal = make_user('erin', beta=False)
         c = Client(); c.force_login(normal)

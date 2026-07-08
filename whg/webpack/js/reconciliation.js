@@ -31,6 +31,8 @@ let Validate = null; // Ajv LPF validator (Phase: contribution validation) — r
 const loadValidate = async () => (Validate || (Validate = await import(/* webpackChunkName: "recon-validate" */ './recon-validate.js')));
 let Xlsx = null; // SheetJS — loaded on demand only when a spreadsheet is imported (kept out of the initial bundle)
 const loadXlsx = async () => (Xlsx || (Xlsx = await import(/* webpackChunkName: "recon-xlsx" */ './recon-xlsx.js')));
+let TextExtract = null; // mammoth (.docx) + pdf.js (.pdf) for the NER importer — loaded only when such a file is chosen
+const loadTextExtract = async () => (TextExtract || (TextExtract = await import(/* webpackChunkName: "recon-textextract" */ './recon-textextract.js')));
 import * as Sync from './recon-sync.js'; // collaborative-project API (place#112, Phase 0/1) — tiny, always bundled
 
 const PREVIEW_ROWS = 20;
@@ -1341,20 +1343,16 @@ async function importGoogleSheet() {
 // spaCy service (the one MyD step that leaves the browser — the UI says so), and turn the detected
 // place names into a small table (name · mentions · context) that becomes the project. Binary formats
 // (.docx, .pdf) and Google Docs are a planned fast-follow.
-function nerReadFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      let text = String(reader.result || '');
-      if (/\.html?$/i.test(file.name)) {
-        try { text = new DOMParser().parseFromString(text, 'text/html').body.textContent || ''; }
-        catch (_) { /* fall back to raw */ }
-      }
-      resolve(text);
-    };
-    reader.onerror = () => reject(new Error('could not read the file'));
-    reader.readAsText(file);
-  });
+async function nerReadFile(file) {
+  const name = file.name || '';
+  if (/\.docx$/i.test(name)) { const mod = await loadTextExtract(); return mod.extractDocx(await file.arrayBuffer()); }
+  if (/\.pdf$/i.test(name)) { const mod = await loadTextExtract(); return mod.extractPdf(await file.arrayBuffer()); }
+  const text = await file.text();
+  if (/\.html?$/i.test(name)) {
+    try { return new DOMParser().parseFromString(text, 'text/html').body.textContent || ''; }
+    catch (_) { return text; }
+  }
+  return text; // .txt / .md / other plain text
 }
 async function extractPlaceNames() {
   const area = el('recon-ner-text');
@@ -1379,6 +1377,10 @@ async function extractPlaceNames() {
       total: ents.length,
     };
     await finishImport(parsed, 'extracted-places.csv', 'ner');
+    // The extracted names ARE the toponyms — assign the place-name role deterministically (the generic
+    // column-name heuristic doesn't recognise "place_name"), so reconciliation is ready immediately.
+    const nameCol = project.columns.find((c) => c.name === 'place_name');
+    if (nameCol && nameCol.role !== 'name') { nameCol.role = 'name'; normalizeChain(); renderAll(); await persist(); }
     setMsg('');
     if (area) area.value = '';
   } catch (err) {
@@ -1398,8 +1400,36 @@ async function nerLoadFile(file) {
   const area = el('recon-ner-text');
   const msg = el('recon-ner-msg');
   if (!file || !area) return;
-  try { area.value = await nerReadFile(file); if (msg) msg.innerHTML = ''; }
-  catch (err) { if (msg) msg.innerHTML = `<span class="text-danger">${esc(err.message)}</span>`; }
+  if (msg) msg.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Reading file…</span>';
+  try { area.value = await nerReadFile(file); if (msg) msg.innerHTML = ''; area.focus(); }
+  catch (err) { console.warn('[recon] file read failed', err); if (msg) msg.innerHTML = `<span class="text-danger">Could not read that file — is it a valid ${/\.pdf$/i.test(file.name) ? 'PDF' : /\.docx$/i.test(file.name) ? 'Word (.docx)' : 'text'} file?</span>`; }
+}
+// Import a shared Google Doc as plain text (via the same-origin proxy) into the extractor textarea.
+async function importGoogleDoc() {
+  const input = el('recon-ner-gdoc-url');
+  const msg = el('recon-ner-msg');
+  const btn = el('recon-ner-gdoc-btn');
+  const area = el('recon-ner-text');
+  const url = (input && input.value || '').trim();
+  const setMsg = (h) => { if (msg) msg.innerHTML = h; };
+  if (!url) { setMsg('<span class="text-muted">Paste a Google Doc link first.</span>'); return; }
+  if (btn) btn.disabled = true;
+  setMsg('<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Fetching the document…</span>');
+  try {
+    const res = await Sync.importGDoc(url);
+    if (res.status !== 200 || !res.data || res.data.text == null) {
+      setMsg(`<span class="text-danger">${esc((res.data && res.data.error) || 'Could not fetch that document.')}</span>`);
+      return;
+    }
+    if (area) { area.value = res.data.text; area.focus(); }
+    setMsg('<span class="text-success">Loaded — now click “Extract place names”.</span>');
+    if (input) input.value = '';
+  } catch (err) {
+    console.warn('[recon] gdoc import failed', err);
+    setMsg('<span class="text-danger">Import failed — check the link and your connection, then try again.</span>');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 async function clearData() {
@@ -4682,6 +4712,10 @@ function init() {
   if (nerPaste) nerPaste.addEventListener('click', nerPasteFromClipboard);
   const nerFile = el('recon-ner-file');
   if (nerFile) nerFile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) nerLoadFile(f); e.target.value = ''; });
+  const nerGdocBtn = el('recon-ner-gdoc-btn');
+  if (nerGdocBtn) nerGdocBtn.addEventListener('click', importGoogleDoc);
+  const nerGdocUrl = el('recon-ner-gdoc-url');
+  if (nerGdocUrl) nerGdocUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); importGoogleDoc(); } });
 
   // Load a bundled sample dataset (fetched from a static URL) for demonstration — no file picker.
   const sampleBtn = el('recon-load-sample');

@@ -345,6 +345,36 @@ def gsheet_proxy(request):
     return JsonResponse({'csv': r.text, 'name': f'gsheet-{doc_id[:8]}.csv'})
 
 
+# ── Google Doc import proxy (Map-your-Data NER) ────────────────────────────────
+GDOC_ID_RE = re.compile(r'docs\.google\.com/document/d/([a-zA-Z0-9\-_]+)')
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def gdoc_proxy(request):
+    """Fetch a shared Google Doc as plain text, server-side (avoids CORS). SSRF-safe: only ever fetch
+    the fixed ``docs.google.com/document/d/<id>/export?format=txt`` derived from the pasted link."""
+    url = (_body(request).get('url') or '').strip()
+    m = GDOC_ID_RE.search(url)
+    if not m:
+        return _err('That doesn’t look like a Google Docs link '
+                    '(expected docs.google.com/document/d/…).')
+    doc_id = m.group(1)
+    export = f'https://docs.google.com/document/d/{doc_id}/export?format=txt'
+    try:
+        r = requests.get(export, timeout=15, allow_redirects=True)
+    except requests.RequestException:
+        return _err('Could not reach Google Docs — please try again.', 502)
+    # A doc that isn't link-shared redirects to an HTML sign-in page (still HTTP 200).
+    if r.status_code != 200 or 'text/plain' not in r.headers.get('Content-Type', ''):
+        return _err('Could not read that document — make sure it is shared so that '
+                    '“anyone with the link can view”.', 400)
+    if len(r.content) > 10 * 1024 * 1024:
+        return _err('That document is too large to import here (over 10 MB).', 413)
+    return JsonResponse({'text': r.text, 'name': f'gdoc-{doc_id[:8]}.txt'})
+
+
 # ── Place-name extraction proxy (Map-your-Data NER) ────────────────────────────
 # NB: unlike the rest of Map-your-Data (which stays in the browser), this deliberately sends the
 # pasted / extracted text to WHG's on-host spaCy service for named-entity recognition. The UI warns
