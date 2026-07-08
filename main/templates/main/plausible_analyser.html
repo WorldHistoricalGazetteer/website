@@ -25,7 +25,9 @@
   .an-bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: .15rem; }
   .an-drop { color: #b45309; font-size: .8rem; }
   .an-dseg { display: flex; align-items: center; gap: .35rem; font-size: .8rem; }
+  #an-map { height: 400px; width: 100%; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css"/>
 {% endblock %}
 
 {% block content %}
@@ -89,6 +91,37 @@
     {% else %}<p class="text-muted small mb-0">No data for this period.</p>{% endif %}
   </div></div>
 
+  <!-- Choropleth: visitors by country -->
+  <div class="card mb-4"><div class="card-body">
+    <h6 class="card-title"><i class="fas fa-earth-americas me-1 text-secondary"></i>Visitors by country</h6>
+    <div id="an-map"></div>
+    <div id="an-map-fallback" class="text-muted small d-none mt-2">
+      Map couldn't load (offline?). The Countries list below has the same data.</div>
+  </div></div>
+  {{ country_map|json_script:"an-map-data" }}
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
+  <script>
+  (function () {
+    var el = document.getElementById('an-map');
+    var data = {};
+    try { data = JSON.parse(document.getElementById('an-map-data').textContent); } catch (e) {}
+    function fail() { var f = document.getElementById('an-map-fallback'); if (f) f.classList.remove('d-none'); }
+    if (!el || typeof jsVectorMap === 'undefined') { fail(); return; }
+    try {
+      new jsVectorMap({
+        selector: '#an-map', map: 'world', zoomButtons: true,
+        regionStyle: { initial: { fill: '#e5e7eb', stroke: '#ffffff', strokeWidth: 0.3 } },
+        series: { regions: [{ attribute: 'fill', scale: ['#dbeafe', '#1e3a8a'],
+          normalizeFunction: 'polynomial', values: data }] },
+        onRegionTooltipShow: function (event, tooltip, code) {
+          try { tooltip.text(tooltip.text() + ': ' + (data[code] || 0) + ' visitors', true); } catch (e) {}
+        }
+      });
+    } catch (e) { fail(); }
+  })();
+  </script>
+
   <!-- Breakdown tables + donuts -->
   <div class="row g-3 mb-4">
     {% for sec in sections %}
@@ -100,7 +133,7 @@
         <tr>
           <td class="an-bd-cell">
             <div class="an-bd-bar" style="width: {% widthratio row.visitors sec.max 100 %}%;"></div>
-            <span class="an-bd-txt">{{ row.label|truncatechars:44 }}</span>
+            <span class="an-bd-txt"{% if row.title %} title="{{ row.title }}"{% endif %}>{{ row.label|truncatechars:44 }}{% if row.title %} <span class="text-muted">— {{ row.title|truncatechars:22 }}</span>{% endif %}</span>
           </td>
           <td class="text-end an-bd-num">{{ row.visitors }}{% if sec.pv %} <span class="text-muted">/ {{ row.pageviews }} pv</span>{% endif %}</td>
         </tr>

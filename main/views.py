@@ -569,6 +569,33 @@ def _fmt_chart_date(iso, interval):
         return iso
 
 
+_COUNTRY_NAMES = None
+
+
+def _country_names():
+    """{ISO2 code: country name} from WHG's own static/js/parents.js (window.ccode_hash) so the
+    Analytics country list matches the names used site-wide. Parsed once, cached; {} on any failure."""
+    global _COUNTRY_NAMES
+    if _COUNTRY_NAMES is not None:
+        return _COUNTRY_NAMES
+    _COUNTRY_NAMES = {}
+    try:
+        import os
+        path = os.path.join(settings.STATIC_ROOT, 'js', 'parents.js')
+        with open(path, encoding='utf-8') as fh:
+            raw = fh.read()
+        seg = raw.split('window.ccode_hash', 1)[1]
+        start = seg.index('{')
+        end = seg.index('window.regions') if 'window.regions' in seg else len(seg)
+        obj = seg[start:end].rstrip().rstrip(';').rstrip()
+        data = json.loads(obj)
+        _COUNTRY_NAMES = {code: (v.get('gnlabel') or code).strip()
+                          for code, v in data.items() if code and isinstance(v, dict)}
+    except Exception as e:  # noqa: BLE001 — names are cosmetic; degrade to codes
+        logger.warning('Analytics country-name parse failed: %s', e)
+    return _COUNTRY_NAMES
+
+
 def _svg_area(series, w=820, h=190, pad=26):
     """Build SVG polyline/polygon point strings for a visitors-over-time area chart.
     series = [(label, value), …]. Returns None if empty."""
@@ -628,7 +655,7 @@ def plausible_analyser_view(request):
         tasks[('source', site)] = ('breakdown', {'period': period, 'property': 'visit:source',
             'metrics': 'visitors', 'limit': 30}, site)
         tasks[('country', site)] = ('breakdown', {'period': period, 'property': 'visit:country',
-            'metrics': 'visitors', 'limit': 30}, site)
+            'metrics': 'visitors', 'limit': 150}, site)
         tasks[('device', site)] = ('breakdown', {'period': period, 'property': 'visit:device',
             'metrics': 'visitors', 'limit': 10}, site)
         tasks[('browser', site)] = ('breakdown', {'period': period, 'property': 'visit:browser',
@@ -708,10 +735,18 @@ def plausible_analyser_view(request):
     pages.sort(key=lambda x: x['visitors'], reverse=True)
     pages = pages[:12]
 
+    # Countries — attach full names (from WHG's own data) for tooltips, and a code→visitors map for
+    # the choropleth. Codes come from Plausible as ISO-2 uppercase, matching the map library's regions.
+    cnames = _country_names()
+    countries_full = merge('country', 'country', 300)
+    for row in countries_full:
+        row['title'] = cnames.get(row['label'], '')
+    country_map = {row['label']: row['visitors'] for row in countries_full if len(row['label']) == 2}
+
     sections = [
         {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
         {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket', 'rows': merge('source', 'source', 8)},
-        {'title': 'Countries', 'icon': 'fa-earth-americas', 'rows': merge('country', 'country', 8)},
+        {'title': 'Countries', 'icon': 'fa-earth-americas', 'rows': countries_full[:8]},
         {'title': 'Operating systems', 'icon': 'fa-gear', 'rows': merge('os', 'os', 6)},
     ]
     for sec in sections:
@@ -741,7 +776,7 @@ def plausible_analyser_view(request):
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
         'topline': topline, 'per_site': per_site, 'chart': chart,
-        'sections': sections, 'donuts': donuts,
+        'sections': sections, 'donuts': donuts, 'country_map': country_map,
         'funnel': funnel, 'others': others, 'base_v': base_v,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
