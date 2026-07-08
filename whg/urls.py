@@ -97,6 +97,7 @@ urlpatterns = [
                   path('dashboard/', views.dashboard_redirect, name="dashboard"),  # redirect to user or admin
                   path('dashboard_user/', views.dashboard_user_view, name="dashboard-user"),
                   path('dashboard_admin/', views.dashboard_admin_view, name="dashboard-admin"),
+                  path('dashboard_admin/analytics/', views.plausible_analyser_view, name="plausible-analyser"),
 
                   # static content
                   path('about/', TemplateView.as_view(template_name="main/about.html"), name="about"),

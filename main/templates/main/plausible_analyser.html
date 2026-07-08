@@ -1,0 +1,90 @@
+{% extends "main/base_webpack.html" %}
+{% block title %}<title>WHG · Map your Data — usage funnel</title>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .myd-analyser { max-width: 900px; margin: 1.5rem auto; }
+  .myd-funnel-step { margin-bottom: .5rem; }
+  .myd-bar-track { background: #f0f0f0; border-radius: 6px; overflow: hidden; height: 34px; position: relative; }
+  .myd-bar-fill { background: linear-gradient(90deg,#2563eb,#60a5fa); height: 100%; min-width: 2px;
+    display: flex; align-items: center; color: #fff; font-weight: 600; padding: 0 .6rem; white-space: nowrap;
+    border-radius: 6px; transition: width .4s; }
+  .myd-bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: .15rem; }
+  .myd-drop { color: #b45309; font-size: .8rem; }
+  .myd-period a { margin-right: .5rem; }
+  .myd-period a.active { font-weight: 700; text-decoration: underline; }
+  .myd-other td { padding: .3rem .6rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="myd-analyser px-3">
+  <div class="d-flex align-items-center justify-content-between flex-wrap">
+    <h3 class="mb-0"><i class="fas fa-filter text-secondary me-2"></i>Map your Data — usage funnel</h3>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'dashboard-admin' %}#tools">&larr; Admin tools</a>
+  </div>
+  <p class="text-muted small mt-1">
+    Anonymous, aggregate workbench usage from our self-hosted Plausible. No personal data, no dataset
+    contents. Counts are <strong>unique visitors</strong> reaching each stage.
+  </p>
+
+  <div class="myd-period small mb-3">
+    <span class="text-muted me-2">Period:</span>
+    {% for value, label in periods %}
+      <a href="?period={{ value }}" class="{% if value == period %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  {% if error %}
+    <div class="alert alert-warning small"><i class="fas fa-triangle-exclamation me-1"></i>{{ error }}
+      Check <code>PLAUSIBLE_API_KEY</code> (needs Stats API access) in local settings.</div>
+  {% endif %}
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Funnel <span class="text-muted small fw-normal">(each step vs. the first)</span></h5>
+      {% if base_v %}
+        {% for step in funnel %}
+        <div class="myd-funnel-step">
+          <div class="myd-bar-label">
+            <span>{{ step.label }} <span class="text-muted">· {{ step.name }}</span></span>
+            <span>
+              <strong>{{ step.visitors }}</strong> visitors
+              <span class="text-muted">/ {{ step.events }} events · {{ step.pct }}%</span>
+              {% if step.drop is not None %}<span class="myd-drop">&darr;{{ step.drop }}% drop</span>{% endif %}
+            </span>
+          </div>
+          <div class="myd-bar-track">
+            <div class="myd-bar-fill" style="width: {{ step.pct }}%;">{{ step.pct }}%</div>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted mb-0">No <code>MyD: import</code> events recorded in this period yet — the funnel
+          appears once the workbench is used. (Events are collecting; try a longer period.)</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-body">
+      <h5 class="card-title">Other actions</h5>
+      <table class="table table-sm myd-other mb-0">
+        <thead><tr><th>Action</th><th class="text-end">Visitors</th><th class="text-end">Events</th></tr></thead>
+        <tbody>
+          {% for row in others %}
+          <tr><td>{{ row.label }} <span class="text-muted small">· {{ row.name }}</span></td>
+              <td class="text-end">{{ row.visitors }}</td><td class="text-end">{{ row.events }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="small text-muted">
+    Data via the <a href="{{ plausible_url }}" target="_blank" rel="noopener">Plausible</a> Stats API
+    (<code>event:name</code> breakdown — independent of Plausible goals). Event taxonomy:
+    <code>developer/analytics-map-your-data.md</code>.
+  </p>
+</div>
+{% endblock %}

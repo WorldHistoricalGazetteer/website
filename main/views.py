@@ -499,6 +499,79 @@ def reconciliation_view(request):
     return render(request, "main/reconciliation.html")
 
 
+# ── Map-your-Data usage analyser ─────────────────────────────────────────────────────────────────
+# Staff-only admin tool (dashboard_admin → Tools) that reads the anonymous `MyD: …` custom events
+# from our self-hosted Plausible via its Stats API and renders the import→reconcile→export/contribute
+# funnel — a WHG-native alternative to Plausible CE's (absent) funnel feature. Uses the breakdown
+# endpoint (`event:name`), which is goal-independent, so it needs no goals configured in Plausible.
+PLAUSIBLE_PERIODS = [('7d', 'Last 7 days'), ('30d', 'Last 30 days'), ('month', 'This month'),
+                     ('6mo', 'Last 6 months'), ('12mo', 'Last 12 months')]
+MYD_FUNNEL = [
+    ('MyD: import', 'Imported a dataset'),
+    ('MyD: reconcile', 'Ran reconciliation'),
+    ('MyD: reconcile result', 'Got candidate matches'),
+    ('MyD: export', 'Exported results'),
+    ('MyD: contribute', 'Contributed to WHG'),
+]
+MYD_OTHER = [
+    ('MyD: scope applied', 'Applied a scope filter'),
+    ('MyD: place type assigned', 'Assigned a place type'),
+    ('MyD: tour', 'Took the guided tour'),
+    ('MyD: resume', 'Resumed a saved project'),
+    ('MyD: contribute blocked', 'Blocked at contribute (validation)'),
+]
+
+
+def _plausible_event_breakdown(period):
+    """{event_name: {visitors, events}} for the period from the Plausible Stats API, or (None, error)."""
+    key = getattr(settings, 'PLAUSIBLE_API_KEY', None)
+    base = getattr(settings, 'PLAUSIBLE_BASE_URL', '')
+    site = getattr(settings, 'PLAUSIBLE_SITE', '')
+    if not (key and base and site):
+        return None, 'Plausible is not configured (PLAUSIBLE_API_KEY / _BASE_URL / _SITE).'
+    try:
+        resp = requests.get(
+            f'{base}/api/v1/stats/breakdown',
+            params={'site_id': site, 'period': period, 'property': 'event:name',
+                    'metrics': 'visitors,events', 'limit': 200},
+            headers={'Authorization': f'Bearer {key}'}, timeout=15)
+        resp.raise_for_status()
+        return {row['name']: row for row in resp.json().get('results', [])}, None
+    except requests.RequestException as e:
+        return None, f'Plausible Stats API error: {e}'
+
+
+@login_required
+def plausible_analyser_view(request):
+    if not request.user.is_staff:
+        raise Http404()
+    period = request.GET.get('period', '30d')
+    if period not in dict(PLAUSIBLE_PERIODS):
+        period = '30d'
+    by_name, error = _plausible_event_breakdown(period)
+    by_name = by_name or {}
+
+    def mk(name, label):
+        r = by_name.get(name) or {}
+        return {'name': name, 'label': label,
+                'visitors': r.get('visitors', 0) or 0, 'events': r.get('events', 0) or 0}
+
+    funnel = [mk(n, l) for n, l in MYD_FUNNEL]
+    base_v = funnel[0]['visitors'] if funnel else 0
+    prev_v = None
+    for step in funnel:
+        step['pct'] = round(100 * step['visitors'] / base_v, 1) if base_v else 0
+        step['drop'] = (round(100 * (prev_v - step['visitors']) / prev_v, 1)
+                        if prev_v else None)
+        prev_v = step['visitors']
+    others = [mk(n, l) for n, l in MYD_OTHER]
+    return render(request, 'main/plausible_analyser.html', {
+        'period': period, 'periods': PLAUSIBLE_PERIODS,
+        'funnel': funnel, 'others': others, 'base_v': base_v, 'error': error,
+        'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{getattr(settings, 'PLAUSIBLE_SITE', '')}",
+    })
+
+
 # gets the correct view based on user group
 @login_required
 def dashboard_redirect(request):
