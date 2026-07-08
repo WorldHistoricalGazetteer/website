@@ -1149,6 +1149,8 @@ function handleFile(file) {
         rows: bucketCount(project.total),
         cols: String(project.columns.length),
       });
+      stopRealtime();               // a fresh import replaces any prior (server) project
+      setCollabBadge('local');      // …so it's device-only until saved (clear any stale badge)
       renderAll();
       if (navigator.storage && navigator.storage.persist) {
         try { await navigator.storage.persist(); } catch (_) { /* best effort */ }
@@ -2079,9 +2081,12 @@ async function ensureServer(team) {
   setCollabBadge('synced');
   return true;
 }
-async function saveToServer(team) {
+async function saveToServer(team, title) {
   if (await ensureServer(team)) {
-    if (team) { const s = el('recon-team-select'); project.teamTitle = s ? (s.options[s.selectedIndex] || {}).text : ''; }
+    // Prefer an explicit title (e.g. a just-created team); otherwise read the dropdown label.
+    if (title) project.teamTitle = title;
+    else if (team) { const s = el('recon-team-select'); project.teamTitle = s ? (s.options[s.selectedIndex] || {}).text : ''; }
+    await putProject(project);
     await renderCollab();
     maybeStartRealtime(); // a team project goes live immediately
   }
@@ -2091,8 +2096,7 @@ async function createTeamThenSave() {
   if (!name || !name.trim()) return;
   const res = await Sync.createTeam(name.trim());
   if (res.status !== 201 || !res.data) { flashSaved('⚠ could not create the team'); return; }
-  project.teamTitle = res.data.title;
-  await saveToServer(res.data.id);
+  await saveToServer(res.data.id, res.data.title);
 }
 async function shareCreate() {
   if (!(await ensureServer(project.teamId))) return;
