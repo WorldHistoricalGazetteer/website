@@ -539,3 +539,23 @@
 @media (prefers-reduced-motion: reduce) {
   .recon-tour-ring, .recon-tour-tip { transition: none; }
 }
+
+/* ── Collaboration (place#112) ───────────────────────────────────────────── */
+.recon-collab-badge { font-weight: 600; }
+.recon-collab-badge:empty { display: none; }
+
+/* View-only (viewer role on a shared team project): dim + disable editing affordances.
+   Best-effort — the key edit controls are also disabled in JS via applyReadOnlyMode(). */
+body.recon-viewer .recon-map select,
+body.recon-viewer .recon-map .btn,
+body.recon-viewer .recon-map [draggable="true"],
+body.recon-viewer .recon-transform-btn,
+body.recon-viewer .recon-preview-body td[data-ci] {
+  pointer-events: none !important;
+  opacity: 0.6;
+}
+body.recon-viewer #recon-viewer-badge { cursor: help; }
+
+/* Conflict list items */
+.recon-conflict { background: rgba(0, 0, 0, 0.02); }
+.recon-conflict code { white-space: normal; word-break: break-word; }

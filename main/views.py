@@ -527,6 +527,10 @@ MYD_OTHER = [
     ('MyD: tour', 'Took the guided tour'),
     ('MyD: resume', 'Resumed a saved project'),
     ('MyD: contribute blocked', 'Blocked at contribute (validation)'),
+    ('MyD: team save', 'Saved a project to the server (collab)'),
+    ('MyD: shared', 'Created a read-only share link'),
+    ('MyD: shared open', 'Opened a shared project'),
+    ('MyD: conflict', 'Hit a merge conflict'),
 ]
 
 

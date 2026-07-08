@@ -117,6 +117,8 @@ urlpatterns = [
 
                   # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)
                   path('reconciliation/', views.reconciliation_view, name="reconciliation"),
+                  # Collaborative Workbench API (place#112): projects/teams/share, co-located under the tool's path
+                  path('reconciliation/', include('workbench.urls')),
 
                   # yet more static content - 2024-02
                   path('main_regions/', TemplateView.as_view(template_name="main/regions.html"), name="main-regions"),

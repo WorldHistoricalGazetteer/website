@@ -29,6 +29,7 @@ let Symphonym = null; // in-browser phonetic encoder (Phase 7) — clusters vari
 const loadSymphonym = async () => (Symphonym || (Symphonym = await import(/* webpackChunkName: "recon-symphonym" */ './recon-symphonym.js')));
 let Validate = null; // Ajv LPF validator (Phase: contribution validation) — replicates server schema check
 const loadValidate = async () => (Validate || (Validate = await import(/* webpackChunkName: "recon-validate" */ './recon-validate.js')));
+import * as Sync from './recon-sync.js'; // collaborative-project API (place#112, Phase 0/1) — tiny, always bundled
 
 const PREVIEW_ROWS = 20;
 const RECON_ENDPOINT = '/reconcile';   // WHG standard OpenRefine reconciliation service (same-origin)
@@ -228,6 +229,7 @@ async function persist() {
   if (!project) return;
   try { await putProject(project); flashSaved(`Saved locally · ${new Date().toLocaleTimeString()}`); }
   catch (err) { console.error('[recon] persist failed', err); flashSaved('⚠ could not save locally'); }
+  schedulePush(); // if this project is server-backed and editable, sync in the background (Collab)
 }
 
 // ── Rendering ───────────────────────────────────────────────────────────────
@@ -1739,9 +1741,387 @@ async function loadSaved() {
       normalizeChain();     // defensively drop any orphaned containment links
       renderAll();
       showResume();
+      applyReadOnlyMode();
+      setCollabBadge(collabState());
       console.log(`[recon] resumed saved project: ${project.total} rows`);
     }
   } catch (err) { console.error('[recon] could not load saved project', err); }
+}
+
+// ── Collaboration (place#112, Phase 0/1) ─────────────────────────────────────
+// A server-backed project keeps client-only sync metadata (serverId/serverVersion/role/team/share)
+// ON the `project` object (so it persists to IndexedDB) but STRIPPED from the snapshot pushed to the
+// server — the snapshot is the shared document, the metadata is per-client. Editing a server project
+// debounces a background push (optimistic-lock: PUT with base_version → fast-forward / auto-merge /
+// conflict). Solo local projects are untouched (no serverId → no network).
+const SYNC_KEYS = ['serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal', 'sharedToken', 'sharedUrl'];
+let _pushTimer = null, _pushing = false, _pushQueued = false, _retryTimer = null;
+let _pendingConflict = null; // { mine, merged, conflicts, version }
+
+function cleanSnapshot() {
+  const out = {};
+  for (const k of Object.keys(project)) if (!SYNC_KEYS.includes(k)) out[k] = project[k];
+  return out;
+}
+function clone(x) { return JSON.parse(JSON.stringify(x)); }
+function isServerProject() { return !!(project && project.serverId); }
+function isReadOnly() { return !!(project && project.role === 'viewer'); }
+function canPush() { return isServerProject() && !isReadOnly(); }
+
+// Replace the working document with `snap`, preserving this client's sync metadata + the IndexedDB
+// key, then re-run the same post-load steps as a resume so the whole UI reflects the new state.
+function applySnapshot(snap) {
+  const meta = {};
+  for (const k of SYNC_KEYS) if (k in project) meta[k] = project[k];
+  project = Object.assign({}, snap, meta);
+  project.id = CURRENT;
+  reviewMeta = []; reviewPos = 0;
+  migrateLegacyChain();
+  normalizeChain();
+  renderAll();
+  showResume();
+  applyReadOnlyMode();
+}
+
+function schedulePush() {
+  if (!canPush()) return;
+  clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(doPush, 1200);
+  setCollabBadge('syncing');
+}
+
+async function doPush() {
+  if (!canPush()) return;
+  if (_pushing) { _pushQueued = true; return; }
+  _pushing = true; _pushQueued = false;
+  const mine = cleanSnapshot();
+  try {
+    const res = await Sync.pushSnapshot(project.serverId, mine, project.serverVersion || 0);
+    if (res.status === 200 && res.data) {
+      project.serverVersion = res.data.version;
+      if (res.data.snapshot) applySnapshot(res.data.snapshot); // adopted an auto-merge
+      await putProject(project);
+      setCollabBadge('synced');
+    } else if (res.status === 409 && res.data && res.data.status === 'conflict') {
+      openConflictModal({ mine, merged: res.data.merged, conflicts: res.data.conflicts, version: res.data.version });
+    } else if (res.status === 409 && res.data && res.data.status === 'stale') {
+      applySnapshot(res.data.snapshot);
+      project.serverVersion = res.data.version;
+      await putProject(project);
+      setCollabBadge('synced');
+      flashSaved('Reloaded the latest version from the server');
+    } else if (res.status === 403) {
+      project.role = 'viewer'; applyReadOnlyMode(); setCollabBadge('viewer');
+      flashSaved('⚠ your access to this project changed — now view-only');
+    } else {
+      setCollabBadge('offline');
+    }
+  } catch (err) {
+    console.warn('[recon] push failed (offline?)', err);
+    setCollabBadge('offline');
+    clearTimeout(_retryTimer);
+    _retryTimer = setTimeout(() => { if (canPush()) doPush(); }, 8000);
+  } finally {
+    _pushing = false;
+    if (_pushQueued && canPush()) schedulePush();
+  }
+}
+
+// Conflict UI — same key edited differently on both sides. Start from the server's auto-merge
+// (which already keeps this client's non-conflicting edits) and let the user pick mine/theirs per
+// conflict, then re-push at the server's current version (a clean fast-forward).
+function fieldLabel(k) {
+  return ({ columns: 'Column setup', rows: 'Table data', scope: 'Scope filter', title: 'Project title',
+            submissionTypes: 'Place types', coordFormat: 'Coordinate format',
+            decisions: 'Match decision', matches: 'Candidates', geom: 'Geometry', rowTypes: 'Row place-type' })[k] || k;
+}
+function conflictValueHTML(v) {
+  if (v == null) return '<em class="text-muted">(none)</em>';
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  return `<code>${esc(s.length > 120 ? s.slice(0, 119) + '…' : s)}</code>`;
+}
+function openConflictModal(state) {
+  _pendingConflict = state;
+  track('MyD: conflict', { count: state.conflicts.length });
+  setCollabBadge('conflict');
+  const body = el('recon-conflict-body');
+  if (!body) { // no modal in DOM → safe default: keep server version
+    applySnapshot(state.merged); project.serverVersion = state.version; putProject(project); return;
+  }
+  body.innerHTML = state.conflicts.map((c, i) => {
+    const isField = c.kind === 'field';
+    const label = isField ? fieldLabel(c.key) : `${fieldLabel(c.kind)} · ${esc(c.key)}`;
+    const mineVal = isField ? state.mine[c.key] : (c.mine);
+    const theirsVal = isField ? state.merged[c.key] : (c.theirs);
+    return `<div class="recon-conflict border rounded p-2 mb-2" data-i="${i}">
+        <div class="small fw-bold mb-1">${esc(label)}</div>
+        <label class="d-block small mb-1"><input type="radio" name="cf-${i}" value="theirs" checked>
+          Keep theirs (server): ${conflictValueHTML(theirsVal)}</label>
+        <label class="d-block small"><input type="radio" name="cf-${i}" value="mine">
+          Keep mine: ${conflictValueHTML(mineVal)}</label>
+      </div>`;
+  }).join('');
+  showModal('recon-conflict-modal');
+}
+async function resolveConflicts() {
+  const state = _pendingConflict;
+  if (!state) return;
+  const resolved = clone(state.merged);
+  state.conflicts.forEach((c, i) => {
+    const sel = document.querySelector(`input[name=cf-${i}]:checked`);
+    if (!sel || sel.value !== 'mine') return; // default keeps theirs (already in resolved)
+    if (c.kind === 'field') {
+      resolved[c.key] = state.mine[c.key];
+    } else {
+      resolved[c.kind] = resolved[c.kind] || {};
+      const src = state.mine[c.kind] || {};
+      if (c.key in src) resolved[c.kind][c.key] = src[c.key];
+      else delete resolved[c.kind][c.key];
+    }
+  });
+  hideModal('recon-conflict-modal');
+  applySnapshot(resolved);
+  project.serverVersion = state.version; // base for the re-push == server's current version
+  _pendingConflict = null;
+  await putProject(project);
+  doPush(); // clean fast-forward now
+}
+
+// ── read-only (viewer) mode ────────────────────────────────────────────────
+function applyReadOnlyMode() {
+  const ro = isReadOnly();
+  document.body.classList.toggle('recon-viewer', ro);
+  ['recon-run', 'recon-rerun', 'recon-contribute-btn', 'recon-undo', 'recon-redo',
+   'recon-preview-edit', 'recon-clear'].forEach((id) => { const b = el(id); if (b) b.disabled = ro; });
+  const badge = el('recon-viewer-badge');
+  if (badge) badge.classList.toggle('d-none', !ro);
+}
+
+// ── collaborate badge on the button ──────────────────────────────────────────
+function setCollabBadge(state) {
+  const b = el('recon-collab-badge');
+  if (!b) return;
+  const map = { local: ['', ''], synced: ['✓ synced', 'text-success'], syncing: ['⋯ syncing', 'text-muted'],
+                offline: ['⚠ offline', 'text-warning'], conflict: ['⚠ conflict', 'text-danger'],
+                viewer: ['view only', 'text-muted'] };
+  const [txt, cls] = map[state] || map.local;
+  b.textContent = txt;
+  b.className = 'recon-collab-badge small ms-1 ' + cls;
+}
+function collabState() {
+  if (!isServerProject()) return 'local';
+  if (isReadOnly()) return 'viewer';
+  return 'synced';
+}
+
+// ── modal helpers ──────────────────────────────────────────────────────────
+function showModal(id) { const m = el(id); if (m && window.bootstrap && window.bootstrap.Modal) window.bootstrap.Modal.getOrCreateInstance(m).show(); }
+function hideModal(id) { const m = el(id); if (m && window.bootstrap && window.bootstrap.Modal) { const inst = window.bootstrap.Modal.getInstance(m); if (inst) inst.hide(); } }
+
+// ── the Collaborate hub modal (body rendered by JS to keep the template lean) ──
+async function openCollabModal() {
+  if (!project) return;
+  showModal('recon-collab-modal');
+  renderCollabBody('<div class="text-muted small">Loading…</div>');
+  await renderCollab();
+}
+function renderCollabBody(html) { const b = el('recon-collab-body'); if (b) b.innerHTML = html; }
+
+async function renderCollab() {
+  const parts = [];
+  // Status
+  if (isServerProject()) {
+    parts.push(`<div class="alert alert-light border small mb-3">
+      <i class="fas fa-cloud me-1"></i> Saved to <strong>${esc(project.teamTitle || 'a team')}</strong>
+      · version ${project.serverVersion || 1} · your role: <strong>${esc(project.role || 'owner')}</strong></div>`);
+  } else {
+    parts.push(`<div class="alert alert-light border small mb-3">
+      <i class="fas fa-laptop me-1"></i> This project is on <strong>your device only</strong>.
+      Save it to enable sharing and team editing.</div>`);
+  }
+  // Share (Phase 0)
+  parts.push('<h6 class="small text-uppercase text-muted">Share a read-only link</h6>');
+  if (project.sharedUrl) {
+    parts.push(`<div class="input-group input-group-sm mb-2">
+        <input type="text" class="form-control" id="recon-share-url" readonly value="${esc(project.sharedUrl)}">
+        <button class="btn btn-outline-secondary" id="recon-share-copy" type="button">Copy</button>
+      </div>
+      <button class="btn btn-sm btn-link text-danger p-0 mb-3" id="recon-share-stop">Stop sharing</button>`);
+  } else {
+    parts.push(`<p class="small text-muted mb-2">Anyone with the link can import a read-only copy of the current data.</p>
+      <button class="btn btn-sm btn-outline-primary mb-3" id="recon-share-create">
+        <i class="fas fa-link me-1"></i>Create read-only link</button>`);
+  }
+  // Teams
+  parts.push('<hr><h6 class="small text-uppercase text-muted">Collaborate with a team</h6>');
+  if (!isServerProject()) {
+    const tr = await Sync.listTeams();
+    const teams = (tr.data && tr.data.teams) || [];
+    const opts = teams.map((t) => `<option value="${t.id}">${esc(t.title)} (${esc(t.role)})</option>`).join('');
+    parts.push(`<div class="mb-2">
+        <label class="small d-block mb-1">Save this project to a team:</label>
+        <div class="input-group input-group-sm mb-2">
+          <select class="form-select" id="recon-team-select">
+            <option value="">My workbench (private)</option>${opts}
+          </select>
+          <button class="btn btn-outline-primary" id="recon-save-team" type="button">Save</button>
+        </div>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="recon-new-team" placeholder="…or create a new team">
+          <button class="btn btn-outline-secondary" id="recon-create-team" type="button">Create team</button>
+        </div>
+      </div>`);
+  } else if (project.teamPersonal) {
+    parts.push(`<p class="small text-muted">This project is saved to your <strong>private workbench</strong>.
+      To collaborate, share a read-only link above, or start a new team project (a project's team is
+      fixed once saved).</p>`);
+  } else if (project.teamId && (project.role === 'owner')) {
+    parts.push('<div id="recon-members" class="small mb-2 text-muted">Loading members…</div>');
+    parts.push(`<div class="input-group input-group-sm mb-3">
+        <input type="text" class="form-control" id="recon-invite-id" placeholder="username or email">
+        <select class="form-select" id="recon-invite-role" style="max-width:8rem">
+          <option value="editor">Editor</option><option value="viewer">Viewer</option><option value="owner">Owner</option>
+        </select>
+        <button class="btn btn-outline-primary" id="recon-invite-btn" type="button">Invite</button>
+      </div>`);
+  } else if (isServerProject()) {
+    parts.push('<p class="small text-muted">Only the team owner can manage members.</p>');
+  }
+  // Open a server project
+  parts.push('<hr><h6 class="small text-uppercase text-muted">Open a saved project</h6>');
+  parts.push('<div id="recon-open-list" class="small text-muted">Loading…</div>');
+
+  renderCollabBody(parts.join(''));
+  wireCollab();
+  loadOpenList();
+  if (isServerProject() && project.role === 'owner' && !project.teamPersonal) loadMembers();
+}
+
+function wireCollab() {
+  const on = (id, ev, fn) => { const e = el(id); if (e) e.addEventListener(ev, fn); };
+  on('recon-share-create', 'click', shareCreate);
+  on('recon-share-stop', 'click', shareStop);
+  on('recon-share-copy', 'click', () => { const i = el('recon-share-url'); if (i) { i.select(); document.execCommand && document.execCommand('copy'); } });
+  on('recon-save-team', 'click', () => saveToServer(el('recon-team-select') ? el('recon-team-select').value : ''));
+  on('recon-create-team', 'click', createTeamThenSave);
+  on('recon-invite-btn', 'click', inviteMember);
+}
+
+// Ensure the project exists server-side (creating it in `team` if given), return true on success.
+async function ensureServer(team) {
+  if (isServerProject()) return true;
+  const res = await Sync.createProject(cleanSnapshot(), project.fileName || 'Untitled project', team || undefined);
+  if (res.status !== 201 || !res.data) { flashSaved('⚠ could not save to the server'); return false; }
+  project.serverId = res.data.id;
+  project.serverVersion = res.data.version;
+  project.role = res.data.role || 'owner';
+  project.teamId = res.data.team;
+  project.teamPersonal = !team;
+  if (!team) project.teamTitle = 'My workbench';
+  await putProject(project);
+  track('MyD: team save', { team: team ? 'team' : 'personal' });
+  setCollabBadge('synced');
+  return true;
+}
+async function saveToServer(team) {
+  if (await ensureServer(team)) { if (team) { const s = el('recon-team-select'); project.teamTitle = s ? (s.options[s.selectedIndex] || {}).text : ''; } await renderCollab(); }
+}
+async function createTeamThenSave() {
+  const name = (el('recon-new-team') || {}).value;
+  if (!name || !name.trim()) return;
+  const res = await Sync.createTeam(name.trim());
+  if (res.status !== 201 || !res.data) { flashSaved('⚠ could not create the team'); return; }
+  project.teamTitle = res.data.title;
+  await saveToServer(res.data.id);
+}
+async function shareCreate() {
+  if (!(await ensureServer(project.teamId))) return;
+  const res = await Sync.shareProject(project.serverId);
+  if (res.status === 200 && res.data && res.data.url) {
+    project.sharedToken = res.data.token; project.sharedUrl = res.data.url;
+    await putProject(project);
+    track('MyD: shared');
+    await renderCollab();
+  } else { flashSaved('⚠ could not create a share link'); }
+}
+async function shareStop() {
+  if (!isServerProject()) return;
+  await Sync.unshareProject(project.serverId);
+  project.sharedToken = null; project.sharedUrl = null;
+  await putProject(project);
+  await renderCollab();
+}
+async function loadMembers() {
+  const box = el('recon-members');
+  if (!box) return;
+  const res = await Sync.listMembers(project.teamId);
+  if (res.status !== 200 || !res.data) { box.textContent = 'Could not load members.'; return; }
+  box.innerHTML = '<div class="fw-bold mb-1">Members</div>' + res.data.members.map((m) =>
+    `<div class="d-flex justify-content-between align-items-center py-1">
+       <span>${esc(m.name || m.username)} <span class="text-muted">(${esc(m.role)})</span></span>
+       ${m.role !== 'owner' ? `<button class="btn btn-sm btn-link text-danger p-0" data-uid="${m.user_id}">remove</button>` : ''}
+     </div>`).join('');
+  box.querySelectorAll('button[data-uid]').forEach((b) => b.addEventListener('click', async () => {
+    await Sync.removeMember(project.teamId, b.dataset.uid); loadMembers();
+  }));
+}
+async function inviteMember() {
+  const idf = (el('recon-invite-id') || {}).value;
+  const role = (el('recon-invite-role') || {}).value || 'editor';
+  if (!idf || !idf.trim()) return;
+  const res = await Sync.addMember(project.teamId, idf.trim(), role);
+  if (res.status === 200) { if (el('recon-invite-id')) el('recon-invite-id').value = ''; loadMembers(); }
+  else { flashSaved('⚠ ' + ((res.data && res.data.error) || 'could not add that person')); }
+}
+async function loadOpenList() {
+  const box = el('recon-open-list');
+  if (!box) return;
+  const res = await Sync.listProjects();
+  const list = (res.data && res.data.projects) || [];
+  if (!list.length) { box.innerHTML = '<span class="text-muted">No saved projects yet.</span>'; return; }
+  box.innerHTML = list.map((p) => `<div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+      <span>${esc(p.title)} <span class="text-muted">· ${esc(p.team_title)} · v${p.version} · ${esc(p.role)}</span>
+        ${p.id === project.serverId ? '<span class="badge bg-secondary ms-1">open</span>' : ''}</span>
+      ${p.id === project.serverId ? '' : `<button class="btn btn-sm btn-outline-primary py-0" data-pid="${p.id}">Open</button>`}
+    </div>`).join('');
+  box.querySelectorAll('button[data-pid]').forEach((b) => b.addEventListener('click', () => openServerProject(b.dataset.pid)));
+}
+async function openServerProject(pid) {
+  const res = await Sync.fetchProject(pid);
+  if (res.status !== 200 || !res.data) { flashSaved('⚠ could not open that project'); return; }
+  const d = res.data;
+  // Replace local sync metadata wholesale with the opened project's identity.
+  SYNC_KEYS.forEach((k) => { delete project[k]; });
+  project.serverId = d.id; project.serverVersion = d.version; project.role = d.role;
+  project.teamId = d.team; project.teamTitle = d.team_title || ''; project.teamPersonal = !!d.team_personal;
+  applySnapshot(d.snapshot);
+  await putProject(project);
+  setCollabBadge(collabState());
+  hideModal('recon-collab-modal');
+  flashSaved('Opened the team project');
+}
+
+// ── shared-link bootstrap (?shared=<token>) ──────────────────────────────────
+async function handleSharedBootstrap(token) {
+  try {
+    const res = await Sync.fetchShared(token);
+    if (res.status !== 200 || !res.data || !res.data.snapshot) { await loadSaved(); return; }
+    const snap = res.data.snapshot;
+    // Import a LOCAL copy — the recipient edits their own device-only project (no serverId).
+    project = Object.assign({}, snap);
+    project.id = CURRENT;
+    SYNC_KEYS.forEach((k) => { delete project[k]; });
+    reviewMeta = []; reviewPos = 0;
+    migrateLegacyChain(); normalizeChain();
+    await putProject(project);
+    renderAll(); showResume(); applyReadOnlyMode();
+    setCollabBadge('local');
+    track('MyD: shared open');
+    flashSaved('Imported a read-only copy shared with you');
+  } catch (err) {
+    console.warn('[recon] shared import failed', err);
+    await loadSaved();
+  }
 }
 
 // ── Reconciliation engine (Phase 3) ─────────────────────────────────────────
@@ -3725,6 +4105,10 @@ function init() {
 
   const backupBtn = el('recon-backup');
   if (backupBtn) backupBtn.addEventListener('click', downloadBackup);
+  const collabBtn = el('recon-collab');
+  if (collabBtn) collabBtn.addEventListener('click', openCollabModal);
+  const conflictApply = el('recon-conflict-apply');
+  if (conflictApply) conflictApply.addEventListener('click', resolveConflicts);
   // Undo / redo (data mutations: transforms, column ops, role changes) — buttons + Ctrl/Cmd+Z / Y.
   const undoBtn = el('recon-undo'); if (undoBtn) undoBtn.addEventListener('click', undo);
   const redoBtn = el('recon-redo'); if (redoBtn) redoBtn.addEventListener('click', redo);
@@ -3861,7 +4245,14 @@ function init() {
   loadSources().then(() => { if (project && project.matches && Object.keys(project.matches).length) { const built = buildUniqueQueries(); if (built) renderResults(built); } });
 
   showCapabilities();
-  loadSaved();
+  // A ?shared=<token> link opens a read-only copy someone shared; otherwise resume local work.
+  const sharedToken = new URLSearchParams(window.location.search).get('shared');
+  if (sharedToken) {
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (_) { /* ignore */ }
+    handleSharedBootstrap(sharedToken);
+  } else {
+    loadSaved();
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

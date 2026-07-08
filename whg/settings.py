@@ -135,6 +135,7 @@ INSTALLED_APPS = [
     'sitemap.apps.SitemapConfig',
     'traces.apps.TracesConfig',
     'users.apps.UsersConfig',
+    'workbench.apps.WorkbenchConfig',  # collaborative "Map your Data" projects (place#112)
 ]
 
 AUTH_USER_MODEL = 'users.User'

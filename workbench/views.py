@@ -1,0 +1,320 @@
+"""
+Collaborative Workbench API (place#112), mounted under /reconciliation/.
+
+All endpoints require login + ``user.can_access_beta`` (same gate as the Map-your-Data tool), except
+the Phase-0 read-only ``shared/<token>/`` endpoint, whose capability is the unguessable token.
+
+Plain Django function views returning JSON — session auth + CSRF (the client sends ``X-CSRFToken``,
+mirroring the existing ``postReconcile`` call in reconciliation.js).
+"""
+import json
+import logging
+import uuid
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
+from django.http import JsonResponse, Http404
+from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
+from django.views.decorators.http import require_http_methods
+
+from .merge import merge_snapshots
+from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
+                     ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES)
+
+logger = logging.getLogger(__name__)
+User = get_user_model()
+
+SNAPSHOT_HISTORY = 25  # ProjectSnapshot rows kept per project (merge ancestor + backup)
+VALID_ROLES = {r[0] for r in TEAM_ROLES}
+
+
+# ── helpers ─────────────────────────────────────────────────────────────────
+def _beta_required(view):
+    """Wrap a view so non-beta users get a 404 (feature existence is not disclosed)."""
+    def wrapped(request, *args, **kwargs):
+        if not request.user.can_access_beta:
+            raise Http404()
+        return view(request, *args, **kwargs)
+    wrapped.__name__ = view.__name__
+    return wrapped
+
+
+def _body(request):
+    try:
+        return json.loads(request.body or b'{}')
+    except (ValueError, TypeError):
+        return {}
+
+
+def _err(msg, status=400):
+    return JsonResponse({'error': msg}, status=status)
+
+
+def _project_dict(p, role):
+    return {
+        'id': str(p.id), 'title': p.title, 'team': p.team_id, 'team_title': p.team.title,
+        'role': role, 'version': p.version, 'status': p.status,
+        'updated': p.updated.isoformat(), 'shared': bool(p.public_token),
+        'is_personal_team': p.team.is_personal,
+    }
+
+
+def prune_snapshots(project):
+    """Keep only the most recent SNAPSHOT_HISTORY snapshot rows for a project."""
+    keep = list(project.snapshots.values_list('id', flat=True)[:SNAPSHOT_HISTORY])
+    project.snapshots.exclude(id__in=keep).delete()
+
+
+def _find_user(identifier):
+    """Resolve an invitee by username (reliable) then email (best-effort; email is encrypted)."""
+    identifier = (identifier or '').strip()
+    if not identifier:
+        return None
+    u = User.objects.filter(username__iexact=identifier).first()
+    if u:
+        return u
+    return User.objects.filter(email=identifier).first()
+
+
+# ── projects ──────────────────────────────────────────────────────────────────
+@login_required
+@_beta_required
+@require_http_methods(['GET', 'POST'])
+def projects(request):
+    if request.method == 'GET':
+        team_ids = TeamMember.objects.filter(user=request.user).values_list('team_id', flat=True)
+        qs = WorkbenchProject.objects.filter(team_id__in=list(team_ids)).select_related('team')
+        out = [_project_dict(p, p.role_for(request.user)) for p in qs]
+        return JsonResponse({'projects': out})
+
+    # POST — create a server project from a client snapshot.
+    data = _body(request)
+    snapshot = data.get('snapshot')
+    if not isinstance(snapshot, dict):
+        return _err('snapshot (object) is required')
+    title = (data.get('title') or snapshot.get('fileName') or 'Untitled project')[:300]
+    team = _resolve_target_team(request.user, data.get('team'))
+    if team is None:
+        return _err('you are not an editor of that team', 403)
+    with transaction.atomic():
+        p = WorkbenchProject.objects.create(
+            team=team, title=title, created_by=request.user, snapshot=snapshot, version=1,
+            status='draft')
+        ProjectSnapshot.objects.create(project=p, version=1, snapshot=snapshot,
+                                       created_by=request.user)
+    return JsonResponse({'id': str(p.id), 'version': p.version, 'team': team.id,
+                         'role': ROLE_OWNER if team.is_personal else p.role_for(request.user)},
+                        status=201)
+
+
+def _resolve_target_team(user, team_id):
+    """Return the Team to create a project in: an explicit team the user can edit, else personal."""
+    if team_id in (None, '', 'personal'):
+        return Team.personal_for(user)
+    team = Team.objects.filter(id=team_id).first()
+    if not team:
+        return None
+    return team if team.role_for(user) in EDIT_ROLES else None
+
+
+@login_required
+@_beta_required
+@require_http_methods(['GET', 'PUT', 'DELETE'])
+def project_detail(request, pid):
+    p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
+    role = p.role_for(request.user)
+    if role is None:
+        return _err('not a member of this project’s team', 403)
+
+    if request.method == 'GET':
+        return JsonResponse({'id': str(p.id), 'title': p.title, 'team': p.team_id,
+                             'team_title': p.team.title, 'team_personal': p.team.is_personal,
+                             'role': role, 'version': p.version, 'status': p.status,
+                             'shared': bool(p.public_token), 'snapshot': p.snapshot})
+
+    if request.method == 'DELETE':
+        if role != ROLE_OWNER:
+            return _err('only an owner can delete a project', 403)
+        p.delete()
+        return JsonResponse({'ok': True})
+
+    # PUT — optimistic-lock push.
+    if role not in EDIT_ROLES:
+        return _err('view-only: your role cannot edit this project', 403)
+    data = _body(request)
+    snapshot = data.get('snapshot')
+    base_version = data.get('base_version')
+    if not isinstance(snapshot, dict):
+        return _err('snapshot (object) is required')
+    if not isinstance(base_version, int):
+        return _err('base_version (int) is required')
+    return _push(request, p, snapshot, base_version)
+
+
+def _push(request, p, snapshot, base_version):
+    with transaction.atomic():
+        p = WorkbenchProject.objects.select_for_update().get(pk=p.pk)
+
+        # Fast-forward: client is current.
+        if base_version == p.version:
+            return _commit(request, p, snapshot, status='ok')
+
+        # Client is stale → attempt a three-way merge against the ancestor snapshot.
+        ancestor = p.snapshots.filter(version=base_version).first()
+        if ancestor is None:
+            # Ancestor pruned/unknown — client must reload and re-apply.
+            return JsonResponse({'status': 'stale', 'version': p.version,
+                                 'snapshot': p.snapshot}, status=409)
+
+        merged, conflicts = merge_snapshots(ancestor.snapshot, snapshot, p.snapshot)
+        if conflicts:
+            # Nothing is committed. ``merged`` already carries the client's non-conflicting edits
+            # auto-merged with the server value kept for each conflict, so the client can resolve
+            # from it (overriding only the conflicts it wants "mine" for) and re-push — its other
+            # edits are not lost.
+            return JsonResponse({'status': 'conflict', 'version': p.version,
+                                 'conflicts': conflicts, 'merged': merged}, status=409)
+        return _commit(request, p, merged, status='merged')
+
+
+def _commit(request, p, snapshot, status):
+    title = snapshot.get('fileName') or snapshot.get('title')
+    if title:
+        p.title = str(title)[:300]
+    p.snapshot = snapshot
+    p.version += 1
+    p.save(update_fields=['snapshot', 'version', 'title', 'updated'])
+    ProjectSnapshot.objects.create(project=p, version=p.version, snapshot=snapshot,
+                                   created_by=request.user)
+    prune_snapshots(p)
+    return JsonResponse({'status': status, 'version': p.version,
+                         'snapshot': snapshot if status == 'merged' else None})
+
+
+# ── sharing (Phase 0) ─────────────────────────────────────────────────────────
+@login_required
+@_beta_required
+@require_http_methods(['POST', 'DELETE'])
+def project_share(request, pid):
+    p = get_object_or_404(WorkbenchProject, pk=pid)
+    if p.role_for(request.user) not in EDIT_ROLES:
+        return _err('only an editor or owner can share a project', 403)
+    if request.method == 'DELETE':
+        p.public_token = None
+        if p.status == 'shared':
+            p.status = 'draft'
+        p.save(update_fields=['public_token', 'status', 'updated'])
+        return JsonResponse({'ok': True, 'shared': False})
+    if not p.public_token:
+        p.public_token = uuid.uuid4()
+    if p.status == 'draft':
+        p.status = 'shared'
+    p.save(update_fields=['public_token', 'status', 'updated'])
+    url = request.build_absolute_uri(f'/reconciliation/?shared={p.public_token}')
+    return JsonResponse({'ok': True, 'shared': True, 'token': str(p.public_token), 'url': url})
+
+
+@require_http_methods(['GET'])
+def shared_snapshot(request, token):
+    """Phase-0 read-only fetch. No auth — the token is the capability. Recipients import a *copy*."""
+    try:
+        uuid.UUID(str(token))
+    except (ValueError, TypeError):
+        raise Http404()
+    p = WorkbenchProject.objects.filter(public_token=token).first()
+    if not p:
+        raise Http404()
+    return JsonResponse({'title': p.title, 'snapshot': p.snapshot, 'version': p.version,
+                         'read_only': True})
+
+
+# ── teams ───────────────────────────────────────────────────────────────────
+@login_required
+@_beta_required
+@require_http_methods(['GET', 'POST'])
+def teams(request):
+    if request.method == 'GET':
+        memberships = (TeamMember.objects.filter(user=request.user)
+                       .select_related('team').order_by('team__title'))
+        out = []
+        for m in memberships:
+            if m.team.is_personal:
+                continue
+            out.append({'id': m.team.id, 'title': m.team.title, 'role': m.role,
+                        'member_count': m.team.members.count()})
+        return JsonResponse({'teams': out})
+
+    data = _body(request)
+    title = (data.get('title') or '').strip()
+    if not title:
+        return _err('title is required')
+    slug = Team._unique_slug(slugify(title) or 'team')
+    with transaction.atomic():
+        team = Team.objects.create(owner=request.user, title=title[:200], slug=slug,
+                                   description=(data.get('description') or '')[:3000])
+        TeamMember.objects.create(team=team, user=request.user, role=ROLE_OWNER)
+    return JsonResponse({'id': team.id, 'title': team.title, 'role': ROLE_OWNER}, status=201)
+
+
+@login_required
+@_beta_required
+@require_http_methods(['GET', 'POST'])
+def team_members(request, tid):
+    team = get_object_or_404(Team, pk=tid)
+    my_role = team.role_for(request.user)
+    if my_role is None:
+        return _err('not a member of this team', 403)
+
+    if request.method == 'GET':
+        out = [{'user_id': m.user_id, 'username': m.user.username,
+                'name': getattr(m.user, 'name', '') or m.user.username, 'role': m.role}
+               for m in team.members.select_related('user')]
+        return JsonResponse({'team': team.id, 'title': team.title, 'my_role': my_role,
+                             'members': out})
+
+    # POST — invite/add a member (owner only).
+    if my_role != ROLE_OWNER:
+        return _err('only the team owner can add members', 403)
+    data = _body(request)
+    role = data.get('role', ROLE_EDITOR)
+    if role not in VALID_ROLES:
+        return _err('invalid role')
+    user = _find_user(data.get('identifier'))
+    if not user:
+        return _err('no user found with that username or email', 404)
+    m, created = TeamMember.objects.get_or_create(team=team, user=user, defaults={'role': role})
+    if not created:
+        m.role = role
+        m.save(update_fields=['role'])
+    return JsonResponse({'ok': True, 'user_id': user.id, 'username': user.username,
+                         'name': getattr(user, 'name', '') or user.username, 'role': m.role,
+                         'created': created})
+
+
+@login_required
+@_beta_required
+@require_http_methods(['DELETE'])
+def team_member_detail(request, tid, uid):
+    team = get_object_or_404(Team, pk=tid)
+    if team.role_for(request.user) != ROLE_OWNER:
+        return _err('only the team owner can remove members', 403)
+    if int(uid) == team.owner_id:
+        return _err('cannot remove the team owner', 400)
+    TeamMember.objects.filter(team=team, user_id=uid).delete()
+    return JsonResponse({'ok': True})
+
+
+# ── Phase-2 stub ──────────────────────────────────────────────────────────────
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def collab_token(request, pid):
+    """Phase-2 placeholder — will mint a short-lived Hocuspocus collab token after a membership
+    check. Not implemented; returns 501 so the client can feature-detect real-time availability."""
+    p = get_object_or_404(WorkbenchProject, pk=pid)
+    if p.role_for(request.user) is None:
+        return _err('not a member of this project’s team', 403)
+    return JsonResponse({'error': 'real-time collaboration (Phase 2) is not yet available'},
+                        status=501)
