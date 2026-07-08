@@ -122,16 +122,13 @@
       });
       function paint() {
         Object.keys(colors).forEach(function (code) {
-          try {
-            var reg = map.regions && map.regions[code];
-            if (reg && reg.element && reg.element.setStyle) { reg.element.setStyle('fill', colors[code]); return; }
-          } catch (e) {}
           var p = el.querySelector('svg [data-code="' + code + '"]');
           if (p) p.setAttribute('fill', colors[code]);
         });
       }
       paint();
-      setTimeout(paint, 300);  // re-apply once the map has fully rendered
+      setTimeout(paint, 300);   // re-apply once the map has fully rendered
+      el.addEventListener('mouseout', function () { setTimeout(paint, 0); });  // survive hover reverts
     } catch (e) { fail(); }
   })();
   </script>
