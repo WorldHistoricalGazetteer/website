@@ -1833,11 +1833,16 @@ async function maybeStartRealtime() {
   } catch (err) { console.warn('[recon] realtime connect failed — staying on REST', err); }
 }
 
-// On first sync: an empty shared doc adopts our local project (we seed it); a populated one is the
-// authoritative shared copy, so we reconstruct our project from it (full adopt).
+// On first sync we ADOPT the shared copy — we never seed from the client. The Hocuspocus server
+// seeds the doc from the project's stored snapshot (single-threaded, once), so a populated doc always
+// arrives. If we seeded from the client instead, two tabs connecting to a fresh doc would each insert
+// the whole dataset and the CRDT would merge both → duplicated rows/columns.
 function rtOnSynced(mod) {
-  if (mod.isEmpty()) mod.mirror(cleanSnapshot());
-  else adoptRemote(mod.readProject());
+  const remote = mod.readProject();
+  const remoteHasData = (remote.rows && remote.rows.length) || (remote.columns && remote.columns.length);
+  if (remoteHasData) adoptRemote(remote);
+  // else: empty doc — keep our local project and wait for the server's snapshot seed to arrive via the
+  // normal remote-change path (which then adopts it). Never mirror-seed here.
   setCollabBadge('live');
 }
 

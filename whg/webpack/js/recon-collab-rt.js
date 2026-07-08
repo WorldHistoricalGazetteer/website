@@ -133,17 +133,18 @@ export function readProject() {
 }
 
 // ── reconcilers ────────────────────────────────────────────────────────────────────────────────
+function rowMap(row) { const m = new Y.Map(); for (let j = 0; j < row.length; j++) m.set(String(j), cell(row[j])); return m; }
+function objMap(obj) { const m = new Y.Map(); for (const [k, v] of Object.entries(obj)) m.set(k, v); return m; }
+
+// Reconcile in place by index: append ONLY for genuinely new indices (i >= length), otherwise update
+// the existing Y.Map. Never insert at an occupied index (that would shift + duplicate).
 function reconcileRows(yarr, rows) {
   while (yarr.length > rows.length) yarr.delete(yarr.length - 1, 1);
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i] || [];
-    let ym = yarr.get(i);
-    if (!(ym instanceof Y.Map)) {
-      const m = new Y.Map();
-      for (let j = 0; j < row.length; j++) m.set(String(j), cell(row[j]));
-      yarr.insert(i, [m]);
-      continue;
-    }
+    if (i >= yarr.length) { yarr.push([rowMap(row)]); continue; }
+    const ym = yarr.get(i);
+    if (!(ym instanceof Y.Map)) { yarr.delete(i, 1); yarr.insert(i, [rowMap(row)]); continue; }
     for (let j = 0; j < row.length; j++) { const cv = cell(row[j]); if (ym.get(String(j)) !== cv) ym.set(String(j), cv); }
     for (const key of Array.from(ym.keys())) if (Number(key) >= row.length) ym.delete(key);
   }
@@ -153,13 +154,9 @@ function reconcileObjArray(yarr, objs) {
   while (yarr.length > objs.length) yarr.delete(yarr.length - 1, 1);
   for (let i = 0; i < objs.length; i++) {
     const obj = objs[i] || {};
-    let ym = yarr.get(i);
-    if (!(ym instanceof Y.Map)) {
-      const m = new Y.Map();
-      for (const [k, v] of Object.entries(obj)) m.set(k, v);
-      yarr.insert(i, [m]);
-      continue;
-    }
+    if (i >= yarr.length) { yarr.push([objMap(obj)]); continue; }
+    const ym = yarr.get(i);
+    if (!(ym instanceof Y.Map)) { yarr.delete(i, 1); yarr.insert(i, [objMap(obj)]); continue; }
     for (const [k, v] of Object.entries(obj)) if (!jsonEq(ym.get(k), v)) ym.set(k, v);
     for (const k of Array.from(ym.keys())) if (!(k in obj)) ym.delete(k);
   }
