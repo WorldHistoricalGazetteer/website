@@ -437,10 +437,20 @@ def _haversine_km(a, b):
     return 2 * 6371 * asin(min(1.0, sqrt(h)))
 
 
+def _ner_name_hit(hit, name):
+    """True if `name` is the hit's canonical name OR one of its alternative names (case-insensitive).
+    Keeps historical variants (Constantinople → Istanbul) but rejects fuzzy noise (Merchants → …)."""
+    nl = name.strip().lower()
+    if (hit.get('name') or '').strip().lower() == nl:
+        return True
+    return any((a or '').strip().lower() == nl for a in (hit.get('alt_names') or []))
+
+
 def _ner_reconcile_disambiguate(mentions, user):
-    """mentions: {name: count}. Reconcile the most frequent (capped) against WHG, then pick — for
-    ambiguous names — the candidate that best clusters with the document's confident places. Returns
-    {name: {id, title, score, ccodes, lng, lat, ambiguous}} for those matched to the gazetteer."""
+    """mentions: {name: count}. Reconcile the most frequent (capped) against WHG, keep exact name/
+    alt-name matches, then DISAMBIGUATE by geographic coherence: a document's places tend to share a
+    country and cluster spatially, so prefer a candidate in the document's dominant country, breaking
+    ties by proximity to the cluster centroid. Returns {name: match} for gazetteer-matched names."""
     if not mentions:
         return {}
     names = [n for n, _ in sorted(mentions.items(), key=lambda kv: -kv[1])[:NER_RECON_MAX]]
@@ -454,31 +464,40 @@ def _ner_reconcile_disambiguate(mentions, user):
 
     hits_by_name = {}
     for i, n in enumerate(names):
-        hits = (res.get(f'q{i}') or {}).get('result') or []
-        good = [h for h in hits
-                if h.get('match') or (h.get('name') or '').lower() == n.lower() or (h.get('score') or 0) >= 0.6]
-        if good:
-            hits_by_name[n] = good
+        exact = [h for h in ((res.get(f'q{i}') or {}).get('result') or []) if _ner_name_hit(h, n)]
+        if exact:
+            hits_by_name[n] = exact
     if not hits_by_name:
         return {}
 
-    # Anchor cluster: representative points of confident (exact / single-hit) matches; else all tops.
-    anchors = [h[0]['repr_point'] for n, h in hits_by_name.items()
-               if h[0].get('repr_point') and (h[0].get('match') or len(h) == 1)]
-    if not anchors:
-        anchors = [h[0]['repr_point'] for h in hits_by_name.values() if h[0].get('repr_point')]
-    centroid = [_median([p[0] for p in anchors]), _median([p[1] for p in anchors])] if anchors else None
+    # Country vote: rank countries by how many DISTINCT names have a hit there → the document's region.
+    votes = {}
+    for hits in hits_by_name.values():
+        for c in {cc for h in hits for cc in (h.get('ccodes') or [])}:
+            votes[c] = votes.get(c, 0) + 1
+    dominant = {c for c, _ in sorted(votes.items(), key=lambda kv: -kv[1])[:3]}
 
-    chosen = {}
-    for n, hits in hits_by_name.items():
+    def choose(hits, centroid):
         best, best_val = None, -1e9
         for h in hits:
             val = h.get('score') or 0
+            if dominant and (set(h.get('ccodes') or []) & dominant):
+                val += 0.4                                   # strong pull toward the document's country
             rp = h.get('repr_point')
-            if centroid and rp:  # reward geographic agreement with the document's cluster
+            if centroid and rp:
                 val -= 0.15 * min(1.0, _haversine_km(centroid, rp) / 2000.0)
             if val > best_val:
                 best, best_val = h, val
+        return best
+
+    # Pass 1 (country only) → provisional points → centroid → pass 2 (country + proximity).
+    prov = {n: choose(h, None) for n, h in hits_by_name.items()}
+    pts = [p['repr_point'] for p in prov.values() if p and p.get('repr_point')]
+    centroid = [_median([p[0] for p in pts]), _median([p[1] for p in pts])] if pts else None
+
+    chosen = {}
+    for n, hits in hits_by_name.items():
+        best = choose(hits, centroid)
         rp = (best or {}).get('repr_point') or [None, None]
         chosen[n] = {'id': best.get('id'), 'title': best.get('name'), 'score': round(best.get('score') or 0, 3),
                      'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(hits) > 1}

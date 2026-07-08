@@ -221,19 +221,30 @@ def wikipedia_links(links):
     return out
 
 
+def _first_lonlat(coords):
+    """Descend nested GeoJSON coordinate arrays (Point/Line/Polygon/Multi*) to the first [lon, lat]."""
+    while isinstance(coords, (list, tuple)) and coords and isinstance(coords[0], (list, tuple)):
+        coords = coords[0]
+    if isinstance(coords, (list, tuple)) and len(coords) >= 2 and all(isinstance(x, (int, float)) for x in coords[:2]):
+        return [float(coords[0]), float(coords[1])]
+    return None
+
+
 def repr_point(src):
-    """A representative [lng, lat] for a place _source, from the first usable geom (centroid →
-    repr_point → Point location). None if the place carries no point-resolvable geometry."""
+    """A representative [lng, lat] for a place _source, from the first usable geom — centroid,
+    repr_point, or the first vertex of any geometry type. None if no coordinates are present."""
     for g in src.get("geoms", []) or []:
-        c = g.get("centroid")
-        if isinstance(c, (list, tuple)) and len(c) == 2:
-            return [float(c[0]), float(c[1])]
-        rp = g.get("repr_point")
-        if isinstance(rp, (list, tuple)) and len(rp) == 2:
-            return [float(rp[0]), float(rp[1])]
+        for key in ("centroid", "repr_point"):
+            p = _first_lonlat(g.get(key))
+            if p:
+                return p
         loc = g.get("location") or {}
-        if loc.get("type") == "Point" and isinstance(loc.get("coordinates"), (list, tuple)) and len(loc["coordinates"]) == 2:
-            return [float(loc["coordinates"][0]), float(loc["coordinates"][1])]
+        p = _first_lonlat(loc.get("coordinates"))
+        if p:
+            return p
+        p = _first_lonlat(g.get("coordinates"))  # geom object without a `location` wrapper
+        if p:
+            return p
     return None
 
 
