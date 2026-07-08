@@ -523,9 +523,10 @@ BETA_STATUS_SECTIONS = [
             {"name": "Map your Data", "stage": "beta",
              "body": "Turn a spreadsheet or list of place names into located, dated, standardised places — "
                      "matched to the World Historical Gazetteer, cleaned up, and ready to map, share, or "
-                     "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet; reconcile against WHG; "
-                     "add coordinates, dates, and place types; validate; and export or contribute — all in "
-                     "your browser, so your data stays on your device."},
+                     "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet; reconcile against WHG "
+                     "(including historical periods via PeriodO); add coordinates, dates, and place types; "
+                     "enrich with Wikipedia links from matched records; validate; and export or contribute — "
+                     "all in your browser, so your data stays on your device."},
             {"name": "Collaborative Workbench", "stage": "beta",
              "body": "Work on the same reconciliation project as a team, together and in real time, with "
                      "shared roles and a project owned by your group rather than a single account."},
@@ -537,6 +538,10 @@ BETA_STATUS_SECTIONS = [
              "body": "Paste or upload free text (a document, article, or web page) and pull the place names "
                      "out into a table to start a dataset — with the option, later, to use your own AI key "
                      "for higher-accuracy extraction that stays on your device."},
+            {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "dev",
+             "body": "A new, exploration-led interface for the gazetteer, in active development. It clusters "
+                     "and reveals places adaptively as you pan and zoom, keeping very large gazetteers "
+                     "legible at every scale."},
         ],
     },
     {
@@ -547,9 +552,6 @@ BETA_STATUS_SECTIONS = [
              "body": "A dataset can now be made public and searchable regardless of how far its "
                      "reconciliation has progressed, with a clear warning about the trade-offs — removing a "
                      "trap where public datasets could stay invisible in search."},
-            {"name": "Historical-period & Wikipedia enrichment", "stage": "shipped",
-             "body": "Reconcile against historical periods (PeriodO) and pull Wikipedia links through from "
-                     "matched records, directly in Map your Data."},
         ],
     },
     {
@@ -564,9 +566,6 @@ BETA_STATUS_SECTIONS = [
              "body": "A re-architecture around a graph model (with the PLATO ontology) to represent places, "
                      "the relationships between them, and how they change over time far more richly than a "
                      "flat record allows."},
-            {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "horizon",
-             "body": "A new, exploration-led interface that clusters and reveals places adaptively as you "
-                     "pan and zoom, making very large gazetteers legible at every scale."},
         ],
     },
 ]
