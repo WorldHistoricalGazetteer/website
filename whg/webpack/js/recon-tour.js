@@ -183,6 +183,19 @@ function tourSteps() {
         submission.`,
     },
     {
+      key: 'collaborate',
+      target: q('#recon-collab'),
+      enter: async () => { api.openPane('recon-result'); scrollTo('#recon-collab'); },
+      title: '7 · Collaborate &amp; share',
+      body: `Working with others? <strong>Collaborate</strong> saves the project to a <strong>team</strong>
+        — with <strong>owner / editor / viewer</strong> roles — or mints a <strong>read-only link</strong>
+        anyone can import their own copy from. Team projects sync <strong>live</strong>: a teammate's
+        confirmed matches appear for you within a second (watch for the <strong>● live</strong> indicator),
+        and the shared copy is kept safe on the server so no one overwrites anyone else.
+        <div class="recon-tour-note"><i class="fas fa-lock me-1"></i>Still local-first — nothing leaves your
+        browser until you choose to save, share, or contribute.</div>`,
+    },
+    {
       key: 'done',
       target: null,
       title: 'That’s the tour!',
