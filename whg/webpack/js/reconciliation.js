@@ -1411,10 +1411,14 @@ function buildLPF(data) {
       properties: props,
       names: title ? [{ toponym: title }] : [],
     };
-    // Place types: assigned per row in the table editor (project.rowTypes, keyed by source row index).
+    // Place types: assigned per row in the table editor (project.rowTypes, keyed by source row index);
+    // rows without their own type fall back to the global Scope → "What" AAT selection.
     const rt = rowTypesFor(rec.row);
     if (rt.length) feat.types = rt.map((t) => ({ identifier: t.id, label: t.text }));  // LPF place types (needed to contribute)
+    else { const st = (scopeTypes().selected) || []; if (st.length) feat.types = st.map((t) => ({ identifier: t.id, label: t.text })); }
+    // Temporality: per-row parsed dates, else the global Scope → "When" year range (Scope period(s) below).
     if (rec.whenStart || rec.whenEnd) feat.when = { timespans: [{ start: { in: rec.whenStart || undefined }, end: { in: rec.whenEnd || undefined } }] };
+    else { const s = getScope(); if (s && (s.start != null || s.end != null)) feat.when = { timespans: [{ start: { in: s.start != null ? String(s.start) : undefined }, end: { in: s.end != null ? String(s.end) : undefined } }] }; }
     // Dataset-scope PeriodO period(s) apply to every place (scope-level, not per row).
     const scp = scopePeriods();
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
@@ -1579,9 +1583,17 @@ function renderValidation(v) {
     .slice(0, 6)
     .map((g) => `<li>${esc(g.msg)}${g.count > 1 ? ` <span class="text-muted">(${g.count}×)</span>` : ''}</li>`);
   const note = v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
+  // Missing place types and/or temporality can be filled for the whole dataset from the Scope picker.
+  const scopeHint = (v.miss.types > 0 || v.miss.when > 0)
+    ? '<div class="small mt-1"><i class="fas fa-lightbulb me-1 text-warning"></i>Missing <strong>place types</strong> or ' +
+      '<strong>dates/periods</strong>? Set them once for the whole dataset in <strong>Scope</strong> — ' +
+      '<em>What</em> (a Getty AAT place type) and <em>When</em> (a year range or PeriodO period). A Scope value ' +
+      'applies to every row that lacks its own.</div>'
+    : '';
   body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
     ((issues.length || schemaLines.length) ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}${schemaLines.join('')}</ul>` : '') +
-    '<div class="small text-muted">Resolve the items above (assign a place type to each row in the table at Step 2, map a coordinate/date column, …), then re-check.</div>';
+    '<div class="small text-muted">Resolve the items above (assign a place type to each row in the table at Step 2, map a coordinate/date column, …), then re-check.</div>' +
+    scopeHint;
 }
 // Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
 function updateContributeGate() {
