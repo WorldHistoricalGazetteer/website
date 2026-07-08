@@ -520,7 +520,7 @@ BETA_STATUS_SECTIONS = [
         "heading": "In development & beta preview",
         "note": "Available to WHG staff and invited beta testers while we refine them — not yet linked for the public.",
         "items": [
-            {"name": "Map your Data", "stage": "beta",
+            {"name": "Map your Data", "stage": "beta", "version": "3.3",
              "body": "Turn a spreadsheet or list of place names into located, dated, standardised places — "
                      "matched to the World Historical Gazetteer, cleaned up, and ready to map, share, or "
                      "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet — or extract place "
@@ -528,14 +528,14 @@ BETA_STATUS_SECTIONS = [
                      "historical periods via PeriodO); add coordinates, dates, and place types; enrich with "
                      "Wikipedia links from matched records; validate; and export or contribute — all in your "
                      "browser, so your data stays on your device."},
-            {"name": "Collaborative Workbench", "stage": "beta",
+            {"name": "Collaborative Workbench", "stage": "beta", "version": "3.3",
              "body": "Work on the same reconciliation project as a team, together and in real time, with "
                      "shared roles and a project owned by your group rather than a single account."},
-            {"name": "Citations, licensing & contributor credit (CRediT)", "stage": "dev",
+            {"name": "Citations, licensing & contributor credit (CRediT)", "stage": "dev", "version": "3.3",
              "body": "Build a proper citation for a dataset, a machine-readable CITATION.cff and schema.org "
                      "record, and credit everyone who contributed by their role — carried with the data when "
                      "it's shared or contributed to WHG."},
-            {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "dev",
+            {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "dev", "version": "3.5",
              "body": "A new, exploration-led interface for the gazetteer, in active development. It clusters "
                      "and reveals places adaptively as you pan and zoom, keeping very large gazetteers "
                      "legible at every scale."},
@@ -545,11 +545,11 @@ BETA_STATUS_SECTIONS = [
         "heading": "Recently shipped",
         "note": "Live now for everyone, or a change to how an existing workflow behaves.",
         "items": [
-            {"name": "Publish & index independent of reconciliation", "stage": "shipped", "staff": True,
+            {"name": "Publish & index independent of reconciliation", "stage": "shipped", "staff": True, "version": "3.2",
              "body": "A dataset can now be made public and searchable regardless of how far its "
                      "reconciliation has progressed, with a clear warning about the trade-offs — removing a "
                      "trap where public datasets could stay invisible in search. (Staff workflow note.)"},
-            {"name": "In-house analytics dashboard (Plausible aggregation)", "stage": "shipped", "staff": True,
+            {"name": "In-house analytics dashboard (Plausible aggregation)", "stage": "shipped", "staff": True, "version": "3.2",
              "body": "A staff view in the admin area that aggregates WHG's self-hosted Plausible sites "
                      "(main, blog, docs) into one dashboard — top-line metrics, visitors over time, and "
                      "breakdowns — including the Map-your-Data usage funnel. (Staff tool.)"},
@@ -559,16 +559,17 @@ BETA_STATUS_SECTIONS = [
         "heading": "On the horizon",
         "note": "The direction we're heading — shared for planning, not as committed release dates.",
         "items": [
-            {"name": "Browser-first, collaborative Collections", "stage": "horizon",
+            {"name": "Browser-first, collaborative Collections", "stage": "horizon", "version": "3.3",
              "body": "Following the Map-your-Data model, build and curate Collections — of datasets and of "
                      "places, and also Itineraries and Routes — directly in the browser and together as a "
-                     "team, rather than through multi-step server workflows. Intended to reach everyone "
-                     "alongside Map your Data, as one new Workbench (see note above)."},
-            {"name": "A teaching hub for lesson plans (with OME)", "stage": "horizon",
+                     "team, rather than through multi-step server workflows. Ships with Map your Data as one "
+                     "new Workbench (see note above)."},
+            {"name": "A teaching hub for lesson plans (with OME)", "stage": "horizon", "version": "3.3",
              "body": "Exploratory work with OME — an ISKME initiative — to let educators publish lesson plans "
                      "that draw on the World Historical Gazetteer, with the WHG server acting as a hub on "
-                     "their network, connecting classroom resources directly to WHG place data."},
-            {"name": "WHG v4 — a graph data model", "stage": "horizon",
+                     "their network, connecting classroom resources directly to WHG place data. Likely to "
+                     "land with the 3.3 Workbench release."},
+            {"name": "WHG v4 — a graph data model", "stage": "horizon", "version": "4.0",
              "body": "A re-architecture around a graph model (with the PLATO ontology — Place Attestation "
                      "Ontology) to represent places, the relationships between them, and how they change over "
                      "time far more richly than a flat record allows.",
@@ -606,9 +607,9 @@ def beta_status_view(request):
         "updated": BETA_STATUS_UPDATED,
         "release_note": (
             "Map your Data and the browser-first Collections tools are two halves of one new, unified "
-            "Workbench. They're intended to reach everyone together, as a single coordinated release — "
-            "so the current workflow and its documentation can be refreshed in one step rather than "
-            "piecemeal."
+            "Workbench — targeted for v3.3 (with Citations and, likely, OME). They're intended to reach "
+            "everyone together, as a single coordinated release, so the current workflow and its "
+            "documentation can be refreshed in one step rather than piecemeal."
         ),
     })
 

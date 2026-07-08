@@ -26,6 +26,7 @@
     <span><span class="badge text-bg-secondary">In development</span> being built</span>
     <span><span class="badge text-bg-success">Live</span> available now</span>
     <span><span class="badge text-bg-info">Exploratory</span> planned direction</span>
+    <span><span class="badge rounded-pill border text-body-secondary">v3.3</span> anticipated release (we're on {{ app_version }})</span>
   </div>
 
   {% for section in sections %}
@@ -41,6 +42,7 @@
               <h6 class="card-title mb-0">{{ item.name }}</h6>
               <span>
                 {% if item.staff %}<span class="badge text-bg-light border me-1" title="Internal note — hidden from the public view">staff</span>{% endif %}
+                {% if item.version %}<span class="badge rounded-pill border text-body-secondary me-1" title="Anticipated release version (target, not a committed date)">v{{ item.version }}</span>{% endif %}
                 <span class="badge {{ item.stage_class }}">{{ item.stage_label }}</span>
               </span>
             </div>
