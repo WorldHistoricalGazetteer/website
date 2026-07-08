@@ -1081,6 +1081,33 @@ function resetUI() {
 }
 
 // ── Import + lifecycle ──────────────────────────────────────────────────────
+// ── Anonymous usage analytics (Plausible custom events) ──────────────────────────────────────────
+// Privacy-first, so it's safe on a local-first tool: cookieless, no user id, and NEVER any dataset
+// contents — only funnel/friction signals with coarse, non-identifying props (bucketed row counts,
+// chosen export format). Sent to WHG's self-hosted Plausible (script already loaded in
+// base_webpack.html). Lets us see where people drop off (import → reconcile → export/contribute)
+// without touching the data they bring. See developer note + place#112 / Palak monitoring.
+const _tracked = new Set(); // per-page-load dedupe for one-shot funnel events
+function track(event, props) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.plausible === 'function') {
+      window.plausible(event, props ? { props } : undefined);
+    }
+  } catch (_) { /* analytics must never break the workbench */ }
+}
+function trackOnce(event, props) { if (_tracked.has(event)) return; _tracked.add(event); track(event, props); }
+// Coarse buckets so a row count can never fingerprint a specific dataset.
+function bucketCount(n) {
+  n = Number(n) || 0;
+  if (n <= 0) return '0';
+  if (n <= 10) return '1-10';
+  if (n <= 50) return '11-50';
+  if (n <= 200) return '51-200';
+  if (n <= 1000) return '201-1000';
+  if (n <= 5000) return '1001-5000';
+  return '5000+';
+}
+
 function handleFile(file) {
   const reader = new FileReader();
   reader.onload = async () => {
@@ -1096,6 +1123,7 @@ function handleFile(file) {
         renderAll();
         if (navigator.storage && navigator.storage.persist) { try { await navigator.storage.persist(); } catch (_) { /* */ } }
         await persist();
+        track('MyD: resume', { rows: bucketCount(project.total) });
         console.log(`[recon] restored .whgproj: ${project.total} rows`);
         return;
       }
@@ -1111,7 +1139,14 @@ function handleFile(file) {
         delimiter: parsed.delimiter || null,
       };
       el('recon-resume').classList.add('d-none'); // fresh import, not a resume
+      _tracked.clear(); // new dataset → let the once-per-dataset funnel events fire again
       console.log(`[recon] parsed "${file.name}" locally: ${project.total} rows, ${project.columns.length} cols`);
+      track('MyD: import', {
+        source: file.name === 'reconciliation-demo.csv' ? 'sample' : 'file',
+        format: isJSON ? 'json' : 'csv',
+        rows: bucketCount(project.total),
+        cols: String(project.columns.length),
+      });
       renderAll();
       if (navigator.storage && navigator.storage.persist) {
         try { await navigator.storage.persist(); } catch (_) { /* best effort */ }
@@ -1406,6 +1441,7 @@ async function runExport() {
     };
     const [fn, ext, mime] = FMT[opts.format] || FMT.csv;
     downloadText(`${base}.${ext}`, fn(data), mime);
+    track('MyD: export', { format: opts.format, rows: bucketCount(data.records.length) });
     if (status) status.textContent = `exported ${data.records.length.toLocaleString()} rows`;
   } catch (err) {
     console.error('[recon] export failed', err);
@@ -1441,6 +1477,7 @@ async function contributeToWHG() {
     form.appendChild(fileInput);
     document.body.appendChild(form);
     if (status) status.textContent = 'uploading to WHG…';
+    track('MyD: contribute', { rows: bucketCount(data.records.length) });
     form.submit(); // navigates to the validation/progress page; the local project remains in this browser
   } catch (err) {
     console.error('[recon] contribute failed', err);
@@ -3356,6 +3393,7 @@ async function reconcileStage() {
   if (columnState(pos) === 'review') { setReconSummary('<span class="text-warning">Confirm this column’s matches (Step 4) before reconciling the next.</span>'); return; }
   reconStaleNote = ''; // a fresh run clears any "parent changed" notice
   project.matches = project.matches || {};
+  trackOnce('MyD: reconcile', { columns: String(chain.length) });
   toggleRunning(true);
   openPane('recon-recon');
   stopRequested = false;
@@ -3635,7 +3673,12 @@ function init() {
   // Contribution validation: re-check button, "use Scope type(s)" shortcut, and re-validate when the
   // export options (which change the built LPF) change.
   const recheck = el('recon-validate-recheck');
-  if (recheck) recheck.addEventListener('click', runValidation);
+  // A user-initiated re-check that still fails is a genuine "stuck at contribute" signal (unlike the
+  // background validation that runs on every edit, so we only track this explicit click).
+  if (recheck) recheck.addEventListener('click', async () => {
+    const v = await runValidation();
+    if (v && v.schemaOk === false) track('MyD: contribute blocked', { errors: bucketCount(v.schemaErrs) });
+  });
   ['recon-exp-match', 'recon-exp-enrich'].forEach((id) => {
     const box = el(id); if (box) box.addEventListener('change', () => { if (!el('recon-export').classList.contains('recon-collapsed')) runValidation(); });
   });
