@@ -15,6 +15,12 @@
     everyone who presents, teaches, writes about, or uses WHG can follow along without reading code.
   </p>
 
+  {% if release_note %}
+  <div class="alert alert-warning py-2 px-3 small mb-4" role="note">
+    <i class="fas fa-object-group me-1"></i>{{ release_note }}
+  </div>
+  {% endif %}
+
   <div class="d-flex flex-wrap gap-3 small text-muted border-top border-bottom py-2 mb-4">
     <span><span class="badge text-bg-warning">Beta preview</span> staff &amp; invited testers only</span>
     <span><span class="badge text-bg-secondary">In development</span> being built</span>

@@ -523,10 +523,11 @@ BETA_STATUS_SECTIONS = [
             {"name": "Map your Data", "stage": "beta",
              "body": "Turn a spreadsheet or list of place names into located, dated, standardised places — "
                      "matched to the World Historical Gazetteer, cleaned up, and ready to map, share, or "
-                     "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet; reconcile against WHG "
-                     "(including historical periods via PeriodO); add coordinates, dates, and place types; "
-                     "enrich with Wikipedia links from matched records; validate; and export or contribute — "
-                     "all in your browser, so your data stays on your device."},
+                     "contribute. Import from CSV/TSV/JSON, Excel, or a Google Sheet — or extract place "
+                     "names straight from free text you paste or upload; reconcile against WHG (including "
+                     "historical periods via PeriodO); add coordinates, dates, and place types; enrich with "
+                     "Wikipedia links from matched records; validate; and export or contribute — all in your "
+                     "browser, so your data stays on your device."},
             {"name": "Collaborative Workbench", "stage": "beta",
              "body": "Work on the same reconciliation project as a team, together and in real time, with "
                      "shared roles and a project owned by your group rather than a single account."},
@@ -534,10 +535,6 @@ BETA_STATUS_SECTIONS = [
              "body": "Build a proper citation for a dataset, a machine-readable CITATION.cff and schema.org "
                      "record, and credit everyone who contributed by their role — carried with the data when "
                      "it's shared or contributed to WHG."},
-            {"name": "Place-name extraction from text", "stage": "dev",
-             "body": "Paste or upload free text (a document, article, or web page) and pull the place names "
-                     "out into a table to start a dataset — with the option, later, to use your own AI key "
-                     "for higher-accuracy extraction that stays on your device."},
             {"name": "Atlas — a map-first interface with dynamic clustering", "stage": "dev",
              "body": "A new, exploration-led interface for the gazetteer, in active development. It clusters "
                      "and reveals places adaptively as you pan and zoom, keeping very large gazetteers "
@@ -561,7 +558,12 @@ BETA_STATUS_SECTIONS = [
             {"name": "Browser-first, collaborative Collections", "stage": "horizon",
              "body": "Following the Map-your-Data model, build and curate Collections — of datasets and of "
                      "places, and also Itineraries and Routes — directly in the browser and together as a "
-                     "team, rather than through multi-step server workflows."},
+                     "team, rather than through multi-step server workflows. Intended to reach everyone "
+                     "alongside Map your Data, as one new Workbench (see note above)."},
+            {"name": "A teaching hub for lesson plans (with OME)", "stage": "horizon",
+             "body": "Exploratory work with OME — an ISKME initiative — to let educators publish lesson plans "
+                     "that draw on the World Historical Gazetteer, with the WHG server acting as a hub on "
+                     "their network, connecting classroom resources directly to WHG place data."},
             {"name": "WHG v4 — a graph data model", "stage": "horizon",
              "body": "A re-architecture around a graph model (with the PLATO ontology) to represent places, "
                      "the relationships between them, and how they change over time far more richly than a "
@@ -591,6 +593,12 @@ def beta_status_view(request):
         "sections": sections,
         "app_version": settings.APP_VERSION,
         "updated": BETA_STATUS_UPDATED,
+        "release_note": (
+            "Map your Data and the browser-first Collections tools are two halves of one new, unified "
+            "Workbench. They're intended to reach everyone together, as a single coordinated release — "
+            "so the current workflow and its documentation can be refreshed in one step rather than "
+            "piecemeal."
+        ),
     })
 
 
