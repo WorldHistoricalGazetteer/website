@@ -39,9 +39,15 @@
           <div class="card-body py-3">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-1">
               <h6 class="card-title mb-0">{{ item.name }}</h6>
-              <span class="badge {{ item.stage_class }}">{{ item.stage_label }}</span>
+              <span>
+                {% if item.staff %}<span class="badge text-bg-light border me-1" title="Internal note — hidden from the public view">staff</span>{% endif %}
+                <span class="badge {{ item.stage_class }}">{{ item.stage_label }}</span>
+              </span>
             </div>
             <p class="card-text small mb-0">{{ item.body }}</p>
+            {% if item.link %}
+            <p class="card-text small mb-0 mt-1"><a href="{{ item.link.url }}" target="_blank" rel="noopener"><i class="fas fa-arrow-up-right-from-square fa-xs me-1"></i>{{ item.link.label }}</a></p>
+            {% endif %}
           </div>
         </div>
       </div>

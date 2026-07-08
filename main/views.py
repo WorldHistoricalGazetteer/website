@@ -545,10 +545,14 @@ BETA_STATUS_SECTIONS = [
         "heading": "Recently shipped",
         "note": "Live now for everyone, or a change to how an existing workflow behaves.",
         "items": [
-            {"name": "Publish & index independent of reconciliation", "stage": "shipped",
+            {"name": "Publish & index independent of reconciliation", "stage": "shipped", "staff": True,
              "body": "A dataset can now be made public and searchable regardless of how far its "
                      "reconciliation has progressed, with a clear warning about the trade-offs — removing a "
-                     "trap where public datasets could stay invisible in search."},
+                     "trap where public datasets could stay invisible in search. (Staff workflow note.)"},
+            {"name": "In-house analytics dashboard (Plausible aggregation)", "stage": "shipped", "staff": True,
+             "body": "A staff view in the admin area that aggregates WHG's self-hosted Plausible sites "
+                     "(main, blog, docs) into one dashboard — top-line metrics, visitors over time, and "
+                     "breakdowns — including the Map-your-Data usage funnel. (Staff tool.)"},
         ],
     },
     {
@@ -565,9 +569,11 @@ BETA_STATUS_SECTIONS = [
                      "that draw on the World Historical Gazetteer, with the WHG server acting as a hub on "
                      "their network, connecting classroom resources directly to WHG place data."},
             {"name": "WHG v4 — a graph data model", "stage": "horizon",
-             "body": "A re-architecture around a graph model (with the PLATO ontology) to represent places, "
-                     "the relationships between them, and how they change over time far more richly than a "
-                     "flat record allows."},
+             "body": "A re-architecture around a graph model (with the PLATO ontology — Place Attestation "
+                     "Ontology) to represent places, the relationships between them, and how they change over "
+                     "time far more richly than a flat record allows.",
+             "link": {"url": "https://github.com/pelagios/place-attestation-ontology",
+                      "label": "PLATO on the Pelagios GitHub"}},
         ],
     },
 ]
@@ -584,11 +590,16 @@ def beta_status_view(request):
     # Staff-only for now (content is public-ready — see note above).
     if not request.user.is_staff:
         raise Http404()
+    # Staff-flagged items are internal notes: shown (badged) to staff, and hidden once the page is
+    # ungated for the public. Sections with no visible items are dropped entirely.
+    is_staff = request.user.is_staff
     sections = []
     for sec in BETA_STATUS_SECTIONS:
         items = [dict(it, stage_label=_BETA_STAGE_META[it["stage"]][0],
-                      stage_class=_BETA_STAGE_META[it["stage"]][1]) for it in sec["items"]]
-        sections.append(dict(sec, items=items))
+                      stage_class=_BETA_STAGE_META[it["stage"]][1])
+                 for it in sec["items"] if is_staff or not it.get("staff")]
+        if items:
+            sections.append(dict(sec, items=items))
     return render(request, "main/beta_status.html", {
         "sections": sections,
         "app_version": settings.APP_VERSION,
