@@ -654,24 +654,24 @@ class PeriodSuggestView(APIView):
         shortlist = results[:limit]
 
         # Authoritative temporal bounds: PeriodO labels often omit years (e.g. bare "Ming dynasty"),
-        # so fetch the real begin/end from the gateway (extend: whg:temporal_objects) and prefer them
-        # over the label parse. We only extend records that still lack years, and ONE id per call:
-        # the gateway /api/extend is all-or-nothing — a single unresolvable id empties the whole
-        # response — so per-id calls stop one bad record poisoning its neighbours. (Gateway bug: see
-        # WorldHistoricalGazetteer/place issue.) Bounded by `limit`, and skipped for label-dated rows.
-        for r in shortlist:
-            if r['start'] is not None and r['stop'] is not None:
-                continue
+        # so batch-fetch the real begin/end from the gateway (extend: whg:temporal_objects) for the
+        # rows still lacking years, and prefer them over the label parse. A single batched call is safe
+        # now that the gateway resolves each id independently (WorldHistoricalGazetteer/place#114 fixed
+        # in indexing@8c74228 — null ES fields no longer 500 and poison the whole batch).
+        need = [r for r in shortlist if r['start'] is None or r['stop'] is None]
+        if need:
             try:
-                ext = crc_extend([r['id']], [{'id': 'whg:temporal_objects'}], user=request.user) or {}
+                ext = crc_extend([r['id'] for r in need], [{'id': 'whg:temporal_objects'}],
+                                 user=request.user) or {}
             except Exception as e:
                 logger.warning('PeriodSuggest temporal extend error: %s', e)
                 ext = {}
-            b, e = _bounds_from_extend((ext.get(r['id']) or {}).get('whg:temporal_objects'))
-            if b is not None:
-                r['start'] = b
-            if e is not None:
-                r['stop'] = e
+            for r in need:
+                b, e = _bounds_from_extend((ext.get(r['id']) or {}).get('whg:temporal_objects'))
+                if b is not None:
+                    r['start'] = b
+                if e is not None:
+                    r['stop'] = e
 
         # Final rank now that temporal overlap is known.
         for r in shortlist:
