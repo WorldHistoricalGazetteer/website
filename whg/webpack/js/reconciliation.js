@@ -108,6 +108,16 @@ function normalizeChain() {
       if (!valid) { c.role = 'other'; delete c.child; changed = true; }
     });
   }
+  // If the WGS84 columns materialised from a coordinate source have since been deleted, restore that
+  // source's coordinate role so its panel reappears (and can be re-inserted) — mirroring the date panel,
+  // which keeps its source 'date' column. `wasCoords` is tagged by insertWgs84Columns on the demoted
+  // source, and cleared here on restore or by a manual role change.
+  const hasCoords = project.columns.some((c) => c.role === 'coords');
+  const hasLatLonPair = project.columns.some((c) => c.role === 'lat') && project.columns.some((c) => c.role === 'lon');
+  if (!hasCoords && !hasLatLonPair) {
+    const src = project.columns.find((c) => c.wasCoords);
+    if (src) { src.role = 'coords'; delete src.wasCoords; }
+  }
 }
 
 // Migrate a project saved under the old model (role 'county' admin columns + project.chainOrder) to
@@ -351,6 +361,9 @@ async function insertWgs84Columns() {
   project.columns.push({ name: 'wgs84_lat', role: 'lat' }, { name: 'wgs84_lon', role: 'lon' });
   project.rows.forEach((r) => { const c = Coords.parseCoord(fmt, r[coordsIdx]); r.push(c ? +c.lat.toFixed(6) : '', c ? +c.lon.toFixed(6) : ''); });
   project.columns[coordsIdx].role = 'other'; // superseded by the decimal columns
+  project.columns[coordsIdx].wasCoords = true; // remember it was the coord source: if the wgs84 columns
+                                               // are later deleted, normalizeChain restores this role so
+                                               // the panel reappears (see normalizeChain)
   project.showIgnored = true;                 // so the (now-ignored) source column stays visible
   normalizeChain();
   pushUndo({ type: 'columns', label: 'add WGS84 columns', snapshot: snap });
@@ -663,6 +676,7 @@ function renderMapping() {
       pushUndo({ type: 'columns', label: `role of “${truncate(project.columns[i].name, 20)}”`, snapshot: snap });
       if (v.startsWith('contains:')) { project.columns[i].role = 'contains'; project.columns[i].child = Number(v.slice(9)); }
       else { project.columns[i].role = v; delete project.columns[i].child; }
+      delete project.columns[i].wasCoords; // a manual role choice supersedes the demoted-coord-source tag
       sel.className = `form-select form-select-sm recon-role-select role-${project.columns[i].role}`;
       normalizeChain();      // drop any containment links this change orphaned (e.g. an ignored child)
       // A change that alters the reconciliation chain invalidates existing matches (they were scoped by
