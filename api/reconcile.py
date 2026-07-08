@@ -647,6 +647,10 @@ class PeriodSuggestView(APIView):
             r['score'] = round(r.pop('_gw') + 3.0 * temporal_score(r['start'], r['stop']) + 1.5 * geo, 3)
 
         results.sort(key=lambda r: r['score'], reverse=True)
+        if request.GET.get('_debug'):
+            return JsonResponse({'result': results[:limit], '_ids': [r['id'] for r in results],
+                                 '_ext_keys': list((ext or {}).keys()) if results else [],
+                                 '_ext_sample': (ext or {})})
         return JsonResponse({'result': results[:limit]})
 
 
