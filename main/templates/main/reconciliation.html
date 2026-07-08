@@ -319,9 +319,11 @@
             Enrich from WHG <span class="text-muted">(matched coordinates, variant names, description, type — fetches from WHG)</span></label>
           <label class="d-block small"><input type="checkbox" id="recon-exp-wikipedia">
             Wikipedia link <span class="text-muted">(a <code>wikipedia</code> column)</span></label>
-          <p class="small text-muted mb-0 mt-1"><i class="fas fa-circle-info me-1"></i>Wikipedia links come only from
-            <strong>Wikidata</strong> matches — reconcile a row to a <strong>Wikidata (<code>wd</code>)</strong>
-            record (see <em>Sources</em>) for it to have a Wikipedia link; other matches leave the column blank.</p>
+          <p class="small text-muted mb-0 mt-1"><i class="fas fa-circle-info me-1"></i>Taken from the
+            <strong>place-name</strong> column's match only — the lowest level, <em>not</em> higher containment
+            levels (County, Parish, …) — and only when that match is a <strong>Wikidata (<code>wd</code>)</strong>
+            record. Reconcile the place to a Wikidata record (see <em>Sources</em>) for a link; other matches
+            leave the column blank.</p>
           <p class="small text-muted mb-0 mt-1">Converted coordinates &amp; ISO dates: add them as columns in
             <strong>Step 2</strong> (the coordinate/date panels) — they then export like any other column.</p>
         </fieldset>
