@@ -372,7 +372,8 @@ def validate_file(request, dataset_metadata):
             namespaces = extract_context_namespaces(json_path)
 
             # Extract any metadata from JSON file
-            dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'], dataset_metadata['webpage'] = extract_dataset_metadata(json_path)
+            dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'], \
+                dataset_metadata['webpage'], dataset_metadata['citation'] = extract_dataset_metadata(json_path)
             logger.debug(f'Metadata extracted from JSON: {schema_org_metadata}')
         else:
             dataset_metadata["format"] = ext
@@ -475,12 +476,26 @@ def validate_file(request, dataset_metadata):
     return JsonResponse({"status": "in_progress", "task_id": task_id})
 
 
+def _creator_name(node):
+    """Name of a schema.org creator node — plain Person/Organization, or a CRediT Role wrapper
+    ({"@type": "Role", "roleName": <credit-uri>, "contributor": {...}}) whose person is nested."""
+    if not isinstance(node, dict):
+        return ''
+    if node.get('name'):
+        return node['name']
+    inner = node.get('contributor') or node.get('creator') or node.get('author')
+    if isinstance(inner, dict):
+        return inner.get('name', '')
+    return ''
+
+
 def extract_dataset_metadata(file_path):
     dataset_metadata = {
         'creator': '',
         'title': '',
         'description': '',
-        'webpage': ''
+        'webpage': '',
+        'citation': '',
     }
 
     with open(file_path, 'r') as file:
@@ -489,11 +504,17 @@ def extract_dataset_metadata(file_path):
 
         for item in indexing_data:
             if isinstance(item, dict):
-                # Extract 'creator' names
-                if 'creator' in item and isinstance(item['creator'], list):
-                    dataset_metadata['creator'] = "; ".join(
-                        creator.get('name', '') for creator in item['creator'] if 'name' in creator
-                    )
+                # Extract 'creator' names — accept a single node or a list, plain or CRediT-Role-wrapped;
+                # de-duplicate so a person contributing under several CRediT roles is named once.
+                if 'creator' in item:
+                    creators = item['creator'] if isinstance(item['creator'], list) else [item['creator']]
+                    names = []
+                    for creator in creators:
+                        name = _creator_name(creator)
+                        if name and name not in names:
+                            names.append(name)
+                    if names:
+                        dataset_metadata['creator'] = "; ".join(names)
 
                 # Extract 'name' as 'title'
                 if 'name' in item:
@@ -507,7 +528,13 @@ def extract_dataset_metadata(file_path):
                 if 'url' in item:
                     dataset_metadata['webpage'] = item['url']
 
-    return dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'], dataset_metadata['webpage']
+                # Extract a ready-made citation string (generated in the browser by Map-your-Data);
+                # cap to the Dataset.citation column width.
+                if isinstance(item.get('citation'), str):
+                    dataset_metadata['citation'] = item['citation'][:2044]
+
+    return (dataset_metadata['creator'], dataset_metadata['title'], dataset_metadata['description'],
+            dataset_metadata['webpage'], dataset_metadata['citation'])
 
 
 def extract_context_namespaces(file_path):

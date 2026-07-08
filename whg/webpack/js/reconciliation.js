@@ -853,6 +853,10 @@ function applySplit() {
     project.columns.push({ name: nm, role: 'other' });
   }
   project.rows.forEach((r, ri) => { const t = rowLevels[ri]; for (let i = 0; i < N; i++) r.push(i < t.length ? t[i] : ''); });
+  // The split's innermost level is now the authoritative place name, so any pre-existing Place-name
+  // column is superseded — demote it to 'other'. Otherwise two columns claim role 'name' and
+  // colIndexByRole('name') resolves to the stale one (wrong map marker/popup, wrong LPF title).
+  project.columns.forEach((c, i) => { if (i < startIdx && c.role === 'name') c.role = 'other'; });
   // Wire the hierarchy: index 0 = innermost place name; each outer level "contains" the level within it.
   project.columns[startIdx].role = 'name';
   for (let i = 1; i < N; i++) { const c = project.columns[startIdx + i]; c.role = 'contains'; c.child = startIdx + (i - 1); }
@@ -1601,11 +1605,22 @@ function buildLPF(data) {
     if (rec.match) feat.links = rec.match.list.map((x) => ({ type: 'closeMatch', identifier: x.id }));
     return feat;
   });
-  return {
+  const fc = {
     type: 'FeatureCollection',
     '@context': 'https://raw.githubusercontent.com/LinkedPasts/linked-places-format/master/linkedplaces-context-v1.1.jsonld',
-    features,
   };
+  // Embed the dataset's citation & provenance before `features` so WHG's ingest picks it up when the
+  // file is contributed/uploaded. `indexing` (schema.org) is what WHG reads today (citationIndexing);
+  // `citation` (CSL-JSON, the format the LPF schema natively allows) is carried for future consumption.
+  // Both sit ahead of the (possibly huge) features array so the server's streaming reader stops early.
+  const cm = project ? citationModel() : null;
+  if (cm) {
+    const idx = citationIndexing(cm);
+    if (idx && (idx.name || idx.creator || idx.citation || idx.url)) fc.indexing = idx;
+    fc.citation = buildCslCitation(cm);
+  }
+  fc.features = features;
+  return fc;
 }
 function serializeLPF(data) { return JSON.stringify(buildLPF(data), null, 2); }
 
@@ -1841,7 +1856,7 @@ function personNode(c) {
   if (c.affiliation) node.affiliation = { '@type': 'Organization', name: c.affiliation };
   return node;
 }
-function buildSchemaOrg(m) {
+function schemaOrgDataset(m) {
   const doc = { '@context': 'https://schema.org/', '@type': 'Dataset', name: m.title || 'Untitled dataset' };
   if (m.year) doc.datePublished = m.year;
   if (m.version) doc.version = m.version;
@@ -1864,7 +1879,50 @@ function buildSchemaOrg(m) {
     }));
   });
   if (creators.length) doc.creator = creators.length === 1 ? creators[0] : creators;
-  return JSON.stringify(doc, null, 2);
+  return doc;
+}
+function buildSchemaOrg(m) { return JSON.stringify(schemaOrgDataset(m), null, 2); }
+
+// The metadata block embedded at the top of an exported/contributed LPF (`indexing`). WHG's ingest
+// (validation.extract_dataset_metadata) reads this key: creator name(s) → Dataset.creator, name →
+// title, description → description, url → webpage, citation → Dataset.citation. It's the schema.org
+// Dataset with the formatted citation string appended, so the LPF carries its own provenance.
+function citationIndexing(m) {
+  const doc = schemaOrgDataset(m);
+  // Guarantee a resolvable `url` (WHG maps it to the dataset webpage) even when the identifier is a DOI.
+  if (!doc.url && doc.identifier) doc.url = doc.identifier;
+  const cite = formatCitation(m);
+  if (cite) doc.citation = cite;
+  return doc;
+}
+
+// A CSL-JSON name node. WHG's csl-citation schema REQUIRES `family` on every author (it does not
+// accept a literal-only name), so organisations / single-token names are placed in `family` too.
+function cslNameNode(c) {
+  const p = nameParts(c.name);
+  if (p.name) return { family: p.name.replace(/^\[|\]$/g, '').trim() };
+  const node = { family: p.family };
+  if (p.given) node.given = p.given;
+  return node;
+}
+// A CSL-JSON citation cluster for the LPF's top-level `citation` slot (lpf_v2.0.jsonld $refs
+// csl-citation.json). Emitted alongside the schema.org `indexing` block — not consumed on ingest yet,
+// but carried so it can be. Every level satisfies the schema's additionalProperties:false.
+function buildCslCitation(m) {
+  const slug = (m.title || 'dataset').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'dataset';
+  const item = { type: 'dataset', id: slug, title: m.title || 'Untitled dataset' };
+  const authors = citeUniqueContributors().map(cslNameNode).filter((n) => n.family);
+  if (authors.length) item.author = authors;
+  const yr = parseInt(m.year, 10);
+  if (!isNaN(yr)) item.issued = { 'date-parts': [[yr]] };
+  if (m.publisher) item.publisher = m.publisher;
+  if (m.version) item.version = String(m.version);
+  if (m.url) { const u = m.url.trim(); if (u) item[/^10\./.test(u) ? 'DOI' : 'URL'] = u; }
+  return {
+    schema: 'https://whgazetteer.org/schema/csl-citation.json',
+    citationID: 'whg-' + slug,
+    citationItems: [{ id: slug, itemData: item }],
+  };
 }
 function citeFlash(msg) { const s = el('cite-status'); if (s) { s.textContent = msg; setTimeout(() => { if (s.textContent === msg) s.textContent = ''; }, 2500); } }
 function citeBaseName() {

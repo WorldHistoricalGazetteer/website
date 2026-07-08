@@ -362,32 +362,8 @@
         </button>
         <span id="recon-export-status" class="small text-muted"></span>
       </div>
-      <div class="recon-contribute mt-3">
-        <i class="fas fa-hand-holding-heart me-1"></i>
-        <strong>Contribute to WHG.</strong>
-        Reconciled, standardised place data is far more valuable when shared. Send it straight to WHG —
-        the Linked Places file is built and uploaded for you (no manual export needed), and you'll land
-        on WHG's validation page to review and publish it. Your local copy stays in this browser.
-
-        <!-- Contribution readiness: runs WHG's Linked Places schema validation in the browser -->
-        <div id="recon-validate-panel" class="recon-validate-panel mt-2">
-          <div class="d-flex align-items-center gap-2 mb-1">
-            <span class="small fw-semibold">Contribution readiness</span>
-            <button type="button" class="btn btn-sm btn-outline-secondary py-0" id="recon-validate-recheck">
-              <i class="fas fa-rotate me-1"></i>Re-check</button>
-          </div>
-          <div id="recon-validate-body" class="small text-muted">Open this pane to validate.</div>
-        </div>
-
-        <div class="mt-2 d-flex align-items-center gap-2">
-          <button type="button" id="recon-contribute-btn" class="btn btn-sm btn-success">
-            <i class="fas fa-cloud-arrow-up me-1"></i>Contribute to WHG
-          </button>
-          <span id="recon-contribute-status" class="small text-muted"></span>
-        </div>
-      </div>
-
-      <!-- Citation & provenance builder: dataset metadata → a formatted citation + CITATION.cff -->
+      <!-- Citation & provenance builder: dataset metadata → a formatted citation + CITATION.cff.
+           Kept ahead of "Contribute to WHG" because the citation is embedded in the contributed file. -->
       <div class="recon-citation mt-3 pt-3 border-top">
         <h6 class="small text-uppercase text-muted mb-1"><i class="fas fa-quote-right me-1"></i>Citation &amp; provenance</h6>
         <p class="small text-muted mb-2">Describe your dataset so others can cite it. We build a formatted
@@ -426,6 +402,9 @@
             <input type="text" id="cite-url" class="form-control form-control-sm" placeholder="https://… or 10.xxxx/…"></div>
           <div class="col-md-4"><label class="form-label small mb-0">Licence</label>
             <input type="text" id="cite-license" class="form-control form-control-sm" placeholder="e.g. CC-BY-4.0"></div>
+          <div class="col-12"><p class="form-text small text-muted mb-0">
+            <i class="fas fa-circle-info me-1"></i>No DOI yet? Leave <em>URL or DOI</em> blank — WHG mints a
+            DOI for datasets published on the platform.</p></div>
         </div>
         <p class="small mt-2 mb-1"><span class="text-muted">Preview:</span> <span id="cite-preview" class="fst-italic"></span></p>
         <div class="d-flex flex-wrap gap-2">
@@ -433,6 +412,34 @@
           <button type="button" id="cite-cff" class="btn btn-sm btn-outline-primary"><i class="fas fa-download me-1"></i>CITATION.cff</button>
           <button type="button" id="cite-jsonld" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download me-1"></i>schema.org JSON</button>
           <span id="cite-status" class="small text-success align-self-center"></span>
+        </div>
+      </div>
+
+      <!-- Contribute to WHG — follows Citation & provenance because that metadata is embedded in the file -->
+      <div class="recon-contribute mt-3 pt-3 border-top">
+        <i class="fas fa-hand-holding-heart me-1"></i>
+        <strong>Contribute to WHG.</strong>
+        Reconciled, standardised place data is far more valuable when shared. Send it straight to WHG —
+        the Linked Places file is built and uploaded for you (no manual export needed), and you'll land
+        on WHG's validation page to review and publish it. Your local copy stays in this browser.
+        <span class="text-muted">The citation &amp; contributor details above travel with the file, so
+        your dataset arrives already attributed.</span>
+
+        <!-- Contribution readiness: runs WHG's Linked Places schema validation in the browser -->
+        <div id="recon-validate-panel" class="recon-validate-panel mt-2">
+          <div class="d-flex align-items-center gap-2 mb-1">
+            <span class="small fw-semibold">Contribution readiness</span>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0" id="recon-validate-recheck">
+              <i class="fas fa-rotate me-1"></i>Re-check</button>
+          </div>
+          <div id="recon-validate-body" class="small text-muted">Open this pane to validate.</div>
+        </div>
+
+        <div class="mt-2 d-flex align-items-center gap-2">
+          <button type="button" id="recon-contribute-btn" class="btn btn-sm btn-success">
+            <i class="fas fa-cloud-arrow-up me-1"></i>Contribute to WHG
+          </button>
+          <span id="recon-contribute-status" class="small text-muted"></span>
         </div>
       </div>
     </div>

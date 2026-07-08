@@ -151,6 +151,7 @@ def save_dataset(task_id):
                 creator=dataset_metadata['creator'],
                 source=dataset_metadata['source'],
                 contributors=dataset_metadata['contributors'],
+                citation=dataset_metadata.get('citation') or None,
                 uri_base=dataset_metadata['uri_base'],
                 webpage=dataset_metadata['webpage'],
                 pdf=dataset_metadata['pdf'],
