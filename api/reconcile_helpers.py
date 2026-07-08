@@ -221,6 +221,22 @@ def wikipedia_links(links):
     return out
 
 
+def repr_point(src):
+    """A representative [lng, lat] for a place _source, from the first usable geom (centroid →
+    repr_point → Point location). None if the place carries no point-resolvable geometry."""
+    for g in src.get("geoms", []) or []:
+        c = g.get("centroid")
+        if isinstance(c, (list, tuple)) and len(c) == 2:
+            return [float(c[0]), float(c[1])]
+        rp = g.get("repr_point")
+        if isinstance(rp, (list, tuple)) and len(rp) == 2:
+            return [float(rp[0]), float(rp[1])]
+        loc = g.get("location") or {}
+        if loc.get("type") == "Point" and isinstance(loc.get("coordinates"), (list, tuple)) and len(loc["coordinates"]) == 2:
+            return [float(loc["coordinates"][0]), float(loc["coordinates"][1])]
+    return None
+
+
 def make_candidate(hit, query_text, max_score, schema_space):
     src = hit["_source"]
     name = get_canonical_name(src, hit["_id"])
@@ -241,6 +257,8 @@ def make_candidate(hit, query_text, max_score, schema_space):
         "score": score,
         "match": is_exact,
         "alt_names": alt_names,
+        "ccodes": ccodes,
+        "repr_point": repr_point(src),  # [lng, lat] or None — enables map preview + geo-disambiguation
         "description": f"Country: {', '.join(ccodes)}",
         "has_geom": bool(has_geom),
         # Wikipedia article links (from Wikidata sitelinks in the index) — empty unless the place

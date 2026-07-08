@@ -1371,17 +1371,29 @@ async function extractPlaceNames() {
     }
     const ents = res.data.entities;
     if (!ents.length) { setMsg('<span class="text-warning">No place names were found in that text.</span>'); return; }
-    const parsed = {
-      columns: ['place_name', 'mentions', 'context'],
-      rows: ents.map((e) => [String(e.name || ''), String(e.count || 1), String(e.context || '')]),
-      total: ents.length,
-    };
-    await finishImport(parsed, 'extracted-places.csv', 'ner');
+    // When the server has a preliminary reconciliation (gazetteer + geo-disambiguation), surface it as
+    // extra columns so the extracted places arrive already located and identified.
+    const hasMatch = ents.some((e) => e.match);
+    const cols = hasMatch
+      ? ['place_name', 'mentions', 'whg_match', 'country', 'lon', 'lat', 'context']
+      : ['place_name', 'mentions', 'context'];
+    const rows = ents.map((e) => {
+      const m = e.match || {};
+      const row = [String(e.name || ''), String(e.count || 1)];
+      if (hasMatch) {
+        row.push(String(m.title || ''), (m.ccodes || []).join(' '),
+          m.lng != null ? String(m.lng) : '', m.lat != null ? String(m.lat) : '');
+      }
+      row.push(String(e.context || ''));
+      return row;
+    });
+    await finishImport({ columns: cols, rows, total: ents.length }, 'extracted-places.csv', 'ner');
     // The extracted names ARE the toponyms — assign the place-name role deterministically (the generic
     // column-name heuristic doesn't recognise "place_name"), so reconciliation is ready immediately.
     const nameCol = project.columns.find((c) => c.name === 'place_name');
     if (nameCol && nameCol.role !== 'name') { nameCol.role = 'name'; normalizeChain(); renderAll(); await persist(); }
-    setMsg('');
+    const n = res.data.reconciled || 0;
+    setMsg(n ? `<span class="text-success">Located ${n} of ${ents.length} place${ents.length === 1 ? '' : 's'} against WHG (preliminary — review to confirm).</span>` : '');
     if (area) area.value = '';
   } catch (err) {
     console.warn('[recon] NER failed', err);

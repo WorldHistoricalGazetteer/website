@@ -381,6 +381,109 @@ def gdoc_proxy(request):
 # the user. The text is forwarded, not stored. Beta-gated.
 NER_MAX_CHARS = 200_000
 
+# Gazetteer-assisted recall + collocational disambiguation (prototype). spaCy is trained on modern
+# news and misses historical / archaic / non-English toponyms, and can't choose between same-named
+# places. So we (1) also pull capitalised n-gram candidates the model didn't tag, (2) reconcile every
+# mention against WHG's own place index (reusing the /reconcile matcher), and (3) DISAMBIGUATE by
+# geographic clustering — a document's places tend to be near one another, so for an ambiguous name we
+# prefer the candidate closest to the cluster of confident places. The chosen match (id + coordinates)
+# is returned so the browser can seed a preliminary, located reconciliation. Best-effort: if the
+# gateway is slow/unavailable we silently return the spaCy-only result.
+_NER_CAND_RE = re.compile(
+    r"\b[A-Z][\wÀ-ÿ’'\-]+"
+    r"(?:\s+(?:of|the|de|la|le|du|des|upon|on|el|al|von|van)\s+[A-Z][\wÀ-ÿ’'\-]+"
+    r"|\s+[A-Z][\wÀ-ÿ’'\-]+){0,3}"
+)
+_NER_CAND_STOP = {
+    'the', 'a', 'an', 'in', 'on', 'at', 'of', 'and', 'or', 'but', 'he', 'she', 'it', 'they', 'we',
+    'this', 'that', 'these', 'those', 'later', 'then', 'after', 'before', 'during', 'while', 'when',
+    'his', 'her', 'their', 'our', 'its', 'i', 'mr', 'mrs', 'dr', 'st', 'sir', 'lord', 'king', 'queen',
+}
+NER_RECON_MAX = 25  # cap mentions reconciled against the gateway per request (one call each)
+
+
+def _ner_context(text, name, width=140):
+    i = text.lower().find(name.lower())
+    if i < 0:
+        return ''
+    a, b = max(0, i - width // 2), min(len(text), i + len(name) + width // 2)
+    snip = re.sub(r'\s+', ' ', text[a:b]).strip()
+    return ('…' if a > 0 else '') + snip + ('…' if b < len(text) else '')
+
+
+def _ner_candidates(text, already):
+    """Capitalised spans NOT already tagged by spaCy → {name: frequency}."""
+    seen = {(n or '').lower() for n in already}
+    counts = {}
+    for m in _NER_CAND_RE.finditer(text):
+        s = re.sub(r'\s+', ' ', m.group(0)).strip(" ,.;:’'\"-")
+        low = s.lower()
+        if not s or low in seen or low in _NER_CAND_STOP or len(s) < 3 or len(s) > 80:
+            continue
+        counts[s] = counts.get(s, 0) + 1
+    return counts
+
+
+def _median(vals):
+    vals = sorted(vals)
+    n = len(vals)
+    return vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2.0
+
+
+def _haversine_km(a, b):
+    from math import radians, sin, cos, asin, sqrt
+    (lon1, lat1), (lon2, lat2) = a, b
+    h = sin(radians(lat2 - lat1) / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * asin(min(1.0, sqrt(h)))
+
+
+def _ner_reconcile_disambiguate(mentions, user):
+    """mentions: {name: count}. Reconcile the most frequent (capped) against WHG, then pick — for
+    ambiguous names — the candidate that best clusters with the document's confident places. Returns
+    {name: {id, title, score, ccodes, lng, lat, ambiguous}} for those matched to the gazetteer."""
+    if not mentions:
+        return {}
+    names = [n for n, _ in sorted(mentions.items(), key=lambda kv: -kv[1])[:NER_RECON_MAX]]
+    try:
+        from api.reconcile import process_queries
+        res = process_queries({f'q{i}': {'query': n} for i, n in enumerate(names)},
+                              batch_size=NER_RECON_MAX, user=user)
+    except Exception as e:  # gateway down / import issue → degrade to spaCy-only
+        logger.warning('NER gazetteer reconcile failed: %s', e)
+        return {}
+
+    hits_by_name = {}
+    for i, n in enumerate(names):
+        hits = (res.get(f'q{i}') or {}).get('result') or []
+        good = [h for h in hits
+                if h.get('match') or (h.get('name') or '').lower() == n.lower() or (h.get('score') or 0) >= 0.6]
+        if good:
+            hits_by_name[n] = good
+    if not hits_by_name:
+        return {}
+
+    # Anchor cluster: representative points of confident (exact / single-hit) matches; else all tops.
+    anchors = [h[0]['repr_point'] for n, h in hits_by_name.items()
+               if h[0].get('repr_point') and (h[0].get('match') or len(h) == 1)]
+    if not anchors:
+        anchors = [h[0]['repr_point'] for h in hits_by_name.values() if h[0].get('repr_point')]
+    centroid = [_median([p[0] for p in anchors]), _median([p[1] for p in anchors])] if anchors else None
+
+    chosen = {}
+    for n, hits in hits_by_name.items():
+        best, best_val = None, -1e9
+        for h in hits:
+            val = h.get('score') or 0
+            rp = h.get('repr_point')
+            if centroid and rp:  # reward geographic agreement with the document's cluster
+                val -= 0.15 * min(1.0, _haversine_km(centroid, rp) / 2000.0)
+            if val > best_val:
+                best, best_val = h, val
+        rp = (best or {}).get('repr_point') or [None, None]
+        chosen[n] = {'id': best.get('id'), 'title': best.get('name'), 'score': round(best.get('score') or 0, 3),
+                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(hits) > 1}
+    return chosen
+
 
 @login_required
 @_beta_required
@@ -399,7 +502,37 @@ def ner_extract(request):
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
     if r.status_code != 200:
         return _err('The place-name extractor returned an error — please try again.', 502)
-    return JsonResponse(r.json())
+    data = r.json()
+    ents = data.get('entities') or []
+
+    # Union of spaCy names + capitalised candidates → reconcile + geo-disambiguate (best-effort).
+    mentions = {}
+    for e in ents:
+        nm = (e.get('name') or '').strip()
+        if nm:
+            mentions[nm] = max(mentions.get(nm, 0), e.get('count') or 1)
+    for nm, c in _ner_candidates(text, list(mentions.keys())).items():
+        mentions.setdefault(nm, c)
+    matches = _ner_reconcile_disambiguate(mentions, request.user)
+
+    have = {(e.get('name') or '').lower() for e in ents}
+    for e in ents:                                   # attach a preliminary match to spaCy entities
+        m = matches.get((e.get('name') or '').strip())
+        if m:
+            e['match'] = m
+    added = 0
+    for nm, m in matches.items():                    # add gazetteer-confirmed names spaCy missed
+        if nm.lower() in have:
+            continue
+        have.add(nm.lower())
+        ents.append({'name': nm, 'label': 'GAZ', 'count': text.count(nm),
+                     'context': _ner_context(text, nm), 'match': m})
+        added += 1
+    ents.sort(key=lambda e: (-(e.get('count') or 0), (e.get('name') or '').lower()))
+    data['entities'] = ents
+    data['gazetteer_added'] = added
+    data['reconciled'] = sum(1 for e in ents if e.get('match'))
+    return JsonResponse(data)
 
 
 # ── Phase-2 real-time collab token ─────────────────────────────────────────────
