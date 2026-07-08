@@ -1574,34 +1574,50 @@ const VALIDATE_LABELS = {
   when: 'have no date/period',
   types: 'have no place type (AAT) — needed only to contribute',
 };
+// Each contributable-requirement → a plain-English "what's missing" + the specific fix, shown only
+// when that requirement actually fails. Raw schema messages stay hidden behind a disclosure.
+const VALIDATE_HELP = {
+  types:    ['no place type', 'assign one per row in the table (Step&nbsp;2), or set a dataset-wide type in <strong>Scope&nbsp;→&nbsp;What</strong>'],
+  when:     ['no date or period', 'add a date column in Step&nbsp;2, or set a year range or historical period in <strong>Scope&nbsp;→&nbsp;When</strong>'],
+  geometry: ['no location', 'add coordinates in Step&nbsp;2, or draw geometry on the map'],
+  title:    ['no place name', 'map your place-name column in Step&nbsp;2'],
+  names:    ['no name variant', ''],
+};
 function renderValidation(v) {
   const body = el('recon-validate-body'); if (!body || !v) return;
-  const issues = Object.keys(VALIDATE_LABELS)
+  const total = v.total;
+  const plural = (n) => (n === 1 ? 'place' : 'places');
+  // Friendly, actionable bullets — only for requirements that actually fail.
+  const bullets = Object.keys(VALIDATE_HELP)
     .filter((k) => v.miss[k] > 0)
-    .map((k) => `<li${k === 'types' ? ' class="fw-semibold"' : ''}><strong>${v.miss[k].toLocaleString()}</strong> of ${v.total.toLocaleString()} ${VALIDATE_LABELS[k]}</li>`);
-  const valid = v.schemaOk === true && !issues.length;
-  if (valid) {
-    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${v.total.toLocaleString()} places pass WHG's Linked Places validation.</div>`;
+    .map((k) => { const [what, fix] = VALIDATE_HELP[k];
+      return `<li><strong>${v.miss[k].toLocaleString()}</strong> of ${total.toLocaleString()} ${plural(v.miss[k])} have ${what}${fix ? ` — ${fix}` : ''}.</li>`; });
+  // Schema errors the friendly checks don't already explain (bad @id, malformed values, …) → one bullet.
+  const covered = /place name|name variant|location|date\/period|place type|fclasses|types|missing (in|earliest|latest)|anyOf|oneOf/i;
+  const other = (v.schemaSummary || []).filter((g) => !covered.test(g.msg));
+  if (other.length) {
+    const n = other.reduce((a, g) => a + (g.count || 1), 0);
+    bullets.push(`<li><strong>${n.toLocaleString()}</strong> ${n === 1 ? 'record has' : 'records have'} other format issues — see the technical details below.</li>`);
+  }
+
+  if (v.schemaOk === true && !bullets.length) {
+    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${total.toLocaleString()} places pass WHG's Linked Places validation.</div>`;
     return;
   }
-  // Schema-error groups the friendly checks don't already cover (e.g. bad @id, malformed dates).
-  const covered = /place name|name variant|location|date\/period|place type/;
-  const schemaLines = (v.schemaSummary || [])
-    .filter((g) => !covered.test(g.msg))
-    .slice(0, 6)
-    .map((g) => `<li>${esc(g.msg)}${g.count > 1 ? ` <span class="text-muted">(${g.count}×)</span>` : ''}</li>`);
-  const note = v.schemaOk == null ? ' <span class="text-muted">(schema check unavailable)</span>' : '';
-  // Missing place types and/or temporality can be filled for the whole dataset from the Scope picker.
-  const scopeHint = (v.miss.types > 0 || v.miss.when > 0)
-    ? '<div class="small mt-1"><i class="fas fa-lightbulb me-1 text-warning"></i>Missing <strong>place types</strong> or ' +
-      '<strong>dates/periods</strong>? Set them once for the whole dataset in <strong>Scope</strong> — ' +
-      '<em>What</em> (a Getty AAT place type) and <em>When</em> (a year range or PeriodO period). A Scope value ' +
-      'applies to every row that lacks its own.</div>'
+  if (v.schemaOk == null && !bullets.length) {
+    body.innerHTML = `<div class="small text-muted"><i class="fas fa-circle-info me-1"></i>The full schema check couldn't run in your browser, but the basic requirements (name, location, place type, date) all look present. Try <strong>Re-check</strong>, or just export — WHG validates again on upload.</div>`;
+    return;
+  }
+  // Full raw list, hidden behind a disclosure for the technically-minded.
+  const techLines = (v.schemaSummary || []).map((g) => `<li>${esc(g.msg)}${g.count > 1 ? ` <span class="text-muted">(${g.count}×)</span>` : ''}</li>`);
+  const tech = techLines.length
+    ? `<details class="recon-validate-tech small mt-2"><summary class="text-muted">Technical validation details (${techLines.length})</summary><ul class="mb-0 mt-1">${techLines.join('')}</ul></details>`
     : '';
-  body.innerHTML = `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
-    ((issues.length || schemaLines.length) ? `<ul class="recon-validate-issues small mb-1">${issues.join('')}${schemaLines.join('')}</ul>` : '') +
-    '<div class="small text-muted">Resolve the items above (assign a place type to each row in the table at Step 2, map a coordinate/date column, …), then re-check.</div>' +
-    scopeHint;
+  const note = v.schemaOk == null ? ' <span class="text-muted fw-normal">(showing the basic requirements — full schema check unavailable)</span>' : '';
+  body.innerHTML =
+    `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
+    (bullets.length ? `<ul class="recon-validate-issues small mb-0">${bullets.join('')}</ul>` : '') +
+    tech;
 }
 // Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
 function updateContributeGate() {
