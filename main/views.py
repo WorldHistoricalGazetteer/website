@@ -555,6 +555,20 @@ def _fmt_duration(seconds):
     return f'{s // 60}m {s % 60:02d}s'
 
 
+_MONTH_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+
+def _fmt_chart_date(iso, interval):
+    """Unambiguous UK/US chart-axis label from a Plausible 'YYYY-MM-DD' date.
+    Daily → '8 Jun'; monthly → 'Jun 2026'. Falls back to the raw value on any parse error."""
+    try:
+        y, m, d = iso.split('-')[:3]
+        mon = _MONTH_ABBR[int(m)]
+        return f'{mon} {y}' if interval == 'month' else f'{int(d)} {mon}'
+    except (ValueError, IndexError):
+        return iso
+
+
 def _svg_area(series, w=820, h=190, pad=26):
     """Build SVG polyline/polygon point strings for a visitors-over-time area chart.
     series = [(label, value), …]. Returns None if empty."""
@@ -669,7 +683,8 @@ def plausible_analyser_view(request):
     for site, _, _, _ in PLAUSIBLE_SITES:
         ts_by_site[site] = {row['date']: (row.get('visitors') or 0) for row in rows_of(('ts', site))}
     dates = [row['date'] for row in rows_of(('ts', PLAUSIBLE_MAIN))]
-    combined = [(d[5:], sum(ts_by_site[s].get(d, 0) for s, _, _, _ in PLAUSIBLE_SITES)) for d in dates]
+    combined = [(_fmt_chart_date(d, interval), sum(ts_by_site[s].get(d, 0) for s, _, _, _ in PLAUSIBLE_SITES))
+                for d in dates]
     chart = _svg_area(combined)
 
     # ── Merged breakdowns (site-neutral: sum visitors by key) ──
