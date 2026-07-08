@@ -26,7 +26,7 @@ from django.db.models import Count
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from geopy.distance import geodesic
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -500,6 +500,27 @@ def _bounds_from_extend(value):
     return None, None
 
 
+@extend_schema(
+    tags=["Reconciliation API"],
+    summary="Suggest PeriodO periods for a dataset's scope",
+    description=(
+        "Suggest canonical PeriodO periods for a whole dataset's scope, matched against its "
+        "geographic (bounding box / country codes) and temporal (year range) extent and/or a name "
+        "fragment. Backed by PeriodO indexed as gazetteer namespace `po` in the CRC gateway. Returns "
+        "`{id, uri (PeriodO ARK), label, start, stop, ccodes, coverage, has_geom, score}`. A name-less "
+        "query requires a spatial constraint (`bounds` or `contained_in`). Powers the Map-your-Data "
+        "Scope picker's period hints."
+    ),
+    parameters=[
+        OpenApiParameter("q", str, description="Period name fragment (matched against period labels)."),
+        OpenApiParameter("bounds", str, description="GeoJSON Polygon (JSON string) — the dataset's bounding box."),
+        OpenApiParameter("contained_in", str, description="Bare place_id of a WHG region to contain results within."),
+        OpenApiParameter("ccodes", str, description="Comma/space-separated ISO-2 country codes (ranking signal)."),
+        OpenApiParameter("start", int, description="Start year of the temporal scope (negative = BCE)."),
+        OpenApiParameter("end", int, description="End year of the temporal scope (negative = BCE)."),
+        OpenApiParameter("limit", int, description="Max results (default 12, max 50)."),
+    ],
+)
 class PeriodSuggestView(APIView):
     """
     Suggest PeriodO periods for a whole dataset's *scope* — matched against the
