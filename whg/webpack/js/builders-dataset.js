@@ -129,6 +129,38 @@ $(function() {
 		$(".form-public").toggleClass("hidden")
 		$(".btn-ds").toggleClass("hidden")
 	})
+
+	// Publishing (make-public) indexes the dataset into search. If its reconciliation review isn't
+	// complete, warn the editor first — the records are indexed as-is, deferred/unreviewed matches and
+	// all — with a "publish anyway" option. Only intercepts when turning public ON for the first time
+	// on a not-yet-complete dataset; a normal publish of a finished dataset saves without the prompt.
+	var _publishConfirmed = false;
+	$("#ds_form").on("submit", function(e) {
+		var form = this;
+		var pubBox = document.getElementById("id_public");
+		if (_publishConfirmed || !pubBox || !pubBox.checked) return;      // not publishing → normal save
+		if (form.getAttribute("data-was-public") === "1") return;         // already public → no change
+		if (form.getAttribute("data-recon-complete") === "1") return;     // fully reconciled → no warning
+		e.preventDefault();
+		var rows = form.getAttribute("data-numrows") || "";
+		var rowsEl = document.getElementById("publishWarnRows");
+		if (rowsEl) rowsEl.textContent = rows;
+		var m = document.getElementById("publishWarnModal");
+		if (m && window.bootstrap && window.bootstrap.Modal) {
+			window.bootstrap.Modal.getOrCreateInstance(m).show();
+		} else if (window.confirm("This dataset's reconciliation review isn't complete. Publish and index all records into search anyway?")) {
+			_publishConfirmed = true; form.submit();
+		}
+	});
+	$("#confirmPublishBtn").on("click", function() {
+		_publishConfirmed = true;
+		var m = document.getElementById("publishWarnModal");
+		if (m && window.bootstrap && window.bootstrap.Modal) {
+			var inst = window.bootstrap.Modal.getInstance(m);
+			if (inst) inst.hide();
+		}
+		document.getElementById("ds_form").submit();
+	})
 	$(".edit-creator").click(function() {
 		$(".editing-creator").toggleClass("hidden")
 		$(".form-creator").toggleClass("hidden")

@@ -144,12 +144,15 @@ def index_to_pub(dataset_id, idx=settings.ES_PUB):
     """
     es = settings.ES_CONN
 
-    # Fetch dataset by ID
+    # Fetch dataset by ID. Indexing runs whenever an editor makes a dataset public (this task is only
+    # triggered by that flag flip), REGARDLESS of reconciliation status — an editor may deliberately
+    # publish a dataset whose review isn't finished (deferred/unreviewed records are indexed as-is).
+    # The UI warns the editor before this happens (see ds_metadata publish modal).
     try:
-        dataset = Dataset.objects.get(pk=dataset_id, ds_status__in=['wd-complete', 'accessioning'])
+        dataset = Dataset.objects.get(pk=dataset_id)
     except Dataset.DoesNotExist:
-        logger.exception(f"Dataset with ID {dataset_id} does not exist or is not public/ready for accessioning.")
-        return  # Exit if dataset conditions aren't met
+        logger.exception(f"Dataset with ID {dataset_id} does not exist; cannot index to pub.")
+        return
 
     places_to_index = Place.objects.filter(dataset=dataset, indexed=False, idx_pub=False)
     place_ids_to_index = list(places_to_index.values_list('id', flat=True))

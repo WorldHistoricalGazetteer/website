@@ -57,7 +57,10 @@
     </div>
   <div class="tab-content">
     <div id="metadata" class="tab-pane fade show active" role="tabpanel" aria-labelledby="metadata-tab">
-      <form id="ds_form" method="POST" action="#" enctype="multipart/form-data">
+      <form id="ds_form" method="POST" action="#" enctype="multipart/form-data"
+            data-was-public="{% if ds.public %}1{% else %}0{% endif %}"
+            data-recon-complete="{% if ds.ds_status == 'wd-complete' or ds.ds_status == 'accessioning' or ds.ds_status == 'indexed' %}1{% else %}0{% endif %}"
+            data-numrows="{{ ds.places.count }}">
       {% csrf_token %}
       <div class="row">
       <div id="ds_details" class="col-sm-7 small">
@@ -368,6 +371,35 @@
   </div>
   {% endif %}
 </div>
+
+{% if editorial %}
+<!-- Warns an editor before publishing a dataset whose reconciliation review isn't complete: doing so
+     indexes all its records into search as-is (deferred/unreviewed matches are not applied). -->
+<div class="modal fade" id="publishWarnModal" tabindex="-1" aria-hidden="true" aria-labelledby="publishWarnTitle">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="publishWarnTitle"><i class="fas fa-triangle-exclamation text-warning me-2"></i>Publish before review is complete?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>This dataset's reconciliation review <strong>isn't complete</strong> — some records are still
+          unreviewed or deferred.</p>
+        <p>Publishing now makes it public and <strong>indexes all
+          <span id="publishWarnRows"></span> records into search immediately, exactly as they are</strong>.
+          Records whose matches were deferred or not yet reviewed will be indexed <em>without</em> those matches.</p>
+        <p class="mb-0 small text-muted">You can still finish the review later — re-saving as public will
+          re-index with the completed matches.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-warning" id="confirmPublishBtn">
+          <i class="fas fa-globe me-1"></i>Publish &amp; index anyway</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <script>
     var context_datasetId = "{{ ds.id }}";
