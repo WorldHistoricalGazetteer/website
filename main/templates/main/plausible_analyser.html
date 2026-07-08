@@ -99,24 +99,23 @@
       Map couldn't load (offline?). The Countries list below has the same data.</div>
   </div></div>
   {{ country_map|json_script:"an-map-data" }}
-  {{ country_scaled|json_script:"an-map-scaled" }}
+  {{ country_colors|json_script:"an-map-colors" }}
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
   <script>
   (function () {
     var el = document.getElementById('an-map');
-    var data = {}, scaled = {};
+    var data = {}, colors = {};
     try { data = JSON.parse(document.getElementById('an-map-data').textContent); } catch (e) {}
-    try { scaled = JSON.parse(document.getElementById('an-map-scaled').textContent); } catch (e) {}
+    try { colors = JSON.parse(document.getElementById('an-map-colors').textContent); } catch (e) {}
     function fail() { var f = document.getElementById('an-map-fallback'); if (f) f.classList.remove('d-none'); }
     if (!el || typeof jsVectorMap === 'undefined') { fail(); return; }
     try {
+      // Direct per-country fill (server-computed hex, log-scaled) — bypasses the lib's own scale.
       new jsVectorMap({
         selector: '#an-map', map: 'world', zoomButtons: true,
         regionStyle: { initial: { fill: '#eef1f5', stroke: '#ffffff', strokeWidth: 0.4 } },
-        // colour by log-scaled visitors so one hub country doesn't flatten the gradient
-        series: { regions: [{ attribute: 'fill', scale: ['#bfdbfe', '#1e3a8a'],
-          normalizeFunction: 'linear', values: scaled }] },
+        series: { regions: [{ attribute: 'fill', values: colors }] },
         onRegionTooltipShow: function (event, tooltip, code) {
           try { tooltip.text(tooltip.text() + ': ' + (data[code] || 0) + ' visitors', true); } catch (e) {}
         }

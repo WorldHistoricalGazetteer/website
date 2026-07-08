@@ -742,10 +742,18 @@ def plausible_analyser_view(request):
     for row in countries_full:
         row['title'] = cnames.get(row['label'], '')
     country_map = {row['label']: row['visitors'] for row in countries_full if len(row['label']) == 2}
-    # Log-scaled values drive the choropleth colour (raw counts are hugely skewed — one hub country
-    # would otherwise flatten everything else); the raw map still feeds the tooltip + table.
+    # Compute the choropleth fill colour per country server-side (direct hex → jsVectorMap sets it
+    # verbatim; its own scale/normalise was unreliable). Colour by LOG(visitors) so one hub country
+    # doesn't flatten the gradient; raw counts still feed the tooltip + Countries table.
     import math
-    country_scaled = {code: round(math.log10(v + 1), 3) for code, v in country_map.items() if v > 0}
+
+    def _blue(t):  # 0→light, 1→dark, over #bfdbfe … #1e3a8a
+        t = max(0.0, min(1.0, t))
+        r = round(191 + (30 - 191) * t); g = round(219 + (58 - 219) * t); b = round(254 + (138 - 254) * t)
+        return f'#{r:02x}{g:02x}{b:02x}'
+    logs = {code: math.log10(v + 1) for code, v in country_map.items() if v > 0}
+    maxlog = max(logs.values()) if logs else 1
+    country_colors = {code: _blue(lv / maxlog) for code, lv in logs.items()}
 
     sections = [
         {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
@@ -781,7 +789,7 @@ def plausible_analyser_view(request):
         'period': period, 'periods': PLAUSIBLE_PERIODS,
         'topline': topline, 'per_site': per_site, 'chart': chart,
         'sections': sections, 'donuts': donuts,
-        'country_map': country_map, 'country_scaled': country_scaled,
+        'country_map': country_map, 'country_colors': country_colors,
         'funnel': funnel, 'others': others, 'base_v': base_v,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
