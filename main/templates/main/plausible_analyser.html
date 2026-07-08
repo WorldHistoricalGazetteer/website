@@ -14,6 +14,11 @@
   .myd-period a { margin-right: .5rem; }
   .myd-period a.active { font-weight: 700; text-decoration: underline; }
   .myd-other td { padding: .3rem .6rem; }
+  .myd-bd td { padding: .2rem .4rem; font-size: .85rem; border: 0; }
+  .myd-bd-cell { position: relative; }
+  .myd-bd-bar { position: absolute; left: 0; top: 2px; bottom: 2px; background: #e7f1ff; border-radius: 4px; min-width: 2px; }
+  .myd-bd-txt { position: relative; }
+  .myd-bd-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
 </style>
 {% endblock %}
 
@@ -40,9 +45,46 @@
       Check <code>PLAUSIBLE_API_KEY</code> (needs Stats API access) in local settings.</div>
   {% endif %}
 
+  <!-- Site overview -->
+  <div class="row g-2 mb-3">
+    <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+      <div class="h4 mb-0">{{ topline.visitors }}</div><div class="small text-muted">Unique visitors</div></div></div></div>
+    <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+      <div class="h4 mb-0">{{ topline.pageviews }}</div><div class="small text-muted">Pageviews</div></div></div></div>
+    <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+      <div class="h4 mb-0">{{ topline.views_per_visit }}</div><div class="small text-muted">Views / visit</div></div></div></div>
+    <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+      <div class="h4 mb-0">{{ topline.visit_duration }}</div><div class="small text-muted">Avg. visit</div></div></div></div>
+    <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+      <div class="h4 mb-0">{{ topline.bounce_rate }}%</div><div class="small text-muted">Bounce rate</div></div></div></div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    {% for sec in sections %}
+    <div class="col-md-6">
+      <div class="card h-100"><div class="card-body">
+        <h6 class="card-title"><i class="fas {{ sec.icon }} me-1 text-secondary"></i>{{ sec.title }}</h6>
+        {% if sec.rows %}
+        <table class="table table-sm mb-0 myd-bd">
+          {% for row in sec.rows %}
+          <tr>
+            <td class="myd-bd-cell">
+              <div class="myd-bd-bar" style="width: {% widthratio row.visitors sec.max 100 %}%;"></div>
+              <span class="myd-bd-txt">{{ row.label|truncatechars:44 }}</span>
+            </td>
+            <td class="text-end myd-bd-num">{{ row.visitors }}{% if sec.pv %} <span class="text-muted">/ {{ row.pageviews }} pv</span>{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}<p class="text-muted small mb-0">No data.</p>{% endif %}
+      </div></div>
+    </div>
+    {% endfor %}
+  </div>
+
   <div class="card mb-4">
     <div class="card-body">
-      <h5 class="card-title">Funnel <span class="text-muted small fw-normal">(each step vs. the first)</span></h5>
+      <h5 class="card-title"><i class="fas fa-filter text-secondary me-1"></i>Map your Data funnel <span class="text-muted small fw-normal">(each step vs. the first)</span></h5>
       {% if base_v %}
         {% for step in funnel %}
         <div class="myd-funnel-step">

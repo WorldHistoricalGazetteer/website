@@ -522,23 +522,30 @@ MYD_OTHER = [
 ]
 
 
-def _plausible_event_breakdown(period):
-    """{event_name: {visitors, events}} for the period from the Plausible Stats API, or (None, error)."""
+def _plausible_get(path, params):
+    """Call the Plausible Stats API (self-hosted). Returns (json, None) or (None, error_str)."""
     key = getattr(settings, 'PLAUSIBLE_API_KEY', None)
     base = getattr(settings, 'PLAUSIBLE_BASE_URL', '')
     site = getattr(settings, 'PLAUSIBLE_SITE', '')
     if not (key and base and site):
         return None, 'Plausible is not configured (PLAUSIBLE_API_KEY / _BASE_URL / _SITE).'
     try:
-        resp = requests.get(
-            f'{base}/api/v1/stats/breakdown',
-            params={'site_id': site, 'period': period, 'property': 'event:name',
-                    'metrics': 'visitors,events', 'limit': 200},
-            headers={'Authorization': f'Bearer {key}'}, timeout=15)
+        p = {'site_id': site}
+        p.update(params)
+        resp = requests.get(f'{base}/api/v1/stats/{path}', params=p,
+                            headers={'Authorization': f'Bearer {key}'}, timeout=15)
         resp.raise_for_status()
-        return {row['name']: row for row in resp.json().get('results', [])}, None
+        return resp.json(), None
     except requests.RequestException as e:
         return None, f'Plausible Stats API error: {e}'
+
+
+def _fmt_duration(seconds):
+    try:
+        s = int(seconds or 0)
+    except (TypeError, ValueError):
+        return '—'
+    return f'{s // 60}m {s % 60:02d}s'
 
 
 @login_required
@@ -548,8 +555,18 @@ def plausible_analyser_view(request):
     period = request.GET.get('period', '30d')
     if period not in dict(PLAUSIBLE_PERIODS):
         period = '30d'
-    by_name, error = _plausible_event_breakdown(period)
-    by_name = by_name or {}
+    errors = []
+
+    def breakdown(prop, metrics='visitors', limit=8):
+        data, err = _plausible_get('breakdown', {'period': period, 'property': prop,
+                                                  'metrics': metrics, 'limit': limit})
+        if err:
+            errors.append(err)
+        return (data or {}).get('results', [])
+
+    # ── Map your Data funnel (event:name breakdown — goal-independent) ──
+    ev_rows = breakdown('event:name', metrics='visitors,events', limit=200)
+    by_name = {r['name']: r for r in ev_rows}
 
     def mk(name, label):
         r = by_name.get(name) or {}
@@ -561,13 +578,54 @@ def plausible_analyser_view(request):
     prev_v = None
     for step in funnel:
         step['pct'] = round(100 * step['visitors'] / base_v, 1) if base_v else 0
-        step['drop'] = (round(100 * (prev_v - step['visitors']) / prev_v, 1)
-                        if prev_v else None)
+        step['drop'] = round(100 * (prev_v - step['visitors']) / prev_v, 1) if prev_v else None
         prev_v = step['visitors']
     others = [mk(n, l) for n, l in MYD_OTHER]
+
+    # ── Site overview (so staff needn't open Plausible) ──
+    agg, agg_err = _plausible_get('aggregate', {
+        'period': period, 'metrics': 'visitors,pageviews,views_per_visit,visit_duration,bounce_rate'})
+    if agg_err:
+        errors.append(agg_err)
+    ar = (agg or {}).get('results', {}) if agg else {}
+    topline = {
+        'visitors': (ar.get('visitors') or {}).get('value', 0),
+        'pageviews': (ar.get('pageviews') or {}).get('value', 0),
+        'views_per_visit': (ar.get('views_per_visit') or {}).get('value', 0),
+        'visit_duration': _fmt_duration((ar.get('visit_duration') or {}).get('value', 0)),
+        'bounce_rate': (ar.get('bounce_rate') or {}).get('value', 0),
+    }
+    # helper to normalise breakdown rows to {label, visitors} for a table
+    def rows(prop, key='name', metrics='visitors', limit=8):
+        out = []
+        for r in breakdown(prop, metrics=metrics, limit=limit):
+            out.append({'label': r.get(key) or '(none)', 'visitors': r.get('visitors', 0) or 0,
+                        'pageviews': r.get('pageviews', 0) or 0})
+        return out
+
+    sections = [
+        {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True,
+         'rows': rows('event:page', 'page', 'visitors,pageviews', 10)},
+        {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket',
+         'rows': rows('visit:source', 'source', 'visitors', 8)},
+        {'title': 'Countries', 'icon': 'fa-earth-americas',
+         'rows': rows('visit:country', 'country', 'visitors', 8)},
+        {'title': 'Devices', 'icon': 'fa-desktop',
+         'rows': rows('visit:device', 'device', 'visitors', 6)},
+        {'title': 'Browsers', 'icon': 'fa-window-maximize',
+         'rows': rows('visit:browser', 'browser', 'visitors', 6)},
+        {'title': 'Operating systems', 'icon': 'fa-gear',
+         'rows': rows('visit:os', 'os', 'visitors', 6)},
+    ]
+    # max visitors per section for horizontal-bar scaling
+    for sec in sections:
+        sec['max'] = max([row['visitors'] for row in sec['rows']] or [0]) or 1
+
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
-        'funnel': funnel, 'others': others, 'base_v': base_v, 'error': error,
+        'funnel': funnel, 'others': others, 'base_v': base_v,
+        'topline': topline, 'sections': sections,
+        'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{getattr(settings, 'PLAUSIBLE_SITE', '')}",
     })
 
