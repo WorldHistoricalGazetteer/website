@@ -478,6 +478,28 @@ def _years_from_label(label):
     return min(years), max(years)
 
 
+def _bounds_from_extend(value):
+    """[begin, end] years from a gateway ``whg:temporal_objects`` extend value, e.g.
+    ``[{"str": "{\\"begin\\": 1368, \\"end\\": 1644}"}]``. (None, None) if unavailable."""
+    if not value:
+        return None, None
+    for entry in value:
+        s = entry.get('str') if isinstance(entry, dict) else None
+        if not s:
+            continue
+        try:
+            o = json.loads(s)
+        except (ValueError, TypeError):
+            continue
+        b, e = o.get('begin'), o.get('end')
+        if b is not None or e is not None:
+            try:
+                return (int(b) if b is not None else None, int(e) if e is not None else None)
+            except (ValueError, TypeError):
+                continue
+    return None, None
+
+
 class PeriodSuggestView(APIView):
     """
     Suggest PeriodO periods for a whole dataset's *scope* — matched against the
@@ -586,12 +608,6 @@ class PeriodSuggestView(APIView):
             label = src.get('title') or ''
             pstart, pstop = _years_from_label(label)
             hit_cc = src.get('ccodes') or []
-            geo = 0.0
-            if ccodes and hit_cc:
-                inter = len(set(hit_cc) & set(ccodes))
-                if inter:
-                    geo = inter / len(ccodes)
-            gw = float(h.get('_score') or 0.0)
             results.append({
                 'id': f'place:po:{periodo_id}',
                 'uri': f'http://n2t.net/ark:/99152/{periodo_id}',
@@ -601,9 +617,34 @@ class PeriodSuggestView(APIView):
                 'ccodes': hit_cc,
                 'coverage': ', '.join(hit_cc[:6]) if hit_cc else '',
                 'has_geom': bool(src.get('has_geom')),
-                # Rank: gateway relevance (name/spatial) + temporal overlap + ccode overlap.
-                'score': round(gw + 3.0 * temporal_score(pstart, pstop) + 1.5 * geo, 3),
+                '_gw': float(h.get('_score') or 0.0),
             })
+
+        # Authoritative temporal bounds: PeriodO labels often omit years (e.g. bare "Ming dynasty"),
+        # so batch-fetch the real begin/end from the gateway (extend: whg:temporal_objects) and prefer
+        # them over the label parse — this is what makes year-seeding reliable for every period.
+        if results:
+            try:
+                ext = crc_extend([r['id'] for r in results],
+                                 [{'id': 'whg:temporal_objects'}], user=request.user)
+            except Exception as e:
+                logger.warning('PeriodSuggest temporal extend error: %s', e)
+                ext = {}
+            for r in results:
+                b, e = _bounds_from_extend((ext.get(r['id']) or {}).get('whg:temporal_objects'))
+                if b is not None:
+                    r['start'] = b
+                if e is not None:
+                    r['stop'] = e
+
+        for r in results:
+            geo = 0.0
+            if ccodes and r['ccodes']:
+                inter = len(set(r['ccodes']) & set(ccodes))
+                if inter:
+                    geo = inter / len(ccodes)
+            # Rank: gateway relevance (name/spatial) + temporal overlap + ccode overlap.
+            r['score'] = round(r.pop('_gw') + 3.0 * temporal_score(r['start'], r['stop']) + 1.5 * geo, 3)
 
         results.sort(key=lambda r: r['score'], reverse=True)
         return JsonResponse({'result': results[:limit]})

@@ -2743,10 +2743,11 @@ function renderScopePeriods() {
 function addScopePeriod(p) {
   if (!p || !p.id || _scopePeriods.some((x) => x.id === p.id)) return;
   _scopePeriods.push({ id: p.id, uri: p.uri || '', label: p.label || '', start: p.start != null ? p.start : null, stop: p.stop != null ? p.stop : null });
-  // Seed From/To years from the period bounds when the user hasn't set them.
+  // The chosen period IS the dataset's temporal scope, so set the From/To years from its bounds
+  // (overwrite — a later pick supersedes an earlier one; the years drive the reconcile date filter).
   const st = el('recon-scope-start'), en = el('recon-scope-end');
-  if (st && st.value === '' && p.start != null) st.value = p.start;
-  if (en && en.value === '' && p.stop != null) en.value = p.stop;
+  if (st && p.start != null) st.value = p.start;
+  if (en && p.stop != null) en.value = p.stop;
   renderScopePeriods();
 }
 function periodHitButton(p) {
