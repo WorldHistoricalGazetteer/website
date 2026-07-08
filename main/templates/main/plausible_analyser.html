@@ -111,15 +111,27 @@
     function fail() { var f = document.getElementById('an-map-fallback'); if (f) f.classList.remove('d-none'); }
     if (!el || typeof jsVectorMap === 'undefined') { fail(); return; }
     try {
-      // Direct per-country fill (server-computed hex, log-scaled) — bypasses the lib's own scale.
-      new jsVectorMap({
+      // Colour each region directly with our server-computed hex (log-scaled). jsVectorMap's own
+      // series scale was unreliable, so we set fills after init via the region API (+ DOM fallback).
+      var map = new jsVectorMap({
         selector: '#an-map', map: 'world', zoomButtons: true,
         regionStyle: { initial: { fill: '#eef1f5', stroke: '#ffffff', strokeWidth: 0.4 } },
-        series: { regions: [{ attribute: 'fill', values: colors }] },
         onRegionTooltipShow: function (event, tooltip, code) {
           try { tooltip.text(tooltip.text() + ': ' + (data[code] || 0) + ' visitors', true); } catch (e) {}
         }
       });
+      function paint() {
+        Object.keys(colors).forEach(function (code) {
+          try {
+            var reg = map.regions && map.regions[code];
+            if (reg && reg.element && reg.element.setStyle) { reg.element.setStyle('fill', colors[code]); return; }
+          } catch (e) {}
+          var p = el.querySelector('svg [data-code="' + code + '"]');
+          if (p) p.setAttribute('fill', colors[code]);
+        });
+      }
+      paint();
+      setTimeout(paint, 300);  // re-apply once the map has fully rendered
     } catch (e) { fail(); }
   })();
   </script>
