@@ -35,6 +35,7 @@ let yRows = null, yCols = null, yMeta = null;
 const yKeyed = {};
 let cbs = {};
 let _remoteTimer = null;
+let _dirty = new Set(); // which top-level sections changed since the last remote flush
 
 export function isConnected() { return !!(provider && provider.status === 'connected'); }
 export function isEmpty() {
@@ -69,19 +70,24 @@ export function connect(opts) {
   if (opts.user) provider.awareness.setLocalStateField('user', opts.user);
   provider.awareness.on('change', () => { if (cbs.onPresence) cbs.onPresence(publicStates()); });
 
-  // Remote changes → debounced project rebuild (ignore our own local transactions).
-  const onDeep = (events, tx) => { if (!tx || !tx.local) scheduleRemote(); };
-  yRows.observeDeep(onDeep);
-  yCols.observeDeep(onDeep);
-  yMeta.observe((e, tx) => { if (!tx || !tx.local) scheduleRemote(); });
-  KEYED.forEach((k) => yKeyed[k].observeDeep(onDeep));
+  // Remote changes → debounced project rebuild, tagging which section changed so the client can
+  // repaint only the affected panes (ignore our own local transactions).
+  const mark = (section) => (events, tx) => { if (tx && tx.local) return; _dirty.add(section); scheduleRemote(); };
+  yRows.observeDeep(mark('rows'));
+  yCols.observeDeep(mark('columns'));
+  yMeta.observe((e, tx) => { if (tx && tx.local) return; _dirty.add('meta'); scheduleRemote(); });
+  KEYED.forEach((k) => yKeyed[k].observeDeep(mark(k)));
 
   return { provider, ydoc };
 }
 
 function scheduleRemote() {
   clearTimeout(_remoteTimer);
-  _remoteTimer = setTimeout(() => { if (cbs.onRemote) cbs.onRemote(readProject()); }, 160);
+  _remoteTimer = setTimeout(() => {
+    const sections = Array.from(_dirty);
+    _dirty.clear();
+    if (cbs.onRemote) cbs.onRemote(readProject(), sections);
+  }, 160);
 }
 
 // ── local project → Yjs (one transaction so observers see a single, self-tagged change) ──────────
@@ -180,6 +186,7 @@ function publicStates() {
 
 export function disconnect() {
   clearTimeout(_remoteTimer);
+  _dirty.clear();
   if (provider) { try { provider.destroy(); } catch (_) { /* ignore */ } }
   if (idb) { try { idb.destroy(); } catch (_) { /* ignore */ } }
   provider = idb = ydoc = yRows = yCols = yMeta = null;

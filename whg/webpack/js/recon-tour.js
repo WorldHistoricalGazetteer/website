@@ -189,9 +189,11 @@ function tourSteps() {
       title: '7 · Collaborate &amp; share',
       body: `Working with others? <strong>Collaborate</strong> saves the project to a <strong>team</strong>
         — with <strong>owner / editor / viewer</strong> roles — or mints a <strong>read-only link</strong>
-        anyone can import their own copy from. Team projects sync <strong>live</strong>: a teammate's
-        confirmed matches appear for you within a second (watch for the <strong>● live</strong> indicator),
-        and the shared copy is kept safe on the server so no one overwrites anyone else.
+        anyone can import their own copy from. Team projects sync <strong>live</strong>, all of it: cell
+        edits, roles, matches, decisions, geometry and types all appear for teammates within a second and
+        merge automatically, so no one overwrites anyone else. Avatars show who's here and a coloured
+        outline marks the cell a teammate is in (watch for the <strong>● live</strong> indicator). It even
+        keeps working offline, merging back when you reconnect.
         <div class="recon-tour-note"><i class="fas fa-lock me-1"></i>Still local-first — nothing leaves your
         browser until you choose to save, share, or contribute.</div>`,
     },

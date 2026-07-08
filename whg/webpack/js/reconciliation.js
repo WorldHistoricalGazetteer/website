@@ -1772,7 +1772,6 @@ let _pendingConflict = null; // { mine, merged, conflicts, version }
 let RT = null;
 let _applyingRemote = false;   // guard: don't mirror while adopting a peer's change
 let _mirrorTimer = null;       // debounce local→Yjs mirroring
-let _renderTimer = null;       // debounce remote→UI re-render
 let _rtPresence = [];          // other members' awareness states
 const loadRT = async () => (RT || (RT = await import(/* webpackChunkName: "recon-collab-rt" */ './recon-collab-rt.js')));
 function rtActive() { return !!(RT && RT.isConnected()); }
@@ -1835,10 +1834,10 @@ async function maybeStartRealtime() {
 }
 
 // On first sync: an empty shared doc adopts our local project (we seed it); a populated one is the
-// authoritative shared copy, so we reconstruct our project from it.
+// authoritative shared copy, so we reconstruct our project from it (full adopt).
 function rtOnSynced(mod) {
   if (mod.isEmpty()) mod.mirror(cleanSnapshot());
-  else applyRemoteProject(mod.readProject());
+  else adoptRemote(mod.readProject());
   setCollabBadge('live');
 }
 
@@ -1848,23 +1847,66 @@ function scheduleMirror() {
   _mirrorTimer = setTimeout(() => { if (rtActive() && !_applyingRemote) RT.mirror(cleanSnapshot()); }, 300);
 }
 
-// A peer changed the doc → merge the reconstructed project into ours (keeping our sync metadata),
-// persist, and re-render. Debounced so a burst of remote edits repaints once.
-function applyRemoteProject(remote) {
+// Full adopt (initial connect): replace the working project with the shared copy + full render.
+function adoptRemote(remote) {
   if (!project || !remote) return;
   _applyingRemote = true;
   const meta = {};
   for (const k of SYNC_KEYS) if (k in project) meta[k] = project[k];
   project = Object.assign({}, remote, meta);
   project.id = CURRENT;
+  normalizeChain();
   putProject(project);
-  clearTimeout(_renderTimer);
-  _renderTimer = setTimeout(() => {
+  renderAll();
+  applyReadOnlyMode();
+  setCollabBadge('live');
+  _applyingRemote = false;
+}
+
+// Granular apply (ongoing peer edits): overwrite ONLY the sections a teammate changed and repaint
+// just those panes — preserving the local user's scroll position, filters, open pane and review
+// spot. Avoids the disruptive full renderAll (which resets scroll/filters/pane) on every keystroke.
+function applyRemoteProject(remote, sections) {
+  if (!project || !remote) return;
+  _applyingRemote = true;
+  const changed = new Set(sections && sections.length
+    ? sections : ['rows', 'columns', 'decisions', 'matches', 'geom', 'rowTypes', 'meta']);
+  if (changed.has('rows')) { project.rows = remote.rows; project.total = remote.rows.length; }
+  if (changed.has('columns')) project.columns = remote.columns;
+  ['decisions', 'matches', 'geom', 'rowTypes'].forEach((k) => { if (changed.has(k)) project[k] = remote[k]; });
+  if (changed.has('meta')) {
+    for (const k of Object.keys(remote)) {
+      if (['rows', 'columns', 'decisions', 'matches', 'geom', 'rowTypes', 'total', 'id'].includes(k)) continue;
+      if (SYNC_KEYS.includes(k)) continue;
+      project[k] = remote[k];
+    }
+  }
+  project.id = CURRENT;
+  putProject(project);
+  repaintForSections(changed);
+  _applyingRemote = false;
+}
+
+function repaintForSections(changed) {
+  const editing = !!_previewEditing; // don't tear down a cell the local user is typing in
+  if (changed.has('columns')) {
     normalizeChain();
-    renderAll();
-    setCollabBadge('live');
-    _applyingRemote = false;
-  }, 60);
+    renderMapping(); renderColSwitcher(); refreshReconSection();
+    renderCoords(); renderDates();
+    if (!editing) renderPreview();
+  } else if (changed.has('rows')) {
+    if (!editing) renderPreview();
+    renderCoords(); renderDates();
+  } else if (changed.has('rowTypes') && !editing) {
+    renderPreview();
+  }
+  if (changed.has('decisions') || changed.has('matches') || changed.has('geom')) {
+    const built = buildUniqueQueries();
+    if (built) renderResults(built); else refreshReview(); // refreshReview keeps the review position
+  }
+  if (changed.has('meta')) { refreshReconSection(); renderCoords(); renderDates(); refreshExport(); }
+  updatePaneSummaries();
+  setCollabBadge('live');
 }
 
 function stopRealtime() {
