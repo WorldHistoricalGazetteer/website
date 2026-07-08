@@ -18,4 +18,5 @@ urlpatterns = [
     path('teams/<int:tid>/members/<int:uid>/', views.team_member_detail, name='team-member-detail'),
     path('shared/<str:token>/', views.shared_snapshot, name='shared'),
     path('gsheet/', views.gsheet_proxy, name='gsheet'),
+    path('ner/', views.ner_extract, name='ner'),
 ]

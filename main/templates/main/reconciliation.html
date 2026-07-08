@@ -95,6 +95,26 @@
         </div>
         <div id="recon-gsheet-msg" class="small mt-1"></div>
       </div>
+
+      <!-- Extract place names from free text (server-side NER). NB: unlike everything else here, this
+           sends the text to WHG's server — the notice below says so. -->
+      <div class="recon-ner mt-3 pt-2 border-top">
+        <label class="small text-muted d-block mb-1"><i class="fas fa-wand-magic-sparkles me-1"></i>…or <strong>extract place names from text</strong> (paste an article, or upload a <code>.txt</code>, <code>.md</code>, or <code>.html</code> file):</label>
+        <textarea id="recon-ner-text" class="form-control form-control-sm" rows="4" style="max-width:640px"
+                  placeholder="Paste text here — e.g. a paragraph, article, or document extract…"></textarea>
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
+          <button type="button" id="recon-ner-btn" class="btn btn-sm btn-outline-primary"><i class="fas fa-location-dot me-1"></i>Extract place names</button>
+          <button type="button" id="recon-ner-paste" class="btn btn-sm btn-outline-secondary"><i class="fas fa-paste me-1"></i>Paste from clipboard</button>
+          <label class="btn btn-sm btn-outline-secondary mb-0"><i class="fas fa-file-lines me-1"></i>Upload a text file
+            <input type="file" id="recon-ner-file" accept=".txt,.md,.markdown,.html,.htm,text/plain,text/markdown,text/html" hidden>
+          </label>
+          <span id="recon-ner-msg" class="small"></span>
+        </div>
+        <div class="small text-muted mt-1">
+          <i class="fas fa-circle-info me-1"></i>Unlike the rest of Map your Data, this step sends your text to WHG's server to detect place names. The text isn't stored.
+        </div>
+      </div>
+
       <div class="mt-2 small">
         <button type="button" id="recon-load-sample" class="btn btn-sm btn-outline-primary">
           <i class="fas fa-vial me-1"></i>Load a sample dataset

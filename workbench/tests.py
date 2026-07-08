@@ -240,6 +240,28 @@ class ApiTests(TestCase):
                    content_type='application/json')
         self.assertEqual(r.status_code, 404)
 
+    def test_ner_beta_gated(self):
+        normal = make_user('erin', beta=False)
+        c = Client(); c.force_login(normal)
+        r = c.post(reverse('workbench:ner'), data=json.dumps({'text': 'Rome'}),
+                   content_type='application/json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_ner_empty_text_rejected(self):
+        # Blank text → 400 without any call to the NER service.
+        r = self.client.post(reverse('workbench:ner'), data=json.dumps({'text': '   '}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_ner_service_unconfigured(self):
+        # No NER_URL configured → 503 (graceful), no network call.
+        from django.test import override_settings
+        with override_settings(NER_URL=''):
+            r = self.client.post(reverse('workbench:ner'),
+                                 data=json.dumps({'text': 'Rome and Venice'}),
+                                 content_type='application/json')
+            self.assertEqual(r.status_code, 503)
+
     def test_non_owner_cannot_invite(self):
         team = Team.objects.create(owner=self.owner, title='T', slug='t2')
         TeamMember.objects.create(team=team, user=self.owner, role='owner')

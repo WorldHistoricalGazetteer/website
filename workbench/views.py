@@ -345,6 +345,33 @@ def gsheet_proxy(request):
     return JsonResponse({'csv': r.text, 'name': f'gsheet-{doc_id[:8]}.csv'})
 
 
+# ── Place-name extraction proxy (Map-your-Data NER) ────────────────────────────
+# NB: unlike the rest of Map-your-Data (which stays in the browser), this deliberately sends the
+# pasted / extracted text to WHG's on-host spaCy service for named-entity recognition. The UI warns
+# the user. The text is forwarded, not stored. Beta-gated.
+NER_MAX_CHARS = 200_000
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def ner_extract(request):
+    text = _body(request).get('text') or ''
+    if not text.strip():
+        return _err('There’s no text to analyse.')
+    text = text[:NER_MAX_CHARS]                      # the service caps too; bound the request here
+    base = (getattr(settings, 'NER_URL', '') or '').rstrip('/')
+    if not base:
+        return _err('Place-name extraction isn’t available right now.', 503)
+    try:
+        r = requests.post(base + '/extract', json={'text': text}, timeout=60)
+    except requests.RequestException:
+        return _err('The place-name extractor could not be reached — please try again shortly.', 503)
+    if r.status_code != 200:
+        return _err('The place-name extractor returned an error — please try again.', 502)
+    return JsonResponse(r.json())
+
+
 # ── Phase-2 real-time collab token ─────────────────────────────────────────────
 @login_required
 @_beta_required

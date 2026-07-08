@@ -53,6 +53,11 @@ CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get
 # can verify the JWTs. Empty in local dev where the realtime service isn't running.
 HOCUSPOCUS_SECRET = os.environ.get('HOCUSPOCUS_SECRET') or globals().get('HOCUSPOCUS_SECRET', '')
 
+# Place-name extraction (Map-your-Data NER). Django proxies pasted text to the on-host `ner` service
+# over the compose network. Empty in local dev where the service isn't running (the endpoint then
+# returns a friendly 503 and the UI degrades gracefully).
+NER_URL = os.environ.get('NER_URL') or globals().get('NER_URL', '')
+
 # Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
 # Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only
 # link out to it from /contribute/. The default below is the live public form URL (not a

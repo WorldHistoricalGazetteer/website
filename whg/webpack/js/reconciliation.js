@@ -1336,6 +1336,72 @@ async function importGoogleSheet() {
   }
 }
 
+// ── Place-name extraction from text (NER) ────────────────────────────────────────────────────────
+// Get plain text from the textarea or an uploaded .txt/.md/.html file, send it to WHG's server-side
+// spaCy service (the one MyD step that leaves the browser — the UI says so), and turn the detected
+// place names into a small table (name · mentions · context) that becomes the project. Binary formats
+// (.docx, .pdf) and Google Docs are a planned fast-follow.
+function nerReadFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let text = String(reader.result || '');
+      if (/\.html?$/i.test(file.name)) {
+        try { text = new DOMParser().parseFromString(text, 'text/html').body.textContent || ''; }
+        catch (_) { /* fall back to raw */ }
+      }
+      resolve(text);
+    };
+    reader.onerror = () => reject(new Error('could not read the file'));
+    reader.readAsText(file);
+  });
+}
+async function extractPlaceNames() {
+  const area = el('recon-ner-text');
+  const msg = el('recon-ner-msg');
+  const btn = el('recon-ner-btn');
+  const setMsg = (html) => { if (msg) msg.innerHTML = html; };
+  const text = (area && area.value || '').trim();
+  if (!text) { setMsg('<span class="text-muted">Paste or upload some text first.</span>'); return; }
+  if (btn) btn.disabled = true;
+  setMsg('<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Finding place names…</span>');
+  try {
+    const res = await Sync.ner(text);
+    if (res.status !== 200 || !res.data || !Array.isArray(res.data.entities)) {
+      setMsg(`<span class="text-danger">${esc((res.data && res.data.error) || 'Extraction failed — please try again.')}</span>`);
+      return;
+    }
+    const ents = res.data.entities;
+    if (!ents.length) { setMsg('<span class="text-warning">No place names were found in that text.</span>'); return; }
+    const parsed = {
+      columns: ['place_name', 'mentions', 'context'],
+      rows: ents.map((e) => [String(e.name || ''), String(e.count || 1), String(e.context || '')]),
+      total: ents.length,
+    };
+    await finishImport(parsed, 'extracted-places.csv', 'ner');
+    setMsg('');
+    if (area) area.value = '';
+  } catch (err) {
+    console.warn('[recon] NER failed', err);
+    setMsg('<span class="text-danger">Extraction failed — check your connection and try again.</span>');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+async function nerPasteFromClipboard() {
+  const area = el('recon-ner-text');
+  if (!area || !navigator.clipboard || !navigator.clipboard.readText) return;
+  try { const t = await navigator.clipboard.readText(); if (t) area.value = t; area.focus(); }
+  catch (_) { /* permission denied — the textarea still accepts a manual paste */ }
+}
+async function nerLoadFile(file) {
+  const area = el('recon-ner-text');
+  const msg = el('recon-ner-msg');
+  if (!file || !area) return;
+  try { area.value = await nerReadFile(file); if (msg) msg.innerHTML = ''; }
+  catch (err) { if (msg) msg.innerHTML = `<span class="text-danger">${esc(err.message)}</span>`; }
+}
+
 async function clearData() {
   stopRealtime(); // drop any live collab session before wiping local state
   try { await deleteProject(); } catch (err) { console.error('[recon] clear failed', err); }
@@ -4608,6 +4674,14 @@ function init() {
   if (gsBtn) gsBtn.addEventListener('click', importGoogleSheet);
   const gsUrl = el('recon-gsheet-url');
   if (gsUrl) gsUrl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); importGoogleSheet(); } });
+
+  // Place-name extraction (NER) from pasted / uploaded text.
+  const nerBtn = el('recon-ner-btn');
+  if (nerBtn) nerBtn.addEventListener('click', extractPlaceNames);
+  const nerPaste = el('recon-ner-paste');
+  if (nerPaste) nerPaste.addEventListener('click', nerPasteFromClipboard);
+  const nerFile = el('recon-ner-file');
+  if (nerFile) nerFile.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) nerLoadFile(f); e.target.value = ''; });
 
   // Load a bundled sample dataset (fetched from a static URL) for demonstration — no file picker.
   const sampleBtn = el('recon-load-sample');

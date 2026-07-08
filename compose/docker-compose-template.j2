@@ -222,6 +222,21 @@ services:
     depends_on:
       - {{ DB_HOST }}
     restart: unless-stopped
+
+  # Place-name extraction service (spaCy) for Map-your-Data NER. Built on the host from ./ner.
+  # No published port — only reachable from Django over the compose network as http://ner:{{ NER_PORT }}.
+  # Additive: if it's down, only text extraction is affected (Django returns a friendly 503).
+  ner:
+    networks:
+      - {{ ENV_CONTEXT }}
+    build:
+      context: {{ BASE_DIR }}/ner
+    container_name: ner_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_NER is defined %}
+    mem_limit: {{ MEM_LIMIT_NER }}
+    {% endif %}
+    env_file: {{ BASE_DIR }}/.env/.env
+    restart: unless-stopped
 {% endif %}
 
   {% if ENV_CONTEXT == 'local' %}

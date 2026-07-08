@@ -53,6 +53,10 @@ export const collabToken = (id) => req('POST', `/projects/${id}/collab-token/`);
 // Fetch a shared Google Sheet as CSV via the server-side proxy (avoids browser CORS).
 export const importGSheet = (url) => req('POST', '/gsheet/', { url });
 
+// Place-name extraction (NER). Sends text to WHG's server-side spaCy service (via a Django proxy) —
+// the one Map-your-Data step that leaves the browser. Returns { entities:[{name,label,count,context}] }.
+export const ner = (text) => req('POST', '/ner/', { text });
+
 // ── sharing (Phase 0) ─────────────────────────────────────────────────────────
 export const shareProject = (id) => req('POST', `/projects/${id}/share/`);
 export const unshareProject = (id) => req('DELETE', `/projects/${id}/share/`);
