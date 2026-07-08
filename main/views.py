@@ -489,11 +489,12 @@ def submit_dataset(request):
 
 
 # Gazetteer Workbench — browser-based, local-first Reconciliation UI.
-# STAFF-ONLY, UNPUBLISHED preview (see WorldHistoricalGazetteer/place#111 spec, #112 collaboration).
-# Non-staff receive a 404 so the feature's existence is not disclosed while it is unpublished.
+# BETA / UNPUBLISHED preview (see WorldHistoricalGazetteer/place#111 spec, #112 collaboration).
+# Gated to staff/superusers and beta_tester-role users via `can_access_beta`; everyone else gets a
+# 404 so the feature's existence is not disclosed while it is unpublished.
 @login_required
 def reconciliation_view(request):
-    if not request.user.is_staff:
+    if not request.user.can_access_beta:
         raise Http404()
     return render(request, "main/reconciliation.html")
 

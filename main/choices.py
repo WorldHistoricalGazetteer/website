@@ -264,6 +264,7 @@ TRACETYPES = [
 USER_ROLE = (
     ('normal', 'normal'),
     ('group_leader', 'group leader'),
+    ('beta_tester', 'beta tester'),
     ('superuser', 'superuser'),
 )
 

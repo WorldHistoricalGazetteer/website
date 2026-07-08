@@ -107,3 +107,10 @@ class User(AbstractUser, PermissionsMixin):
     def has_verified_email(self):
         """Check if user has a verified email address."""
         return bool(self.email and self.email_confirmed)
+
+    @property
+    def can_access_beta(self):
+        """Access to unpublished BETA / staff-preview features (e.g. Map your Data).
+        Granted to staff/superusers and to users given the ``beta_tester`` role — the
+        single gate for this and any future BETA feature."""
+        return bool(self.is_staff or self.is_superuser or self.role in ('beta_tester', 'superuser'))

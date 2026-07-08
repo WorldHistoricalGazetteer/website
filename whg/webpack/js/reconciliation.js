@@ -3707,7 +3707,12 @@ function init() {
   const scopePeriodSearch = el('recon-scope-period-search');
   if (scopePeriodSearch) scopePeriodSearch.addEventListener('click', searchScopePeriods);
   const scopePeriodQ = el('recon-scope-period-q');
-  if (scopePeriodQ) scopePeriodQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopePeriods(); } });
+  if (scopePeriodQ) {
+    scopePeriodQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchScopePeriods(); } });
+    // Typeahead: search PeriodO as you type (debounced) once ≥2 chars.
+    let ptimer = null;
+    scopePeriodQ.addEventListener('input', () => { clearTimeout(ptimer); const v = scopePeriodQ.value.trim(); if (v.length < 2) { const r = el('recon-scope-period-results'); if (r) r.innerHTML = ''; return; } ptimer = setTimeout(searchScopePeriods, 300); });
+  }
   document.querySelectorAll('[data-scope-draw]').forEach((b) => b.addEventListener('click', () => scopeDrawAction(b.dataset.scopeDraw)));
   // AAT place-type pickers: the Scope filter, and the shared per-row type modal (data-browser cells).
   scopeAat.init();

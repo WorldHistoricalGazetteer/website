@@ -9,7 +9,7 @@
   persistence so a dataset survives reloads (resumability). No data leaves the browser.
 {% endcomment %}
 
-{% block title %}<title>WHG · Map your Data (staff preview)</title>{% endblock %}
+{% block title %}<title>WHG · Map your Data (beta preview)</title>{% endblock %}
 
 {% block extra_head %}
 <link href="{% static 'webpack/reconciliation.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
@@ -22,11 +22,11 @@
   <!-- Unpublished-feature signal -->
   <div class="recon-unpublished-banner" role="note">
     <i class="fas fa-flask me-2"></i>
-    <span><strong>Unpublished feature — staff preview.</strong>
-      This is an early skeleton of the Gazetteer Workbench (issue
+    <span><strong>Unpublished feature — beta preview.</strong>
+      This is an early version of the Gazetteer Workbench (issue
       <a href="https://github.com/WorldHistoricalGazetteer/place/issues/111" target="_blank"
-         rel="noopener noreferrer">place#111</a>). It is visible only to staff and is not linked
-      for the public.</span>
+         rel="noopener noreferrer">place#111</a>). It is available to WHG staff and invited
+      <em>beta testers</em>, and is not yet linked for the public.</span>
   </div>
 
   <header class="recon-header">

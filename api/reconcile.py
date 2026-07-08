@@ -620,38 +620,42 @@ class PeriodSuggestView(APIView):
                 '_gw': float(h.get('_score') or 0.0),
             })
 
-        # Authoritative temporal bounds: PeriodO labels often omit years (e.g. bare "Ming dynasty"),
-        # so batch-fetch the real begin/end from the gateway (extend: whg:temporal_objects) and prefer
-        # them over the label parse — this is what makes year-seeding reliable for every period.
-        if results:
-            try:
-                ext = crc_extend([r['id'] for r in results],
-                                 [{'id': 'whg:temporal_objects'}], user=request.user)
-            except Exception as e:
-                logger.warning('PeriodSuggest temporal extend error: %s', e)
-                ext = {}
-            for r in results:
-                b, e = _bounds_from_extend((ext.get(r['id']) or {}).get('whg:temporal_objects'))
-                if b is not None:
-                    r['start'] = b
-                if e is not None:
-                    r['stop'] = e
-
-        for r in results:
-            geo = 0.0
+        def geo_score(r):
             if ccodes and r['ccodes']:
                 inter = len(set(r['ccodes']) & set(ccodes))
                 if inter:
-                    geo = inter / len(ccodes)
-            # Rank: gateway relevance (name/spatial) + temporal overlap + ccode overlap.
-            r['score'] = round(r.pop('_gw') + 3.0 * temporal_score(r['start'], r['stop']) + 1.5 * geo, 3)
+                    return inter / len(ccodes)
+            return 0.0
 
-        results.sort(key=lambda r: r['score'], reverse=True)
-        if request.GET.get('_debug'):
-            return JsonResponse({'result': results[:limit], '_ids': [r['id'] for r in results],
-                                 '_ext_keys': list((ext or {}).keys()) if results else [],
-                                 '_ext_sample': (ext or {})})
-        return JsonResponse({'result': results[:limit]})
+        # Provisional rank (gateway relevance + geography) → shortlist, so we only fetch temporal
+        # bounds for what we'll actually return.
+        results.sort(key=lambda r: r['_gw'] + 1.5 * geo_score(r), reverse=True)
+        shortlist = results[:limit]
+
+        # Authoritative temporal bounds: PeriodO labels often omit years (e.g. bare "Ming dynasty"),
+        # so fetch the real begin/end from the gateway (extend: whg:temporal_objects) and prefer them
+        # over the label parse. The gateway extend rejects large id batches (empirically fails above a
+        # handful), so request in small chunks.
+        ext = {}
+        ids = [r['id'] for r in shortlist]
+        for i in range(0, len(ids), 4):
+            try:
+                ext.update(crc_extend(ids[i:i + 4], [{'id': 'whg:temporal_objects'}],
+                                      user=request.user) or {})
+            except Exception as e:
+                logger.warning('PeriodSuggest temporal extend error: %s', e)
+        for r in shortlist:
+            b, e = _bounds_from_extend((ext.get(r['id']) or {}).get('whg:temporal_objects'))
+            if b is not None:
+                r['start'] = b
+            if e is not None:
+                r['stop'] = e
+
+        # Final rank now that temporal overlap is known.
+        for r in shortlist:
+            r['score'] = round(r.pop('_gw') + 3.0 * temporal_score(r['start'], r['stop']) + 1.5 * geo_score(r), 3)
+        shortlist.sort(key=lambda r: r['score'], reverse=True)
+        return JsonResponse({'result': shortlist})
 
 
 @method_decorator(csrf_exempt, name="dispatch")

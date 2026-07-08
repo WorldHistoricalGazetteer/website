@@ -112,10 +112,13 @@ function tourSteps() {
       target: q('#recon-scope-btn'),
       enter: async () => { api.openPane('recon-recon'); scrollTo('#recon-scope-btn'); },
       title: 'Scope — narrow before matching',
-      body: `Optionally constrain the <em>whole</em> dataset before matching — to a place (country codes,
-        a WHG region, or an area you draw on a map), a date range, and a Getty <strong>AAT place type</strong>.
-        Sharper scope means fewer wrong candidates. <strong>Sources</strong> similarly restricts which
-        gazetteers a column uses.`,
+      body: `Optionally constrain the <em>whole</em> dataset before matching, in three parts:
+        <strong>Where</strong> (country codes, a WHG region, or an area you draw), <strong>What</strong>
+        (a Getty <strong>AAT place type</strong>), and <strong>When</strong>. Under <em>When</em> you can
+        match your data to a canonical <strong>PeriodO</strong> historical period — search by name or pick
+        one suggested from your data's own area and dates; it fills the year range and travels into your
+        export. Sharper scope means fewer wrong candidates. <strong>Sources</strong> similarly restricts
+        which gazetteers a column uses.`,
     },
     {
       key: 'reconcile',
