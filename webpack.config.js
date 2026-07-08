@@ -86,13 +86,16 @@ module.exports = {
 			filename: '[name].bundle.css', // entry CSS keeps stable names (referenced by templates); busted via ?v=
 			chunkFilename: '[name].[contenthash].css', // async CSS chunks are content-hashed like their JS chunks
 		}),
-		new BundleAnalyzerPlugin({
+		// Bundle report is opt-in: generating the static HTML report + full stats.json for the whole
+		// (~20 MiB) graph on every build added several seconds. Run `npm run analyze` (ANALYZE=1) when
+		// you actually want it; normal `npm run build` / `npm run watch` now skip it.
+		...(process.env.ANALYZE ? [new BundleAnalyzerPlugin({
 			analyzerMode: 'static', // `server` option is very slow
 			reportFilename: 'webpackReport.html',
 			openAnalyzer: false, // still writes the report, but don't auto-open it (was stealing browser focus)
 			generateStatsFile: true,
 			statsFilename: 'stats.json',
-		}),
+		})] : []),
 		new CopyWebpackPlugin({
 	      	patterns: [
 		        {

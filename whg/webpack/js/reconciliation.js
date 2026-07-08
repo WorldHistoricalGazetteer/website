@@ -3052,6 +3052,7 @@ function applyRowType() {
     project.rows.forEach((r, i) => { if (String(r[col] == null ? '' : r[col]).trim() === val) setRow(i); });
   } else setRow(_typeRow);
   persist(); paintPreviewWindow(); renderTypePrompt(); refreshExport(); runValidation();
+  if (sel.length) trackOnce('MyD: place type assigned');
 }
 
 // Read the modal into a fresh scope object, commit it, and (if it changed) reset existing matches so
@@ -3095,6 +3096,15 @@ async function applyScope() {
   persist();
   updateScopeLabel();
   refreshReconSection();
+  if (scopeActive()) {
+    const r = scope.region || {};
+    track('MyD: scope applied', {
+      where: ((r.mode === 'ccodes' && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry)) ? 'yes' : 'no',
+      when: (scope.start != null || scope.end != null || (scope.periods && scope.periods.length)) ? 'yes' : 'no',
+      what: (scope.types && scope.types.selected && scope.types.selected.length) ? 'yes' : 'no',
+      period: (scope.periods && scope.periods.length) ? 'yes' : 'no',
+    });
+  }
 }
 
 // ── Review map: fetch candidate coordinates and plot them ────────────────────
@@ -3407,6 +3417,12 @@ async function reconcileStage() {
   updateReconButton();
   reviewPos = 0; refreshReview();
   await persist();
+  // Finer signal: did this pass actually find candidates? (bucketed key counts, no data)
+  try {
+    const rc = chain[pos]; let matched = 0, nomatch = 0;
+    colKeys(rc).forEach((k) => { const m = project.matches[k]; if (m && m.candidates && m.candidates.length) matched += 1; else nomatch += 1; });
+    track('MyD: reconcile result', { column: String(pos + 1), matched: bucketCount(matched), nomatch: bucketCount(nomatch) });
+  } catch (_) { /* analytics never breaks the run */ }
   console.log(`[recon] reconciled column ${pos + 1}/${chain.length} (${project.columns[chain[pos]].name}) — ${stopRequested ? 'stopped' : 'done'}`);
 }
 
@@ -3581,6 +3597,7 @@ function init() {
   const tourBtn = el('recon-take-tour');
   if (tourBtn) tourBtn.addEventListener('click', async () => {
     tourBtn.disabled = true;
+    track('MyD: tour');
     try { const mod = await import(/* webpackChunkName: "recon-tour" */ './recon-tour.js'); mod.startTour(tourApi()); }
     catch (err) { console.error('[recon] tour failed to load', err); }
     finally { tourBtn.disabled = false; }

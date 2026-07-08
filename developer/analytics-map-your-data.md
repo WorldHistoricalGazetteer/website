@@ -26,6 +26,10 @@ approach agreed with the Technical Director.)
 | `MyD: export` | a file is exported | `format` (csv/json/lptsv/lpf), `rows` (bucket) |
 | `MyD: contribute` | LPF submitted to WHG validation | `rows` (bucket) |
 | `MyD: contribute blocked` | user clicks **Re-check** and LPF still fails schema | `errors` (bucket) |
+| `MyD: reconcile result` | each column pass completes | `column`, `matched` (bucket), `nomatch` (bucket) — *did reconciliation actually find candidates* |
+| `MyD: scope applied` | Scope modal Apply with an active scope | `where`/`when`/`what`/`period` (yes/no) — which facets people use |
+| `MyD: place type assigned` | first AAT type assigned to a row | — |
+| `MyD: tour` | "Take a tour" clicked | — |
 
 ## Reading it
 
