@@ -1,39 +1,45 @@
 {% extends "main/base_webpack.html" %}
-{% block title %}<title>WHG · Map your Data — usage funnel</title>{% endblock %}
+{% block title %}<title>WHG · Analytics</title>{% endblock %}
 
 {% block extra_head %}
 <style>
-  .myd-analyser { max-width: 900px; margin: 1.5rem auto; }
-  .myd-funnel-step { margin-bottom: .5rem; }
-  .myd-bar-track { background: #f0f0f0; border-radius: 6px; overflow: hidden; height: 34px; position: relative; }
-  .myd-bar-fill { background: linear-gradient(90deg,#2563eb,#60a5fa); height: 100%; min-width: 2px;
-    display: flex; align-items: center; color: #fff; font-weight: 600; padding: 0 .6rem; white-space: nowrap;
-    border-radius: 6px; transition: width .4s; }
-  .myd-bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: .15rem; }
-  .myd-drop { color: #b45309; font-size: .8rem; }
-  .myd-period a { margin-right: .5rem; }
-  .myd-period a.active { font-weight: 700; text-decoration: underline; }
-  .myd-other td { padding: .3rem .6rem; }
-  .myd-bd td { padding: .2rem .4rem; font-size: .85rem; border: 0; }
-  .myd-bd-cell { position: relative; }
-  .myd-bd-bar { position: absolute; left: 0; top: 2px; bottom: 2px; background: #e7f1ff; border-radius: 4px; min-width: 2px; }
-  .myd-bd-txt { position: relative; }
-  .myd-bd-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .an-wrap { max-width: 1000px; margin: 1.5rem auto; }
+  .an-period a { margin-right: .5rem; }
+  .an-period a.active { font-weight: 700; text-decoration: underline; }
+  .an-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin: .4rem 0 0; }
+  .an-legend .chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .85rem; }
+  .an-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .an-chart { width: 100%; height: auto; display: block; }
+  .an-donut { width: 130px; height: 130px; }
+  /* horizontal-bar breakdown tables */
+  .an-bd td { padding: .2rem .4rem; font-size: .85rem; border: 0; }
+  .an-bd-cell { position: relative; }
+  .an-bd-bar { position: absolute; left: 0; top: 2px; bottom: 2px; background: #e7f1ff; border-radius: 4px; min-width: 2px; }
+  .an-bd-txt { position: relative; }
+  .an-bd-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* funnel */
+  .an-funnel-step { margin-bottom: .5rem; }
+  .an-bar-track { background: #f0f0f0; border-radius: 6px; overflow: hidden; height: 32px; }
+  .an-bar-fill { background: linear-gradient(90deg,#2563eb,#60a5fa); height: 100%; min-width: 2px;
+    display: flex; align-items: center; color: #fff; font-weight: 600; padding: 0 .6rem; border-radius: 6px; }
+  .an-bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: .15rem; }
+  .an-drop { color: #b45309; font-size: .8rem; }
+  .an-dseg { display: flex; align-items: center; gap: .35rem; font-size: .8rem; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="myd-analyser px-3">
+<div class="an-wrap px-3">
   <div class="d-flex align-items-center justify-content-between flex-wrap">
-    <h3 class="mb-0"><i class="fas fa-filter text-secondary me-2"></i>Map your Data — usage funnel</h3>
+    <h3 class="mb-0"><i class="fas fa-chart-line text-secondary me-2"></i>Analytics</h3>
     <a class="btn btn-sm btn-outline-secondary" href="{% url 'dashboard-admin' %}#tools">&larr; Admin tools</a>
   </div>
   <p class="text-muted small mt-1">
-    Anonymous, aggregate workbench usage from our self-hosted Plausible. No personal data, no dataset
-    contents. Counts are <strong>unique visitors</strong> reaching each stage.
+    Aggregated across all WHG sites (main, blog, docs) from our self-hosted
+    <a href="{{ plausible_url }}" target="_blank" rel="noopener">Plausible</a> — cookieless, no personal data.
   </p>
 
-  <div class="myd-period small mb-3">
+  <div class="an-period small mb-3">
     <span class="text-muted me-2">Period:</span>
     {% for value, label in periods %}
       <a href="?period={{ value }}" class="{% if value == period %}active{% endif %}">{{ label }}</a>
@@ -41,12 +47,11 @@
   </div>
 
   {% if error %}
-    <div class="alert alert-warning small"><i class="fas fa-triangle-exclamation me-1"></i>{{ error }}
-      Check <code>PLAUSIBLE_API_KEY</code> (needs Stats API access) in local settings.</div>
+    <div class="alert alert-warning small"><i class="fas fa-triangle-exclamation me-1"></i>{{ error }}</div>
   {% endif %}
 
-  <!-- Site overview -->
-  <div class="row g-2 mb-3">
+  <!-- Top-line -->
+  <div class="row g-2 mb-2">
     <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
       <div class="h4 mb-0">{{ topline.visitors }}</div><div class="small text-muted">Unique visitors</div></div></div></div>
     <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
@@ -58,61 +63,95 @@
     <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
       <div class="h4 mb-0">{{ topline.bounce_rate }}%</div><div class="small text-muted">Bounce rate</div></div></div></div>
   </div>
-
-  <div class="row g-3 mb-4">
-    {% for sec in sections %}
-    <div class="col-md-6">
-      <div class="card h-100"><div class="card-body">
-        <h6 class="card-title"><i class="fas {{ sec.icon }} me-1 text-secondary"></i>{{ sec.title }}</h6>
-        {% if sec.rows %}
-        <table class="table table-sm mb-0 myd-bd">
-          {% for row in sec.rows %}
-          <tr>
-            <td class="myd-bd-cell">
-              <div class="myd-bd-bar" style="width: {% widthratio row.visitors sec.max 100 %}%;"></div>
-              <span class="myd-bd-txt">{{ row.label|truncatechars:44 }}</span>
-            </td>
-            <td class="text-end myd-bd-num">{{ row.visitors }}{% if sec.pv %} <span class="text-muted">/ {{ row.pageviews }} pv</span>{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% else %}<p class="text-muted small mb-0">No data.</p>{% endif %}
-      </div></div>
-    </div>
+  <div class="an-legend mb-3">
+    {% for s in per_site %}
+      <span class="chip"><span class="an-dot" style="background: {{ s.color }};"></span>
+        <strong>{{ s.label }}</strong> {{ s.visitors }} <span class="text-muted">/ {{ s.pageviews }} pv</span></span>
     {% endfor %}
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h5 class="card-title"><i class="fas fa-filter text-secondary me-1"></i>Map your Data funnel <span class="text-muted small fw-normal">(each step vs. the first)</span></h5>
-      {% if base_v %}
-        {% for step in funnel %}
-        <div class="myd-funnel-step">
-          <div class="myd-bar-label">
-            <span>{{ step.label }} <span class="text-muted">· {{ step.name }}</span></span>
-            <span>
-              <strong>{{ step.visitors }}</strong> visitors
-              <span class="text-muted">/ {{ step.events }} events · {{ step.pct }}%</span>
-              {% if step.drop is not None %}<span class="myd-drop">&darr;{{ step.drop }}% drop</span>{% endif %}
-            </span>
-          </div>
-          <div class="myd-bar-track">
-            <div class="myd-bar-fill" style="width: {{ step.pct }}%;">{{ step.pct }}%</div>
-          </div>
-        </div>
+  <!-- Visitors over time -->
+  <div class="card mb-4"><div class="card-body">
+    <h6 class="card-title"><i class="fas fa-chart-area me-1 text-secondary"></i>Visitors over time
+      <span class="text-muted small fw-normal">(all sites combined)</span></h6>
+    {% if chart %}
+    <svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" class="an-chart" role="img" aria-label="Visitors over time">
+      <defs><linearGradient id="an-grad" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#2563eb" stop-opacity="0.30"/>
+        <stop offset="100%" stop-color="#2563eb" stop-opacity="0.02"/></linearGradient></defs>
+      <polygon points="{{ chart.area }}" fill="url(#an-grad)"/>
+      <polyline points="{{ chart.line }}" fill="none" stroke="#2563eb" stroke-width="2" stroke-linejoin="round"/>
+      <text x="{{ chart.pad }}" y="16" font-size="10" fill="#aaa">{{ chart.max }}</text>
+      {% for t in chart.ticks %}
+        <text x="{{ t.x }}" y="{{ chart.h }}" font-size="10" fill="#999" text-anchor="middle">{{ t.label }}</text>
+      {% endfor %}
+    </svg>
+    {% else %}<p class="text-muted small mb-0">No data for this period.</p>{% endif %}
+  </div></div>
+
+  <!-- Breakdown tables + donuts -->
+  <div class="row g-3 mb-4">
+    {% for sec in sections %}
+    <div class="col-md-6"><div class="card h-100"><div class="card-body">
+      <h6 class="card-title"><i class="fas {{ sec.icon }} me-1 text-secondary"></i>{{ sec.title }}</h6>
+      {% if sec.rows %}
+      <table class="table table-sm mb-0 an-bd">
+        {% for row in sec.rows %}
+        <tr>
+          <td class="an-bd-cell">
+            <div class="an-bd-bar" style="width: {% widthratio row.visitors sec.max 100 %}%;"></div>
+            <span class="an-bd-txt">{{ row.label|truncatechars:44 }}</span>
+          </td>
+          <td class="text-end an-bd-num">{{ row.visitors }}{% if sec.pv %} <span class="text-muted">/ {{ row.pageviews }} pv</span>{% endif %}</td>
+        </tr>
         {% endfor %}
-      {% else %}
-        <p class="text-muted mb-0">No <code>MyD: import</code> events recorded in this period yet — the funnel
-          appears once the workbench is used. (Events are collecting; try a longer period.)</p>
-      {% endif %}
-    </div>
+      </table>
+      {% else %}<p class="text-muted small mb-0">No data.</p>{% endif %}
+    </div></div></div>
+    {% endfor %}
+
+    {% for d in donuts %}
+    <div class="col-md-6"><div class="card h-100"><div class="card-body">
+      <h6 class="card-title"><i class="fas {{ d.icon }} me-1 text-secondary"></i>{{ d.title }}</h6>
+      <div class="d-flex align-items-center gap-3">
+        <svg viewBox="0 0 140 140" class="an-donut" role="img" aria-label="{{ d.title }}">
+          <g transform="rotate(-90 70 70)">
+            {% for seg in d.donut.segs %}
+            <circle cx="70" cy="70" r="{{ d.donut.r }}" fill="none" stroke="{{ seg.color }}" stroke-width="18"
+              stroke-dasharray="{{ seg.dash }}" stroke-dashoffset="{{ seg.offset }}"/>
+            {% endfor %}
+          </g>
+          <text x="70" y="67" text-anchor="middle" font-size="16" font-weight="700">{{ d.donut.total }}</text>
+          <text x="70" y="83" text-anchor="middle" font-size="9" fill="#999">visitors</text>
+        </svg>
+        <div class="flex-grow-1">
+          {% for seg in d.donut.segs %}
+          <div class="an-dseg"><span class="an-dot" style="background: {{ seg.color }};"></span>
+            {{ seg.label }} <span class="text-muted ms-auto">{{ seg.pct }}%</span></div>
+          {% endfor %}
+        </div>
+      </div>
+    </div></div></div>
+    {% endfor %}
   </div>
 
-  <div class="card mb-4">
-    <div class="card-body">
-      <h5 class="card-title">Other actions</h5>
-      <table class="table table-sm myd-other mb-0">
-        <thead><tr><th>Action</th><th class="text-end">Visitors</th><th class="text-end">Events</th></tr></thead>
+  <!-- Map your Data funnel (main-site workbench) -->
+  <div class="card mb-4"><div class="card-body">
+    <h5 class="card-title"><i class="fas fa-filter text-secondary me-1"></i>Map your Data — usage funnel
+      <span class="text-muted small fw-normal">(workbench, main site)</span></h5>
+    {% if base_v %}
+      {% for step in funnel %}
+      <div class="an-funnel-step">
+        <div class="an-bar-label">
+          <span>{{ step.label }} <span class="text-muted">· {{ step.name }}</span></span>
+          <span><strong>{{ step.visitors }}</strong> <span class="text-muted">/ {{ step.events }} ev · {{ step.pct }}%</span>
+            {% if step.drop is not None %}<span class="an-drop">&darr;{{ step.drop }}%</span>{% endif %}</span>
+        </div>
+        <div class="an-bar-track"><div class="an-bar-fill" style="width: {{ step.pct }}%;">{{ step.pct }}%</div></div>
+      </div>
+      {% endfor %}
+      <table class="table table-sm mt-3 mb-0">
+        <thead><tr><th>Other workbench actions</th><th class="text-end">Visitors</th><th class="text-end">Events</th></tr></thead>
         <tbody>
           {% for row in others %}
           <tr><td>{{ row.label }} <span class="text-muted small">· {{ row.name }}</span></td>
@@ -120,13 +159,13 @@
           {% endfor %}
         </tbody>
       </table>
-    </div>
-  </div>
+    {% else %}
+      <p class="text-muted mb-0">No <code>MyD: import</code> events in this period yet — the funnel appears
+        once the workbench is used.</p>
+    {% endif %}
+  </div></div>
 
-  <p class="small text-muted">
-    Data via the <a href="{{ plausible_url }}" target="_blank" rel="noopener">Plausible</a> Stats API
-    (<code>event:name</code> breakdown — independent of Plausible goals). Event taxonomy:
-    <code>developer/analytics-map-your-data.md</code>.
-  </p>
+  <p class="small text-muted">Via the Plausible Stats API (aggregate + breakdown), independent of Plausible
+    goals. Event taxonomy: <code>developer/analytics-map-your-data.md</code>.</p>
 </div>
 {% endblock %}

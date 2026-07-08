@@ -499,13 +499,21 @@ def reconciliation_view(request):
     return render(request, "main/reconciliation.html")
 
 
-# ── Map-your-Data usage analyser ─────────────────────────────────────────────────────────────────
-# Staff-only admin tool (dashboard_admin → Tools) that reads the anonymous `MyD: …` custom events
-# from our self-hosted Plausible via its Stats API and renders the import→reconcile→export/contribute
-# funnel — a WHG-native alternative to Plausible CE's (absent) funnel feature. Uses the breakdown
-# endpoint (`event:name`), which is goal-independent, so it needs no goals configured in Plausible.
+# ── WHG Analytics (in-house proxy for Plausible) ────────────────────────────────────────────────
+# Staff-only admin tool (dashboard_admin → Tools → "Analytics"). Aggregates all three WHG Plausible
+# sites (main / blog / docs) via the Stats API into one page — top-line metrics, a visitors-over-time
+# chart, and breakdowns (pages/sources/countries/devices/browsers/OS) — plus the Map-your-Data usage
+# funnel (main-site custom events) at the bottom. Replaces both the external Plausible link and the
+# CE-absent funnel feature. Multi-site fetches run concurrently.
 PLAUSIBLE_PERIODS = [('7d', 'Last 7 days'), ('30d', 'Last 30 days'), ('month', 'This month'),
                      ('6mo', 'Last 6 months'), ('12mo', 'Last 12 months')]
+PLAUSIBLE_MAIN = 'whgazetteer.org'
+PLAUSIBLE_SITES = [
+    ('whgazetteer.org', 'Main', '', '#2563eb'),
+    ('blog.whgazetteer.org', 'Blog', 'blog', '#16a34a'),
+    ('docs.whgazetteer.org', 'Docs', 'docs', '#d97706'),
+]
+DONUT_PALETTE = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2', '#64748b']
 MYD_FUNNEL = [
     ('MyD: import', 'Imported a dataset'),
     ('MyD: reconcile', 'Ran reconciliation'),
@@ -522,15 +530,14 @@ MYD_OTHER = [
 ]
 
 
-def _plausible_get(path, params):
-    """Call the Plausible Stats API (self-hosted). Returns (json, None) or (None, error_str)."""
+def _plausible_get(path, params, site_id):
+    """Call the Plausible Stats API for a specific site. Returns (json, None) or (None, error_str)."""
     key = getattr(settings, 'PLAUSIBLE_API_KEY', None)
     base = getattr(settings, 'PLAUSIBLE_BASE_URL', '')
-    site = getattr(settings, 'PLAUSIBLE_SITE', '')
-    if not (key and base and site):
-        return None, 'Plausible is not configured (PLAUSIBLE_API_KEY / _BASE_URL / _SITE).'
+    if not (key and base and site_id):
+        return None, 'Plausible is not configured (PLAUSIBLE_API_KEY / _BASE_URL).'
     try:
-        p = {'site_id': site}
+        p = {'site_id': site_id}
         p.update(params)
         resp = requests.get(f'{base}/api/v1/stats/{path}', params=p,
                             headers={'Authorization': f'Bearer {key}'}, timeout=15)
@@ -548,6 +555,44 @@ def _fmt_duration(seconds):
     return f'{s // 60}m {s % 60:02d}s'
 
 
+def _svg_area(series, w=820, h=190, pad=26):
+    """Build SVG polyline/polygon point strings for a visitors-over-time area chart.
+    series = [(label, value), …]. Returns None if empty."""
+    n = len(series)
+    if not n:
+        return None
+    maxv = max((v for _, v in series), default=0) or 1
+    iw, ih = w - 2 * pad, h - 2 * pad
+    pts = []
+    for i, (_, v) in enumerate(series):
+        x = pad + (iw * i / (n - 1) if n > 1 else iw / 2)
+        y = pad + ih * (1 - (v / maxv))
+        pts.append((round(x, 1), round(y, 1)))
+    line = ' '.join(f'{x},{y}' for x, y in pts)
+    area = f'{pad},{h - pad} {line} {round(pad + iw, 1)},{h - pad}'
+    ticks = []  # a few x-axis date labels
+    idxs = sorted(set([0, n // 2, n - 1]))
+    for i in idxs:
+        ticks.append({'x': pts[i][0], 'label': series[i][0]})
+    return {'w': w, 'h': h, 'pad': pad, 'line': line, 'area': area, 'max': maxv, 'ticks': ticks}
+
+
+def _svg_donut(rows):
+    """Segments for an SVG donut. rows = [{label, visitors}]. Returns dict for the template."""
+    total = sum(r['visitors'] for r in rows) or 1
+    r = 55.0
+    circ = 2 * 3.141592653589793 * r
+    segs, offset = [], 0.0
+    for i, row in enumerate(rows):
+        frac = row['visitors'] / total
+        dash = frac * circ
+        segs.append({'label': row['label'], 'visitors': row['visitors'],
+                     'pct': round(frac * 100, 1), 'color': DONUT_PALETTE[i % len(DONUT_PALETTE)],
+                     'dash': f'{round(dash, 2)} {round(circ - dash, 2)}', 'offset': round(-offset, 2)})
+        offset += dash
+    return {'r': r, 'circ': round(circ, 2), 'segs': segs, 'total': total}
+
+
 @login_required
 def plausible_analyser_view(request):
     if not request.user.is_staff:
@@ -555,18 +600,114 @@ def plausible_analyser_view(request):
     period = request.GET.get('period', '30d')
     if period not in dict(PLAUSIBLE_PERIODS):
         period = '30d'
-    errors = []
+    interval = 'month' if period in ('6mo', '12mo') else 'date'
 
-    def breakdown(prop, metrics='visitors', limit=8):
-        data, err = _plausible_get('breakdown', {'period': period, 'property': prop,
-                                                  'metrics': metrics, 'limit': limit})
-        if err:
-            errors.append(err)
-        return (data or {}).get('results', [])
+    # Build every Stats API call, then run them concurrently (up to 24 across 3 sites).
+    tasks = {}
+    for site, _, _, _ in PLAUSIBLE_SITES:
+        tasks[('agg', site)] = ('aggregate', {'period': period,
+            'metrics': 'visitors,pageviews,views_per_visit,visit_duration,bounce_rate'}, site)
+        tasks[('ts', site)] = ('timeseries', {'period': period, 'metrics': 'visitors',
+            'interval': interval}, site)
+        tasks[('pages', site)] = ('breakdown', {'period': period, 'property': 'event:page',
+            'metrics': 'visitors,pageviews', 'limit': 12}, site)
+        tasks[('source', site)] = ('breakdown', {'period': period, 'property': 'visit:source',
+            'metrics': 'visitors', 'limit': 30}, site)
+        tasks[('country', site)] = ('breakdown', {'period': period, 'property': 'visit:country',
+            'metrics': 'visitors', 'limit': 30}, site)
+        tasks[('device', site)] = ('breakdown', {'period': period, 'property': 'visit:device',
+            'metrics': 'visitors', 'limit': 10}, site)
+        tasks[('browser', site)] = ('breakdown', {'period': period, 'property': 'visit:browser',
+            'metrics': 'visitors', 'limit': 10}, site)
+        tasks[('os', site)] = ('breakdown', {'period': period, 'property': 'visit:os',
+            'metrics': 'visitors', 'limit': 10}, site)
+    tasks[('events', PLAUSIBLE_MAIN)] = ('breakdown', {'period': period, 'property': 'event:name',
+        'metrics': 'visitors,events', 'limit': 200}, PLAUSIBLE_MAIN)
 
-    # ── Map your Data funnel (event:name breakdown — goal-independent) ──
-    ev_rows = breakdown('event:name', metrics='visitors,events', limit=200)
-    by_name = {r['name']: r for r in ev_rows}
+    from concurrent.futures import ThreadPoolExecutor
+    results, errors = {}, []
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        futs = {ex.submit(_plausible_get, path, params, site): key
+                for key, (path, params, site) in tasks.items()}
+        for fut, key in futs.items():
+            try:
+                results[key] = fut.result()
+            except Exception as e:  # noqa: BLE001 - surface any thread error
+                results[key] = (None, str(e))
+    for res in results.values():
+        if res[1]:
+            errors.append(res[1])
+
+    def rows_of(key):
+        return ((results.get(key) or (None, None))[0] or {}).get('results', [])
+
+    # ── Top-line: combined across sites + per-site cards ──
+    def agg_val(site, metric):
+        r = ((results.get(('agg', site)) or (None, None))[0] or {}).get('results', {}) or {}
+        return (r.get(metric) or {}).get('value', 0) or 0
+
+    per_site = []
+    tot_visitors = tot_pageviews = 0
+    for site, label, short, color in PLAUSIBLE_SITES:
+        v, pv = agg_val(site, 'visitors'), agg_val(site, 'pageviews')
+        tot_visitors += v
+        tot_pageviews += pv
+        per_site.append({'label': label, 'color': color, 'visitors': v, 'pageviews': pv})
+    # visitor-weighted quality metrics (main site dominates; simple weighting is fine for an overview)
+    def weighted(metric):
+        num = sum(agg_val(s, metric) * (agg_val(s, 'visitors') or 0) for s, _, _, _ in PLAUSIBLE_SITES)
+        return round(num / tot_visitors, 2) if tot_visitors else 0
+    topline = {
+        'visitors': tot_visitors, 'pageviews': tot_pageviews,
+        'views_per_visit': weighted('views_per_visit'),
+        'visit_duration': _fmt_duration(weighted('visit_duration')),
+        'bounce_rate': round(weighted('bounce_rate')),
+    }
+
+    # ── Visitors over time: sum per date across sites → area chart ──
+    ts_by_site = {}
+    for site, _, _, _ in PLAUSIBLE_SITES:
+        ts_by_site[site] = {row['date']: (row.get('visitors') or 0) for row in rows_of(('ts', site))}
+    dates = [row['date'] for row in rows_of(('ts', PLAUSIBLE_MAIN))]
+    combined = [(d[5:], sum(ts_by_site[s].get(d, 0) for s, _, _, _ in PLAUSIBLE_SITES)) for d in dates]
+    chart = _svg_area(combined)
+
+    # ── Merged breakdowns (site-neutral: sum visitors by key) ──
+    def merge(kind, key, limit):
+        acc = {}
+        for site, _, _, _ in PLAUSIBLE_SITES:
+            for r in rows_of((kind, site)):
+                k = r.get(key) or '(none)'
+                acc[k] = acc.get(k, 0) + (r.get('visitors', 0) or 0)
+        out = [{'label': k, 'visitors': v} for k, v in acc.items()]
+        out.sort(key=lambda x: x['visitors'], reverse=True)
+        return out[:limit]
+
+    # Pages differ per site → keep the site as a prefix so they don't collide.
+    pages = []
+    for site, _, short, _ in PLAUSIBLE_SITES:
+        for r in rows_of(('pages', site)):
+            name = (f'{short} ' if short else '') + (r.get('page') or '/')
+            pages.append({'label': name, 'visitors': r.get('visitors', 0) or 0,
+                          'pageviews': r.get('pageviews', 0) or 0})
+    pages.sort(key=lambda x: x['visitors'], reverse=True)
+    pages = pages[:12]
+
+    sections = [
+        {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
+        {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket', 'rows': merge('source', 'source', 8)},
+        {'title': 'Countries', 'icon': 'fa-earth-americas', 'rows': merge('country', 'country', 8)},
+        {'title': 'Operating systems', 'icon': 'fa-gear', 'rows': merge('os', 'os', 6)},
+    ]
+    for sec in sections:
+        sec['max'] = max([row['visitors'] for row in sec['rows']] or [0]) or 1
+    donuts = [
+        {'title': 'Devices', 'icon': 'fa-desktop', 'donut': _svg_donut(merge('device', 'device', 6))},
+        {'title': 'Browsers', 'icon': 'fa-window-maximize', 'donut': _svg_donut(merge('browser', 'browser', 6))},
+    ]
+
+    # ── Map your Data funnel (main-site custom events) ──
+    by_name = {r['name']: r for r in rows_of(('events', PLAUSIBLE_MAIN))}
 
     def mk(name, label):
         r = by_name.get(name) or {}
@@ -582,51 +723,13 @@ def plausible_analyser_view(request):
         prev_v = step['visitors']
     others = [mk(n, l) for n, l in MYD_OTHER]
 
-    # ── Site overview (so staff needn't open Plausible) ──
-    agg, agg_err = _plausible_get('aggregate', {
-        'period': period, 'metrics': 'visitors,pageviews,views_per_visit,visit_duration,bounce_rate'})
-    if agg_err:
-        errors.append(agg_err)
-    ar = (agg or {}).get('results', {}) if agg else {}
-    topline = {
-        'visitors': (ar.get('visitors') or {}).get('value', 0),
-        'pageviews': (ar.get('pageviews') or {}).get('value', 0),
-        'views_per_visit': (ar.get('views_per_visit') or {}).get('value', 0),
-        'visit_duration': _fmt_duration((ar.get('visit_duration') or {}).get('value', 0)),
-        'bounce_rate': (ar.get('bounce_rate') or {}).get('value', 0),
-    }
-    # helper to normalise breakdown rows to {label, visitors} for a table
-    def rows(prop, key='name', metrics='visitors', limit=8):
-        out = []
-        for r in breakdown(prop, metrics=metrics, limit=limit):
-            out.append({'label': r.get(key) or '(none)', 'visitors': r.get('visitors', 0) or 0,
-                        'pageviews': r.get('pageviews', 0) or 0})
-        return out
-
-    sections = [
-        {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True,
-         'rows': rows('event:page', 'page', 'visitors,pageviews', 10)},
-        {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket',
-         'rows': rows('visit:source', 'source', 'visitors', 8)},
-        {'title': 'Countries', 'icon': 'fa-earth-americas',
-         'rows': rows('visit:country', 'country', 'visitors', 8)},
-        {'title': 'Devices', 'icon': 'fa-desktop',
-         'rows': rows('visit:device', 'device', 'visitors', 6)},
-        {'title': 'Browsers', 'icon': 'fa-window-maximize',
-         'rows': rows('visit:browser', 'browser', 'visitors', 6)},
-        {'title': 'Operating systems', 'icon': 'fa-gear',
-         'rows': rows('visit:os', 'os', 'visitors', 6)},
-    ]
-    # max visitors per section for horizontal-bar scaling
-    for sec in sections:
-        sec['max'] = max([row['visitors'] for row in sec['rows']] or [0]) or 1
-
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
+        'topline': topline, 'per_site': per_site, 'chart': chart,
+        'sections': sections, 'donuts': donuts,
         'funnel': funnel, 'others': others, 'base_v': base_v,
-        'topline': topline, 'sections': sections,
         'error': errors[0] if errors else None,
-        'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{getattr(settings, 'PLAUSIBLE_SITE', '')}",
+        'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
     })
 
 
