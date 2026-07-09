@@ -130,6 +130,7 @@ async function publish() {
     if (!c.ok) { flash(out, (c.data && c.data.error) || 'Could not save before publishing.', 'danger'); return; }
   } else { await bridge.push(snapshot()); }
   const r = await bridge.publish();
+  if (r.status === 409) { flash(out, (r.data && r.data.error) || 'This group changed since you started editing.', 'warning'); return; }
   if (!r.ok) { flash(out, (r.data && r.data.error) || 'Publishing failed.', 'danger'); return; }
   const d = r.data;
   const link = `<a href="/collections/${d.collection_id}/browse_ds" target="_blank" rel="noopener">View your published group →</a>`;
@@ -166,7 +167,9 @@ async function init() {
     const r = await bridge.load(pid);
     if (r.ok && r.data && r.data.snapshot) {
       const s = r.data.snapshot;
-      project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [], gazetteers: (s.gazetteers || []).map((g) => ({ dataset_id: g.dataset_id, title: g.title || ('dataset ' + g.dataset_id) })) };
+      project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [],
+                  gazetteers: (s.gazetteers || []).map((g) => ({ dataset_id: g.dataset_id,
+                    title: g.title || ('dataset ' + g.dataset_id), tip: g.tip || '', centroid: g.centroid || null })) };
     }
   } else {
     const local = await store.load();

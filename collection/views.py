@@ -1359,6 +1359,11 @@ class DatasetCollectionBrowseView(DetailView):
         context['links'] = Link.objects.filter(collection=id_)
         context['updates'] = {}
         context['is_admin'] = True if self.request.user.groups.filter(name__in=['whg_admins']).exists() else False
+        # "Edit in Workbench" (Gazetteer Group check-out) — beta-gated AND only for users with edit
+        # rights on this collection (same predicate as the endpoint; see project_checkout).
+        u = self.request.user
+        context['can_edit_in_workbench'] = bool(
+            u.is_authenticated and getattr(u, 'can_access_beta', False) and coll.can_edit(u))
         context[
             'visParameters'] = coll.vis_parameters or "{'seq': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'min': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'max': {'tabulate': false, 'temporal_control': 'none', 'trail': false}}"
         context['datasets'] = [{"id": ds["id"], "label": ds["label"], "title": ds["title"], "extent": ds["extent"]} for

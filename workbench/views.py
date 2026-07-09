@@ -295,7 +295,7 @@ def project_publish(request, pid):
     ``publish_target`` (workbench/publish.py). Editor/owner only. Returns the publish summary
     (e.g. ``{collection_id, added, unresolved}``). The published *artefact* then follows the existing
     public-visibility rules — only the authoring tool/route is beta-gated (plan §2.5)."""
-    from .publish import PublishError
+    from .publish import PublishError, ConflictError
     p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
     if p.role_for(request.user) not in EDIT_ROLES:
         return _err('only an editor or owner can publish a project', 403)
@@ -305,6 +305,8 @@ def project_publish(request, pid):
     try:
         kwargs = {'sequenced': dt.sequenced} if dt.sequenced else {}
         summary = dt.publish_fn(p, request.user, **kwargs)
+    except ConflictError as e:
+        return JsonResponse({'error': str(e), 'status': 'conflict'}, status=409)
     except PublishError as e:
         return _err(str(e))
     except Exception as e:  # noqa: BLE001 — surface a clean error, log the detail
@@ -321,17 +323,22 @@ def project_checkout(request, pid):
     editing (plan §6). Body: ``{collection_id, team?}``. The published record stays authoritative;
     the new project records ``source_published_id`` + ``base_version`` for the publish-back check."""
     from collection.models import Collection
-    from .checkout import checkout_place_collection, CheckoutError
+    from .checkout import checkout_place_collection, checkout_gazetteer_group, CheckoutError
     coll = get_object_or_404(Collection, pk=pid)
     # Only someone with edit rights on this collection may check it out — the SAME predicate the
     # browse page uses to show the button (collection.Collection.can_edit: staff / owner / collaborator).
     # @_beta_required has already 404'd non-beta users; this is the per-object authorisation.
     if not coll.can_edit(request.user):
         return _err('you do not have permission to edit that collection', 403)
-    if coll.collection_class != 'place':
-        return _err('only Place Collections can be checked out yet', 400)
+    # Place Collection → place_collection editor; Dataset Collection → gazetteer_group editor.
+    if coll.collection_class == 'place':
+        loader, doc_type = checkout_place_collection, 'place_collection'
+    elif coll.collection_class == 'dataset':
+        loader, doc_type = checkout_gazetteer_group, 'gazetteer_group'
+    else:
+        return _err('this kind of collection cannot be checked out yet', 400)
     try:
-        snapshot, base_version = checkout_place_collection(coll)
+        snapshot, base_version = loader(coll)
     except CheckoutError as e:
         return _err(str(e))
     team = _resolve_target_team(request.user, _body(request).get('team'))
@@ -340,7 +347,7 @@ def project_checkout(request, pid):
     with transaction.atomic():
         proj = WorkbenchProject.objects.create(
             team=team, title=coll.title[:300], created_by=request.user, snapshot=snapshot,
-            version=1, status='draft', doc_type='place_collection',
+            version=1, status='draft', doc_type=doc_type,
             published_collection=coll, source_published_id=str(coll.pk), base_version=base_version)
         ProjectSnapshot.objects.create(project=proj, version=1, snapshot=snapshot,
                                        created_by=request.user)

@@ -232,6 +232,7 @@ export function mountCollectionEditor(cfg) {
       await bridge.push(snapshot());
     }
     const r = await bridge.publish();
+    if (r.status === 409) { flash(out, (r.data && r.data.error) || 'This collection changed since you started editing.', 'warning'); return; }
     if (!r.ok) { flash(out, (r.data && r.data.error) || 'Publishing failed.', 'danger'); return; }
     const d = r.data;
     const link = `<a href="${cfg.browse(d.collection_id)}" target="_blank" rel="noopener">View your published ${cfg.sequenced ? 'itinerary' : 'collection'} →</a>`;
@@ -274,7 +275,9 @@ export function mountCollectionEditor(cfg) {
       const r = await bridge.load(pid);
       if (r.ok && r.data && r.data.snapshot) {
         const s = r.data.snapshot;
-        project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [], places: (s.places || []).map((p) => ({ id: p.id, title: p.title || p.id, note: p.note || '' })) };
+        project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [],
+                    places: (s.places || []).map((p) => ({ id: p.id, title: p.title || p.id, note: p.note || '',
+                      tip: p.tip || '', lng: p.lng != null ? p.lng : null, lat: p.lat != null ? p.lat : null })) };
       }
     } else {
       const local = await store.load();

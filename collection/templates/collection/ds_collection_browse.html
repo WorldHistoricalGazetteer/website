@@ -44,6 +44,14 @@
 					                class="fas fa-gear me-3"></i></a>
 			            </span>
 					{% endif %}
+					{% if can_edit_in_workbench %}
+						<span class="float-end me-3">
+			                <a href="#" id="wb-edit-btn" class="text-decoration-none"
+			                   title="Open this Gazetteer Group in the Collaborative Workbench (beta) to edit it locally and publish your changes back">
+			                  <i class="fas fa-pen-to-square me-1"></i>Edit in Workbench
+			                  <span class="badge bg-warning text-dark">beta</span></a>
+			            </span>
+					{% endif %}
 				</div>
 				<div id="metadata" class="mt-2">
 					<div class="row pub-intro">
@@ -161,6 +169,37 @@
         window.loggedin = "{{ loggedin }}";
         window.filter = "{{ filter }}";
 	</script>
+
+	{% if can_edit_in_workbench %}
+	<script type="text/javascript">
+        // "Edit in Workbench": check this published Gazetteer Group out into a working copy and open
+        // the Gazetteer Group editor on it. Server re-verifies edit rights + beta gate.
+        (function () {
+            var btn = document.getElementById('wb-edit-btn');
+            if (!btn) return;
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                btn.style.pointerEvents = 'none';
+                fetch('/reconciliation/checkout/collection/{{ object.id }}/', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'X-CSRFToken': window.csrfToken, 'Content-Type': 'application/json' },
+                    body: '{}',
+                }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                  .then(function (res) {
+                      if (res.ok && res.d && res.d.id) {
+                          window.location.href = '/workbench/gazetteer-group/?project=' + res.d.id;
+                      } else {
+                          alert((res.d && res.d.error) || 'Could not open this group in the Workbench.');
+                          btn.style.pointerEvents = '';
+                      }
+                  }).catch(function () {
+                      alert('Could not reach the Workbench — please try again.');
+                      btn.style.pointerEvents = '';
+                  });
+            });
+        })();
+    </script>
+	{% endif %}
 
 {% endblock %}
 

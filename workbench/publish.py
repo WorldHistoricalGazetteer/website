@@ -35,6 +35,24 @@ class PublishError(Exception):
     """Raised for a caller/data error that should surface to the client as a 400."""
 
 
+class ConflictError(Exception):
+    """Raised when the published collection changed under a checked-out working copy (optimistic-lock
+    failure, plan §6). The endpoint surfaces this as a 409 so the client can reload rather than clobber."""
+
+
+def _check_no_conflict(project, collection):
+    """Optimistic-lock guard for publish-BACK: if this project was checked out from ``collection``
+    (``base_version`` recorded at checkout), refuse to overwrite when the collection's current content
+    hash no longer matches — i.e. someone else edited it meanwhile."""
+    if not project.base_version:
+        return
+    from .checkout import collection_state_hash
+    if collection_state_hash(collection) != project.base_version:
+        raise ConflictError(
+            'This collection was changed since you started editing it. Reload the latest version '
+            '(re-open it from its page) and re-apply your changes before publishing.')
+
+
 def _local_place_pk(pid):
     """Return the local ``places.Place`` pk for a snapshot/reconciliation place id, or None.
 
@@ -122,6 +140,8 @@ def publish_place_collection(project, user, sequenced=False):
     resolved, unresolved = _resolve_places(snap.get('places') or [])
 
     coll = project.published_collection
+    if coll is not None:
+        _check_no_conflict(project, coll)                       # optimistic-lock (publish-back)
     if coll is None:
         coll = Collection(owner=user, collection_class='place', status='sandbox')
     coll.title = str(snap.get('title') or project.title or 'Untitled collection')[:255]
@@ -181,6 +201,8 @@ def publish_gazetteer_group(project, user):
     unresolved = [str(i) for i in ids if i not in found]
 
     coll = project.published_collection
+    if coll is not None:
+        _check_no_conflict(project, coll)                       # optimistic-lock (publish-back)
     if coll is None:
         coll = Collection(owner=user, collection_class='dataset', status='sandbox')
     coll.title = str(snap.get('title') or project.title or 'Untitled group')[:255]
@@ -194,9 +216,15 @@ def publish_gazetteer_group(project, user):
 
 
 def _mark_published(project, collection):
+    from .checkout import collection_state_hash
     project.published_collection = collection
     project.status = 'published'
-    project.save(update_fields=['published_collection', 'status', 'updated'])
+    # New baseline: the state we just wrote. Lets the same working copy re-publish repeatedly without
+    # a false conflict, while still catching a THIRD party editing the collection between publishes.
+    project.source_published_id = str(collection.pk)
+    project.base_version = collection_state_hash(collection)
+    project.save(update_fields=['published_collection', 'status', 'source_published_id',
+                                'base_version', 'updated'])
 
 
 # ── validators reused from the registry (kept here too so publish is self-contained) ──────────────

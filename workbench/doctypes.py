@@ -142,7 +142,7 @@ REGISTRY = {
         DOC_GAZETTEER_GROUP, 'gazetteer_group', enabled=True, editor='wb-gazetteer-group',
         validate=_errs_gazetteer_group,
         publish='workbench.publish.publish_gazetteer_group',
-        checkout=None),
+        checkout='workbench.checkout.checkout_gazetteer_group'),
     # ── v4 placeholders (§4.4): reserved doc-types, creation gated OFF. No models, no editors yet.
     DOC_ROUTE: DocType(
         DOC_ROUTE, 'route', enabled=False, editor=None, validate=_errs_disabled),
