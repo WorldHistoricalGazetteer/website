@@ -60,6 +60,7 @@ module.exports = {
 		'wb-gazetteer-group': './whg/webpack/js/wb-gazetteer-group.js',
 		'wb-place-record': './whg/webpack/js/wb-place-record.js',
 		'wb-dataset': './whg/webpack/js/wb-dataset.js',
+		'wb-suggest': './whg/webpack/js/wb-suggest.js',
 		search: './whg/webpack/js/search.js',
 		search_functions: './whg/webpack/js/search_resources.js',
 		tasks: './whg/webpack/js/tasks.js',

@@ -28,7 +28,7 @@
 <div class="wb-rec-wrap px-3">
   {% csrf_token %}
   <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-    <h1 class="h4 mb-0">Correct a record</h1>
+    <h1 class="h4 mb-0" id="wb-rec-heading">Correct a record</h1>
     <span class="badge bg-warning text-dark">beta</span>
     <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
     <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html#correcting-a-single-record" target="_blank" rel="noopener">Documentation</a>
@@ -38,13 +38,9 @@
   <div id="wb-rec-form"></div>
 
   <section class="wb-rf-block">
-    <button id="wb-rec-pub" class="btn btn-success" type="button">Publish correction</button>
+    <div id="wb-rec-actions"></div>
     <div id="wb-rec-result" class="mt-2"></div>
-    <p class="text-muted small mt-3 mb-0">
-      Publishing applies your changes to this single record and re-indexes it in WHG search — the rest of
-      the gazetteer is untouched. Guarded so you can't overwrite a change someone else made meanwhile.
-      (Depictions, relations, and named periods aren't editable here yet and are preserved as-is.)
-    </p>
+    <p class="text-muted small mt-3 mb-0" id="wb-rec-note"></p>
   </section>
 </div>
 {% endblock %}

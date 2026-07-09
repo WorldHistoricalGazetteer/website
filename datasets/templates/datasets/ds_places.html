@@ -303,9 +303,17 @@
 
 {% block deferredScripts %}
 
+    // Community record corrections (plan-record-suggestions): beta users get a "Suggest a correction"
+    // affordance in the place detail popup. Read by wb-suggest.js / getPlace.js.
+    window.WHG_CAN_SUGGEST = {{ can_suggest_record|yesno:"true,false"|default:"false" }};
+
     var scripts = [
     {
     src: '{% static 'webpack/whg_maplibre.bundle.js' %}',
+    type: 'text/javascript',
+    },
+    {
+    src: '{% static 'webpack/wb-suggest.bundle.js' %}',
     type: 'text/javascript',
     },
     {

@@ -708,6 +708,9 @@ class DatasetPlacesView(DetailView, DatasetContextMixin):
                 collection_class="place",
                 **({} if self._is_admin(me) else {"owner": me})
             ) if not me.is_anonymous else None,
+            # Community record corrections (plan-record-suggestions): beta users get a "Suggest a
+            # correction" affordance in the place detail popup (wb-suggest.js reads window.WHG_CAN_SUGGEST).
+            "can_suggest_record": bool(me.is_authenticated and getattr(me, "can_access_beta", False)),
         })
 
         return context

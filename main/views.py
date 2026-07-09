@@ -620,6 +620,67 @@ def wb_place_record_view(request):
     return render(request, "main/wb_place_record.html", {})
 
 
+def _suggestion_diff(cur, prop, changed):
+    """Build display rows [(label, current, proposed)] for the changed fields of a suggestion, for the
+    review queue's side-by-side diff."""
+    def flat(lst, k):
+        vals = [(i.get(k) or '').strip() for i in (lst or []) if (i.get(k) or '').strip()]
+        return ', '.join(vals) if vals else '—'
+
+    def coord(s):
+        return f"{s.get('lng')}, {s.get('lat')}" if s.get('lng') is not None else '—'
+
+    labels = {'name': 'Name', 'ccodes': 'Countries', 'names': 'Also-known-as', 'types': 'Types',
+              'links': 'Authority links', 'descriptions': 'Descriptions', 'dates': 'Dates',
+              'coordinate': 'Coordinate'}
+    rows = []
+    for f in changed:
+        if f == 'name':
+            rows.append((labels[f], cur.get('title') or '—', prop.get('title') or '—'))
+        elif f == 'ccodes':
+            rows.append((labels[f], ', '.join(cur.get('ccodes') or []) or '—', ', '.join(prop.get('ccodes') or []) or '—'))
+        elif f in ('names', 'descriptions'):
+            k = 'toponym' if f == 'names' else 'value'
+            rows.append((labels[f], flat(cur.get(f), k), flat(prop.get(f), k)))
+        elif f == 'types':
+            rows.append((labels[f], flat(cur.get('types'), 'label'), flat(prop.get('types'), 'label')))
+        elif f == 'links':
+            rows.append((labels[f], flat(cur.get('links'), 'identifier'), flat(prop.get('links'), 'identifier')))
+        elif f == 'dates':
+            cd, pd = cur.get('dates') or {}, prop.get('dates') or {}
+            fmt = lambda d: (f"{d.get('start', '')}–{d.get('end', '')}" if (d.get('start') is not None or d.get('end') is not None) else '—')
+            rows.append((labels[f], fmt(cd), fmt(pd)))
+        elif f == 'coordinate':
+            rows.append((labels[f], coord(cur), coord(prop)))
+    return rows
+
+
+@login_required
+def suggestions_review(request):
+    """Review queue for community record corrections (plan-record-suggestions §3). Beta-gated. Staff see
+    all pending suggestions; a gazetteer owner sees those on their gazetteers. Accept/reject is a POST to
+    the workbench review endpoint."""
+    if not request.user.can_access_beta:
+        raise Http404()
+    from workbench import suggestions as S
+    from workbench.checkout import record_snapshot
+    cards = []
+    for s in S.queue_for(request.user).order_by('dataset_id', '-created')[:200]:
+        try:
+            cur = record_snapshot(s.place)
+        except Exception:
+            cur = {}
+        cards.append({
+            'id': s.id, 'record_id': s.place_id, 'record_title': s.place.title,
+            'dataset_title': s.dataset.title, 'dataset_id': s.dataset_id,
+            'proposer': (getattr(s.proposer, 'name', '') or getattr(s.proposer, 'username', '') or '—') if s.proposer_id else '—',
+            'created': s.created, 'rationale': s.rationale, 'changed': s.changed_fields or [],
+            'diff': _suggestion_diff(cur, s.proposed_snapshot or {}, s.changed_fields or []),
+        })
+    return render(request, 'main/suggestions_review.html',
+                  {'cards': cards, 'reviewer_is_staff': request.user.is_staff})
+
+
 @login_required
 def wb_dataset_view(request):
     # Gazetteer records-correction shell (plan-dataset-checkout §3/§4). Beta + STAFF-gated (whole-/

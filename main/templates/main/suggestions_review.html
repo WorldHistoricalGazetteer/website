@@ -1,0 +1,114 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{#
+  Review queue for community record corrections ("Suggestions", plan-record-suggestions §3). BETA-gated
+  in the view. Staff see all pending; a gazetteer owner sees those on their gazetteers. Accept applies
+  the correction via the shared record path; reject records a note. Client posts to the workbench
+  review endpoint.
+#}
+{% block title %}WHG · Review suggested corrections (beta){% endblock %}
+
+{% block extra_head %}
+<style>
+  .sr-wrap { max-width: 900px; margin: 1.75rem auto; }
+  .sr-card { border:1px solid var(--bs-border-color,#dee2e6); border-radius:.6rem; padding:1rem 1.1rem; margin-bottom:.9rem; }
+  .sr-meta { font-size:.85rem; color:#6c757d; }
+  .sr-diff { width:100%; font-size:.9rem; margin:.6rem 0; border-collapse:collapse; }
+  .sr-diff th { text-align:left; font-weight:600; color:#6c757d; font-size:.78rem; text-transform:uppercase; letter-spacing:.03em; padding:.2rem .5rem; }
+  .sr-diff td { padding:.25rem .5rem; vertical-align:top; border-top:1px solid var(--bs-border-color,#eee); }
+  .sr-before { color:#842029; } .sr-after { color:#0f5132; }
+  .sr-field { color:#495057; white-space:nowrap; }
+  .sr-badges .badge { margin-right:.25rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sr-wrap px-3">
+  {% csrf_token %}
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <h1 class="h3 mb-0">Suggested corrections</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+  </div>
+  <p class="text-muted">
+    {% if reviewer_is_staff %}Every pending community correction across WHG gazetteers.
+    {% else %}Pending community corrections to records in gazetteers you own.{% endif %}
+    Accepting applies the change to the record and re-indexes it; the proposer is not able to change
+    anything without your approval.
+  </p>
+
+  <div id="sr-list">
+    {% for c in cards %}
+    <div class="sr-card" data-id="{{ c.id }}">
+      <div class="d-flex flex-wrap align-items-start gap-2">
+        <div class="flex-grow-1" style="min-width:0;">
+          <div class="fw-semibold">
+            <a href="/places/{{ c.record_id }}/detail" target="_blank" rel="noopener" class="text-decoration-none">{{ c.record_title|default:"(untitled)" }}</a>
+            <span class="text-muted small">#{{ c.record_id }}</span>
+          </div>
+          <div class="sr-meta">in <strong>{{ c.dataset_title }}</strong> · proposed by {{ c.proposer }} · {{ c.created|timesince }} ago</div>
+        </div>
+        <div class="sr-badges">
+          {% for f in c.changed %}<span class="badge bg-light text-dark border">{{ f }}</span>{% endfor %}
+        </div>
+      </div>
+
+      {% if c.rationale %}<div class="mt-2 small fst-italic">“{{ c.rationale }}”</div>{% endif %}
+
+      <table class="sr-diff">
+        <tr><th style="width:9rem;">Field</th><th>Current</th><th>Proposed</th></tr>
+        {% for label, before, after in c.diff %}
+        <tr><td class="sr-field">{{ label }}</td><td class="sr-before">{{ before }}</td><td class="sr-after">{{ after }}</td></tr>
+        {% endfor %}
+      </table>
+
+      <div class="d-flex flex-wrap gap-2 align-items-center mt-1">
+        <button class="btn btn-sm btn-success sr-accept" data-id="{{ c.id }}"><i class="fas fa-check me-1"></i>Accept &amp; apply</button>
+        <button class="btn btn-sm btn-outline-danger sr-reject" data-id="{{ c.id }}"><i class="fas fa-xmark me-1"></i>Reject</button>
+        <input class="form-control form-control-sm sr-note" data-id="{{ c.id }}" style="max-width:22rem;" placeholder="Optional note (shown to the proposer on reject)">
+        <span class="sr-result small ms-auto" data-id="{{ c.id }}"></span>
+      </div>
+    </div>
+    {% empty %}
+    <p class="text-muted">No pending suggestions right now. 🎉</p>
+    {% endfor %}
+  </div>
+</div>
+
+<script type="text/javascript">
+(function () {
+  function csrf() { var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+  function post(id, decision, note, resultEl, card) {
+    resultEl.textContent = decision === 'accept' ? 'Applying…' : 'Rejecting…';
+    fetch('/reconciliation/suggestions/' + id + '/review/', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decision: decision, note: note })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, status: r.status, d: d }; }); })
+      .then(function (res) {
+        if (res.ok) {
+          card.style.transition = 'opacity .4s'; card.style.opacity = '.45';
+          card.querySelectorAll('button,input').forEach(function (n) { n.disabled = true; });
+          resultEl.className = 'sr-result small ms-auto text-success';
+          resultEl.innerHTML = res.d.status === 'accepted'
+            ? '✓ Applied' + (res.d.reindexed ? ' &amp; reindexed' : '')
+            : '✓ Rejected';
+        } else if (res.status === 409) {
+          resultEl.className = 'sr-result small ms-auto text-warning';
+          resultEl.textContent = (res.d && res.d.error) || 'The record changed since this was proposed.';
+        } else {
+          resultEl.className = 'sr-result small ms-auto text-danger';
+          resultEl.textContent = (res.d && res.d.error) || 'Could not complete that.';
+        }
+      }).catch(function () { resultEl.className = 'sr-result small ms-auto text-danger'; resultEl.textContent = 'Network error.'; });
+  }
+  document.querySelectorAll('.sr-accept, .sr-reject').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.dataset.id, card = btn.closest('.sr-card');
+      var note = card.querySelector('.sr-note').value || '';
+      var resultEl = card.querySelector('.sr-result');
+      post(id, btn.classList.contains('sr-accept') ? 'accept' : 'reject', note, resultEl, card);
+    });
+  });
+})();
+</script>
+{% endblock %}

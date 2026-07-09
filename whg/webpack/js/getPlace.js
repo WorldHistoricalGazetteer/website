@@ -5,8 +5,14 @@ import './enlarge.js';
 
 export function popupFeatureHTML(feature, clickable=true) { // TODO: Improve styling with css and content?
 	let HTML = '<b>' + feature.properties.title + '</b><br/>' +
-    'Temporality: ' + (feature.properties.min ? feature.properties.min : '?') + '/' + (feature.properties.max ? feature.properties.max : '?') + 
+    'Temporality: ' + (feature.properties.min ? feature.properties.min : '?') + '/' + (feature.properties.max ? feature.properties.max : '?') +
     (clickable ? '<br/>Click to focus' : '');
+    // Community record corrections (plan-record-suggestions): a "Suggest a correction" affordance in the
+    // dataset-places detail popup, for beta users (wb-suggest.js delegated handler opens the editor).
+    const pid = feature.properties && feature.properties.pid;
+    if (pid && window.WHGSuggest && window.WHGSuggest.canSuggest) {
+        HTML += '<br/>' + window.WHGSuggest.buttonHTML(pid, 'Suggest a correction');
+    }
     return (HTML);
 }
 

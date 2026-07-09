@@ -320,6 +320,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 		            ${coordinates ? `<div>${Array.isArray(JSON.parse(coordinates)) ? 'Coordinates' : 'Geometry'}: <a class="clip-coordinates" data-coordinates="${coordinates}" data-bs-toggle="tooltip" title="copy to clipboard"><i class="fas fa-clipboard linky"></i></a></div>` : ''}
 		            ${place.types.length > 0 ? `<div>Type${place.types.length > 1 ? 's' : ''}: ${place.types.map(type => type.label).join(', ')}</div>` : ''}
 	    			${place.timespans.length > 0 ? `<div>Chronology: ${place.timespans.reverse().map(timespan => timespan.join('-')).join(', ')}</div>` : ''}
+	    			${(window.WHGSuggest && window.WHGSuggest.canSuggest) ? `<div class="source-suggest mt-1">${window.WHGSuggest.buttonHTML(place.place_id)} ${window.WHGSuggest.insetHTML(place.place_id)}</div>` : ''}
     			</div>
 	        `;
 
@@ -328,6 +329,8 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
         $('#sources .toggle-truncate').toggleTruncate();
         $('#sources').height($('#sources').height()); // Fix height to prevent change when content is hidden
         $('.notes').notes();
+        // Community record corrections (plan-record-suggestions): fill the per-source pending insets.
+        if (window.WHGSuggest) window.WHGSuggest.mountInsets(document.getElementById('sources'));
 
         // For single source (unlinked), the place_id is the primary source
         if (payload.length === 1) {

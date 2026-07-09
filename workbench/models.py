@@ -182,6 +182,55 @@ class ProjectSnapshot(models.Model):
         return f'{self.project_id} v{self.version}'
 
 
+class RecordSuggestion(models.Model):
+    """A community-proposed **correction to one published gazetteer record** (plan-record-suggestions).
+
+    Any beta/staff user may propose a fix to any record; it is reviewed by the dataset owner (if opted
+    in) and/or WHG staff, and applied on accept via the SAME record apply-path the direct editor uses
+    (``workbench.publish.apply_record_fields`` + ``_reindex_place``), guarded by the record's
+    ``base_version`` at proposal time.
+
+    Deliberately scoped to **error-correction**, not competing/parallel claims (those are v4 Attestations,
+    PLATO place#100). But every suggestion is a **permanent, provenance-bearing record** — kept through
+    accept/reject/withdraw, never hard-deleted — so the corpus is the forward-compatible seed for v4
+    attestations. ``proposed_snapshot`` is the full-LPF record snapshot (``checkout.record_snapshot``)."""
+    STATUS_PENDING, STATUS_ACCEPTED, STATUS_REJECTED, STATUS_SUPERSEDED, STATUS_WITHDRAWN = (
+        'pending', 'accepted', 'rejected', 'superseded', 'withdrawn')
+    STATUS_CHOICES = [(STATUS_PENDING, 'Pending'), (STATUS_ACCEPTED, 'Accepted'),
+                      (STATUS_REJECTED, 'Rejected'), (STATUS_SUPERSEDED, 'Superseded'),
+                      (STATUS_WITHDRAWN, 'Withdrawn')]
+
+    place = models.ForeignKey('places.Place', related_name='suggestions', on_delete=models.CASCADE)
+    # Denormalised so the review queue / opt-in / per-place insets query without joining through Place.
+    dataset = models.ForeignKey('datasets.Dataset', related_name='record_suggestions',
+                                on_delete=models.CASCADE)
+    proposer = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='record_suggestions',
+                                 null=True, on_delete=models.SET_NULL)
+    proposed_snapshot = JSONField(default=dict)          # full-LPF record snapshot
+    base_version = models.CharField(max_length=64)       # record_state_hash at proposal (optimistic lock)
+    changed_fields = JSONField(default=list, blank=True)  # ['name','coordinate',…] computed at submit
+    rationale = models.TextField(blank=True, default='')  # optional proposer note
+
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created = models.DateTimeField(auto_now_add=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name='+')
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.TextField(blank=True, default='')
+    applied_changed = JSONField(default=list, blank=True)  # what actually changed on accept
+
+    class Meta:
+        db_table = 'workbench_record_suggestion'
+        ordering = ['-created']
+        indexes = [
+            models.Index(fields=['status', 'dataset']),
+            models.Index(fields=['place', 'status']),
+        ]
+
+    def __str__(self):
+        return f'suggestion #{self.pk} on place {self.place_id} ({self.status})'
+
+
 class ProjectYDoc(models.Model):
     """Binary Yjs document state for a project's real-time (Hocuspocus) session — Phase 2 (place#112).
     The Node hocuspocus service reads/writes ``state`` (the persistence store); Django owns the schema

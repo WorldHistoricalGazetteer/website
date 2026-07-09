@@ -26,7 +26,7 @@ from django.views.decorators.http import require_http_methods
 
 from . import doctypes
 from .merge import merge_snapshots
-from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
+from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot, RecordSuggestion,
                      ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES,
                      DOC_RECONCILIATION, DOC_TYPES)
 
@@ -153,12 +153,20 @@ def project_detail(request, pid):
         return _err('not a member of this project’s team', 403)
 
     if request.method == 'GET':
+        # can_apply: may THIS user publish this working copy directly to its published source? For a
+        # record correction that means edit rights on the record's gazetteer; a non-owner sees the
+        # editor's "Submit suggestion" path instead (plan-record-suggestions §3/§4).
+        can_apply = True
+        if p.doc_type == 'place_record':
+            from places.models import Place
+            pl = Place.objects.filter(pk=(p.snapshot or {}).get('record_id')).select_related('dataset').first()
+            can_apply = bool(pl and pl.dataset.can_edit(request.user))
         return JsonResponse({'id': str(p.id), 'title': p.title, 'team': p.team_id,
                              'team_title': p.team.title, 'team_personal': p.team.is_personal,
                              'role': role, 'version': p.version, 'status': p.status,
                              'doc_type': p.doc_type, 'shared': bool(p.public_token),
                              'published_collection': p.published_collection_id,
-                             'snapshot': p.snapshot})
+                             'can_apply': can_apply, 'snapshot': p.snapshot})
 
     if request.method == 'DELETE':
         if role != ROLE_OWNER:
@@ -302,6 +310,21 @@ def project_publish(request, pid):
     dt = doctypes.get(p.doc_type)
     if dt is None or dt.publish_fn is None:
         return _err('this doc-type cannot be published from the Workbench', 400)
+    # Direct publish-back to a published gazetteer needs edit rights on THAT gazetteer — not just team
+    # membership on the working copy (record check-out is open to any beta user, who may only *suggest*).
+    # This is the single enforcement point for "non-owners can suggest but not apply" (plan-record-
+    # suggestions §3). Collections/Groups keep their own model-level owner checks in publish.py.
+    if p.doc_type == 'place_record':
+        from places.models import Place
+        place = Place.objects.filter(pk=(p.snapshot or {}).get('record_id')).select_related('dataset').first()
+        if not place or not place.dataset.can_edit(request.user):
+            return _err('You can suggest a correction to this record, but only its gazetteer’s owner or '
+                        'WHG staff can publish it directly. Use “Submit suggestion” instead.', 403)
+    elif p.doc_type == 'dataset_edit':
+        from datasets.models import Dataset
+        ds = Dataset.objects.filter(pk=(p.snapshot or {}).get('dataset_id')).first()
+        if not ds or not (request.user.is_staff and ds.can_edit(request.user)):
+            return _err('editing a whole gazetteer in the Workbench is limited to staff for now', 403)
     try:
         kwargs = {'sequenced': dt.sequenced} if dt.sequenced else {}
         summary = dt.publish_fn(p, request.user, **kwargs)
@@ -359,14 +382,14 @@ def project_checkout(request, pid):
 @_beta_required
 @require_http_methods(['POST'])
 def project_checkout_place(request, pid):
-    """Record-level check-out (plan §6.1): materialise a single published ``places.Place`` into a new
-    team-owned ``WorkbenchProject(doc_type='place_record')`` for a targeted correction. Gated on beta +
-    **dataset** edit rights (owner/staff) — the same predicate the "Correct this record" button uses."""
+    """Record-level check-out (plan §6.1 / plan-record-suggestions §3): materialise a single published
+    ``places.Place`` into a new team-owned ``WorkbenchProject(doc_type='place_record')``. Open to ANY
+    beta user — those WITHOUT edit rights compose a **suggestion** (Submit), owners/staff can Publish
+    directly. The direct-apply authorisation is enforced at publish time (see ``project_publish``), so
+    widening check-out here doesn't let a non-owner apply their own working copy."""
     from places.models import Place
     from .checkout import checkout_place_record, CheckoutError
     place = get_object_or_404(Place.objects.select_related('dataset'), pk=pid)
-    if not place.dataset.can_edit(request.user):
-        return _err('you do not have permission to edit that gazetteer', 403)
     try:
         snapshot, base_version = checkout_place_record(place)
     except CheckoutError as e:
@@ -446,6 +469,81 @@ def project_checkout_dataset(request, pid):
     return JsonResponse({'id': str(proj.id), 'version': proj.version, 'doc_type': proj.doc_type,
                          'loaded': loaded, 'total_matched': snapshot.get('total_matched'),
                          'team': team.id}, status=201)
+
+
+# ── community record corrections — "Suggestions" (plan-record-suggestions) ──────
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def submit_suggestion(request):
+    """Submit a ``place_record`` working-copy project as a pending ``RecordSuggestion`` (plan §3).
+    Open to any beta user. Body: ``{project_id, rationale?}``. Deletes the throwaway working copy on
+    success. Returns ``{id, changed_fields}``."""
+    from . import suggestions as S
+    data = _body(request)
+    proj = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=data.get('project_id'))
+    if proj.role_for(request.user) is None:
+        return _err('not your working copy', 403)
+    if proj.doc_type != 'place_record':
+        return _err('only a single-record correction can be submitted as a suggestion', 400)
+    try:
+        sug = S.create_suggestion(proj, request.user, rationale=data.get('rationale') or '')
+    except S.SuggestionError as e:
+        return _err(str(e))
+    proj.delete()                                   # the suggestion is the artefact now
+    return JsonResponse({'ok': True, 'id': sug.id, 'changed_fields': sug.changed_fields}, status=201)
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def review_suggestion(request, sid):
+    """Accept or reject a pending suggestion (plan §3). Auth: staff OR the gazetteer's owner. Body:
+    ``{decision: 'accept'|'reject', note?}``. Accept applies it via the shared record path + reindex."""
+    from . import suggestions as S
+    sug = get_object_or_404(RecordSuggestion.objects.select_related('dataset', 'place'), pk=sid)
+    if not S.can_review(request.user, sug):
+        return _err('only this gazetteer’s owner or WHG staff can review this suggestion', 403)
+    decision = (_body(request).get('decision') or '').lower()
+    note = _body(request).get('note') or ''
+    try:
+        if decision == 'accept':
+            summary = S.apply_suggestion(sug, request.user)
+            return JsonResponse({'ok': True, 'status': 'accepted', **summary})
+        if decision == 'reject':
+            S.reject_suggestion(sug, request.user, note)
+            return JsonResponse({'ok': True, 'status': 'rejected'})
+        return _err('decision must be "accept" or "reject"')
+    except S.SuggestionSuperseded as e:
+        return JsonResponse({'error': str(e), 'status': 'superseded'}, status=409)
+    except S.SuggestionError as e:
+        return _err(str(e))
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def withdraw_suggestion(request, sid):
+    """The proposer withdraws their own pending suggestion."""
+    from . import suggestions as S
+    sug = get_object_or_404(RecordSuggestion, pk=sid)
+    try:
+        S.withdraw_suggestion(sug, request.user)
+    except S.SuggestionError as e:
+        return _err(str(e), 403)
+    return JsonResponse({'ok': True, 'status': 'withdrawn'})
+
+
+@login_required
+@_beta_required
+@require_http_methods(['GET'])
+def suggestions_for_place(request, pid):
+    """Pending-suggestions inset data for one place (plan §1d/§1e): count always; items + review
+    controls only for staff / gazetteer owner / the proposer."""
+    from places.models import Place
+    from . import suggestions as S
+    place = get_object_or_404(Place.objects.select_related('dataset'), pk=pid)
+    return JsonResponse(S.inset_for_place(place, request.user))
 
 
 # ── teams ───────────────────────────────────────────────────────────────────

@@ -32,11 +32,20 @@
                 class="text-secondary ms-2">({{ dataset.title }})</small>
             {% if can_correct_record %}
             <a href="#" id="wb-correct-btn" class="btn btn-sm btn-outline-primary ms-2"
-               title="Fix this one record's name or coordinate in the Collaborative Workbench (beta), without touching the rest of the gazetteer">
+               title="Fix this one record's fields in the Collaborative Workbench (beta), without touching the rest of the gazetteer">
                 <i class="fas fa-pen-to-square me-1"></i>Correct this record
+                <span class="badge bg-warning text-dark">beta</span></a>
+            {% elif can_suggest_record %}
+            <a href="#" class="btn btn-sm btn-outline-primary ms-2" data-wb-suggest data-place-id="{{ object.id }}"
+               title="Propose a correction to this record for its gazetteer's editors and WHG staff to review (beta)">
+                <i class="fas fa-pen-to-square me-1"></i>Suggest a correction
                 <span class="badge bg-warning text-dark">beta</span></a>
             {% endif %}
         </h4>
+        {% if show_suggest_inset %}
+        <div data-wb-suggest-inset data-place-id="{{ object.id }}" class="mb-2"></div>
+        <script type="text/javascript" src="{% static 'webpack/wb-suggest.bundle.js' %}?v={{ asset_version }}"></script>
+        {% endif %}
         {% if can_correct_record %}
         <script type="text/javascript">
             (function () {

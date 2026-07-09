@@ -119,6 +119,9 @@
     };
     const userId = {{ user.id|default_if_none:"false" }};
     const userAuthenticated = {{ user.is_authenticated|yesno:"true,false"|default:"false" }};
+    // Community record corrections (plan-record-suggestions): beta users get a "Suggest a correction"
+    // affordance + pending inset per source-box. Read by wb-suggest.js.
+    window.WHG_CAN_SUGGEST = {{ can_suggest_record|yesno:"true,false"|default:"false" }};
   </script>
 
   {{ payload|json_script:"payload_data" }}
@@ -134,6 +137,10 @@
   },
   {
   src: '{% static 'webpack/whg_maplibre.bundle.js' %}',
+  type: 'text/javascript',
+  },
+  {
+  src: '{% static 'webpack/wb-suggest.bundle.js' %}',
   type: 'text/javascript',
   },
   {

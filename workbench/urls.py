@@ -21,6 +21,11 @@ urlpatterns = [
     # Dataset ("gazetteer") check-out — subset / whole-that-fits (pid = Dataset id). Staff-gated.
     path('checkout/dataset/<int:pid>/', views.project_checkout_dataset, name='checkout-dataset'),
     path('checkout/dataset/<int:pid>/info/', views.dataset_checkout_info, name='checkout-dataset-info'),
+    # Community record corrections ("Suggestions", plan-record-suggestions).
+    path('suggestions/', views.submit_suggestion, name='suggestion-submit'),
+    path('suggestions/<int:sid>/review/', views.review_suggestion, name='suggestion-review'),
+    path('suggestions/<int:sid>/withdraw/', views.withdraw_suggestion, name='suggestion-withdraw'),
+    path('suggestions/for-place/<int:pid>/', views.suggestions_for_place, name='suggestions-for-place'),
     path('teams/', views.teams, name='teams'),
     path('teams/<int:tid>/members/', views.team_members, name='team-members'),
     path('teams/<int:tid>/members/<int:uid>/', views.team_member_detail, name='team-member-detail'),

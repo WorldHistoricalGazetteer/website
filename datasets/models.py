@@ -147,6 +147,11 @@ class Dataset(models.Model):
     )
     numrows = models.IntegerField(null=True, blank=True)
 
+    # Owner opt-in to the community record-correction review loop (workbench.RecordSuggestion,
+    # plan-record-suggestions §1c). When True the owner is surfaced pending suggestions on their
+    # gazetteer (queue + digest); when False, WHG staff remain the review backstop so nothing is lost.
+    accept_suggestions = models.BooleanField(default=False)
+
     # these are back-filled
     numlinked = models.IntegerField(null=True, blank=True)
     total_links = models.IntegerField(null=True, blank=True)

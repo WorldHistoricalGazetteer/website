@@ -95,8 +95,13 @@ class PlaceDetailView(DetailView):
         # users with edit rights on this gazetteer. Button visibility mirrors the checkout endpoint's
         # authorisation (workbench.views.project_checkout_place → Dataset.can_edit).
         u = self.request.user
-        context['can_correct_record'] = bool(
-            u.is_authenticated and getattr(u, 'can_access_beta', False) and dataset.can_edit(u))
+        beta = bool(u.is_authenticated and getattr(u, 'can_access_beta', False))
+        context['can_correct_record'] = bool(beta and dataset.can_edit(u))
+        # "Suggest a correction" (community corrections, plan-record-suggestions) — beta users WITHOUT
+        # edit rights propose a correction for review instead of applying it. Owners/staff use Correct.
+        context['can_suggest_record'] = bool(beta and not dataset.can_edit(u))
+        # Pending-suggestions inset is shown to any beta user (the endpoint controls count-vs-content).
+        context['show_suggest_inset'] = beta
 
         return context
 
@@ -123,6 +128,9 @@ class PlacePortalView(TemplateView):
         if me.is_authenticated:
             filter_condition &= (Q(owner=me) | Q(collabs__user=me))
         context['my_collections'] = Collection.objects.filter(filter_condition)
+        # Community record corrections (plan-record-suggestions): beta users get a per-source-box
+        # "Suggest a correction" affordance + pending inset (wb-suggest.js reads window.WHG_CAN_SUGGEST).
+        context['can_suggest_record'] = bool(me.is_authenticated and getattr(me, 'can_access_beta', False))
 
         pid = kwargs.get('pid')
         whg_id = kwargs.get('whg_id')
