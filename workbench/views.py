@@ -385,10 +385,11 @@ NER_MAX_CHARS = 200_000
 # news and misses historical / archaic / non-English toponyms, and can't choose between same-named
 # places. So we (1) also pull capitalised n-gram candidates the model didn't tag, (2) reconcile every
 # mention against WHG's own place index (reusing the /reconcile matcher), and (3) DISAMBIGUATE by
-# geographic clustering — a document's places tend to be near one another, so for an ambiguous name we
-# prefer the candidate closest to the cluster of confident places. The chosen match (id + coordinates)
-# is returned so the browser can seed a preliminary, located reconciliation. Best-effort: if the
-# gateway is slow/unavailable we silently return the spaCy-only result.
+# geographic mode-seeking — a document's places cluster, so we find the region where the most distinct
+# names have a candidate and resolve each name to its nearest candidate there. This uses pure geometry
+# (the indexed repr_point), NOT country codes, which are patchy in the index. The chosen match (id +
+# coordinates) is returned so the browser can seed a preliminary, located reconciliation. Best-effort:
+# if the gateway is slow/unavailable we silently return the spaCy-only result.
 _NER_CAND_RE = re.compile(
     r"\b[A-Z][\wÀ-ÿ’'\-]+"
     r"(?:\s+(?:of|the|de|la|le|du|des|upon|on|el|al|von|van)\s+[A-Z][\wÀ-ÿ’'\-]+"
@@ -489,47 +490,41 @@ def _ner_reconcile_disambiguate(mentions, user):
     if not hits_by_name:
         return {}
 
-    # 1. Country vote → dominant region (how many DISTINCT names have a hit in each country).
-    votes = {}
-    for hits in hits_by_name.values():
-        for c in {cc for h in hits for cc in (h.get('ccodes') or [])}:
-            votes[c] = votes.get(c, 0) + 1
-    dominant = {c for c, _ in sorted(votes.items(), key=lambda kv: -kv[1])[:2]}
+    # One representative candidate per DISTINCT location a name resolves to (dedup near-dupes; keep the
+    # best-scoring hit per location). We disambiguate by PURE GEOGRAPHY, not ccodes — country codes are
+    # patchy in the index, so a country vote mis-fires (a GB place with no ccode loses to a CA sibling).
+    locs_by_name = {}
+    for n, hits in hits_by_name.items():
+        reps = [(pt, max(c_hits, key=lambda h: h.get('score') or 0)) for pt, c_hits in _cluster_locations(hits)]
+        if not reps and hits:                                   # no coordinates at all → keep top hit
+            reps = [(None, max(hits, key=lambda h: h.get('score') or 0))]
+        locs_by_name[n] = reps
 
-    # Restrict each name to its dominant-country hits (keeps geographic coherence; fall back to all).
-    dom_hits = {n: [h for h in hits if set(h.get('ccodes') or []) & dominant] or hits
-                for n, hits in hits_by_name.items()}
-
-    # 2. Anchor centroid: names that resolve to exactly ONE location within the dominant country.
-    anchor_pts = [_cluster_locations(hits)[0][0] for hits in dom_hits.values()
-                  if len(_cluster_locations(hits)) == 1 and _cluster_locations(hits)[0][0]]
-    center = ([_median([p[0] for p in anchor_pts]), _median([p[1] for p in anchor_pts])]
-              if anchor_pts else None)
-
-    def choose(hits, center):
-        # score/100 (ES relevance, 0–1) is a mild tiebreak; distance-to-anchor (up to 0.6) dominates,
-        # so same-country siblings are separated by which is nearest the document's cluster.
-        best, best_val = None, -1e9
-        for h in hits:
-            val = 0.2 * ((h.get('score') or 0) / 100.0)
-            rp = h.get('repr_point')
-            if center and rp:
-                val -= 0.6 * min(1.0, _haversine_km(center, rp) / 500.0)
-            if val > best_val:
-                best, best_val = h, val
-        return best
-
-    # 3. If no anchors pinned the region, bootstrap the centre from every name's top pick, then refine.
-    if center is None:
-        boot = [p['repr_point'] for p in (choose(h, None) for h in dom_hits.values()) if p and p.get('repr_point')]
-        center = [_median([p[0] for p in boot]), _median([p[1] for p in boot])] if boot else None
+    # Mode-seeking: the region (a candidate point) that covers the MOST distinct names within R km — a
+    # document's places cluster, so the true region is where the most names have a candidate. A tight
+    # cluster (e.g. a single county) beats scattered same-name siblings decisively; ties → tighter.
+    R = 250.0
+    all_pts = [pt for reps in locs_by_name.values() for pt, _ in reps if pt]
+    center, best_cov, best_spread = None, -1, 1e18
+    for cand in all_pts:
+        cov = spread = 0
+        for reps in locs_by_name.values():
+            dmin = min((_haversine_km(cand, pt) for pt, _ in reps if pt), default=None)
+            if dmin is not None and dmin <= R:
+                cov += 1
+                spread += dmin
+        if cov > best_cov or (cov == best_cov and spread < best_spread):
+            center, best_cov, best_spread = cand, cov, spread
 
     chosen = {}
-    for n, hits in dom_hits.items():
-        best = choose(hits, center) or hits[0]
-        rp = (best or {}).get('repr_point') or [None, None]
+    for n, reps in locs_by_name.items():
+        if center:                                              # nearest candidate to the region centre
+            _, best = min(reps, key=lambda pr: _haversine_km(center, pr[0]) if pr[0] else 1e18)
+        else:                                                   # no geography anywhere → best relevance
+            _, best = max(reps, key=lambda pr: pr[1].get('score') or 0)
+        rp = best.get('repr_point') or [None, None]
         chosen[n] = {'id': best.get('id'), 'title': best.get('name'), 'score': round(best.get('score') or 0, 3),
-                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(_cluster_locations(hits)) > 1}
+                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(reps) > 1}
     return chosen
 
 
