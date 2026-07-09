@@ -46,6 +46,7 @@ module.exports = {
 		profile: './whg/webpack/js/profile.js',
 		reconciliation: './whg/webpack/js/reconciliation.js',
 		review: './whg/webpack/js/review.js',
+		'wb-place-collection': './whg/webpack/js/wb-place-collection.js',
 		search: './whg/webpack/js/search.js',
 		search_functions: './whg/webpack/js/search_resources.js',
 		tasks: './whg/webpack/js/tasks.js',

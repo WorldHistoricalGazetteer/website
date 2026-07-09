@@ -39,16 +39,21 @@ def _local_place_pk(pid):
     """Return the local ``places.Place`` pk for a snapshot/reconciliation place id, or None.
 
     WHG's reconciliation service namespaces legacy WHG place ids as ``whg:<digits>`` (the ``whg``
-    pseudo-namespace; see api.reconcile_helpers.get_namespace); a bare ``<digits>`` and a
-    ``place:<digits>`` form are also accepted. ONLY these are local Place rows — every other
-    namespace (``gn:``, ``wd:``, ``osm:``, ``tgn:``, …) is a CRC-gateway id with no local pk, so it
-    can't become a CollPlace and is reported as unresolved (the contribute-then-add bridge, §8.1)."""
-    s = str(pid).strip()
-    for prefix in ('whg:', 'place:'):
-        if s.startswith(prefix):
-            s = s[len(prefix):]
-            break
-    return int(s) if s.isdigit() else None
+    pseudo-namespace; see api.reconcile_helpers.get_namespace), and its extend keys use the
+    ``place:<id>`` form — so a local id may arrive as ``123``, ``whg:123``, ``place:123`` or
+    ``place:whg:123``. ONLY a WHG-namespaced (or bare/place-prefixed) numeric id is a local Place row;
+    every CRC-gateway id carries a real source namespace (``gn:``, ``wd:``, ``osm:``, ``tgn:``, …) —
+    e.g. ``gn:745044`` or ``place:gn:745044`` — and has no local pk, so it can't become a CollPlace
+    and is reported as unresolved (the contribute-then-add bridge, §8.1).
+
+    Rule: the final colon-separated segment must be all digits, and its namespace (the segment before
+    it, or ``whg`` if none) must be ``whg`` or the neutral ``place`` wrapper."""
+    parts = str(pid).strip().split(':')
+    last = parts[-1]
+    if not last.isdigit():
+        return None
+    namespace = parts[-2].lower() if len(parts) >= 2 else 'whg'
+    return int(last) if namespace in ('whg', 'place') else None
 
 
 def _resolve_places(place_refs):

@@ -516,7 +516,8 @@ def workbench_home(request):
     from main.labels import label
     # Editors that are actually built and reachable today. New doc-type editor chunks land here as
     # they ship; until then their tiles render as "in development" rather than dead links.
-    READY = {'reconciliation': '/reconciliation/'}
+    READY = {'reconciliation': '/reconciliation/',
+             'place_collection': '/workbench/place-collection/'}
     tiles = []
     for dt in doctypes.creatable():
         tiles.append({'key': dt.key, 'label': dt.label, 'url': READY.get(dt.key),
@@ -526,6 +527,16 @@ def workbench_home(request):
                     {'key': 'network', 'label': label('network')}]
     return render(request, "main/workbench_new.html",
                   {'tiles': tiles, 'placeholders': placeholders})
+
+
+# Place Collection editor page (Collaborative Workbench doc-type #2). Beta-gated exactly like the
+# reconciliation tool (404 to non-beta). Local-first: the page ships static; all state lives in the
+# browser until the user saves to their account or publishes (both via the beta-gated workbench API).
+@login_required
+def wb_place_collection_view(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    return render(request, "main/wb_place_collection.html", {})
 
 
 # ── Development status & roadmap ─────────────────────────────────────────────────────────────────
