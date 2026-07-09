@@ -230,21 +230,46 @@ def _first_lonlat(coords):
     return None
 
 
+def _geo_point_lonlat(v):
+    """An Elasticsearch geo_point → [lon, lat]. Accepts [lon, lat] array, {lat, lon[/lng]} object, or
+    the ES "lat,lon" string form."""
+    if isinstance(v, dict):
+        lat = v.get("lat")
+        lon = v.get("lon", v.get("lng"))
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            return [float(lon), float(lat)]
+        return None
+    if isinstance(v, str) and "," in v:
+        try:
+            lat, lon = (float(x) for x in v.split(",")[:2])   # geo_point string is "lat,lon"
+            return [lon, lat]
+        except ValueError:
+            return None
+    return _first_lonlat(v)  # [lon, lat] array
+
+
 def repr_point(src):
-    """A representative [lng, lat] for a place _source, from the first usable geom — centroid,
-    repr_point, or the first vertex of any geometry type. None if no coordinates are present."""
-    for g in src.get("geoms", []) or []:
-        for key in ("centroid", "repr_point"):
-            p = _first_lonlat(g.get(key))
+    """The place's authoritative representative point as [lng, lat]. The index stores one per geometry
+    (``geometries[].repr_point``, a geo_point); prefer it (and any centroid) over deriving a point from
+    a polygon. Reads both the raw index field (``geometries``) and the reconcile-adapted (``geoms``)."""
+    geom_lists = [src.get("geometries") or [], src.get("geoms") or []]
+    # 1. Authoritative representative point / centroid.
+    for geoms in geom_lists:
+        for g in geoms:
+            if not isinstance(g, dict):
+                continue
+            for key in ("repr_point", "centroid", "h3_centroid"):
+                p = _geo_point_lonlat(g.get(key))
+                if p:
+                    return p
+    # 2. Last resort: a vertex of whatever geometry is present.
+    for geoms in geom_lists:
+        for g in geoms:
+            if not isinstance(g, dict):
+                continue
+            p = _first_lonlat((g.get("location") or {}).get("coordinates")) or _first_lonlat(g.get("coordinates"))
             if p:
                 return p
-        loc = g.get("location") or {}
-        p = _first_lonlat(loc.get("coordinates"))
-        if p:
-            return p
-        p = _first_lonlat(g.get("coordinates"))  # geom object without a `location` wrapper
-        if p:
-            return p
     return None
 
 

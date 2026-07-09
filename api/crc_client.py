@@ -432,29 +432,23 @@ def _adapt_hits(data: dict) -> list[dict]:
         geoms = []
         for g in geometries:
             if isinstance(g, dict):
+                entry = {}
                 # Full GeoJSON geometry object
                 if g.get("type") and g.get("coordinates"):
-                    geoms.append({
-                        "location": {
-                            "type": g["type"],
-                            "coordinates": g["coordinates"],
-                        }
-                    })
+                    entry["location"] = {"type": g["type"], "coordinates": g["coordinates"]}
                 # ES-style wrapper
                 elif isinstance(g.get("location"), dict):
                     loc = g["location"]
                     if loc.get("type") and loc.get("coordinates"):
-                        geoms.append({"location": loc})
-                # Legacy repr_point inside a geometries entry
-                else:
-                    rp = g.get("repr_point")
-                    if rp and len(rp) == 2:
-                        geoms.append({
-                            "location": {
-                                "type": "Point",
-                                "coordinates": rp,
-                            }
-                        })
+                        entry["location"] = loc
+                # Preserve the indexed representative point ALWAYS (not only when a full geometry is
+                # absent) — it's the authoritative point for the place; the polygon isn't a substitute.
+                rp = g.get("repr_point")
+                if rp and len(rp) == 2:
+                    entry["repr_point"] = rp
+                    entry.setdefault("location", {"type": "Point", "coordinates": rp})
+                if entry:
+                    geoms.append(entry)
 
         # Fall back to top-level repr_point when no full geometries exist
         if not geoms:
