@@ -9,11 +9,17 @@
 // config sets sequenced=true (drives copy + the ordinal styling). The backend derives "sequenced"
 // from the project's doc_type, so publishing needs nothing special here beyond sending doc_type.
 
-import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion, haversineKm, centroid } from './wb-shell.js';
+import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion, haversineKm, centroid, WB_COLORS } from './wb-shell.js';
 import { mountCollab } from './wb-collab.js';
 
 const RECON_ENDPOINT = '/reconcile';
 const SEARCH_LIMIT = 8;
+
+// MapLibre + the numbered-marker/full map are a heavy lazy chunk (same as Map your Data): only paid
+// for when a place with coordinates is actually shown. recon-map self-loads the maplibre shims.
+let ReconMap = null;
+const loadReconMap = async () => (ReconMap || (ReconMap = await import(/* webpackChunkName: "recon-map" */ './recon-map.js')));
+const colorDot = (i) => `<span class="badge me-1" style="background:${WB_COLORS[i % WB_COLORS.length]};color:#fff;">${i + 1}</span>`;
 
 // A hover tooltip for a reconciliation candidate: its description plus any alternative names.
 function candidateTip(c) {
@@ -103,16 +109,50 @@ export function mountCollectionEditor(cfg) {
       const km = anchor && c.repr_point ? haversineKm(c.repr_point, anchor) : null;
       const dist = km != null ? `<span class="text-muted small ms-1">· ${km < 1 ? '<1' : Math.round(km)} km</span>` : '';
       return `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(candidateTip(c))}">
-        ${esc(truncate(c.name, 48))}
+        ${c.repr_point ? colorDot(i) : ''}${esc(truncate(c.name, 44))}
         ${isWhg(c.id) ? '' : '<span class="badge bg-warning text-dark ms-1" title="Not a WHG-indexed place — cannot be published to a collection yet">external</span>'}
         ${c.description ? `<span class="text-muted small ms-1">${esc(truncate(c.description, 34))}</span>` : ''}${dist}
       </button>`;
     }).join('');
-    box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => {
-      const c = results[+b.dataset.i];
-      addPlace({ id: c.id, title: c.name, tip: candidateTip(c), lnglat: c.repr_point });
-      el('wb-search').value = ''; box.innerHTML = '';
-    }));
+    box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => addCandidate(results, +b.dataset.i, box)));
+    renderCandMap(results);
+  }
+
+  function addCandidate(results, i, box) {
+    const c = results[i];
+    addPlace({ id: c.id, title: c.name, tip: candidateTip(c), lnglat: c.repr_point });
+    el('wb-search').value = ''; if (box) box.innerHTML = '';
+    hideCandMap();
+  }
+
+  // Numbered-marker map of the current search candidates — matches the list numbers/colours (as in
+  // Map your Data). Clicking a pin adds that place. Only candidates with coordinates are shown.
+  async function renderCandMap(results) {
+    const container = el('wb-cand-map');
+    if (!container) return;
+    const pts = results.map((c, i) => (c.repr_point ? { ci: i, lon: c.repr_point[0], lat: c.repr_point[1], name: c.name } : null)).filter(Boolean);
+    if (!pts.length) { hideCandMap(); return; }
+    container.classList.remove('d-none');
+    const mod = await loadReconMap();
+    mod.renderReviewMap(container, pts, null, { onAccept: (ci) => addCandidate(results, ci, el('wb-search-results')) });
+    if (mod.resizeReviewMap) mod.resizeReviewMap();
+  }
+  function hideCandMap() { const c = el('wb-cand-map'); if (c) c.classList.add('d-none'); }
+
+  // Assembled-collection map (its own step) — all located members as a clustered/labelled map.
+  async function renderFullMap() {
+    const container = el('wb-full-map'); if (!container) return;
+    const located = project.places.filter((p) => p.lng != null && p.lat != null);
+    const note = el('wb-full-map-note');
+    if (note) note.textContent = located.length
+      ? `${located.length} of ${project.places.length} ${memberWord}s mapped.`
+      : `No mapped ${memberWord}s yet — add some in step 2.`;
+    const fc = { type: 'FeatureCollection', features: located.map((p, i) => ({
+      type: 'Feature', geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      properties: { title: `${i + 1}. ${p.title || p.id}`, match: true } })) };
+    const mod = await loadReconMap();
+    mod.renderFullMap(container, fc);
+    if (mod.resizeFullMap) mod.resizeFullMap();
   }
 
   function addPlace(p) {
@@ -137,11 +177,9 @@ export function mountCollectionEditor(cfg) {
       list.innerHTML = `<li class="text-muted small list-group-item">No ${memberWord}s yet — search above to add some.</li>`;
       return;
     }
-    // Itinerary ordinals get a directional tint so the journey order reads clearly.
-    const badgeClass = cfg.sequenced ? 'bg-primary' : 'bg-secondary';
     list.innerHTML = project.places.map((p, i) => `
       <li class="list-group-item d-flex align-items-start gap-2" data-i="${i}">
-        <span class="badge ${badgeClass} mt-1">${i + 1}</span>
+        <span class="badge mt-1" style="background:${WB_COLORS[i % WB_COLORS.length]};color:#fff;">${i + 1}</span>
         <span class="flex-grow-1">
           <span class="fw-semibold" title="${esc(p.tip || '')}">${esc(p.title || p.id)}</span>
           ${isWhg(p.id) ? '' : '<span class="badge bg-warning text-dark ms-1">external</span>'}
@@ -207,7 +245,7 @@ export function mountCollectionEditor(cfg) {
   async function init() {
     status = statusBadge(el('wb-status'));
     bindMeta();
-    mountAccordion('wb-pane-about');
+    mountAccordion('wb-pane-about', (id) => { if (id === 'wb-pane-map') renderFullMap(); });
     mountCollab({ bridge, getSnapshot: snapshot, getTitle: () => project.title.trim() || 'Untitled',
                   container: el('wb-collab-body'), onSaved: () => status.synced() });
     el('wb-search-btn').addEventListener('click', search);

@@ -51,15 +51,19 @@ export function openPane(id) {
   document.querySelectorAll('.recon-pane').forEach((p) => p.classList.toggle('recon-collapsed', p.id !== id));
 }
 
-export function mountAccordion(openId) {
+export function mountAccordion(openId, onOpen) {
   document.querySelectorAll('.recon-pane-toggle').forEach((btn) => btn.addEventListener('click', () => {
     const p = btn.closest('.recon-pane');
     if (!p) return;
-    if (p.classList.contains('recon-collapsed')) openPane(p.id);   // sole-open
-    else p.classList.add('recon-collapsed');                       // click again to collapse
+    if (p.classList.contains('recon-collapsed')) { openPane(p.id); if (onOpen) onOpen(p.id); } // sole-open
+    else p.classList.add('recon-collapsed');                                                   // click again collapses
   }));
   if (openId) openPane(openId);
 }
+
+// Shared numbered-marker palette (matches reconciliation.js RECON_COLORS + recon-map.js COLORS) so
+// list badges and map pins line up across the Workbench.
+export const WB_COLORS = ['#1565c0', '#c2410c', '#2e7d32', '#6a1b9a', '#00838f', '#b26a00', '#455a64', '#c2185b', '#5d4037'];
 
 // Copy text to the clipboard; resolves true/false. Falls back to a hidden textarea+execCommand when
 // the async Clipboard API is unavailable (older browsers / insecure context).
