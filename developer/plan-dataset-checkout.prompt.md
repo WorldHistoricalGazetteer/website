@@ -1,6 +1,7 @@
 # Plan — Whole-dataset ("Gazetteer") wholesale check-out
 
-**Status:** PLAN (2026-07-09) — not started. The largest and highest-blast-radius piece of the
+**Status:** REVIEWED (Stephen, 2026-07-09) — decisions locked (§1), ready to build in phases (§5). The
+largest and highest-blast-radius piece of the
 check-out/publish-back model: editing a whole **published, indexed gazetteer** (`datasets.Dataset`)
 through the Workbench. Realises plan-collaborativeCollections **§6 / §6.1** at the top of the
 granularity spectrum.
@@ -32,9 +33,18 @@ built first — whole-dataset is subset-of-everything with a capacity gate.
 
 ---
 
-## 1. Key architectural decisions (resolve at implementation — options + recommendation)
+## 1. Key architectural decisions — DECIDED (Stephen, 2026-07-09)
 
-### 1a. Which editor? (the big one)
+| # | Decision | Choice |
+|---|----------|--------|
+| 1a | Editor | **Record-editor-over-subset (option C).** No lossy spreadsheet flatten. |
+| 1b | Capacity | **Dynamic, from the user's own resources** — `navigator.storage.estimate()`, not a fixed global cap. |
+| 1c | Publish-back | **Delta-only.** No full dataset re-accession; instead the record editor does **per-record re-reconciliation**. |
+| 1d | Field scope | **Every LPF field** editable per record — a **schema-driven** editor derived from the LPF schema. |
+| 1e | Permissions | **Staff-only initially**; owners + team members when v3.3 goes public. Third-party corrections → **v4 Attestations** (PLATO, place#100), not record edits. |
+| 1f | Entry point | A single **"Edit published…"** link in the Workbench dropdown → a hub listing all the user's material (search/filter), each with "Edit in Workbench". |
+
+### 1a. Which editor? — record-editor-over-subset (DECIDED: C)
 A gazetteer's places are **LPF features** (per place: multiple names, geometries, temporal spans,
 types, links), *not* flat spreadsheet rows. Three options:
 
@@ -57,8 +67,11 @@ as select-all with a capacity gate. Offer **A** later only for explicitly-tabula
 MyD round-trip is safe.
 
 ### 1b. Transfer (streaming, resumable, capacity-aware) — §6.1
-- **Check capacity first:** `navigator.storage.estimate()` before check-out; if the dataset's
-  serialised size exceeds available quota (or a hard cap), **refuse and steer to subset/record**.
+- **Capacity is the user's own, queried at check-out (DECIDED 1b).** Call
+  `navigator.storage.estimate()` → `{quota, usage}`; the budget is `quota − usage − safety_margin`.
+  Compare against the dataset's estimated serialised size (record count × avg feature bytes, from a
+  cheap `HEAD`/size endpoint). If it fits → allow whole check-out; if not → **refuse and steer to
+  subset/record**. No fixed global threshold — it adapts to each browser/device.
 - **Stream out in chunks**, never one giant JSON. Reuse the **LPF/GeoJSON serialisers**
   (`utils/feature_collection.py`, `utils/mapdata.py`) behind a **paged** endpoint
   (`?page=`/`?after_id=`), so the browser pulls features in batches (mirror of the accession ingest,
@@ -68,16 +81,17 @@ MyD round-trip is safe.
 - **Backpressure / caps:** explicit size limits with clear messaging ("this gazetteer is too large to
   edit wholesale — edit records or a filtered subset instead"), mirroring MyD's existing caps.
 
-### 1c. Publish-back — DELTA by default, full re-accession as an explicit choice
-- **Delta (default):** send only **changed records** (a diff against the checkout baseline). The server
-  applies each changed record with the **record-level apply path already built**
-  (`publish_place_record`'s field mutation) and **targeted re-index** — reuse `_reindex_place` per
-  changed record, or a **bulk `streaming_bulk`** (as `index_to_pub` does) when many changed. NOT a full
-  dataset re-accession. This keeps routine bulk corrections cheap and low-risk.
-- **Full re-accession (explicit "I restructured everything"):** re-run the **validation/accession
-  pipeline** (`validation.views.validate_file` → `validate_feature_batch` → `create_dataset`) on the
-  edited LPF, then re-index. Heavy, re-reconciles, high blast radius — behind an explicit confirmation
-  + backup, and only for datasets that were fully checked out.
+### 1c. Publish-back — DELTA-only (DECIDED); re-reconciliation is a per-record editor action
+- **Delta only.** Send just the **changed records** (a diff against the checkout baseline). The server
+  applies each with the **record-level apply path already built** (`publish_place_record`'s field
+  mutation, extended to all LPF fields per 1d) and **targeted re-index** — `_reindex_place` per changed
+  record, or a **bulk `streaming_bulk`** (as `index_to_pub`) when many changed. **No full dataset
+  re-accession.**
+- **Re-reconciliation happens IN the editor, per record.** Rather than re-running the accession
+  pipeline over the whole dataset, the record editor exposes a **"re-reconcile this record"** action —
+  re-match it against WHG / Wikidata / GeoNames / OSM via the existing `/reconcile` service, and update
+  that record's authority links / match. So re-reconciliation is a normal per-record edit that flows
+  through the delta path — no wholesale re-accession needed for v3.3.
 
 ### 1d. Optimistic locking at scale (§6.1 "record granularity")
 Per-record content hash (reuse `checkout.record_state_hash`) captured at check-out. On delta
@@ -126,34 +140,46 @@ manifest.)
 
 ## 4. Safety & gating
 
-- Beta + `Dataset.can_edit` (owner/staff), button + endpoint (one predicate) — as for record-level.
+- **Staff-only initially (1e).** Beta gate + a staff check on the dataset check-out endpoint/button; at
+  the v3.3 public release, widen to `Dataset.can_edit` (owner + team). (The already-shipped *record*
+  correction uses staff-or-owner; whole-dataset check-out is higher blast radius → staff-only first.)
 - **Capacity guard** before check-out; hard size cap with steering to subset/record.
 - **Backup revision** (`DatasetFile.rev`) before any publish-back; reversible.
 - Delta-by-default keeps blast radius per-record; full re-accession is explicit + confirmed + backed up.
 - The single-doc re-index path is **already proven** (record-level, verified live) — bulk is the same
   `makeDoc`+`searchy`-enrichment scaled via `streaming_bulk`.
 
-## 5. Phasing
+## 5. Phasing (recommended build order)
 
-1. **Subset / filtered check-out** — check out a bounded page/filter of a dataset's records; edit with
-   the record editor; delta publish-back + reindex the changed records. (The real workhorse; do first.)
-2. **Whole-dataset for datasets that fit** — "select all" over (1) with the capacity gate; the "Edit in
-   Workbench" button on the dataset page.
-3. **Streaming/resumable transfer + capacity steering** for large datasets.
-4. **Full re-accession** option (validation pipeline) for wholesale restructures, behind confirmation +
-   backup.
+The prerequisite that unlocks everything else is a **full-LPF record editor** — name+coordinate (built)
+is too thin to edit a real gazetteer. Build order:
 
-## 6. Open questions (decide with Stephen)
+1. **"Edit published…" hub (1f)** — one Workbench-dropdown link → a page listing all the user's
+   material (gazetteers, place collections, groups, itineraries) with **search/filter**, each with
+   "Edit in Workbench". Independent, low-risk, immediately useful (surfaces everything already
+   checkout-able). *Quick win — do first.*
+2. **Full-LPF record editor (1d)** — grow the shipped record editor from name/coordinate to a
+   **schema-driven** form covering every LPF field (names, geometries, types, temporal/`when`, links,
+   descriptions, relations, ccodes), plus a **"re-reconcile this record"** action (1c). This is the
+   foundational capability; the whole-dataset story is "many of these".
+3. **Filtered-subset check-out** — check out a bounded page/filter of a dataset's records into a
+   dataset shell; edit with the full-LPF record editor; **delta publish-back** + reindex changed
+   records. The real workhorse ("fix these twelve records"). Staff-only (1e).
+4. **Whole-dataset for datasets that fit** — "select all" over (3) with the **dynamic capacity gate**
+   (1b); the "Edit in Workbench" button on the dataset page.
+5. **Streaming / resumable transfer + capacity steering** for large datasets (paged LPF both ways).
+6. **v3.3-public gate change** — extend check-out from staff-only to owners + team members (1e).
 
-- **Editor choice** (1a: MyD-flatten vs record-editor-subset vs new LPF editor) — recommend
-  record-editor-subset (C), but confirm.
-- **Capacity threshold** — what record count / byte size flips from "edit wholesale" to "edit a subset"?
-- **Full re-accession** — is re-reconciliation on publish-back ever wanted, or is delta-only sufficient
-  for v3.3? (Re-reconciliation changes matched authority ids — a semantic decision.)
-- **Who may check out a gazetteer owned by others** (place#111 open question — access/permissions for
-  legacy gazetteers) — staff-only initially?
-- **Field scope** for record edits at scale — name/coord (built) is thin for a gazetteer; likely need
-  types, dates, links too (extends `publish_place_record`).
+## 6. Resolved (was: open questions)
+
+All resolved with Stephen 2026-07-09 — see the decisions table (§1). Recap:
+- **Editor** = record-editor-over-subset (C); **capacity** = dynamic via `navigator.storage.estimate()`;
+  **publish-back** = delta-only with per-record re-reconciliation (no full re-accession); **fields** =
+  every LPF field, schema-driven; **permissions** = staff-only now → owners/team at v3.3-public;
+  **third-party corrections** = deferred to **v4 Attestations** on the graph (PLATO, place#100), not
+  record edits; **entry** = an "Edit published…" hub in the Workbench dropdown.
+- Remaining detail to settle during build: the exact LPF-schema → form mapping (which fields get rich
+  widgets vs raw JSON), and the changed-record diff/merge UX at subset scale.
 
 ## 7. Files (indicative)
 
