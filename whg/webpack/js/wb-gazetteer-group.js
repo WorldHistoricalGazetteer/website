@@ -6,8 +6,9 @@
 // reuses the shared wb_collection_editor.html DOM (same element ids).
 
 import '../css/reconciliation.css';
-import { el, esc, truncate, debounce, statusBadge, openStore, serverBridge } from './wb-shell.js';
+import { el, esc, truncate, debounce, statusBadge, openStore, serverBridge, mountAccordion } from './wb-shell.js';
 import { searchDatasets } from './recon-sync.js';
+import { mountCollab } from './wb-collab.js';
 
 // eslint-disable-next-line camelcase, no-undef
 __webpack_public_path__ = '/static/webpack/';
@@ -63,20 +64,21 @@ async function search() {
   if (!r.ok) { box.innerHTML = `<span class="text-danger small">Search failed.</span>`; return; }
   const results = (r.data && r.data.datasets) || [];
   if (!results.length) { box.innerHTML = '<span class="text-muted small">No published gazetteers found.</span>'; return; }
-  box.innerHTML = results.map((d, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}">
+  box.innerHTML = results.map((d, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(d.description || '')}">
       <span class="fw-semibold">${esc(truncate(d.title, 52))}</span>
       ${d.description ? `<span class="text-muted small ms-1">${esc(truncate(d.description, 40))}</span>` : ''}
     </button>`).join('');
   box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => {
     const d = results[+b.dataset.i];
-    addGazetteer({ dataset_id: d.id, title: d.title });
+    addGazetteer({ dataset_id: d.id, title: d.title, tip: d.description || '' });
     el('wb-search').value = ''; box.innerHTML = '';
   }));
 }
 
 function addGazetteer(g) {
   if (project.gazetteers.some((x) => x.dataset_id === g.dataset_id)) return;
-  project.gazetteers.push(g); render(); touched();
+  project.gazetteers.push({ dataset_id: g.dataset_id, title: g.title, tip: g.tip || '' });
+  render(); touched();
 }
 function move(i, d) {
   const j = i + d;
@@ -91,7 +93,7 @@ function render() {
   list.innerHTML = project.gazetteers.map((g, i) => `
     <li class="list-group-item d-flex align-items-center gap-2" data-i="${i}">
       <span class="badge bg-secondary">${i + 1}</span>
-      <span class="flex-grow-1 fw-semibold">${esc(g.title || ('dataset ' + g.dataset_id))}</span>
+      <span class="flex-grow-1 fw-semibold" title="${esc(g.tip || '')}">${esc(g.title || ('dataset ' + g.dataset_id))}</span>
       <span class="btn-group btn-group-sm" role="group">
         <button type="button" class="btn btn-outline-secondary wb-up" title="Move up">↑</button>
         <button type="button" class="btn btn-outline-secondary wb-down" title="Move down">↓</button>
@@ -143,8 +145,12 @@ async function clearDraft() {
 async function init() {
   status = statusBadge(el('wb-status'));
   bindMeta();
+  mountAccordion('wb-pane-about');
+  mountCollab({ bridge, getSnapshot: snapshot, getTitle: () => project.title.trim() || 'Untitled group',
+                container: el('wb-collab-body'), onSaved: () => status.synced() });
   el('wb-search-btn').addEventListener('click', search);
   el('wb-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+  el('wb-search').addEventListener('input', debounce(search, 300));   // typeahead
   el('wb-save-btn').addEventListener('click', saveToAccount);
   el('wb-publish-btn').addEventListener('click', publish);
   el('wb-clear-btn').addEventListener('click', () => { if (confirm('Clear this draft from your browser? This cannot be undone.')) clearDraft(); });

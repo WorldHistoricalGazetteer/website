@@ -25,6 +25,39 @@ export function debounce(fn, ms) {
   return wrapped;
 }
 
+// ── accordion (sole-open panes) ────────────────────────────────────────────────
+// Mirrors the Map-your-Data pane accordion (reconciliation.js openPane): panes use the shared
+// `.recon-pane` / `.recon-pane-toggle[data-pane]` markup from reconciliation.css; opening one adds
+// `.recon-collapsed` to every other. Coloured step-number badges come from per-pane CSS in the
+// editor template.
+export function openPane(id) {
+  document.querySelectorAll('.recon-pane').forEach((p) => p.classList.toggle('recon-collapsed', p.id !== id));
+}
+
+export function mountAccordion(openId) {
+  document.querySelectorAll('.recon-pane-toggle').forEach((btn) => btn.addEventListener('click', () => {
+    const p = btn.closest('.recon-pane');
+    if (!p) return;
+    if (p.classList.contains('recon-collapsed')) openPane(p.id);   // sole-open
+    else p.classList.add('recon-collapsed');                       // click again to collapse
+  }));
+  if (openId) openPane(openId);
+}
+
+// Copy text to the clipboard; resolves true/false. Falls back to a hidden textarea+execCommand when
+// the async Clipboard API is unavailable (older browsers / insecure context).
+export async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
+  } catch (_) { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+  } catch (_) { return false; }
+}
+
 export function csrf() {
   const input = document.querySelector('input[name=csrfmiddlewaretoken]');
   if (input && input.value) return input.value;

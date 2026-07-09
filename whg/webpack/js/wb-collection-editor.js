@@ -9,10 +9,19 @@
 // config sets sequenced=true (drives copy + the ordinal styling). The backend derives "sequenced"
 // from the project's doc_type, so publishing needs nothing special here beyond sending doc_type.
 
-import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge } from './wb-shell.js';
+import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion } from './wb-shell.js';
+import { mountCollab } from './wb-collab.js';
 
 const RECON_ENDPOINT = '/reconcile';
 const SEARCH_LIMIT = 8;
+
+// A hover tooltip for a reconciliation candidate: its description plus any alternative names.
+function candidateTip(c) {
+  const bits = [];
+  if (c.description) bits.push(c.description);
+  if (c.alt_names && c.alt_names.length) bits.push('Also known as: ' + c.alt_names.slice(0, 12).join(', '));
+  return bits.join('\n');
+}
 
 // Is a reconciliation candidate id a WHG-indexed (publishable) place? Mirrors publish._local_place_pk:
 // whg:/place:/bare-digit ⇒ local; any real source namespace (gn:, wd:, …) ⇒ external.
@@ -85,21 +94,21 @@ export function mountCollectionEditor(cfg) {
     } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; return; }
     const results = (data.q0 && data.q0.result) || [];
     if (!results.length) { box.innerHTML = '<span class="text-muted small">No places found in WHG.</span>'; return; }
-    box.innerHTML = results.map((c, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}">
+    box.innerHTML = results.map((c, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(candidateTip(c))}">
         ${esc(truncate(c.name, 48))}
         ${isWhg(c.id) ? '' : '<span class="badge bg-warning text-dark ms-1" title="Not a WHG-indexed place — cannot be published to a collection yet">external</span>'}
         ${c.description ? `<span class="text-muted small ms-1">${esc(truncate(c.description, 34))}</span>` : ''}
       </button>`).join('');
     box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => {
       const c = results[+b.dataset.i];
-      addPlace({ id: c.id, title: c.name });
+      addPlace({ id: c.id, title: c.name, tip: candidateTip(c) });
       el('wb-search').value = ''; box.innerHTML = '';
     }));
   }
 
   function addPlace(p) {
     if (project.places.some((x) => x.id === p.id)) return;
-    project.places.push({ id: p.id, title: p.title, note: '' });
+    project.places.push({ id: p.id, title: p.title, note: '', tip: p.tip || '' });
     renderPlaces(); touched();
   }
 
@@ -123,7 +132,7 @@ export function mountCollectionEditor(cfg) {
       <li class="list-group-item d-flex align-items-start gap-2" data-i="${i}">
         <span class="badge ${badgeClass} mt-1">${i + 1}</span>
         <span class="flex-grow-1">
-          <span class="fw-semibold">${esc(p.title || p.id)}</span>
+          <span class="fw-semibold" title="${esc(p.tip || '')}">${esc(p.title || p.id)}</span>
           ${isWhg(p.id) ? '' : '<span class="badge bg-warning text-dark ms-1">external</span>'}
           <input class="form-control form-control-sm mt-1 wb-note" placeholder="note (optional)" value="${esc(p.note || '')}">
         </span>
@@ -187,8 +196,12 @@ export function mountCollectionEditor(cfg) {
   async function init() {
     status = statusBadge(el('wb-status'));
     bindMeta();
+    mountAccordion('wb-pane-about');
+    mountCollab({ bridge, getSnapshot: snapshot, getTitle: () => project.title.trim() || 'Untitled',
+                  container: el('wb-collab-body'), onSaved: () => status.synced() });
     el('wb-search-btn').addEventListener('click', search);
     el('wb-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+    el('wb-search').addEventListener('input', debounce(search, 300));   // typeahead
     el('wb-save-btn').addEventListener('click', saveToAccount);
     el('wb-publish-btn').addEventListener('click', publish);
     el('wb-clear-btn').addEventListener('click', () => { if (confirm('Clear this draft from your browser? This cannot be undone.')) clearDraft(); });

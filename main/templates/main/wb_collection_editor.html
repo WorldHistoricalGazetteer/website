@@ -2,10 +2,10 @@
 {% load static %}
 {% load labels %}
 {#
-  Shared editor page for place-based Workbench collections — Place Collection and Itinerary
-  (an Itinerary is a sequenced Place Collection, plan §4.3). BETA-gated in the view (404 to non-beta).
-  Local-first: nothing is saved to WHG until "Save to account" or "Publish". Context vars differ per
-  doc-type (heading/intro/member words/bundle); the DOM ids are bound by wb-collection-editor.js.
+  Shared editor page for Workbench collections — Place Collection, Itinerary (sequenced), and (reusing
+  the same DOM) Gazetteer Group. BETA-gated in the view (404 to non-beta). Local-first: nothing is
+  saved to WHG until "Save/Publish". Sole-open accordion (MyD .recon-pane pattern) with coloured step
+  badges. Context vars differ per doc-type; DOM ids are bound by the editor JS.
 #}
 {% block title %}WHG · {{ page_title }} (beta){% endblock %}
 
@@ -17,9 +17,13 @@
   .wb-status--saving { background:#fff3cd; color:#664d03; }
   .wb-status--saved  { background:#e2e3e5; color:#41464b; }
   .wb-status--error  { background:#f8d7da; color:#842029; }
-  .wb-pane { margin-bottom: 1.25rem; }
-  .wb-pane h2 { font-size: 1rem; font-weight: 600; }
-  #wb-search-results { max-height: 260px; overflow-y: auto; }
+  #wb-search-results { max-height: 280px; overflow-y: auto; }
+  /* Coloured step-number badges + left rule, per pane (matches the MyD accordion styling). */
+  #wb-pane-about   { border-left-color:#1565c0; } #wb-pane-about   .recon-pane-num { background:#1565c0; }
+  #wb-pane-members { border-left-color:#00838f; } #wb-pane-members .recon-pane-num { background:#00838f; }
+  #wb-pane-collab  { border-left-color:#6a1b9a; } #wb-pane-collab  .recon-pane-num { background:#6a1b9a; }
+  #wb-pane-publish { border-left-color:#2e7d32; } #wb-pane-publish .recon-pane-num { background:#2e7d32; }
+  .recon-pane { margin-bottom: 1rem; }
 </style>
 {% endblock %}
 
@@ -27,7 +31,7 @@
 <div class="wb-wrap px-3">
   {% csrf_token %}
 
-  <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+  <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
     <h1 class="h3 mb-0">{{ heading }}</h1>
     <span class="badge bg-warning text-dark">beta</span>
     <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
@@ -35,49 +39,84 @@
   </div>
   <p class="text-muted small">{{ intro }}</p>
 
-  {# 1. Metadata #}
-  <section class="wb-pane recon-card p-3">
-    <h2>1 · {{ meta_heading }}</h2>
-    <div class="mb-2">
-      <label class="form-label small mb-1" for="wb-title">Title</label>
-      <input id="wb-title" class="form-control" placeholder="{{ title_placeholder }}" maxlength="255">
+  {# 1 · Metadata #}
+  <section class="recon-card recon-pane p-3" id="wb-pane-about">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="wb-pane-about">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-num">1</span><span class="recon-pane-title">{{ meta_heading }}</span>
+      </button>
     </div>
-    <div class="mb-2">
-      <label class="form-label small mb-1" for="wb-desc">Description</label>
-      <textarea id="wb-desc" class="form-control" rows="3" maxlength="3000" placeholder="What this is about"></textarea>
-    </div>
-    <div class="mb-0">
-      <label class="form-label small mb-1" for="wb-keywords">Keywords <span class="text-muted">(comma-separated)</span></label>
-      <input id="wb-keywords" class="form-control" placeholder="trade, medieval, Baltic">
+    <div class="recon-pane-body">
+      <div class="mb-2">
+        <label class="form-label small mb-1" for="wb-title">Title</label>
+        <input id="wb-title" class="form-control" placeholder="{{ title_placeholder }}" maxlength="255">
+      </div>
+      <div class="mb-2">
+        <label class="form-label small mb-1" for="wb-desc">Description</label>
+        <textarea id="wb-desc" class="form-control" rows="3" maxlength="3000" placeholder="What this is about"></textarea>
+      </div>
+      <div class="mb-0">
+        <label class="form-label small mb-1" for="wb-keywords">Keywords <span class="text-muted">(comma-separated)</span></label>
+        <input id="wb-keywords" class="form-control" placeholder="trade, medieval, Baltic">
+      </div>
     </div>
   </section>
 
-  {# 2. Places / stops #}
-  <section class="wb-pane recon-card p-3">
-    <h2>2 · {{ member_heading }} <span class="badge bg-secondary" id="wb-places-count">0</span></h2>
-    {% if sequenced %}<p class="text-muted small mb-2">Order matters — drag with the ↑ ↓ buttons to set the sequence of the journey.</p>{% endif %}
-    <div class="input-group mb-2">
-      <input id="wb-search" class="form-control" placeholder="{{ search_placeholder }}">
-      <button id="wb-search-btn" class="btn btn-primary" type="button">Search</button>
+  {# 2 · Members #}
+  <section class="recon-card recon-pane p-3" id="wb-pane-members">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="wb-pane-members">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-num">2</span><span class="recon-pane-title">{{ member_heading }}</span>
+        <span class="recon-pane-summary"><span class="badge bg-secondary" id="wb-places-count">0</span></span>
+      </button>
     </div>
-    <div id="wb-search-results" class="mb-2"></div>
-    <ul id="wb-places" class="list-group"></ul>
+    <div class="recon-pane-body">
+      {% if sequenced %}<p class="text-muted small mb-2">Order matters — use the ↑ ↓ buttons to set the sequence of the journey.</p>{% endif %}
+      <div class="input-group mb-2">
+        <input id="wb-search" class="form-control" placeholder="{{ search_placeholder }}" autocomplete="off">
+        <button id="wb-search-btn" class="btn btn-primary" type="button">Search</button>
+      </div>
+      <div id="wb-search-results" class="mb-2"></div>
+      <ul id="wb-places" class="list-group"></ul>
+    </div>
   </section>
 
-  {# 3. Save & publish #}
-  <section class="wb-pane recon-card p-3">
-    <h2>3 · Save &amp; publish</h2>
-    <div class="d-flex flex-wrap gap-2 mb-2">
-      <button id="wb-save-btn" class="btn btn-outline-primary" type="button">Save to my account</button>
-      <button id="wb-publish-btn" class="btn btn-success" type="button">Publish {{ publish_word }}</button>
-      <button id="wb-clear-btn" class="btn btn-outline-danger ms-auto" type="button">Clear draft</button>
+  {# 3 · Collaborate & share #}
+  <section class="recon-card recon-pane p-3" id="wb-pane-collab">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="wb-pane-collab">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-num">3</span><span class="recon-pane-title">Collaborate &amp; share</span>
+      </button>
     </div>
-    <div id="wb-save-result" class="mb-1"></div>
-    <div id="wb-publish-result"></div>
-    <p class="text-muted small mt-2 mb-0">
-      Publishing writes this into your WHG collections and makes it available on the normal collection
-      pages. You can keep editing and re-publish to update it.
-    </p>
+    <div class="recon-pane-body">
+      <div id="wb-collab-body"></div>
+    </div>
+  </section>
+
+  {# 4 · Save & publish #}
+  <section class="recon-card recon-pane p-3" id="wb-pane-publish">
+    <div class="recon-pane-header">
+      <button type="button" class="recon-pane-toggle" data-pane="wb-pane-publish">
+        <i class="fas fa-chevron-down recon-pane-chevron"></i>
+        <span class="recon-pane-num">4</span><span class="recon-pane-title">Save &amp; publish</span>
+      </button>
+    </div>
+    <div class="recon-pane-body">
+      <div class="d-flex flex-wrap gap-2 mb-2">
+        <button id="wb-save-btn" class="btn btn-outline-primary" type="button">Save to my account</button>
+        <button id="wb-publish-btn" class="btn btn-success" type="button">Publish {{ publish_word }}</button>
+        <button id="wb-clear-btn" class="btn btn-outline-danger ms-auto" type="button">Clear draft</button>
+      </div>
+      <div id="wb-save-result" class="mb-1"></div>
+      <div id="wb-publish-result"></div>
+      <p class="text-muted small mt-2 mb-0">
+        Publishing writes this into your WHG collections and makes it available on the normal collection
+        pages. You can keep editing and re-publish to update it.
+      </p>
+    </div>
   </section>
 </div>
 {% endblock %}

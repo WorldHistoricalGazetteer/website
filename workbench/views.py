@@ -272,7 +272,7 @@ def dataset_search(request):
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q))
     qs = qs.order_by('title')[:20]
     out = [{'id': d.id, 'title': d.title, 'label': d.label,
-            'description': (d.description or '')[:140]} for d in qs]
+            'description': (d.description or '')[:500]} for d in qs]
     return JsonResponse({'datasets': out})
 
 
