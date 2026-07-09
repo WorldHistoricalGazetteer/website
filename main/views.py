@@ -539,6 +539,37 @@ def workbench_home(request):
 _COLLECTIONS_DOC = 'https://docs.whgazetteer.org/content/v3-3/collections.html'
 
 
+# "Edit published…" hub (plan-collaborativeCollections §10 / plan-dataset-checkout §1f) — one place to
+# find and re-open any of the user's own published material for editing in the Workbench. Beta-gated.
+@login_required
+def workbench_published(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    from django.db.models import Q
+    from collection.models import Collection
+    from datasets.models import Dataset
+    u = request.user
+    mine = Q(owner=u) | Q(collabs__user=u)               # owned OR collaborator (Collection.collabs)
+    items = []
+    for c in Collection.objects.filter(collection_class='place').filter(mine).distinct().order_by('-create_date'):
+        items.append({'kind': 'Place Collection', 'kind_key': 'place_collection', 'icon': 'fa-layer-group',
+                      'id': c.id, 'title': c.title, 'meta': f'{c.status or "sandbox"}',
+                      'editor': '/workbench/place-collection/', 'checkout': True,
+                      'browse': f'/collections/{c.id}/browse_pl'})
+    for c in Collection.objects.filter(collection_class='dataset').filter(mine).distinct().order_by('-create_date'):
+        items.append({'kind': 'Gazetteer Group', 'kind_key': 'gazetteer_group', 'icon': 'fa-database',
+                      'id': c.id, 'title': c.title, 'meta': f'{c.datasets.count()} gazetteers · {c.status or "sandbox"}',
+                      'editor': '/workbench/gazetteer-group/', 'checkout': True,
+                      'browse': f'/collections/{c.id}/browse_ds'})
+    for d in (Dataset.objects.filter(Q(owner=u) | Q(collabs__user_id=u))
+              .exclude(title__startswith='(stub)').distinct().order_by('-id')):
+        items.append({'kind': 'Gazetteer', 'kind_key': 'gazetteer', 'icon': 'fa-map',
+                      'id': d.id, 'title': d.title, 'meta': f'{d.numrows or "?"} records · {d.ds_status or ""}',
+                      'editor': None, 'checkout': False,                    # whole-dataset check-out not built yet
+                      'browse': f'/datasets/{d.id}/browse'})
+    return render(request, 'main/workbench_published.html', {'items': items})
+
+
 @login_required
 def wb_place_collection_view(request):
     if not request.user.can_access_beta:

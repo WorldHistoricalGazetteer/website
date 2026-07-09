@@ -1,0 +1,109 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{% load labels %}
+{#
+  "Edit published…" hub (plan §10). BETA-gated in the view (workbench_published). One place to find
+  and re-open any of your own published material for editing in the Collaborative Workbench. Client-side
+  search + type filter; Place Collections and Gazetteer Groups get an "Edit in Workbench" button that
+  checks the item out and opens the right editor. Gazetteers (whole-dataset editing not built yet) link
+  to their page, where individual records can be corrected.
+#}
+{% block title %}WHG · Edit your published material (beta){% endblock %}
+
+{% block extra_head %}
+<style>
+  .wbp-wrap { max-width: 900px; margin: 1.75rem auto; }
+  .wbp-row { display:flex; align-items:center; gap:.75rem; padding:.7rem .9rem; border:1px solid var(--bs-border-color,#dee2e6); border-radius:.5rem; margin-bottom:.5rem; background:var(--bs-body-bg,#fff); }
+  .wbp-row .wbp-icon { width:2rem; text-align:center; color:#6c757d; }
+  .wbp-title { font-weight:600; }
+  .wbp-meta { font-size:.82rem; color:#6c757d; }
+  .wbp-kind { font-size:.7rem; text-transform:uppercase; letter-spacing:.03em; }
+  .wbp-actions { margin-left:auto; white-space:nowrap; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wbp-wrap px-3">
+  {% csrf_token %}
+  <div class="d-flex align-items-center gap-2 mb-1">
+    <h1 class="h3 mb-0">Edit your published material</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+  </div>
+  <p class="text-muted">Everything you own or collaborate on, in one place. Open any of it in the
+    Collaborative Workbench to edit and publish your changes back.</p>
+
+  <div class="row g-2 mb-3">
+    <div class="col-12 col-sm">
+      <input id="wbp-search" class="form-control" placeholder="Search your material by title…" autocomplete="off">
+    </div>
+    <div class="col-12 col-sm-auto">
+      <select id="wbp-filter" class="form-select">
+        <option value="">All types</option>
+        <option value="place_collection">Place Collections</option>
+        <option value="gazetteer_group">Gazetteer Groups</option>
+        <option value="gazetteer">Gazetteers</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="wbp-list">
+    {% for it in items %}
+    <div class="wbp-row" data-kind="{{ it.kind_key }}" data-title="{{ it.title|lower }}">
+      <span class="wbp-icon"><i class="fas {{ it.icon }}"></i></span>
+      <span class="flex-grow-1" style="min-width:0;">
+        <div class="wbp-title text-truncate"><a href="{{ it.browse }}" class="text-decoration-none" target="_blank" rel="noopener">{{ it.title }}</a></div>
+        <div class="wbp-meta"><span class="wbp-kind me-2">{{ it.kind }}</span>{{ it.meta }}</div>
+      </span>
+      <span class="wbp-actions">
+        {% if it.checkout %}
+          <button type="button" class="btn btn-sm btn-outline-primary wbp-edit" data-id="{{ it.id }}" data-editor="{{ it.editor }}">
+            <i class="fas fa-pen-to-square me-1"></i>Edit in Workbench</button>
+        {% else %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ it.browse }}" target="_blank" rel="noopener"
+             title="Whole-gazetteer editing is coming; for now, open a place from this gazetteer to correct it">
+            Corrections →</a>
+        {% endif %}
+      </span>
+    </div>
+    {% empty %}
+    <p class="text-muted">You don't have any published collections, groups, or gazetteers yet. Start something with
+      <a href="{% url 'workbench-new' %}">New…</a>.</p>
+    {% endfor %}
+  </div>
+  <p id="wbp-none" class="text-muted d-none">Nothing matches your search.</p>
+</div>
+
+<script type="text/javascript">
+(function () {
+  var search = document.getElementById('wbp-search'),
+      filter = document.getElementById('wbp-filter'),
+      rows = Array.prototype.slice.call(document.querySelectorAll('#wbp-list .wbp-row')),
+      none = document.getElementById('wbp-none');
+  function apply() {
+    var q = (search.value || '').trim().toLowerCase(), k = filter.value, shown = 0;
+    rows.forEach(function (r) {
+      var ok = (!q || r.dataset.title.indexOf(q) > -1) && (!k || r.dataset.kind === k);
+      r.style.display = ok ? '' : 'none'; if (ok) shown++;
+    });
+    none.classList.toggle('d-none', shown > 0 || rows.length === 0);
+  }
+  if (search) search.addEventListener('input', apply);
+  if (filter) filter.addEventListener('change', apply);
+
+  function csrf() { var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/); return m ? decodeURIComponent(m[1]) : ''; }
+  document.querySelectorAll('.wbp-edit').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.disabled = true; btn.textContent = 'Opening…';
+      fetch('/reconciliation/checkout/collection/' + btn.dataset.id + '/', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json' }, body: '{}',
+      }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+          if (res.ok && res.d && res.d.id) { window.location.href = btn.dataset.editor + '?project=' + res.d.id; }
+          else { alert((res.d && res.d.error) || 'Could not open this in the Workbench.'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen-to-square me-1"></i>Edit in Workbench'; }
+        }).catch(function () { alert('Could not reach the Workbench.'); btn.disabled = false; btn.innerHTML = '<i class="fas fa-pen-to-square me-1"></i>Edit in Workbench'; });
+    });
+  });
+})();
+</script>
+{% endblock %}

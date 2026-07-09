@@ -119,6 +119,7 @@ urlpatterns = [
                   # Collaborative Workbench — unified "New…" doc-type picker (BETA-gated; place#111/#112).
                   # Separate from the public legacy /workbench/ page above (rewriting that is the P4 step).
                   path('workbench/new/', views.workbench_home, name="workbench-new"),
+                  path('workbench/published/', views.workbench_published, name="workbench-published"),
                   path('workbench/place-collection/', views.wb_place_collection_view, name="wb-place-collection"),
                   path('workbench/itinerary/', views.wb_itinerary_view, name="wb-itinerary"),
                   path('workbench/gazetteer-group/', views.wb_gazetteer_group_view, name="wb-gazetteer-group"),
