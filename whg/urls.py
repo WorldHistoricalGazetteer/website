@@ -116,6 +116,10 @@ urlpatterns = [
                   # more static content - 2024-01
                   path('workbench/', TemplateView.as_view(template_name="main/workbench_3col.html"), name="workbench"),
 
+                  # Collaborative Workbench — unified "New…" doc-type picker (BETA-gated; place#111/#112).
+                  # Separate from the public legacy /workbench/ page above (rewriting that is the P4 step).
+                  path('workbench/new/', views.workbench_home, name="workbench-new"),
+
                   # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)
                   path('reconciliation/', views.reconciliation_view, name="reconciliation"),
                   # Collaborative Workbench API (place#112): projects/teams/share, co-located under the tool's path

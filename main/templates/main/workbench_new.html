@@ -1,0 +1,86 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{% load labels %}
+{#
+  Unified Collaborative Workbench entry — the "New…" doc-type picker
+  (plan-collaborativeCollections §10). BETA-gated in the view (main.views.workbench_home): non-beta
+  users get a 404, so nothing here is reachable by the public. This is a separate surface from the
+  public legacy /workbench/ pathways page (untouched in v3.3). Self-contained styling — no new
+  webpack bundle. Terminology comes from the central label map via {% load labels %}.
+#}
+{% block title %}WHG · {% label 'workbench' %} (beta preview){% endblock %}
+
+{% block extra_head %}
+<style>
+  .wb-new-wrap { max-width: 960px; margin: 2rem auto; }
+  .wb-new-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; }
+  .wb-tile { display: flex; flex-direction: column; height: 100%; border: 1px solid var(--bs-border-color, #dee2e6);
+             border-radius: .5rem; padding: 1.1rem 1.15rem; text-decoration: none; color: inherit;
+             background: var(--bs-body-bg, #fff); transition: box-shadow .12s, border-color .12s; }
+  a.wb-tile:hover { border-color: #1565c0; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  .wb-tile-title { font-weight: 600; font-size: 1.05rem; margin-bottom: .3rem; }
+  .wb-tile-desc { font-size: .86rem; color: #6c757d; flex-grow: 1; }
+  .wb-tile-foot { margin-top: .8rem; }
+  .wb-tile.disabled { opacity: .6; cursor: not-allowed; }
+  .wb-badge-soon { font-size: .68rem; text-transform: uppercase; letter-spacing: .03em; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wb-new-wrap px-3">
+
+  <div class="d-flex align-items-center mb-1">
+    <h1 class="h3 mb-0">{% label 'workbench' %}</h1>
+    <span class="badge bg-warning text-dark ms-2 align-middle">beta</span>
+  </div>
+  <p class="text-muted">
+    One tool, many document types — all local-first in your browser and collaborative with your team.
+    Choose what to make. Your existing drafts stay in your browser until you choose to publish.
+  </p>
+
+  <div class="alert alert-secondary py-2 small" role="alert">
+    This is a preview open to WHG staff and invited beta testers. Nothing here is visible to the public.
+  </div>
+
+  <h2 class="h6 text-uppercase text-muted mt-4 mb-2">Start something new</h2>
+  <div class="wb-new-grid">
+    {% for t in tiles %}
+      {% if t.ready %}
+        <a class="wb-tile" href="{{ t.url }}">
+          <div class="wb-tile-title">{{ t.label }}</div>
+          <div class="wb-tile-desc">{% include "main/_wb_doctype_desc.html" with key=t.key %}</div>
+          <div class="wb-tile-foot"><span class="btn btn-sm btn-primary">Open →</span></div>
+        </a>
+      {% else %}
+        <div class="wb-tile disabled" title="Editor in development — coming during this beta">
+          <div class="wb-tile-title">{{ t.label }}</div>
+          <div class="wb-tile-desc">{% include "main/_wb_doctype_desc.html" with key=t.key %}</div>
+          <div class="wb-tile-foot"><span class="badge bg-info text-dark wb-badge-soon">In development</span></div>
+        </div>
+      {% endif %}
+    {% endfor %}
+
+    {% for p in placeholders %}
+      <div class="wb-tile disabled"
+           title="A {{ p.label|lower }} is a first-class historical entity, arriving with WHG's v4 data model">
+        <div class="wb-tile-title">{{ p.label }}</div>
+        <div class="wb-tile-desc">
+          {% if p.key == 'route' %}
+            A route is more than a list of places — a referential entity with its own dates and attestations.
+          {% else %}
+            A network of places and their relations, with its own identity and attestations.
+          {% endif %}
+        </div>
+        <div class="wb-tile-foot"><span class="badge bg-secondary wb-badge-soon">Coming with v4</span></div>
+      </div>
+    {% endfor %}
+  </div>
+
+  <h2 class="h6 text-uppercase text-muted mt-4 mb-2">Your work</h2>
+  <p class="text-muted small mb-0">
+    Open the tool for a doc-type to see and resume your saved projects, or use
+    <em>Edit published…</em> inside it to check out something already published.
+  </p>
+
+</div>
+{% endblock %}

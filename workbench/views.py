@@ -24,9 +24,11 @@ from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
+from . import doctypes
 from .merge import merge_snapshots
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
-                     ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES)
+                     ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES,
+                     DOC_RECONCILIATION, DOC_TYPES)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -60,9 +62,10 @@ def _err(msg, status=400):
 def _project_dict(p, role):
     return {
         'id': str(p.id), 'title': p.title, 'team': p.team_id, 'team_title': p.team.title,
-        'role': role, 'version': p.version, 'status': p.status,
+        'role': role, 'version': p.version, 'status': p.status, 'doc_type': p.doc_type,
         'updated': p.updated.isoformat(), 'shared': bool(p.public_token),
         'is_personal_team': p.team.is_personal,
+        'published_collection': p.published_collection_id,
     }
 
 
@@ -99,17 +102,33 @@ def projects(request):
     snapshot = data.get('snapshot')
     if not isinstance(snapshot, dict):
         return _err('snapshot (object) is required')
-    title = (data.get('title') or snapshot.get('fileName') or 'Untitled project')[:300]
+
+    # doc_type: default 'reconciliation' (back-compat). Reject unknown types and the v4 placeholders
+    # (route/network are reserved but their creation is gated OFF — plan §4.4), then validate the
+    # snapshot against the doc-type's schema so a broken/hostile client can't seed a malformed doc.
+    doc_type = data.get('doc_type') or DOC_RECONCILIATION
+    dt = doctypes.get(doc_type)
+    if dt is None:
+        return _err(f'unknown doc_type: {doc_type}')
+    if not dt.enabled:
+        return _err(f'the “{dt.label}” doc-type is not available yet', 403)
+    errs = dt.validate(snapshot)
+    if errs:
+        return _err('; '.join(errs))
+
+    title = (data.get('title') or snapshot.get('title') or snapshot.get('fileName')
+             or 'Untitled project')[:300]
     team = _resolve_target_team(request.user, data.get('team'))
     if team is None:
         return _err('you are not an editor of that team', 403)
     with transaction.atomic():
         p = WorkbenchProject.objects.create(
             team=team, title=title, created_by=request.user, snapshot=snapshot, version=1,
-            status='draft')
+            status='draft', doc_type=doc_type)
         ProjectSnapshot.objects.create(project=p, version=1, snapshot=snapshot,
                                        created_by=request.user)
     return JsonResponse({'id': str(p.id), 'version': p.version, 'team': team.id,
+                         'doc_type': p.doc_type,
                          'role': ROLE_OWNER if team.is_personal else p.role_for(request.user)},
                         status=201)
 
@@ -137,7 +156,9 @@ def project_detail(request, pid):
         return JsonResponse({'id': str(p.id), 'title': p.title, 'team': p.team_id,
                              'team_title': p.team.title, 'team_personal': p.team.is_personal,
                              'role': role, 'version': p.version, 'status': p.status,
-                             'shared': bool(p.public_token), 'snapshot': p.snapshot})
+                             'doc_type': p.doc_type, 'shared': bool(p.public_token),
+                             'published_collection': p.published_collection_id,
+                             'snapshot': p.snapshot})
 
     if request.method == 'DELETE':
         if role != ROLE_OWNER:
@@ -233,6 +254,66 @@ def shared_snapshot(request, token):
         raise Http404()
     return JsonResponse({'title': p.title, 'snapshot': p.snapshot, 'version': p.version,
                          'read_only': True})
+
+
+# ── publish-back (plan §9) ─────────────────────────────────────────────────────
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def project_publish(request, pid):
+    """Publish (or re-publish) a project's snapshot into its canonical model via the doc-type's
+    ``publish_target`` (workbench/publish.py). Editor/owner only. Returns the publish summary
+    (e.g. ``{collection_id, added, unresolved}``). The published *artefact* then follows the existing
+    public-visibility rules — only the authoring tool/route is beta-gated (plan §2.5)."""
+    from .publish import PublishError
+    p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
+    if p.role_for(request.user) not in EDIT_ROLES:
+        return _err('only an editor or owner can publish a project', 403)
+    dt = doctypes.get(p.doc_type)
+    if dt is None or dt.publish_fn is None:
+        return _err('this doc-type cannot be published from the Workbench', 400)
+    try:
+        kwargs = {'sequenced': dt.sequenced} if dt.sequenced else {}
+        summary = dt.publish_fn(p, request.user, **kwargs)
+    except PublishError as e:
+        return _err(str(e))
+    except Exception as e:  # noqa: BLE001 — surface a clean error, log the detail
+        logger.exception('publish failed for project %s: %s', pid, e)
+        return _err('publishing failed — please try again.', 500)
+    return JsonResponse({'ok': True, 'status': 'published', **summary})
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def project_checkout(request, pid):
+    """Materialise an already-published Place Collection into a new, team-owned Workbench project for
+    editing (plan §6). Body: ``{collection_id, team?}``. The published record stays authoritative;
+    the new project records ``source_published_id`` + ``base_version`` for the publish-back check."""
+    from collection.models import Collection
+    from .checkout import checkout_place_collection, CheckoutError
+    coll = get_object_or_404(Collection, pk=pid)
+    # Only someone who can edit the collection may check it out to edit it.
+    if coll.owner_id != request.user.id and not request.user.is_staff:
+        return _err('you do not have permission to edit that collection', 403)
+    if coll.collection_class != 'place':
+        return _err('only Place Collections can be checked out yet', 400)
+    try:
+        snapshot, base_version = checkout_place_collection(coll)
+    except CheckoutError as e:
+        return _err(str(e))
+    team = _resolve_target_team(request.user, _body(request).get('team'))
+    if team is None:
+        return _err('you are not an editor of that team', 403)
+    with transaction.atomic():
+        proj = WorkbenchProject.objects.create(
+            team=team, title=coll.title[:300], created_by=request.user, snapshot=snapshot,
+            version=1, status='draft', doc_type='place_collection',
+            published_collection=coll, source_published_id=str(coll.pk), base_version=base_version)
+        ProjectSnapshot.objects.create(project=proj, version=1, snapshot=snapshot,
+                                       created_by=request.user)
+    return JsonResponse({'id': str(proj.id), 'version': proj.version, 'doc_type': proj.doc_type,
+                         'team': team.id}, status=201)
 
 
 # ── teams ───────────────────────────────────────────────────────────────────

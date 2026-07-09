@@ -1,0 +1,7 @@
+{# One-line description per creatable Workbench doc-type. Included by workbench_new.html with `key`. #}
+{% if key == 'place_collection' %}Curate a set of WHG places with notes, relations, and a narrative — for teaching or research.
+{% elif key == 'itinerary' %}An ordered Place Collection — a journey through places, with a route-line preview.
+{% elif key == 'gazetteer_group' %}Group published gazetteers together for comparison or analysis.
+{% elif key == 'reconciliation' %}Import a table of places and match it against WHG's gazetteers — the Map your Data workflow.
+{% else %}A Workbench document.
+{% endif %}

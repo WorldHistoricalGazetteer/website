@@ -26,6 +26,27 @@ EDIT_ROLES = (ROLE_OWNER, ROLE_EDITOR)  # roles allowed to write
 
 STATUS_CHOICES = [('draft', 'Draft'), ('shared', 'Shared'), ('published', 'Published')]
 
+# Workbench doc-types (plan-collaborativeCollections §3.1). One Workbench, many doc-types: the
+# reconciliation project (Map your Data) is doc-type #1; the rest share the same envelope (team,
+# snapshot, version, share/collab machinery) but carry a doc-type-specific snapshot schema and a
+# distinct publish/checkout pair (see workbench/doctypes.py). ``route`` and ``network`` are reserved
+# PLACEHOLDERS whose creation is gated OFF in v3.3 (arriving with the v4 graph model) — the values are
+# reserved now so no migration is needed when v4 lands.
+DOC_RECONCILIATION = 'reconciliation'
+DOC_GAZETTEER_GROUP = 'gazetteer_group'
+DOC_PLACE_COLLECTION = 'place_collection'
+DOC_ITINERARY = 'itinerary'
+DOC_ROUTE = 'route'
+DOC_NETWORK = 'network'
+DOC_TYPES = [
+    (DOC_RECONCILIATION, 'Map your Data (reconciliation)'),
+    (DOC_GAZETTEER_GROUP, 'Gazetteer Group'),
+    (DOC_PLACE_COLLECTION, 'Place Collection'),
+    (DOC_ITINERARY, 'Itinerary'),
+    (DOC_ROUTE, 'Route'),
+    (DOC_NETWORK, 'Network'),
+]
+
 
 class Team(models.Model):
     """A group that co-owns Workbench projects. Every user also gets one hidden *personal* team
@@ -95,6 +116,9 @@ class WorkbenchProject(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     team = models.ForeignKey(Team, related_name='projects', on_delete=models.CASCADE)
     title = models.CharField(max_length=300, default='Untitled project')
+    # Which kind of Workbench document this project holds. The snapshot schema is a discriminated
+    # union on this value (see workbench/doctypes.py); the envelope (team/version/share) is shared.
+    doc_type = models.CharField(max_length=20, choices=DOC_TYPES, default=DOC_RECONCILIATION)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='workbench_projects',
                                    null=True, on_delete=models.SET_NULL)
     created = models.DateTimeField(auto_now_add=True)
@@ -106,8 +130,23 @@ class WorkbenchProject(models.Model):
     version = models.IntegerField(default=0)
     # Phase-0 read-only capability token (anyone with the link may import a copy).
     public_token = models.UUIDField(null=True, blank=True, unique=True)
+
+    # ── Publish targets (one per doc-type family). A project publishes into exactly one canonical
+    # record; the pointer records which, so re-publish (publish-back) updates in place. ``route``/
+    # ``network`` pointers are reserved PLACEHOLDERS for v4 (no Route/Network models exist yet).
     published_dataset = models.ForeignKey('datasets.Dataset', null=True, blank=True,
                                           on_delete=models.SET_NULL, related_name='+')
+    published_collection = models.ForeignKey('collection.Collection', null=True, blank=True,
+                                             on_delete=models.SET_NULL, related_name='+')
+    published_route_id = models.IntegerField(null=True, blank=True)      # PLACEHOLDER (v4)
+    published_network_id = models.IntegerField(null=True, blank=True)    # PLACEHOLDER (v4)
+
+    # ── Check-out → edit → publish-back (plan §6). When a project is a working copy of an
+    # already-published item, ``source_published_id`` records the canonical record it was checked out
+    # from and ``base_version`` the server version/hash at checkout, so publish-back can run an
+    # optimistic-lock check (did the server copy change under us?). Null for born-in-Workbench drafts.
+    source_published_id = models.CharField(max_length=64, null=True, blank=True)
+    base_version = models.CharField(max_length=64, null=True, blank=True)
 
     class Meta:
         db_table = 'workbench_project'

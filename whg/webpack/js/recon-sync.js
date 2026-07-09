@@ -34,10 +34,21 @@ async function req(method, path, body) {
 
 // ── projects ────────────────────────────────────────────────────────────────
 export const listProjects = () => req('GET', '/projects/');
-export const createProject = (snapshot, title, team) =>
-  req('POST', '/projects/', { snapshot, title, team });
+// docType defaults server-side to 'reconciliation' (back-compat); Collaborative Collections editors
+// pass 'place_collection' | 'itinerary' | 'gazetteer_group' (workbench/doctypes.py).
+export const createProject = (snapshot, title, team, docType) =>
+  req('POST', '/projects/', { snapshot, title, team, doc_type: docType });
 export const fetchProject = (id) => req('GET', `/projects/${id}/`);
 export const deleteProject = (id) => req('DELETE', `/projects/${id}/`);
+
+// Publish (or re-publish) a project into its canonical model (Collection). Editor/owner only.
+// 200 { ok, status:'published', collection_id, added, unresolved:[…] }.
+export const publishProject = (id) => req('POST', `/projects/${id}/publish/`);
+
+// Check out an already-published Place Collection into a new editable project (plan §6).
+// 201 { id, version, doc_type, team }.
+export const checkoutCollection = (collectionId, team) =>
+  req('POST', `/checkout/collection/${collectionId}/`, { team });
 
 // PUT a snapshot built on `baseVersion`. Resolves to { status, data }:
 //   200 { status:'ok'|'merged', version, snapshot? }   — accepted (adopt merged snapshot if present)

@@ -278,3 +278,162 @@ class ApiTests(TestCase):
         r = c.post(reverse('workbench:team-members', args=[team.id]),
                    data=json.dumps({'identifier': 'alice'}), content_type='application/json')
         self.assertEqual(r.status_code, 403)
+
+
+# ── doc-type registry (unit; no DB) ───────────────────────────────────────────
+class DocTypeRegistryTests(TestCase):
+    def test_creatable_excludes_v4_placeholders(self):
+        from workbench import doctypes
+        keys = [d.key for d in doctypes.creatable()]
+        self.assertIn('place_collection', keys)
+        self.assertIn('itinerary', keys)
+        self.assertIn('gazetteer_group', keys)
+        self.assertNotIn('route', keys)
+        self.assertNotIn('network', keys)
+
+    def test_route_network_reserved_but_disabled(self):
+        from workbench import doctypes
+        self.assertIsNotNone(doctypes.get('route'))
+        self.assertFalse(doctypes.get('route').enabled)
+        self.assertFalse(doctypes.get('network').enabled)
+
+    def test_snapshot_validation(self):
+        from workbench import doctypes
+        self.assertTrue(doctypes.validate_snapshot('nope', {}))              # unknown → error
+        self.assertTrue(doctypes.validate_snapshot('place_collection', {}))  # missing title/places
+        self.assertEqual([], doctypes.validate_snapshot(
+            'place_collection', {'title': 'X', 'places': [{'id': 'whg:5'}]}))
+        self.assertTrue(doctypes.validate_snapshot(
+            'gazetteer_group', {'title': 'G', 'gazetteers': [{}]}))          # gazetteer missing id
+
+
+# ── doc-type project creation gate ────────────────────────────────────────────
+class DocTypeCreateTests(TestCase):
+    def setUp(self):
+        self.owner = make_user('frank')
+        self.client = Client()
+        self.client.force_login(self.owner)
+
+    def _post(self, **body):
+        return self.client.post(reverse('workbench:projects'),
+                                data=json.dumps(body), content_type='application/json')
+
+    def test_default_doc_type_is_reconciliation(self):
+        r = self._post(snapshot=snap())
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertEqual(r.json()['doc_type'], 'reconciliation')
+
+    def test_create_place_collection(self):
+        r = self._post(doc_type='place_collection',
+                       snapshot={'title': 'My places', 'places': [{'id': 'whg:1'}]})
+        self.assertEqual(r.status_code, 201, r.content)
+        p = WorkbenchProject.objects.get(pk=r.json()['id'])
+        self.assertEqual(p.doc_type, 'place_collection')
+        self.assertEqual(p.title, 'My places')
+
+    def test_route_creation_gated_off(self):
+        r = self._post(doc_type='route', snapshot={'title': 'Silk Road'})
+        self.assertEqual(r.status_code, 403)
+
+    def test_unknown_doc_type_rejected(self):
+        r = self._post(doc_type='banana', snapshot={'title': 'x'})
+        self.assertEqual(r.status_code, 400)
+
+    def test_invalid_place_collection_snapshot_rejected(self):
+        # missing title + non-list places
+        r = self._post(doc_type='place_collection', snapshot={'places': 'nope'})
+        self.assertEqual(r.status_code, 400)
+
+
+# ── publish + checkout into collection.Collection ─────────────────────────────
+def make_place(title, label='wb-test-ds'):
+    """Minimal Dataset + Place fixture. Place.dataset FKs Dataset.label (not pk)."""
+    from datasets.models import Dataset
+    from places.models import Place
+    ds, _ = Dataset.objects.get_or_create(
+        label=label, defaults={'owner': User.objects.filter(is_superuser=False).first(),
+                               'title': 'WB test ds', 'description': 'x'})
+    return Place.objects.create(title=title, src_id='', dataset=ds, ccodes=[])
+
+
+class PublishCheckoutTests(TestCase):
+    def setUp(self):
+        self.owner = make_user('grace')
+        self.client = Client()
+        self.client.force_login(self.owner)
+
+    def _create_pc(self, snapshot):
+        r = self.client.post(reverse('workbench:projects'),
+                             data=json.dumps({'doc_type': 'place_collection', 'snapshot': snapshot}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 201, r.content)
+        return WorkbenchProject.objects.get(pk=r.json()['id'])
+
+    def test_publish_place_collection_creates_collection(self):
+        from collection.models import Collection, CollPlace
+        from traces.models import TraceAnnotation
+        p1, p2 = make_place('Rome'), make_place('Venice')
+        proj = self._create_pc({
+            'title': 'Italian cities', 'description': 'demo',
+            'keywords': ['italy', 'cities'],
+            'places': [{'id': f'whg:{p1.id}', 'note': 'the capital'},
+                       {'id': f'whg:{p2.id}'},
+                       {'id': 'gn:745044'}]})  # a CRC id — must be reported unresolved
+        r = self.client.post(reverse('workbench:project-publish', args=[proj.id]),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        body = r.json()
+        self.assertEqual(body['added'], 2)
+        self.assertEqual(body['unresolved'], ['gn:745044'])
+        coll = Collection.objects.get(pk=body['collection_id'])
+        self.assertEqual(coll.collection_class, 'place')
+        self.assertEqual(coll.title, 'Italian cities')
+        self.assertEqual(sorted(coll.keywords), ['cities', 'italy'])
+        self.assertEqual(CollPlace.objects.filter(collection=coll).count(), 2)
+        self.assertTrue(TraceAnnotation.objects.filter(collection=coll, place=p1,
+                                                       note='the capital').exists())
+        # project now points at the published collection + is marked published
+        proj.refresh_from_db()
+        self.assertEqual(proj.published_collection_id, coll.pk)
+        self.assertEqual(proj.status, 'published')
+
+    def test_republish_updates_in_place(self):
+        from collection.models import Collection, CollPlace
+        p1, p2 = make_place('Rome'), make_place('Venice')
+        proj = self._create_pc({'title': 'C', 'places': [{'id': f'whg:{p1.id}'}]})
+        r1 = self.client.post(reverse('workbench:project-publish', args=[proj.id]),
+                              content_type='application/json')
+        cid = r1.json()['collection_id']
+        # edit snapshot to two places, re-publish → same collection, membership rebuilt
+        proj.refresh_from_db()
+        proj.snapshot = {'title': 'C', 'places': [{'id': f'whg:{p1.id}'}, {'id': f'whg:{p2.id}'}]}
+        proj.save(update_fields=['snapshot'])
+        r2 = self.client.post(reverse('workbench:project-publish', args=[proj.id]),
+                              content_type='application/json')
+        self.assertEqual(r2.json()['collection_id'], cid)      # same collection
+        self.assertEqual(Collection.objects.filter(collection_class='place').count(), 1)
+        self.assertEqual(CollPlace.objects.filter(collection_id=cid).count(), 2)
+
+    def test_publish_beta_gated(self):
+        proj = self._create_pc({'title': 'C', 'places': []})
+        normal = make_user('heidi', beta=False)
+        c = Client(); c.force_login(normal)
+        r = c.post(reverse('workbench:project-publish', args=[proj.id]),
+                   content_type='application/json')
+        self.assertEqual(r.status_code, 404)
+
+    def test_checkout_roundtrip(self):
+        # publish, then check out the published collection → new project whose snapshot matches
+        p1 = make_place('Rome')
+        proj = self._create_pc({'title': 'RT', 'places': [{'id': f'whg:{p1.id}', 'note': 'hi'}]})
+        r = self.client.post(reverse('workbench:project-publish', args=[proj.id]),
+                             content_type='application/json')
+        cid = r.json()['collection_id']
+        r2 = self.client.post(reverse('workbench:checkout-collection', args=[cid]),
+                              content_type='application/json')
+        self.assertEqual(r2.status_code, 201, r2.content)
+        new = WorkbenchProject.objects.get(pk=r2.json()['id'])
+        self.assertEqual(new.doc_type, 'place_collection')
+        self.assertEqual(new.published_collection_id, cid)
+        self.assertEqual(new.snapshot['places'][0]['id'], f'whg:{p1.id}')
+        self.assertEqual(new.snapshot['places'][0]['note'], 'hi')

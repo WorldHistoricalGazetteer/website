@@ -504,6 +504,30 @@ def reconciliation_view(request):
     })
 
 
+# Unified Collaborative Workbench entry — the "New…" doc-type picker (plan-collaborativeCollections
+# §10). Beta-gated exactly like reconciliation_view (404 to non-beta; existence not disclosed). It is
+# a SEPARATE surface from the public legacy /workbench/ pathways page, which is untouched in v3.3 —
+# rewriting that public page to launch this picker is the later P4 convergence step (plan §12.1).
+@login_required
+def workbench_home(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    from workbench import doctypes
+    from main.labels import label
+    # Editors that are actually built and reachable today. New doc-type editor chunks land here as
+    # they ship; until then their tiles render as "in development" rather than dead links.
+    READY = {'reconciliation': '/reconciliation/'}
+    tiles = []
+    for dt in doctypes.creatable():
+        tiles.append({'key': dt.key, 'label': dt.label, 'url': READY.get(dt.key),
+                      'ready': dt.key in READY})
+    # v4 placeholders — reserved, creation gated OFF; shown disabled with a "Coming with v4" badge.
+    placeholders = [{'key': 'route', 'label': label('route')},
+                    {'key': 'network', 'label': label('network')}]
+    return render(request, "main/workbench_new.html",
+                  {'tiles': tiles, 'placeholders': placeholders})
+
+
 # ── Development status & roadmap ─────────────────────────────────────────────────────────────────
 # A single, plain-language view of what's being built, its stage, and roughly where it's heading —
 # so non-developer staff (and eventually the public) can track WHG's concurrent development without
