@@ -187,14 +187,20 @@
                         <a class="nav-link" href="{% url 'teaching' %}">Teaching</a>
                     </li>
                     {% if user.can_access_beta %}
-                    {% comment %}Reconciliation UI — BETA, unpublished preview (place#111/#112). Shown to staff/superusers and beta_tester-role users (can_access_beta). Burnt-orange pill signals an in-development feature not yet public.{% endcomment %}
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'reconciliation' %}"
-                           title="Beta preview — unpublished Gazetteer Workbench (place#111)">
+                    {% comment %}Collaborative Workbench — BETA, unpublished preview (place#111/#112). Whole menu is gated to staff/superusers and beta_tester-role users (can_access_beta); non-beta users never see it. Burnt-orange pill signals an in-development feature not yet public.{% endcomment %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                           aria-expanded="false" title="Beta preview — collaborative Workbench (place#111/#112)">
                             <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
-                                <i class="fas fa-map-location-dot" style="margin-right:4px;"></i>Map your Data <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
+                                <i class="fas fa-flask" style="margin-right:4px;"></i>Workbench <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
                             </span>
                         </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{% url 'workbench-new' %}"><i class="fas fa-plus fa-fw me-1"></i>New… (all types)</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'reconciliation' %}"><i class="fas fa-map-location-dot fa-fw me-1"></i>Map your Data</a></li>
+                            <li><a class="dropdown-item" href="{% url 'wb-place-collection' %}"><i class="fas fa-layer-group fa-fw me-1"></i>New Place Collection</a></li>
+                        </ul>
                     </li>
                     {% endif %}
                     <li class="nav-item dropdown">
