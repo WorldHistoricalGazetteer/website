@@ -121,6 +121,96 @@ def _place_point(place):
         return None, None, False
 
 
+# ── geometry (full single/multi editing, plan-record-suggestions §8) ───────────
+# A geom sub-row's ``jsonb`` is a bare GeoJSON geometry, sometimes carrying temporal/provenance keys.
+# We may safely REPLACE a place's geometry through the draw editor only when nothing meaningful would be
+# lost — i.e. every geom is a plain geometry (no ``when``/``citation``/``src``) and they share ONE base
+# kind (so they collapse to a single- or Multi- geometry the picker can represent). Anything else
+# (mixed kinds, or geoms bearing temporal/citation metadata) is shown read-only, exactly as before.
+_GEOM_BLOCKING_KEYS = {'when', 'citation', 'citations', 'src'}
+
+
+def _geom_base(gtype):
+    if gtype in ('Point', 'MultiPoint'):
+        return 'point'
+    if gtype in ('LineString', 'MultiLineString'):
+        return 'line'
+    if gtype in ('Polygon', 'MultiPolygon'):
+        return 'polygon'
+    return None
+
+
+def _geom_to_parts(g):
+    """A geometry → list of single-part coordinate arrays (mirrors recon-map.toParts)."""
+    t = g.get('type')
+    if t in ('Point', 'LineString', 'Polygon'):
+        return [g.get('coordinates')]
+    if t in ('MultiPoint', 'MultiLineString', 'MultiPolygon'):
+        return list(g.get('coordinates') or [])
+    return []
+
+
+def _geom_from_parts(base, parts):
+    """Single-part coordinates → single or Multi geometry of ``base`` (mirrors recon-map.fromParts)."""
+    if not parts:
+        return None
+    multi = len(parts) > 1
+    if base == 'point':
+        return {'type': 'MultiPoint' if multi else 'Point', 'coordinates': parts if multi else parts[0]}
+    if base == 'line':
+        return {'type': 'MultiLineString' if multi else 'LineString', 'coordinates': parts if multi else parts[0]}
+    if base == 'polygon':
+        return {'type': 'MultiPolygon' if multi else 'Polygon', 'coordinates': parts if multi else parts[0]}
+    return None
+
+
+def _round_coords(c, nd=6):
+    if isinstance(c, (int, float)):
+        return round(c, nd)
+    if isinstance(c, (list, tuple)):
+        return [_round_coords(x, nd) for x in c]
+    return c
+
+
+def _norm_geom(g):
+    """Stable, coordinate-rounded JSON of a geometry (for hashing / change-detection). None → ''."""
+    if not g or not g.get('type'):
+        return ''
+    if g['type'] == 'GeometryCollection':
+        return json.dumps({'type': 'GeometryCollection',
+                           'geometries': [json.loads(_norm_geom(x) or '{}') for x in (g.get('geometries') or [])]},
+                          sort_keys=True)
+    return json.dumps({'type': g['type'], 'coordinates': _round_coords(g.get('coordinates'))}, sort_keys=True)
+
+
+def _place_geometry(place):
+    """Return ``(geometry, editable)`` for the draw editor. ``geometry`` is a GeoJSON geometry (single/
+    Multi, or a read-only GeometryCollection for mixed sets), or None when the place has none.
+    ``editable`` is True only when we can round-trip it losslessly through the single-geometry picker."""
+    geoms = list(place.geoms.all())
+    if not geoms:
+        return None, True                                   # nothing yet → draw a new one
+    bare, blocked = [], False
+    for g in geoms:
+        jb = g.jsonb if isinstance(g.jsonb, dict) else {}
+        t = jb.get('type')
+        if not t or 'coordinates' not in jb:                # a Feature/GeometryCollection/odd row → hands off
+            blocked = True
+            continue
+        if _GEOM_BLOCKING_KEYS & set(jb.keys()):            # temporal / provenance metadata → preserve, read-only
+            blocked = True
+        bare.append((_geom_base(t), {'type': t, 'coordinates': jb['coordinates']}))
+    kinds = {b for b, _ in bare if b}
+    if blocked or len(kinds) != 1:
+        gc = {'type': 'GeometryCollection', 'geometries': [g for _, g in bare]} if bare else None
+        return gc, False
+    base = kinds.pop()
+    parts = []
+    for _, g in bare:
+        parts.extend(_geom_to_parts(g))
+    return _geom_from_parts(base, parts), True
+
+
 def _record_lpf(place):
     """Serialise a Place's editable LPF sub-fields for check-out/hash. Each sub-row's ``jsonb`` IS the
     LPF object (verified against the accession pipeline), so we round-trip it verbatim and expose the
@@ -145,9 +235,9 @@ def _record_lpf(place):
 
 
 def record_state_hash(place):
-    """Stable SHA-1 of a place's editable state (title, names, types, links, descriptions, point,
+    """Stable SHA-1 of a place's editable state (title, names, types, links, descriptions, geometry,
     ccodes, dates) — the optimistic-lock ``base_version`` at record granularity for publish-back."""
-    lng, lat, _ = _place_point(place)
+    geometry, _ = _place_geometry(place)
     names, types, links, descriptions, dates = _record_lpf(place)
     state = {
         'title': place.title or '',
@@ -155,7 +245,7 @@ def record_state_hash(place):
         'types': sorted((t['label'], t['identifier']) for t in types),
         'links': sorted((l['type'], l['identifier']) for l in links),
         'descriptions': sorted(d['value'] for d in descriptions if d['value']),
-        'point': [round(lng, 6) if lng is not None else None, round(lat, 6) if lat is not None else None],
+        'geometry': _norm_geom(geometry),
         'ccodes': sorted(place.ccodes or []), 'dates': [dates['start'], dates['end']],
     }
     return hashlib.sha1(json.dumps(state, sort_keys=True, default=str).encode('utf-8')).hexdigest()
@@ -164,13 +254,17 @@ def record_state_hash(place):
 def record_snapshot(place):
     """The full-LPF editable snapshot of one ``places.Place`` (the shape the record editor + record
     apply-path speak). Shared by single-record check-out and dataset (subset/whole) check-out."""
-    lng, lat, editable = _place_point(place)
+    geometry, geom_editable = _place_geometry(place)
+    lng, lat, pt_editable = _place_point(place)
     names, types, links, descriptions, dates = _record_lpf(place)
     return {
         'record_id': place.id, 'dataset_label': place.dataset.label, 'idx_pub': bool(place.idx_pub),
         'title': place.title or '', 'ccodes': list(place.ccodes or []),
         'names': names, 'types': types, 'links': links, 'descriptions': descriptions, 'dates': dates,
-        'lng': lng, 'lat': lat, 'point_editable': editable,
+        # Full geometry (single/multi, drawable) + a repr point for map centring. lng/lat/point_editable
+        # are kept for backward-compat with any in-flight working copy.
+        'geometry': geometry, 'geometry_editable': geom_editable,
+        'lng': lng, 'lat': lat, 'point_editable': pt_editable,
     }
 
 

@@ -630,9 +630,21 @@ def _suggestion_diff(cur, prop, changed):
     def coord(s):
         return f"{s.get('lng')}, {s.get('lat')}" if s.get('lng') is not None else '—'
 
+    def geom(s):
+        g = s.get('geometry')
+        if not g or not g.get('type'):
+            return '—'
+        t = g['type']
+        if t == 'Point':
+            c = g.get('coordinates') or []
+            return f"Point ({c[0]:.4f}, {c[1]:.4f})" if len(c) == 2 else 'Point'
+        if t == 'GeometryCollection':
+            return f"{len(g.get('geometries') or [])} mixed geometries"
+        return f"{t} ({len(g.get('coordinates') or [])} parts)"
+
     labels = {'name': 'Name', 'ccodes': 'Countries', 'names': 'Also-known-as', 'types': 'Types',
               'links': 'Authority links', 'descriptions': 'Descriptions', 'dates': 'Dates',
-              'coordinate': 'Coordinate'}
+              'coordinate': 'Coordinate', 'geometry': 'Geometry'}
     rows = []
     for f in changed:
         if f == 'name':
@@ -652,6 +664,8 @@ def _suggestion_diff(cur, prop, changed):
             rows.append((labels[f], fmt(cd), fmt(pd)))
         elif f == 'coordinate':
             rows.append((labels[f], coord(cur), coord(prop)))
+        elif f == 'geometry':
+            rows.append((labels[f], geom(cur), geom(prop)))
     return rows
 
 

@@ -11,6 +11,23 @@ import { esc, truncate, csrf } from './wb-shell.js';
 
 const RECON_ENDPOINT = '/reconcile';
 
+// One-line human description of a GeoJSON geometry, for the collapsed geometry summary.
+function geomSummary(g) {
+  if (!g || !g.type) return '<span class="text-muted">No geometry yet — add one on the map.</span>';
+  const n = (a) => (Array.isArray(a) ? a.length : 0);
+  const c = g.coordinates;
+  switch (g.type) {
+    case 'Point': return `Point <span class="text-muted">(${(+c[0]).toFixed(4)}, ${(+c[1]).toFixed(4)})</span>`;
+    case 'MultiPoint': return `${n(c)} points`;
+    case 'LineString': return `Line <span class="text-muted">(${n(c)} vertices)</span>`;
+    case 'MultiLineString': return `${n(c)} lines`;
+    case 'Polygon': return `Polygon <span class="text-muted">(${Math.max(0, n(c[0]) - 1)} vertices)</span>`;
+    case 'MultiPolygon': return `${n(c)} polygons`;
+    case 'GeometryCollection': return `${n(g.geometries)} mixed geometries`;
+    default: return esc(g.type);
+  }
+}
+
 // Generic repeatable-list editor over a sub-container. fields: [{k, placeholder, width}].
 function listEditor(box, arr, fields, factory, onChange) {
   function render() {
@@ -41,7 +58,7 @@ const SECTIONS = `
   <div class="wb-rf-block"><div class="wb-rf-h">Place types</div>
     <div class="wb-rf-types"></div>
     <button type="button" class="btn btn-sm btn-outline-secondary wb-rf-add" data-list="types"><i class="fas fa-plus me-1"></i>Add a type</button></div>
-  <div class="wb-rf-block"><div class="wb-rf-h">Coordinate</div><div class="wb-rf-coord"></div></div>
+  <div class="wb-rf-block"><div class="wb-rf-h">Location / geometry</div><div class="wb-rf-coord"></div></div>
   <div class="wb-rf-block"><div class="wb-rf-h">Dates</div>
     <div class="input-group input-group-sm" style="max-width:26rem;">
       <span class="input-group-text">start (year)</span><input class="form-control wb-rf-start" type="number" step="1">
@@ -82,19 +99,43 @@ export function renderRecordFields(container, rec, opts = {}) {
   const editors = { names: namesEd, types: typesEd, links: linksEd, descriptions: descrEd };
   container.querySelectorAll('.wb-rf-add').forEach((b) => b.addEventListener('click', () => editors[b.dataset.list].add()));
 
+  // Geometry editor: a summary + a lazily-mounted MapLibre draw map (recon-map.js picker) supporting
+  // single AND multi point/line/polygon. Read-only for complex/annotated geometry (view-only map).
+  let geomMod = null;
+  function refreshGeomSummary() { const s = $('.wb-rf-coord .wb-geom-summary'); if (s) s.innerHTML = geomSummary(rec.geometry); }
   function renderCoord() {
     const box = $('.wb-rf-coord');
-    if (rec.point_editable) {
-      box.innerHTML = `<div class="input-group input-group-sm" style="max-width:26rem;">
-          <span class="input-group-text">lng</span><input class="form-control wb-rf-lng" type="number" step="any" value="${rec.lng != null ? rec.lng : ''}">
-          <span class="input-group-text">lat</span><input class="form-control wb-rf-lat" type="number" step="any" value="${rec.lat != null ? rec.lat : ''}"></div>
-        <div class="form-text">Decimal degrees (WGS-84).${rec.lng == null ? ' No coordinate yet — add one.' : ''}</div>`;
-      box.querySelector('.wb-rf-lng').addEventListener('input', (e) => { rec.lng = e.target.value === '' ? null : parseFloat(e.target.value); onChange(); });
-      box.querySelector('.wb-rf-lat').addEventListener('input', (e) => { rec.lat = e.target.value === '' ? null : parseFloat(e.target.value); onChange(); });
-    } else {
-      box.innerHTML = `<div class="text-muted small"><i class="fas fa-circle-info me-1"></i>This place has complex geometry
-        ${rec.lng != null ? `(near ${(+rec.lng).toFixed(3)}, ${(+rec.lat).toFixed(3)})` : ''} — edit its geometry in the dataset editor.</div>`;
-    }
+    const editable = rec.geometry_editable !== false;   // default true (no geometry yet → draw one)
+    box.innerHTML = `
+      <div class="wb-geom-summary small mb-2">${geomSummary(rec.geometry)}</div>
+      <button type="button" class="btn btn-sm btn-outline-primary wb-geom-toggle">
+        <i class="fas fa-draw-polygon me-1"></i>${editable ? 'Edit geometry on map' : 'View geometry on map'}</button>
+      ${editable ? '' : '<div class="form-text">This place has complex or richly-annotated geometry (e.g. temporal spans or citations). Edit it in the dataset editor to preserve that detail.</div>'}
+      <div class="wb-geom-panel mt-2" hidden>
+        ${editable ? `<div class="d-flex flex-wrap gap-1 mb-1">
+          <button type="button" class="btn btn-sm btn-outline-secondary wb-geom-shape" data-shape="point"><i class="fas fa-location-dot me-1"></i>Point</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary wb-geom-shape" data-shape="line"><i class="fas fa-share-nodes me-1"></i>Line</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary wb-geom-shape" data-shape="polygon"><i class="fas fa-draw-polygon me-1"></i>Polygon</button>
+          <button type="button" class="btn btn-sm btn-outline-success wb-geom-finish">Finish shape</button>
+          <button type="button" class="btn btn-sm btn-outline-danger wb-geom-clear">Clear all</button>
+        </div>
+        <div class="form-text mb-1">Click the map to add points. Click a shape button again to start another part (making a <em>multi</em>-geometry). Use <em>Finish shape</em> to complete a line or polygon.</div>` : ''}
+        <div class="wb-geom-map" style="height:340px;border:1px solid var(--bs-border-color,#dee2e6);border-radius:.4rem;overflow:hidden;"></div>
+      </div>`;
+    const panel = box.querySelector('.wb-geom-panel');
+    const mapDiv = box.querySelector('.wb-geom-map');
+    box.querySelector('.wb-geom-toggle').addEventListener('click', async () => {
+      if (!panel.hasAttribute('hidden')) { panel.setAttribute('hidden', ''); return; }
+      panel.removeAttribute('hidden');
+      // eslint-disable-next-line no-return-assign
+      const mod = geomMod || (geomMod = await import(/* webpackChunkName: "recon-map" */ './recon-map.js'));
+      mod.renderGeometryEditor(mapDiv, rec.geometry, (gg) => { rec.geometry = gg; refreshGeomSummary(); onChange(); });
+      if (editable) {
+        box.querySelectorAll('.wb-geom-shape').forEach((b) => { b.onclick = () => mod.startDraw(b.dataset.shape); });
+        box.querySelector('.wb-geom-finish').onclick = () => mod.finishDraw();
+        box.querySelector('.wb-geom-clear').onclick = () => mod.clearGeom();
+      }
+    });
   }
   renderCoord();
 
@@ -120,7 +161,10 @@ export function renderRecordFields(container, rec, opts = {}) {
     box.querySelectorAll('.wb-recon-hit').forEach((b) => b.addEventListener('click', () => {
       const c = results[+b.dataset.i];
       if (!rec.links.some((l) => l.identifier === c.id)) { rec.links.push({ type: 'closeMatch', identifier: c.id }); linksEd.render(); onChange(); }
-      if (c.repr_point && (rec.lng == null) && rec.point_editable) { rec.lng = c.repr_point[0]; rec.lat = c.repr_point[1]; renderCoord(); onChange(); }
+      if (c.repr_point && rec.geometry_editable !== false && (!rec.geometry || !rec.geometry.type)) {
+        rec.geometry = { type: 'Point', coordinates: [c.repr_point[0], c.repr_point[1]] };
+        refreshGeomSummary(); if (geomMod) geomMod.setOverride(rec.geometry); onChange();
+      }
       b.disabled = true; b.classList.add('active');
     }));
   }

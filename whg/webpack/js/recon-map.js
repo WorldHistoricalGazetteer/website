@@ -302,6 +302,34 @@ export function renderReviewMap(container, points, rowPoint, opts) {
   if (m.loaded()) onReady(); else m.once('load', onReady);
 }
 
+// ── Standalone geometry editor (record correction / suggestions, plan-record-suggestions §8) ──────
+// A bare map + the geometry picker, no candidate markers. `geometry` seeds the current geometry (single/
+// Multi/GeometryCollection); `onGeom(geometry|null)` fires on every commit. Drive drawing with the
+// exported startDraw('point'|'line'|'polygon') / finishDraw() / clearGeom(). Reuses this module's
+// singleton map, so only one geometry editor is live at a time (fine: one record is edited at a time).
+export function renderGeometryEditor(container, geometry, onGeom) {
+  const M = ML();
+  const m = ensureMap(container);
+  onGeomCb = onGeom || null;
+  currentGeom = geometry || null;
+  draw = { mode: null, verts: [], parts: [] };
+  markers.forEach((mk) => mk.remove());          // clear any candidate markers from a prior review-map use
+  markers = [];
+  markerByCi = {};
+  const bounds = new M.LngLatBounds();
+  allCoords(currentGeom).forEach((pt) => bounds.extend(pt));
+  lastBounds = bounds.isEmpty() ? null : bounds;
+  const onReady = () => {
+    m.resize();
+    ensureGeomLayers();
+    redrawGeom();
+    if (!clickBound) { m.on('click', onMapClick); clickBound = true; }
+    hookLayerPersistence(container);
+    if (lastBounds) m.fitBounds(lastBounds, { padding: 48, maxZoom: 12, duration: 0 });
+  };
+  if (m.loaded()) onReady(); else m.once('load', onReady);
+}
+
 export function destroyReviewMap() {
   if (ro) { try { ro.disconnect(); } catch (_) { /* ignore */ } ro = null; }
   if (map) { try { map.remove(); } catch (_) { /* ignore */ } map = null; markers = []; hoverPopup = null; lastBounds = null; clickBound = false; }

@@ -69,7 +69,12 @@ def _changed_fields(place, proposed):
     if (pd.get('start'), pd.get('end')) != (cd.get('start'), cd.get('end')):
         changed.append('dates')
 
-    if proposed.get('point_editable') and cur.get('point_editable'):
+    # geometry (drawable single/multi) — compare normalised; fall back to the legacy point compare.
+    if 'geometry' in proposed and proposed.get('geometry_editable') and cur.get('geometry_editable'):
+        from .checkout import _norm_geom
+        if _norm_geom(proposed.get('geometry')) != _norm_geom(cur.get('geometry')):
+            changed.append('geometry')
+    elif proposed.get('point_editable') and cur.get('point_editable'):
         def rnd(v):
             try:
                 return round(float(v), 6) if v not in (None, '') else None

@@ -353,8 +353,26 @@ def apply_record_fields(place, snap):
         rebuild(PlaceDescription, rows)
         changed.append('descriptions')
 
-    # ── Coordinate — point-editable places only (complex geometry left untouched) ──
-    if snap.get('point_editable') and snap.get('lng') is not None and snap.get('lat') is not None:
+    # ── Geometry — full single/multi draw editing (plan-record-suggestions §8) ──
+    # When the editor sends a drawable geometry (``geometry_editable``), REBUILD the place's geom rows
+    # from the drawn geometry — but only if it actually changed, so unchanged reads preserve any
+    # temporal/provenance metadata on the original rows. A snapshot without ``geometry`` falls back to
+    # the legacy point path (keeps in-flight working copies working).
+    if 'geometry' in snap and snap.get('geometry_editable'):
+        from .checkout import _place_geometry, _norm_geom
+        new_geom = snap.get('geometry')
+        cur_geom, _ = _place_geometry(place)
+        if _norm_geom(new_geom) != _norm_geom(cur_geom):
+            PlaceGeom.objects.filter(place=place).delete()
+            if new_geom and new_geom.get('type') and new_geom.get('type') != 'GeometryCollection':
+                try:
+                    from django.contrib.gis.geos import GEOSGeometry
+                    g = GEOSGeometry(json.dumps(new_geom), srid=4326)
+                    PlaceGeom.objects.create(place=place, geom=g, jsonb=new_geom, src_id=src)
+                except Exception as e:  # noqa: BLE001 — bad geometry: leave rows cleared, log
+                    logger.warning('record %s: could not build geometry %s: %s', place.pk, new_geom, e)
+            changed.append('geometry')
+    elif snap.get('point_editable') and snap.get('lng') is not None and snap.get('lat') is not None:
         try:
             lng, lat = float(snap['lng']), float(snap['lat'])
         except (TypeError, ValueError):

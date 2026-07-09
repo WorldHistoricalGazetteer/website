@@ -112,7 +112,7 @@ function refreshCount() {
 function rowSub(rec) {
   const bits = [`#${rec.record_id}`];
   if ((rec.ccodes || []).length) bits.push(rec.ccodes.join(', '));
-  if (rec.point_editable === false) bits.push('complex geometry');
+  if (rec.geometry_editable === false) bits.push('complex geometry');
   return bits.join(' · ');
 }
 
