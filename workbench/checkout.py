@@ -122,12 +122,22 @@ def _place_point(place):
 
 
 # ── geometry (full single/multi editing, plan-record-suggestions §8) ───────────
-# A geom sub-row's ``jsonb`` is a bare GeoJSON geometry, sometimes carrying temporal/provenance keys.
-# We may safely REPLACE a place's geometry through the draw editor only when nothing meaningful would be
-# lost — i.e. every geom is a plain geometry (no ``when``/``citation``/``src``) and they share ONE base
-# kind (so they collapse to a single- or Multi- geometry the picker can represent). Anything else
-# (mixed kinds, or geoms bearing temporal/citation metadata) is shown read-only, exactly as before.
-_GEOM_BLOCKING_KEYS = {'when', 'citation', 'citations', 'src'}
+# A geom sub-row's ``jsonb`` is a bare GeoJSON geometry, sometimes carrying temporal/provenance keys
+# (``when`` / ``citation`` / ``src`` …). We may safely REPLACE a place's geometry through the draw editor
+# when nothing meaningful would be lost:
+#   * a SINGLE geom row (any kind) → editable, and its metadata (``when``/citation/…) is captured and
+#     RE-ATTACHED to the reshaped geometry on publish, so drawing doesn't drop it;
+#   * MULTIPLE geoms of one base kind with NO metadata → editable (collapse to a Multi geometry);
+#   * multiple geoms where any carries metadata (can't re-associate to redrawn parts), or a mix of base
+#     kinds, or an unparseable row → read-only (view-only map; edit in the dataset editor).
+# ``geowkt`` is a coordinate-derived cache: never treated as metadata and never re-attached (it would be
+# stale after a reshape). Callers get ``(geometry, editable, meta)``.
+_GEOM_DERIVED_KEYS = {'type', 'coordinates', 'geowkt'}
+
+
+def _geom_meta(jb):
+    """Non-geometry keys of a geom jsonb worth preserving through an edit (drops derived ``geowkt``)."""
+    return {k: v for k, v in (jb or {}).items() if k not in _GEOM_DERIVED_KEYS}
 
 
 def _geom_base(gtype):
@@ -184,31 +194,39 @@ def _norm_geom(g):
 
 
 def _place_geometry(place):
-    """Return ``(geometry, editable)`` for the draw editor. ``geometry`` is a GeoJSON geometry (single/
-    Multi, or a read-only GeometryCollection for mixed sets), or None when the place has none.
-    ``editable`` is True only when we can round-trip it losslessly through the single-geometry picker."""
+    """Return ``(geometry, editable, meta)`` for the draw editor. ``geometry`` is a GeoJSON geometry
+    (single/Multi, or a read-only GeometryCollection for mixed sets), or None when the place has none.
+    ``editable`` is True when we can round-trip it through the single-geometry picker without losing
+    data; ``meta`` is the metadata (``when``/citation/…) to re-attach on a reshape (only the single-geom
+    case carries it — see the module note)."""
     geoms = list(place.geoms.all())
     if not geoms:
-        return None, True                                   # nothing yet → draw a new one
-    bare, blocked = [], False
+        return None, True, {}                                # nothing yet → draw a new one
+    parsed, unparseable = [], False
     for g in geoms:
         jb = g.jsonb if isinstance(g.jsonb, dict) else {}
         t = jb.get('type')
-        if not t or 'coordinates' not in jb:                # a Feature/GeometryCollection/odd row → hands off
-            blocked = True
+        if not t or 'coordinates' not in jb:                 # a Feature/GeometryCollection/odd row → hands off
+            unparseable = True
             continue
-        if _GEOM_BLOCKING_KEYS & set(jb.keys()):            # temporal / provenance metadata → preserve, read-only
-            blocked = True
-        bare.append((_geom_base(t), {'type': t, 'coordinates': jb['coordinates']}))
-    kinds = {b for b, _ in bare if b}
-    if blocked or len(kinds) != 1:
-        gc = {'type': 'GeometryCollection', 'geometries': [g for _, g in bare]} if bare else None
-        return gc, False
+        parsed.append((_geom_base(t), {'type': t, 'coordinates': jb['coordinates']}, _geom_meta(jb)))
+
+    def _readonly_gc():
+        gc = {'type': 'GeometryCollection', 'geometries': [g for _, g, _ in parsed]} if parsed else None
+        return gc, False, {}
+
+    kinds = {b for b, _, _ in parsed if b}
+    if unparseable or not parsed or len(kinds) != 1:
+        return _readonly_gc()
     base = kinds.pop()
-    parts = []
-    for _, g in bare:
+    if len(parsed) == 1:                                      # single geom → editable, preserve its metadata
+        return parsed[0][1], True, parsed[0][2]
+    if any(m for _, _, m in parsed):                         # multiple geoms with metadata → can't re-associate
+        return _readonly_gc()
+    parts = []                                               # multiple plain geoms of one kind → collapse to Multi
+    for _, g, _ in parsed:
         parts.extend(_geom_to_parts(g))
-    return _geom_from_parts(base, parts), True
+    return _geom_from_parts(base, parts), True, {}
 
 
 def _record_lpf(place):
@@ -237,7 +255,7 @@ def _record_lpf(place):
 def record_state_hash(place):
     """Stable SHA-1 of a place's editable state (title, names, types, links, descriptions, geometry,
     ccodes, dates) — the optimistic-lock ``base_version`` at record granularity for publish-back."""
-    geometry, _ = _place_geometry(place)
+    geometry, _, _ = _place_geometry(place)
     names, types, links, descriptions, dates = _record_lpf(place)
     state = {
         'title': place.title or '',
@@ -254,16 +272,17 @@ def record_state_hash(place):
 def record_snapshot(place):
     """The full-LPF editable snapshot of one ``places.Place`` (the shape the record editor + record
     apply-path speak). Shared by single-record check-out and dataset (subset/whole) check-out."""
-    geometry, geom_editable = _place_geometry(place)
+    geometry, geom_editable, geom_meta = _place_geometry(place)
     lng, lat, pt_editable = _place_point(place)
     names, types, links, descriptions, dates = _record_lpf(place)
     return {
         'record_id': place.id, 'dataset_label': place.dataset.label, 'idx_pub': bool(place.idx_pub),
         'title': place.title or '', 'ccodes': list(place.ccodes or []),
         'names': names, 'types': types, 'links': links, 'descriptions': descriptions, 'dates': dates,
-        # Full geometry (single/multi, drawable) + a repr point for map centring. lng/lat/point_editable
+        # Full geometry (single/multi, drawable) + a repr point for map centring. ``geometry_meta`` is
+        # the per-geometry metadata (when/citation/…) re-attached on a reshape. lng/lat/point_editable
         # are kept for backward-compat with any in-flight working copy.
-        'geometry': geometry, 'geometry_editable': geom_editable,
+        'geometry': geometry, 'geometry_editable': geom_editable, 'geometry_meta': geom_meta,
         'lng': lng, 'lat': lat, 'point_editable': pt_editable,
     }
 

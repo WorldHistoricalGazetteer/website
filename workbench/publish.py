@@ -359,16 +359,23 @@ def apply_record_fields(place, snap):
     # temporal/provenance metadata on the original rows. A snapshot without ``geometry`` falls back to
     # the legacy point path (keeps in-flight working copies working).
     if 'geometry' in snap and snap.get('geometry_editable'):
-        from .checkout import _place_geometry, _norm_geom
+        from .checkout import _place_geometry, _norm_geom, _GEOM_DERIVED_KEYS
         new_geom = snap.get('geometry')
-        cur_geom, _ = _place_geometry(place)
+        cur_geom, _, _ = _place_geometry(place)
         if _norm_geom(new_geom) != _norm_geom(cur_geom):
             PlaceGeom.objects.filter(place=place).delete()
             if new_geom and new_geom.get('type') and new_geom.get('type') != 'GeometryCollection':
                 try:
                     from django.contrib.gis.geos import GEOSGeometry
-                    g = GEOSGeometry(json.dumps(new_geom), srid=4326)
-                    PlaceGeom.objects.create(place=place, geom=g, jsonb=new_geom, src_id=src)
+                    # jsonb = the drawn geometry + any preserved metadata (when/citation/…) re-attached,
+                    # so reshaping an annotated geometry keeps its temporal/provenance detail. The GEOS
+                    # geom is built from the pure geometry only. ``geowkt`` is never carried (would be stale).
+                    jb = {'type': new_geom['type'], 'coordinates': new_geom['coordinates']}
+                    for k, v in (snap.get('geometry_meta') or {}).items():
+                        if k not in _GEOM_DERIVED_KEYS:
+                            jb[k] = v
+                    g = GEOSGeometry(json.dumps({'type': jb['type'], 'coordinates': jb['coordinates']}), srid=4326)
+                    PlaceGeom.objects.create(place=place, geom=g, jsonb=jb, src_id=src)
                 except Exception as e:  # noqa: BLE001 — bad geometry: leave rows cleared, log
                     logger.warning('record %s: could not build geometry %s: %s', place.pk, new_geom, e)
             changed.append('geometry')

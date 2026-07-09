@@ -106,11 +106,13 @@ export function renderRecordFields(container, rec, opts = {}) {
   function renderCoord() {
     const box = $('.wb-rf-coord');
     const editable = rec.geometry_editable !== false;   // default true (no geometry yet → draw one)
+    const hasMeta = editable && rec.geometry_meta && Object.keys(rec.geometry_meta).length > 0;
     box.innerHTML = `
       <div class="wb-geom-summary small mb-2">${geomSummary(rec.geometry)}</div>
       <button type="button" class="btn btn-sm btn-outline-primary wb-geom-toggle">
         <i class="fas fa-draw-polygon me-1"></i>${editable ? 'Edit geometry on map' : 'View geometry on map'}</button>
-      ${editable ? '' : '<div class="form-text">This place has complex or richly-annotated geometry (e.g. temporal spans or citations). Edit it in the dataset editor to preserve that detail.</div>'}
+      ${editable ? '' : '<div class="form-text">This place has complex or richly-annotated geometry (a mix of geometry types, or several geometries with their own dates or citations). Edit it in the dataset editor so that detail can’t be lost.</div>'}
+      ${hasMeta ? '<div class="form-text"><i class="fas fa-circle-info me-1"></i>This geometry has date/citation details attached — they’ll be kept if you reshape it.</div>' : ''}
       <div class="wb-geom-panel mt-2" hidden>
         ${editable ? `<div class="d-flex flex-wrap gap-1 mb-1">
           <button type="button" class="btn btn-sm btn-outline-secondary wb-geom-shape" data-shape="point"><i class="fas fa-location-dot me-1"></i>Point</button>
