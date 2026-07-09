@@ -446,11 +446,30 @@ def _ner_name_hit(hit, name):
     return any((a or '').strip().lower() == nl for a in (hit.get('alt_names') or []))
 
 
+def _cluster_locations(hits, thresh_km=40):
+    """Greedily group hits by location (points within thresh_km ⇒ same place). Returns
+    [(centroid[lng,lat], [hits]), …]; hits with no repr_point are ignored for clustering."""
+    clusters = []  # [sum_lng, sum_lat, count, [hits]]
+    for h in hits:
+        rp = h.get('repr_point')
+        if not rp:
+            continue
+        for cl in clusters:
+            if _haversine_km([cl[0] / cl[2], cl[1] / cl[2]], rp) <= thresh_km:
+                cl[0] += rp[0]; cl[1] += rp[1]; cl[2] += 1; cl[3].append(h)
+                break
+        else:
+            clusters.append([rp[0], rp[1], 1, [h]])
+    return [([cl[0] / cl[2], cl[1] / cl[2]], cl[3]) for cl in clusters]
+
+
 def _ner_reconcile_disambiguate(mentions, user):
     """mentions: {name: count}. Reconcile the most frequent (capped) against WHG, keep exact name/
-    alt-name matches, then DISAMBIGUATE by geographic coherence: a document's places tend to share a
-    country and cluster spatially, so prefer a candidate in the document's dominant country, breaking
-    ties by proximity to the cluster centroid. Returns {name: match} for gazetteer-matched names."""
+    alt-name matches, then DISAMBIGUATE by geographic coherence. A document's places share a country
+    and cluster spatially, so we: (1) country-vote to the dominant region; (2) ANCHOR on names that
+    resolve to a single location within that region (they pin the area unambiguously); (3) resolve the
+    genuinely ambiguous same-country siblings by proximity to that clean anchor cluster. Returns
+    {name: match} for gazetteer-matched names."""
     if not mentions:
         return {}
     names = [n for n, _ in sorted(mentions.items(), key=lambda kv: -kv[1])[:NER_RECON_MAX]]
@@ -470,37 +489,47 @@ def _ner_reconcile_disambiguate(mentions, user):
     if not hits_by_name:
         return {}
 
-    # Country vote: rank countries by how many DISTINCT names have a hit there → the document's region.
+    # 1. Country vote → dominant region (how many DISTINCT names have a hit in each country).
     votes = {}
     for hits in hits_by_name.values():
         for c in {cc for h in hits for cc in (h.get('ccodes') or [])}:
             votes[c] = votes.get(c, 0) + 1
-    dominant = {c for c, _ in sorted(votes.items(), key=lambda kv: -kv[1])[:3]}
+    dominant = {c for c, _ in sorted(votes.items(), key=lambda kv: -kv[1])[:2]}
 
-    def choose(hits, centroid):
+    # Restrict each name to its dominant-country hits (keeps geographic coherence; fall back to all).
+    dom_hits = {n: [h for h in hits if set(h.get('ccodes') or []) & dominant] or hits
+                for n, hits in hits_by_name.items()}
+
+    # 2. Anchor centroid: names that resolve to exactly ONE location within the dominant country.
+    anchor_pts = [_cluster_locations(hits)[0][0] for hits in dom_hits.values()
+                  if len(_cluster_locations(hits)) == 1 and _cluster_locations(hits)[0][0]]
+    center = ([_median([p[0] for p in anchor_pts]), _median([p[1] for p in anchor_pts])]
+              if anchor_pts else None)
+
+    def choose(hits, center):
+        # score/100 (ES relevance, 0–1) is a mild tiebreak; distance-to-anchor (up to 0.6) dominates,
+        # so same-country siblings are separated by which is nearest the document's cluster.
         best, best_val = None, -1e9
         for h in hits:
-            val = h.get('score') or 0
-            if dominant and (set(h.get('ccodes') or []) & dominant):
-                val += 0.4                                   # strong pull toward the document's country
+            val = 0.2 * ((h.get('score') or 0) / 100.0)
             rp = h.get('repr_point')
-            if centroid and rp:
-                val -= 0.15 * min(1.0, _haversine_km(centroid, rp) / 2000.0)
+            if center and rp:
+                val -= 0.6 * min(1.0, _haversine_km(center, rp) / 500.0)
             if val > best_val:
                 best, best_val = h, val
         return best
 
-    # Pass 1 (country only) → provisional points → centroid → pass 2 (country + proximity).
-    prov = {n: choose(h, None) for n, h in hits_by_name.items()}
-    pts = [p['repr_point'] for p in prov.values() if p and p.get('repr_point')]
-    centroid = [_median([p[0] for p in pts]), _median([p[1] for p in pts])] if pts else None
+    # 3. If no anchors pinned the region, bootstrap the centre from every name's top pick, then refine.
+    if center is None:
+        boot = [p['repr_point'] for p in (choose(h, None) for h in dom_hits.values()) if p and p.get('repr_point')]
+        center = [_median([p[0] for p in boot]), _median([p[1] for p in boot])] if boot else None
 
     chosen = {}
-    for n, hits in hits_by_name.items():
-        best = choose(hits, centroid)
+    for n, hits in dom_hits.items():
+        best = choose(hits, center) or hits[0]
         rp = (best or {}).get('repr_point') or [None, None]
         chosen[n] = {'id': best.get('id'), 'title': best.get('name'), 'score': round(best.get('score') or 0, 3),
-                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(hits) > 1}
+                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(_cluster_locations(hits)) > 1}
     return chosen
 
 
