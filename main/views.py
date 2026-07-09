@@ -517,7 +517,9 @@ def workbench_home(request):
     # Editors that are actually built and reachable today. New doc-type editor chunks land here as
     # they ship; until then their tiles render as "in development" rather than dead links.
     READY = {'reconciliation': '/reconciliation/',
-             'place_collection': '/workbench/place-collection/'}
+             'place_collection': '/workbench/place-collection/',
+             'itinerary': '/workbench/itinerary/',
+             'gazetteer_group': '/workbench/gazetteer-group/'}
     tiles = []
     for dt in doctypes.creatable():
         tiles.append({'key': dt.key, 'label': dt.label, 'url': READY.get(dt.key),
@@ -529,14 +531,68 @@ def workbench_home(request):
                   {'tiles': tiles, 'placeholders': placeholders})
 
 
-# Place Collection editor page (Collaborative Workbench doc-type #2). Beta-gated exactly like the
-# reconciliation tool (404 to non-beta). Local-first: the page ships static; all state lives in the
-# browser until the user saves to their account or publishes (both via the beta-gated workbench API).
+# Collaborative Workbench editor pages (doc-types #2/#3). Beta-gated exactly like the reconciliation
+# tool (404 to non-beta). Local-first: the page ships static; all state lives in the browser until the
+# user saves to their account or publishes (both via the beta-gated workbench API). Place Collection
+# and Itinerary share one template + one client core (wb-collection-editor); only the copy/bundle
+# differ. Documentation buttons point at the v3.3 Collaborative Collections guide.
+_COLLECTIONS_DOC = 'https://docs.whgazetteer.org/content/v3-3/collections.html'
+
+
 @login_required
 def wb_place_collection_view(request):
     if not request.user.can_access_beta:
         raise Http404()
-    return render(request, "main/wb_place_collection.html", {})
+    return render(request, "main/wb_collection_editor.html", {
+        'page_title': 'New Place Collection', 'heading': 'New Place Collection',
+        'intro': 'Curate a set of WHG places with notes — for teaching, storytelling, or research. '
+                 'Everything stays in your browser until you choose to save it to your account or publish it.',
+        'meta_heading': 'About this collection', 'member_heading': 'Places',
+        'title_placeholder': 'e.g. Cities of the Hanseatic League',
+        'search_placeholder': 'Search WHG for a place to add…',
+        'publish_word': 'collection', 'sequenced': False,
+        'doc_url': _COLLECTIONS_DOC + '#building-a-place-collection',
+        'bundle_css': 'webpack/wb-place-collection.bundle.css',
+        'bundle_js': 'webpack/wb-place-collection.bundle.js',
+    })
+
+
+@login_required
+def wb_itinerary_view(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    return render(request, "main/wb_collection_editor.html", {
+        'page_title': 'New Itinerary', 'heading': 'New Itinerary',
+        'intro': 'An itinerary is an ordered journey through WHG places — a sequenced Place Collection. '
+                 'Add stops, set their order, and publish. Everything stays in your browser until you publish.',
+        'meta_heading': 'About this itinerary', 'member_heading': 'Stops',
+        'title_placeholder': 'e.g. A Grand Tour of Italy, 1786',
+        'search_placeholder': 'Search WHG for a stop to add…',
+        'publish_word': 'itinerary', 'sequenced': True,
+        'doc_url': _COLLECTIONS_DOC + '#building-an-itinerary',
+        'bundle_css': 'webpack/wb-itinerary.bundle.css',
+        'bundle_js': 'webpack/wb-itinerary.bundle.js',
+    })
+
+
+@login_required
+def wb_gazetteer_group_view(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    # Reuses the shared editor DOM; its own client (wb-gazetteer-group) fills the member pane with
+    # published gazetteers (datasets) rather than places.
+    return render(request, "main/wb_collection_editor.html", {
+        'page_title': 'New Gazetteer Group', 'heading': 'New Gazetteer Group',
+        'intro': 'Aggregate published gazetteers (datasets) into a single group for comparison or '
+                 'analysis. Everything stays in your browser until you choose to save or publish.',
+        'meta_heading': 'About this group', 'member_heading': 'Gazetteers',
+        'title_placeholder': 'e.g. Colonial & modern gazetteers of South Asia',
+        'search_placeholder': 'Search published gazetteers to add…',
+        'publish_word': 'group', 'sequenced': False,
+        'doc_url': _COLLECTIONS_DOC + '#building-a-gazetteer-group',
+        'bundle_css': 'webpack/wb-gazetteer-group.bundle.css',
+        'bundle_js': 'webpack/wb-gazetteer-group.bundle.js',
+    })
 
 
 # ── Development status & roadmap ─────────────────────────────────────────────────────────────────

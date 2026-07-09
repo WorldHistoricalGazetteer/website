@@ -61,6 +61,10 @@ export const pushSnapshot = (id, snapshot, baseVersion) =>
 // or 501 (realtime not configured) / 403 (not a member) → caller stays on the Phase-1 REST sync.
 export const collabToken = (id) => req('POST', `/projects/${id}/collab-token/`);
 
+// Search public, non-core published gazetteers (datasets) for the Gazetteer Group editor.
+// 200 { datasets:[{id, title, label, description}] }.
+export const searchDatasets = (q) => req('GET', '/datasets/search/?q=' + encodeURIComponent(q || ''));
+
 // Fetch a shared Google Sheet as CSV via the server-side proxy (avoids browser CORS).
 export const importGSheet = (url) => req('POST', '/gsheet/', { url });
 export const importGDoc = (url) => req('POST', '/gdoc/', { url });

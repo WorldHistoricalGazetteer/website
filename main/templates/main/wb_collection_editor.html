@@ -2,14 +2,15 @@
 {% load static %}
 {% load labels %}
 {#
-  Place Collection editor (Collaborative Workbench doc-type). BETA-gated in the view
-  (main.views.wb_place_collection_view) — 404 to non-beta. Local-first: nothing is saved to WHG until
-  you choose "Save to account" or "Publish". DOM ids here are bound by wb-place-collection.js.
+  Shared editor page for place-based Workbench collections — Place Collection and Itinerary
+  (an Itinerary is a sequenced Place Collection, plan §4.3). BETA-gated in the view (404 to non-beta).
+  Local-first: nothing is saved to WHG until "Save to account" or "Publish". Context vars differ per
+  doc-type (heading/intro/member words/bundle); the DOM ids are bound by wb-collection-editor.js.
 #}
-{% block title %}WHG · New {% label 'place_collection' %} (beta){% endblock %}
+{% block title %}WHG · {{ page_title }} (beta){% endblock %}
 
 {% block extra_head %}
-<link href="{% static 'webpack/wb-place-collection.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+<link href="{% static bundle_css %}?v={{ asset_version }}" rel="stylesheet"/>
 <style>
   .wb-wrap { max-width: 860px; margin: 1.5rem auto; }
   .wb-status { font-size: .8rem; padding: .15rem .5rem; border-radius: .35rem; white-space: nowrap; }
@@ -27,26 +28,23 @@
   {% csrf_token %}
 
   <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-    <h1 class="h3 mb-0">New {% label 'place_collection' %}</h1>
+    <h1 class="h3 mb-0">{{ heading }}</h1>
     <span class="badge bg-warning text-dark">beta</span>
     <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
-    <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html" target="_blank" rel="noopener">Documentation</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ doc_url }}" target="_blank" rel="noopener">Documentation</a>
   </div>
-  <p class="text-muted small">
-    Curate a set of WHG places with notes — for teaching, storytelling, or research. Everything stays
-    in your browser until you choose to save it to your account or publish it.
-  </p>
+  <p class="text-muted small">{{ intro }}</p>
 
   {# 1. Metadata #}
   <section class="wb-pane recon-card p-3">
-    <h2>1 · About this collection</h2>
+    <h2>1 · {{ meta_heading }}</h2>
     <div class="mb-2">
       <label class="form-label small mb-1" for="wb-title">Title</label>
-      <input id="wb-title" class="form-control" placeholder="e.g. Cities of the Hanseatic League" maxlength="255">
+      <input id="wb-title" class="form-control" placeholder="{{ title_placeholder }}" maxlength="255">
     </div>
     <div class="mb-2">
       <label class="form-label small mb-1" for="wb-desc">Description</label>
-      <textarea id="wb-desc" class="form-control" rows="3" maxlength="3000" placeholder="What this collection is about"></textarea>
+      <textarea id="wb-desc" class="form-control" rows="3" maxlength="3000" placeholder="What this is about"></textarea>
     </div>
     <div class="mb-0">
       <label class="form-label small mb-1" for="wb-keywords">Keywords <span class="text-muted">(comma-separated)</span></label>
@@ -54,11 +52,12 @@
     </div>
   </section>
 
-  {# 2. Places #}
+  {# 2. Places / stops #}
   <section class="wb-pane recon-card p-3">
-    <h2>2 · Places <span class="badge bg-secondary" id="wb-places-count">0</span></h2>
+    <h2>2 · {{ member_heading }} <span class="badge bg-secondary" id="wb-places-count">0</span></h2>
+    {% if sequenced %}<p class="text-muted small mb-2">Order matters — drag with the ↑ ↓ buttons to set the sequence of the journey.</p>{% endif %}
     <div class="input-group mb-2">
-      <input id="wb-search" class="form-control" placeholder="Search WHG for a place to add…">
+      <input id="wb-search" class="form-control" placeholder="{{ search_placeholder }}">
       <button id="wb-search-btn" class="btn btn-primary" type="button">Search</button>
     </div>
     <div id="wb-search-results" class="mb-2"></div>
@@ -70,7 +69,7 @@
     <h2>3 · Save &amp; publish</h2>
     <div class="d-flex flex-wrap gap-2 mb-2">
       <button id="wb-save-btn" class="btn btn-outline-primary" type="button">Save to my account</button>
-      <button id="wb-publish-btn" class="btn btn-success" type="button">Publish collection</button>
+      <button id="wb-publish-btn" class="btn btn-success" type="button">Publish {{ publish_word }}</button>
       <button id="wb-clear-btn" class="btn btn-outline-danger ms-auto" type="button">Clear draft</button>
     </div>
     <div id="wb-save-result" class="mb-1"></div>
@@ -84,5 +83,5 @@
 {% endblock %}
 
 {% block deferredScripts %}
-  var scripts = [{ src: '{% static "webpack/wb-place-collection.bundle.js" %}', type: 'module' }];
+  var scripts = [{ src: '{% static bundle_js %}', type: 'module' }];
 {% endblock %}

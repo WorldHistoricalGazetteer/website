@@ -20,6 +20,7 @@ urlpatterns = [
     path('teams/<int:tid>/members/', views.team_members, name='team-members'),
     path('teams/<int:tid>/members/<int:uid>/', views.team_member_detail, name='team-member-detail'),
     path('shared/<str:token>/', views.shared_snapshot, name='shared'),
+    path('datasets/search/', views.dataset_search, name='dataset-search'),
     path('gsheet/', views.gsheet_proxy, name='gsheet'),
     path('gdoc/', views.gdoc_proxy, name='gdoc'),
     path('ner/', views.ner_extract, name='ner'),

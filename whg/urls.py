@@ -120,6 +120,8 @@ urlpatterns = [
                   # Separate from the public legacy /workbench/ page above (rewriting that is the P4 step).
                   path('workbench/new/', views.workbench_home, name="workbench-new"),
                   path('workbench/place-collection/', views.wb_place_collection_view, name="wb-place-collection"),
+                  path('workbench/itinerary/', views.wb_itinerary_view, name="wb-itinerary"),
+                  path('workbench/gazetteer-group/', views.wb_gazetteer_group_view, name="wb-gazetteer-group"),
 
                   # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)
                   path('reconciliation/', views.reconciliation_view, name="reconciliation"),

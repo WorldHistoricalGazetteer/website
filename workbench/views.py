@@ -256,6 +256,26 @@ def shared_snapshot(request, token):
                          'read_only': True})
 
 
+# ── gazetteer (dataset) search for the Gazetteer Group editor ───────────────────
+@login_required
+@_beta_required
+@require_http_methods(['GET'])
+def dataset_search(request):
+    """Search public, non-core published gazetteers (``datasets.Dataset``) for the Gazetteer Group
+    editor's member picker. Returns a lean ``{datasets:[{id, title, label, description}]}`` (title/
+    description match, capped). Beta-gated like the rest of the Workbench."""
+    from django.db.models import Q
+    from datasets.models import Dataset
+    q = (request.GET.get('q') or '').strip()
+    qs = Dataset.objects.filter(public=True, core=False)
+    if q:
+        qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q))
+    qs = qs.order_by('title')[:20]
+    out = [{'id': d.id, 'title': d.title, 'label': d.label,
+            'description': (d.description or '')[:140]} for d in qs]
+    return JsonResponse({'datasets': out})
+
+
 # ── publish-back (plan §9) ─────────────────────────────────────────────────────
 @login_required
 @_beta_required
