@@ -100,11 +100,14 @@ def create_suggestion(project, user, rationale=''):
         status=RecordSuggestion.STATUS_PENDING)
 
 
-@transaction.atomic
 def apply_suggestion(suggestion, reviewer):
     """Accept + apply a pending suggestion via the shared record apply-path, guarded by the record's
     ``base_version``. On a stale record → mark ``superseded`` and raise ``SuggestionSuperseded``.
-    Returns ``{record_id, changed, reindexed}``."""
+    Returns ``{record_id, changed, reindexed}``.
+
+    The optimistic-lock pre-checks run OUTSIDE the apply transaction so that a ``superseded`` mark is
+    committed (raising inside the atomic apply would roll the mark back). Only the apply + accept-mark
+    are atomic together."""
     from places.models import Place
     from .checkout import record_state_hash
     from .publish import apply_record_fields, _reindex_place
@@ -121,12 +124,13 @@ def apply_suggestion(suggestion, reviewer):
               'the record changed since this correction was proposed')
         raise SuggestionSuperseded('the record changed since this correction was proposed')
 
-    changed = apply_record_fields(place, suggestion.proposed_snapshot)
-    place.refresh_from_db()
-    reindexed = _reindex_place(place)
-    suggestion.applied_changed = sorted(set(changed))
-    _mark(suggestion, RecordSuggestion.STATUS_ACCEPTED, reviewer, '',
-          extra_fields=['applied_changed'])
+    with transaction.atomic():
+        changed = apply_record_fields(place, suggestion.proposed_snapshot)
+        place.refresh_from_db()
+        reindexed = _reindex_place(place)
+        suggestion.applied_changed = sorted(set(changed))
+        _mark(suggestion, RecordSuggestion.STATUS_ACCEPTED, reviewer, '',
+              extra_fields=['applied_changed'])
     return {'record_id': place.id, 'changed': sorted(set(changed)), 'reindexed': reindexed}
 
 
