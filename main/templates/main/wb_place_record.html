@@ -2,20 +2,22 @@
 {% load static %}
 {% load labels %}
 {#
-  Single-record correction editor (Collaborative Workbench, plan §6.1). BETA-gated in the view
-  (main.views.wb_place_record_view). Reached only via record-level check-out (?project=<uuid>); the
-  editor loads that working copy, edits the name/coordinate, and publishes the delta back + re-indexes.
+  Full-LPF single-record correction editor (plan §6.1). BETA-gated in the view. Reached via record-
+  level check-out (?project=<uuid>). Edit every common LPF field; publish rebuilds the place's
+  sub-tables and re-indexes just that record. DOM ids bound by wb-place-record.js.
 #}
 {% block title %}WHG · Correct a record (beta){% endblock %}
 
 {% block extra_head %}
 <link href="{% static 'webpack/wb-place-record.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
 <style>
-  .wb-rec-wrap { max-width: 680px; margin: 1.75rem auto; }
-  .wb-status { font-size: .8rem; padding: .15rem .5rem; border-radius: .35rem; white-space: nowrap; }
-  .wb-status--saving { background:#fff3cd; color:#664d03; }
-  .wb-status--saved  { background:#e2e3e5; color:#41464b; }
-  .wb-status--error  { background:#f8d7da; color:#842029; }
+  .wb-rec-wrap { max-width: 760px; margin: 1.75rem auto; }
+  .wb-status { font-size:.8rem; padding:.15rem .5rem; border-radius:.35rem; white-space:nowrap; }
+  .wb-status--saving { background:#fff3cd; color:#664d03; } .wb-status--saved { background:#e2e3e5; color:#41464b; } .wb-status--error { background:#f8d7da; color:#842029; }
+  .wb-sec { margin-bottom:1rem; }
+  .wb-sec h2 { font-size:.95rem; font-weight:600; }
+  .wb-item { display:flex; gap:.4rem; align-items:center; margin-bottom:.4rem; }
+  .wb-item .btn-rm { flex:0 0 auto; }
 </style>
 {% endblock %}
 
@@ -26,26 +28,75 @@
     <h1 class="h4 mb-0">Correct a record</h1>
     <span class="badge bg-warning text-dark">beta</span>
     <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
-    <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html#editing-something-already-published" target="_blank" rel="noopener">Documentation</a>
+    <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html#correcting-a-single-record" target="_blank" rel="noopener">Documentation</a>
   </div>
   <p class="text-muted small" id="wb-rec-where">Loading…</p>
 
-  <div class="recon-card p-3">
-    <div class="mb-3">
-      <label class="form-label small mb-1" for="wb-rec-title">Name</label>
-      <input id="wb-rec-title" class="form-control" maxlength="255" placeholder="Place name">
+  <section class="wb-sec recon-card p-3">
+    <h2>Name &amp; countries</h2>
+    <div class="mb-2">
+      <label class="form-label small mb-1" for="wb-rec-title">Primary name (title)</label>
+      <input id="wb-rec-title" class="form-control" maxlength="255">
     </div>
-    <div class="mb-3" id="wb-rec-coord"></div>
-    <div class="d-flex gap-2 align-items-center">
-      <button id="wb-rec-pub" class="btn btn-success" type="button">Publish correction</button>
+    <div class="mb-0">
+      <label class="form-label small mb-1" for="wb-rec-ccodes">Country codes <span class="text-muted">(comma-separated ISO-2)</span></label>
+      <input id="wb-rec-ccodes" class="form-control" placeholder="GB, FR">
     </div>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Also-known-as (names)</h2>
+    <div id="wb-rec-names"></div>
+    <button id="wb-rec-names-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a name</button>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Place types</h2>
+    <div id="wb-rec-types"></div>
+    <button id="wb-rec-types-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a type</button>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Coordinate</h2>
+    <div id="wb-rec-coord"></div>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Dates</h2>
+    <div class="input-group input-group-sm" style="max-width:26rem;">
+      <span class="input-group-text">start (year)</span>
+      <input id="wb-rec-start" class="form-control" type="number" step="1">
+      <span class="input-group-text">end</span>
+      <input id="wb-rec-end" class="form-control" type="number" step="1">
+    </div>
+    <div class="form-text">Negative years are BCE (e.g. -500).</div>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Authority links</h2>
+    <div id="wb-rec-links"></div>
+    <div class="d-flex gap-2 mt-1">
+      <button id="wb-rec-links-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a link</button>
+      <button id="wb-rec-recon" class="btn btn-sm btn-outline-primary" type="button"><i class="fas fa-wand-magic-sparkles me-1"></i>Re-reconcile this record</button>
+    </div>
+    <div id="wb-rec-recon-results" class="mt-2"></div>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <h2>Descriptions</h2>
+    <div id="wb-rec-descriptions"></div>
+    <button id="wb-rec-descr-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a description</button>
+  </section>
+
+  <section class="wb-sec recon-card p-3">
+    <button id="wb-rec-pub" class="btn btn-success" type="button">Publish correction</button>
     <div id="wb-rec-result" class="mt-2"></div>
     <p class="text-muted small mt-3 mb-0">
-      This fixes a single published record. Your change is applied to the gazetteer and, if the record
-      is in WHG search, the search index is updated for that record only — the rest of the gazetteer is
-      untouched. Guarded so you can't overwrite a change someone else made meanwhile.
+      Publishing applies your changes to this single record and re-indexes it in WHG search — the rest of
+      the gazetteer is untouched. Guarded so you can't overwrite a change someone else made meanwhile.
+      (Depictions, relations, and named periods aren't editable here yet and are preserved as-is.)
     </p>
-  </div>
+  </section>
 </div>
 {% endblock %}
 
