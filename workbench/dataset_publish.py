@@ -50,7 +50,10 @@ def publish_dataset_edit(project, user):
                 'changed_records': 0, 'applied': [], 'reindexed': 0, 'conflicts': []}
 
     ids = [r['record_id'] for r in dirty]
-    places = {p.id: p for p in Place.objects.filter(id__in=ids, dataset_id=dataset_id)
+    # NB: places.Place.dataset is a FK whose target is Dataset.label (a string), so the raw column
+    # ``dataset_id`` holds the label — filter via ``dataset__id`` to scope by the numeric dataset id
+    # carried in the snapshot (also guards against a record_id that has moved to another gazetteer).
+    places = {p.id: p for p in Place.objects.filter(id__in=ids, dataset__id=dataset_id)
               .select_related('dataset')}
 
     applied, conflicts, reindexed = [], [], 0
