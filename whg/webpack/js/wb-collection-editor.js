@@ -135,9 +135,21 @@ export function mountCollectionEditor(cfg) {
     container.classList.remove('d-none');
     const mod = await loadReconMap();
     mod.renderReviewMap(container, pts, null, { onAccept: (ci) => addCandidate(results, ci, el('wb-search-results')) });
-    if (mod.resizeReviewMap) mod.resizeReviewMap();
+    // The container just un-hid (display:none → real size); MapLibre must be resized AFTER layout
+    // settles or it paints blank on first show. Nudge across a few frames to cover layout + tile load.
+    kickResize(mod.resizeReviewMap);
   }
   function hideCandMap() { const c = el('wb-cand-map'); if (c) c.classList.add('d-none'); }
+
+  // Fire a map resize now, next frame, and a couple of short delays later — covers the case where the
+  // map's container only gains its real size a tick after becoming visible (accordion/hidden → shown).
+  function kickResize(fn) {
+    if (typeof fn !== 'function') return;
+    const go = () => { try { fn(); } catch (_) { /* map torn down */ } };
+    requestAnimationFrame(go);
+    setTimeout(go, 200);
+    setTimeout(go, 600);
+  }
 
   // Assembled-collection map (its own step) — all located members as a clustered/labelled map.
   async function renderFullMap() {
@@ -152,7 +164,7 @@ export function mountCollectionEditor(cfg) {
       properties: { title: `${i + 1}. ${p.title || p.id}`, match: true } })) };
     const mod = await loadReconMap();
     mod.renderFullMap(container, fc);
-    if (mod.resizeFullMap) mod.resizeFullMap();
+    kickResize(mod.resizeFullMap);
   }
 
   function addPlace(p) {
