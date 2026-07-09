@@ -161,20 +161,25 @@ def record_state_hash(place):
     return hashlib.sha1(json.dumps(state, sort_keys=True, default=str).encode('utf-8')).hexdigest()
 
 
-def checkout_place_record(place):
-    """Serialise a single published ``places.Place`` → a full-LPF record-correction snapshot.
-    Returns ``(snapshot, base_version)``. Editable: names, types, links, descriptions, coordinate,
-    dates, ccodes (+ per-record re-reconciliation, client-side). Depictions/relations/periods are
-    round-tripped-through by leaving their sub-rows untouched (not exposed for editing yet)."""
+def record_snapshot(place):
+    """The full-LPF editable snapshot of one ``places.Place`` (the shape the record editor + record
+    apply-path speak). Shared by single-record check-out and dataset (subset/whole) check-out."""
     lng, lat, editable = _place_point(place)
     names, types, links, descriptions, dates = _record_lpf(place)
-    snapshot = {
+    return {
         'record_id': place.id, 'dataset_label': place.dataset.label, 'idx_pub': bool(place.idx_pub),
         'title': place.title or '', 'ccodes': list(place.ccodes or []),
         'names': names, 'types': types, 'links': links, 'descriptions': descriptions, 'dates': dates,
         'lng': lng, 'lat': lat, 'point_editable': editable,
     }
-    return snapshot, record_state_hash(place)
+
+
+def checkout_place_record(place):
+    """Serialise a single published ``places.Place`` → a full-LPF record-correction snapshot.
+    Returns ``(snapshot, base_version)``. Editable: names, types, links, descriptions, coordinate,
+    dates, ccodes (+ per-record re-reconciliation, client-side). Depictions/relations/periods are
+    round-tripped-through by leaving their sub-rows untouched (not exposed for editing yet)."""
+    return record_snapshot(place), record_state_hash(place)
 
 
 def checkout_gazetteer_group(collection):

@@ -23,8 +23,8 @@ dataset to the browser". It is the top of a spectrum we're building bottom-up:
 | Granularity | Status | Browser holds | Publish-back |
 |---|---|---|---|
 | **1 record** | ✅ shipped | one place | apply delta + reindex 1 doc |
-| **filtered subset / page** | ← the sensible NEXT step | N places (bounded) | delta of changed records + reindex those |
-| **whole dataset** | this plan (top end) | the whole dataset *iff it fits* | delta of changed records (default) or full re-accession (explicit) |
+| **filtered subset / page** | ✅ shipped | N places (bounded) | delta of changed records + reindex those |
+| **whole dataset** | ✅ shipped (fits-cap; streaming later) | the whole dataset *iff it fits* | delta of changed records (default) or full re-accession (explicit, later) |
 
 **Core principle:** the tool is **capacity-aware and steers by size.** Below a threshold, whole-dataset
 check-out materialises the dataset locally; above it, the tool refuses and **routes the user to subset
@@ -162,13 +162,22 @@ is too thin to edit a real gazetteer. Build order:
    **schema-driven** form covering every LPF field (names, geometries, types, temporal/`when`, links,
    descriptions, relations, ccodes), plus a **"re-reconcile this record"** action (1c). This is the
    foundational capability; the whole-dataset story is "many of these".
-3. **Filtered-subset check-out** — check out a bounded page/filter of a dataset's records into a
-   dataset shell; edit with the full-LPF record editor; **delta publish-back** + reindex changed
-   records. The real workhorse ("fix these twelve records"). Staff-only (1e).
-4. **Whole-dataset for datasets that fit** — "select all" over (3) with the **dynamic capacity gate**
-   (1b); the "Edit in Workbench" button on the dataset page.
-5. **Streaming / resumable transfer + capacity steering** for large datasets (paged LPF both ways).
-6. **v3.3-public gate change** — extend check-out from staff-only to owners + team members (1e).
+3. **Filtered-subset check-out** — ✅ **SHIPPED.** `dataset_edit` doc-type + `dataset_checkout.py`
+   (title/name + country filter, paged, ordered by id, capped at `MAX_CHECKOUT_RECORDS=3000`) →
+   `wb-dataset.js` shell (collapsible record list, each expands into the shared full-LPF field editor
+   `wb-record-fields.js`, dirty-tracking) → `dataset_publish.publish_dataset_edit` **delta** apply
+   (only `_dirty` records, each `apply_record_fields` + `_reindex_place`), **per-record** optimistic
+   lock (embedded `base_version`; conflicts reported, not clobbered, and don't abort the others).
+   Staff-only (1e). Entry: "Edit records in Workbench" on `ds_browse` + the "Edit published…" hub.
+4. **Whole-dataset for datasets that fit** — ✅ **SHIPPED.** Same shell; the capacity chooser
+   (`?dataset=<id>`) runs `navigator.storage.estimate()` vs the dataset's estimated size
+   (`checkout/dataset/<id>/info/`) and offers "Edit all N records" only when it fits both the browser
+   budget and the server cap; otherwise steers to the subset filter (1b).
+5. **Streaming / resumable transfer + capacity steering** for large datasets (paged LPF both ways) —
+   *still to do.* Today's subset path pages via `offset`/`limit`; a fully streamed/resumable transfer
+   for very large gazetteers is the remaining scale work. A `DatasetFile.rev` backup before
+   publish-back (1e) is the other hardening item, most valuable before widening beyond staff.
+6. **v3.3-public gate change** — extend check-out from staff-only to owners + team members (1e). *TODO.*
 
 ## 6. Resolved (was: open questions)
 

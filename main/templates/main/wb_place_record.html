@@ -3,8 +3,8 @@
 {% load labels %}
 {#
   Full-LPF single-record correction editor (plan §6.1). BETA-gated in the view. Reached via record-
-  level check-out (?project=<uuid>). Edit every common LPF field; publish rebuilds the place's
-  sub-tables and re-indexes just that record. DOM ids bound by wb-place-record.js.
+  level check-out (?project=<uuid>). The field editor itself is rendered by wb-record-fields.js into
+  #wb-rec-form; publish rebuilds the place's sub-tables and re-indexes just that record.
 #}
 {% block title %}WHG · Correct a record (beta){% endblock %}
 
@@ -14,10 +14,13 @@
   .wb-rec-wrap { max-width: 760px; margin: 1.75rem auto; }
   .wb-status { font-size:.8rem; padding:.15rem .5rem; border-radius:.35rem; white-space:nowrap; }
   .wb-status--saving { background:#fff3cd; color:#664d03; } .wb-status--saved { background:#e2e3e5; color:#41464b; } .wb-status--error { background:#f8d7da; color:#842029; }
-  .wb-sec { margin-bottom:1rem; }
-  .wb-sec h2 { font-size:.95rem; font-weight:600; }
+  /* shared record-field editor (wb-record-fields.js) */
+  .wb-rf-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:1rem; }
+  .wb-rf-block { border:1px solid var(--bs-border-color,#dee2e6); border-radius:.5rem; padding:.75rem .9rem; margin-bottom:.85rem; }
+  .wb-rf-h { font-size:.9rem; font-weight:600; margin-bottom:.5rem; }
   .wb-item { display:flex; gap:.4rem; align-items:center; margin-bottom:.4rem; }
   .wb-item .btn-rm { flex:0 0 auto; }
+  @media (max-width:576px){ .wb-rf-grid { grid-template-columns:1fr; } }
 </style>
 {% endblock %}
 
@@ -32,63 +35,9 @@
   </div>
   <p class="text-muted small" id="wb-rec-where">Loading…</p>
 
-  <section class="wb-sec recon-card p-3">
-    <h2>Name &amp; countries</h2>
-    <div class="mb-2">
-      <label class="form-label small mb-1" for="wb-rec-title">Primary name (title)</label>
-      <input id="wb-rec-title" class="form-control" maxlength="255">
-    </div>
-    <div class="mb-0">
-      <label class="form-label small mb-1" for="wb-rec-ccodes">Country codes <span class="text-muted">(comma-separated ISO-2)</span></label>
-      <input id="wb-rec-ccodes" class="form-control" placeholder="GB, FR">
-    </div>
-  </section>
+  <div id="wb-rec-form"></div>
 
-  <section class="wb-sec recon-card p-3">
-    <h2>Also-known-as (names)</h2>
-    <div id="wb-rec-names"></div>
-    <button id="wb-rec-names-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a name</button>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
-    <h2>Place types</h2>
-    <div id="wb-rec-types"></div>
-    <button id="wb-rec-types-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a type</button>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
-    <h2>Coordinate</h2>
-    <div id="wb-rec-coord"></div>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
-    <h2>Dates</h2>
-    <div class="input-group input-group-sm" style="max-width:26rem;">
-      <span class="input-group-text">start (year)</span>
-      <input id="wb-rec-start" class="form-control" type="number" step="1">
-      <span class="input-group-text">end</span>
-      <input id="wb-rec-end" class="form-control" type="number" step="1">
-    </div>
-    <div class="form-text">Negative years are BCE (e.g. -500).</div>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
-    <h2>Authority links</h2>
-    <div id="wb-rec-links"></div>
-    <div class="d-flex gap-2 mt-1">
-      <button id="wb-rec-links-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a link</button>
-      <button id="wb-rec-recon" class="btn btn-sm btn-outline-primary" type="button"><i class="fas fa-wand-magic-sparkles me-1"></i>Re-reconcile this record</button>
-    </div>
-    <div id="wb-rec-recon-results" class="mt-2"></div>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
-    <h2>Descriptions</h2>
-    <div id="wb-rec-descriptions"></div>
-    <button id="wb-rec-descr-add" class="btn btn-sm btn-outline-secondary" type="button"><i class="fas fa-plus me-1"></i>Add a description</button>
-  </section>
-
-  <section class="wb-sec recon-card p-3">
+  <section class="wb-rf-block">
     <button id="wb-rec-pub" class="btn btn-success" type="button">Publish correction</button>
     <div id="wb-rec-result" class="mt-2"></div>
     <p class="text-muted small mt-3 mb-0">

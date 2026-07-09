@@ -1,0 +1,68 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{#
+  Gazetteer records-correction shell (plan-dataset-checkout §3/§4). BETA + STAFF-gated in the view.
+  Two modes, chosen by query string:
+    ?dataset=<id>   — fresh: a capacity chooser (whole-dataset if it fits, else a name/country subset)
+    ?project=<uuid> — resume: the checked-out record list; expand a record to edit it (full-LPF), then
+                      publish the delta of changed records.
+  The per-record editor is wb-record-fields.js; publish-back applies only dirty records + reindexes them.
+#}
+{% block title %}WHG · Correct gazetteer records (beta){% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/wb-dataset.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+<style>
+  .wb-ds-wrap { max-width: 860px; margin: 1.75rem auto; }
+  .wb-status { font-size:.8rem; padding:.15rem .5rem; border-radius:.35rem; white-space:nowrap; }
+  .wb-status--saving { background:#fff3cd; color:#664d03; } .wb-status--saved { background:#e2e3e5; color:#41464b; } .wb-status--error { background:#f8d7da; color:#842029; }
+  /* record list */
+  .wb-ds-row { border:1px solid var(--bs-border-color,#dee2e6); border-radius:.5rem; margin-bottom:.5rem; overflow:hidden; }
+  .wb-ds-head { display:flex; align-items:center; gap:.6rem; padding:.55rem .8rem; cursor:pointer; background:var(--bs-body-bg,#fff); }
+  .wb-ds-head:hover { background:#f8f9fa; }
+  .wb-ds-title { font-weight:600; min-width:0; }
+  .wb-ds-sub { font-size:.8rem; color:#6c757d; }
+  .wb-ds-body { padding:.75rem .9rem; border-top:1px solid var(--bs-border-color,#dee2e6); display:none; }
+  .wb-ds-row.open .wb-ds-body { display:block; }
+  .wb-ds-dirty { font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; }
+  /* shared record-field editor (wb-record-fields.js) */
+  .wb-rf-grid { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:1rem; }
+  .wb-rf-block { border:1px solid var(--bs-border-color,#dee2e6); border-radius:.5rem; padding:.75rem .9rem; margin-bottom:.85rem; }
+  .wb-rf-h { font-size:.9rem; font-weight:600; margin-bottom:.5rem; }
+  .wb-item { display:flex; gap:.4rem; align-items:center; margin-bottom:.4rem; }
+  .wb-item .btn-rm { flex:0 0 auto; }
+  @media (max-width:576px){ .wb-rf-grid { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wb-ds-wrap px-3">
+  {% csrf_token %}
+  <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+    <h1 class="h4 mb-0">Correct gazetteer records</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+    <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
+    <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html#correcting-records-across-a-gazetteer" target="_blank" rel="noopener">Documentation</a>
+  </div>
+  <p class="text-muted small" id="wb-ds-where">Loading…</p>
+
+  {# ── fresh-checkout capacity chooser (?dataset=) ── #}
+  <div id="wb-ds-chooser" class="wb-rf-block" style="display:none;">
+    <div class="wb-rf-h">Check out records to edit</div>
+    <div id="wb-ds-chooser-body"><span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>checking size…</span></div>
+  </div>
+
+  {# ── resume: toolbar + record list (?project=) ── #}
+  <div id="wb-ds-toolbar" class="d-flex flex-wrap gap-2 align-items-center mb-2" style="display:none;">
+    <input id="wb-ds-search" class="form-control form-control-sm" style="max-width:20rem;" placeholder="Filter these records by name…" autocomplete="off">
+    <span id="wb-ds-count" class="text-muted small"></span>
+    <button id="wb-ds-pub" class="btn btn-success btn-sm ms-auto" type="button" disabled>Publish changes</button>
+  </div>
+  <div id="wb-ds-result" class="mb-2"></div>
+  <div id="wb-ds-list"></div>
+</div>
+{% endblock %}
+
+{% block deferredScripts %}
+  var scripts = [{ src: '{% static "webpack/wb-dataset.bundle.js" %}', type: 'module' }];
+{% endblock %}

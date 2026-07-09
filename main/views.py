@@ -563,9 +563,13 @@ def workbench_published(request):
                       'browse': f'/collections/{c.id}/browse_ds'})
     for d in (Dataset.objects.filter(Q(owner=u) | Q(collabs__user_id=u))
               .exclude(title__startswith='(stub)').distinct().order_by('-id')):
+        # Whole-/subset-dataset editing is staff-only for now (plan-dataset-checkout §1e). Staff get a
+        # direct link into the check-out chooser; everyone else gets the record-by-record "Corrections"
+        # path on the dataset page.
         items.append({'kind': 'Gazetteer', 'kind_key': 'gazetteer', 'icon': 'fa-map',
                       'id': d.id, 'title': d.title, 'meta': f'{d.numrows or "?"} records · {d.ds_status or ""}',
-                      'editor': None, 'checkout': False,                    # whole-dataset check-out not built yet
+                      'editor': None, 'checkout': False,
+                      'edit_url': (f'/workbench/dataset/?dataset={d.id}' if u.is_staff else None),
                       'browse': f'/datasets/{d.id}/browse'})
     return render(request, 'main/workbench_published.html', {'items': items})
 
@@ -614,6 +618,16 @@ def wb_place_record_view(request):
     if not request.user.can_access_beta:
         raise Http404()
     return render(request, "main/wb_place_record.html", {})
+
+
+@login_required
+def wb_dataset_view(request):
+    # Gazetteer records-correction shell (plan-dataset-checkout §3/§4). Beta + STAFF-gated (whole-/
+    # subset-dataset editing is staff-only initially — see workbench.views._staff_dataset_or_403).
+    # Reached with ?dataset=<id> (fresh check-out chooser) or ?project=<uuid> (resume a working copy).
+    if not (request.user.can_access_beta and request.user.is_staff):
+        raise Http404()
+    return render(request, "main/wb_dataset.html", {})
 
 
 @login_required

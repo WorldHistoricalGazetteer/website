@@ -385,6 +385,69 @@ def project_checkout_place(request, pid):
                          'team': team.id}, status=201)
 
 
+# ── dataset ("gazetteer") check-out — subset / whole-that-fits (plan-dataset-checkout §3/§4) ─────
+def _staff_dataset_or_403(request, pid):
+    """Resolve the target dataset and enforce the dataset-checkout gate: beta (already applied by the
+    decorator) + **staff** (plan §1e — whole-/subset-dataset editing is higher blast radius than a
+    single record, so staff-only initially; widens to owners/team at the v3.3 public release) AND
+    ``Dataset.can_edit``. Returns (dataset, None) on success or (None, JsonResponse) on refusal."""
+    from datasets.models import Dataset
+    ds = get_object_or_404(Dataset, pk=pid)
+    if not (request.user.is_staff and ds.can_edit(request.user)):
+        return None, _err('editing a whole gazetteer in the Workbench is limited to staff for now', 403)
+    return ds, None
+
+
+@login_required
+@_beta_required
+@require_http_methods(['GET'])
+def dataset_checkout_info(request, pid):
+    """Pre-flight for the capacity chooser (plan §1b): record count, per-record byte estimate, and the
+    country codes present, so the client can compare against ``navigator.storage.estimate()`` and offer
+    whole-dataset vs a filtered subset. Staff-gated like the check-out itself."""
+    from .dataset_checkout import dataset_checkout_info as _info
+    ds, refusal = _staff_dataset_or_403(request, pid)
+    if refusal:
+        return refusal
+    return JsonResponse(_info(ds))
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def project_checkout_dataset(request, pid):
+    """Check out a bounded set of a gazetteer's records into a new ``dataset_edit`` project (plan §3/§4).
+    Body: ``{q?, ccode?, limit?, offset?, team?}``. A filter/limit selects a subset (the workhorse); no
+    filter + no limit is the whole-dataset path, allowed only if the dataset fits the server cap. Each
+    record carries its own ``base_version`` for per-record optimistic locking at publish-back."""
+    from .dataset_checkout import checkout_dataset, DatasetCheckoutError
+    ds, refusal = _staff_dataset_or_403(request, pid)
+    if refusal:
+        return refusal
+    data = _body(request)
+    try:
+        snapshot, base_version = checkout_dataset(
+            ds, q=data.get('q'), ccode=data.get('ccode'),
+            limit=data.get('limit'), offset=data.get('offset') or 0)
+    except DatasetCheckoutError as e:
+        return _err(str(e))
+    team = _resolve_target_team(request.user, data.get('team'))
+    if team is None:
+        return _err('you are not an editor of that team', 403)
+    loaded = snapshot.get('loaded', 0)
+    title = f'{ds.title} — {loaded} record{"s" if loaded != 1 else ""}'
+    with transaction.atomic():
+        proj = WorkbenchProject.objects.create(
+            team=team, title=title[:300], created_by=request.user, snapshot=snapshot,
+            version=1, status='draft', doc_type='dataset_edit',
+            published_dataset=ds, source_published_id=str(ds.id), base_version=base_version)
+        ProjectSnapshot.objects.create(project=proj, version=1, snapshot=snapshot,
+                                       created_by=request.user)
+    return JsonResponse({'id': str(proj.id), 'version': proj.version, 'doc_type': proj.doc_type,
+                         'loaded': loaded, 'total_matched': snapshot.get('total_matched'),
+                         'team': team.id}, status=201)
+
+
 # ── teams ───────────────────────────────────────────────────────────────────
 @login_required
 @_beta_required

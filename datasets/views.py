@@ -662,6 +662,14 @@ class DatasetBrowseView(LoginRequiredMixin, DetailView, DatasetContextMixin):
         context['whgtask'] = len(set(['whg', 'idx']) & set(ds_tasks)) > 0
         context['wdtask'] = len(set(['wd', 'wdlocal']) & set(ds_tasks)) > 0
 
+        # Collaborative Workbench "Edit records" entry (plan-dataset-checkout §3/§4). Beta + staff-only
+        # for now (higher blast radius than a single-record correction); widens to owners/team at the
+        # v3.3 public release. Mirrors the staff gate on the check-out endpoint.
+        u = self.request.user
+        context['can_edit_records_wb'] = bool(
+            u.is_authenticated and getattr(u, 'can_access_beta', False) and u.is_staff
+            and ds.can_edit(u))
+
         return context
 
 

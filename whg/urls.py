@@ -124,6 +124,7 @@ urlpatterns = [
                   path('workbench/itinerary/', views.wb_itinerary_view, name="wb-itinerary"),
                   path('workbench/gazetteer-group/', views.wb_gazetteer_group_view, name="wb-gazetteer-group"),
                   path('workbench/record/', views.wb_place_record_view, name="wb-place-record"),
+                  path('workbench/dataset/', views.wb_dataset_view, name="wb-dataset"),
 
                   # Gazetteer Workbench — Reconciliation UI (STAFF-ONLY, unpublished preview; see place#111/#112)
                   path('reconciliation/', views.reconciliation_view, name="reconciliation"),

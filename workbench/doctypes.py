@@ -24,7 +24,7 @@ else in the envelope (team, version, share, collab) changes.
 from importlib import import_module
 
 from .models import (DOC_RECONCILIATION, DOC_GAZETTEER_GROUP, DOC_PLACE_COLLECTION,
-                     DOC_ITINERARY, DOC_PLACE_RECORD, DOC_ROUTE, DOC_NETWORK)
+                     DOC_ITINERARY, DOC_PLACE_RECORD, DOC_DATASET_EDIT, DOC_ROUTE, DOC_NETWORK)
 
 
 # ── snapshot validators ───────────────────────────────────────────────────────
@@ -84,6 +84,20 @@ def _errs_place_record_stub(snap):
     if not isinstance(snap, dict):
         return ['snapshot must be an object']
     return [] if snap.get('record_id') else ['a record_id is required']
+
+
+def _errs_dataset_edit_stub(snap):
+    """Gazetteer-records-correction snapshot: ``{dataset_id, records:[{record_id, …}], …}``. Created
+    only via dataset check-out (§3/§4 of plan-dataset-checkout), so this is a light backstop: it must
+    carry a dataset_id and a records list."""
+    if not isinstance(snap, dict):
+        return ['snapshot must be an object']
+    errs = []
+    if not snap.get('dataset_id'):
+        errs.append('a dataset_id is required')
+    if not isinstance(snap.get('records'), list):
+        errs.append('"records" must be a list')
+    return errs
 
 
 def _errs_reconciliation(snap):
@@ -158,6 +172,15 @@ REGISTRY = {
         validate=_errs_place_record_stub,
         publish='workbench.publish.publish_place_record',
         checkout='workbench.checkout.checkout_place_record'),
+    # Gazetteer-records correction (plan-dataset-checkout §3/§4). A dataset shell holding a checked-out
+    # subset (or whole-that-fits) of a gazetteer's records, each edited via the full-LPF record editor;
+    # publish-back is a per-record delta. Created ONLY via dataset check-out (dedicated endpoint, not the
+    # generic collection checkout nor the "New…" picker), so enabled=False and checkout=None here.
+    DOC_DATASET_EDIT: DocType(
+        DOC_DATASET_EDIT, 'dataset_edit', enabled=False, editor='wb-dataset',
+        validate=_errs_dataset_edit_stub,
+        publish='workbench.dataset_publish.publish_dataset_edit',
+        checkout=None),
     # ── v4 placeholders (§4.4): reserved doc-types, creation gated OFF. No models, no editors yet.
     DOC_ROUTE: DocType(
         DOC_ROUTE, 'route', enabled=False, editor=None, validate=_errs_disabled),

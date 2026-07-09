@@ -241,26 +241,18 @@ def _reindex_place(place):
         return False
 
 
-@transaction.atomic
-def publish_place_record(project, user):
-    """Publish-back a full-LPF single-record correction (plan §6.1): apply the edited fields to the
-    ``places.Place`` and REBUILD its sub-tables (names/types/links/descriptions) from the snapshot,
-    then re-index that one record. Each sub-row's ``jsonb`` mirrors the accession pipeline's shape, so
-    makeDoc indexes the rebuilt rows unchanged. Guarded by the record-level optimistic hash. Depictions/
-    relations/periods are left untouched (not exposed for editing). Rebuild is safe because check-out
-    captured every sub-row and the editor round-trips them all (removing a row = intentional delete).
-    Returns ``{record_id, changed:[…], reindexed, dataset}``."""
+def apply_record_fields(place, snap):
+    """Apply a full-LPF record snapshot's editable fields to ``place`` — place-level fields
+    (title/ccodes/dates) + REBUILD of the sub-tables (names/types/links/descriptions) + the coordinate
+    (point-editable places only). Returns the list of changed field-groups. Each sub-row's ``jsonb``
+    mirrors the accession pipeline's shape, so ``makeDoc`` re-indexes the rebuilt rows unchanged.
+    Rebuild is safe because check-out captured every sub-row and the editor round-trips them all
+    (removing a row = intentional delete). Depictions/relations/periods are left untouched.
+
+    The CALLER owns the optimistic-lock check, ``refresh_from_db``, re-indexing, and bookkeeping — so
+    this same core serves both single-record publish-back and per-record dataset delta publish-back."""
     from django.contrib.gis.geos import Point
     from places.models import Place, PlaceName, PlaceType, PlaceLink, PlaceDescription, PlaceGeom
-    from .checkout import record_state_hash
-
-    snap = project.snapshot or {}
-    place = Place.objects.filter(pk=snap.get('record_id')).select_related('dataset').first()
-    if not place:
-        raise PublishError('that place record no longer exists')
-    if project.base_version and record_state_hash(place) != project.base_version:
-        raise ConflictError('This record was changed since you started editing it. Reload it from its '
-                            'page and re-apply your correction.')
 
     changed = []
 
@@ -377,6 +369,27 @@ def publish_place_record(project, user):
                 PlaceGeom.objects.create(place=place, geom=Point(lng, lat, srid=4326),
                                          jsonb={'type': 'Point', 'coordinates': [lng, lat]}, src_id=src)
                 changed.append('coordinate')
+
+    return changed
+
+
+@transaction.atomic
+def publish_place_record(project, user):
+    """Publish-back a full-LPF single-record correction (plan §6.1): apply the edited fields to the
+    ``places.Place`` (via ``apply_record_fields``) and re-index that one record. Guarded by the
+    record-level optimistic hash. Returns ``{record_id, changed:[…], reindexed, dataset}``."""
+    from places.models import Place
+    from .checkout import record_state_hash
+
+    snap = project.snapshot or {}
+    place = Place.objects.filter(pk=snap.get('record_id')).select_related('dataset').first()
+    if not place:
+        raise PublishError('that place record no longer exists')
+    if project.base_version and record_state_hash(place) != project.base_version:
+        raise ConflictError('This record was changed since you started editing it. Reload it from its '
+                            'page and re-apply your correction.')
+
+    changed = apply_record_fields(place, snap)
 
     place.refresh_from_db()
     reindexed = _reindex_place(place)
