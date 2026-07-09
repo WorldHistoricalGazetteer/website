@@ -356,6 +356,14 @@ class Dataset(models.Model):
         ds_owners = User.objects.filter(id__in=du_owner_ids)
         return ds_owners
 
+    def can_edit(self, user):
+        """True if ``user`` may edit this gazetteer: WHG staff or an owner/co-owner. Matches the
+        established datasets._user_can_edit_dataset gate; single source of truth for the "Correct
+        this record" (record-level check-out) affordance and its endpoint."""
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        return bool(user.is_staff or self.owners.filter(id=user.id).exists())
+
     # list of dataset place_id values
     @property
     def placeids(self):

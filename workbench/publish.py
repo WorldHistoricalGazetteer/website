@@ -23,6 +23,7 @@ places therefore needs no ES write on publish; its members are already searchabl
 datasets. We keep a single ``_reindex_hook`` seam so a doc-type that DOES need indexing (or a future
 per-collection index) has one obvious place to fire it.
 """
+import json
 import logging
 
 from django.db import transaction
@@ -213,6 +214,89 @@ def publish_gazetteer_group(project, user):
     coll.datasets.set(list(found.values()))
     _mark_published(project, collection=coll)
     return {'collection_id': coll.pk, 'added': len(found), 'unresolved': unresolved}
+
+
+# ── record-level correction (plan §6.1) ────────────────────────────────────────
+def _reindex_place(place):
+    """Targeted single-doc re-index of one place in the pub ES index — only if it's actually indexed
+    there (idx_pub). Replicates make_bulk_doc's ``searchy`` enrichment (toponyms + title) so search-by-
+    name keeps working. Best-effort: the database is authoritative; on ES failure we log and carry on
+    (a later reindex fixes the doc) rather than losing the correction."""
+    if not getattr(place, 'idx_pub', False):
+        return False
+    try:
+        from django.conf import settings
+        from elastic.es_utils import makeDoc
+        doc = makeDoc(place)
+        doc['whg_id'] = ''
+        searchy = set(doc.get('searchy') or [])
+        searchy.update(n['toponym'] for n in doc.get('names', []) if n.get('toponym'))
+        if doc.get('title'):
+            searchy.add(doc['title'])
+        doc['searchy'] = sorted(searchy)
+        settings.ES_CONN.index(index=settings.ES_PUB, id=str(place.id), body=json.dumps(doc), refresh=True)
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning('record reindex failed for place %s: %s', place.id, e)
+        return False
+
+
+@transaction.atomic
+def publish_place_record(project, user):
+    """Publish-back a single-record correction (plan §6.1): apply the name/coordinate delta to the
+    ``places.Place`` (+ its PlaceName/PlaceGeom) and re-index just that record. Guarded by the
+    record-level optimistic hash. Returns ``{record_id, changed:[…], reindexed, dataset}``."""
+    from django.contrib.gis.geos import Point
+    from places.models import Place, PlaceName, PlaceGeom
+    from .checkout import record_state_hash
+
+    snap = project.snapshot or {}
+    place = Place.objects.filter(pk=snap.get('record_id')).select_related('dataset').first()
+    if not place:
+        raise PublishError('that place record no longer exists')
+    if project.base_version and record_state_hash(place) != project.base_version:
+        raise ConflictError('This record was changed since you started editing it. Reload it from its '
+                            'page and re-apply your correction.')
+
+    changed = []
+    # 1. Name — Place.title (canonical) + the matching PlaceName jsonb.toponym (what ES indexes).
+    new_title = str(snap.get('title') or '').strip()
+    if new_title and new_title != place.title:
+        old = place.title
+        Place.objects.filter(pk=place.pk).update(title=new_title[:255])   # .update() bypasses signals
+        for pn in PlaceName.objects.filter(place=place):
+            if (pn.toponym or '') == old or (isinstance(pn.jsonb, dict) and pn.jsonb.get('toponym') == old):
+                jb = dict(pn.jsonb or {}); jb['toponym'] = new_title
+                PlaceName.objects.filter(pk=pn.pk).update(toponym=new_title[:2044], jsonb=jb)
+        changed.append('name')
+
+    # 2. Coordinate — only when the record was checked out as point-editable.
+    if snap.get('point_editable') and snap.get('lng') is not None and snap.get('lat') is not None:
+        try:
+            lng, lat = float(snap['lng']), float(snap['lat'])
+        except (TypeError, ValueError):
+            lng = lat = None
+        if lng is not None and -180 <= lng <= 180 and -90 <= lat <= 90:
+            geoms = list(PlaceGeom.objects.filter(place=place))
+            if len(geoms) == 1 and isinstance(geoms[0].jsonb, dict) and geoms[0].jsonb.get('type') == 'Point':
+                jb = dict(geoms[0].jsonb); jb['coordinates'] = [lng, lat]
+                PlaceGeom.objects.filter(pk=geoms[0].pk).update(geom=Point(lng, lat, srid=4326), jsonb=jb)
+                changed.append('coordinate')
+            elif not geoms:
+                PlaceGeom.objects.create(place=place, geom=Point(lng, lat, srid=4326),
+                                         jsonb={'type': 'Point', 'coordinates': [lng, lat]},
+                                         src_id=place.src_id or '')
+                changed.append('coordinate')
+            # else: complex geometry — left untouched (not editable at record level)
+
+    place.refresh_from_db()
+    reindexed = _reindex_place(place)
+    project.source_published_id = str(place.id)
+    project.base_version = record_state_hash(place)
+    project.status = 'published'
+    project.save(update_fields=['source_published_id', 'base_version', 'status', 'updated'])
+    return {'record_id': place.id, 'changed': changed, 'reindexed': reindexed,
+            'dataset': place.dataset.label}
 
 
 def _mark_published(project, collection):

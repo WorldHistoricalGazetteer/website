@@ -578,6 +578,14 @@ def wb_itinerary_view(request):
 
 
 @login_required
+def wb_place_record_view(request):
+    # Single-record correction editor (plan §6.1). Beta-gated; reached via record-level check-out.
+    if not request.user.can_access_beta:
+        raise Http404()
+    return render(request, "main/wb_place_record.html", {})
+
+
+@login_required
 def wb_gazetteer_group_view(request):
     if not request.user.can_access_beta:
         raise Http404()

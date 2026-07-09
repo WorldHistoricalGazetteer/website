@@ -103,6 +103,52 @@ def checkout_place_collection(collection):
     return snapshot, collection_state_hash(collection)
 
 
+def _place_point(place):
+    """Return (lng, lat, point_editable). A place's coordinate is safely editable here only when its
+    geometry is a single Point (or it has none → we can create one). Complex/multi geometry is shown
+    read-only (edit it in the dataset editor) so a one-field correction can't mangle a polygon."""
+    geoms = list(place.geoms.all())
+    if not geoms:
+        return None, None, True
+    if len(geoms) == 1 and isinstance(geoms[0].jsonb, dict) and geoms[0].jsonb.get('type') == 'Point':
+        c = geoms[0].jsonb.get('coordinates') or [None, None]
+        return c[0], c[1], True
+    # complex geometry → read-only point (a centroid), not editable
+    try:
+        rp = place.repr_point
+        return (rp[0], rp[1], False) if rp and len(rp) >= 2 else (None, None, False)
+    except Exception:
+        return None, None, False
+
+
+def record_state_hash(place):
+    """Stable SHA-1 of a place's editable/key state (title, its name toponyms, point, ccodes) — the
+    optimistic-lock ``base_version`` at record granularity for publish-back."""
+    from places.models import PlaceName
+    lng, lat, _ = _place_point(place)
+    names = sorted(n.toponym for n in PlaceName.objects.filter(place=place) if n.toponym)
+    state = {'title': place.title or '', 'names': names,
+             'point': [round(lng, 6) if lng is not None else None,
+                       round(lat, 6) if lat is not None else None],
+             'ccodes': sorted(place.ccodes or [])}
+    return hashlib.sha1(json.dumps(state, sort_keys=True, default=str).encode('utf-8')).hexdigest()
+
+
+def checkout_place_record(place):
+    """Serialise a single published ``places.Place`` → a lightweight record-correction snapshot.
+    Returns ``(snapshot, base_version)``. Editable fields (this increment): primary name + point."""
+    from places.models import PlaceName
+    lng, lat, editable = _place_point(place)
+    names = [n.toponym for n in PlaceName.objects.filter(place=place) if n.toponym]
+    snapshot = {
+        'record_id': place.id, 'dataset_label': place.dataset.label,
+        'title': place.title or '', 'names': names,
+        'lng': lng, 'lat': lat, 'point_editable': editable,
+        'ccodes': list(place.ccodes or []), 'idx_pub': bool(place.idx_pub),
+    }
+    return snapshot, record_state_hash(place)
+
+
 def checkout_gazetteer_group(collection):
     """Serialise a published ``Collection(collection_class='dataset')`` → a Gazetteer-Group snapshot.
     Returns ``(snapshot, base_version)``. Each member dataset carries its bbox centroid for the

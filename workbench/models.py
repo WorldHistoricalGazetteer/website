@@ -36,6 +36,7 @@ DOC_RECONCILIATION = 'reconciliation'
 DOC_GAZETTEER_GROUP = 'gazetteer_group'
 DOC_PLACE_COLLECTION = 'place_collection'
 DOC_ITINERARY = 'itinerary'
+DOC_PLACE_RECORD = 'place_record'   # single-place correction (created only via record-level check-out)
 DOC_ROUTE = 'route'
 DOC_NETWORK = 'network'
 DOC_TYPES = [
@@ -43,6 +44,7 @@ DOC_TYPES = [
     (DOC_GAZETTEER_GROUP, 'Gazetteer Group'),
     (DOC_PLACE_COLLECTION, 'Place Collection'),
     (DOC_ITINERARY, 'Itinerary'),
+    (DOC_PLACE_RECORD, 'Place record correction'),
     (DOC_ROUTE, 'Route'),
     (DOC_NETWORK, 'Network'),
 ]

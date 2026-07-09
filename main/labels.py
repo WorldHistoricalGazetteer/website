@@ -27,6 +27,8 @@ LABELS = {
     'itinerary_plural': 'Itineraries',
     # the reconciliation doc-type (Map your Data).
     'map_your_data': 'Map your Data',
+    # single-record correction (record-level check-out).
+    'place_record': 'Record correction',
     # v4 placeholders.
     'route': 'Route',
     'network': 'Network',

@@ -58,6 +58,7 @@ module.exports = {
 		'wb-place-collection': './whg/webpack/js/wb-place-collection.js',
 		'wb-itinerary': './whg/webpack/js/wb-itinerary.js',
 		'wb-gazetteer-group': './whg/webpack/js/wb-gazetteer-group.js',
+		'wb-place-record': './whg/webpack/js/wb-place-record.js',
 		search: './whg/webpack/js/search.js',
 		search_functions: './whg/webpack/js/search_resources.js',
 		tasks: './whg/webpack/js/tasks.js',

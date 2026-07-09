@@ -30,7 +30,37 @@
         <h4 class="mt-3">
             <span class="text-danger">{{ object.title }}</span> <small
                 class="text-secondary ms-2">({{ dataset.title }})</small>
+            {% if can_correct_record %}
+            <a href="#" id="wb-correct-btn" class="btn btn-sm btn-outline-primary ms-2"
+               title="Fix this one record's name or coordinate in the Collaborative Workbench (beta), without touching the rest of the gazetteer">
+                <i class="fas fa-pen-to-square me-1"></i>Correct this record
+                <span class="badge bg-warning text-dark">beta</span></a>
+            {% endif %}
         </h4>
+        {% if can_correct_record %}
+        <script type="text/javascript">
+            (function () {
+                var btn = document.getElementById('wb-correct-btn');
+                if (!btn) return;
+                function csrf() {
+                    var m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+                    return m ? decodeURIComponent(m[1]) : '';
+                }
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault(); btn.style.pointerEvents = 'none';
+                    fetch('/reconciliation/checkout/place/{{ object.id }}/', {
+                        method: 'POST', credentials: 'same-origin',
+                        headers: { 'X-CSRFToken': csrf(), 'Content-Type': 'application/json' }, body: '{}',
+                    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+                      .then(function (res) {
+                          if (res.ok && res.d && res.d.id) {
+                              window.location.href = '/workbench/record/?project=' + res.d.id;
+                          } else { alert((res.d && res.d.error) || 'Could not open this record in the Workbench.'); btn.style.pointerEvents = ''; }
+                      }).catch(function () { alert('Could not reach the Workbench — please try again.'); btn.style.pointerEvents = ''; });
+                });
+            })();
+        </script>
+        {% endif %}
         <div class="row">
             <div class="col-12 col-lg-7 mt-2 order-1 order-lg-0">
                 <div class="form-box">

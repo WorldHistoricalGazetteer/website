@@ -24,7 +24,7 @@ else in the envelope (team, version, share, collab) changes.
 from importlib import import_module
 
 from .models import (DOC_RECONCILIATION, DOC_GAZETTEER_GROUP, DOC_PLACE_COLLECTION,
-                     DOC_ITINERARY, DOC_ROUTE, DOC_NETWORK)
+                     DOC_ITINERARY, DOC_PLACE_RECORD, DOC_ROUTE, DOC_NETWORK)
 
 
 # ── snapshot validators ───────────────────────────────────────────────────────
@@ -76,6 +76,14 @@ def _errs_gazetteer_group(snap):
             if not isinstance(g, dict) or g.get('dataset_id') in (None, ''):
                 errs.append(f'gazetteer[{i}] must be an object with a "dataset_id"')
     return errs
+
+
+def _errs_place_record_stub(snap):
+    """Record-correction snapshot: ``{record_id, title, lng?, lat?, point_editable, …}``. Must carry
+    a record_id (the place being corrected). Created only via check-out, so this is a light backstop."""
+    if not isinstance(snap, dict):
+        return ['snapshot must be an object']
+    return [] if snap.get('record_id') else ['a record_id is required']
 
 
 def _errs_reconciliation(snap):
@@ -143,6 +151,13 @@ REGISTRY = {
         validate=_errs_gazetteer_group,
         publish='workbench.publish.publish_gazetteer_group',
         checkout='workbench.checkout.checkout_gazetteer_group'),
+    # Record-level correction (§6.1). Created ONLY via record-level check-out (not the "New…" picker),
+    # so enabled=False for creation; checkout + publish + editor are wired.
+    DOC_PLACE_RECORD: DocType(
+        DOC_PLACE_RECORD, 'place_record', enabled=False, editor='wb-place-record',
+        validate=_errs_place_record_stub,
+        publish='workbench.publish.publish_place_record',
+        checkout='workbench.checkout.checkout_place_record'),
     # ── v4 placeholders (§4.4): reserved doc-types, creation gated OFF. No models, no editors yet.
     DOC_ROUTE: DocType(
         DOC_ROUTE, 'route', enabled=False, editor=None, validate=_errs_disabled),

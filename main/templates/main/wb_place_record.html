@@ -1,0 +1,54 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{% load labels %}
+{#
+  Single-record correction editor (Collaborative Workbench, plan §6.1). BETA-gated in the view
+  (main.views.wb_place_record_view). Reached only via record-level check-out (?project=<uuid>); the
+  editor loads that working copy, edits the name/coordinate, and publishes the delta back + re-indexes.
+#}
+{% block title %}WHG · Correct a record (beta){% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/wb-place-record.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+<style>
+  .wb-rec-wrap { max-width: 680px; margin: 1.75rem auto; }
+  .wb-status { font-size: .8rem; padding: .15rem .5rem; border-radius: .35rem; white-space: nowrap; }
+  .wb-status--saving { background:#fff3cd; color:#664d03; }
+  .wb-status--saved  { background:#e2e3e5; color:#41464b; }
+  .wb-status--error  { background:#f8d7da; color:#842029; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="wb-rec-wrap px-3">
+  {% csrf_token %}
+  <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+    <h1 class="h4 mb-0">Correct a record</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+    <span id="wb-status" class="wb-status wb-status--saved ms-auto">Saved in your browser</span>
+    <a class="btn btn-sm btn-outline-secondary" href="https://docs.whgazetteer.org/content/v3-3/collections.html#editing-something-already-published" target="_blank" rel="noopener">Documentation</a>
+  </div>
+  <p class="text-muted small" id="wb-rec-where">Loading…</p>
+
+  <div class="recon-card p-3">
+    <div class="mb-3">
+      <label class="form-label small mb-1" for="wb-rec-title">Name</label>
+      <input id="wb-rec-title" class="form-control" maxlength="255" placeholder="Place name">
+    </div>
+    <div class="mb-3" id="wb-rec-coord"></div>
+    <div class="d-flex gap-2 align-items-center">
+      <button id="wb-rec-pub" class="btn btn-success" type="button">Publish correction</button>
+    </div>
+    <div id="wb-rec-result" class="mt-2"></div>
+    <p class="text-muted small mt-3 mb-0">
+      This fixes a single published record. Your change is applied to the gazetteer and, if the record
+      is in WHG search, the search index is updated for that record only — the rest of the gazetteer is
+      untouched. Guarded so you can't overwrite a change someone else made meanwhile.
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block deferredScripts %}
+  var scripts = [{ src: '{% static "webpack/wb-place-record.bundle.js" %}', type: 'module' }];
+{% endblock %}

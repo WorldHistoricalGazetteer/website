@@ -355,6 +355,36 @@ def project_checkout(request, pid):
                          'team': team.id}, status=201)
 
 
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def project_checkout_place(request, pid):
+    """Record-level check-out (plan §6.1): materialise a single published ``places.Place`` into a new
+    team-owned ``WorkbenchProject(doc_type='place_record')`` for a targeted correction. Gated on beta +
+    **dataset** edit rights (owner/staff) — the same predicate the "Correct this record" button uses."""
+    from places.models import Place
+    from .checkout import checkout_place_record, CheckoutError
+    place = get_object_or_404(Place.objects.select_related('dataset'), pk=pid)
+    if not place.dataset.can_edit(request.user):
+        return _err('you do not have permission to edit that gazetteer', 403)
+    try:
+        snapshot, base_version = checkout_place_record(place)
+    except CheckoutError as e:
+        return _err(str(e))
+    team = _resolve_target_team(request.user, _body(request).get('team'))
+    if team is None:
+        return _err('you are not an editor of that team', 403)
+    with transaction.atomic():
+        proj = WorkbenchProject.objects.create(
+            team=team, title=(place.title or f'place {place.id}')[:300], created_by=request.user,
+            snapshot=snapshot, version=1, status='draft', doc_type='place_record',
+            source_published_id=str(place.id), base_version=base_version)
+        ProjectSnapshot.objects.create(project=proj, version=1, snapshot=snapshot,
+                                       created_by=request.user)
+    return JsonResponse({'id': str(proj.id), 'version': proj.version, 'doc_type': proj.doc_type,
+                         'team': team.id}, status=201)
+
+
 # ── teams ───────────────────────────────────────────────────────────────────
 @login_required
 @_beta_required

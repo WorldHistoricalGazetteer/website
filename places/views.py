@@ -91,6 +91,12 @@ class PlaceDetailView(DetailView):
             'dataset_last_modified_text': dataset.last_modified_text,
             'beta_or_better': self.request.user.groups.filter(name__in=['beta', 'whg_admins']).exists()
         })
+        # "Correct this record" (record-level Workbench check-out, plan §6.1) — beta-gated AND only for
+        # users with edit rights on this gazetteer. Button visibility mirrors the checkout endpoint's
+        # authorisation (workbench.views.project_checkout_place → Dataset.can_edit).
+        u = self.request.user
+        context['can_correct_record'] = bool(
+            u.is_authenticated and getattr(u, 'can_access_beta', False) and dataset.can_edit(u))
 
         return context
 
