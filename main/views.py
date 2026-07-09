@@ -608,7 +608,7 @@ def wb_gazetteer_group_view(request):
 # Stages: 'beta' = usable now by staff + invited testers, not yet public; 'dev' = being built, not
 # yet testable; 'shipped' = live for everyone / changes an existing workflow; 'horizon' = planned
 # direction, NOT a dated commitment. Edit BETA_STATUS_UPDATED whenever this list changes.
-BETA_STATUS_UPDATED = "8 July 2026"
+BETA_STATUS_UPDATED = "9 July 2026"
 BETA_STATUS_SECTIONS = [
     {
         "heading": "In development & beta preview",
@@ -625,6 +625,13 @@ BETA_STATUS_SECTIONS = [
             {"name": "Collaborative Workbench", "stage": "beta", "version": "3.3",
              "body": "Work on the same reconciliation project as a team, together and in real time, with "
                      "shared roles and a project owned by your group rather than a single account."},
+            {"name": "Browser-first, collaborative Collections", "stage": "beta", "version": "3.3",
+             "body": "Build and curate Collections directly in the browser and together as a team, rather "
+                     "than through multi-step server workflows — the same local-first model as Map your "
+                     "Data. Now in beta: Place Collections, Itineraries (ordered journeys), and Gazetteer "
+                     "Groups, each with search-as-you-type place-finding ranked by geographic nearness, "
+                     "map previews, add-places-from-text (NER), team collaboration, and publish into WHG's "
+                     "existing public collection pages. (Routes and Networks arrive with the v4 model.)"},
             {"name": "Citations, licensing & contributor credit (CRediT)", "stage": "dev", "version": "3.3",
              "body": "Build a proper citation for a dataset, a machine-readable CITATION.cff and schema.org "
                      "record, and credit everyone who contributed by their role — carried with the data when "
@@ -653,16 +660,17 @@ BETA_STATUS_SECTIONS = [
         "heading": "On the horizon",
         "note": "The direction we're heading — shared for planning, not as committed release dates.",
         "items": [
-            {"name": "Browser-first, collaborative Collections", "stage": "horizon", "version": "3.3",
-             "body": "Following the Map-your-Data model, build and curate Collections — of datasets and of "
-                     "places, and also Itineraries and Routes — directly in the browser and together as a "
-                     "team, rather than through multi-step server workflows. Ships with Map your Data as one "
-                     "new Workbench (see note above)."},
-            {"name": "A teaching hub for lesson plans (with OME)", "stage": "horizon", "version": "3.3",
-             "body": "Exploratory work with OME — an ISKME initiative — to let educators publish lesson plans "
-                     "that draw on the World Historical Gazetteer, with the WHG server acting as a hub on "
-                     "their network, connecting classroom resources directly to WHG place data. Likely to "
-                     "land with the 3.3 Workbench release."},
+            {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon", "version": "3.4",
+             "body": "Exploratory work to make WHG a node in the Open Metadata Exchange (OME) — a "
+                     "peer-to-peer metadata-sharing network, an ISKME initiative. WHG would feed its "
+                     "place/entity metadata into the network and, in a later phase, extend its reconciliation "
+                     "service to query the federated metadata, enriching matches with links, alternate "
+                     "spellings, and context contributed by peer nodes. Our OME node is packaged and ready; "
+                     "we're awaiting the next stage of OME's own development. Targeted for v3.4."},
+            {"name": "Lesson plans on ISKME's publishing platform", "stage": "horizon", "version": "3.6",
+             "body": "Separately from OME, we plan to author lesson plans that draw on the World Historical "
+                     "Gazetteer using ISKME's publishing platform, in time succeeding WHG's current Lesson "
+                     "Plans resources. A later effort, expected after v3.5."},
             {"name": "WHG v4 — a graph data model", "stage": "horizon", "version": "4.0",
              "body": "A re-architecture around a graph model (with the PLATO ontology — Place Attestation "
                      "Ontology) to represent places, the relationships between them, and how they change over "
@@ -701,7 +709,7 @@ def beta_status_view(request):
         "updated": BETA_STATUS_UPDATED,
         "release_note": (
             "Map your Data and the browser-first Collections tools are two halves of one new, unified "
-            "Workbench — targeted for v3.3 (with Citations and, likely, OME). They're intended to reach "
+            "Workbench — targeted for v3.3 (alongside Citations). They're intended to reach "
             "everyone together, as a single coordinated release, so the current workflow and its "
             "documentation can be refreshed in one step rather than piecemeal."
         ),

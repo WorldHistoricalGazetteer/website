@@ -11,6 +11,7 @@
 
 import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion, haversineKm, centroid, WB_COLORS } from './wb-shell.js';
 import { mountCollab } from './wb-collab.js';
+import { mountNer } from './wb-ner.js';
 
 const RECON_ENDPOINT = '/reconcile';
 const SEARCH_LIMIT = 8;
@@ -260,6 +261,7 @@ export function mountCollectionEditor(cfg) {
     mountAccordion('wb-pane-about', (id) => { if (id === 'wb-pane-map') renderFullMap(); });
     mountCollab({ bridge, getSnapshot: snapshot, getTitle: () => project.title.trim() || 'Untitled',
                   container: el('wb-collab-body'), onSaved: () => status.synced() });
+    if (el('wb-ner-body')) mountNer({ container: el('wb-ner-body'), onAdd: (p) => addPlace(p) });
     el('wb-search-btn').addEventListener('click', search);
     el('wb-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
     el('wb-search').addEventListener('input', debounce(search, 300));   // typeahead
