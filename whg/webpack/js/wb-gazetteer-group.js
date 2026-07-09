@@ -6,7 +6,7 @@
 // reuses the shared wb_collection_editor.html DOM (same element ids).
 
 import '../css/reconciliation.css';
-import { el, esc, truncate, debounce, statusBadge, openStore, serverBridge, mountAccordion } from './wb-shell.js';
+import { el, esc, truncate, debounce, statusBadge, openStore, serverBridge, mountAccordion, haversineKm, centroid } from './wb-shell.js';
 import { searchDatasets } from './recon-sync.js';
 import { mountCollab } from './wb-collab.js';
 
@@ -64,20 +64,26 @@ async function search() {
   if (!r.ok) { box.innerHTML = `<span class="text-danger small">Search failed.</span>`; return; }
   const results = (r.data && r.data.datasets) || [];
   if (!results.length) { box.innerHTML = '<span class="text-muted small">No published gazetteers found.</span>'; return; }
-  box.innerHTML = results.map((d, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(d.description || '')}">
+  // Colocation: rank suggestions by proximity of their bbox centroid to the centroid of already-added
+  // gazetteers (coarse, but useful for regional groupings). Datasets without a bbox fall to the end.
+  const anchor = centroid(project.gazetteers.map((g) => (g.centroid || null)));
+  if (anchor) results.sort((a, b) => haversineKm(a.centroid, anchor) - haversineKm(b.centroid, anchor));
+  const note = anchor ? '<div class="text-muted small mb-1"><i class="fas fa-location-crosshairs me-1"></i>ranked by nearness to your other gazetteers</div>' : '';
+  box.innerHTML = note + results.map((d, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(d.description || '')}">
       <span class="fw-semibold">${esc(truncate(d.title, 52))}</span>
       ${d.description ? `<span class="text-muted small ms-1">${esc(truncate(d.description, 40))}</span>` : ''}
     </button>`).join('');
   box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => {
     const d = results[+b.dataset.i];
-    addGazetteer({ dataset_id: d.id, title: d.title, tip: d.description || '' });
+    addGazetteer({ dataset_id: d.id, title: d.title, tip: d.description || '', centroid: d.centroid || null });
     el('wb-search').value = ''; box.innerHTML = '';
   }));
 }
 
 function addGazetteer(g) {
   if (project.gazetteers.some((x) => x.dataset_id === g.dataset_id)) return;
-  project.gazetteers.push({ dataset_id: g.dataset_id, title: g.title, tip: g.tip || '' });
+  project.gazetteers.push({ dataset_id: g.dataset_id, title: g.title, tip: g.tip || '',
+                            centroid: g.centroid || null });
   render(); touched();
 }
 function move(i, d) {

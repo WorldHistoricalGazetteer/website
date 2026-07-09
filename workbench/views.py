@@ -271,8 +271,18 @@ def dataset_search(request):
     if q:
         qs = qs.filter(Q(title__icontains=q) | Q(description__icontains=q))
     qs = qs.order_by('title')[:20]
-    out = [{'id': d.id, 'title': d.title, 'label': d.label,
-            'description': (d.description or '')[:500]} for d in qs]
+    out = []
+    for d in qs:
+        # Centroid of the stored bbox (WGS84 Polygon) → [lng, lat], for colocation ranking on the client.
+        c = None
+        if getattr(d, 'bbox', None):
+            try:
+                pt = d.bbox.centroid
+                c = [pt.x, pt.y]
+            except Exception:
+                c = None
+        out.append({'id': d.id, 'title': d.title, 'label': d.label,
+                    'description': (d.description or '')[:500], 'centroid': c})
     return JsonResponse({'datasets': out})
 
 

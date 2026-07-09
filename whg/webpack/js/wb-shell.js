@@ -18,6 +18,23 @@ export const esc = (s) => String(s == null ? '' : s)
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 export const truncate = (s, n) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
 
+// Great-circle distance in km between two [lng, lat] points. Used to score suggestions by
+// colocation with already-selected members (a collection's places tend to cluster geographically).
+export function haversineKm(a, b) {
+  if (!a || !b || a[0] == null || b[0] == null) return Infinity;
+  const R = 6371, rad = Math.PI / 180;
+  const dLat = (b[1] - a[1]) * rad, dLon = (b[0] - a[0]) * rad;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// Mean [lng, lat] of a list of [lng, lat] points (ignoring nulls); null if none.
+export function centroid(points) {
+  const pts = (points || []).filter((p) => p && p[0] != null && p[1] != null);
+  if (!pts.length) return null;
+  return [pts.reduce((s, p) => s + p[0], 0) / pts.length, pts.reduce((s, p) => s + p[1], 0) / pts.length];
+}
+
 export function debounce(fn, ms) {
   let t = null;
   const wrapped = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };

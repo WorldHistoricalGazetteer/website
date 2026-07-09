@@ -9,7 +9,7 @@
 // config sets sequenced=true (drives copy + the ordinal styling). The backend derives "sequenced"
 // from the project's doc_type, so publishing needs nothing special here beyond sending doc_type.
 
-import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion } from './wb-shell.js';
+import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion, haversineKm, centroid } from './wb-shell.js';
 import { mountCollab } from './wb-collab.js';
 
 const RECON_ENDPOINT = '/reconcile';
@@ -94,21 +94,32 @@ export function mountCollectionEditor(cfg) {
     } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; return; }
     const results = (data.q0 && data.q0.result) || [];
     if (!results.length) { box.innerHTML = '<span class="text-muted small">No places found in WHG.</span>'; return; }
-    box.innerHTML = results.map((c, i) => `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(candidateTip(c))}">
+    // Colocation: once the collection has located members, rank suggestions by proximity to their
+    // centroid (a collection's places tend to cluster). Candidates without coordinates fall to the end.
+    const anchor = centroid(project.places.map((p) => (p.lng != null ? [p.lng, p.lat] : null)));
+    if (anchor) results.sort((a, b) => haversineKm(a.repr_point, anchor) - haversineKm(b.repr_point, anchor));
+    const note = anchor ? '<div class="text-muted small mb-1"><i class="fas fa-location-crosshairs me-1"></i>ranked by nearness to your other places</div>' : '';
+    box.innerHTML = note + results.map((c, i) => {
+      const km = anchor && c.repr_point ? haversineKm(c.repr_point, anchor) : null;
+      const dist = km != null ? `<span class="text-muted small ms-1">· ${km < 1 ? '<1' : Math.round(km)} km</span>` : '';
+      return `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-hit" data-i="${i}" title="${esc(candidateTip(c))}">
         ${esc(truncate(c.name, 48))}
         ${isWhg(c.id) ? '' : '<span class="badge bg-warning text-dark ms-1" title="Not a WHG-indexed place — cannot be published to a collection yet">external</span>'}
-        ${c.description ? `<span class="text-muted small ms-1">${esc(truncate(c.description, 34))}</span>` : ''}
-      </button>`).join('');
+        ${c.description ? `<span class="text-muted small ms-1">${esc(truncate(c.description, 34))}</span>` : ''}${dist}
+      </button>`;
+    }).join('');
     box.querySelectorAll('.wb-hit').forEach((b) => b.addEventListener('click', () => {
       const c = results[+b.dataset.i];
-      addPlace({ id: c.id, title: c.name, tip: candidateTip(c) });
+      addPlace({ id: c.id, title: c.name, tip: candidateTip(c), lnglat: c.repr_point });
       el('wb-search').value = ''; box.innerHTML = '';
     }));
   }
 
   function addPlace(p) {
     if (project.places.some((x) => x.id === p.id)) return;
-    project.places.push({ id: p.id, title: p.title, note: '', tip: p.tip || '' });
+    const ll = p.lnglat && p.lnglat[0] != null ? p.lnglat : null;
+    project.places.push({ id: p.id, title: p.title, note: '', tip: p.tip || '',
+                          lng: ll ? ll[0] : null, lat: ll ? ll[1] : null });
     renderPlaces(); touched();
   }
 
