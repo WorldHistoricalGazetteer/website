@@ -612,19 +612,24 @@ def _ner_reconcile_disambiguate(mentions, user):
         locs_by_name[n] = reps
 
     # Mode-seeking: the region (a candidate point) that covers the MOST distinct names within R km — a
-    # document's places cluster, so the true region is where the most names have a candidate. A tight
-    # cluster (e.g. a single county) beats scattered same-name siblings decisively; ties → tighter.
+    # document's places cluster, so the true region is where the most names have a candidate. Coverage
+    # is WEIGHTED BY PROMINENCE (the reconciliation score of each name's nearest candidate), so a
+    # cluster containing the prominent original (e.g. Paris, France, score 100) outweighs a tighter
+    # cluster of obscure namesakes (Paris, Ohio, score 63). Without this, America's dense "little
+    # Europe" town names (Canterbury/Dover/Paris/… all within one Ohio county) out-cluster the real
+    # English/French originals, which span a country border. Ties on weight → tighter (smaller spread).
     R = 250.0
     all_pts = [pt for reps in locs_by_name.values() for pt, _ in reps if pt]
-    center, best_cov, best_spread = None, -1, 1e18
+    center, best_cov, best_spread = None, -1.0, 1e18
     for cand in all_pts:
-        cov = spread = 0
+        cov = spread = 0.0
         for reps in locs_by_name.values():
-            dmin = min((_haversine_km(cand, pt) for pt, _ in reps if pt), default=None)
-            if dmin is not None and dmin <= R:
-                cov += 1
-                spread += dmin
-        if cov > best_cov or (cov == best_cov and spread < best_spread):
+            near = [(pt, h) for pt, h in reps if pt and _haversine_km(cand, pt) <= R]
+            if near:
+                pt, h = min(near, key=lambda ph: _haversine_km(cand, ph[0]))
+                cov += (h.get('score') or 0) / 100.0            # prominence-weighted coverage
+                spread += _haversine_km(cand, pt)
+        if cov > best_cov or (abs(cov - best_cov) < 1e-9 and spread < best_spread):
             center, best_cov, best_spread = cand, cov, spread
 
     chosen = {}
