@@ -1000,6 +1000,12 @@ class PlaceCollectionBrowseView(DetailView):
         context['media_url'] = settings.MEDIA_URL
 
         context['is_admin'] = True if self.request.user.groups.filter(name__in=['whg_admins']).exists() else False
+        # "Edit in Workbench" (Collaborative Workbench check-out) — beta-gated AND only for users with
+        # edit rights on THIS collection. The button is a UX hint; the checkout endpoint re-checks the
+        # same predicate server-side (workbench.views.project_checkout).
+        u = self.request.user
+        context['can_edit_in_workbench'] = bool(
+            u.is_authenticated and getattr(u, 'can_access_beta', False) and coll.can_edit(u))
         context['ds_list'] = coll.ds_list
         context['num_places'] = coll.num_places
         context['ds_counter'] = coll.ds_counter

@@ -323,8 +323,10 @@ def project_checkout(request, pid):
     from collection.models import Collection
     from .checkout import checkout_place_collection, CheckoutError
     coll = get_object_or_404(Collection, pk=pid)
-    # Only someone who can edit the collection may check it out to edit it.
-    if coll.owner_id != request.user.id and not request.user.is_staff:
+    # Only someone with edit rights on this collection may check it out — the SAME predicate the
+    # browse page uses to show the button (collection.Collection.can_edit: staff / owner / collaborator).
+    # @_beta_required has already 404'd non-beta users; this is the per-object authorisation.
+    if not coll.can_edit(request.user):
         return _err('you do not have permission to edit that collection', 403)
     if coll.collection_class != 'place':
         return _err('only Place Collections can be checked out yet', 400)

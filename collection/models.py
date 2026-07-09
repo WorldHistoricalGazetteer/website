@@ -287,6 +287,16 @@ class Collection(models.Model):
         owners = User.objects.filter(id__in=owner_ids)
         return owners
 
+    def can_edit(self, user):
+        """True if ``user`` may edit this collection: WHG staff, an owner/co-owner, or a collaborator.
+        Single source of truth for edit rights — used to gate the "Edit in Workbench" check-out
+        affordance (template) AND its checkout endpoint (authorisation), so the two never diverge."""
+        if not user or not getattr(user, 'is_authenticated', False):
+            return False
+        if user.is_staff:
+            return True
+        return self.owners.filter(id=user.id).exists() or self.collaborators.filter(id=user.id).exists()
+
     @property
     def places_ds(self):
         dses = self.datasets.all()
