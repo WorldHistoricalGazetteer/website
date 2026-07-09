@@ -25,6 +25,15 @@ const isProduction = process.env.ENV_CONTEXT === 'whgazetteer-org';
 module.exports = {
 	mode: isProduction ? 'production' : 'development', // Use production mode for staging
     devtool: isProduction ? 'source-map' : 'eval-source-map',
+	// Persistent on-disk build cache — the single biggest speed-up for COLD builds (a fresh `npm run
+	// build`/`watch` start): webpack reuses previously-compiled modules from node_modules/.cache/webpack
+	// instead of recompiling all ~22 entries from scratch. Does NOT change build output, only speed.
+	// buildDependencies invalidates the cache when this config (or a referenced file) changes, so it
+	// can never serve stale output.
+	cache: {
+		type: 'filesystem',
+		buildDependencies: { config: [__filename] },
+	},
 	watch: !isProduction,
 	watchOptions: {
 		poll: 1000, // Check for changes every second
