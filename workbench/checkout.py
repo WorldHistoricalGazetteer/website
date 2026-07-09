@@ -121,30 +121,58 @@ def _place_point(place):
         return None, None, False
 
 
+def _record_lpf(place):
+    """Serialise a Place's editable LPF sub-fields for check-out/hash. Each sub-row's ``jsonb`` IS the
+    LPF object (verified against the accession pipeline), so we round-trip it verbatim and expose the
+    common editable keys alongside — unexposed keys (citations, per-item when, …) survive editing."""
+    from places.models import PlaceName, PlaceType, PlaceLink, PlaceDescription
+    names = [{'toponym': (n.toponym or (n.jsonb or {}).get('toponym') or ''),
+              'lang': (n.jsonb or {}).get('lang', ''), '_raw': n.jsonb or {}}
+             for n in PlaceName.objects.filter(place=place)]
+    types = [{'label': (t.jsonb or {}).get('label') or (t.jsonb or {}).get('sourceLabel') or '',
+              'identifier': (t.jsonb or {}).get('identifier', ''), 'fclass': t.fclass or '',
+              'aat_id': t.aat_id, '_raw': t.jsonb or {}}
+             for t in PlaceType.objects.filter(place=place)]
+    links = [{'type': (l.jsonb or {}).get('type', 'closeMatch'),
+              'identifier': (l.jsonb or {}).get('identifier', '')}
+             for l in PlaceLink.objects.filter(place=place)]
+    descriptions = [{'value': (d.jsonb or {}).get('value', ''), 'lang': (d.jsonb or {}).get('lang', ''),
+                     '_raw': d.jsonb or {}}
+                    for d in PlaceDescription.objects.filter(place=place)]
+    mm = place.minmax or []
+    dates = {'start': mm[0] if len(mm) > 0 else None, 'end': mm[1] if len(mm) > 1 else None}
+    return names, types, links, descriptions, dates
+
+
 def record_state_hash(place):
-    """Stable SHA-1 of a place's editable/key state (title, its name toponyms, point, ccodes) — the
-    optimistic-lock ``base_version`` at record granularity for publish-back."""
-    from places.models import PlaceName
+    """Stable SHA-1 of a place's editable state (title, names, types, links, descriptions, point,
+    ccodes, dates) — the optimistic-lock ``base_version`` at record granularity for publish-back."""
     lng, lat, _ = _place_point(place)
-    names = sorted(n.toponym for n in PlaceName.objects.filter(place=place) if n.toponym)
-    state = {'title': place.title or '', 'names': names,
-             'point': [round(lng, 6) if lng is not None else None,
-                       round(lat, 6) if lat is not None else None],
-             'ccodes': sorted(place.ccodes or [])}
+    names, types, links, descriptions, dates = _record_lpf(place)
+    state = {
+        'title': place.title or '',
+        'names': sorted(n['toponym'] for n in names if n['toponym']),
+        'types': sorted((t['label'], t['identifier']) for t in types),
+        'links': sorted((l['type'], l['identifier']) for l in links),
+        'descriptions': sorted(d['value'] for d in descriptions if d['value']),
+        'point': [round(lng, 6) if lng is not None else None, round(lat, 6) if lat is not None else None],
+        'ccodes': sorted(place.ccodes or []), 'dates': [dates['start'], dates['end']],
+    }
     return hashlib.sha1(json.dumps(state, sort_keys=True, default=str).encode('utf-8')).hexdigest()
 
 
 def checkout_place_record(place):
-    """Serialise a single published ``places.Place`` → a lightweight record-correction snapshot.
-    Returns ``(snapshot, base_version)``. Editable fields (this increment): primary name + point."""
-    from places.models import PlaceName
+    """Serialise a single published ``places.Place`` → a full-LPF record-correction snapshot.
+    Returns ``(snapshot, base_version)``. Editable: names, types, links, descriptions, coordinate,
+    dates, ccodes (+ per-record re-reconciliation, client-side). Depictions/relations/periods are
+    round-tripped-through by leaving their sub-rows untouched (not exposed for editing yet)."""
     lng, lat, editable = _place_point(place)
-    names = [n.toponym for n in PlaceName.objects.filter(place=place) if n.toponym]
+    names, types, links, descriptions, dates = _record_lpf(place)
     snapshot = {
-        'record_id': place.id, 'dataset_label': place.dataset.label,
-        'title': place.title or '', 'names': names,
+        'record_id': place.id, 'dataset_label': place.dataset.label, 'idx_pub': bool(place.idx_pub),
+        'title': place.title or '', 'ccodes': list(place.ccodes or []),
+        'names': names, 'types': types, 'links': links, 'descriptions': descriptions, 'dates': dates,
         'lng': lng, 'lat': lat, 'point_editable': editable,
-        'ccodes': list(place.ccodes or []), 'idx_pub': bool(place.idx_pub),
     }
     return snapshot, record_state_hash(place)
 

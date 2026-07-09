@@ -243,11 +243,15 @@ def _reindex_place(place):
 
 @transaction.atomic
 def publish_place_record(project, user):
-    """Publish-back a single-record correction (plan §6.1): apply the name/coordinate delta to the
-    ``places.Place`` (+ its PlaceName/PlaceGeom) and re-index just that record. Guarded by the
-    record-level optimistic hash. Returns ``{record_id, changed:[…], reindexed, dataset}``."""
+    """Publish-back a full-LPF single-record correction (plan §6.1): apply the edited fields to the
+    ``places.Place`` and REBUILD its sub-tables (names/types/links/descriptions) from the snapshot,
+    then re-index that one record. Each sub-row's ``jsonb`` mirrors the accession pipeline's shape, so
+    makeDoc indexes the rebuilt rows unchanged. Guarded by the record-level optimistic hash. Depictions/
+    relations/periods are left untouched (not exposed for editing). Rebuild is safe because check-out
+    captured every sub-row and the editor round-trips them all (removing a row = intentional delete).
+    Returns ``{record_id, changed:[…], reindexed, dataset}``."""
     from django.contrib.gis.geos import Point
-    from places.models import Place, PlaceName, PlaceGeom
+    from places.models import Place, PlaceName, PlaceType, PlaceLink, PlaceDescription, PlaceGeom
     from .checkout import record_state_hash
 
     snap = project.snapshot or {}
@@ -259,18 +263,105 @@ def publish_place_record(project, user):
                             'page and re-apply your correction.')
 
     changed = []
-    # 1. Name — Place.title (canonical) + the matching PlaceName jsonb.toponym (what ES indexes).
-    new_title = str(snap.get('title') or '').strip()
-    if new_title and new_title != place.title:
-        old = place.title
-        Place.objects.filter(pk=place.pk).update(title=new_title[:255])   # .update() bypasses signals
-        for pn in PlaceName.objects.filter(place=place):
-            if (pn.toponym or '') == old or (isinstance(pn.jsonb, dict) and pn.jsonb.get('toponym') == old):
-                jb = dict(pn.jsonb or {}); jb['toponym'] = new_title
-                PlaceName.objects.filter(pk=pn.pk).update(toponym=new_title[:2044], jsonb=jb)
-        changed.append('name')
 
-    # 2. Coordinate — only when the record was checked out as point-editable.
+    def rebuild(Model, rows):
+        """Delete this place's rows for a sub-table and recreate from the snapshot. bulk_create bypasses
+        save() (so PlaceGeom/PlaceLink's task_id/reviewer guard never fires) — and we never set task_id."""
+        Model.objects.filter(place=place).delete()
+        if rows:
+            Model.objects.bulk_create(rows)
+
+    src = place.src_id or ''
+
+    # ── Place-level fields ─────────────────────────────────────────────────────
+    upd = {}
+    new_title = str(snap.get('title') or '').strip()
+    if new_title:
+        upd['title'] = new_title[:255]
+        if new_title != place.title:
+            changed.append('name')
+    if isinstance(snap.get('ccodes'), list):
+        cc = [str(c).upper()[:2] for c in snap['ccodes'] if str(c).strip()]
+        if cc != (place.ccodes or []):
+            changed.append('ccodes')
+        upd['ccodes'] = cc
+    d = snap.get('dates') or {}
+    s, e = d.get('start'), d.get('end')
+    if s not in (None, '') or e not in (None, ''):
+        try:
+            s = int(s) if s not in (None, '') else None
+            e = int(e) if e not in (None, '') else None
+        except (TypeError, ValueError):
+            s = e = None
+        if s is not None or e is not None:
+            lo, hi = (s if s is not None else e), (e if e is not None else s)
+            upd['minmax'] = [lo, hi]
+            upd['timespans'] = [[lo, hi]]
+            changed.append('dates')
+    if upd:
+        Place.objects.filter(pk=place.pk).update(**upd)
+
+    # ── Sub-tables: rebuild from the snapshot (round-tripped raw jsonb + edited keys) ──
+    names = snap.get('names')
+    if isinstance(names, list):
+        rows = []
+        for n in names:
+            top = str(n.get('toponym') or '').strip()
+            if not top:
+                continue
+            jb = dict(n.get('_raw') or {}); jb['toponym'] = top
+            if n.get('lang'):
+                jb['lang'] = n['lang']
+            rows.append(PlaceName(place=place, src_id=src, toponym=top[:2044], jsonb=jb))
+        rebuild(PlaceName, rows)
+        changed.append('names')
+
+    types = snap.get('types')
+    if isinstance(types, list):
+        rows = []
+        for t in types:
+            label, ident = str(t.get('label') or '').strip(), str(t.get('identifier') or '').strip()
+            if not (label or ident):
+                continue
+            jb = dict(t.get('_raw') or {})
+            if label:
+                jb['label'] = label
+            if ident:
+                jb['identifier'] = ident
+            fc = (t.get('fclass') or '').strip()[:1] or None
+            rows.append(PlaceType(place=place, src_id=src, fclass=fc, aat_id=t.get('aat_id'), jsonb=jb))
+        rebuild(PlaceType, rows)
+        changed.append('types')
+
+    links = snap.get('links')
+    if isinstance(links, list):
+        rows = []
+        seen = set()
+        for l in links:
+            ident = str(l.get('identifier') or '').strip().rstrip('/')
+            if not ident or ident in seen:
+                continue
+            seen.add(ident)
+            rows.append(PlaceLink(place=place, src_id=src,
+                                  jsonb={'type': str(l.get('type') or 'closeMatch'), 'identifier': ident}))
+        rebuild(PlaceLink, rows)
+        changed.append('links')
+
+    descriptions = snap.get('descriptions')
+    if isinstance(descriptions, list):
+        rows = []
+        for dd in descriptions:
+            val = str(dd.get('value') or '').strip()
+            if not val:
+                continue
+            jb = dict(dd.get('_raw') or {}); jb['value'] = val
+            if dd.get('lang'):
+                jb['lang'] = dd['lang']
+            rows.append(PlaceDescription(place=place, src_id=src, jsonb=jb))
+        rebuild(PlaceDescription, rows)
+        changed.append('descriptions')
+
+    # ── Coordinate — point-editable places only (complex geometry left untouched) ──
     if snap.get('point_editable') and snap.get('lng') is not None and snap.get('lat') is not None:
         try:
             lng, lat = float(snap['lng']), float(snap['lat'])
@@ -284,10 +375,8 @@ def publish_place_record(project, user):
                 changed.append('coordinate')
             elif not geoms:
                 PlaceGeom.objects.create(place=place, geom=Point(lng, lat, srid=4326),
-                                         jsonb={'type': 'Point', 'coordinates': [lng, lat]},
-                                         src_id=place.src_id or '')
+                                         jsonb={'type': 'Point', 'coordinates': [lng, lat]}, src_id=src)
                 changed.append('coordinate')
-            # else: complex geometry — left untouched (not editable at record level)
 
     place.refresh_from_db()
     reindexed = _reindex_place(place)
@@ -295,7 +384,7 @@ def publish_place_record(project, user):
     project.base_version = record_state_hash(place)
     project.status = 'published'
     project.save(update_fields=['source_published_id', 'base_version', 'status', 'updated'])
-    return {'record_id': place.id, 'changed': changed, 'reindexed': reindexed,
+    return {'record_id': place.id, 'changed': sorted(set(changed)), 'reindexed': reindexed,
             'dataset': place.dataset.label}
 
 
