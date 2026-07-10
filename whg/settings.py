@@ -197,6 +197,8 @@ MIDDLEWARE = [
     # 'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Tag the Sentry/GlitchTip scope with beta-tester context for diagnostics (needs request.user).
+    'whg.middleware.SentryBetaContextMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'api.middleware.PlausibleAPIMiddleware',

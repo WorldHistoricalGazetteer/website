@@ -21,6 +21,9 @@
     {% if user.is_authenticated %}
     <meta name="user-id" content="user_{{ user.id }}">
     {% endif %}
+    {# Beta-tester diagnostics (plan-beta-diagnostics): drives beta-diag.js. Only "1" for the beta cohort. #}
+    <meta name="beta-user" content="{% if user.can_access_beta %}1{% else %}0{% endif %}">
+    <meta name="user-role" content="{% if user.is_staff %}staff{% elif user.can_access_beta %}beta{% endif %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>
     {% block schema_org %}
     <script type="application/ld+json">
@@ -219,8 +222,8 @@
                                    title="Integrate several published gazetteers (datasets) into a single group for comparison or analysis — ideal for researchers combining sources (e.g. colonial gazetteers + archaeological sites + modern administrative data) to see overlaps and differences across datasets.">
                                 <i class="fas fa-database fa-fw me-1"></i>New Gazetteer Group</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="https://github.com/WorldHistoricalGazetteer/place/issues/115" target="_blank" rel="noopener"
-                                   title="Found a bug or rough edge while testing the beta Workbench? Add it to the shared snag list on GitHub.">
+                            <li><a class="dropdown-item" id="wb-report-snag" href="https://github.com/WorldHistoricalGazetteer/place/issues/115" target="_blank" rel="noopener"
+                                   title="Found a bug or rough edge while testing the beta Workbench? Click to copy a diagnostic context block, then paste it into a new item on the shared snag list.">
                                 <i class="fas fa-bug fa-fw me-1"></i>Report a snag <i class="fas fa-arrow-up-right-from-square fa-xs ms-1 text-muted"></i></a></li>
                             <li><span class="dropdown-item-text text-muted small">Each tool has a <strong>Documentation</strong> button in its own screen — open a tool to read its full guide.</span></li>
                         </ul>

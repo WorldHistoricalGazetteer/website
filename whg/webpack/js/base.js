@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/browser';
 const {browserTracingIntegration, thirdPartyErrorFilterIntegration, captureConsoleIntegration} = Sentry;
 import {Spinner} from './spin.js';
 import {initWHGModal} from './whg-modal.js';
+import {initBetaDiag} from './beta-diag.js';
 import {initializeCitationFormatters} from './citationFormatter';
 import {base_urls} from './aliases.js';
 import '../css/base.css';
@@ -234,6 +235,10 @@ Promise.all([
         }
 
         window.Sentry = Sentry;
+
+        // Beta-tester diagnostics (plan-beta-diagnostics): correlate client+server errors + snags via a
+        // per-session id, enrich GlitchTip, prefill the snag report. No-op for non-beta users.
+        try { initBetaDiag(Sentry); } catch (e) { /* diagnostics must never break the page */ }
 
         // Set Bootstrap tooltip defaults
         $.extend(true, $.fn.tooltip.Constructor.Default, {
