@@ -762,7 +762,8 @@ def beta_snag(request):
             snag.github_url = gh_url
             snag.save(update_fields=['github_url'])
         return render(request, 'main/beta_snag.html', {'submitted': snag, 'github_url': gh_url})
-    return render(request, 'main/beta_snag.html', {'page': request.GET.get('page', '')})
+    return render(request, 'main/beta_snag.html',
+                  {'page': request.GET.get('page', ''), 'session': request.GET.get('session', '')})
 
 
 @login_required

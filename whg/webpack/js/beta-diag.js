@@ -81,7 +81,12 @@ function wireSnagReport() {
   link.addEventListener('click', function (e) {
     e.preventDefault();
     const base = link.getAttribute('href') || '/beta/snag/';
-    window.open(base + (base.indexOf('?') > -1 ? '&' : '?') + 'page=' + encodeURIComponent(location.href), '_blank', 'noopener');
+    // Pass the page AND the session id: the form opens in a NEW tab (own sessionStorage), so it can't
+    // read this tab's session id otherwise.
+    const sid = (window.WHGDiag && window.WHGDiag.session) || '';
+    const url = base + (base.indexOf('?') > -1 ? '&' : '?') +
+      'page=' + encodeURIComponent(location.href) + '&session=' + encodeURIComponent(sid);
+    window.open(url, '_blank', 'noopener');
   });
 }
 

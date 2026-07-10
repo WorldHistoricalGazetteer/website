@@ -41,7 +41,7 @@
 
     <form method="post" action="{% url 'beta-snag' %}" id="snag-form">
       {% csrf_token %}
-      <input type="hidden" name="session_id" id="snag-session">
+      <input type="hidden" name="session_id" id="snag-session" value="{{ session }}">
       <input type="hidden" name="user_agent" id="snag-ua">
       <input type="hidden" name="page_url" id="snag-page" value="{{ page }}">
 
@@ -106,7 +106,8 @@
   var s = document.getElementById('snag-session'), ua = document.getElementById('snag-ua'),
       page = document.getElementById('snag-page');
   if (ua) ua.value = (navigator.userAgent || '').slice(0, 300);
-  if (s) s.value = (window.WHGDiag && window.WHGDiag.session) || '';
+  // session id comes from the URL (passed by the opener). Fall back to this tab's own if present.
+  if (s && !s.value) s.value = (window.WHGDiag && window.WHGDiag.session) || (function () { try { return sessionStorage.getItem('whg-beta-session') || ''; } catch (_) { return ''; } }());
   // If no ?page= was passed, fall back to the referrer (the page the tester was testing).
   if (page && !page.value) page.value = document.referrer || '';
 })();
