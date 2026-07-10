@@ -72,51 +72,16 @@ function patchFetch(diag, session) {
   window.fetch = wrapped;
 }
 
-// ── snag report prefill ────────────────────────────────────────────────────────
-function snagTemplate(session, role) {
-  const ua = (navigator.userAgent || '').replace(/\s+/g, ' ').slice(0, 120);
-  return [
-    '- [ ] **<short title>** — page: ' + location.href,
-    '  - who: ' + (role || 'beta') + ' · session: `' + session + '` · ' + new Date().toISOString(),
-    '  - browser: ' + ua,
-    '  - steps: ',
-    '  - expected: ',
-    '  - actual: ',
-  ].join('\n');
-}
-function copyText(text) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text).then(() => true, () => false);
-  } catch (_) { /* fall through */ }
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    const ok = document.execCommand('copy'); document.body.removeChild(ta);
-    return Promise.resolve(ok);
-  } catch (_) { return Promise.resolve(false); }
-}
-function toast(msg) {
-  const t = document.createElement('div');
-  t.textContent = msg;
-  t.style.cssText = 'position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);z-index:20000;' +
-    'background:#212529;color:#fff;padding:.5rem .9rem;border-radius:.4rem;font-size:.85rem;' +
-    'box-shadow:0 2px 10px rgba(0,0,0,.3);max-width:90vw;';
-  document.body.appendChild(t);
-  setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 3200);
-}
-function wireSnagReport(session, role) {
+// ── snag report ────────────────────────────────────────────────────────────────
+// Open the on-site snag form (account-free for testers) in a new tab, passing the page being tested so
+// the tester keeps their place. The form reads the session id from window.WHGDiag itself.
+function wireSnagReport() {
   const link = document.getElementById('wb-report-snag');
   if (!link) return;
   link.addEventListener('click', function (e) {
     e.preventDefault();
-    const block = snagTemplate(session, role);
-    copyText(block).then(function (ok) {
-      toast(ok ? 'Diagnostic context copied — paste it into a new snag item on the issue.'
-               : 'Copy the diagnostic block from the console into your snag.');
-      if (!ok) { try { console.log('[WHG snag]\n' + block); } catch (_) { /* ignore */ } }
-      window.open(link.href, '_blank', 'noopener');
-    });
+    const base = link.getAttribute('href') || '/beta/snag/';
+    window.open(base + (base.indexOf('?') > -1 ? '&' : '?') + 'page=' + encodeURIComponent(location.href), '_blank', 'noopener');
   });
 }
 
@@ -157,7 +122,7 @@ export function initBetaDiag(Sentry) {
   window.WHGDiag = diag;
 
   patchFetch(diag, session);
-  wireSnagReport(session, role);
+  wireSnagReport();
   maybeConsentNotice();
   diag.breadcrumb('session', 'beta session started', { session });
 }

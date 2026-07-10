@@ -17,6 +17,35 @@ from main.choices import (COMMENT_TAGS, COMMENT_TAGS_REVIEW, LOG_CATEGORIES, LOG
 
 
 # cross-app models
+class BetaSnag(models.Model):
+    """A beta-tester's problem report, filed via the on-site snag form (plan-beta-diagnostics /
+    Beta Testing Plan). Stored durably here so nothing is lost, and — when a GitHub token is configured
+    — also filed as a GitHub issue in the planning repo. Carries the diagnostics ``session_id`` that ties
+    it to the tester's GlitchTip errors, so the technical trace behind a report is one lookup away."""
+    SEVERITY_CHOICES = [('blocker', 'Blocker'), ('major', 'Major'), ('minor', 'Minor'),
+                        ('cosmetic', 'Cosmetic')]
+    reporter = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
+                                 related_name='beta_snags')
+    title = models.CharField(max_length=300)
+    what = models.TextField(blank=True, default='')
+    expected = models.TextField(blank=True, default='')
+    steps = models.TextField(blank=True, default='')
+    feature = models.CharField(max_length=80, blank=True, default='')
+    severity = models.CharField(max_length=20, blank=True, default='', choices=SEVERITY_CHOICES)
+    page_url = models.CharField(max_length=500, blank=True, default='')
+    session_id = models.CharField(max_length=64, blank=True, default='')
+    user_agent = models.CharField(max_length=300, blank=True, default='')
+    github_url = models.CharField(max_length=300, blank=True, default='')  # created issue, if filed
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'beta_snag'
+        ordering = ['-created']
+
+    def __str__(self):
+        return f'snag #{self.pk}: {self.title[:60]}'
+
+
 class DownloadFile(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     title = models.CharField(max_length=255, null=True, blank=True)

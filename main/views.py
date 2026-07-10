@@ -695,6 +695,76 @@ def suggestions_review(request):
                   {'cards': cards, 'reviewer_is_staff': request.user.is_staff})
 
 
+# ── Beta snag form (Beta Testing Plan) — account-free intake for testers (no GitHub account needed) ──
+# Testers file problems via this on-site form; it persists a BetaSnag and — when GITHUB_SNAG_TOKEN is
+# configured — also opens a GitHub issue in the planning repo, carrying the diagnostics session id so
+# the report ties to the tester's GlitchTip errors. Beta-gated (testers hold WHG/ORCiD accounts).
+def _snag_github_body(snag, user, role):
+    def block(label, val):
+        return f'\n**{label}**\n{val.strip()}\n' if (val or '').strip() else ''
+    return (
+        f'**Reported by:** {getattr(user, "name", "") or user.username} ({role}) · '
+        f'**session:** `{snag.session_id or "—"}`\n'
+        f'**Page:** {snag.page_url or "—"}\n'
+        f'**Severity:** {snag.severity or "—"} · **Feature:** {snag.feature or "—"}\n'
+        f'**Browser:** {snag.user_agent or "—"}\n'
+        + block('What happened', snag.what)
+        + block('Expected', snag.expected)
+        + block('Steps', snag.steps)
+        + '\n---\n_Filed via the WHG on-site beta snag form. The session id ties this to the reporter’s '
+          'GlitchTip diagnostics for the same session._')
+
+
+def _file_snag_to_github(snag, user):
+    """Best-effort: open a GitHub issue for the snag. Returns the issue URL, or '' if unfiled (no token
+    or API error). Never raises — the snag is already saved locally regardless."""
+    token = getattr(settings, 'GITHUB_SNAG_TOKEN', '')
+    repo = getattr(settings, 'GITHUB_SNAG_REPO', '')
+    if not token or not repo:
+        return ''
+    import requests
+    role = 'staff' if user.is_staff else 'beta'
+    labels = ['beta-snag'] + ([f'sev:{snag.severity}'] if snag.severity else [])
+    try:
+        r = requests.post(
+            f'https://api.github.com/repos/{repo}/issues',
+            headers={'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json'},
+            json={'title': f'[beta] {snag.title}', 'body': _snag_github_body(snag, user, role), 'labels': labels},
+            timeout=15)
+        if r.status_code in (200, 201):
+            return r.json().get('html_url', '')
+        logger.warning('beta snag: GitHub file failed (%s): %s', r.status_code, r.text[:300])
+    except Exception as e:  # noqa: BLE001
+        logger.warning('beta snag: GitHub file error: %s', e)
+    return ''
+
+
+@login_required
+def beta_snag(request):
+    if not request.user.can_access_beta:
+        raise Http404()
+    from main.models import BetaSnag
+    if request.method == 'POST':
+        d = request.POST
+        title = (d.get('title') or '').strip()
+        if not title:
+            return render(request, 'main/beta_snag.html',
+                          {'error': 'Please give the problem a short title.', 'form': d,
+                           'page': d.get('page_url', '')})
+        snag = BetaSnag.objects.create(
+            reporter=request.user, title=title[:300],
+            what=(d.get('what') or '')[:8000], expected=(d.get('expected') or '')[:8000],
+            steps=(d.get('steps') or '')[:8000], feature=(d.get('feature') or '')[:80],
+            severity=(d.get('severity') or '')[:20], page_url=(d.get('page_url') or '')[:500],
+            session_id=(d.get('session_id') or '')[:64], user_agent=(d.get('user_agent') or '')[:300])
+        gh_url = _file_snag_to_github(snag, request.user)
+        if gh_url:
+            snag.github_url = gh_url
+            snag.save(update_fields=['github_url'])
+        return render(request, 'main/beta_snag.html', {'submitted': snag, 'github_url': gh_url})
+    return render(request, 'main/beta_snag.html', {'page': request.GET.get('page', '')})
+
+
 @login_required
 def wb_dataset_view(request):
     # Gazetteer records-correction shell (plan-dataset-checkout §3/§4). Beta + STAFF-gated (whole-/

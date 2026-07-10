@@ -53,6 +53,13 @@ CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get
 # can verify the JWTs. Empty in local dev where the realtime service isn't running.
 HOCUSPOCUS_SECRET = os.environ.get('HOCUSPOCUS_SECRET') or globals().get('HOCUSPOCUS_SECRET', '')
 
+# Beta snag form → GitHub issue filing (Beta Testing Plan). A fine-grained/classic PAT with issue-write
+# on the planning repo. If unset, snags still persist to the BetaSnag table (nothing lost) but aren't
+# auto-filed to GitHub. Set GITHUB_SNAG_TOKEN in env/local_settings to enable.
+GITHUB_SNAG_TOKEN = os.environ.get('GITHUB_SNAG_TOKEN') or globals().get('GITHUB_SNAG_TOKEN', '')
+GITHUB_SNAG_REPO = os.environ.get('GITHUB_SNAG_REPO') or globals().get('GITHUB_SNAG_REPO',
+                                                                       'WorldHistoricalGazetteer/place')
+
 # Place-name extraction (Map-your-Data NER). Django proxies pasted text to the on-host `ner` service
 # over the compose network. Empty in local dev where the service isn't running (the endpoint then
 # returns a friendly 503 and the UI degrades gracefully).
