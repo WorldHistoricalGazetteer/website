@@ -60,13 +60,19 @@ class UserAPIProfile(models.Model):
 class ContributorAttestation(models.Model):
     """A user-asserted hard link between two indexed places.
 
-    Canonical store for contributor reconciliation links. The ingest
-    pipeline's Batch 12 ``contributor_replay.py`` reads this table from DO
-    PostgreSQL and writes the rows into the Pitt-side SQLite hard-link
-    overlay queried by the gateway. Live writes are forwarded synchronously
-    to the gateway via the ``api/signals.py`` post_save / post_delete
-    handlers (``crc_post_link`` / ``crc_delete_link``) so the SQLite stays
-    in sync without waiting for the next batch run.
+    Canonical store for contributor reconciliation links asserted through
+    the platform. This table is populated only by live ``POST /api/links``
+    writes; it is *not* the source read by the ingest pipeline's Batch 12
+    ``contributor_replay.py``, which replays the legacy corpus from the
+    ``place_link`` / ``close_matches`` tables into the Pitt-side SQLite
+    hard-link overlay queried by the gateway.
+
+    Live forwarding to the gateway is wired via the ``api/signals.py``
+    post_save / post_delete handlers (``crc_post_link`` /
+    ``crc_delete_link``, registered in ``ApiConfig.ready()``), but end-to-end
+    sync is still pending the gateway-side ``/api/links`` receiver, which does
+    not yet exist in the indexing repo. Until that lands, forwarding is a
+    best-effort no-op on the receiving side.
 
     Constraints:
       * ``place_a < place_b`` (canonical ordering, enforced both in code
