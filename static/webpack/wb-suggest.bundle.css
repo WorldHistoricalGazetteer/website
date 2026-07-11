@@ -1,27 +1,2 @@
-/*!**********************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/wb-suggest.css ***!
-  \**********************************************************************************/
-/* wb-suggest.css — community record-correction affordances (button + pending inset). */
-.wb-suggest-btn {
-  display: inline-flex; align-items: center; gap: .3rem;
-  font-size: .8rem; text-decoration: none; color: #1565c0;
-  border: 1px solid #1565c0; border-radius: .35rem; padding: .1rem .45rem;
-  white-space: nowrap; cursor: pointer; background: transparent;
-}
-.wb-suggest-btn:hover { background: #1565c0; color: #fff; }
-
-.wb-inset-wrap { display: inline-block; }
-.wb-inset {
-  font-size: .82rem; margin-top: .35rem; padding: .35rem .55rem;
-  border: 1px solid #ffe08a; background: #fff8e1; border-radius: .4rem;
-}
-.wb-inset-badge { font-weight: 600; color: #7a5c00; }
-.wb-inset-muted { color: #6c757d; }
-.wb-inset-link { margin-left: .3rem; }
-.wb-inset-list { list-style: none; margin: .3rem 0 0; padding: 0; }
-.wb-inset-list li { margin-bottom: .15rem; }
-.wb-inset-chip {
-  display: inline-block; font-size: .7rem; padding: 0 .35rem;
-  border: 1px solid #d9c47a; border-radius: .3rem; background: #fffdf5; margin-right: .15rem;
-}
-
+.wb-suggest-btn{display:inline-flex;align-items:center;gap:.3rem;font-size:.8rem;text-decoration:none;color:#1565c0;border:1px solid #1565c0;border-radius:.35rem;padding:.1rem .45rem;white-space:nowrap;cursor:pointer;background:transparent}.wb-suggest-btn:hover{background:#1565c0;color:#fff}.wb-inset-wrap{display:inline-block}.wb-inset{font-size:.82rem;margin-top:.35rem;padding:.35rem .55rem;border:1px solid #ffe08a;background:#fff8e1;border-radius:.4rem}.wb-inset-badge{font-weight:600;color:#7a5c00}.wb-inset-muted{color:#6c757d}.wb-inset-link{margin-left:.3rem}.wb-inset-list{list-style:none;margin:.3rem 0 0;padding:0}.wb-inset-list li{margin-bottom:.15rem}.wb-inset-chip{display:inline-block;font-size:.7rem;padding:0 .35rem;border:1px solid #d9c47a;border-radius:.3rem;background:#fffdf5;margin-right:.15rem}
+/*# sourceMappingURL=wb-suggest.bundle.css.map*/

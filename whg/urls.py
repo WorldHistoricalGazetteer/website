@@ -70,6 +70,7 @@ urlpatterns = [
                   path('places/', include('places.urls')),
                   path('resources/', include('resources.urls')),
                   path('search/', include('search.urls')),
+                  path('atlas/', include('search.urls_atlas')),
                   path('types/', include('placetypes.urls')),
                   path(
                       "sitemap.xml",

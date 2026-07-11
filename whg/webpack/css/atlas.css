@@ -1,0 +1,1507 @@
+/* /whg/webpack/css/atlas.css */
+/* WHG Atlas — Hero Map Explorer Layout */
+
+/* ═══════════════════════════════════════════════════════════════════
+   Container-constrained hero map layout
+   ═══════════════════════════════════════════════════════════════════ */
+
+.explorer-container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+.explorer-layout {
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 110px);  /* viewport minus header + footer */
+    min-height: 400px;
+    overflow: hidden;
+}
+
+#hero_map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+/* Opaque overlay that covers the map until globe projection has rendered */
+.map-loading-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: rgb(218, 236, 241);
+    transition: opacity 2.5s ease;
+    pointer-events: none;
+}
+.map-loading-overlay.fade-out {
+    opacity: 0;
+}
+
+/* Force all MapLibre controls to stay inside the map container */
+#hero_map .maplibregl-control-container {
+    position: absolute !important;
+    inset: 0 !important;
+    overflow: hidden !important;
+    pointer-events: none;
+}
+#hero_map .maplibregl-control-container > * {
+    pointer-events: none;
+}
+#hero_map .maplibregl-ctrl {
+    pointer-events: auto;
+}
+#hero_map .maplibregl-ctrl-bottom-left,
+#hero_map .maplibregl-ctrl-bottom-right {
+    bottom: 4px !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Floating search + controls panel (top-left)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#floating_search {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 10;
+    max-width: 580px;
+    width: calc(100% - 24px);
+}
+
+.floating-search-inner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 10px;
+    padding: 6px 10px;
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    max-width: 626px;
+}
+
+/* Search mode toggle — primary mode switch uses a burgundy accent
+   to visually distinguish it from other tool buttons.  */
+.search-mode-toggle .btn {
+    font-size: 0.75rem;
+    padding: 5px 10px;
+    border-color: #bdc3c7;
+    color: #555;
+    background: #f0f0f0;
+    white-space: nowrap;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.search-mode-toggle .btn.active {
+    background: #7b2d3b;
+    border-color: #6b2533;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
+}
+.search-mode-toggle .btn:hover:not(.active) {
+    background: #f5e6e8;
+    border-color: #c9a0a8;
+    color: #6b2533;
+}
+
+/* Search input group */
+.search-input-group {
+    flex: 1;
+    min-width: 0;
+}
+.search-input-group .form-control {
+    border-radius: 6px 0 0 6px;
+    font-size: 0.85rem;
+}
+.search-input-group .btn {
+    font-size: 0.8rem;
+    border-color: #ced4da;
+}
+
+/* Atlas control buttons (Layers, Sources, Categories) */
+.atlas-control-buttons {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.atlas-control-buttons .btn {
+    font-size: 0.7rem;
+    white-space: nowrap;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    background: rgba(44, 62, 80, 0.8);
+    border-color: rgba(44, 62, 80, 0.6);
+    color: #fff;
+}
+.atlas-control-buttons .btn:hover {
+    background: rgba(44, 62, 80, 1);
+}
+
+/* Selection chips */
+#selection_chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+    max-width: 100%;
+}
+#selection_chips:empty {
+    display: none;
+}
+#selection_chips .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid #bdc3c7;
+    border-radius: 16px;
+    padding: 2px 10px 2px 8px;
+    font-size: 0.75rem;
+    color: #2c3e50;
+    line-height: 1.4;
+}
+#selection_chips .filter-chip-meta {
+    color: #7f8c8d;
+    font-size: 0.65rem;
+}
+#selection_chips .filter-chip-dismiss {
+    background: none;
+    border: none;
+    color: #e74c3c;
+    cursor: pointer;
+    padding: 0 2px;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Custom temporal range control (below search bar)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#temporal_control {
+    margin-top: 6px;
+    width: 300px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 10px;
+    padding: 6px 12px 4px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Header row: mode toggle + year labels */
+.temporal-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+/* Mode toggle (Off / Range / +Undated) */
+.temporal-mode-toggle {
+    flex-shrink: 0;
+}
+.temporal-mode-toggle .btn {
+    font-size: 0.68rem;
+    padding: 2px 8px;
+    border-color: #b0bec5;
+    color: #546e7a;
+    background: #eceff1;
+    transition: all 0.15s;
+}
+.temporal-mode-toggle .btn.active {
+    background: #546e7a;
+    border-color: #455a64;
+    color: #fff;
+}
+.temporal-mode-toggle .btn:hover:not(.active) {
+    background: #cfd8dc;
+}
+
+/* Year labels */
+.temporal-year-labels {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 4px;
+    font-family: 'REM', 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.75rem;
+    color: #37474f;
+    font-weight: 600;
+    padding: 0 2px;
+    white-space: nowrap;
+}
+.temporal-year-labels span {
+    min-width: 30px;
+    text-align: center;
+}
+
+/* Dual-range slider container */
+.temporal-slider-wrap {
+    position: relative;
+    height: 20px;
+    margin: 0 2px;
+}
+
+.temporal-slider-wrap input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    margin: 8px 0;
+    background: transparent;
+    pointer-events: none;
+    outline: none;
+}
+
+/* Track for the 'to' slider (shows the range fill) */
+.temporal-slider-wrap input[type="range"].temporal-to {
+    z-index: 2;
+}
+.temporal-slider-wrap input[type="range"].temporal-from {
+    z-index: 3;
+    height: 4px;
+    background: transparent;
+}
+
+/* Thumbs */
+.temporal-slider-wrap input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: all;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #546e7a;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    cursor: pointer;
+    position: relative;
+    z-index: 5;
+}
+.temporal-slider-wrap input[type="range"]::-moz-range-thumb {
+    appearance: none;
+    pointer-events: all;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #546e7a;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    cursor: pointer;
+    z-index: 5;
+}
+.temporal-slider-wrap input[type="range"]::-webkit-slider-thumb:hover {
+    background: #37474f;
+    box-shadow: 0 0 0 4px rgba(84, 110, 122, 0.2);
+}
+.temporal-slider-wrap input[type="range"]::-moz-range-thumb:hover {
+    background: #37474f;
+    box-shadow: 0 0 0 4px rgba(84, 110, 122, 0.2);
+}
+
+/* Scale ticks */
+.temporal-scale {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+    margin-top: 2px;
+}
+.temporal-scale span {
+    font-size: 0.55rem;
+    color: #90a4ae;
+}
+
+/* Disabled state when temporal is "off" */
+#temporal_control.temporal-off .temporal-slider-wrap,
+#temporal_control.temporal-off .temporal-year-labels,
+#temporal_control.temporal-off .temporal-scale {
+    opacity: 0.25;
+    pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Layer Sources panel (inside offcanvas body)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.layer-source-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 4px;
+    margin: 0 -4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+.layer-source-item:hover {
+    background: rgba(44, 62, 80, 0.04);
+}
+.layer-source-item label {
+    font-size: 0.74rem;
+    color: #34495e;
+    cursor: pointer;
+    margin: 0;
+}
+.layer-source-item .form-check-input {
+    margin-top: 3px;
+    width: 0.85em;
+    height: 0.85em;
+}
+#admin_auto_zoom {
+    margin-top: 3px;
+}
+.layer-source-item .form-check-input:disabled + label {
+    color: #999;
+}
+.layer-source-item .coming-soon {
+    font-size: 0.58rem;
+    color: #999;
+    font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Results panel (slides in from right)
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_results_panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 380px;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(8px);
+    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    overflow: hidden;
+}
+#atlas_results_panel.atlas-results-hidden {
+    transform: translateX(100%);
+    pointer-events: none;
+}
+
+.results-panel-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid #dee2e6;
+    flex-shrink: 0;
+}
+
+#atlas_result_container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 12px;
+}
+
+/* Result items (reuse existing search result styles) */
+#atlas_search_results .result {
+    padding: 8px;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+#atlas_search_results .result:hover {
+    background: #f0f4f8;
+}
+#atlas_search_results .result.selected {
+    background: #e3ecf6;
+    border-color: #4a90d9;
+}
+#atlas_search_results .result .red-head {
+    font-weight: 600;
+    color: #c0392b;
+}
+#atlas_search_results .result p {
+    margin: 2px 0;
+    font-size: 0.8rem;
+    color: #555;
+}
+#atlas_search_results .portal-link {
+    font-size: 0.7rem;
+}
+#atlas_search_results .result-dataset-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    background: #e9ecef;
+    border-radius: 3px;
+    padding: 1px 5px;
+    margin-top: 2px;
+    color: #666;
+}
+#atlas_search_results .result-description {
+    font-size: 0.78rem;
+    color: #666;
+}
+
+/* Flash animation for map-clicked results */
+@keyframes atlas-flash-border {
+    0%, 100% { border-color: #e9ecef; }
+    50% { border-color: #e74c3c; }
+}
+#atlas_search_results .result.flash-border {
+    animation: atlas-flash-border 0.6s ease 3;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Offcanvas styling overrides
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-offcanvas {
+    width: 310px;
+    background: linear-gradient(168deg, #f8fafb 0%, #f0f3f6 100%);
+    border-left: 1px solid rgba(44, 62, 80, 0.10);
+    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.10), -1px 0 4px rgba(0, 0, 0, 0.04);
+    /* Bootstrap defaults: z-index 1045 for offcanvas, 1040 for backdrop.
+       No override needed since panels are outside .explorer-layout. */
+}
+
+.atlas-offcanvas .offcanvas-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #3d566e 100%);
+    color: #fff;
+    padding: 14px 18px;
+    border-bottom: none;
+}
+.atlas-offcanvas .offcanvas-header .offcanvas-title {
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    color: #fff;
+}
+.atlas-offcanvas .offcanvas-header .offcanvas-title i {
+    opacity: 0.7;
+}
+.atlas-offcanvas .offcanvas-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+.atlas-offcanvas .offcanvas-header .btn-close:hover {
+    opacity: 1;
+}
+
+.atlas-offcanvas .offcanvas-body {
+    padding: 16px 18px;
+    font-size: 0.8rem;
+}
+
+/* Help / explanatory text inside offcanvas panels */
+.offcanvas-help-text {
+    font-size: 0.74rem;
+    color: #5d6d7e;
+    line-height: 1.5;
+    margin: 0 0 12px 0;
+    padding: 8px 10px;
+    background: rgba(44, 62, 80, 0.04);
+    border-left: 3px solid rgba(44, 62, 80, 0.15);
+    border-radius: 0 4px 4px 0;
+}
+
+/* Help text inside layer sources panel */
+.layer-panel-help-text {
+    font-size: 0.68rem;
+    color: #5d6d7e;
+    line-height: 1.4;
+    margin: 2px 0 6px 0;
+    font-style: italic;
+}
+
+/* Categories header extras — badge & clear link in dark header */
+#categories_offcanvas .offcanvas-header #atlas_tree_badge {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 500;
+}
+#categories_offcanvas .offcanvas-header #atlas_tree_clear {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.68rem;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+#categories_offcanvas .offcanvas-header #atlas_tree_clear:hover {
+    color: #fff;
+}
+
+/* Section headers inside the Gazetteers panel (My Gazetteers groupings, etc.) */
+#gazetteers_offcanvas .filter-header .categories {
+    color: #2c3e50;
+    font-size: 0.6rem !important;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 2px solid rgba(123, 45, 59, 0.25);
+    padding-bottom: 3px;
+}
+#gazetteers_offcanvas hr {
+    border-color: rgba(44, 62, 80, 0.10);
+}
+
+/* Filter | Explore mode toggle: faint outline on both, faint fill on the active one. */
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn {
+    background: transparent;
+    border: 1px solid rgba(44, 62, 80, 0.20);
+    color: rgba(44, 62, 80, 0.70);
+    font-weight: 500;
+    box-shadow: none;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:hover {
+    background: rgba(44, 62, 80, 0.04);
+    color: #2c3e50;
+    border-color: rgba(44, 62, 80, 0.30);
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn.active {
+    background: rgba(44, 62, 80, 0.10);
+    color: #2c3e50;
+    border-color: rgba(44, 62, 80, 0.40);
+}
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:focus,
+#gazetteers_offcanvas .gazetteer-mode-toggle .btn:focus-visible {
+    box-shadow: 0 0 0 2px rgba(44, 62, 80, 0.12);
+    outline: none;
+}
+
+/* Shared "card" styling used by the coverage-filters block and the My-Gazetteers toggle. */
+#gazetteers_offcanvas .gazetteer-card {
+    background: rgba(44, 62, 80, 0.04);
+    border: 1px solid rgba(44, 62, 80, 0.08);
+    border-radius: 0.25rem;
+    padding: 0.5rem 0.6rem;
+}
+
+/* Explore-mode capabilities note — uses the same slate palette as the offcanvas help text */
+#gazetteers_offcanvas .gazetteer-explore-note {
+    border-left: 3px solid rgba(44, 62, 80, 0.25);
+    background: rgba(44, 62, 80, 0.03);
+    padding: 6px 10px;
+    color: #34495e;
+    border-radius: 0 0.2rem 0.2rem 0;
+}
+#gazetteers_offcanvas .gazetteer-explore-note .fa-info-circle {
+    color: rgba(44, 62, 80, 0.55);
+}
+
+/* Stub-note inside the coverage-filters card, shown when an unimplemented switch is on. */
+#gazetteers_offcanvas .gazetteer-stub-note {
+    border-top: 1px dashed rgba(44, 62, 80, 0.20);
+    padding-top: 0.4rem;
+}
+
+/* Form controls inside panels — subtle styling */
+.atlas-offcanvas .form-select {
+    background-color: #fff;
+    border-color: rgba(44, 62, 80, 0.15);
+    font-size: 0.74rem;
+}
+.atlas-offcanvas .form-select:focus {
+    border-color: rgba(44, 62, 80, 0.35);
+    box-shadow: 0 0 0 2px rgba(44, 62, 80, 0.08);
+}
+.atlas-offcanvas .form-check-input:checked {
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+}
+.atlas-offcanvas .form-switch .form-check-input:checked {
+    background-color: #2c3e50;
+    border-color: #2c3e50;
+}
+
+#gazetteers_offcanvas .authority-item {
+    padding: 4px 0;
+    transition: background 0.15s;
+    border-radius: 4px;
+    margin: 0 -4px;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+#gazetteers_offcanvas .authority-item:hover {
+    background: rgba(44, 62, 80, 0.04);
+}
+#gazetteers_offcanvas .form-check-label {
+    font-size: 0.82rem;
+    color: #34495e;
+}
+
+/* Polygon-only gazetteers (OSM/OHM in Explore mode) — visually disabled but
+   still tooltip-receptive so the explanatory hover text fires. */
+#gazetteers_offcanvas .authority-item.disabled {
+    opacity: 0.45;
+    pointer-events: auto;
+    cursor: not-allowed;
+}
+#gazetteers_offcanvas .authority-item.disabled .form-check-input,
+#gazetteers_offcanvas .authority-item.disabled .form-check-label {
+    cursor: not-allowed;
+}
+
+/* Specialist Gazetteers expansion — inline dropdown beneath the parent row. */
+#gazetteers_offcanvas .specialist-gazetteers-expansion {
+    margin: 0.25rem 0 0.5rem 0;
+    padding: 0.5rem 0.6rem;
+    background: rgba(44, 62, 80, 0.03);
+    border: 1px solid rgba(44, 62, 80, 0.08);
+    border-radius: 0.25rem;
+}
+#gazetteers_offcanvas .specialist-search {
+    font-size: 0.78rem;
+}
+#gazetteers_offcanvas .specialist-list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+#gazetteers_offcanvas .specialist-list .authority-item {
+    padding: 2px 4px;
+    margin: 0;
+}
+
+/* Sketch type-pill filter — three toggle buttons styled like the existing
+   Filter|Explore mode toggle. Active = included, inactive = excluded.
+   Explicit borders + box-shadow dividers so the segments read distinctly even
+   when adjacent buttons share an active state. */
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    border: 1px solid rgba(44, 62, 80, 0.25);
+    background: #fff;
+    color: #34495e;
+}
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn + .btn {
+    /* Hairline divider between segments — visible against both active and
+       inactive backgrounds because it sits over the button's own border. */
+    box-shadow: inset 1px 0 0 rgba(44, 62, 80, 0.35);
+}
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn.active {
+    background: #2c3e50;
+    color: #fff;
+    border-color: #2c3e50;
+}
+
+/* "core" badge alignment within the authority-item label. */
+#gazetteers_offcanvas .authority-item .badge {
+    vertical-align: middle;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Type tree overrides for atlas offcanvas
+   — remove bullet points, reduce font size
+   ═══════════════════════════════════════════════════════════════════ */
+
+#categories_offcanvas .tt-root,
+#categories_offcanvas .tt-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+#categories_offcanvas .tt-children {
+    padding-left: 14px;
+}
+#categories_offcanvas .tt-node {
+    list-style: none;
+    padding: 0;
+    line-height: 1.25;
+}
+#categories_offcanvas .tt-label {
+    font-size: 0.72rem;
+}
+#categories_offcanvas .tt-guide > .tt-label {
+    font-size: 0.67rem;
+}
+#categories_offcanvas .tt-toggle {
+    font-size: 0.7rem;
+    width: 12px;
+}
+#categories_offcanvas .tt-badge {
+    font-size: 0.5rem;
+}
+
+/* Checkbox alignment fix for atlas offcanvas */
+#categories_offcanvas .tt-cb {
+    position: relative;
+    top: 2px;
+    margin-left: 3px;
+}
+
+/* Search box bottom margin */
+#categories_offcanvas .tt-search {
+    margin-bottom: 0.5rem;
+}
+
+/* Hide GeoNames fclass badges in atlas type tree */
+#categories_offcanvas .tt-badge {
+    display: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Region selector overrides (when mounted in atlas layout)
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Region search dropdown (positioned below floating search) */
+.atlas-region-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 20;
+}
+.atlas-region-dropdown .region-result {
+    padding: 6px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #f0f0f0;
+}
+.atlas-region-dropdown .region-result:hover,
+.atlas-region-dropdown .region-result.region-result--active {
+    background: #f0f4f8;
+}
+.atlas-region-dropdown .region-result-label {
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+.atlas-region-dropdown .region-result-sublabel {
+    font-size: 0.7rem;
+    color: #999;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Existing widget styles (boundary hover tooltip)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.boundary-hover-tooltip {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    background: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Gazetteer feature popup (Atlas Explore mode)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-content {
+    max-width: 400px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.97);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* Keep the MapLibre close button above any popup content and ensure it
+ * has a comfortable hit area in the top-right corner of the popup. */
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-close-button {
+    z-index: 2;
+    width: 22px;
+    height: 22px;
+    line-height: 18px;
+    font-size: 18px;
+    color: #7f8c8d;
+}
+.maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-close-button:hover {
+    color: #2c3e50;
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.whg-gazetteer-popup {
+    font-size: 0.8rem;
+    color: #2c3e50;
+    line-height: 1.4;
+    min-width: 260px;
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+}
+
+.whg-gazetteer-popup .popup-loading {
+    color: #888;
+    font-style: italic;
+    padding: 12px;
+}
+
+.whg-gazetteer-popup .popup-header {
+    /* Right-padding reserves space for the absolutely-positioned close
+     * button so it doesn't visually collide with header content. */
+    padding: 10px 32px 6px 12px;
+    flex: 0 0 auto;
+}
+
+.whg-gazetteer-popup .popup-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #c0392b;
+    text-decoration: none;
+    word-break: break-word;
+    line-height: 1.25;
+    display: block;
+}
+.whg-gazetteer-popup .popup-title:hover {
+    text-decoration: underline;
+}
+
+.whg-gazetteer-popup .popup-place-id {
+    font-size: 0.68rem;
+    color: #95a5a6;
+    margin-top: 1px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    word-break: break-all;
+}
+
+.whg-gazetteer-popup .popup-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 0 12px 6px;
+    flex: 0 0 auto;
+}
+
+.whg-gazetteer-popup .popup-chip {
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: #ecf0f1;
+    color: #34495e;
+}
+.whg-gazetteer-popup .popup-chip-type { background: #d6eaf8; color: #1f4e79; }
+.whg-gazetteer-popup .popup-chip-secondary { opacity: 0.78; }
+.whg-gazetteer-popup .popup-chip-admin { background: #fdebd0; color: #7e5109; }
+.whg-gazetteer-popup .popup-chip-cc { background: #d5f5e3; color: #1e6b3a; }
+
+.whg-gazetteer-popup .popup-body {
+    padding: 0 12px 6px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.whg-gazetteer-popup .popup-meta-list {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    row-gap: 2px;
+    margin: 4px 0 8px;
+    font-size: 0.75rem;
+}
+.whg-gazetteer-popup .popup-meta-list dt {
+    color: #2c3e50;
+    font-weight: 600;
+}
+.whg-gazetteer-popup .popup-meta-list dd {
+    margin: 0;
+    color: #546e7a;
+}
+
+.whg-gazetteer-popup .popup-description {
+    font-size: 0.78rem;
+    color: #34495e;
+    margin: 6px 0 8px;
+}
+.whg-gazetteer-popup .popup-description-extra {
+    font-size: 0.75rem;
+    color: #34495e;
+    margin: 4px 0;
+}
+
+.whg-gazetteer-popup .popup-depiction {
+    margin: 0;
+    padding: 0 0 6px;
+    flex: 0 0 auto;
+}
+.whg-gazetteer-popup .popup-depiction img {
+    width: 100%;
+    max-height: 160px;
+    object-fit: cover;
+    display: block;
+}
+.whg-gazetteer-popup .popup-depiction-caption {
+    font-size: 0.65rem;
+    color: #888;
+    padding: 3px 12px 0;
+}
+.whg-gazetteer-popup .popup-license {
+    margin-left: 4px;
+    color: #aaa;
+    font-style: italic;
+}
+
+.whg-gazetteer-popup .popup-section {
+    margin: 4px 0;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    padding-top: 4px;
+}
+.whg-gazetteer-popup .popup-section > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: #34495e;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 0;
+    list-style: none;
+    user-select: none;
+}
+.whg-gazetteer-popup .popup-section > summary::-webkit-details-marker { display: none; }
+.whg-gazetteer-popup .popup-section > summary::before {
+    content: "▶";
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 0.6em;
+    transform: translateY(-1px);
+    transition: transform 0.12s ease;
+    color: #95a5a6;
+}
+.whg-gazetteer-popup .popup-section[open] > summary::before {
+    transform: rotate(90deg) translateX(-1px);
+}
+.whg-gazetteer-popup .popup-section-body {
+    padding: 4px 0 4px 14px;
+}
+
+.whg-gazetteer-popup .popup-name-list,
+.whg-gazetteer-popup .popup-geom-list,
+.whg-gazetteer-popup .popup-relation-list,
+.whg-gazetteer-popup .popup-link-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: 0.75rem;
+}
+.whg-gazetteer-popup .popup-name-list li,
+.whg-gazetteer-popup .popup-geom-list li,
+.whg-gazetteer-popup .popup-relation-list li,
+.whg-gazetteer-popup .popup-link-list li {
+    margin: 0;
+    padding: 1px 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px;
+}
+
+.whg-gazetteer-popup .popup-name-label { color: #2c3e50; }
+.whg-gazetteer-popup .popup-lang {
+    font-size: 0.65rem;
+    color: #7f8c8d;
+    background: #ecf0f1;
+    padding: 0 4px;
+    border-radius: 2px;
+    text-transform: uppercase;
+}
+.whg-gazetteer-popup .popup-timespan-marker {
+    font-size: 0.65rem;
+    color: #6d4c41;
+    background: #efebe9;
+    padding: 0 5px;
+    border-radius: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.whg-gazetteer-popup .popup-geom-type {
+    font-weight: 600;
+    color: #1f4e79;
+}
+.whg-gazetteer-popup .popup-geom-coord {
+    color: #7f8c8d;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.whg-gazetteer-popup .popup-relation-type {
+    color: #7f8c8d;
+    font-style: italic;
+    margin-right: 2px;
+}
+
+.whg-gazetteer-popup .popup-link-group {
+    margin: 4px 0;
+}
+.whg-gazetteer-popup .popup-link-authority {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #34495e;
+    display: block;
+    margin-bottom: 2px;
+}
+.whg-gazetteer-popup .popup-link-list a,
+.whg-gazetteer-popup .popup-relation-list a {
+    color: #4a90d9;
+    text-decoration: none;
+    word-break: break-all;
+}
+.whg-gazetteer-popup .popup-link-list a:hover,
+.whg-gazetteer-popup .popup-relation-list a:hover { text-decoration: underline; }
+.whg-gazetteer-popup .popup-link-type {
+    font-size: 0.6rem;
+    color: #95a5a6;
+    text-transform: uppercase;
+}
+
+.whg-gazetteer-popup .popup-depiction-gallery {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+.whg-gazetteer-popup .popup-depiction-gallery img {
+    width: 100%;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 2px;
+    display: block;
+}
+
+.whg-gazetteer-popup .popup-body > :first-child { margin-top: 6px; }
+
+/* Modal-trigger affordance — both the popup title and any in-WHG
+ * place reference render as a click target that pops the place's
+ * preview HTML in a Bootstrap modal rather than opening a new tab. */
+.whg-place-modal-trigger { cursor: pointer; }
+
+.whg-place-modal .modal-body { padding: 0; }
+.whg-place-modal .modal-body .record-container {
+    border-left: 0;
+    margin: 0;
+    background: transparent;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Exact-match toggle
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_exact_match.active {
+    background-color: #6b8ea4;
+    border-color: #5a7d93;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Viewport constraint button
+   ═══════════════════════════════════════════════════════════════════ */
+
+#atlas_viewport_btn.active {
+    background: #2980b9 !important;
+    border-color: #2471a3 !important;
+    color: #fff !important;
+}
+#atlas_viewport_btn:disabled {
+    opacity: 0.45;
+    cursor: pointer;
+    pointer-events: none;
+}
+#atlas_viewport_wrap {
+    cursor: pointer;
+    border-radius: var(--bs-border-radius-sm) 0 0 var(--bs-border-radius-sm);
+}
+#atlas_viewport_wrap #atlas_viewport_btn {
+    border-top-right-radius: 0 !important;
+    border-bottom-right-radius: 0 !important;
+}
+/* Ensure the pill group items share the control-button style */
+#areas_control_pill .btn {
+    font-size: 0.7rem;
+    white-space: nowrap;
+    background: rgba(44, 62, 80, 0.8);
+    border-color: rgba(44, 62, 80, 0.6);
+    color: #fff;
+}
+#areas_control_pill .btn:hover:not(:disabled):not(.active) {
+    background: rgba(44, 62, 80, 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Boundary level dropdown inside layer panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+.layer-panel-divider {
+    border: 0;
+    border-top: 1px solid rgba(44, 62, 80, 0.10);
+    margin: 6px 0;
+}
+
+.layer-panel-section-label {
+    display: block;
+    color: #2c3e50;
+    font-weight: 700;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 5px;
+    padding-bottom: 3px;
+    border-bottom: 2px solid rgba(123, 45, 59, 0.25);
+}
+
+#boundary_level_section {
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(44, 62, 80, 0.10);
+}
+
+#boundary_level_select {
+    font-size: 0.72rem;
+    padding: 2px 24px 2px 6px;
+    height: auto;
+    line-height: 1.4;
+}
+
+.admin-auto-toggle {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    font-size: 0.65rem;
+    color: #666;
+}
+.admin-auto-toggle .form-check-input {
+    margin-top: 0;
+    width: 1.8em;
+    height: 1em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Wide screens: expand floating search panel */
+@media (min-width: 992px) {
+    #floating_search {
+        max-width: 980px;
+    }
+    .floating-search-inner {
+        max-width: 626px;
+    }
+}
+
+@media (max-width: 768px) {
+    #floating_search {
+        top: 8px;
+        left: 8px;
+        width: calc(100% - 16px);
+        max-width: none;
+    }
+    .floating-search-inner {
+        flex-wrap: wrap;
+    }
+    .search-mode-toggle {
+        width: 100%;
+        margin-bottom: 4px;
+    }
+    #atlas_results_panel {
+        width: 100%;
+        height: 50vh;
+        top: auto;
+        bottom: 0;
+        border-radius: 16px 16px 0 0;
+    }
+    #atlas_results_panel.atlas-results-hidden {
+        transform: translateY(100%);
+    }
+    .atlas-welcome {
+        width: calc(100% - 32px) !important;
+        max-width: none !important;
+        left: 16px !important;
+        right: 16px !important;
+        transform: translate(0, -50%) !important;
+    }
+    .atlas-welcome.atlas-welcome-hidden {
+        opacity: 0;
+        transform: translate(0, -50%) scale(0.95) !important;
+        pointer-events: none;
+    }
+}
+
+@media (max-width: 576px) {
+    .atlas-control-buttons {
+        width: 100%;
+        justify-content: center;
+        margin-top: 4px;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Welcome / Landing panel (centered on map)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-welcome {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12;
+    width: 420px;
+    max-width: calc(100% - 40px);
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 16px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    text-align: center;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.atlas-welcome.atlas-welcome-hidden {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.95);
+    pointer-events: none;
+}
+
+.atlas-welcome-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #7f8c8d;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 6px;
+    line-height: 1;
+    border-radius: 4px;
+    transition: color 0.15s, background 0.15s;
+}
+.atlas-welcome-close:hover {
+    color: #2c3e50;
+    background: rgba(0, 0, 0, 0.06);
+}
+
+.atlas-welcome-logo {
+    width: 80px;
+    margin-bottom: 12px;
+    opacity: 0.9;
+}
+
+.atlas-welcome-title {
+    font-family: 'REM', 'Segoe UI', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #2c3e50;
+    margin-bottom: 8px;
+}
+
+.atlas-welcome-text {
+    font-size: 0.82rem;
+    color: #555;
+    line-height: 1.55;
+    margin-bottom: 14px;
+}
+
+.atlas-welcome-tour-link {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #2980b9;
+    text-decoration: none;
+    padding: 6px 16px;
+    border: 1px solid #2980b9;
+    border-radius: 20px;
+    transition: background 0.2s, color 0.2s;
+}
+.atlas-welcome-tour-link:hover {
+    background: #2980b9;
+    color: #fff;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tour relaunch button (bottom-left)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.atlas-tour-btn {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    z-index: 10;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(44, 62, 80, 0.85);
+    color: #fff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+}
+.atlas-tour-btn:hover {
+    background: rgba(44, 62, 80, 1);
+    transform: scale(1.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tour active state — z-index & interaction blocking
+   During the guided tour, offcanvas panels are opened automatically
+   as demos. They need to appear above the driver.js overlay (z-index
+   10000) so their contents are clearly visible rather than dimmed.
+   The `inert` attribute (set by JS) prevents all user interaction
+   and focus within the panels, but CSS `pointer-events: none` on the
+   panel itself is also needed so that clicks fall through to the
+   driver.js overlay rather than being absorbed by the panel backdrop.
+   ═══════════════════════════════════════════════════════════════════ */
+
+body.atlas-tour-active .offcanvas.show,
+body.atlas-tour-active .offcanvas.showing {
+    z-index: 10001 !important;
+    pointer-events: none !important;
+}
+
+/* Block interaction with offcanvas child elements during the tour */
+body.atlas-tour-active .offcanvas.show *,
+body.atlas-tour-active .offcanvas.showing * {
+    pointer-events: none !important;
+}
+
+/* Suppress Bootstrap offcanvas backdrop during tour */
+body.atlas-tour-active .offcanvas-backdrop {
+    display: none !important;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Tour footer + demo-mode controls
+   ════════════════════════════════════════════════════════════════ */
+
+/* Small footer bar inside every tour-step popover: WHG logo + a discreet
+   "preview of a future release" note (and, in demo mode, a pause/continue
+   control). Keeps the demo framing visible without obscuring the UI. */
+.driver-popover-footnote {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.7rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #e4e4e4;
+}
+
+.driver-popover-footnote-logo {
+    flex: 0 0 auto;
+    height: 16px;
+    width: auto;
+    opacity: 0.85;
+}
+
+.driver-popover-footnote-text {
+    flex: 1 1 auto;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    color: #8a8a8a;
+    font-style: italic;
+}
+
+/* Discreet pause/continue toggle, demo mode only. */
+.driver-popover-demo-pause {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid #d3c2c6;
+    border-radius: 50%;
+    background: #fff;
+    color: #7b2d3b;
+    font-size: 0.72rem;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.driver-popover-demo-pause:hover {
+    background: #7b2d3b;
+    color: #fff;
+}
+
+/* "Start looping demo" button injected into the first tour step popover. */
+.driver-popover-demo-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    width: 100%;
+    margin-top: 0.9rem;
+    padding: 0.5rem 0.9rem;
+    border: none;
+    border-radius: 6px;
+    background: #7b2d3b;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.driver-popover-demo-btn:hover {
+    background: #93384a;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Welcome modal — centred, hero-style first tour step
+   ════════════════════════════════════════════════════════════════ */
+
+.driver-popover.atlas-welcome-popover {
+    max-width: 480px;
+    padding: 1.9rem 1.9rem 1.4rem;
+    text-align: center;
+    border-radius: 14px;
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.4);
+    background:
+        radial-gradient(120% 80% at 50% 0%, #fbf4f5 0%, #ffffff 60%);
+}
+
+/* Large WHG logo, this modal only. */
+.atlas-welcome-popover .atlas-welcome-popover-logo {
+    display: block;
+    width: 220px;
+    max-width: 72%;
+    height: auto;
+    margin: 0.25rem auto 1.1rem;
+}
+
+.driver-popover.atlas-welcome-popover .driver-popover-title {
+    font-size: 1.5rem;
+    line-height: 1.25;
+    color: #6b2533;
+    margin-bottom: 0.85rem;
+}
+
+.driver-popover.atlas-welcome-popover .driver-popover-description {
+    text-align: left;
+    font-size: 0.94rem;
+    line-height: 1.5;
+}
+
+/* The big hero logo replaces the small footer logo on this modal. */
+.atlas-welcome-popover .driver-popover-footnote-logo {
+    display: none;
+}
+
+.atlas-welcome-popover .driver-popover-footnote {
+    justify-content: center;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Demo mode — suppress the dev server's red viewport border
+   (set inline as `body { border: 3px red solid !important }`)
+   ════════════════════════════════════════════════════════════════ */
+
+body.atlas-demo-mode {
+    border: none !important;
+}
+

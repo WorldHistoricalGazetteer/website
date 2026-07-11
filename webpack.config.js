@@ -40,6 +40,7 @@ module.exports = {
 	},
 	entry: {
 		areas: './whg/webpack/js/areas.js',
+		atlas: './whg/webpack/js/atlas.js',
 		base: './whg/webpack/js/base.js',
 		'builders-collection-dataset': './whg/webpack/js/builders-collection-dataset.js',
 		'builders-collection-place': './whg/webpack/js/builders-collection-place.js',

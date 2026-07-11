@@ -1,12 +1,2 @@
-/*!*********************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/ds_browse.css ***!
-  \*********************************************************************************/
-
-.noUi-handle {
-	height:18px !important; 
-	top: -4px !important;
-}
-.noUi-horizontal {
-	height:12px !important;
-}
-
+.noUi-handle{height:18px!important;top:-4px!important}.noUi-horizontal{height:12px!important}
+/*# sourceMappingURL=ds_browse.bundle.css.map*/

@@ -1,0 +1,1 @@
+{"version":3,"file":"tasks.bundle.css","mappings":"AAAA,iBACI,eACJ,CACA,gBACI,gBACJ","sources":["webpack://whg-webpack/./whg/webpack/css/tasks.css"],"sourcesContent":[".recon-options p {\n    margin-bottom: 0;\n}\n.maplibregl-map {\n    min-height: 300px;\n}"],"names":[],"sourceRoot":""}

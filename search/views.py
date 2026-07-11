@@ -117,6 +117,108 @@ class SearchPageView(TemplateView):
         return context
 
 
+class AtlasPageView(TemplateView):
+    """
+    The Atlas (Explorer) page — a hero-map spatio-temporal explorer
+    served at /atlas/, parallel to the existing /search/ page.
+    """
+    template_name = 'search/atlas.html'
+
+    def get_context_data(self, *args, **kwargs):
+        context = super().get_context_data(*args, **kwargs)
+        context['toponym'] = kwargs.get('toponym', None)
+        context['media_url'] = settings.MEDIA_URL
+        context['es_whg'] = settings.ES_WHG
+        context['dropdown_data'] = get_regions_countries()
+        context['index_places'] = getattr(settings, 'INDEX_PLACES_LABEL', 'millions of')
+        context['index_toponyms'] = getattr(settings, 'INDEX_TOPONYMS_LABEL', 'millions of')
+
+        # Available spatial data sources for the Layer Sources palette,
+        # driven by ``GazetteerRegistryEntry.region_source``. Staff toggle
+        # entries on/off via the Django admin (api/admin.py); previously
+        # this list was hardcoded inline. See migration 0005 for seeds.
+        from api.models import GazetteerRegistryEntry
+        # Region Source list is driven solely by the ``region_source`` flag.
+        # ``no_explore`` is independent — it gates the Gazetteers offcanvas
+        # Explore mode (see atlas.js::applyTilesetGating), not this panel.
+        # Display order matches the panel's existing order so admin toggles
+        # don't visually reshuffle. Unknown ids fall to the end alphabetically.
+        REGION_SOURCE_ORDER = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl']
+        region_source_rows = (
+            GazetteerRegistryEntry.objects
+            .filter(region_source=True, status='published')
+            .values('id', 'name', 'description')
+        )
+        ordered = sorted(
+            region_source_rows,
+            key=lambda r: (
+                REGION_SOURCE_ORDER.index(r['id']) if r['id'] in REGION_SOURCE_ORDER else len(REGION_SOURCE_ORDER),
+                r['id'],
+            ),
+        )
+        context['available_sources'] = json.dumps([
+            {
+                'id': row['id'],
+                'label': row['name'],
+                'description': row['description'] or '',
+                'enabled': True,
+            }
+            for row in ordered
+        ])
+
+        user_areas = []
+        if self.request.user.is_authenticated:
+            qs = Area.objects.filter(
+                owner=self.request.user,
+                type__in=['ccodes', 'copied', 'drawn'],
+            ).values('id', 'title', 'type', 'description', 'geojson')
+            for a in qs:
+                feature = {
+                    "type": "Feature",
+                    "properties": {
+                        "id": a['id'], "title": a['title'],
+                        "type": a['type'], "description": a['description'],
+                    },
+                    "geometry": a['geojson'],
+                }
+                user_areas.append(feature)
+
+        context['has_areas'] = len(user_areas) > 0
+        context['user_areas'] = json.dumps(user_areas)
+
+        # Gazetteer registry — the standard offcanvas list (authorities) and
+        # the Specialist Gazetteers expansion (WHG-namespaced datasets).
+        # Falls back to an empty queryset before the inventory push has run;
+        # the data migration in api/migrations/0003 seeds the ten current
+        # authorities so the page renders even on a fresh DB.
+        gazetteer_inventory = list(
+            GazetteerRegistryEntry.objects
+            .filter(entry_class='authority')
+            .order_by('name')
+            .values(
+                'id', 'name', 'description', 'namespace', 'core',
+                'no_explore', 'gazetteer_type', 'record_count',
+                # Attribution fields (citations Phase 4) — surfaced in the
+                # Gazetteers offcanvas. license_url falls back to the deed
+                # URL on the resolved License row.
+                'citation_text', 'rights_holder', 'source_url',
+                'contributors_csl', 'license__spdx_id', 'license__label',
+                'license__url', 'license_url',
+            )
+        )
+        specialist_gazetteers = list(
+            GazetteerRegistryEntry.objects
+            .filter(entry_class='dataset', namespace='whg')
+            .order_by('name')
+            .values(
+                'id', 'name', 'description', 'gazetteer_type', 'record_count',
+            )
+        )
+        context['gazetteer_inventory'] = gazetteer_inventory
+        context['specialist_gazetteers'] = specialist_gazetteers
+        return context
+
+
 def fetchArea(request):
     aid = request.GET.get('pk')
     area = Area.objects.filter(id=aid)
