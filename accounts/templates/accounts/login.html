@@ -4,6 +4,21 @@
 
 {% block content %}
 {% load static %}
+
+{% if WHG_DEV_SERVER %}
+<div class="container mt-4">
+    <div class="alert alert-warning d-flex align-items-start mb-0" role="alert">
+        <i class="fas fa-flask me-2 mt-1"></i>
+        <div>
+            <strong>Dev server.</strong> To sign in, use the
+            <a href="/admin/login/" class="alert-link">admin login</a> with your dev credentials.
+            The <em>Sign in with ORCiD</em> option below uses the ORCiD <strong>sandbox</strong> and is for
+            deliberate testing only — it creates a throwaway sandbox account, not your real WHG profile.
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="container mt-4 mb-2">
 
     <div id="login-orcid-explainer" class="row mb-4 justify-content-center">

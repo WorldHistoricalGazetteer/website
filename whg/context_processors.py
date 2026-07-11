@@ -4,9 +4,15 @@ from django.conf import settings
 
 
 def environment(request):
+    env = os.getenv('ENV_CONTEXT', 'default')
     return {
-        'environment': os.getenv('ENV_CONTEXT', 'default'),
-        'ENV_CONTEXT': os.getenv('ENV_CONTEXT', 'default'),
+        'environment': env,
+        'ENV_CONTEXT': env,
+        # True only on the dev server. Used to steer the "Login/Register"
+        # nav + login page to the Django admin login (dev auth is admin
+        # creds, not ORCiD — the ORCiD redirect URI only matches prod), while
+        # leaving the ORCiD *sandbox* flow reachable for deliberate testing.
+        'WHG_DEV_SERVER': env == 'dev-whgazetteer-org',
         'GLITCHTIP_DSN': settings.GLITCHTIP_DSN,
         'GLITCHTIP_RELEASE': settings.GLITCHTIP_RELEASE,
     }
