@@ -807,7 +807,7 @@ def wb_gazetteer_group_view(request):
 # Stages: 'beta' = usable now by staff + invited testers, not yet public; 'dev' = being built, not
 # yet testable; 'shipped' = live for everyone / changes an existing workflow; 'horizon' = planned
 # direction, NOT a dated commitment. Edit BETA_STATUS_UPDATED whenever this list changes.
-BETA_STATUS_UPDATED = "9 July 2026"
+BETA_STATUS_UPDATED = "11 July 2026"
 BETA_STATUS_SECTIONS = [
     {
         "heading": "In development & beta preview",
@@ -859,6 +859,13 @@ BETA_STATUS_SECTIONS = [
         "heading": "On the horizon",
         "note": "The direction we're heading — shared for planning, not as committed release dates.",
         "items": [
+            {"name": "Submission tracker", "stage": "horizon", "version": "3.4",
+             "body": "A way to follow a dataset submission through its lifecycle — from first "
+                     "contribution, through review, to publication — so contributors and editors can "
+                     "see where each submission stands and what happens next. It will be built natively "
+                     "into WHG rather than relying on a separate external service, keeping it integrated "
+                     "with datasets, accounts, and the rest of the platform. We're finalising the "
+                     "specification with colleagues; tentatively targeted for v3.4."},
             {"name": "Joining the Open Metadata Exchange (with ISKME)", "stage": "horizon", "version": "3.4",
              "body": "Exploratory work to make WHG a node in the Open Metadata Exchange (OME) — a "
                      "peer-to-peer metadata-sharing network, an ISKME initiative. WHG would feed its "
