@@ -183,6 +183,13 @@ class GazetteerRegistryEntry(models.Model):
         ("itinerary", "Itinerary"),
         ("network",   "Network"),
     ]
+    REINGEST_STATUS_CHOICES = [
+        ("idle",      "Idle"),
+        ("queued",    "Queued"),
+        ("running",   "Running"),
+        ("completed", "Completed"),
+        ("failed",    "Failed"),
+    ]
 
     # Stable id used by the inventory push; matches the namespace for
     # authorities (``"gn"``) and the sub-namespace for WHG datasets
@@ -214,19 +221,76 @@ class GazetteerRegistryEntry(models.Model):
     # ``[min_start_year, max_end_year]`` with each endpoint optionally null.
     temporal_extent = models.JSONField(default=list)
 
+    # ── Attribution / licence / rights (citations design §3.2) ──────────
+    # Source-of-truth = indexing ``AUTHORITIES`` → pushed by Batch 11
+    # (``push_gazetteer_inventory.py``) into the inventory payload, applied
+    # by ``api/views_indexing.py::GazetteerInventoryView._upsert_one``.
+    # These are *push-managed* like the other inventory fields above (NOT in
+    # the admin-protected curatorial set), so a push refreshes them from the
+    # canonical source. All optional — a source supplies whatever it has
+    # (design decision 3: metadata flexibility).
+    #
+    # Human-readable citation. Historically the citation blob was crammed
+    # into ``description``; new pushes populate this and keep ``description``
+    # for genuine prose. ``attribution_for()`` prefers this, falling back to
+    # ``description`` for rows pushed before the upgrade.
+    citation_text = models.TextField(null=True, blank=True)
+    # Canonical SPDX licence; resolved from the pushed ``license_spdx`` code.
+    license = models.ForeignKey(
+        'licensing.License',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='gazetteer_entries',
+    )
+    # Override deed URL when the source deviates from the canonical licence
+    # deed (left null to use ``license.url``).
+    license_url = models.URLField(null=True, blank=True)
+    # e.g. "J. Paul Getty Trust", "ISAW".
+    rights_holder = models.CharField(max_length=255, null=True, blank=True)
+    # Homepage / landing page for the source.
+    source_url = models.URLField(null=True, blank=True)
+    # Optional CRediT-shaped provider credit where the source documents it:
+    # ``[{"name": ..., "role": ..., "orcid": ...}]`` (see §3.3 output shape).
+    contributors_csl = models.JSONField(default=list, blank=True)
+
     # Curatorial fields managed via the Django admin only — the inventory
     # push from the indexing pipeline deliberately omits these so it never
-    # overwrites staff curation. Defaults must mirror migration 0003 so
+    # overwrites staff curation. Defaults must mirror the migration so
     # rows pushed without these fields satisfy NOT NULL on INSERT.
     core = models.BooleanField(default=False, db_index=True)
-    tileset_polygon_only = models.BooleanField(default=False)
+    # ``no_explore``: hides the entry's tileset-dependent affordances
+    # (Explore mode in the Gazetteers offcanvas, in-Atlas polygon hover/click).
+    # Renamed from ``tileset_polygon_only`` — the original name was opaque.
+    no_explore = models.BooleanField(default=False)
+    # ``region_source``: appears as a selectable Source in the Regions
+    # offcanvas (the boundary-namespace toggle in the Atlas page). Drives
+    # ``available_sources`` in ``search.views.AtlasPageView``.
+    region_source = models.BooleanField(default=False, db_index=True)
     gazetteer_type = models.CharField(
         max_length=16,
         choices=GAZETTEER_TYPE_CHOICES,
         default="standard",
     )
 
+    # Re-ingest tracking — written by the admin "Re-ingest" action and
+    # by ``api.reingest`` polling the Pitt gateway. Only the latest run is
+    # tracked; if history is needed later a separate audit table can hold it.
+    reingest_status = models.CharField(
+        max_length=12,
+        choices=REINGEST_STATUS_CHOICES,
+        default="idle",
+        db_index=True,
+    )
+    reingest_started_at = models.DateTimeField(null=True, blank=True)
+    reingest_finished_at = models.DateTimeField(null=True, blank=True)
+    reingest_job_id = models.CharField(max_length=64, null=True, blank=True)
+    reingest_message = models.TextField(null=True, blank=True)
+
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_global(self) -> bool:
+        return self.h3_coverage == "global"
 
     def __str__(self):
         return f"{self.id} ({self.entry_class})"
