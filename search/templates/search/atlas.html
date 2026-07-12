@@ -140,6 +140,17 @@
                 <i class="fas fa-times"></i>
             </button>
         </div>
+        <!-- BETA: client-side clustering control. Re-clusters the cached
+             result set live (no refetch) as the threshold changes. -->
+        <div id="atlas_cluster_controls" class="cluster-controls" style="display:none;">
+            <label for="atlas_cluster_theta" class="cluster-theta-label">
+                Merge sensitivity
+                <span class="cluster-theta-hint"
+                      title="How readily two places merge into one cluster. Lower → more, smaller clusters; higher → fewer, tighter clusters. (θ: the composite-score threshold for merging.)">&#9432;</span>
+                <span id="atlas_cluster_theta_val" class="cluster-theta-val"></span>
+            </label>
+            <input type="range" id="atlas_cluster_theta" min="0.30" max="0.90" step="0.01" value="0.55">
+        </div>
         <div id="atlas_result_container">
             <div id="atlas_no_results" class="bg-light p-2 rounded" style="display:none;">
                 No results — please modify your search terms or filters.

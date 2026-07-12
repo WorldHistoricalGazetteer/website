@@ -1365,6 +1365,45 @@
     font-size: 0.85rem;
     color: #5a5f64;
 }
+/* ── BETA: cluster cards + merge-sensitivity (θ) control ── */
+.cluster-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid #e3e6e9;
+    font-size: 0.8rem;
+    color: #5a5f64;
+}
+.cluster-controls input[type="range"] { flex: 1; min-width: 80px; }
+.cluster-theta-label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.cluster-theta-hint { cursor: help; color: #8a8f94; }
+.cluster-theta-val { font-variant-numeric: tabular-nums; color: #2980b9; font-weight: 600; }
+.cluster-card {
+    border: 1px solid #e3e6e9;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin: 8px;
+    background: #fff;
+}
+.cluster-card.cluster-multi { border-left: 3px solid #2980b9; }
+.cluster-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cluster-title { font-weight: 600; color: #b0413e; }
+.cluster-badge {
+    font-size: 0.75rem; color: #2980b9; background: #eaf3fa;
+    border-radius: 10px; padding: 1px 8px; white-space: nowrap;
+}
+.cluster-namespaces { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.ns-chip {
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: .3px;
+    background: #f1f3f5; color: #5a5f64; border-radius: 4px; padding: 1px 6px;
+}
+.cluster-members { margin-top: 6px; border-top: 1px dashed #e3e6e9; padding-top: 4px; }
+.cluster-member {
+    display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 0.82rem;
+}
+.member-title { flex: 1; }
+.member-ns { font-size: 0.68rem; color: #8a8f94; text-transform: uppercase; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Tour relaunch button (bottom-left)

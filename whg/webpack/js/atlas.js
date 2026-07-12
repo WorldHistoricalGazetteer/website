@@ -16,6 +16,7 @@ import heroMap from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
+import { clusterHits } from './clustering.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -347,6 +348,18 @@ Promise.all([
         hideResultsPanel();
         switchSearchMode('areas');
     });
+
+    // ── BETA: cluster merge-sensitivity (θ) slider — re-clusters live ──
+    const thetaSlider = document.getElementById('atlas_cluster_theta');
+    if (thetaSlider) {
+        const thetaVal = document.getElementById('atlas_cluster_theta_val');
+        const applyTheta = () => {
+            clusterThetaOverride = parseFloat(thetaSlider.value);
+            if (thetaVal) thetaVal.textContent = clusterThetaOverride.toFixed(2);
+            if (gatewayData) renderClusters();
+        };
+        thetaSlider.addEventListener('input', debounce(applyTheta, 120));
+    }
 
     // ── Wire exact match toggle ──
     document.getElementById('atlas_exact_match').addEventListener('click', function () {
@@ -1230,6 +1243,13 @@ function initiateToponymSearch() {
     const resultsDiv = document.getElementById('atlas_search_results');
     resultsDiv.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Searching…</div>';
 
+    // BETA: route through the CRC gateway (/atlas/search/) for client-side
+    // clustering. Non-beta users stay on the legacy Django /search/index/ path.
+    if (isBetaUser()) {
+        initiateGatewaySearch(options);
+        return;
+    }
+
     $.ajax({
         type: 'POST',
         url: '/search/index/',
@@ -1245,6 +1265,133 @@ function initiateToponymSearch() {
             resultsDiv.innerHTML = '<div class="p-3 text-danger">Search failed. Please try again.</div>';
         },
     });
+}
+
+// ── BETA: gateway-routed clustered search ───────────────────────────────────
+// The gateway ships the clustering fuel (edges[], per-hit fields,
+// clustering_params); clustering.js clusters it in the browser and we show
+// cluster cards. The θ slider re-clusters the cached response live (no refetch).
+let gatewayData = null;            // cached last gateway response
+let clusterThetaOverride = null;   // θ slider value, or null → use params default
+
+function isBetaUser() {
+    const m = document.querySelector('meta[name="beta-user"]');
+    return !!(m && m.content === '1');
+}
+
+function initiateGatewaySearch(options) {
+    const resultsDiv = document.getElementById('atlas_search_results');
+    $.ajax({
+        type: 'POST',
+        url: '/atlas/search/',
+        data: JSON.stringify(options),
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': csrfToken },
+        success: (data) => {
+            gatewayData = data;
+            clusterThetaOverride = null;
+            const slider = document.getElementById('atlas_cluster_theta');
+            if (slider && data.clustering_params && data.clustering_params.thresholds) {
+                slider.value = data.clustering_params.thresholds.theta_query ?? slider.value;
+            }
+            renderClusters();
+        },
+        error: (err) => {
+            console.error('Atlas: gateway search error', err);
+            resultsDiv.innerHTML = '<div class="p-3 text-danger">Search failed. Please try again.</div>';
+        },
+    });
+}
+
+function hitsToFeatureCollection(hits, assignments) {
+    const features = [];
+    hits.forEach((h, i) => {
+        let geometry = null;
+        if (Array.isArray(h.geometries) && h.geometries.length) {
+            geometry = h.geometries.length === 1
+                ? h.geometries[0]
+                : { type: 'GeometryCollection', geometries: h.geometries };
+        } else if (Array.isArray(h.repr_point) && h.repr_point.length >= 2) {
+            geometry = { type: 'Point', coordinates: [h.repr_point[0], h.repr_point[1]] };
+        }
+        if (!geometry) return;
+        features.push({
+            type: 'Feature',
+            id: i,
+            geometry,
+            properties: {
+                pid: h.place_id,
+                title: h.title,
+                namespace: h.namespace,
+                cluster: assignments ? assignments.get(h.place_id) : null,
+            },
+        });
+    });
+    return { type: 'FeatureCollection', features };
+}
+
+function renderClusters() {
+    if (!gatewayData) return;
+    const hits = gatewayData.hits || [];
+    const $resultsDiv = $('#atlas_search_results');
+    $resultsDiv.empty();
+
+    document.getElementById('atlas_no_results').style.display = hits.length === 0 ? 'block' : 'none';
+    const controls = document.getElementById('atlas_cluster_controls');
+    if (controls) controls.style.display = hits.length ? '' : 'none';
+
+    const { clusters, assignments, params, debug } = clusterHits({
+        hits,
+        edges: gatewayData.edges || [],
+        params: gatewayData.clustering_params || undefined,
+        theta: clusterThetaOverride == null ? undefined : clusterThetaOverride,
+    });
+    console.log('Atlas cluster', debug, params);
+
+    const countEl = document.getElementById('atlas_results_count');
+    countEl.textContent = `${hits.length} place${hits.length !== 1 ? 's' : ''} · `
+        + `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''}`;
+
+    clusters.forEach((cluster, ci) => {
+        const members = cluster.members;
+        const rep = members[0] || {};
+        const multi = members.length > 1;
+        const namespaces = [...new Set(members.map(m => m.namespace).filter(Boolean))];
+        let html = `<div class="cluster-card${multi ? ' cluster-multi' : ''}" data-cluster="${ci}">`;
+        html += `<div class="cluster-head">
+            <span class="cluster-title">${escapeHtml(rep.title || '(untitled)')}</span>`;
+        if (multi) {
+            html += `<span class="cluster-badge" title="places merged into this cluster">`
+                + `${members.length}<i class="fas fa-layer-group ms-1"></i></span>`;
+        }
+        html += `</div>`;
+        if (namespaces.length) {
+            html += `<div class="cluster-namespaces">`
+                + namespaces.map(n => `<span class="ns-chip">${escapeHtml(n)}</span>`).join('')
+                + `</div>`;
+        }
+        if (multi) {
+            html += `<div class="cluster-members">`;
+            members.forEach(m => {
+                html += `<div class="cluster-member">`
+                    + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
+                    + `<span class="member-ns">${escapeHtml(m.namespace || '')}</span>`
+                    + `</div>`;
+            });
+            html += `</div>`;
+        }
+        html += `</div>`;
+        $resultsDiv.append(html);
+    });
+
+    // Plot on the hero map
+    const fc = hitsToFeatureCollection(hits, assignments);
+    heroMap.showResultFeatures(fc);
+    if (fc.features.length > 0) {
+        heroMap.map.fitViewport(bbox(fc), {
+            maxZoom: 12, padding: { top: 80, right: 400, bottom: 60, left: 80 },
+        });
+    }
 }
 
 function gatherToponymOptions(qstr) {
