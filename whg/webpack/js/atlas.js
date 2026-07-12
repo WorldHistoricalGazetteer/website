@@ -194,8 +194,16 @@ function setupWelcomePanel() {
     const welcomePanel = document.getElementById('atlas_welcome');
     if (!welcomePanel) return;
     if (isWelcomeDismissed()) {
-        // Suppress entirely on subsequent visits — no fade, just gone.
+        // Opted out: hide the welcome, but show a lightweight "please wait"
+        // placeholder so a returning user still sees something while the map
+        // loads. It auto-hides once the map is ready (map-gated .then() below);
+        // a fallback timeout clears it if the map load never signals.
         welcomePanel.style.display = 'none';
+        const loading = document.getElementById('atlas_loading');
+        if (loading) {
+            loading.style.display = '';
+            setTimeout(() => { loading.style.display = 'none'; }, 20000);
+        }
         return;
     }
     fadeOutWelcome = () => {
@@ -259,6 +267,10 @@ Promise.all([
     waitDocumentReady(),
     Promise.all(select2_CDN_fallbacks.map(loadResource)),
 ]).then(() => {
+
+    // Map is ready — clear the "please wait" placeholder (opted-out users).
+    const atlasLoadingEl = document.getElementById('atlas_loading');
+    if (atlasLoadingEl) atlasLoadingEl.style.display = 'none';
 
     // ── Start globe spin on load ──
     heroMap.startSpin();

@@ -176,6 +176,15 @@
         </button>
     </div>
 
+    <!-- Lightweight "map loading" placeholder — shown INSTEAD of the welcome
+         panel once the user has opted out (via "Don't show this again"), so a
+         returning user still sees something while the map loads. Auto-hidden
+         when the map finishes loading. -->
+    <div id="atlas_loading" class="atlas-loading" style="display:none;" role="status" aria-live="polite">
+        <div class="atlas-loading-spinner" aria-hidden="true"></div>
+        <span class="atlas-loading-text">Loading the map…</span>
+    </div>
+
     <!-- Tour relaunch button (bottom-left) -->
     <button id="atlas_tour_btn" class="atlas-tour-btn" title="Take a guided tour">
         <i class="fas fa-map-signs"></i>
