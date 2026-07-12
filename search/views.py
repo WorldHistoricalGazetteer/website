@@ -219,6 +219,37 @@ class AtlasPageView(TemplateView):
         return context
 
 
+def atlas_search(request):
+    """Atlas search — proxy to the CRC gateway ``POST /api/search`` with the
+    clustering fuel, returning the full response for the browser clusterer
+    (whg/webpack/js/clustering.js).
+
+    Routes Atlas through the gateway (via Django, since the Pitt firewall only
+    admits the DO app server) instead of the legacy Django ``/search/index/``
+    ES path. BETA-gated while the client-side clustering UI is built.
+    """
+    if not (request.user.is_authenticated and request.user.can_access_beta):
+        return JsonResponse({"error": "beta access required"}, status=403)
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        options = json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        options = {}
+
+    from api.crc_client import crc_search
+    data = crc_search(options, user=request.user)
+    if data is None:
+        # Gateway unconfigured / unreachable — empty but well-formed so the
+        # client renders "no results" rather than erroring.
+        return JsonResponse({
+            "hits": [], "total": 0, "edges": [],
+            "clustering_params": None, "toponym_stoplist": [], "gateway": False,
+        })
+    data["gateway"] = True
+    return JsonResponse(data)
+
+
 def fetchArea(request):
     aid = request.GET.get('pk')
     area = Area.objects.filter(id=aid)
