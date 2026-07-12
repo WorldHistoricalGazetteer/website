@@ -1387,7 +1387,10 @@
     background: #fff;
 }
 .cluster-card.cluster-multi { border-left: 3px solid #2980b9; }
-.cluster-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cluster-card.cluster-highlight { box-shadow: 0 0 0 2px #2980b9; background: #f5faff; }
+.cluster-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; }
+.cluster-member { cursor: pointer; }
+.cluster-member:hover { background: #f1f6fb; border-radius: 4px; }
 .cluster-title { font-weight: 600; color: #b0413e; }
 .cluster-badge {
     font-size: 0.75rem; color: #2980b9; background: #eaf3fa;

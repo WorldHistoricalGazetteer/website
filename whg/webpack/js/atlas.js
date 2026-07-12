@@ -159,8 +159,19 @@ function waitMapLoad() {
             const features = heroMap.map.queryRenderedFeatures(e.point);
             if (features.length > 0 && features[0].layer.id.startsWith('places_')) {
                 const idx = features[0].id;
-                $('#atlas_search_results .result').eq(idx)
-                    .attr('data-map-clicked', 'true').click();
+                if (clusterFC && clusterFC.features[idx]) {
+                    // Gateway/cluster mode: highlight the marker + scroll to /
+                    // highlight the cluster card that contains this hit.
+                    const pid = clusterFC.features[idx].properties.pid;
+                    highlightHits([idx]);
+                    const $card = $(`#atlas_search_results .cluster-card[data-pids~="${pid}"]`);
+                    $('#atlas_search_results .cluster-card').removeClass('cluster-highlight');
+                    $card.addClass('cluster-highlight');
+                    if ($card.length) $card[0].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    $('#atlas_search_results .result').eq(idx)
+                        .attr('data-map-clicked', 'true').click();
+                }
             }
         });
         heroMap.map.on('mousemove', function (e) {
@@ -510,6 +521,26 @@ Promise.all([
         const id = $(this).data('whg-id') || $(this).data('pid');
         const path = $(this).data('whg-id') ? 'portal/' : 'detail';
         window.location.href = `/places/${id}/${path}`;
+    });
+
+    // ── BETA cluster panel → map sync ──
+    // Click a cluster card head → highlight + fit all its members' markers.
+    $(document).on('click', '#atlas_search_results .cluster-head', function () {
+        const $card = $(this).closest('.cluster-card');
+        const pids = String($card.data('pids') || '').split(' ').filter(Boolean);
+        if (!pids.length) return;
+        highlightHits(pidsToIndices(pids), { fit: true });
+        $('#atlas_search_results .cluster-card').removeClass('cluster-highlight');
+        $card.addClass('cluster-highlight');
+    });
+    // Click a single member → highlight + fit just that marker.
+    $(document).on('click', '#atlas_search_results .cluster-member', function (e) {
+        e.stopPropagation();
+        const pid = $(this).data('pid');
+        if (pid == null) return;
+        highlightHits(pidsToIndices([String(pid)]), { fit: true });
+        $('#atlas_search_results .cluster-card').removeClass('cluster-highlight');
+        $(this).closest('.cluster-card').addClass('cluster-highlight');
     });
 
     // ── Result item click handler ──
@@ -1273,6 +1304,33 @@ function initiateToponymSearch() {
 // cluster cards. The θ slider re-clusters the cached response live (no refetch).
 let gatewayData = null;            // cached last gateway response
 let clusterThetaOverride = null;   // θ slider value, or null → use params default
+let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
+let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
+
+function clearMapHighlight() {
+    try { heroMap.map.removeFeatureState({ source: 'places' }); } catch (e) { /* map not ready */ }
+}
+
+// Highlight the given hit indices on the map (+ optionally fit to them).
+function highlightHits(indices, { fit = false } = {}) {
+    if (!clusterFC) return;
+    clearMapHighlight();
+    indices.forEach(i => {
+        try { heroMap.map.setFeatureState({ source: 'places', id: i }, { highlight: true }); } catch (e) { /* */ }
+    });
+    if (fit) {
+        const feats = indices.map(i => clusterFC.features[i]).filter(Boolean);
+        if (feats.length) {
+            heroMap.map.fitViewport(bbox({ type: 'FeatureCollection', features: feats }),
+                { maxZoom: 12, padding: { top: 80, right: 400, bottom: 60, left: 80 } });
+        }
+    }
+}
+
+function pidsToIndices(pids) {
+    if (!clusterPidToIndex) return [];
+    return pids.map(p => clusterPidToIndex.get(p)).filter(i => i != null);
+}
 
 function isBetaUser() {
     const m = document.querySelector('meta[name="beta-user"]');
@@ -1357,7 +1415,10 @@ function renderClusters() {
         const rep = members[0] || {};
         const multi = members.length > 1;
         const namespaces = [...new Set(members.map(m => m.namespace).filter(Boolean))];
-        let html = `<div class="cluster-card${multi ? ' cluster-multi' : ''}" data-cluster="${ci}">`;
+        // Space-separated pids so the map-click handler can find this card via
+        // an attribute selector ([data-pids~="<pid>"]).
+        const pids = members.map(m => m.place_id).join(' ');
+        let html = `<div class="cluster-card${multi ? ' cluster-multi' : ''}" data-cluster="${ci}" data-pids="${escapeHtml(pids)}">`;
         html += `<div class="cluster-head">
             <span class="cluster-title">${escapeHtml(rep.title || '(untitled)')}</span>`;
         if (multi) {
@@ -1373,7 +1434,7 @@ function renderClusters() {
         if (multi) {
             html += `<div class="cluster-members">`;
             members.forEach(m => {
-                html += `<div class="cluster-member">`
+                html += `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
                     + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
                     + `<span class="member-ns">${escapeHtml(m.namespace || '')}</span>`
                     + `</div>`;
@@ -1384,8 +1445,10 @@ function renderClusters() {
         $resultsDiv.append(html);
     });
 
-    // Plot on the hero map
+    // Plot on the hero map + cache the pid→index map for panel↔map sync.
     const fc = hitsToFeatureCollection(hits, assignments);
+    clusterFC = fc;
+    clusterPidToIndex = new Map(hits.map((h, i) => [h.place_id, i]));
     heroMap.showResultFeatures(fc);
     if (fc.features.length > 0) {
         heroMap.map.fitViewport(bbox(fc), {
