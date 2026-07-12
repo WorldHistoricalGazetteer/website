@@ -555,6 +555,14 @@ Promise.all([
         $(this).closest('.cluster-card').addClass('cluster-highlight');
     });
 
+    // ── BETA dynamic portal: open place detail (from cluster cards/members and
+    //    from the portal's own live-cluster links). ──
+    $(document).on('click', '.atlas-portal-open', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openAtlasPortal($(this).data('portal-pid'));
+    });
+
     // ── Result item click handler ──
     $(document).on('click', '#atlas_search_results .result', function () {
         const $el = $(this);
@@ -1319,6 +1327,79 @@ let clusterThetaOverride = null;   // θ slider value, or null → use params de
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
+let lastClusters = [];             // last clusterHits() clusters (for the portal's live context)
+
+// ── Dynamic Atlas portal ────────────────────────────────────────────────────
+// Resolve one place on demand (/atlas/place/) and show it with its LIVE cluster
+// context (the other members of its current client-side cluster) — no fixed
+// cluster_id, so it reflects the current θ/weights.
+function findClusterFor(pid) {
+    return (lastClusters || []).find(c => c.memberIds && c.memberIds.includes(pid));
+}
+
+function openAtlasPortal(pid) {
+    if (!pid) return;
+    if (clusterPidToIndex && clusterPidToIndex.has(pid)) {
+        highlightHits([clusterPidToIndex.get(pid)], { fit: true });
+    }
+    const body = document.getElementById('atlas_portal_body');
+    document.getElementById('atlas_portal_title').textContent = 'Place';
+    body.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('atlas_portal_modal')).show();
+    $.ajax({
+        url: '/atlas/place/?id=' + encodeURIComponent(pid),
+        success: (place) => renderPortal(place, pid),
+        error: (err) => {
+            body.innerHTML = `<div class="p-3 text-danger">Could not load this place${err.status === 404 ? ' (not found)' : ''}.</div>`;
+        },
+    });
+}
+
+function renderPortal(place, pid) {
+    document.getElementById('atlas_portal_title').textContent = place.title || pid;
+    const attr = place.attribution || {};
+    let h = `<p class="portal-source"><strong>Source:</strong> ${escapeHtml(attr.name || place.namespace || '')}`;
+    if (attr.rights_holder) h += ` — ${escapeHtml(attr.rights_holder)}`;
+    if (attr.license__spdx_id) h += ` <span class="portal-license">(${escapeHtml(attr.license__spdx_id)})</span>`;
+    h += ` <span class="text-muted small">${escapeHtml(pid)}</span></p>`;
+
+    const names = (place.names || []).map(n => escapeHtml(n.label || n.toponym)).filter(Boolean);
+    if (names.length) h += `<p><strong>Names:</strong> ${names.join(', ')}</p>`;
+    const types = (place.types || []).map(t => escapeHtml(t.label || t.sourceLabel || t.identifier)).filter(Boolean);
+    if (types.length) h += `<p><strong>Types:</strong> ${types.join(', ')}</p>`;
+    if ((place.ccodes || []).length) h += `<p><strong>Countries:</strong> ${place.ccodes.map(escapeHtml).join(', ')}</p>`;
+    const ts = place.timespans || [];
+    if (ts.length) {
+        h += `<p><strong>Chronology:</strong> ${ts.map(s => `${s.start ?? s[0] ?? '?'}–${s.end ?? s[1] ?? '?'}`).join(', ')}</p>`;
+    }
+    const links = place.links || [];
+    if (links.length) {
+        h += `<p class="mb-1"><strong>Links:</strong></p><ul class="portal-links">`;
+        links.forEach(l => {
+            const id = l.identifier || l.uri || '';
+            h += `<li><span class="text-muted">${escapeHtml(l.type || 'seeAlso')}:</span> `
+                + `<a href="${escapeHtml(id)}" target="_blank" rel="noopener">${escapeHtml(id)}</a></li>`;
+        });
+        h += `</ul>`;
+    }
+
+    // Live cluster context (dynamic — reflects current θ/weights, no stored id).
+    const cl = findClusterFor(pid);
+    const others = cl ? cl.members.filter(m => m.place_id !== pid) : [];
+    if (others.length) {
+        h += `<hr><p class="portal-cluster-note"><i class="fas fa-layer-group me-1"></i>`
+            + `<strong>Currently grouped with ${others.length} other place${others.length !== 1 ? 's' : ''}</strong> `
+            + `in your search — the live grouping at the current merge settings:</p><ul class="portal-cluster-members">`;
+        others.forEach(m => {
+            h += `<li><a href="#" class="atlas-portal-open" data-portal-pid="${escapeHtml(m.place_id)}">`
+                + `${escapeHtml(m.title || m.place_id)}</a> <span class="text-muted small">${escapeHtml(m.namespace || '')}</span></li>`;
+        });
+        h += `</ul>`;
+    } else {
+        h += `<hr><p class="text-muted small">Not grouped with any other place at the current merge settings.</p>`;
+    }
+    document.getElementById('atlas_portal_body').innerHTML = h;
+}
 
 // Fallback weights when the gateway ships no clustering_params (mirrors
 // clustering.js DEFAULT_PARAMS / indexing clustering_params.json).
@@ -1444,6 +1525,7 @@ function renderClusters() {
         weights: weightOverrides,
         stoplist: gatewayData.toponym_stoplist || [],
     });
+    lastClusters = clusters;
     console.log('Atlas cluster', debug, params);
 
     const countEl = document.getElementById('atlas_results_count');
@@ -1464,6 +1546,9 @@ function renderClusters() {
         if (multi) {
             html += `<span class="cluster-badge" title="places merged into this cluster">`
                 + `${members.length}<i class="fas fa-layer-group ms-1"></i></span>`;
+        } else {
+            // Single-place cluster: the "open details" affordance lives on the head.
+            html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
         html += `</div>`;
         if (namespaces.length) {
@@ -1477,6 +1562,7 @@ function renderClusters() {
                 html += `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
                     + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
                     + `<span class="member-ns">${escapeHtml(m.namespace || '')}</span>`
+                    + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`
                     + `</div>`;
             });
             html += `</div>`;

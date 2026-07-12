@@ -171,6 +171,21 @@
         </div>
     </div>
 
+    <!-- BETA: dynamic Atlas portal — per-place detail resolved on demand from
+         the gateway, with the live (client-side) cluster context. Not the
+         legacy fixed-cluster-id portal. -->
+    <div class="modal fade" id="atlas_portal_modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="atlas_portal_title">Place</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="atlas_portal_body"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Welcome / landing panel (centered on map, fades on interaction) -->
     <div id="atlas_welcome" class="atlas-welcome">
         <button id="atlas_welcome_dismiss" class="atlas-welcome-close" aria-label="Dismiss">

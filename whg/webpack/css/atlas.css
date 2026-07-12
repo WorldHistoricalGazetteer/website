@@ -1418,6 +1418,15 @@
 }
 .member-title { flex: 1; }
 .member-ns { font-size: 0.68rem; color: #8a8f94; text-transform: uppercase; }
+.atlas-portal-open { color: #2980b9; }
+.atlas-portal-open:hover { color: #1c5a86; }
+/* Dynamic portal modal */
+#atlas_portal_body .portal-source { color: #5a5f64; }
+#atlas_portal_body .portal-license { color: #2980b9; }
+#atlas_portal_body .portal-links { margin: 0 0 .5rem; padding-left: 1.1rem; font-size: 0.85rem; word-break: break-all; }
+#atlas_portal_body .portal-cluster-note { color: #b0413e; }
+#atlas_portal_body .portal-cluster-members { padding-left: 1.1rem; }
+#atlas_portal_body .portal-cluster-members a { cursor: pointer; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Tour relaunch button (bottom-left)
