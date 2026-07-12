@@ -1317,6 +1317,22 @@
     background: #2980b9;
     color: #fff;
 }
+/* Persisted opt-out — quiet, secondary to the tour link */
+.atlas-welcome-dontshow {
+    display: block;
+    margin: 12px auto 0;
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    font-size: 0.72rem;
+    color: #8a8f94;
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.2s;
+}
+.atlas-welcome-dontshow:hover {
+    color: #5a5f64;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Tour relaunch button (bottom-left)

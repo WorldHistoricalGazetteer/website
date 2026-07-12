@@ -471,8 +471,20 @@ Promise.all([
     }
 
     // ── Welcome panel: fade out on control interaction ──
+    // Persisted opt-out (mirrors atlasTour.js's TOUR_SEEN_KEY): once the user
+    // clicks "Don't show this again" the panel never returns, and the
+    // first-visit auto-tour is suppressed too. The tour stays relaunchable via
+    // the bottom-left button.
+    const WELCOME_DISMISSED_KEY = 'whg_atlas_welcome_dismissed';
+    const welcomeDismissed = (() => {
+        try { return localStorage.getItem(WELCOME_DISMISSED_KEY) === 'true'; }
+        catch (e) { return false; }
+    })();
     const welcomePanel = document.getElementById('atlas_welcome');
-    if (welcomePanel) {
+    if (welcomePanel && welcomeDismissed) {
+        // Suppress entirely on subsequent visits — no fade, just gone.
+        welcomePanel.style.display = 'none';
+    } else if (welcomePanel) {
         const fadeOutWelcome = () => {
             welcomePanel.classList.add('atlas-welcome-hidden');
             welcomePanel.addEventListener('transitionend', () => {
@@ -480,9 +492,18 @@ Promise.all([
             }, { once: true });
         };
 
-        // Dismiss button
+        // Dismiss button (this visit only)
         const dismissBtn = document.getElementById('atlas_welcome_dismiss');
         if (dismissBtn) dismissBtn.addEventListener('click', fadeOutWelcome);
+
+        // "Don't show this again" — persist the opt-out, then fade out.
+        const dontShowBtn = document.getElementById('atlas_welcome_dontshow');
+        if (dontShowBtn) {
+            dontShowBtn.addEventListener('click', () => {
+                try { localStorage.setItem(WELCOME_DISMISSED_KEY, 'true'); } catch (e) { /* private mode */ }
+                fadeOutWelcome();
+            });
+        }
 
         // Fade when any control receives focus/click
         const controlSelectors = [
@@ -526,7 +547,7 @@ Promise.all([
     }
 
     // ── Auto-start tour on first visit ──
-    if (!hasSeenAtlasTour() && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+    if (!hasSeenAtlasTour() && !welcomeDismissed && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
         // Delay slightly to let the map finish rendering
         setTimeout(() => {
             const wp = document.getElementById('atlas_welcome');
