@@ -175,6 +175,81 @@ function waitDocumentReady() {
     return new Promise((resolve) => $(document).ready(() => resolve()));
 }
 
+// ── Welcome panel ──────────────────────────────────────────────────────────
+// Persisted opt-out (mirrors atlasTour.js's TOUR_SEEN_KEY): once the user
+// clicks "Don't show this again" the panel never returns, and the first-visit
+// auto-tour is suppressed too (the tour stays relaunchable via the bottom-left
+// button). The panel is shown immediately in the template, so its controls are
+// wired on document-ready — NOT behind the map-load gate below — otherwise a
+// slow/failed map load would trap the user behind an undismissable panel.
+const WELCOME_DISMISSED_KEY = 'whg_atlas_welcome_dismissed';
+function isWelcomeDismissed() {
+    try { return localStorage.getItem(WELCOME_DISMISSED_KEY) === 'true'; }
+    catch (e) { return false; }
+}
+// Shared so the map-drag handler (added after map load) can also fade the panel.
+let fadeOutWelcome = () => {};
+
+function setupWelcomePanel() {
+    const welcomePanel = document.getElementById('atlas_welcome');
+    if (!welcomePanel) return;
+    if (isWelcomeDismissed()) {
+        // Suppress entirely on subsequent visits — no fade, just gone.
+        welcomePanel.style.display = 'none';
+        return;
+    }
+    fadeOutWelcome = () => {
+        welcomePanel.classList.add('atlas-welcome-hidden');
+        welcomePanel.addEventListener('transitionend', () => {
+            welcomePanel.style.display = 'none';
+        }, { once: true });
+    };
+
+    // Dismiss button (this visit only)
+    const dismissBtn = document.getElementById('atlas_welcome_dismiss');
+    if (dismissBtn) dismissBtn.addEventListener('click', fadeOutWelcome);
+
+    // "Don't show this again" — persist the opt-out, then fade out.
+    const dontShowBtn = document.getElementById('atlas_welcome_dontshow');
+    if (dontShowBtn) {
+        dontShowBtn.addEventListener('click', () => {
+            try { localStorage.setItem(WELCOME_DISMISSED_KEY, 'true'); } catch (e) { /* private mode */ }
+            fadeOutWelcome();
+        });
+    }
+
+    // Fade when any (already-present) control receives focus/click.
+    const controlSelectors = [
+        '#atlas_search_input',
+        '.search-mode-toggle .btn',
+        '.atlas-control-buttons .btn',
+        '#temporal_control',
+        '#atlas_initiate_search',
+        '#atlas_exact_match',
+        '#atlas_clear_search',
+        '.maplibregl-ctrl-zoom-in',
+        '.maplibregl-ctrl-zoom-out',
+        '.maplibregl-ctrl-globe',
+    ];
+    controlSelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+            el.addEventListener('focus', fadeOutWelcome, { once: true });
+            el.addEventListener('click', fadeOutWelcome, { once: true });
+        });
+    });
+
+    // Tour link inside welcome panel
+    const tourLink = document.getElementById('atlas_start_tour_link');
+    if (tourLink) {
+        tourLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            fadeOutWelcome();
+            setTimeout(() => startAtlasTour(), 400);
+        });
+    }
+}
+waitDocumentReady().then(setupWelcomePanel);
+
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready
    ═══════════════════════════════════════════════════════════════════ */
@@ -470,75 +545,12 @@ Promise.all([
         }
     }
 
-    // ── Welcome panel: fade out on control interaction ──
-    // Persisted opt-out (mirrors atlasTour.js's TOUR_SEEN_KEY): once the user
-    // clicks "Don't show this again" the panel never returns, and the
-    // first-visit auto-tour is suppressed too. The tour stays relaunchable via
-    // the bottom-left button.
-    const WELCOME_DISMISSED_KEY = 'whg_atlas_welcome_dismissed';
-    const welcomeDismissed = (() => {
-        try { return localStorage.getItem(WELCOME_DISMISSED_KEY) === 'true'; }
-        catch (e) { return false; }
-    })();
-    const welcomePanel = document.getElementById('atlas_welcome');
-    if (welcomePanel && welcomeDismissed) {
-        // Suppress entirely on subsequent visits — no fade, just gone.
-        welcomePanel.style.display = 'none';
-    } else if (welcomePanel) {
-        const fadeOutWelcome = () => {
-            welcomePanel.classList.add('atlas-welcome-hidden');
-            welcomePanel.addEventListener('transitionend', () => {
-                welcomePanel.style.display = 'none';
-            }, { once: true });
-        };
-
-        // Dismiss button (this visit only)
-        const dismissBtn = document.getElementById('atlas_welcome_dismiss');
-        if (dismissBtn) dismissBtn.addEventListener('click', fadeOutWelcome);
-
-        // "Don't show this again" — persist the opt-out, then fade out.
-        const dontShowBtn = document.getElementById('atlas_welcome_dontshow');
-        if (dontShowBtn) {
-            dontShowBtn.addEventListener('click', () => {
-                try { localStorage.setItem(WELCOME_DISMISSED_KEY, 'true'); } catch (e) { /* private mode */ }
-                fadeOutWelcome();
-            });
-        }
-
-        // Fade when any control receives focus/click
-        const controlSelectors = [
-            '#atlas_search_input',
-            '.search-mode-toggle .btn',
-            '.atlas-control-buttons .btn',
-            '#temporal_control',
-            '#atlas_initiate_search',
-            '#atlas_exact_match',
-            '#atlas_clear_search',
-            '.maplibregl-ctrl-zoom-in',
-            '.maplibregl-ctrl-zoom-out',
-            '.maplibregl-ctrl-globe',
-        ];
-        controlSelectors.forEach(sel => {
-            document.querySelectorAll(sel).forEach(el => {
-                el.addEventListener('focus', fadeOutWelcome, { once: true });
-                el.addEventListener('click', fadeOutWelcome, { once: true });
-            });
-        });
-
-        // Also fade on map interaction
-        heroMap.map.on('mousedown', fadeOutWelcome);
-        heroMap.map.on('touchstart', fadeOutWelcome);
-
-        // Tour link inside welcome panel
-        const tourLink = document.getElementById('atlas_start_tour_link');
-        if (tourLink) {
-            tourLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                fadeOutWelcome();
-                setTimeout(() => startAtlasTour(), 400);
-            });
-        }
-    }
+    // ── Welcome panel: fade on map interaction ──
+    // The panel's own controls (dismiss, "don't show again", control-focus
+    // fade, tour link) are wired on document-ready in setupWelcomePanel(),
+    // independent of map load; here we add the map-drag fade now the map exists.
+    heroMap.map.on('mousedown', fadeOutWelcome);
+    heroMap.map.on('touchstart', fadeOutWelcome);
 
     // ── Tour relaunch button (bottom-left) ──
     const tourBtn = document.getElementById('atlas_tour_btn');
@@ -547,7 +559,7 @@ Promise.all([
     }
 
     // ── Auto-start tour on first visit ──
-    if (!hasSeenAtlasTour() && !welcomeDismissed && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+    if (!hasSeenAtlasTour() && !isWelcomeDismissed() && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
         // Delay slightly to let the map finish rendering
         setTimeout(() => {
             const wp = document.getElementById('atlas_welcome');
