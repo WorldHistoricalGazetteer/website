@@ -151,6 +151,18 @@
             </label>
             <input type="range" id="atlas_cluster_theta" min="0.30" max="0.90" step="0.01" value="0.55">
         </div>
+        <!-- BETA: per-signal weight sliders — re-cluster live (relative weights;
+             the composite is a weighted average so they need not sum to 1). -->
+        <details id="atlas_weight_controls" class="weight-controls" style="display:none;">
+            <summary>Adjust signal weights</summary>
+            <div class="weight-grid">
+                <label>Name<input type="range" class="weight-slider" data-facet="name" min="0" max="1" step="0.05"><span class="weight-val" data-facet="name"></span></label>
+                <label>Location<input type="range" class="weight-slider" data-facet="spatial" min="0" max="1" step="0.05"><span class="weight-val" data-facet="spatial"></span></label>
+                <label>Time<input type="range" class="weight-slider" data-facet="temporal" min="0" max="1" step="0.05"><span class="weight-val" data-facet="temporal"></span></label>
+                <label>Type<input type="range" class="weight-slider" data-facet="type" min="0" max="1" step="0.05"><span class="weight-val" data-facet="type"></span></label>
+                <label>Links<input type="range" class="weight-slider" data-facet="link" min="0" max="1" step="0.05"><span class="weight-val" data-facet="link"></span></label>
+            </div>
+        </details>
         <div id="atlas_result_container">
             <div id="atlas_no_results" class="bg-light p-2 rounded" style="display:none;">
                 No results — please modify your search terms or filters.

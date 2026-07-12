@@ -372,6 +372,18 @@ Promise.all([
         thetaSlider.addEventListener('input', debounce(applyTheta, 120));
     }
 
+    // ── BETA: per-signal weight sliders — re-cluster live ──
+    const applyWeights = debounce(() => { if (gatewayData) renderClusters(); }, 120);
+    document.querySelectorAll('.weight-slider').forEach(sl => {
+        sl.addEventListener('input', () => {
+            const f = sl.dataset.facet;
+            weightOverrides[f] = parseFloat(sl.value);
+            const rd = document.querySelector(`.weight-val[data-facet="${f}"]`);
+            if (rd) rd.textContent = parseFloat(sl.value).toFixed(2);
+            applyWeights();
+        });
+    });
+
     // ── Wire exact match toggle ──
     document.getElementById('atlas_exact_match').addEventListener('click', function () {
         exactMatch = !exactMatch;
@@ -1304,8 +1316,36 @@ function initiateToponymSearch() {
 // cluster cards. The θ slider re-clusters the cached response live (no refetch).
 let gatewayData = null;            // cached last gateway response
 let clusterThetaOverride = null;   // θ slider value, or null → use params default
+let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
+
+// Fallback weights when the gateway ships no clustering_params (mirrors
+// clustering.js DEFAULT_PARAMS / indexing clustering_params.json).
+const DEFAULT_CLUSTER_WEIGHTS = { name: 0.35, spatial: 0.20, temporal: 0.15, type: 0.15, link: 0.15 };
+
+// Seed the θ + weight sliders from the shipped clustering_params (called once
+// per search, before the user starts tuning). Resets any prior overrides.
+function seedClusterControls(clusteringParams) {
+    clusterThetaOverride = null;
+    weightOverrides = {};
+    const thr = (clusteringParams && clusteringParams.thresholds) || {};
+    const wts = Object.assign({}, DEFAULT_CLUSTER_WEIGHTS, (clusteringParams && clusteringParams.weights) || {});
+    const thetaSlider = document.getElementById('atlas_cluster_theta');
+    if (thetaSlider && thr.theta_query != null) {
+        thetaSlider.value = thr.theta_query;
+        const tv = document.getElementById('atlas_cluster_theta_val');
+        if (tv) tv.textContent = Number(thr.theta_query).toFixed(2);
+    }
+    document.querySelectorAll('.weight-slider').forEach(sl => {
+        const f = sl.dataset.facet;
+        if (wts[f] != null) {
+            sl.value = wts[f];
+            const rd = document.querySelector(`.weight-val[data-facet="${f}"]`);
+            if (rd) rd.textContent = Number(wts[f]).toFixed(2);
+        }
+    });
+}
 
 function clearMapHighlight() {
     try { heroMap.map.removeFeatureState({ source: 'places' }); } catch (e) { /* map not ready */ }
@@ -1347,11 +1387,7 @@ function initiateGatewaySearch(options) {
         headers: { 'X-CSRFToken': csrfToken },
         success: (data) => {
             gatewayData = data;
-            clusterThetaOverride = null;
-            const slider = document.getElementById('atlas_cluster_theta');
-            if (slider && data.clustering_params && data.clustering_params.thresholds) {
-                slider.value = data.clustering_params.thresholds.theta_query ?? slider.value;
-            }
+            seedClusterControls(data.clustering_params);
             renderClusters();
         },
         error: (err) => {
@@ -1397,12 +1433,16 @@ function renderClusters() {
     document.getElementById('atlas_no_results').style.display = hits.length === 0 ? 'block' : 'none';
     const controls = document.getElementById('atlas_cluster_controls');
     if (controls) controls.style.display = hits.length ? '' : 'none';
+    const weightControls = document.getElementById('atlas_weight_controls');
+    if (weightControls) weightControls.style.display = hits.length ? '' : 'none';
 
     const { clusters, assignments, params, debug } = clusterHits({
         hits,
         edges: gatewayData.edges || [],
         params: gatewayData.clustering_params || undefined,
         theta: clusterThetaOverride == null ? undefined : clusterThetaOverride,
+        weights: weightOverrides,
+        stoplist: gatewayData.toponym_stoplist || [],
     });
     console.log('Atlas cluster', debug, params);
 

@@ -44,6 +44,12 @@ const MERGE_RELATIONS = new Set(['sameAs', 'exactMatch', 'closeMatch']);
 // default to respecting it as a cannot-link, but keep it toggleable.
 const SPLIT_RELATION = 'distinct';
 
+// Generic high-frequency names (the gateway's toponym_stoplist) are weak
+// co-reference evidence — many unrelated places share them — so the name
+// signal's weight is scaled by this factor when either hit's matched toponym
+// is on the stoplist. Down-weight, not drop (plan §1).
+const STOPLIST_NAME_FACTOR = 0.2;
+
 // ---------------------------------------------------------------------------
 // Signal functions — one-to-one with clustering/calibrate_params.py.
 // Each returns [0,1]; each returns 0.0 when its evidence is missing on either
@@ -156,6 +162,11 @@ function defaultAccessors(opts = {}) {
 			const first = names.find(n => n && Array.isArray(n.phon_emb));
 			return first ? first.phon_emb : null;
 		},
+		// Representative toponym string (for stoplist lookup): the query-matched
+		// name, else the first name label, else the title.
+		nameStr: (h) => (h.query_match && h.query_match.name)
+			|| (Array.isArray(h.names) && h.names[0] && h.names[0].label)
+			|| h.title || null,
 	};
 }
 
@@ -214,13 +225,25 @@ const pairKey = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
  * @returns {{composite:number, signals:object, weightUsed:number}}
  */
 export function scorePair(ha, hb, ctx) {
-	const { acc, weights, edgeIndex } = ctx;
+	const { acc, weights, edgeIndex, stopSet } = ctx;
 	const signals = {};
 	const w = {};
 
-	// name (s.n) — needs both embeddings
+	// name (s.n) — needs both embeddings; down-weighted when either matched
+	// toponym is a generic high-frequency name (toponym_stoplist).
 	const ea = acc.embedding(ha); const eb = acc.embedding(hb);
-	if (ea && eb) { signals.name = cosineByte(ea, eb); w.name = weights.name; }
+	if (ea && eb) {
+		signals.name = cosineByte(ea, eb);
+		w.name = weights.name;
+		if (stopSet && stopSet.size) {
+			const na = (acc.nameStr(ha) || '').toLowerCase();
+			const nb = (acc.nameStr(hb) || '').toLowerCase();
+			// Scale the signal VALUE (not the weight): under graceful-degradation
+			// renormalisation, scaling the weight is a no-op when name is the only
+			// present signal, whereas scaling the value correctly weakens the match.
+			if (stopSet.has(na) || stopSet.has(nb)) signals.name *= STOPLIST_NAME_FACTOR;
+		}
+	}
 
 	// spatial (s.sp) — needs both lat/lng
 	const la = acc.latLng(ha); const lb = acc.latLng(hb);
@@ -268,6 +291,8 @@ export function clusterHits(p) {
 	const theta = p.theta ?? (params.thresholds || DEFAULT_PARAMS.thresholds).theta_query;
 	const respectDistinct = p.respectDistinct !== false;
 	const acc = Object.assign(defaultAccessors(p.accessors || {}), p.accessors || {});
+	// Generic-name down-weighting set (lower-cased toponym_stoplist).
+	const stopSet = new Set((p.stoplist || []).map((s) => String(s).toLowerCase()));
 	const hits = p.hits || [];
 
 	const ids = hits.map((h) => acc.id(h)).filter((x) => x != null);
@@ -298,7 +323,7 @@ export function clusterHits(p) {
 	const scored = [];
 	for (let i = 0; i < hits.length; i++) {
 		for (let j = i + 1; j < hits.length; j++) {
-			const r = scorePair(hits[i], hits[j], { acc, weights, edgeIndex });
+			const r = scorePair(hits[i], hits[j], { acc, weights, edgeIndex, stopSet });
 			if (r.composite >= theta) scored.push({ a: acc.id(hits[i]), b: acc.id(hits[j]), ...r });
 		}
 	}
