@@ -69,6 +69,36 @@ def _headers() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
+def crc_places(ids: list, user=None) -> dict | None:
+    """Call the CRC gateway ``POST /api/places`` and return the full response.
+
+    Fetches complete ``PlaceDetail`` records (names, types, geometries, links,
+    descriptions, relations, timespans, …) by namespaced place id — the data
+    source for the dynamic Atlas portal. Returns ``None`` when the gateway is
+    unconfigured or the call fails.
+    """
+    if not _is_enabled(user):
+        return None
+    if isinstance(ids, str):
+        ids = [ids]
+    ids = [str(i) for i in (ids or []) if i]
+    if not ids:
+        return None
+    try:
+        url = f"{_gateway_url()}/api/places"
+        resp = requests.post(url, json={"ids": ids}, headers=_headers(), timeout=_timeout())
+        if 200 <= resp.status_code < 300:
+            return resp.json()
+        logger.warning("CRC gateway POST /api/places %s: %s",
+                       resp.status_code, resp.text[:200])
+        return None
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.warning("CRC gateway /api/places network error: %s", exc)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("CRC gateway /api/places unexpected: %s", exc)
+    return None
+
+
 def crc_search(options: dict, user=None) -> dict | None:
     """Call the CRC gateway ``POST /api/search`` and return the FULL response.
 

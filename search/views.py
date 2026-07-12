@@ -250,6 +250,42 @@ def atlas_search(request):
     return JsonResponse(data)
 
 
+def atlas_place(request):
+    """Dynamic Atlas portal — resolve one place on demand from the CRC gateway
+    (`/api/places`) and enrich it with the source's registry attribution.
+
+    Per-place, not per-cluster: Atlas clusters are dynamic/client-side with no
+    persistent cluster_id, so the portal resolves a place by id and the browser
+    supplies the live cluster context. BETA-gated.
+    """
+    if not (request.user.is_authenticated and request.user.can_access_beta):
+        return JsonResponse({"error": "beta access required"}, status=403)
+    pid = request.GET.get("id") or request.GET.get("pid")
+    if not pid:
+        return JsonResponse({"error": "missing id"}, status=400)
+
+    from api.crc_client import crc_places
+    data = crc_places([pid], user=request.user)
+    places = (data or {}).get("places") or []
+    if not places:
+        return JsonResponse({"error": "not found", "id": pid}, status=404)
+    place = places[0]
+
+    # Enrich with the source authority's attribution (registry, per-namespace).
+    ns = place.get("namespace") or (pid.split(":", 1)[0] if ":" in pid else "")
+    if ns:
+        from api.models import GazetteerRegistryEntry
+        entry = (GazetteerRegistryEntry.objects
+                 .filter(namespace=ns, entry_class="authority")
+                 .values("id", "name", "description", "citation_text",
+                         "rights_holder", "source_url", "license_url",
+                         "license__spdx_id", "license__label", "license__url")
+                 .first())
+        if entry:
+            place["attribution"] = entry
+    return JsonResponse(place)
+
+
 def fetchArea(request):
     aid = request.GET.get('pk')
     area = Area.objects.filter(id=aid)
