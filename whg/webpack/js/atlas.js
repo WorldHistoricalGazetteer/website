@@ -563,6 +563,19 @@ Promise.all([
         openAtlasPortal($(this).data('portal-pid'));
     });
 
+    // ── BETA AAT type facet: toggle a hierarchical type filter, re-search ──
+    $(document).on('click', '#atlas_type_facets .type-facet-chip', function () {
+        const id = parseInt($(this).data('aat-id'), 10);
+        if (Number.isNaN(id)) return;
+        const i = selectedAatTypes.indexOf(id);
+        if (i >= 0) selectedAatTypes.splice(i, 1); else selectedAatTypes.push(id);
+        initiateToponymSearch({ preserveFacets: true });
+    });
+    $(document).on('click', '#atlas_type_facets .type-facet-clear', function () {
+        selectedAatTypes = [];
+        initiateToponymSearch({ preserveFacets: true });
+    });
+
     // ── Result item click handler ──
     $(document).on('click', '#atlas_search_results .result', function () {
         const $el = $(this);
@@ -1277,12 +1290,15 @@ function renderSelectionChips() {
 
 /* ── Toponym search ── */
 
-function initiateToponymSearch() {
+function initiateToponymSearch(opts = {}) {
     if (searchDisabled) return;
+    // A fresh query clears the AAT type-facet selection; a facet toggle
+    // (preserveFacets) re-searches with the same query + updated facet filter.
+    if (!opts.preserveFacets) selectedAatTypes = [];
     const input = document.getElementById('atlas_search_input');
     const qstr = input.value.trim();
 
-    if (!qstr && !(typeTree && typeTree.selectionCount() > 0)) {
+    if (!qstr && !(typeTree && typeTree.selectionCount() > 0) && !selectedAatTypes.length) {
         console.log('Atlas: need a search term or type filter');
         return;
     }
@@ -1328,6 +1344,30 @@ let weightOverrides = {};          // per-facet weight slider overrides (merged 
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
 let lastClusters = [];             // last clusterHits() clusters (for the portal's live context)
+let selectedAatTypes = [];         // AAT concept ids selected in the type facet (hierarchical filter)
+
+// Render the result-driven AAT type facet from the gateway's facets.aat_types
+// ([{aat_id,label,count}]). Clicking a chip toggles a hierarchical aat_types
+// filter and re-runs the search (preserving the query + facet selection).
+function renderTypeFacets(facets) {
+    const el = document.getElementById('atlas_type_facets');
+    if (!el) return;
+    const types = (facets && facets.aat_types) || [];
+    if (!types.length && !selectedAatTypes.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.style.display = '';
+    let h = '<span class="type-facets-label">Types:</span>';
+    types.forEach(t => {
+        const sel = selectedAatTypes.includes(t.aat_id);
+        h += `<button class="type-facet-chip${sel ? ' selected' : ''}" data-aat-id="${t.aat_id}" `
+            + `title="${escapeHtml(t.label || '')}${sel ? ' (selected)' : ''}">`
+            + `${escapeHtml(t.label || String(t.aat_id))} <span class="type-facet-count">${t.count}</span></button>`;
+    });
+    // A "clear" affordance for any selected types not present in the current facet list.
+    if (selectedAatTypes.length) {
+        h += `<button class="type-facet-clear" title="Clear type filter"><i class="fas fa-times"></i> clear</button>`;
+    }
+    el.innerHTML = h;
+}
 
 // ── Dynamic Atlas portal ────────────────────────────────────────────────────
 // Resolve one place on demand (/atlas/place/) and show it with its LIVE cluster
@@ -1526,6 +1566,7 @@ function renderClusters() {
         stoplist: gatewayData.toponym_stoplist || [],
     });
     lastClusters = clusters;
+    renderTypeFacets(gatewayData.facets);
     console.log('Atlas cluster', debug, params);
 
     const countEl = document.getElementById('atlas_results_count');
@@ -1636,6 +1677,7 @@ function gatherToponymOptions(qstr) {
         countries: [],
         userareas: [],
         spatial: spatialMode,
+        aat_types: selectedAatTypes.slice(),
     };
 }
 

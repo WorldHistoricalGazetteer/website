@@ -144,6 +144,19 @@ def crc_search(options: dict, user=None) -> dict | None:
         if types:
             body["types"] = types
 
+    # AAT type facet filter — hierarchical (concept + descendants), list of ints.
+    aat_types = options.get("aat_types")
+    if aat_types:
+        if isinstance(aat_types, str):
+            aat_types = aat_types.split(",")
+        ids = []
+        for t in aat_types:
+            s = str(t).strip()
+            if s.isdigit():
+                ids.append(int(s))
+        if ids:
+            body["aat_types"] = ids
+
     namespaces = options.get("namespaces")
     if namespaces:
         if isinstance(namespaces, str):

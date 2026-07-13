@@ -1387,6 +1387,21 @@
 .weight-grid label { display: contents; }
 .weight-grid input[type="range"] { width: 100%; }
 .weight-val { font-variant-numeric: tabular-nums; color: #2980b9; min-width: 2.2em; text-align: right; }
+/* AAT type facet (result-driven, hierarchical) */
+.type-facets {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+    padding: 6px 12px; border-bottom: 1px solid #e3e6e9;
+}
+.type-facets-label { font-size: 0.75rem; color: #8a8f94; margin-right: 2px; }
+.type-facet-chip {
+    font-size: 0.75rem; border: 1px solid #ccd3da; background: #fff; color: #333;
+    border-radius: 12px; padding: 1px 9px; cursor: pointer; transition: all 0.15s;
+}
+.type-facet-chip:hover { border-color: #2980b9; }
+.type-facet-chip.selected { background: #2980b9; color: #fff; border-color: #2980b9; }
+.type-facet-count { opacity: 0.7; font-variant-numeric: tabular-nums; }
+.type-facet-clear { font-size: 0.72rem; background: none; border: none; color: #8a8f94; cursor: pointer; }
+.type-facet-clear:hover { color: #b0413e; }
 .cluster-theta-label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .cluster-theta-hint { cursor: help; color: #8a8f94; }
 .cluster-theta-val { font-variant-numeric: tabular-nums; color: #2980b9; font-weight: 600; }
