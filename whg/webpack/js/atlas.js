@@ -367,9 +367,20 @@ function resetTemporalControl() {
 // The Gazetteers "Hide gazetteers outside Date Range filter" switch only makes
 // sense while a Date Range filter is active — disable + clear it otherwise.
 function updateGazetteerPeriodSwitch() {
-    const sw = document.getElementById('gazetteer_filter_period');
+    setGazetteerCoverageSwitch('gazetteer_filter_period', temporalMode !== 'off');
+}
+
+// Likewise, the "Hide gazetteers outside Area filter" switch only makes sense
+// once one or more areas have been selected.
+function updateGazetteerAreaSwitch() {
+    setGazetteerCoverageSwitch('gazetteer_filter_area', selectedRegions.length > 0);
+}
+
+// Enable/disable a coverage-filter switch, clearing it (and its stub note) when
+// disabled, and dimming its label.
+function setGazetteerCoverageSwitch(id, active) {
+    const sw = document.getElementById(id);
     if (!sw) return;
-    const active = temporalMode !== 'off';
     sw.disabled = !active;
     if (!active && sw.checked) {
         sw.checked = false;
@@ -1583,6 +1594,7 @@ function updateSelectionOverlay() {
 }
 
 function renderSelectionChips() {
+    updateGazetteerAreaSwitch();   // keep the coverage "Area" switch in sync with the selection
     const container = document.getElementById('selection_chips');
     if (selectedRegions.length === 0) {
         container.innerHTML = '';

@@ -82,6 +82,57 @@ maplibregl.Map.prototype.clearHighlights = function () {
 	this.highlights = [];
 }
 
+// Dynamically load a gazetteer vector tileset (one not in the base whg-context
+// style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
+// so the caller (heroMap.showGazetteer) can read vector_layers + bounds. The
+// baseId rule (single vector_layer → `id`; multi → `${id}__${sourceLayer}`) MUST
+// stay in sync with heroMap.showGazetteer's interaction wiring.
+maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
+	if (!id) return null;
+	const tilejson = await fetchJSON(getTilejsonURL(id));
+	if (!this.getSource(id)) {
+		this.addSource(id, {
+			type: 'vector',
+			tiles: tilejson.tiles || [],
+			minzoom: tilejson.minzoom ?? 0,
+			maxzoom: tilejson.maxzoom ?? 14,
+			attribution: tilejson.attribution || '',
+			bounds: tilejson.bounds || undefined,
+		});
+	}
+	// Place dynamic layers below the lowest label so symbols stay legible.
+	const beforeId = this.getStyle().layers.find(l => l.type === 'symbol')?.id;
+	const vectorLayers = (tilejson.vector_layers && tilejson.vector_layers.length)
+		? tilejson.vector_layers
+		: [{ id }];
+	for (const vl of vectorLayers) {
+		const sourceLayer = vl.id;
+		const baseId = vectorLayers.length > 1 ? `${id}__${sourceLayer}` : id;
+		if (!this.getLayer(`${baseId}_fill`)) {
+			this.addLayer({
+				id: `${baseId}_fill`, type: 'fill', source: id, 'source-layer': sourceLayer,
+				filter: ['==', ['geometry-type'], 'Polygon'],
+				paint: { 'fill-color': 'rgb(100, 140, 190)', 'fill-opacity': 0.12, 'fill-outline-color': 'rgba(50, 80, 120, 0.35)' },
+			}, beforeId);
+		}
+		if (!this.getLayer(`${baseId}_line`)) {
+			this.addLayer({
+				id: `${baseId}_line`, type: 'line', source: id, 'source-layer': sourceLayer,
+				filter: ['match', ['geometry-type'], ['Polygon', 'LineString'], true, false],
+				paint: { 'line-color': '#2563eb', 'line-width': 1, 'line-opacity': 0.6 },
+			}, beforeId);
+		}
+		if (!this.getLayer(`${baseId}_circle`)) {
+			this.addLayer({
+				id: `${baseId}_circle`, type: 'circle', source: id, 'source-layer': sourceLayer,
+				filter: ['==', ['geometry-type'], 'Point'],
+				paint: { 'circle-radius': 4, 'circle-color': '#e04040', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1, 'circle-opacity': 0.85 },
+			}, beforeId);
+		}
+	}
+	return tilejson;
+};
+
 function getStyleURL(style) {
 	return `${process.env.TILEBOSS}/styles/${style}/style.json`; 
 }
