@@ -152,6 +152,9 @@
     color: #fff;
     box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
 }
+/* Inactive label text carries the mode's palette colour (matches the idle key). */
+.search-mode-toggle .btn[data-search-mode="areas"]:not(.active) { color: var(--atlas-areas); }
+.search-mode-toggle .btn[data-search-mode="toponyms"]:not(.active) { color: var(--atlas-places); }
 /* Mode identity via a strong border on the search bar (no background wash). */
 #floating_search.mode-areas .floating-search-inner { border-color: var(--atlas-areas); }
 #floating_search.mode-toponyms .floating-search-inner { border-color: var(--atlas-places); }
@@ -280,6 +283,13 @@
 .temporal-mode-toggle .btn.active {
     background: #546e7a;
     border-color: #455a64;
+    color: #fff;
+}
+/* "Date Range" carries the time palette: ochre label when off, ochre fill when on. */
+.temporal-mode-toggle .btn[data-temporal-mode="range"]:not(.active) { color: var(--atlas-time); }
+.temporal-mode-toggle .btn[data-temporal-mode="range"].active {
+    background: var(--atlas-time);
+    border-color: #a5370a;
     color: #fff;
 }
 .temporal-mode-toggle .btn:hover:not(.active) {
@@ -1546,6 +1556,9 @@
 .weight-grid label { display: contents; }
 .weight-grid input[type="range"] { width: 100%; }
 .weight-val { font-variant-numeric: tabular-nums; color: #2980b9; min-width: 2.2em; text-align: right; }
+/* Same-gazetteer repulsion sits apart from the attraction weights (it subtracts,
+   not adds), so give it its own separated row. */
+.ns-penalty-grid { margin-top: 6px; padding-top: 6px; border-top: 1px dashed #e3e6e9; }
 /* AAT type facet (result-driven, hierarchical) */
 .type-facets {
     display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 5px;

@@ -172,6 +172,9 @@
                 <label>Type<input type="range" class="weight-slider" data-facet="type" min="0" max="1" step="0.05"><span class="weight-val" data-facet="type"></span></label>
                 <label>Links<input type="range" class="weight-slider" data-facet="link" min="0" max="1" step="0.05"><span class="weight-val" data-facet="link"></span></label>
             </div>
+            <div class="weight-grid ns-penalty-grid">
+                <label title="A gazetteer rarely lists the same place twice, so two records from the same source are pushed apart unless the other signals are very strong. Higher = stronger split.">Same-gazetteer split<input type="range" id="atlas_ns_penalty" min="0" max="0.5" step="0.05"><span class="weight-val" id="atlas_ns_penalty_val"></span></label>
+            </div>
         </details>
         <!-- BETA: AAT type facet (result-driven, hierarchical). Populated from
              the gateway's facets.aat_types; clicking filters via aat_types. -->

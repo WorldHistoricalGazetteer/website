@@ -35,6 +35,15 @@ export const DEFAULT_PARAMS = Object.freeze({
 		tau_name: 0.75,
 		tau_link: 1.0,
 	},
+	// Browser-side heuristic (NOT part of the offline calibration): a single
+	// gazetteer rarely lists the same place twice, so a cluster should hold at
+	// most one record per namespace. A merge that would put two same-namespace
+	// records in one cluster is BLOCKED unless the bridging pair's composite
+	// clears θ by this margin (the "other signals are very strong" override).
+	// Applied cluster-wide (catches transitive collisions via cross-namespace
+	// hubs), so it is a constraint in clusterHits(), not a pair penalty. 0
+	// disables it. Hard-link (sameAs/exactMatch/closeMatch) merges bypass it.
+	same_ns_penalty: 0.15,
 });
 
 // Hard-link relation types that force a MERGE (authoritative co-reference).
@@ -167,6 +176,8 @@ function defaultAccessors(opts = {}) {
 		nameStr: (h) => (h.query_match && h.query_match.name)
 			|| (Array.isArray(h.names) && h.names[0] && h.names[0].label)
 			|| h.title || null,
+		// Source gazetteer (for the same-namespace repulsion, below).
+		namespace: (h) => h.namespace ?? h.ns ?? null,
 	};
 }
 
@@ -293,6 +304,9 @@ export function clusterHits(p) {
 	const acc = Object.assign(defaultAccessors(p.accessors || {}), p.accessors || {});
 	// Generic-name down-weighting set (lower-cased toponym_stoplist).
 	const stopSet = new Set((p.stoplist || []).map((s) => String(s).toLowerCase()));
+	// Same-namespace repulsion margin (override → params → default). A same-
+	// gazetteer collision is allowed only when the pair's composite ≥ θ + margin.
+	const sameNsMargin = p.sameNsPenalty ?? (params.same_ns_penalty ?? DEFAULT_PARAMS.same_ns_penalty);
 	const hits = p.hits || [];
 
 	const ids = hits.map((h) => acc.id(h)).filter((x) => x != null);
@@ -319,6 +333,27 @@ export function clusterHits(p) {
 		return false;
 	};
 
+	// Per-component namespace multiset — a gazetteer rarely lists a place twice,
+	// so a cluster should hold ≤1 record per namespace. Seeded AFTER forced
+	// merges so it reflects the hard-linked components. `find()` always resolves
+	// to a live root, so stale non-root entries left after a union are harmless.
+	const nsById = new Map();
+	for (const h of hits) { const id = acc.id(h); if (id != null && acc.namespace) nsById.set(id, acc.namespace(h)); }
+	const nsByRoot = new Map();
+	const addNs = (root, ns) => {
+		if (ns == null) return;
+		if (!nsByRoot.has(root)) nsByRoot.set(root, new Map());
+		const m = nsByRoot.get(root); m.set(ns, (m.get(ns) || 0) + 1);
+	};
+	for (const h of hits) { const id = acc.id(h); if (id != null) addNs(uf.find(id), nsById.get(id)); }
+	// Would merging components ra,rb collide two records of one namespace?
+	const wouldCollideNamespace = (ra, rb) => {
+		const ma = nsByRoot.get(ra); const mb = nsByRoot.get(rb);
+		if (!ma || !mb) return false;
+		for (const ns of ma.keys()) { if (mb.has(ns)) return true; }
+		return false;
+	};
+
 	// Threshold merges over all in-result pairs (O(n²); fine for a result page).
 	const scored = [];
 	for (let i = 0; i < hits.length; i++) {
@@ -329,11 +364,26 @@ export function clusterHits(p) {
 	}
 	// Merge highest-composite first so cannot-link blocks the weakest links.
 	scored.sort((x, y) => y.composite - x.composite);
+	let sameNsBlocked = 0;
 	for (const s of scored) {
 		const ra = uf.find(s.a); const rb = uf.find(s.b);
 		if (ra === rb) continue;
 		if (respectDistinct && violatesCannotLink(ra, rb)) continue;
-		uf.union(s.a, s.b);
+		// Same-gazetteer repulsion: block a merge that would put two records of
+		// one namespace in a cluster, unless THIS pair is very strong (≥ θ+margin).
+		if (sameNsMargin > 0 && s.composite < theta + sameNsMargin && wouldCollideNamespace(ra, rb)) { sameNsBlocked++; continue; }
+		const root = uf.union(s.a, s.b);
+		// Fold the absorbed component's namespace multiset into the surviving root.
+		const other = root === ra ? rb : ra;
+		if (other !== root) {
+			const om = nsByRoot.get(other);
+			if (om) {
+				const rm = nsByRoot.get(root) || new Map();
+				for (const [ns, c] of om) rm.set(ns, (rm.get(ns) || 0) + c);
+				nsByRoot.set(root, rm);
+				nsByRoot.delete(other);
+			}
+		}
 	}
 
 	// Assemble clusters (only over the actual result hits; off-result 1-hop ids
@@ -353,13 +403,15 @@ export function clusterHits(p) {
 	return {
 		clusters,
 		assignments,
-		params: { weights, theta, calibrated: !!params.calibrated },
+		params: { weights, theta, sameNsMargin, calibrated: !!params.calibrated },
 		debug: {
 			hitCount: hits.length,
 			edgeCount: (p.edges || []).length,
 			forcedMerges: (p.edges || []).filter((e) => MERGE_RELATIONS.has(e.relation_type)).length,
 			cannotLinks: cannotLink.length,
 			thresholdMerges: scored.length,
+			sameNsMargin,
+			sameNsBlocked,
 			clusterCount: clusters.length,
 		},
 	};

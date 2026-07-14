@@ -607,6 +607,16 @@ Promise.all([
             applyWeights();
         });
     });
+    // ── BETA: same-gazetteer repulsion — re-cluster live ──
+    const nsPenaltySlider = document.getElementById('atlas_ns_penalty');
+    if (nsPenaltySlider) {
+        nsPenaltySlider.addEventListener('input', () => {
+            sameNsPenaltyOverride = parseFloat(nsPenaltySlider.value);
+            const rd = document.getElementById('atlas_ns_penalty_val');
+            if (rd) rd.textContent = sameNsPenaltyOverride.toFixed(2);
+            applyWeights();
+        });
+    }
 
     // ── Wire exact match toggle ──
     document.getElementById('atlas_exact_match').addEventListener('click', function () {
@@ -1582,6 +1592,8 @@ let thetaUserSet = false;          // true once the user drags θ → stop auto-
 let thetaAutoFitted = false;       // whether the current θ was auto-fitted to the result set
 let thetaNeedsFit = true;          // re-fit θ only on a FRESH query; preserve it across reloads of a result set
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
+const ATLAS_DEFAULT_NS_PENALTY = 0.15;  // mirrors clustering.js DEFAULT_PARAMS.same_ns_penalty
+let sameNsPenaltyOverride = ATLAS_DEFAULT_NS_PENALTY; // same-gazetteer repulsion strength (slider)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
 let lastClusters = [];             // last clusterHits() clusters (for the portal's live context)
@@ -1724,6 +1736,15 @@ function seedClusterControls(clusteringParams) {
             if (rd) rd.textContent = Number(wts[f]).toFixed(2);
         }
     });
+    // Same-gazetteer repulsion: reset to the shipped/default strength each search.
+    sameNsPenaltyOverride = (clusteringParams && clusteringParams.same_ns_penalty != null)
+        ? clusteringParams.same_ns_penalty : ATLAS_DEFAULT_NS_PENALTY;
+    const nsSlider = document.getElementById('atlas_ns_penalty');
+    if (nsSlider) {
+        nsSlider.value = sameNsPenaltyOverride;
+        const rd = document.getElementById('atlas_ns_penalty_val');
+        if (rd) rd.textContent = sameNsPenaltyOverride.toFixed(2);
+    }
 }
 
 function clearMapHighlight() {
@@ -1831,6 +1852,7 @@ function renderClusters() {
         params: gatewayData.clustering_params || undefined,
         theta: clusterThetaOverride == null ? undefined : clusterThetaOverride,
         weights: weightOverrides,
+        sameNsPenalty: sameNsPenaltyOverride == null ? undefined : sameNsPenaltyOverride,
         stoplist: gatewayData.toponym_stoplist || [],
     });
     lastClusters = clusters;
