@@ -1426,17 +1426,46 @@
     font-size: 0.75rem; color: #2980b9; background: #eaf3fa;
     border-radius: 10px; padding: 1px 8px; white-space: nowrap;
 }
-.cluster-namespaces { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
+.cluster-namespaces, .cluster-countries, .cluster-types, .member-types {
+    margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;
+}
 .ns-chip {
     font-size: 0.68rem; text-transform: uppercase; letter-spacing: .3px;
     background: #f1f3f5; color: #5a5f64; border-radius: 4px; padding: 1px 6px;
+    cursor: help;
 }
+/* Country code chips (hover → country name) */
+.cc-chip {
+    font-size: 0.68rem; letter-spacing: .3px;
+    background: #eef4ec; color: #4f6b4a; border-radius: 4px; padding: 1px 6px;
+    cursor: help;
+}
+/* AAT type chips — shared (cluster) or extra (member) */
+.type-chip {
+    font-size: 0.68rem;
+    background: #f4f0f7; color: #6a5a78; border-radius: 4px; padding: 1px 6px;
+}
+.member-types { margin-top: 2px; margin-left: 4px; }
 .cluster-members { margin-top: 6px; border-top: 1px dashed #e3e6e9; padding-top: 4px; }
+.cluster-member-wrap { padding: 1px 0; }
 .cluster-member {
     display: flex; align-items: baseline; gap: 8px; padding: 2px 0; font-size: 0.82rem;
 }
 .member-title { flex: 1; }
-.member-ns { font-size: 0.68rem; color: #8a8f94; text-transform: uppercase; }
+.member-ns { font-size: 0.68rem; color: #8a8f94; text-transform: uppercase; cursor: help; }
+/* Collapsible, height-capped toponym list (cluster-shared or member-extra) */
+.toponyms-details { margin: 3px 0; font-size: 0.75rem; }
+.toponyms-details.member-toponyms { margin-left: 4px; }
+.toponyms-details > summary { cursor: pointer; color: #2980b9; padding: 1px 0; }
+.toponym-list {
+    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px;
+    max-height: 92px; overflow-y: auto;
+    padding: 3px; background: #fafbfc; border: 1px solid #eef0f2; border-radius: 4px;
+}
+.toponym-chip {
+    font-size: 0.72rem; background: #fff; color: #333;
+    border: 1px solid #e3e6e9; border-radius: 10px; padding: 0 7px;
+}
 .atlas-portal-open { color: #2980b9; }
 .atlas-portal-open:hover { color: #1c5a86; }
 /* Dynamic portal modal */

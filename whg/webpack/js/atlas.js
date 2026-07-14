@@ -59,6 +59,83 @@ const TEMPORAL_MAX = 2100;
 const countryParents = new CountryParents();
 await countryParents.dataLoaded;
 
+/* ── Display-name helpers for cluster cards ──
+   Gazetteer (namespace) names come from the gazetteer registry (/api/sources/,
+   loaded once, non-blocking); a static map covers the common authorities before
+   the registry resolves, with an uppercase fallback for anything unknown.
+   Country names come from ``window.ccode_hash`` (loaded above via CountryParents). */
+const NS_NAMES = {
+    gn: 'GeoNames', wd: 'Wikidata', tgn: 'Getty TGN', osm: 'OpenStreetMap',
+    ohm: 'OpenHistoricalMap', pl: 'Pleiades', pleiades: 'Pleiades',
+    whg: 'World Historical Gazetteer', chgis: 'CHGIS', hgis: 'HGIS de las Indias',
+    alc: 'Alcedo', gb: 'GB1900', gb1900: 'GB1900', ukhc: 'UK Historic Counties',
+};
+const _nsNames = {};
+fetch('/api/sources/', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+    .then(r => (r.ok ? r.json() : null))
+    .then(d => { ((d && d.sources) || []).forEach(s => { if (s.namespace && s.name) _nsNames[s.namespace] = s.name; }); })
+    .catch(() => { /* fall back to the static NS_NAMES map */ });
+
+function nsLabel(ns) {
+    const k = String(ns || '').toLowerCase();
+    return _nsNames[k] || NS_NAMES[k] || k.toUpperCase();
+}
+function ccLabel(cc) {
+    const e = (window.ccode_hash || {})[cc];
+    return (e && (e.gnlabel || e.tgnlabel)) || cc;
+}
+// Distinct toponyms attested by one place record. Each gateway ``names[]`` entry
+// packs surface forms into a comma-joined ``label``; split, trim, de-dupe (ci).
+function memberToponyms(m) {
+    const seen = new Set();
+    const out = [];
+    (m.names || []).forEach(n => String(n.label || '').split(',').forEach(t => {
+        const s = t.trim();
+        const k = s.toLowerCase();
+        if (s && !seen.has(k)) { seen.add(k); out.push(s); }
+    }));
+    return out;
+}
+// Collapsible, height-capped toponym list with a caller-supplied summary label.
+function toponymsDetails(toponyms, label, extraClass) {
+    if (!toponyms.length) return '';
+    return `<details class="toponyms-details${extraClass ? ' ' + extraClass : ''}"><summary>${escapeHtml(label)}</summary>`
+        + `<div class="toponym-list">`
+        + toponyms.map(t => `<span class="toponym-chip">${escapeHtml(t)}</span>`).join('')
+        + `</div></details>`;
+}
+// Distinct AAT type labels for one place record, resolved via the result-set
+// facet label map (aat_id → friendly label; falls back to the raw id).
+function memberTypes(m, aatLabels) {
+    const seen = new Set();
+    const out = [];
+    (m.aat_ids || []).forEach(id => {
+        const label = aatLabels[id] || String(id);
+        const k = label.toLowerCase();
+        if (!seen.has(k)) { seen.add(k); out.push(label); }
+    });
+    return out;
+}
+// Given a per-member array of display-string lists, split into the entries
+// common to ALL members (intersection, case-insensitive) and each member's
+// remaining (extra) entries. Preserves the first-seen surface form.
+function splitCommonExtra(perMember) {
+    const sets = perMember.map(arr => new Set(arr.map(s => s.toLowerCase())));
+    const commonKeys = sets.length
+        ? new Set([...sets[0]].filter(k => sets.every(s => s.has(k))))
+        : new Set();
+    const common = (perMember[0] || []).filter(s => commonKeys.has(s.toLowerCase()));
+    const extras = perMember.map(arr => arr.filter(s => !commonKeys.has(s.toLowerCase())));
+    return { common, extras };
+}
+// Inline chip row (namespaces / countries / types). Each chip may carry a hover title.
+function chipRow(cls, items) {
+    if (!items.length) return '';
+    return `<div class="${cls}">`
+        + items.map(it => `<span class="${it.chip}"${it.title ? ` title="${escapeHtml(it.title)}"` : ''}>${escapeHtml(it.text)}</span>`).join('')
+        + `</div>`;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Custom temporal range control
    ═══════════════════════════════════════════════════════════════════ */
@@ -1569,6 +1646,10 @@ function renderClusters() {
     renderTypeFacets(gatewayData.facets);
     console.log('Atlas cluster', debug, params);
 
+    // aat_id → friendly label, from the result-set facets (used for member types).
+    const aatLabels = {};
+    ((gatewayData.facets && gatewayData.facets.aat_types) || []).forEach(f => { aatLabels[f.aat_id] = f.label; });
+
     const countEl = document.getElementById('atlas_results_count');
     countEl.textContent = `${hits.length} place${hits.length !== 1 ? 's' : ''} · `
         + `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''}`;
@@ -1578,6 +1659,11 @@ function renderClusters() {
         const rep = members[0] || {};
         const multi = members.length > 1;
         const namespaces = [...new Set(members.map(m => m.namespace).filter(Boolean))];
+        const ccodes = [...new Set(members.flatMap(m => m.ccodes || []).filter(Boolean))];
+        // Toponyms and AAT types shared by ALL members (cluster level) vs each
+        // member's additional variants (member level).
+        const { common: commonTop, extras: extraTop } = splitCommonExtra(members.map(memberToponyms));
+        const { common: commonTypes, extras: extraTypes } = splitCommonExtra(members.map(m => memberTypes(m, aatLabels)));
         // Space-separated pids so the map-click handler can find this card via
         // an attribute selector ([data-pids~="<pid>"]).
         const pids = members.map(m => m.place_id).join(' ');
@@ -1592,18 +1678,23 @@ function renderClusters() {
             html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
         html += `</div>`;
-        if (namespaces.length) {
-            html += `<div class="cluster-namespaces">`
-                + namespaces.map(n => `<span class="ns-chip">${escapeHtml(n)}</span>`).join('')
-                + `</div>`;
-        }
+        // Cluster-level facets: gazetteers, countries, shared types (all with hover names).
+        html += chipRow('cluster-namespaces', namespaces.map(n => ({ chip: 'ns-chip', text: n, title: nsLabel(n) })));
+        html += chipRow('cluster-countries', ccodes.map(c => ({ chip: 'cc-chip', text: c, title: ccLabel(c) })));
+        html += chipRow('cluster-types', commonTypes.map(t => ({ chip: 'type-chip', text: t })));
+        // Cluster-level toponyms: shared across all members (all of them, for a single-place cluster).
+        html += toponymsDetails(commonTop, multi ? `${commonTop.length} shared toponym${commonTop.length === 1 ? '' : 's'}` : `${commonTop.length} toponym${commonTop.length === 1 ? '' : 's'}`);
         if (multi) {
             html += `<div class="cluster-members">`;
-            members.forEach(m => {
-                html += `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
+            members.forEach((m, mi) => {
+                html += `<div class="cluster-member-wrap">`
+                    + `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
                     + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
-                    + `<span class="member-ns">${escapeHtml(m.namespace || '')}</span>`
+                    + `<span class="member-ns" title="${escapeHtml(nsLabel(m.namespace))}">${escapeHtml(m.namespace || '')}</span>`
                     + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`
+                    + `</div>`
+                    + chipRow('member-types', (extraTypes[mi] || []).map(t => ({ chip: 'type-chip', text: t })))
+                    + toponymsDetails(extraTop[mi] || [], `${(extraTop[mi] || []).length} more toponym${(extraTop[mi] || []).length === 1 ? '' : 's'}`, 'member-toponyms')
                     + `</div>`;
             });
             html += `</div>`;
