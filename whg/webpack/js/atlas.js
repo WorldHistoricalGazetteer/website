@@ -52,6 +52,13 @@ let temporalTo = 1800;
 const TEMPORAL_MIN = -2000;
 const TEMPORAL_MAX = 2100;
 
+/* Default merge sensitivity (θ_query). Bumped from the calibration default 0.55
+   to a more disambiguating 0.65: empirically (spread-vs-θ sweep on ambiguous
+   names) the max intra-cluster geographic spread collapses from ~30 km to ~4 km
+   between 0.55 and 0.65 — tightening loose same-name merges — while 0.70 starts
+   over-splitting genuine multi-source places into pairs. */
+const ATLAS_DEFAULT_THETA = 0.65;
+
 /* ═══════════════════════════════════════════════════════════════════
    Init: Load data dependencies
    ═══════════════════════════════════════════════════════════════════ */
@@ -187,6 +194,31 @@ function updateTemporalLabels() {
     if (toLabel) toLabel.textContent = temporalTo;
 }
 
+// Client-side mirror of the gateway temporal filter — interval overlap on the
+// hit's `temporal_range` ([start,end] or null=undated); undated hits pass only
+// in +Undated mode. Lets the range control live-refilter the LOADED results
+// instantly, ahead of the debounced authoritative server re-search.
+function temporalHitPasses(h) {
+    if (temporalMode === 'off') return true;
+    const tr = h.temporal_range;
+    if (!Array.isArray(tr) || tr.length !== 2) return temporalMode === 'undated';
+    const s = tr[0] == null ? -Infinity : tr[0];
+    const e = tr[1] == null ? Infinity : tr[1];
+    return s <= temporalTo && e >= temporalFrom;
+}
+
+// Live temporal interaction: throttled instant re-filter/re-cluster of the loaded
+// set + a debounced authoritative re-query of the whole index within the range.
+const throttledTemporalRender = throttle(() => { if (gatewayData) renderClusters(); }, 100);
+const debouncedTemporalResearch = debounce(() => {
+    const input = document.getElementById('atlas_search_input');
+    if (gatewayData && input && input.value.trim()) initiateToponymSearch({ preserveFacets: true });
+}, 550);
+function applyTemporalLive() {
+    throttledTemporalRender();     // instant preview on what's already loaded
+    debouncedTemporalResearch();   // authoritative top-N in-range from the index
+}
+
 function wireTemporalControl() {
     const fromSlider = document.getElementById('temporal_from_slider');
     const toSlider = document.getElementById('temporal_to_slider');
@@ -201,6 +233,7 @@ function wireTemporalControl() {
         updateTemporalLabels();
         fillTemporalSlider();
         temporalRangeChanged();
+        applyTemporalLive();
     });
 
     toSlider.addEventListener('input', () => {
@@ -212,6 +245,7 @@ function wireTemporalControl() {
         updateTemporalLabels();
         fillTemporalSlider();
         temporalRangeChanged();
+        applyTemporalLive();
     });
 
     // Temporal mode toggle
@@ -223,6 +257,7 @@ function wireTemporalControl() {
             temporalMode = btn.dataset.temporalMode;
             const tc = document.getElementById('temporal_control');
             tc.classList.toggle('temporal-off', temporalMode === 'off');
+            applyTemporalLive();
         });
     });
 
@@ -254,6 +289,7 @@ function wireTemporalControl() {
             updateTemporalLabels();
             fillTemporalSlider();
             temporalRangeChanged();
+            applyTemporalLive();
         });
         const endDrag = (e) => {
             if (!dragging) return;
@@ -502,6 +538,9 @@ Promise.all([
     const thetaSlider = document.getElementById('atlas_cluster_theta');
     if (thetaSlider) {
         const thetaVal = document.getElementById('atlas_cluster_theta_val');
+        // Seed the control to the Atlas default so the displayed value matches.
+        thetaSlider.value = clusterThetaOverride;
+        if (thetaVal) thetaVal.textContent = clusterThetaOverride.toFixed(2);
         const applyTheta = () => {
             clusterThetaOverride = parseFloat(thetaSlider.value);
             if (thetaVal) thetaVal.textContent = clusterThetaOverride.toFixed(2);
@@ -1477,7 +1516,7 @@ function initiateToponymSearch(opts = {}) {
 // clustering_params); clustering.js clusters it in the browser and we show
 // cluster cards. The θ slider re-clusters the cached response live (no refetch).
 let gatewayData = null;            // cached last gateway response
-let clusterThetaOverride = null;   // θ slider value, or null → use params default
+let clusterThetaOverride = ATLAS_DEFAULT_THETA;   // θ slider value (seeded to the Atlas default)
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
@@ -1586,15 +1625,16 @@ const DEFAULT_CLUSTER_WEIGHTS = { name: 0.35, spatial: 0.20, temporal: 0.15, typ
 // Seed the θ + weight sliders from the shipped clustering_params (called once
 // per search, before the user starts tuning). Resets any prior overrides.
 function seedClusterControls(clusteringParams) {
-    clusterThetaOverride = null;
+    // Seed θ to the Atlas default (a deliberately more disambiguating value than
+    // the gateway's calibration θ_query); the slider drives clustering from here.
+    clusterThetaOverride = ATLAS_DEFAULT_THETA;
     weightOverrides = {};
-    const thr = (clusteringParams && clusteringParams.thresholds) || {};
     const wts = Object.assign({}, DEFAULT_CLUSTER_WEIGHTS, (clusteringParams && clusteringParams.weights) || {});
     const thetaSlider = document.getElementById('atlas_cluster_theta');
-    if (thetaSlider && thr.theta_query != null) {
-        thetaSlider.value = thr.theta_query;
+    if (thetaSlider) {
+        thetaSlider.value = clusterThetaOverride;
         const tv = document.getElementById('atlas_cluster_theta_val');
-        if (tv) tv.textContent = Number(thr.theta_query).toFixed(2);
+        if (tv) tv.textContent = clusterThetaOverride.toFixed(2);
     }
     document.querySelectorAll('.weight-slider').forEach(sl => {
         const f = sl.dataset.facet;
@@ -1685,7 +1725,10 @@ function hitsToFeatureCollection(hits, assignments) {
 
 function renderClusters() {
     if (!gatewayData) return;
-    const hits = gatewayData.hits || [];
+    // Apply the temporal filter client-side too, so dragging the date control
+    // re-filters the loaded results live (idempotent when the server already
+    // filtered — those hits all pass).
+    const hits = (gatewayData.hits || []).filter(temporalHitPasses);
     const $resultsDiv = $('#atlas_search_results');
     $resultsDiv.empty();
 
