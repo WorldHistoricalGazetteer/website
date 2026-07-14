@@ -77,6 +77,8 @@
 }
 
 .floating-search-inner {
+    position: relative;
+    z-index: 5;   /* lift above #temporal_control so the area dropdown isn't obscured */
     display: flex;
     align-items: center;
     flex-wrap: wrap;

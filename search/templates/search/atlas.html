@@ -102,7 +102,7 @@
         <div id="selection_chips"></div>
 
         <!-- Temporal range control (below search bar, matching width) -->
-        <div id="temporal_control" class="temporal-off">
+        <div id="temporal_control" class="temporal-off" style="position:relative; z-index:1;">
             <div class="temporal-header">
                 <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
                     <button type="button" class="btn active" data-temporal-mode="off">Off</button>
@@ -138,7 +138,7 @@
 
     <!-- Fixed results panel — permanent column beside the map. -->
     <div id="atlas_results_panel">
-        <div class="results-panel-header">
+        <div class="results-panel-header" style="display:none;">
             <span id="atlas_results_count" class="small text-muted"></span>
             <button id="atlas_close_results" class="btn btn-sm btn-outline-secondary ms-auto"
                     data-bs-toggle="tooltip" title="Clear results">

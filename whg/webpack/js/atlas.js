@@ -2025,11 +2025,15 @@ function renderToponymResults(data) {
 function showResultsPanel() {
     const dp = document.getElementById('atlas_default_panel');
     if (dp) dp.style.display = 'none';
+    const hdr = document.querySelector('#atlas_results_panel .results-panel-header');
+    if (hdr) hdr.style.display = '';   // header (with Clear ×) only while showing results
 }
 
 function hideResultsPanel() {
     const dp = document.getElementById('atlas_default_panel');
     if (dp) dp.style.display = '';
+    const hdr = document.querySelector('#atlas_results_panel .results-panel-header');
+    if (hdr) hdr.style.display = 'none';   // no Clear button on the idle instructions
     heroMap.clearResultFeatures();
     document.getElementById('atlas_search_results').innerHTML = '';
     document.getElementById('atlas_no_results').style.display = 'none';
