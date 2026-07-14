@@ -1424,6 +1424,11 @@
 .cluster-theta-label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .cluster-theta-hint { cursor: help; color: #8a8f94; }
 .cluster-theta-val { font-variant-numeric: tabular-nums; color: #2980b9; font-weight: 600; }
+.cluster-theta-auto {
+    font-size: 0.6rem; text-transform: uppercase; letter-spacing: .4px;
+    color: #2e7d32; background: #e8f5e9; border-radius: 3px;
+    padding: 0 4px; margin-left: 3px; cursor: help; vertical-align: middle;
+}
 .cluster-card {
     border: 1px solid #e3e6e9;
     border-radius: 8px;

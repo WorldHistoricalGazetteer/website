@@ -365,4 +365,49 @@ export function clusterHits(p) {
 	};
 }
 
-export default { clusterHits, scorePair, UnionFind, DEFAULT_PARAMS };
+/**
+ * Best-guess merge threshold (θ) for THIS result set, so disambiguation adapts
+ * to the query's own structure. Scores every candidate pair, then finds the
+ * widest gap ("valley") in the plausibly-mergeable score band — the natural
+ * split between co-referent duplicates (high composite) and distinct same-name
+ * places (lower). Clamped to a sane window; falls back to `fallback` when the
+ * set is too small or has no clear valley (where auto-fit would be noise).
+ *
+ * @returns {{theta:number, reason:'gap'|'sparse'|'no-gap', gap:number, n:number}}
+ */
+export function suggestTheta(p) {
+	const fallback = p.fallback ?? 0.65;
+	const LO = p.min ?? 0.55, HI = p.max ?? 0.80;
+	const FLOOR = p.floor ?? 0.45;   // ignore clearly-unrelated pairs
+	const MIN_PAIRS = p.minPairs ?? 8;
+	const MIN_GAP = p.minGap ?? 0.03;
+	const params = p.params || DEFAULT_PARAMS;
+	const weights = Object.assign({}, params.weights || DEFAULT_PARAMS.weights, p.weights || {});
+	const acc = Object.assign(defaultAccessors(p.accessors || {}), p.accessors || {});
+	const stopSet = new Set((p.stoplist || []).map((s) => String(s).toLowerCase()));
+	const edgeIndex = new Map();
+	for (const e of (p.edges || [])) edgeIndex.set(pairKey(e.a, e.b), e);
+	const H = p.hits || [];
+
+	const cand = [];
+	for (let i = 0; i < H.length; i++) {
+		for (let j = i + 1; j < H.length; j++) {
+			const c = scorePair(H[i], H[j], { acc, weights, edgeIndex, stopSet }).composite;
+			if (c >= FLOOR) cand.push(c);
+		}
+	}
+	if (cand.length < MIN_PAIRS) return { theta: fallback, reason: 'sparse', gap: 0, n: cand.length };
+	cand.sort((a, b) => a - b);
+	let bestGap = 0, bestTheta = null;
+	for (let k = 1; k < cand.length; k++) {
+		const mid = (cand[k] + cand[k - 1]) / 2;
+		if (mid < LO || mid > HI) continue;
+		const gap = cand[k] - cand[k - 1];
+		if (gap > bestGap) { bestGap = gap; bestTheta = mid; }
+	}
+	if (bestTheta == null || bestGap < MIN_GAP) return { theta: fallback, reason: 'no-gap', gap: bestGap, n: cand.length };
+	const theta = Math.min(HI, Math.max(LO, Math.round(bestTheta * 100) / 100));
+	return { theta, reason: 'gap', gap: Math.round(bestGap * 1000) / 1000, n: cand.length };
+}
+
+export default { clusterHits, scorePair, suggestTheta, UnionFind, DEFAULT_PARAMS };

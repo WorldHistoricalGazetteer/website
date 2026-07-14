@@ -16,7 +16,7 @@ import heroMap from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
-import { clusterHits } from './clustering.js';
+import { clusterHits, suggestTheta } from './clustering.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -544,6 +544,11 @@ Promise.all([
         const applyTheta = () => {
             clusterThetaOverride = parseFloat(thetaSlider.value);
             if (thetaVal) thetaVal.textContent = clusterThetaOverride.toFixed(2);
+            // Manual drag → the user owns θ now; stop auto-fitting + drop the badge.
+            thetaUserSet = true;
+            thetaAutoFitted = false;
+            const autoBadge = document.getElementById('atlas_cluster_theta_auto');
+            if (autoBadge) autoBadge.style.display = 'none';
             if (gatewayData) renderClusters();
         };
         thetaSlider.addEventListener('input', debounce(applyTheta, 120));
@@ -1471,7 +1476,9 @@ function initiateToponymSearch(opts = {}) {
     if (searchDisabled) return;
     // A fresh query clears the AAT type-facet selection; a facet toggle
     // (preserveFacets) re-searches with the same query + updated facet filter.
-    if (!opts.preserveFacets) selectedAatTypes = [];
+    // A fresh query also re-enables θ auto-fit; a preserved re-search (facets /
+    // temporal) keeps the user's manual θ if they set one.
+    if (!opts.preserveFacets) { selectedAatTypes = []; thetaUserSet = false; }
     const input = document.getElementById('atlas_search_input');
     const qstr = input.value.trim();
 
@@ -1517,6 +1524,8 @@ function initiateToponymSearch(opts = {}) {
 // cluster cards. The θ slider re-clusters the cached response live (no refetch).
 let gatewayData = null;            // cached last gateway response
 let clusterThetaOverride = ATLAS_DEFAULT_THETA;   // θ slider value (seeded to the Atlas default)
+let thetaUserSet = false;          // true once the user drags θ → stop auto-seeding until a fresh query
+let thetaAutoFitted = false;       // whether the current θ was auto-fitted to the result set
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
@@ -1625,16 +1634,29 @@ const DEFAULT_CLUSTER_WEIGHTS = { name: 0.35, spatial: 0.20, temporal: 0.15, typ
 // Seed the θ + weight sliders from the shipped clustering_params (called once
 // per search, before the user starts tuning). Resets any prior overrides.
 function seedClusterControls(clusteringParams) {
-    // Seed θ to the Atlas default (a deliberately more disambiguating value than
-    // the gateway's calibration θ_query); the slider drives clustering from here.
-    clusterThetaOverride = ATLAS_DEFAULT_THETA;
     weightOverrides = {};
     const wts = Object.assign({}, DEFAULT_CLUSTER_WEIGHTS, (clusteringParams && clusteringParams.weights) || {});
+    // θ: auto-fit a best-guess disambiguating value to THIS result set (the
+    // natural valley in the pair-score distribution), unless the user has taken
+    // manual control. Falls back to the Atlas default on small/degenerate sets.
+    if (!thetaUserSet) {
+        const sug = suggestTheta({
+            hits: (gatewayData && gatewayData.hits) || [],
+            edges: (gatewayData && gatewayData.edges) || [],
+            params: clusteringParams,
+            stoplist: (gatewayData && gatewayData.toponym_stoplist) || [],
+            fallback: ATLAS_DEFAULT_THETA,
+        });
+        clusterThetaOverride = sug.theta;
+        thetaAutoFitted = sug.reason === 'gap';   // only badge a genuine fit, not the fallback
+    }
     const thetaSlider = document.getElementById('atlas_cluster_theta');
     if (thetaSlider) {
         thetaSlider.value = clusterThetaOverride;
         const tv = document.getElementById('atlas_cluster_theta_val');
         if (tv) tv.textContent = clusterThetaOverride.toFixed(2);
+        const autoBadge = document.getElementById('atlas_cluster_theta_auto');
+        if (autoBadge) autoBadge.style.display = thetaAutoFitted ? '' : 'none';
     }
     document.querySelectorAll('.weight-slider').forEach(sl => {
         const f = sl.dataset.facet;
