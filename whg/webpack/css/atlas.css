@@ -21,6 +21,12 @@
     --atlas-time-soft:    #fbede4;
 }
 
+/* Generic palette-coloured text — reuse anywhere a word should read by purpose
+   (idle key, welcome panel, …): Areas=indigo, Places=burgundy, time=ochre. */
+.palette-areas  { color: var(--atlas-areas); }
+.palette-places { color: var(--atlas-places); }
+.palette-time   { color: var(--atlas-time); }
+
 /* ═══════════════════════════════════════════════════════════════════
    Container-constrained hero map layout
    ═══════════════════════════════════════════════════════════════════ */
@@ -177,6 +183,14 @@
 .search-input-group .btn {
     font-size: 0.8rem;
     border-color: #ced4da;
+}
+/* The green Search button's grey group-border contrasts against its fill and
+   makes it look mis-aligned with its (transparent-fill) neighbours; match the
+   border to the fill so it reads as one solid block flush with the row. */
+.search-input-group #atlas_initiate_search,
+.search-input-group #atlas_initiate_search:hover,
+.search-input-group #atlas_initiate_search:focus {
+    border-color: #198754;
 }
 
 /* Atlas control buttons (Layers, Sources, Categories) */
