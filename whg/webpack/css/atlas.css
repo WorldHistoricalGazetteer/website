@@ -2,6 +2,26 @@
 /* WHG Atlas — Hero Map Explorer Layout */
 
 /* ═══════════════════════════════════════════════════════════════════
+   Atlas colour palette — a small dictionary of purpose-hint colours
+   reused across the UI so each function reads by colour:
+     Areas  = indigo   (regions / boundaries)
+     Places = burgundy  (place names / toponyms)
+     Time   = ochre     (temporal; matches the site's BETA buttons)
+   Each has a strong variant (borders, text, active fills) and a soft
+   variant (chip / tint backgrounds).
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+    --atlas-areas:        #4f46b8;
+    --atlas-areas-dark:   #433ba0;
+    --atlas-areas-soft:   #ecebf8;
+    --atlas-places:       #7b2d3b;
+    --atlas-places-dark:  #6b2533;
+    --atlas-places-soft:  #f6e9ec;
+    --atlas-time:         #c2410c;
+    --atlas-time-soft:    #fbede4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    Container-constrained hero map layout
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -121,21 +141,20 @@
 /* Mode identity: Areas = indigo (distinct from the map's blue-green), Places =
    burgundy (place names). */
 .search-mode-toggle .btn[data-search-mode="areas"].active {
-    background: #4f46b8;
-    border-color: #433bA0;
+    background: var(--atlas-areas);
+    border-color: var(--atlas-areas-dark);
     color: #fff;
     box-shadow: 0 1px 4px rgba(79, 70, 184, 0.35);
 }
 .search-mode-toggle .btn[data-search-mode="toponyms"].active {
-    background: #7b2d3b;
-    border-color: #6b2533;
+    background: var(--atlas-places);
+    border-color: var(--atlas-places-dark);
     color: #fff;
     box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
 }
-/* Mode wash: stronger at BOTH ends, fading toward the middle (never fully). */
 /* Mode identity via a strong border on the search bar (no background wash). */
-#floating_search.mode-areas .floating-search-inner { border-color: #4f46b8; }
-#floating_search.mode-toponyms .floating-search-inner { border-color: #7b2d3b; }
+#floating_search.mode-areas .floating-search-inner { border-color: var(--atlas-areas); }
+#floating_search.mode-toponyms .floating-search-inner { border-color: var(--atlas-places); }
 .search-mode-toggle .btn:hover:not(.active) {
     background: #f5e6e8;
     border-color: #c9a0a8;
@@ -232,7 +251,7 @@
     -webkit-backdrop-filter: blur(12px);
     /* Strong ochre border (time) — matches the site's BETA buttons; clearly
        distinct from the indigo Areas / burgundy Places borders. */
-    border: 2px solid #c2410c;
+    border: 2px solid var(--atlas-time);
     border-radius: 10px;
     padding: 6px 12px 4px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
@@ -525,6 +544,10 @@
 }
 .atlas-default-panel .adp-list li { padding-left: 2px; }
 .atlas-default-panel .adp-list strong { color: #34495e; }
+/* Colour the lead words by purpose, matching the live UI's colour cues. */
+.atlas-default-panel .adp-list strong.adp-areas  { color: var(--atlas-areas); }
+.atlas-default-panel .adp-list strong.adp-places { color: var(--atlas-places); }
+.atlas-default-panel .adp-list strong.adp-time   { color: var(--atlas-time); }
 .atlas-default-panel .adp-hint {
     font-size: 0.72rem;
     color: #90a4ae;
@@ -1586,14 +1609,15 @@
     background: #f4f0f7; color: #6a5a78; border-radius: 4px; padding: 1px 6px;
 }
 .member-types { margin-top: 2px; margin-left: 4px; }
-/* Temporal (attested date span / range) — amber to read as "when" */
+/* Temporal (attested date span / range) — ochre (--atlas-time) to read as "when",
+   matching the temporal control's border and the site's BETA colour. */
 .temporal-chip {
     font-size: 0.68rem; font-variant-numeric: tabular-nums;
-    background: #fff4e5; color: #8a5a00; border-radius: 4px; padding: 1px 6px; cursor: help;
+    background: var(--atlas-time-soft); color: var(--atlas-time); border-radius: 4px; padding: 1px 6px; cursor: help;
 }
 .member-temporal {
     font-size: 0.68rem; font-variant-numeric: tabular-nums;
-    color: #8a5a00; white-space: nowrap; cursor: help;
+    color: var(--atlas-time); white-space: nowrap; cursor: help;
 }
 .cluster-members { margin-top: 6px; border-top: 1px dashed #e3e6e9; padding-top: 4px; }
 .cluster-member-wrap { padding: 1px 0; }

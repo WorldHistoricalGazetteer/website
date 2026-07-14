@@ -1782,7 +1782,10 @@ function hitsToFeatureCollection(hits, assignments) {
         if (!geometry) return;
         features.push({
             type: 'Feature',
-            id: i,
+            // Contiguous id == array position. Hits with no geometry are skipped,
+            // so the ORIGINAL hit index `i` would leave gaps and break every
+            // `clusterFC.features[id]` array lookup (card↔marker↔zoom sync).
+            id: features.length,
             geometry,
             properties: {
                 pid: h.place_id,
@@ -1887,7 +1890,9 @@ function renderClusters() {
     // Plot on the hero map + cache the pid→index map for panel↔map sync.
     const fc = hitsToFeatureCollection(hits, assignments);
     clusterFC = fc;
-    clusterPidToIndex = new Map(hits.map((h, i) => [h.place_id, i]));
+    // Derive pid→index from the plotted features (contiguous ids), NOT from the
+    // raw hits — so it stays aligned when no-geometry hits are dropped.
+    clusterPidToIndex = new Map(fc.features.map(f => [f.properties.pid, f.id]));
     heroMap.showResultFeatures(fc);
     if (fc.features.length > 0) {
         heroMap.map.fitViewport(bbox(fc), 9); // numeric maxZoom; avoid street-level on a tight result set
