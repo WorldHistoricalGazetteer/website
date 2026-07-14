@@ -1446,7 +1446,7 @@
     font-size: 0.75rem; color: #2980b9; background: #eaf3fa;
     border-radius: 10px; padding: 1px 8px; white-space: nowrap;
 }
-.cluster-namespaces, .cluster-countries, .cluster-types, .member-types {
+.cluster-namespaces, .cluster-countries, .cluster-types, .cluster-temporal, .member-types {
     margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px;
 }
 .ns-chip {
@@ -1466,6 +1466,15 @@
     background: #f4f0f7; color: #6a5a78; border-radius: 4px; padding: 1px 6px;
 }
 .member-types { margin-top: 2px; margin-left: 4px; }
+/* Temporal (attested date span / range) — amber to read as "when" */
+.temporal-chip {
+    font-size: 0.68rem; font-variant-numeric: tabular-nums;
+    background: #fff4e5; color: #8a5a00; border-radius: 4px; padding: 1px 6px; cursor: help;
+}
+.member-temporal {
+    font-size: 0.68rem; font-variant-numeric: tabular-nums;
+    color: #8a5a00; white-space: nowrap; cursor: help;
+}
 .cluster-members { margin-top: 6px; border-top: 1px dashed #e3e6e9; padding-top: 4px; }
 .cluster-member-wrap { padding: 1px 0; }
 .cluster-member {

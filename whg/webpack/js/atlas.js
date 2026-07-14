@@ -146,6 +146,33 @@ function chipRow(cls, items) {
         + items.map(it => `<span class="${it.chip}"${it.title ? ` title="${escapeHtml(it.title)}"` : ''}>${escapeHtml(it.text)}</span>`).join('')
         + `</div>`;
 }
+// Temporal formatting: negative years → BCE; a [start,end] range collapses to a
+// single year when equal. Returns '' for undated (null/malformed) ranges.
+function formatYear(y) {
+    if (y == null) return '';
+    return y < 0 ? `${-y} BCE` : `${y}`;
+}
+function formatRange(tr) {
+    if (!Array.isArray(tr) || tr.length !== 2) return '';
+    const [s, e] = tr;
+    if (s == null && e == null) return '';
+    if (s === e) return formatYear(s);
+    return `${formatYear(s)}–${formatYear(e)}`; // en-dash
+}
+// The cluster's overall attested span: earliest start → latest end across the
+// members that carry a temporal_range. Null when none are dated.
+function clusterTemporalSpan(members) {
+    const starts = [], ends = [];
+    for (const m of members) {
+        const tr = m.temporal_range;
+        if (Array.isArray(tr) && tr.length === 2) {
+            if (tr[0] != null) starts.push(tr[0]);
+            if (tr[1] != null) ends.push(tr[1]);
+        }
+    }
+    if (!starts.length && !ends.length) return null;
+    return [starts.length ? Math.min(...starts) : null, ends.length ? Math.max(...ends) : null];
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    Custom temporal range control
@@ -1803,18 +1830,24 @@ function renderClusters() {
             html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
         html += `</div>`;
-        // Cluster-level facets: countries + AAT types common to all members.
-        // (Namespaces are shown per member below, so omitted here as redundant.)
+        // Cluster-level facets: countries, AAT types common to all members, and
+        // the overall attested date span. (Namespaces are shown per member below.)
         html += chipRow('cluster-countries', ccodes.map(c => ({ chip: 'cc-chip', text: c, title: ccLabel(c) })));
         html += chipRow('cluster-types', commonTypes.map(t => ({ chip: 'type-chip', text: t })));
+        const clusterSpan = clusterTemporalSpan(members);
+        if (clusterSpan) {
+            html += chipRow('cluster-temporal', [{ chip: 'temporal-chip', text: formatRange(clusterSpan), title: 'Attested date span (earliest–latest across members)' }]);
+        }
         // Toponyms common to ALL members (or, for a single-place cluster, simply all of them).
         html += toponymsDetails(commonTop, multi ? `${commonTop.length} common to all` : `${commonTop.length} toponym${commonTop.length === 1 ? '' : 's'}`);
         if (multi) {
             html += `<div class="cluster-members">`;
             members.forEach((m, mi) => {
+                const mRange = formatRange(m.temporal_range);
                 html += `<div class="cluster-member-wrap">`
                     + `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
                     + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
+                    + (mRange ? `<span class="member-temporal" title="Attested date range">${escapeHtml(mRange)}</span>` : '')
                     + `<span class="member-ns" title="${escapeHtml(nsLabel(m.namespace))}">${escapeHtml(m.namespace || '')}</span>`
                     + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`
                     + `</div>`
