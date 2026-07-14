@@ -107,21 +107,25 @@ function memberToponyms(m) {
     }));
     return out;
 }
-// Toponym variants for a cluster (common to all) or a member (extras). A single
-// entry just replicates the headline title, so it's omitted. With 2+, up to three
-// show inline; any beyond that sit behind a "<n> more toponyms" toggle.
+// Toponym variants for a cluster (common to all) or a member (extras), rendered
+// as plain inline comma-separated text (chips waste space). A single entry just
+// replicates the headline title, so it's omitted. A toggle that reveals only one
+// or two names wastes a click, so show up to five inline; collapse only when at
+// least three would be hidden (first three inline + "<n> more toponyms" toggle).
 function toponymsList(toponyms, extraClass) {
     if (!toponyms || toponyms.length <= 1) return '';
-    const chip = t => `<span class="toponym-chip">${escapeHtml(t)}</span>`;
-    const shown = toponyms.slice(0, 3);
-    const rest = toponyms.slice(3);
-    let html = `<div class="toponyms-list${extraClass ? ' ' + extraClass : ''}">`
-        + `<div class="toponym-list">${shown.map(chip).join('')}</div>`;
-    if (rest.length) {
-        html += `<details class="toponyms-more"><summary>${rest.length} more toponym${rest.length === 1 ? '' : 's'}</summary>`
-            + `<div class="toponym-list">${rest.map(chip).join('')}</div></details>`;
+    const esc = t => escapeHtml(t);
+    const cls = `toponyms-list${extraClass ? ' ' + extraClass : ''}`;
+    if (toponyms.length <= 5) {
+        return `<div class="${cls}"><span class="toponym-names">${toponyms.map(esc).join(', ')}</span></div>`;
     }
-    return html + `</div>`;
+    const shown = toponyms.slice(0, 3).map(esc).join(', ');
+    const rest = toponyms.slice(3);
+    return `<div class="${cls}">`
+        + `<span class="toponym-names">${shown}</span>`
+        + `<details class="toponyms-more"><summary>${rest.length} more toponyms</summary>`
+        + `<span class="toponym-names">, ${rest.map(esc).join(', ')}</span></details>`
+        + `</div>`;
 }
 // Distinct AAT type labels for one place record, resolved via the result-set
 // facet label map (aat_id → friendly label; falls back to the raw id).

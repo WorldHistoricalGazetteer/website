@@ -1626,24 +1626,18 @@
 }
 .member-title { flex: 1; }
 .member-ns { font-size: 0.68rem; color: #8a8f94; text-transform: uppercase; cursor: help; }
-/* Toponym variants (cluster-shared or member-extra): up to three inline, the
-   remainder behind a "<n> more toponyms" toggle. */
-.toponyms-list { margin: 3px 0; font-size: 0.75rem; }
+/* Toponym variants (cluster-shared or member-extra): plain inline comma-separated
+   text; when many, the overflow sits behind an inline "<n> more toponyms" toggle
+   that expands in place (the toggle text is replaced by the revealed names). */
+.toponyms-list { margin: 3px 0; font-size: 0.75rem; color: #5a5f64; line-height: 1.45; }
 .toponyms-list.member-toponyms { margin-left: 4px; }
-.toponyms-more { margin-top: 3px; }
-.toponyms-more > summary { cursor: pointer; color: #2980b9; padding: 1px 0; }
-.toponym-list {
-    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 3px;
-    max-height: 92px; overflow-y: auto;
-    padding: 3px; background: #fafbfc; border: 1px solid #eef0f2; border-radius: 4px;
+.toponym-names { color: #5a5f64; }
+.toponyms-more { display: inline; }
+.toponyms-more > summary {
+    display: inline; cursor: pointer; color: #2980b9; margin-left: 6px; list-style: none;
 }
-/* The always-visible first three sit in a plain wrap row (no scroll cap). */
-.toponyms-list > .toponym-list { max-height: none; overflow: visible; }
-.toponyms-more > .toponym-list { margin-top: 2px; }
-.toponym-chip {
-    font-size: 0.72rem; background: #fff; color: #333;
-    border: 1px solid #e3e6e9; border-radius: 10px; padding: 0 7px;
-}
+.toponyms-more > summary::-webkit-details-marker { display: none; }
+.toponyms-more[open] > summary { display: none; }   /* hide toggle once expanded → clean full list */
 .atlas-portal-open { color: #2980b9; }
 .atlas-portal-open:hover { color: #1c5a86; }
 /* Dynamic portal modal */
