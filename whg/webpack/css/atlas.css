@@ -34,8 +34,10 @@
     z-index: 0;
 }
 /* Kill the MapLibre map's own border/radius (global default) so only the
-   layout's rounded card rounds the corners — the map's own corners stay square. */
-#hero_map .maplibregl-map {
+   layout's rounded card rounds the corners — the map's own corners stay square.
+   MapLibre adds .maplibregl-map to #hero_map ITSELF, so target it compound. */
+#hero_map,
+#hero_map.maplibregl-map {
     border: 0 !important;
     border-radius: 0 !important;
 }
@@ -223,7 +225,9 @@
 #temporal_control {
     margin-top: 6px;
     width: 300px;
-    background: rgba(255, 255, 255, 0.92);
+    /* Amber double-ended wash (time/history) to match the mode-tinted search bar. */
+    background-color: rgba(255, 255, 255, 0.92);
+    background-image: linear-gradient(90deg, rgba(214, 158, 46, 0.32), rgba(214, 158, 46, 0.08) 50%, rgba(214, 158, 46, 0.32));
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 10px;
@@ -485,7 +489,12 @@
    give them proper internal margins. */
 #atlas_results_panel .atlas-panel-view .offcanvas-header { padding: 10px 14px; }
 #atlas_results_panel .atlas-panel-view .offcanvas-body { padding: 8px 14px 14px; overflow-x: hidden; }
-#atlas_results_panel .atlas-panel-view .authority-list { padding-left: 14px !important; }
+/* Keep form-check inputs within the panel's left margin — Bootstrap's -1.5em
+   input margin (+ the item's -4px) was letting radios/checkboxes stray to the
+   divider. Pad the lists enough to clear it and zero the item's negative margin. */
+#atlas_results_panel .atlas-panel-view .authority-list,
+#atlas_results_panel .atlas-panel-view #layer_sources_panel { padding-left: 26px !important; }
+#atlas_results_panel .atlas-panel-view .authority-item { margin-left: 0 !important; }
 
 /* Idle-state generic instructions (shown when no search is active) */
 .atlas-default-panel {

@@ -899,9 +899,12 @@ function updateTreeBadge() {
 
 function switchSearchMode(mode) {
     searchMode = mode;
-    // Mode tint on the floating search bar (Areas = teal, Places = burgundy).
+    // Mode tint on the floating search bar (Areas = indigo, Places = burgundy).
     const fs = document.getElementById('floating_search');
     if (fs) { fs.classList.remove('mode-areas', 'mode-toponyms'); fs.classList.add('mode-' + mode); }
+    // A settings view (Regions/Gazetteers/Categories) is mode-specific, so leave
+    // it on a mode switch — otherwise it lingers under the wrong mode's controls.
+    showResultsView();
     const input = document.getElementById('atlas_search_input');
     const toponymBtns = document.querySelectorAll('.toponym-only-btn');
     const areasBtns = document.querySelectorAll('.areas-only-btn');
