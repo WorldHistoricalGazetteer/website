@@ -633,6 +633,7 @@ Promise.all([
             if (this.disabled) return;
             useViewport = !useViewport;
             this.classList.toggle('active', useViewport);
+            setViewportFrame(useViewport);
             updateViewportTooltip();
 
             // Hide boundaries when viewport mode is active; restore when deactivated
@@ -1306,6 +1307,12 @@ function emitGazetteerSelection(mode) {
 
 /* ── Viewport constraint helpers ── */
 
+// Show/hide the on-map edge-marker frame that signals Viewport mode is active.
+function setViewportFrame(on) {
+    const frame = document.getElementById('atlas_viewport_frame');
+    if (frame) frame.classList.toggle('active', on);
+}
+
 function updateViewportButtonState(isGlobe) {
     const btn = document.getElementById('atlas_viewport_btn');
     if (!btn) return;
@@ -1316,6 +1323,7 @@ function updateViewportButtonState(isGlobe) {
         if (useViewport) {
             useViewport = false;
             btn.classList.remove('active');
+            setViewportFrame(false);
             // Restore boundaries when viewport is auto-disabled
             if (layerPalette) layerPalette.refreshBoundaries();
         }
@@ -2125,6 +2133,7 @@ function showPanelView(id) {
         useViewport = false;
         const vb = document.getElementById('atlas_viewport_btn');
         if (vb) vb.classList.remove('active');
+        setViewportFrame(false);
         if (typeof updateViewportTooltip === 'function') updateViewportTooltip();
         if (layerPalette) layerPalette.refreshBoundaries();
     }
@@ -2208,6 +2217,7 @@ function clearAll() {
     useViewport = false;
     const vpBtn = document.getElementById('atlas_viewport_btn');
     if (vpBtn) { vpBtn.classList.remove('active'); }
+    setViewportFrame(false);
     updateViewportTooltip();
 
     // Reset clustering (always-on default; slider TBD per Master Plan §4.2)

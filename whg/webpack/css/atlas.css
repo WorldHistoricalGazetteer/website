@@ -85,6 +85,31 @@
     opacity: 0;
 }
 
+/* Viewport-mode frame: T-markers at each map-edge centre, arrows pointing in.
+   Covers only the map area (left of the 340px panel), never intercepts input. */
+.viewport-frame {
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 340px;
+    z-index: 2;
+    pointer-events: none;
+    display: none;
+    color: var(--atlas-areas);   /* spatial constraint → Areas indigo */
+}
+.viewport-frame.active { display: block; }
+.viewport-frame .vp-marker {
+    position: absolute;
+    /* Double white halo so the markers stay legible over any basemap. */
+    filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 2px #fff);
+    animation: vp-marker-in 0.25s ease-out both;
+}
+/* Top marker drops below the floating search bar (the one control spanning the
+   top-centre); Viewport mode clears area selections so the bar can't grow chips. */
+.viewport-frame .vp-top    { top: 60px;   left: 50%; transform: translateX(-50%); }
+.viewport-frame .vp-bottom { bottom: 6px; left: 50%; transform: translateX(-50%); }
+.viewport-frame .vp-left   { left: 6px;   top: 50%;  transform: translateY(-50%); }
+.viewport-frame .vp-right  { right: 6px;  top: 50%;  transform: translateY(-50%); }
+@keyframes vp-marker-in { from { opacity: 0; } to { opacity: 1; } }
+
 /* Force all MapLibre controls to stay inside the map container */
 #hero_map .maplibregl-control-container {
     position: absolute !important;

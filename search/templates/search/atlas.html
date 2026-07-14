@@ -30,6 +30,28 @@
     <!-- Opaque overlay that hides the map until globe mode has fully rendered -->
     <div id="map_loading_overlay" class="map-loading-overlay"></div>
 
+    <!-- Viewport-mode indicator: T-markers at the centre of each map edge whose
+         arrows point inward, framing the current view as the search extent.
+         Shown only while Viewport constraint is active. -->
+    <div id="atlas_viewport_frame" class="viewport-frame" aria-hidden="true">
+        <svg class="vp-marker vp-top" viewBox="0 0 56 46" width="56" height="46" fill="none"
+             stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 5 H50"/><path d="M28 5 V28"/><path d="M19 22 L28 33 L37 22"/>
+        </svg>
+        <svg class="vp-marker vp-right" viewBox="0 0 46 56" width="46" height="56" fill="none"
+             stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M41 6 V50"/><path d="M41 28 H18"/><path d="M24 19 L13 28 L24 37"/>
+        </svg>
+        <svg class="vp-marker vp-bottom" viewBox="0 0 56 46" width="56" height="46" fill="none"
+             stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 41 H50"/><path d="M28 41 V18"/><path d="M19 24 L28 13 L37 24"/>
+        </svg>
+        <svg class="vp-marker vp-left" viewBox="0 0 46 56" width="46" height="56" fill="none"
+             stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 6 V50"/><path d="M5 28 H28"/><path d="M22 19 L33 28 L22 37"/>
+        </svg>
+    </div>
+
     <!-- Floating search input + controls (top-left) -->
     <div id="floating_search" class="mode-areas">
         <div class="floating-search-inner">
