@@ -161,11 +161,22 @@ function fillTemporalSlider() {
         #546e7a ${fromPct}%, #546e7a ${toPct}%,
         #b0bec5 ${toPct}%, #b0bec5 100%)`;
 
-    // Keep the drag-band aligned with the fill between the handles.
+    // Keep the drag-band aligned with the fill, inset ~8px (half a thumb) from
+    // each handle so it only covers the MIDDLE — the handles stay independently
+    // grabbable. Hide it when the range is too narrow to leave a middle.
     const band = document.getElementById('temporal_range_band');
     if (band) {
-        band.style.left = `${fromPct}%`;
-        band.style.width = `${toPct - fromPct}%`;
+        const THUMB = 8;
+        const wrap = document.querySelector('.temporal-slider-wrap');
+        const px = wrap ? wrap.getBoundingClientRect().width : 200;
+        const midPx = ((toPct - fromPct) / 100) * px - 2 * THUMB;
+        if (midPx > 6) {
+            band.style.left = `calc(${fromPct}% + ${THUMB}px)`;
+            band.style.width = `calc(${toPct - fromPct}% - ${2 * THUMB}px)`;
+            band.style.display = 'block';
+        } else {
+            band.style.display = 'none';
+        }
     }
 }
 
