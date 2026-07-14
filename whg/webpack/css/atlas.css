@@ -304,6 +304,21 @@
     box-shadow: 0 0 0 4px rgba(84, 110, 122, 0.2);
 }
 
+/* Draggable range band — invisible drag layer over the visible fill gradient.
+   Below the thumbs (z-index 5) so the handles stay independently grabbable;
+   grabbing between them shifts the whole range. */
+.temporal-range-band {
+    position: absolute;
+    top: 3px;
+    height: 14px;
+    background: transparent;
+    z-index: 4;
+    cursor: grab;
+    touch-action: none;
+}
+.temporal-range-band.dragging { cursor: grabbing; }
+#temporal_control.temporal-off .temporal-range-band { cursor: default; }
+
 /* Scale ticks */
 .temporal-scale {
     display: flex;

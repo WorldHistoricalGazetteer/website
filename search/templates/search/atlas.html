@@ -120,6 +120,11 @@
                        min="-2000" max="2100" value="800">
                 <input type="range" class="temporal-to" id="temporal_to_slider"
                        min="-2000" max="2100" value="1800">
+                <!-- Transparent drag-layer over the fill band: shifts both handles
+                     together (preserving span). Sits below the thumbs so the handles
+                     stay independently draggable. -->
+                <div class="temporal-range-band" id="temporal_range_band"
+                     title="Drag to move the whole range"></div>
             </div>
             <div class="temporal-scale">
                 <span>2000 BCE</span>

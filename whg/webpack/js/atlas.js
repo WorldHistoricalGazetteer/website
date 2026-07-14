@@ -160,6 +160,13 @@ function fillTemporalSlider() {
         #b0bec5 0%, #b0bec5 ${fromPct}%,
         #546e7a ${fromPct}%, #546e7a ${toPct}%,
         #b0bec5 ${toPct}%, #b0bec5 100%)`;
+
+    // Keep the drag-band aligned with the fill between the handles.
+    const band = document.getElementById('temporal_range_band');
+    if (band) {
+        band.style.left = `${fromPct}%`;
+        band.style.width = `${toPct - fromPct}%`;
+    }
 }
 
 function updateTemporalLabels() {
@@ -207,6 +214,45 @@ function wireTemporalControl() {
             tc.classList.toggle('temporal-off', temporalMode === 'off');
         });
     });
+
+    // Drag the whole range band (shift both handles, preserving span).
+    const wrap = document.querySelector('.temporal-slider-wrap');
+    const band = document.getElementById('temporal_range_band');
+    if (wrap && band) {
+        let dragging = false, startX = 0, startFrom = 0, span = 0;
+        band.addEventListener('pointerdown', (e) => {
+            dragging = true;
+            startX = e.clientX;
+            startFrom = temporalFrom;
+            span = temporalTo - temporalFrom;
+            band.classList.add('dragging');
+            try { band.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+            e.preventDefault();
+        });
+        band.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const px = wrap.getBoundingClientRect().width || 1;
+            const deltaYears = Math.round(((e.clientX - startX) / px) * (TEMPORAL_MAX - TEMPORAL_MIN));
+            let newFrom = startFrom + deltaYears;
+            // Clamp so the span stays within bounds (both handles move together).
+            newFrom = Math.max(TEMPORAL_MIN, Math.min(newFrom, TEMPORAL_MAX - span));
+            temporalFrom = newFrom;
+            temporalTo = newFrom + span;
+            fromSlider.value = temporalFrom;
+            toSlider.value = temporalTo;
+            updateTemporalLabels();
+            fillTemporalSlider();
+            temporalRangeChanged();
+        });
+        const endDrag = (e) => {
+            if (!dragging) return;
+            dragging = false;
+            band.classList.remove('dragging');
+            try { band.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+        };
+        band.addEventListener('pointerup', endDrag);
+        band.addEventListener('pointercancel', endDrag);
+    }
 
     // Initial fill
     fillTemporalSlider();
