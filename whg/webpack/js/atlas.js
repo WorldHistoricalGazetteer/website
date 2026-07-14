@@ -616,6 +616,9 @@ Promise.all([
             // Hide boundaries when viewport mode is active; restore when deactivated
             if (useViewport) {
                 heroMap.hideBoundaries();
+                // Viewport & Regions are mutually-exclusive spatial constraints —
+                // turning viewport on closes the Regions panel + clears its button.
+                showResultsView();
             } else if (layerPalette) {
                 layerPalette.refreshBoundaries();
             }
@@ -2077,6 +2080,15 @@ function initPanelViews() {
 function showPanelView(id) {
     const panel = document.getElementById('atlas_results_panel');
     if (!panel) return;
+    // Opening the Regions panel deactivates Viewport (mutually-exclusive spatial
+    // constraints — Viewport hides the boundaries Regions needs).
+    if (id === 'layers_offcanvas' && useViewport) {
+        useViewport = false;
+        const vb = document.getElementById('atlas_viewport_btn');
+        if (vb) vb.classList.remove('active');
+        if (typeof updateViewportTooltip === 'function') updateViewportTooltip();
+        if (layerPalette) layerPalette.refreshBoundaries();
+    }
     panel.querySelectorAll('.atlas-panel-view').forEach(v => v.classList.remove('active'));
     const view = document.getElementById(id);
     // Highlight the toolbar button for the active view (none matches the results
