@@ -1357,8 +1357,11 @@ function renderAreaDropdown(items) {
         </div>
     `).join('');
 
-    // Mount below the floating search
-    document.getElementById('floating_search').appendChild(dropdown);
+    // Mount directly beneath the search input box (not the whole floating panel,
+    // which would drop it below the temporal control).
+    const anchor = document.querySelector('#floating_search .search-input-group')
+        || document.getElementById('floating_search');
+    anchor.appendChild(dropdown);
 
     // Wire clicks
     dropdown.querySelectorAll('.region-result:not(.region-result--stub)').forEach(el => {
@@ -2017,19 +2020,26 @@ function renderToponymResults(data) {
 
 /* ── Results panel show/hide ── */
 
+// The panel is a permanent column; "show" just swaps the idle instructions out
+// for results, "hide" (clear/close) swaps them back and resets the controls.
 function showResultsPanel() {
-    const panel = document.getElementById('atlas_results_panel');
-    panel.classList.remove('atlas-results-hidden');
-    // Resize map to accommodate
-    setTimeout(() => heroMap.resize(), 350);
+    const dp = document.getElementById('atlas_default_panel');
+    if (dp) dp.style.display = 'none';
 }
 
 function hideResultsPanel() {
-    const panel = document.getElementById('atlas_results_panel');
-    panel.classList.add('atlas-results-hidden');
+    const dp = document.getElementById('atlas_default_panel');
+    if (dp) dp.style.display = '';
     heroMap.clearResultFeatures();
     document.getElementById('atlas_search_results').innerHTML = '';
-    setTimeout(() => heroMap.resize(), 350);
+    document.getElementById('atlas_no_results').style.display = 'none';
+    const count = document.getElementById('atlas_results_count');
+    if (count) count.textContent = '';
+    ['atlas_cluster_controls', 'atlas_weight_controls', 'atlas_type_facets'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+    gatewayData = null;
 }
 
 /* ── Clear all ── */

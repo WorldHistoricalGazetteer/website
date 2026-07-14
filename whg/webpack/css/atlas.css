@@ -12,6 +12,7 @@
 
 .explorer-layout {
     position: relative;
+    display: flex;               /* map (flex:1) beside a fixed results panel */
     width: 100%;
     height: calc(100vh - 110px);  /* viewport minus header + footer */
     min-height: 400px;
@@ -19,15 +20,22 @@
 }
 
 #hero_map {
-    position: absolute;
-    inset: 0;
+    position: relative;
+    flex: 1 1 auto;              /* fill the space left of the panel; map controls
+                                    now stay inside this narrower area */
+    min-width: 0;
+    height: 100%;
     z-index: 0;
 }
 
-/* Opaque overlay that covers the map until globe projection has rendered */
+/* Opaque overlay that covers the map until globe projection has rendered.
+   Constrained to the map area (left of the fixed panel). */
 .map-loading-overlay {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 340px;
     z-index: 1;
     background: rgb(218, 236, 241);
     transition: opacity 2.5s ease;
@@ -109,6 +117,7 @@
 .search-input-group {
     flex: 1;
     min-width: 0;
+    position: relative; /* anchor the area-results dropdown directly beneath the input */
 }
 .search-input-group .form-control {
     border-radius: 6px 0 0 6px;
@@ -382,24 +391,19 @@
    Results panel (slides in from right)
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Fixed results panel — a permanent column beside the map (never overlays it,
+   so map controls and drawn features stay visible). Shows generic instructions
+   when idle; results replace them on search. */
 #atlas_results_panel {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 380px;
+    position: relative;
+    flex: 0 0 340px;
+    width: 340px;
     height: 100%;
     background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(8px);
-    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
-    z-index: 15;
+    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.12);
     display: flex;
     flex-direction: column;
-    transition: transform 0.3s ease;
     overflow: hidden;
-}
-#atlas_results_panel.atlas-results-hidden {
-    transform: translateX(100%);
-    pointer-events: none;
 }
 
 .results-panel-header {
@@ -408,6 +412,39 @@
     padding: 8px 12px;
     border-bottom: 1px solid #dee2e6;
     flex-shrink: 0;
+}
+
+/* Idle-state generic instructions (shown when no search is active) */
+.atlas-default-panel {
+    padding: 24px 18px;
+    color: #5a6b7b;
+    text-align: center;
+}
+.atlas-default-panel .adp-icon {
+    font-size: 1.6rem;
+    color: #9fb0bf;
+    margin-bottom: 8px;
+}
+.atlas-default-panel .adp-lead {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #34495e;
+    margin: 0 0 10px;
+}
+.atlas-default-panel .adp-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 12px;
+    text-align: left;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+.atlas-default-panel .adp-list li { padding-left: 2px; }
+.atlas-default-panel .adp-list strong { color: #34495e; }
+.atlas-default-panel .adp-hint {
+    font-size: 0.72rem;
+    color: #90a4ae;
+    margin: 0;
 }
 
 #atlas_result_container {
@@ -1218,16 +1255,15 @@
         width: 100%;
         margin-bottom: 4px;
     }
+    /* Stack map over panel on narrow screens. */
+    .explorer-layout { flex-direction: column; }
     #atlas_results_panel {
+        flex: 1 1 45vh;
         width: 100%;
-        height: 50vh;
-        top: auto;
-        bottom: 0;
+        height: auto;
         border-radius: 16px 16px 0 0;
     }
-    #atlas_results_panel.atlas-results-hidden {
-        transform: translateY(100%);
-    }
+    .map-loading-overlay { right: 0; }
     .atlas-welcome {
         width: calc(100% - 32px) !important;
         max-width: none !important;
@@ -1257,7 +1293,7 @@
 .atlas-welcome {
     position: absolute;
     top: 50%;
-    left: 50%;
+    left: calc(50% - 170px); /* centre on the map area (left of the 340px panel) */
     transform: translate(-50%, -50%);
     z-index: 12;
     width: 420px;

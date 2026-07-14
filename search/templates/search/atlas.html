@@ -136,12 +136,12 @@
         </div>
     </div>
 
-    <!-- Results panel (hidden in Explorer mode, slides in for Toponym mode) -->
-    <div id="atlas_results_panel" class="atlas-results-hidden">
+    <!-- Fixed results panel — permanent column beside the map. -->
+    <div id="atlas_results_panel">
         <div class="results-panel-header">
             <span id="atlas_results_count" class="small text-muted"></span>
             <button id="atlas_close_results" class="btn btn-sm btn-outline-secondary ms-auto"
-                    data-bs-toggle="tooltip" title="Close results">
+                    data-bs-toggle="tooltip" title="Clear results">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -175,6 +175,17 @@
              the gateway's facets.aat_types; clicking filters via aat_types. -->
         <div id="atlas_type_facets" class="type-facets" style="display:none;"></div>
         <div id="atlas_result_container">
+            <!-- Generic instructions shown when the panel is idle (no active search). -->
+            <div id="atlas_default_panel" class="atlas-default-panel">
+                <i class="fas fa-compass adp-icon"></i>
+                <p class="adp-lead">Explore the Atlas</p>
+                <ul class="adp-list">
+                    <li><strong>Areas</strong> — find a region or boundary.</li>
+                    <li><strong>Places</strong> — search place names.</li>
+                    <li>Filter by date with the <strong>time range</strong>.</li>
+                </ul>
+                <p class="adp-hint">Results and clustering controls appear here.</p>
+            </div>
             <div id="atlas_no_results" class="bg-light p-2 rounded" style="display:none;">
                 No results — please modify your search terms or filters.
             </div>
