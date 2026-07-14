@@ -1,9 +1,2 @@
-/*!*****************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/tasks.css ***!
-  \*****************************************************************************/
-.recon-options p {
-    margin-bottom: 0;
-}
-.maplibregl-map {
-    min-height: 300px;
-}
+.recon-options p{margin-bottom:0}.maplibregl-map{min-height:300px}
+/*# sourceMappingURL=tasks.bundle.css.map*/

@@ -1,19 +1,2 @@
-/*!*****************************************************************************!*\
-  !*** css ./node_modules/css-loader/dist/cjs.js!./whg/webpack/css/areas.css ***!
-  \*****************************************************************************/
-#entrySelector {
-    width: 100%;
-    margin: 0.4rem;
-}
-
-#geojson {
-    width: 100%;	
-}
-
-#buffer_km {
-    width: fit-content;
-    display: inline-block;
-    font-size: .8rem;
-    margin-top: 1rem;
-}
-
+#entrySelector{width:100%;margin:.4rem}#geojson{width:100%}#buffer_km{width:fit-content;display:inline-block;font-size:.8rem;margin-top:1rem}
+/*# sourceMappingURL=areas.bundle.css.map*/

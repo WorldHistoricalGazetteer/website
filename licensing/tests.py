@@ -5,11 +5,27 @@ from .models import License
 
 
 class LicenseSeedTests(TestCase):
-    """The 0002 data migration runs as part of test-DB setup, so the seeded
-    rows are present without re-running anything here."""
+    """The 0002 + 0003 data migrations run as part of test-DB setup, so the
+    seeded rows are present without re-running anything here."""
 
     def test_seed_rows_present(self):
-        self.assertEqual(License.objects.count(), 8)
+        # 8 rows from 0002 + 7 rows from 0003_extend_licenses.
+        self.assertEqual(License.objects.count(), 15)
+
+    def test_extended_custom_and_nd_rows_present(self):
+        """The four custom / NoDerivatives keys added by 0003 must resolve —
+        the indexing-side inventory push depends on them at prod parity."""
+        for spdx in ("CC-BY-NC-ND-3.0", "CC-BY-NC-ND-4.0",
+                     "custom-all-rights-reserved", "custom-academic-use"):
+            self.assertTrue(
+                License.objects.filter(spdx_id=spdx).exists(),
+                f"missing seeded licence row {spdx!r}",
+            )
+        # NoDerivatives / all-rights-reserved forbid commercial reuse.
+        self.assertFalse(
+            License.objects.get(spdx_id="CC-BY-NC-ND-4.0").permits_commercial)
+        self.assertTrue(
+            License.objects.get(spdx_id="custom-academic-use").custom)
 
     def test_flag_semantics(self):
         self.assertFalse(License.objects.get(spdx_id="CC0-1.0").attribution_required)

@@ -1,0 +1,561 @@
+<!-- /search/templates/search/atlas.html -->
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block maplibre %}
+<script type="text/javascript">
+	const loadMaplibre = true;
+</script>
+<link href="{% static 'webpack/whg_maplibre.bundle.css' %}" rel="stylesheet"/>
+{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/atlas.bundle.css' %}" rel="stylesheet"/>
+{% endblock %}
+
+{% block header %}
+{% endblock %}
+
+{% block title %}
+<title>WHG Atlas{% if toponym %}: {{ toponym }}{% endif %}</title>
+{% endblock %}
+
+{% block content %}
+<div class="container explorer-container">
+<div id="explorer" class="explorer-layout">
+
+    <!-- Hero map: fills explorer container -->
+    <div id="hero_map"></div>
+
+    <!-- Opaque overlay that hides the map until globe mode has fully rendered -->
+    <div id="map_loading_overlay" class="map-loading-overlay"></div>
+
+    <!-- Floating search input + controls (top-left) -->
+    <div id="floating_search">
+        <div class="floating-search-inner">
+            <!-- Mode toggle: Areas / Places (internal data-search-mode value remains "toponyms") -->
+            <div class="search-mode-toggle btn-group btn-group-sm" role="group" aria-label="Search mode">
+                <button type="button" class="btn active" data-search-mode="areas"
+                        data-bs-toggle="tooltip" title="Search for geographic areas, boundaries, and territories">
+                    <i class="fas fa-vector-square me-1"></i>Areas
+                </button>
+                <button type="button" class="btn" data-search-mode="toponyms"
+                        data-bs-toggle="tooltip" title="Search for Place Names or Gazetteers within selected Areas">
+                    <i class="fas fa-search-location me-1"></i>Places
+                </button>
+            </div>
+
+            <!-- Search input -->
+            <div class="search-input-group input-group input-group-sm">
+                <input id="atlas_search_input" class="form-control" type="text"
+                       autocomplete="off" spellcheck="false"
+                       placeholder="Search for regions…"/>
+                <button id="atlas_clear_search" class="btn btn-outline-secondary" type="button"
+                        data-bs-toggle="tooltip" title="Clear search">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button id="atlas_initiate_search" class="btn btn-outline-secondary btn-success" type="button"
+                        data-bs-toggle="tooltip" title="Search">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button id="atlas_exact_match" class="btn btn-outline-secondary" type="button"
+                        aria-pressed="false"
+                        data-bs-toggle="tooltip" title="Toggle exact match">
+                    <i class="fas fa-crosshairs"></i>
+                </button>
+            </div>
+
+            <!-- Control buttons (Viewport+Regions areas-only; Gazetteers & Categories toponym-only) -->
+            <div class="atlas-control-buttons">
+                <div class="btn-group btn-group-sm areas-only-btn" id="areas_control_pill"
+                     role="group" aria-label="Spatial constraint">
+                    <span id="atlas_viewport_wrap" class="d-inline-block" tabindex="0"
+                          data-bs-toggle="tooltip"
+                          title="Switch to flat map projection to enable viewport constraint">
+                        <button id="atlas_viewport_btn" class="btn" type="button"
+                                disabled style="pointer-events: none;">
+                            <i class="fas fa-crop-alt me-1"></i>Viewport
+                        </button>
+                    </span>
+                    <button id="atlas_layers_btn" class="btn"
+                            data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
+                            title="Region sources and boundary settings">
+                        <i class="fas fa-globe-americas me-1"></i>Regions
+                    </button>
+                </div>
+                <button id="open_gazetteers_modal" class="btn btn-sm toponym-only-btn"
+                        data-bs-toggle="offcanvas" data-bs-target="#gazetteers_offcanvas"
+                        title="Filter or Explore Gazetteers"
+                        style="display:none;">
+                    <i class="fas fa-book-atlas me-1"></i>Gazetteers
+                </button>
+                <button id="open_categories_modal" class="btn btn-sm toponym-only-btn"
+                        data-bs-toggle="offcanvas" data-bs-target="#categories_offcanvas"
+                        title="Filter by place type"
+                        style="display:none;">
+                    <i class="fas fa-sitemap me-1"></i>Categories
+                </button>
+            </div>
+        </div>
+
+        <!-- Spatial selection chips -->
+        <div id="selection_chips"></div>
+
+        <!-- Temporal range control (below search bar, matching width) -->
+        <div id="temporal_control" class="temporal-off">
+            <div class="temporal-header">
+                <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
+                    <button type="button" class="btn active" data-temporal-mode="off">Off</button>
+                    <button type="button" class="btn" data-temporal-mode="range">Date Range</button>
+                    <button type="button" class="btn" data-temporal-mode="undated">+Undated</button>
+                </div>
+                <div class="temporal-year-labels">
+                    <span id="temporal_from_label">800</span>
+                    <span style="color:#90a4ae; font-weight:400; font-size:0.65rem">to</span>
+                    <span id="temporal_to_label">1800</span>
+                </div>
+            </div>
+            <div class="temporal-slider-wrap">
+                <input type="range" class="temporal-from" id="temporal_from_slider"
+                       min="-2000" max="2100" value="800">
+                <input type="range" class="temporal-to" id="temporal_to_slider"
+                       min="-2000" max="2100" value="1800">
+            </div>
+            <div class="temporal-scale">
+                <span>2000 BCE</span>
+                <span>1000 BCE</span>
+                <span>1 CE</span>
+                <span>1000</span>
+                <span>2000</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results panel (hidden in Explorer mode, slides in for Toponym mode) -->
+    <div id="atlas_results_panel" class="atlas-results-hidden">
+        <div class="results-panel-header">
+            <span id="atlas_results_count" class="small text-muted"></span>
+            <button id="atlas_close_results" class="btn btn-sm btn-outline-secondary ms-auto"
+                    data-bs-toggle="tooltip" title="Close results">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <!-- BETA: client-side clustering control. Re-clusters the cached
+             result set live (no refetch) as the threshold changes. -->
+        <div id="atlas_cluster_controls" class="cluster-controls" style="display:none;">
+            <label for="atlas_cluster_theta" class="cluster-theta-label">
+                Merge sensitivity
+                <span class="cluster-theta-hint"
+                      title="How readily two places merge into one cluster. Lower → more, smaller clusters; higher → fewer, tighter clusters. (θ: the composite-score threshold for merging.)">&#9432;</span>
+                <span id="atlas_cluster_theta_val" class="cluster-theta-val"></span>
+            </label>
+            <input type="range" id="atlas_cluster_theta" min="0.30" max="0.90" step="0.01" value="0.55">
+        </div>
+        <!-- BETA: per-signal weight sliders — re-cluster live (relative weights;
+             the composite is a weighted average so they need not sum to 1). -->
+        <details id="atlas_weight_controls" class="weight-controls" style="display:none;">
+            <summary>Adjust signal weights</summary>
+            <div class="weight-grid">
+                <label>Name<input type="range" class="weight-slider" data-facet="name" min="0" max="1" step="0.05"><span class="weight-val" data-facet="name"></span></label>
+                <label>Location<input type="range" class="weight-slider" data-facet="spatial" min="0" max="1" step="0.05"><span class="weight-val" data-facet="spatial"></span></label>
+                <label>Time<input type="range" class="weight-slider" data-facet="temporal" min="0" max="1" step="0.05"><span class="weight-val" data-facet="temporal"></span></label>
+                <label>Type<input type="range" class="weight-slider" data-facet="type" min="0" max="1" step="0.05"><span class="weight-val" data-facet="type"></span></label>
+                <label>Links<input type="range" class="weight-slider" data-facet="link" min="0" max="1" step="0.05"><span class="weight-val" data-facet="link"></span></label>
+            </div>
+        </details>
+        <!-- BETA: AAT type facet (result-driven, hierarchical). Populated from
+             the gateway's facets.aat_types; clicking filters via aat_types. -->
+        <div id="atlas_type_facets" class="type-facets" style="display:none;"></div>
+        <div id="atlas_result_container">
+            <div id="atlas_no_results" class="bg-light p-2 rounded" style="display:none;">
+                No results — please modify your search terms or filters.
+            </div>
+            <div id="atlas_search_results"></div>
+        </div>
+    </div>
+
+    <!-- BETA: dynamic Atlas portal — per-place detail resolved on demand from
+         the gateway, with the live (client-side) cluster context. Not the
+         legacy fixed-cluster-id portal. -->
+    <div class="modal fade" id="atlas_portal_modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="atlas_portal_title">Place</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="atlas_portal_body"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Welcome / landing panel (centered on map, fades on interaction) -->
+    <div id="atlas_welcome" class="atlas-welcome">
+        <button id="atlas_welcome_dismiss" class="atlas-welcome-close" aria-label="Dismiss">
+            <i class="fas fa-times"></i>
+        </button>
+        <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" class="atlas-welcome-logo">
+        <h5 class="atlas-welcome-title">WHG Atlas</h5>
+        <p class="atlas-welcome-text">
+            The WHG Atlas is a visualisation tool for the World Historical Gazetteer —
+            {{ index_places }} place records and {{ index_toponyms }}
+            distinct toponyms, combining scholarly curated gazetteers with
+            large-scale public gazetteers including GeoNames and Wikidata.
+            At this scale, spatial and temporal scoping of searches is highly desirable.
+        </p>
+        <p class="atlas-welcome-text" style="margin-bottom: 14px;">
+            Start in <strong>Areas</strong> mode to select geographic regions, then
+            switch to <strong>Places</strong> to search for place names within them.
+            Use <strong>Regions</strong>, <strong>Gazetteers</strong>, and <strong>Categories</strong>
+            to refine your view.
+        </p>
+        <a href="#" id="atlas_start_tour_link" class="atlas-welcome-tour-link">
+            <i class="fas fa-map-signs me-1"></i>Take a guided tour
+        </a>
+        <button type="button" id="atlas_welcome_dontshow" class="atlas-welcome-dontshow">
+            Don't show this again
+        </button>
+    </div>
+
+    <!-- Lightweight "map loading" placeholder — shown INSTEAD of the welcome
+         panel once the user has opted out (via "Don't show this again"), so a
+         returning user still sees something while the map loads. Auto-hidden
+         when the map finishes loading. -->
+    <div id="atlas_loading" class="atlas-loading" style="display:none;" role="status" aria-live="polite">
+        <div class="atlas-loading-spinner" aria-hidden="true"></div>
+        <span class="atlas-loading-text">Loading the map…</span>
+    </div>
+
+    <!-- Tour relaunch button (bottom-left) -->
+    <button id="atlas_tour_btn" class="atlas-tour-btn" title="Take a guided tour">
+        <i class="fas fa-map-signs"></i>
+    </button>
+
+</div><!-- #explorer -->
+</div><!-- .container -->
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     Offcanvas panels — placed OUTSIDE .explorer-layout so they are
+     not clipped by overflow:hidden and sit above the backdrop.
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<!-- Regions offcanvas -->
+<div id="layers_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
+     aria-labelledby="layers_offcanvas_label">
+    <div class="offcanvas-header">
+        <h6 class="offcanvas-title" id="layers_offcanvas_label">
+            <i class="fas fa-globe-americas me-1"></i>Regions
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <p class="offcanvas-help-text">
+            Select a <strong>source</strong> for geographic regions such as
+            empires, polities, kingdoms, and administrative territories.
+            Regions selected from the map act as <strong>spatial constraints</strong>
+            for subsequent toponym searches.
+        </p>
+        <div id="layer_sources_panel">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+
+<!-- Gazetteers offcanvas -->
+<div id="gazetteers_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
+     aria-labelledby="gazetteers_offcanvas_label">
+    <div class="offcanvas-header">
+        <h6 class="offcanvas-title" id="gazetteers_offcanvas_label">
+            <i class="fas fa-book-atlas me-1"></i>Gazetteers
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body" data-mode="filter">
+
+        <!-- Filter | Explore mode toggle (Master Plan §1.4 — sketch UI; backend unification of
+             Authorities/Datasets/Collections via /suggest is pending Phase 2) -->
+        <div class="gazetteer-mode-toggle btn-group btn-group-sm w-100 mb-2" role="group"
+             aria-label="Gazetteer mode">
+            <button type="button" class="btn active" data-gazetteer-mode="filter"
+                    data-bs-toggle="tooltip"
+                    title="Use multiple selected gazetteers as a filter on subsequent searches">
+                <i class="fas fa-filter me-1"></i>Filter
+            </button>
+            <button type="button" class="btn" data-gazetteer-mode="explore"
+                    data-bs-toggle="tooltip"
+                    title="Browse a single selected gazetteer in Explorer view">
+                <i class="fas fa-binoculars me-1"></i>Explore
+            </button>
+        </div>
+
+        <!-- Mode-specific help text (the inactive copy is hidden via .d-none and toggled by atlas.js) -->
+        <p class="offcanvas-help-text gazetteer-mode-help" data-mode="filter">
+            Choose which gazetteers to include in your search.
+            Checked gazetteers contribute place records to the results; uncheck
+            any you wish to exclude.
+        </p>
+        <p class="offcanvas-help-text gazetteer-mode-help d-none" data-mode="explore">
+            Select a single gazetteer to browse it in <strong>Explorer view</strong> —
+            its records become the primary content, with clustering, comparison,
+            and link/distinct affordances scoped to that gazetteer.
+        </p>
+
+        <!-- Coverage filters card (Master Plan §1.4.1 — sketch UI; the switches operate but
+             the underlying functionality is not yet implemented. The stub-note appears when
+             either switch is on, and is hidden again when both are off.) -->
+        <div class="gazetteer-card gazetteer-coverage-filters mb-2">
+            <div class="form-check form-switch small mb-1">
+                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_area">
+                <label class="form-check-label small" for="gazetteer_filter_area">
+                    Hide gazetteers outside <strong>Area</strong> filter
+                </label>
+            </div>
+            <div class="form-check form-switch small">
+                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_period">
+                <label class="form-check-label small" for="gazetteer_filter_period">
+                    Hide gazetteers outside <strong>Period</strong> filter
+                </label>
+            </div>
+            <div class="gazetteer-stub-note small text-muted fst-italic mt-2 d-none">
+                <i class="fas fa-info-circle me-1"></i>
+                Coverage filtering is not yet implemented — the switch will activate
+                once gazetteer-level <code>h3_coverage</code> and <code>temporal_extent</code>
+                arrive via the extended <code>/suggest</code> API (Master Plan Phase 2).
+            </div>
+        </div>
+
+        <!-- "My Gazetteers" card (Explore mode only; placeholder data — backend /suggest
+             extension with `owner_user_id` and `status` is pending Phase 2).
+             NOTE: the user.is_authenticated guard is intentionally omitted during the
+             sketch phase so colleagues without accounts can review the intent. The guard will
+             be reintroduced once this is wired to real per-user data. -->
+        <div class="gazetteer-card gazetteer-mine-card mb-2 d-none" data-mode-visible="explore">
+            <div class="form-check form-switch small">
+                <input class="form-check-input" type="checkbox" id="gazetteer_mine_toggle">
+                <label class="form-check-label small" for="gazetteer_mine_toggle">
+                    <i class="fas fa-user me-1"></i><strong>My Gazetteers</strong>
+                    <span class="text-muted">— show only your published and pending gazetteers</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Explore-mode capabilities note (only visible while in Explore mode) -->
+        <div class="gazetteer-explore-note small mb-2 d-none" data-mode-visible="explore">
+            <i class="fas fa-info-circle me-1"></i>
+            While exploring, signed-in users can add <strong>Attestations</strong>
+            to any place. When exploring one of <strong>your own</strong> gazetteers,
+            you can additionally add places, edit data and metadata, and adjust the
+            clustering — equivalent to the reconciliation / accessioning workflow in v3.2.
+        </div>
+
+        <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on).
+             Populated from `gazetteer_inventory` (api.GazetteerRegistryEntry rows with
+             entry_class='authority'). Only `core` rows are pre-checked. The Specialist
+             Gazetteers parent row is hardcoded after the loop because it's a UI grouping
+             (the WHG-namespaced datasets it expands), not a true authority entry. -->
+        <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
+            {% for g in gazetteer_inventory %}
+            {% if g.id != "whg" %}
+            <label class="authority-item form-check"
+                   data-bs-toggle="tooltip"
+                   data-bs-title="{{ g.description|default:g.name }}"
+                   data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
+                   data-gazetteer-type="{{ g.gazetteer_type }}">
+                <input class="form-check-input authority-cb" type="checkbox"
+                       value="{{ g.id }}"{% if g.core %} checked{% endif %}>
+                <span class="form-check-label">{{ g.name }}</span>
+                {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>
+            </label>
+            {% endif %}
+            {% empty %}
+            <p class="small text-muted fst-italic">
+                No gazetteers registered. Run the indexing pipeline's
+                <code>push_gazetteer_inventory</code> to populate the list.
+            </p>
+            {% endfor %}
+
+            <!-- Specialist Gazetteers — UI grouping that expands to the inline list
+                 of WHG-namespaced datasets. Hardcoded so it is present regardless of
+                 the inventory state (and so the inventory pipeline can't accidentally
+                 remove the parent by reclassifying the underlying rows). -->
+            <label class="authority-item form-check specialist-gazetteers-parent"
+                   data-bs-toggle="tooltip"
+                   data-bs-title="WHG-curated specialist gazetteers — datasets and collections contributed by researchers."
+                   data-no-explore="0"
+                   data-gazetteer-type="standard">
+                <input class="form-check-input authority-cb" type="checkbox" value="whg">
+                <span class="form-check-label">Specialist Gazetteers</span>
+                <span class="gazetteer-count text-muted small ms-1" data-namespace="whg"></span>
+            </label>
+            <!-- Specialist Gazetteers expansion (lazy-rendered by atlas.js when the
+                 parent row is first interacted with). The type-pill filter is sketch
+                 only and Explore-mode-visible via [data-mode-visible]. -->
+            <div class="specialist-gazetteers-expansion d-none">
+                <div class="gazetteer-type-pill-filter btn-group btn-group-sm w-100 mb-2 d-none"
+                     data-mode-visible="explore" role="group" aria-label="Gazetteer type filter">
+                    <button type="button" class="btn active" data-gazetteer-type-pill="standard"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Datasets, Place Collections, and Dataset Collections without sequence/network metadata.">
+                        Standard
+                    </button>
+                    <button type="button" class="btn" data-gazetteer-type-pill="itinerary"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Sketch — datasets with embedded sequence metadata.">
+                        Itinerary
+                    </button>
+                    <button type="button" class="btn" data-gazetteer-type-pill="network"
+                            data-bs-toggle="tooltip"
+                            data-bs-title="Sketch — datasets with embedded network metadata.">
+                        Network
+                    </button>
+                </div>
+                <input class="form-control form-control-sm specialist-search mb-2"
+                       type="search" placeholder="Search Specialist Gazetteers…">
+                <div class="specialist-list authority-list" style="padding-left: 0;">
+                    <!-- Populated by atlas.js::renderSpecialistList -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Specialist Gazetteers payload — emitted as a JSON script tag for
+             atlas.js::renderSpecialistList to consume on demand. -->
+        {{ specialist_gazetteers|json_script:"specialist_gazetteers_data" }}
+
+        <!-- "My Gazetteers" placeholder list (visible only when the toggle above is on; sketch
+             quality — every entry is illustrative, not real user data). The real list is
+             populated from the extended /suggest API (Phase 2 + 4).
+             NOTE: as with the toggle above, the user.is_authenticated guard is
+             intentionally omitted for the sketch period. -->
+        <div class="authority-list my-gazetteers-list d-none" style="padding-left: 25px;">
+            <p class="small text-muted fst-italic mb-1">
+                Placeholder data — illustrates the published / pending grouping. The
+                real list will be populated from the extended <code>/suggest</code> API.
+            </p>
+
+            <div class="my-gazetteers-section mb-2">
+                <div class="filter-header d-flex align-items-center mb-1 mt-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-check-circle me-1 text-success"></i>Published
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample published Dataset (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:welsh-place-names">
+                    <span class="form-check-label">Welsh Place Names <span class="text-muted small">(sample dataset)</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample published Collection (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:roman-britain-sites">
+                    <span class="form-check-label">Roman Britain Sites <span class="text-muted small">(sample collection)</span></span>
+                </label>
+            </div>
+
+            <div class="my-gazetteers-section mb-2">
+                <div class="filter-header d-flex align-items-center mb-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-lock me-1 text-secondary"></i>Private
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample private Dataset — visible only to you (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:fieldwork-notes-2024">
+                    <span class="form-check-label">Fieldwork Notes 2024 <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample private Collection — work-in-progress, never published (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:thesis-corpus">
+                    <span class="form-check-label">Thesis Corpus <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
+                </label>
+            </div>
+
+            <div class="my-gazetteers-section">
+                <div class="filter-header d-flex align-items-center mb-1">
+                    <span class="categories fw-bold" style="font-size: 0.75rem;">
+                        <i class="fas fa-clock me-1 text-warning"></i>Pending
+                    </span>
+                </div>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample pending Dataset awaiting reconciliation (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:medieval-pilgrimage-routes">
+                    <span class="form-check-label">Medieval Pilgrimage Routes <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">draft</span></span>
+                </label>
+                <label class="authority-item form-check"
+                       data-bs-toggle="tooltip"
+                       data-bs-title="Sample dataset under editorial review (placeholder).">
+                    <input class="form-check-input authority-cb" type="checkbox" value="my:hanseatic-ports">
+                    <span class="form-check-label">Hanseatic Ports <span class="badge bg-info text-dark ms-1" style="font-size: 0.6rem;">submitted</span></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Continue button (always visible across Filter / Explore / My Gazetteers states).
+             Closes the offcanvas via Bootstrap's data-bs-dismiss; current selections have
+             already been mirrored into filterState by the change handlers.
+             Left-aligned with a left arrow to indicate "return to the map". -->
+        <div class="gazetteer-continue-row text-start mt-3">
+            <button id="gazetteer_continue_btn" class="btn btn-sm btn-primary" type="button"
+                    data-bs-dismiss="offcanvas">
+                <i class="fas fa-arrow-left me-1"></i>Continue
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Categories offcanvas (AAT type tree) -->
+<div id="categories_offcanvas" class="offcanvas offcanvas-end atlas-offcanvas" tabindex="-1"
+     aria-labelledby="categories_offcanvas_label">
+    <div class="offcanvas-header">
+        <h6 class="offcanvas-title" id="categories_offcanvas_label">
+            <i class="fas fa-sitemap me-1"></i>Place Categories
+        </h6>
+        <span id="atlas_tree_badge" class="badge bg-info ms-2" style="display:none"></span>
+        <a href="#" id="atlas_tree_clear" class="small ms-2">clear all</a>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <p class="offcanvas-help-text">
+            Filter toponym results by place type using the AAT
+            (Art &amp; Architecture Thesaurus) hierarchy. Check one or more
+            categories to restrict your search to specific kinds of place,
+            such as populated places, administrative divisions, or
+            hydrographic features.
+        </p>
+        <div id="atlas_type_tree"></div>
+    </div>
+</div>
+
+{% csrf_token %}
+<script type="text/javascript">
+    const dropdown_data = {{ dropdown_data|safe }};
+    var eswhg = "{{ es_whg|escapejs }}";
+    const has_areas = {{ has_areas|yesno:"true,false" }};
+    const user_areas = {{ user_areas|safe }};
+    const available_sources = {{ available_sources|safe }};
+    const atlas_toponym = {% if toponym %}"{{ toponym|escapejs }}"{% else %}null{% endif %};
+</script>
+
+{% endblock %}
+
+{% block deferredScripts %}
+
+  var scripts = [
+	  {
+		  src: '{% static 'webpack/whg_maplibre.bundle.js' %}',
+		  type: 'text/javascript',
+	  },
+	  {
+		  src: '{% static 'webpack/atlas.bundle.js' %}',
+		  type: 'module',
+	  },
+  ]
+
+{% endblock %}
+
+

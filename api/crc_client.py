@@ -69,6 +69,133 @@ def _headers() -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
+def crc_places(ids: list, user=None) -> dict | None:
+    """Call the CRC gateway ``POST /api/places`` and return the full response.
+
+    Fetches complete ``PlaceDetail`` records (names, types, geometries, links,
+    descriptions, relations, timespans, …) by namespaced place id — the data
+    source for the dynamic Atlas portal. Returns ``None`` when the gateway is
+    unconfigured or the call fails.
+    """
+    if not _is_enabled(user):
+        return None
+    if isinstance(ids, str):
+        ids = [ids]
+    ids = [str(i) for i in (ids or []) if i]
+    if not ids:
+        return None
+    try:
+        url = f"{_gateway_url()}/api/places"
+        resp = requests.post(url, json={"ids": ids}, headers=_headers(), timeout=_timeout())
+        if 200 <= resp.status_code < 300:
+            return resp.json()
+        logger.warning("CRC gateway POST /api/places %s: %s",
+                       resp.status_code, resp.text[:200])
+        return None
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.warning("CRC gateway /api/places network error: %s", exc)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("CRC gateway /api/places unexpected: %s", exc)
+    return None
+
+
+def crc_search(options: dict, user=None) -> dict | None:
+    """Call the CRC gateway ``POST /api/search`` and return the FULL response.
+
+    Unlike ``crc_reconcile_search`` (which adapts hits for the reconciliation
+    make_candidate() path), this returns the gateway's complete SearchResponse
+    dict — ``hits``, ``edges``, ``clustering_params``, ``toponym_stoplist``,
+    ``facets`` — so the browser Atlas clusterer
+    (``whg/webpack/js/clustering.js``) receives all the fuel.
+
+    ``options`` is the Atlas search payload (atlas.js ``gatherToponymOptions``):
+    ``qstr``, ``types`` (AAT ids), ``bounds`` (GeoJSON), ``start`` / ``end`` /
+    ``undated``, ``exact``, ``countries``, ``namespaces``, ``size``.
+
+    Always opts into the clustering fuel (include_hard_links /
+    include_clustering_fields / include_embeddings) and full geometry so the
+    map can plot results. Returns ``None`` when the gateway is unconfigured or
+    the call fails; the caller decides how to surface that.
+    """
+    if not _is_enabled(user):
+        return None
+
+    body = {
+        "query": (options.get("qstr") or "").strip() or None,
+        "mode": "exact" if options.get("exact") else "fuzzy",
+        "size": int(options.get("size") or 100),
+        "geom": "full",
+        "include_hard_links": True,
+        "include_clustering_fields": True,
+        "include_embeddings": True,
+    }
+
+    countries = options.get("countries")
+    if countries:
+        if isinstance(countries, str):
+            countries = [c.strip().upper() for c in countries.split(",") if c.strip()]
+        if countries:
+            body["ccodes"] = countries
+
+    types = options.get("types")
+    if types:
+        if isinstance(types, str):
+            types = [t.strip() for t in types.split(",") if t.strip()]
+        if types:
+            body["types"] = types
+
+    # AAT type facet filter — hierarchical (concept + descendants), list of ints.
+    aat_types = options.get("aat_types")
+    if aat_types:
+        if isinstance(aat_types, str):
+            aat_types = aat_types.split(",")
+        ids = []
+        for t in aat_types:
+            s = str(t).strip()
+            if s.isdigit():
+                ids.append(int(s))
+        if ids:
+            body["aat_types"] = ids
+
+    namespaces = options.get("namespaces")
+    if namespaces:
+        if isinstance(namespaces, str):
+            namespaces = [n.strip() for n in namespaces.split(",") if n.strip()]
+        if namespaces:
+            body["namespaces"] = namespaces
+
+    bounds = options.get("bounds")
+    if isinstance(bounds, dict) and bounds.get("type") and (
+        bounds.get("coordinates") or bounds.get("geometries")
+    ):
+        body["bounds"] = bounds
+
+    if options.get("temporal"):
+        start = options.get("start")
+        end = options.get("end")
+        if start is not None:
+            body["start_year"] = int(start)
+        if end is not None:
+            body["end_year"] = int(end)
+        if options.get("undated"):
+            body["undated"] = True
+
+    try:
+        url = f"{_gateway_url()}/api/search"
+        logger.info("CRC gateway POST %s  q=%r", url, body.get("query"))
+        resp = requests.post(url, json=body, headers=_headers(), timeout=_timeout())
+        if 200 <= resp.status_code < 300:
+            return resp.json()
+        logger.warning("CRC gateway POST /api/search %s: %s",
+                       resp.status_code, resp.text[:200])
+        return None
+    except (requests.Timeout, requests.ConnectionError) as exc:
+        logger.warning("CRC gateway /api/search network error: %s", exc)
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("CRC gateway /api/search unexpected: %s", exc)
+    return None
+
+
 def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None) -> list[dict]:
     """
     Call the CRC gateway ``/api/reconcile`` endpoint.

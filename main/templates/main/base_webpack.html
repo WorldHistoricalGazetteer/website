@@ -190,6 +190,23 @@
                         <a class="nav-link" href="{% url 'teaching' %}">Teaching</a>
                     </li>
                     {% if user.can_access_beta %}
+                    {% comment %}Atlas + Gazetteers — BETA preview (place#111). Spatio-temporal explorer + gazetteer-registry browser, ported from the atlas branch. Gated to staff/beta_tester (can_access_beta) until public launch; same burnt-orange pill convention as the Workbench beta menu.{% endcomment %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'atlas-page' %}" title="Beta preview — Atlas spatio-temporal explorer (place#111)">
+                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                                <i class="fas fa-atlas" style="margin-right:4px;"></i>Atlas <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
+                            </span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'atlas-page' %}?panel=gazetteers&amp;gmode=explore" title="Beta preview — Gazetteers registry browser (place#111)">
+                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                                <i class="fas fa-book-open" style="margin-right:4px;"></i>Gazetteers <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
+                            </span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if user.can_access_beta %}
                     {% comment %}Collaborative Workbench — BETA, unpublished preview (place#111/#112). Whole menu is gated to staff/superusers and beta_tester-role users (can_access_beta); non-beta users never see it. Burnt-orange pill signals an in-development feature not yet public.{% endcomment %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
@@ -346,7 +363,11 @@
                 </li>
                 <!-- user --> {% else %}
                 <li class="nav-item">
+                    {% if WHG_DEV_SERVER %}
+                    <a class="nav-link" href="/admin/login/" title="Dev server — log in with your dev admin credentials (not ORCiD)"><i class="fas fa-user" style="color:#336699;"></i> Login <span class="badge bg-secondary" style="font-size:9px; vertical-align:middle;">dev</span></a>
+                    {% else %}
                     <a class="nav-link" href="{% url 'accounts:login' %}"><i class="fas fa-user" style="color:#336699;"></i> Login/Register</a>
+                    {% endif %}
                 </li>
                 {% endif %}
                 </ul>

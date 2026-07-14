@@ -25,9 +25,13 @@ def attribution_for(namespaces):
     out = {}
     for entry in GazetteerRegistryEntry.objects.filter(
             namespace__in=codes, entry_class='authority'):
+        # Prefer the structured ``citation_text`` (populated by the Phase 4
+        # inventory push) over the legacy ``description`` blob, which older
+        # rows crammed the citation into. Falls back to ``description`` for
+        # rows pushed before the upgrade.
         out[entry.namespace] = {
             'name': entry.name,
-            'citation': entry.description or '',
+            'citation': entry.citation_text or entry.description or '',
             'record_count': entry.record_count,
         }
     return out

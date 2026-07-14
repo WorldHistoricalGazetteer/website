@@ -1,6 +1,7 @@
 from django.test import TestCase
 
 from api.attribution import attribution_for, attribution_block, namespaces_from_ids
+from api.models import GazetteerRegistryEntry
 
 
 class AttributionHelperTests(TestCase):
@@ -16,6 +17,30 @@ class AttributionHelperTests(TestCase):
         self.assertIn('wd', attr)
         self.assertIn('name', attr['gn'])
         self.assertIn('citation', attr['gn'])
+
+    def test_citation_prefers_citation_text_over_description(self):
+        """Phase 4: the structured citation_text wins over the legacy
+        description blob once an upgraded inventory push populates it."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(
+            description='LEGACY description blob',
+            citation_text='Structured Phase-4 citation.',
+        )
+        self.assertEqual(
+            attribution_for(['gn'])['gn']['citation'],
+            'Structured Phase-4 citation.',
+        )
+
+    def test_citation_falls_back_to_description(self):
+        """Rows pushed before the upgrade (no citation_text) still surface
+        their legacy description."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(
+            description='LEGACY description blob',
+            citation_text=None,
+        )
+        self.assertEqual(
+            attribution_for(['gn'])['gn']['citation'],
+            'LEGACY description blob',
+        )
 
     def test_unknown_namespace_omitted(self):
         self.assertNotIn('zz', attribution_for(['zz']))

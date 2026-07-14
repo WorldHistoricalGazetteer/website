@@ -839,6 +839,19 @@ BETA_STATUS_SECTIONS = [
              "body": "A new, exploration-led interface for the gazetteer, in active development. It clusters "
                      "and reveals places adaptively as you pan and zoom, keeping very large gazetteers "
                      "legible at every scale."},
+            {"name": "Standardised place types across every source (Getty AAT)", "stage": "dev", "version": "3.5",
+             "staff": True,
+             "body": "We're giving every place in WHG a standardised place type from the Getty Art & "
+                     "Architecture Thesaurus (AAT) — a shared, hierarchical vocabulary — so you can filter "
+                     "and browse by the kind of place (city, river, temple, administrative area…) "
+                     "consistently, whichever gazetteer a record came from. This powers the search "
+                     "experience directly: a hierarchical type filter (choose 'inhabited places' and also "
+                     "get its subtypes) and friendly, human-readable type labels, replacing today's raw "
+                     "source codes. It's a large, source-by-source effort spanning several months: the "
+                     "biggest sources — GeoNames, OpenStreetMap, Wikidata, OpenHistoricalMap, and now the "
+                     "Getty Thesaurus of Geographic Names (~3M records) — are typed, but a number of "
+                     "smaller and specialist gazetteers still need their type vocabularies mapped to AAT "
+                     "before their records become fully filterable by type. Coverage is growing steadily."},
         ],
     },
     {
