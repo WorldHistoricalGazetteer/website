@@ -78,7 +78,11 @@ fetch('/api/sources/', { credentials: 'same-origin', headers: { Accept: 'applica
 
 function nsLabel(ns) {
     const k = String(ns || '').toLowerCase();
-    return _nsNames[k] || NS_NAMES[k] || k.toUpperCase();
+    // The registry name is authoritative UNLESS it is merely the acronym (equal
+    // to the namespace code, e.g. tgn→"TGN"); then prefer a curated friendly name.
+    const reg = _nsNames[k];
+    if (reg && reg.toLowerCase() !== k) return reg;
+    return NS_NAMES[k] || reg || k.toUpperCase();
 }
 function ccLabel(cc) {
     const e = (window.ccode_hash || {})[cc];
@@ -1658,7 +1662,6 @@ function renderClusters() {
         const members = cluster.members;
         const rep = members[0] || {};
         const multi = members.length > 1;
-        const namespaces = [...new Set(members.map(m => m.namespace).filter(Boolean))];
         const ccodes = [...new Set(members.flatMap(m => m.ccodes || []).filter(Boolean))];
         // Toponyms and AAT types shared by ALL members (cluster level) vs each
         // member's additional variants (member level).
@@ -1678,12 +1681,12 @@ function renderClusters() {
             html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
         html += `</div>`;
-        // Cluster-level facets: gazetteers, countries, shared types (all with hover names).
-        html += chipRow('cluster-namespaces', namespaces.map(n => ({ chip: 'ns-chip', text: n, title: nsLabel(n) })));
+        // Cluster-level facets: countries + AAT types common to all members.
+        // (Namespaces are shown per member below, so omitted here as redundant.)
         html += chipRow('cluster-countries', ccodes.map(c => ({ chip: 'cc-chip', text: c, title: ccLabel(c) })));
         html += chipRow('cluster-types', commonTypes.map(t => ({ chip: 'type-chip', text: t })));
-        // Cluster-level toponyms: shared across all members (all of them, for a single-place cluster).
-        html += toponymsDetails(commonTop, multi ? `${commonTop.length} shared toponym${commonTop.length === 1 ? '' : 's'}` : `${commonTop.length} toponym${commonTop.length === 1 ? '' : 's'}`);
+        // Toponyms common to ALL members (or, for a single-place cluster, simply all of them).
+        html += toponymsDetails(commonTop, multi ? `${commonTop.length} common to all` : `${commonTop.length} toponym${commonTop.length === 1 ? '' : 's'}`);
         if (multi) {
             html += `<div class="cluster-members">`;
             members.forEach((m, mi) => {
