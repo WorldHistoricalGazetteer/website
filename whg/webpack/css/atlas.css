@@ -228,7 +228,7 @@
     /* Magenta double-ended wash (time) — a cohesive triad with the indigo Areas
        and burgundy Places tints, all absent from the green/blue/tan basemap. */
     background-color: rgba(255, 255, 255, 0.92);
-    background-image: linear-gradient(90deg, rgba(176, 40, 151, 0.30), rgba(176, 40, 151, 0.07) 50%, rgba(176, 40, 151, 0.30));
+    background-image: linear-gradient(90deg, rgba(150, 82, 132, 0.28), rgba(150, 82, 132, 0.06) 50%, rgba(150, 82, 132, 0.28));
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-radius: 10px;
