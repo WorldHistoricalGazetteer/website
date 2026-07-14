@@ -397,6 +397,7 @@
 
 #atlas_result_container {
     flex: 1;
+    min-height: 0; /* allow this flex child to shrink and scroll its cluster cards */
     overflow-y: auto;
     padding: 8px 12px;
 }
@@ -1389,8 +1390,11 @@
 .weight-val { font-variant-numeric: tabular-nums; color: #2980b9; min-width: 2.2em; text-align: right; }
 /* AAT type facet (result-driven, hierarchical) */
 .type-facets {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 5px;
+    display: flex; flex-wrap: wrap; align-items: center; align-content: flex-start; gap: 5px;
     padding: 6px 12px; border-bottom: 1px solid #e3e6e9;
+    /* Cap the facet list so a many-type result (e.g. "London" → 60+ types) can't
+       consume the whole panel and starve the cluster-card list; it scrolls within. */
+    flex-shrink: 0; max-height: 108px; overflow-y: auto;
 }
 .type-facets-label { font-size: 0.75rem; color: #8a8f94; margin-right: 2px; }
 .type-facet-chip {
