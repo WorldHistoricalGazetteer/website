@@ -478,7 +478,11 @@ def es_search(index=ELASTIC_INDICES, query=None, ids=None):
     else:
         return []
 
-    resp = es.search(index=index, body=body)
+    # Tolerate an index in ELASTIC_INDICES that is absent from the cluster
+    # (e.g. dropped/renamed during reindexing): skip it rather than 500 the
+    # whole search. Without this a single missing index (wdgn) raised
+    # index_not_found_exception and took down every reconcile/suggest call.
+    resp = es.search(index=index, body=body, ignore_unavailable=True, allow_no_indices=True)
     return resp.get("hits", {}).get("hits", [])
 
 
