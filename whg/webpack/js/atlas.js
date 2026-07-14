@@ -618,6 +618,24 @@ Promise.all([
         });
     }
 
+    // ── Bootstrap tooltips: initialise every static trigger in the Atlas controls
+    //    so they all render as consistent styled tooltips (not native title tips).
+    //    Bootstrap loads via a deferred CDN script, so it may not be ready at init
+    //    time — try now, then on window.load, then poll briefly until it appears. ──
+    const initAtlasTooltips = () => {
+        const bs = window.bootstrap;
+        if (!bs || !bs.Tooltip) return false;
+        document.querySelectorAll('#floating_search [data-bs-toggle="tooltip"]').forEach(el => {
+            bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' });
+        });
+        return true;
+    };
+    if (!initAtlasTooltips()) {
+        window.addEventListener('load', initAtlasTooltips, { once: true });
+        let tries = 0;
+        const ttTimer = setInterval(() => { if (initAtlasTooltips() || ++tries > 20) clearInterval(ttTimer); }, 150);
+    }
+
     // ── Wire exact match toggle ──
     document.getElementById('atlas_exact_match').addEventListener('click', function () {
         exactMatch = !exactMatch;

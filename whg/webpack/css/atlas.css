@@ -249,7 +249,9 @@
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 6px;
-    max-width: 100%;
+    /* Reserve the top-right corner for the map zoom/globe controls so wrapped
+       chips never cover them. */
+    max-width: calc(100% - 60px);
 }
 #selection_chips:empty {
     display: none;

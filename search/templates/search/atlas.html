@@ -101,18 +101,21 @@
                     </span>
                     <button id="atlas_layers_btn" class="btn"
                             data-panel-view="layers_offcanvas"
+                            data-bs-toggle="tooltip"
                             title="Region sources and boundary settings">
                         <i class="fas fa-globe-americas me-1"></i>Regions
                     </button>
                 </div>
                 <button id="open_gazetteers_modal" class="btn btn-sm toponym-only-btn"
                         data-panel-view="gazetteers_offcanvas"
+                        data-bs-toggle="tooltip"
                         title="Filter or Explore Gazetteers"
                         style="display:none;">
                     <i class="fas fa-book-atlas me-1"></i>Gazetteers
                 </button>
                 <button id="open_categories_modal" class="btn btn-sm toponym-only-btn"
                         data-panel-view="categories_offcanvas"
+                        data-bs-toggle="tooltip"
                         title="Filter by place type"
                         style="display:none;">
                     <i class="fas fa-sitemap me-1"></i>Categories
@@ -127,9 +130,15 @@
         <div id="temporal_control" class="temporal-off" style="position:relative; z-index:1;">
             <div class="temporal-header">
                 <div class="temporal-mode-toggle btn-group btn-group-sm" role="group" aria-label="Temporal filter mode">
-                    <button type="button" class="btn active" data-temporal-mode="off">Off</button>
-                    <button type="button" class="btn" data-temporal-mode="range">Date Range</button>
-                    <button type="button" class="btn" data-temporal-mode="undated">+Undated</button>
+                    <button type="button" class="btn active" data-temporal-mode="off"
+                            data-bs-toggle="tooltip"
+                            title="No date filter — include places from any period">Off</button>
+                    <button type="button" class="btn" data-temporal-mode="range"
+                            data-bs-toggle="tooltip"
+                            title="Filter to places attested within the selected year range (undated places are excluded — use +Undated to keep them)">Date Range</button>
+                    <button type="button" class="btn" data-temporal-mode="undated"
+                            data-bs-toggle="tooltip"
+                            title="Apply the date range, but also keep places that have no recorded date (which the date range would otherwise exclude)">+Undated</button>
                 </div>
                 <div class="temporal-year-labels">
                     <span id="temporal_from_label">800</span>
