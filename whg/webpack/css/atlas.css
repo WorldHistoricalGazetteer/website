@@ -33,6 +33,12 @@
     height: 100%;
     z-index: 0;
 }
+/* Kill the MapLibre map's own border/radius (global default) so only the
+   layout's rounded card rounds the corners — the map's own corners stay square. */
+#hero_map .maplibregl-map {
+    border: 0 !important;
+    border-radius: 0 !important;
+}
 
 /* Opaque overlay that covers the map until globe projection has rendered.
    Constrained to the map area (left of the fixed panel). */
@@ -109,12 +115,13 @@
     white-space: nowrap;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
-/* Mode identity: Areas = teal (territory), Places = burgundy (place names). */
+/* Mode identity: Areas = indigo (distinct from the map's blue-green), Places =
+   burgundy (place names). */
 .search-mode-toggle .btn[data-search-mode="areas"].active {
-    background: #2c7a7b;
-    border-color: #24696a;
+    background: #4f46b8;
+    border-color: #433bA0;
     color: #fff;
-    box-shadow: 0 1px 4px rgba(44, 122, 123, 0.35);
+    box-shadow: 0 1px 4px rgba(79, 70, 184, 0.35);
 }
 .search-mode-toggle .btn[data-search-mode="toponyms"].active {
     background: #7b2d3b;
@@ -122,12 +129,14 @@
     color: #fff;
     box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
 }
-/* Subtle wash across the search bar echoing the active mode's colour. */
+/* Mode wash: stronger at BOTH ends, fading toward the middle (never fully). */
 #floating_search.mode-areas .floating-search-inner {
-    background: linear-gradient(120deg, rgba(44, 122, 123, 0.14), rgba(255, 255, 255, 0.90) 62%);
+    background-color: rgba(255, 255, 255, 0.92);
+    background-image: linear-gradient(90deg, rgba(79, 70, 184, 0.30), rgba(79, 70, 184, 0.07) 50%, rgba(79, 70, 184, 0.30));
 }
 #floating_search.mode-toponyms .floating-search-inner {
-    background: linear-gradient(120deg, rgba(123, 45, 59, 0.14), rgba(255, 255, 255, 0.90) 62%);
+    background-color: rgba(255, 255, 255, 0.92);
+    background-image: linear-gradient(90deg, rgba(123, 45, 59, 0.30), rgba(123, 45, 59, 0.07) 50%, rgba(123, 45, 59, 0.30));
 }
 .search-mode-toggle .btn:hover:not(.active) {
     background: #f5e6e8;
@@ -457,11 +466,25 @@
     border: 0;
     box-shadow: none;
 }
-.atlas-view-back { color: #5a6b7b; text-decoration: none; }
-.atlas-view-back:hover { color: #34495e; }
-/* Offcanvas bodies were sized for a wider drawer; keep them within the 340px
-   column (vertical scroll only). */
-#atlas_results_panel .atlas-panel-view .offcanvas-body { overflow-x: hidden; }
+/* "Back to results" breadcrumb button in a relocated view's header. */
+#atlas_results_panel .atlas-panel-view .offcanvas-header {
+    justify-content: flex-start;
+    gap: 10px;
+}
+.atlas-view-back {
+    color: #4f46b8;
+    background: #eeecf9;
+    border: 1px solid #ddd9f4;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+.atlas-view-back:hover { background: #e3e0f4; color: #3a34a0; }
+/* Relocated offcanvas views: keep within the 340px column (v-scroll only) and
+   give them proper internal margins. */
+#atlas_results_panel .atlas-panel-view .offcanvas-header { padding: 10px 14px; }
+#atlas_results_panel .atlas-panel-view .offcanvas-body { padding: 8px 14px 14px; overflow-x: hidden; }
 #atlas_results_panel .atlas-panel-view .authority-list { padding-left: 14px !important; }
 
 /* Idle-state generic instructions (shown when no search is active) */

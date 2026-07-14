@@ -1514,7 +1514,7 @@ function initiateToponymSearch(opts = {}) {
     // (preserveFacets) re-searches with the same query + updated facet filter.
     // A fresh query also re-enables θ auto-fit; a preserved re-search (facets /
     // temporal) keeps the user's manual θ if they set one.
-    if (!opts.preserveFacets) { selectedAatTypes = []; thetaUserSet = false; }
+    if (!opts.preserveFacets) { selectedAatTypes = []; thetaUserSet = false; thetaNeedsFit = true; }
     const input = document.getElementById('atlas_search_input');
     const qstr = input.value.trim();
 
@@ -1562,6 +1562,7 @@ let gatewayData = null;            // cached last gateway response
 let clusterThetaOverride = ATLAS_DEFAULT_THETA;   // θ slider value (seeded to the Atlas default)
 let thetaUserSet = false;          // true once the user drags θ → stop auto-seeding until a fresh query
 let thetaAutoFitted = false;       // whether the current θ was auto-fitted to the result set
+let thetaNeedsFit = true;          // re-fit θ only on a FRESH query; preserve it across reloads of a result set
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
@@ -1675,7 +1676,9 @@ function seedClusterControls(clusteringParams) {
     // θ: auto-fit a best-guess disambiguating value to THIS result set (the
     // natural valley in the pair-score distribution), unless the user has taken
     // manual control. Falls back to the Atlas default on small/degenerate sets.
-    if (!thetaUserSet) {
+    // Auto-fit θ only on a fresh query; a reload of the same result set (facet
+    // toggle, temporal re-search) keeps the current θ. Manual θ always kept.
+    if (!thetaUserSet && thetaNeedsFit) {
         const sug = suggestTheta({
             hits: (gatewayData && gatewayData.hits) || [],
             edges: (gatewayData && gatewayData.edges) || [],
@@ -1685,6 +1688,7 @@ function seedClusterControls(clusteringParams) {
         });
         clusterThetaOverride = sug.theta;
         thetaAutoFitted = sug.reason === 'gap';   // only badge a genuine fit, not the fallback
+        thetaNeedsFit = false;
     }
     const thetaSlider = document.getElementById('atlas_cluster_theta');
     if (thetaSlider) {
@@ -1718,8 +1722,11 @@ function highlightHits(indices, { fit = false } = {}) {
     if (fit) {
         const feats = indices.map(i => clusterFC.features[i]).filter(Boolean);
         if (feats.length) {
+            // Clamp the zoom so clicking a cluster keeps geographic context (a
+            // single point would otherwise zoom right in). The panel no longer
+            // overlays the map, so the old right:400 padding is gone.
             heroMap.map.fitViewport(bbox({ type: 'FeatureCollection', features: feats }),
-                { maxZoom: 12, padding: { top: 80, right: 400, bottom: 60, left: 80 } });
+                { maxZoom: 6, padding: 60 });
         }
     }
 }
@@ -2039,22 +2046,29 @@ function initPanelViews() {
         el.classList.remove('offcanvas', 'offcanvas-end', 'atlas-offcanvas', 'show');
         el.classList.add('atlas-panel-view');
         el.removeAttribute('tabindex');
-        // Replace the offcanvas × with a Back control (returns to results).
+        // Drop the offcanvas × and add a labelled "Back to results" control that
+        // only shows when a result set is loaded (see showPanelView).
         const header = el.querySelector('.offcanvas-header');
         if (header) {
             header.querySelectorAll('[data-bs-dismiss="offcanvas"]').forEach(b => b.remove());
             const back = document.createElement('button');
             back.type = 'button';
-            back.className = 'btn btn-sm btn-link atlas-view-back p-0 me-2';
+            back.className = 'btn btn-sm atlas-view-back';
             back.title = 'Back to results';
-            back.innerHTML = '<i class="fas fa-arrow-left"></i>';
+            back.innerHTML = '<i class="fas fa-arrow-left me-1"></i>Results';
+            back.style.display = 'none';
             back.addEventListener('click', showResultsView);
             header.insertBefore(back, header.firstChild);
         }
         panel.appendChild(el);   // move into the fixed panel (keeps listeners)
     });
+    // Toolbar buttons toggle their view (click again → back to results).
     document.querySelectorAll('[data-panel-view]').forEach(btn => {
-        btn.addEventListener('click', () => showPanelView(btn.dataset.panelView));
+        btn.addEventListener('click', () => {
+            const view = document.getElementById(btn.dataset.panelView);
+            if (view && view.classList.contains('active')) showResultsView();
+            else showPanelView(btn.dataset.panelView);
+        });
     });
 }
 
@@ -2063,7 +2077,11 @@ function showPanelView(id) {
     if (!panel) return;
     panel.querySelectorAll('.atlas-panel-view').forEach(v => v.classList.remove('active'));
     const view = document.getElementById(id);
-    if (view) view.classList.add('active');
+    if (!view) return;
+    view.classList.add('active');
+    // "Back to results" is only meaningful once a result set exists.
+    const back = view.querySelector('.atlas-view-back');
+    if (back) back.style.display = gatewayData ? '' : 'none';
 }
 
 function showResultsView() {
