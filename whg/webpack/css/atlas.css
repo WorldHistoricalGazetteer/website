@@ -100,9 +100,10 @@
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    border: 2px solid #cfd3da;   /* strong mode-coloured border (set per mode below) */
     border-radius: 10px;
     padding: 6px 10px;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
     max-width: 626px;
 }
 
@@ -117,29 +118,24 @@
     white-space: nowrap;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
-/* Mode identity via a strong narrow border (not a fill, which fought the site's
-   bold-colour design): Areas = indigo, Places = burgundy. */
+/* Mode identity: Areas = indigo (distinct from the map's blue-green), Places =
+   burgundy (place names). */
 .search-mode-toggle .btn[data-search-mode="areas"].active {
-    background: #fff;
-    color: #4f46b8;
-    box-shadow: inset 0 0 0 2px #4f46b8;
-    font-weight: 600;
+    background: #4f46b8;
+    border-color: #433bA0;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(79, 70, 184, 0.35);
 }
 .search-mode-toggle .btn[data-search-mode="toponyms"].active {
-    background: #fff;
-    color: #7b2d3b;
-    box-shadow: inset 0 0 0 2px #7b2d3b;
-    font-weight: 600;
+    background: #7b2d3b;
+    border-color: #6b2533;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
 }
 /* Mode wash: stronger at BOTH ends, fading toward the middle (never fully). */
-#floating_search.mode-areas .floating-search-inner {
-    background-color: rgba(255, 255, 255, 0.92);
-    background-image: linear-gradient(90deg, rgba(79, 70, 184, 0.30), rgba(79, 70, 184, 0.07) 50%, rgba(79, 70, 184, 0.30));
-}
-#floating_search.mode-toponyms .floating-search-inner {
-    background-color: rgba(255, 255, 255, 0.92);
-    background-image: linear-gradient(90deg, rgba(123, 45, 59, 0.30), rgba(123, 45, 59, 0.07) 50%, rgba(123, 45, 59, 0.30));
-}
+/* Mode identity via a strong border on the search bar (no background wash). */
+#floating_search.mode-areas .floating-search-inner { border-color: #4f46b8; }
+#floating_search.mode-toponyms .floating-search-inner { border-color: #7b2d3b; }
 .search-mode-toggle .btn:hover:not(.active) {
     background: #f5e6e8;
     border-color: #c9a0a8;
@@ -179,12 +175,11 @@
 .atlas-control-buttons .btn:hover {
     background: rgba(44, 62, 80, 1);
 }
-/* Active/selected control button (Viewport on, or a panel view open) — marked
-   with a strong narrow border, not a fill. */
+/* Active/selected control button (Viewport on, or a panel view open). */
 .atlas-control-buttons .btn.active {
-    background: rgba(44, 62, 80, 0.8) !important;
+    background: #2980b9 !important;
+    border-color: #2471a3 !important;
     color: #fff !important;
-    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.92) !important;
 }
 
 /* Selection chips */
@@ -232,15 +227,14 @@
 #temporal_control {
     margin-top: 6px;
     width: 300px;
-    /* Magenta double-ended wash (time) — a cohesive triad with the indigo Areas
-       and burgundy Places tints, all absent from the green/blue/tan basemap. */
     background-color: rgba(255, 255, 255, 0.92);
-    background-image: linear-gradient(90deg, rgba(150, 82, 132, 0.28), rgba(150, 82, 132, 0.06) 50%, rgba(150, 82, 132, 0.28));
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    /* Strong plum border (time) — cohesive triad with indigo Areas / burgundy Places. */
+    border: 2px solid #9e3c7c;
     border-radius: 10px;
     padding: 6px 12px 4px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
 }
 
 /* Header row: mode toggle + year labels */
@@ -1237,7 +1231,11 @@
    Viewport constraint button
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Active state handled by the shared .atlas-control-buttons .btn.active border. */
+#atlas_viewport_btn.active {
+    background: #2980b9 !important;
+    border-color: #2471a3 !important;
+    color: #fff !important;
+}
 #atlas_viewport_btn:disabled {
     opacity: 0.45;
     cursor: pointer;
