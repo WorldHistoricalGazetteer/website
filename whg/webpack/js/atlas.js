@@ -107,13 +107,21 @@ function memberToponyms(m) {
     }));
     return out;
 }
-// Collapsible, height-capped toponym list with a caller-supplied summary label.
-function toponymsDetails(toponyms, label, extraClass) {
-    if (!toponyms.length) return '';
-    return `<details class="toponyms-details${extraClass ? ' ' + extraClass : ''}"><summary>${escapeHtml(label)}</summary>`
-        + `<div class="toponym-list">`
-        + toponyms.map(t => `<span class="toponym-chip">${escapeHtml(t)}</span>`).join('')
-        + `</div></details>`;
+// Toponym variants for a cluster (common to all) or a member (extras). A single
+// entry just replicates the headline title, so it's omitted. With 2+, up to three
+// show inline; any beyond that sit behind a "<n> more toponyms" toggle.
+function toponymsList(toponyms, extraClass) {
+    if (!toponyms || toponyms.length <= 1) return '';
+    const chip = t => `<span class="toponym-chip">${escapeHtml(t)}</span>`;
+    const shown = toponyms.slice(0, 3);
+    const rest = toponyms.slice(3);
+    let html = `<div class="toponyms-list${extraClass ? ' ' + extraClass : ''}">`
+        + `<div class="toponym-list">${shown.map(chip).join('')}</div>`;
+    if (rest.length) {
+        html += `<details class="toponyms-more"><summary>${rest.length} more toponym${rest.length === 1 ? '' : 's'}</summary>`
+            + `<div class="toponym-list">${rest.map(chip).join('')}</div></details>`;
+    }
+    return html + `</div>`;
 }
 // Distinct AAT type labels for one place record, resolved via the result-set
 // facet label map (aat_id → friendly label; falls back to the raw id).
@@ -1865,7 +1873,7 @@ function renderClusters() {
             html += chipRow('cluster-temporal', [{ chip: 'temporal-chip', text: formatRange(clusterSpan), title: 'Attested date span (earliest–latest across members)' }]);
         }
         // Toponyms common to ALL members (or, for a single-place cluster, simply all of them).
-        html += toponymsDetails(commonTop, multi ? `${commonTop.length} common to all` : `${commonTop.length} toponym${commonTop.length === 1 ? '' : 's'}`);
+        html += toponymsList(commonTop);
         if (multi) {
             html += `<div class="cluster-members">`;
             members.forEach((m, mi) => {
@@ -1878,7 +1886,7 @@ function renderClusters() {
                     + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`
                     + `</div>`
                     + chipRow('member-types', (extraTypes[mi] || []).map(t => ({ chip: 'type-chip', text: t })))
-                    + toponymsDetails(extraTop[mi] || [], `${(extraTop[mi] || []).length} more toponym${(extraTop[mi] || []).length === 1 ? '' : 's'}`, 'member-toponyms')
+                    + toponymsList(extraTop[mi] || [], 'member-toponyms')
                     + `</div>`;
             });
             html += `</div>`;
