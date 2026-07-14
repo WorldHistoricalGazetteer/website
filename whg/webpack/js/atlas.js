@@ -78,11 +78,11 @@ fetch('/api/sources/', { credentials: 'same-origin', headers: { Accept: 'applica
 
 function nsLabel(ns) {
     const k = String(ns || '').toLowerCase();
-    // The registry name is authoritative UNLESS it is merely the acronym (equal
-    // to the namespace code, e.g. tgn→"TGN"); then prefer a curated friendly name.
-    const reg = _nsNames[k];
-    if (reg && reg.toLowerCase() !== k) return reg;
-    return NS_NAMES[k] || reg || k.toUpperCase();
+    // The gazetteer registry (/api/sources/) is the source of truth for names;
+    // NS_NAMES is only a fallback before it resolves / for namespaces it lacks.
+    // Short or acronym names (e.g. tgn→"TGN") are fixed in the authority metadata
+    // on the indexing side, not patched here.
+    return _nsNames[k] || NS_NAMES[k] || k.toUpperCase();
 }
 function ccLabel(cc) {
     const e = (window.ccode_hash || {})[cc];
