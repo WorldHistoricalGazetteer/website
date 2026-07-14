@@ -230,8 +230,9 @@
     background-color: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    /* Strong plum border (time) — cohesive triad with indigo Areas / burgundy Places. */
-    border: 2px solid #9e3c7c;
+    /* Strong ochre border (time) — matches the site's BETA buttons; clearly
+       distinct from the indigo Areas / burgundy Places borders. */
+    border: 2px solid #c2410c;
     border-radius: 10px;
     padding: 6px 12px 4px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
