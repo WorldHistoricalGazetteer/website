@@ -802,7 +802,7 @@ Promise.all([
             $el.removeAttr('data-map-clicked');
             scrollToResult($el);
         } else if (fc?.features?.length > index) {
-            heroMap.map.fitViewport(bbox(fc.features[index]), { maxZoom: 12, padding: 60 });
+            heroMap.map.fitViewport(bbox(fc.features[index]), 6); // clamp: keep context
         }
 
         $('#atlas_search_results .result').removeClass('selected');
@@ -1728,8 +1728,9 @@ function highlightHits(indices, { fit = false } = {}) {
             // Clamp the zoom so clicking a cluster keeps geographic context (a
             // single point would otherwise zoom right in). The panel no longer
             // overlays the map, so the old right:400 padding is gone.
-            heroMap.map.fitViewport(bbox({ type: 'FeatureCollection', features: feats }),
-                { maxZoom: 6, padding: 60 });
+            // fitViewport's 2nd arg is a NUMERIC maxZoom (not an options object);
+            // clamp so clicking a cluster keeps geographic context.
+            heroMap.map.fitViewport(bbox({ type: 'FeatureCollection', features: feats }), 6);
         }
     }
 }
@@ -1886,9 +1887,7 @@ function renderClusters() {
     clusterPidToIndex = new Map(hits.map((h, i) => [h.place_id, i]));
     heroMap.showResultFeatures(fc);
     if (fc.features.length > 0) {
-        heroMap.map.fitViewport(bbox(fc), {
-            maxZoom: 12, padding: { top: 80, right: 400, bottom: 60, left: 80 },
-        });
+        heroMap.map.fitViewport(bbox(fc), 9); // numeric maxZoom; avoid street-level on a tight result set
     }
 }
 
@@ -2030,7 +2029,7 @@ function renderToponymResults(data) {
 
     // Zoom to results
     if (results.length > 0) {
-        heroMap.map.fitViewport(bbox(featureCollection), { maxZoom: 12, padding: { top: 80, right: 400, bottom: 60, left: 80 } });
+        heroMap.map.fitViewport(bbox(featureCollection), 9); // numeric maxZoom
     }
 }
 
@@ -2080,6 +2079,11 @@ function showPanelView(id) {
     if (!panel) return;
     panel.querySelectorAll('.atlas-panel-view').forEach(v => v.classList.remove('active'));
     const view = document.getElementById(id);
+    // Highlight the toolbar button for the active view (none matches the results
+    // view, so returning to results de-highlights all of them).
+    document.querySelectorAll('[data-panel-view]').forEach(btn => {
+        btn.classList.toggle('active', !!view && btn.dataset.panelView === id);
+    });
     if (!view) return;
     view.classList.add('active');
     // "Back to results" is only meaningful once a result set exists.

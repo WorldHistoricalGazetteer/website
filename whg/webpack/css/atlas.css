@@ -179,6 +179,12 @@
 .atlas-control-buttons .btn:hover {
     background: rgba(44, 62, 80, 1);
 }
+/* Active/selected control button (Viewport on, or a panel view open). */
+.atlas-control-buttons .btn.active {
+    background: #2980b9 !important;
+    border-color: #2471a3 !important;
+    color: #fff !important;
+}
 
 /* Selection chips */
 #selection_chips {
