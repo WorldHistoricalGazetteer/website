@@ -31,7 +31,7 @@
     <div id="map_loading_overlay" class="map-loading-overlay"></div>
 
     <!-- Floating search input + controls (top-left) -->
-    <div id="floating_search">
+    <div id="floating_search" class="mode-areas">
         <div class="floating-search-inner">
             <!-- Mode toggle: Areas / Places (internal data-search-mode value remains "toponyms") -->
             <div class="search-mode-toggle btn-group btn-group-sm" role="group" aria-label="Search mode">
@@ -78,19 +78,19 @@
                         </button>
                     </span>
                     <button id="atlas_layers_btn" class="btn"
-                            data-bs-toggle="offcanvas" data-bs-target="#layers_offcanvas"
+                            data-panel-view="layers_offcanvas"
                             title="Region sources and boundary settings">
                         <i class="fas fa-globe-americas me-1"></i>Regions
                     </button>
                 </div>
                 <button id="open_gazetteers_modal" class="btn btn-sm toponym-only-btn"
-                        data-bs-toggle="offcanvas" data-bs-target="#gazetteers_offcanvas"
+                        data-panel-view="gazetteers_offcanvas"
                         title="Filter or Explore Gazetteers"
                         style="display:none;">
                     <i class="fas fa-book-atlas me-1"></i>Gazetteers
                 </button>
                 <button id="open_categories_modal" class="btn btn-sm toponym-only-btn"
-                        data-bs-toggle="offcanvas" data-bs-target="#categories_offcanvas"
+                        data-panel-view="categories_offcanvas"
                         title="Filter by place type"
                         style="display:none;">
                     <i class="fas fa-sitemap me-1"></i>Categories
@@ -136,8 +136,10 @@
         </div>
     </div>
 
-    <!-- Fixed results panel — permanent column beside the map. -->
+    <!-- Fixed results panel — permanent column beside the map. Holds the results
+         view plus (relocated at runtime) the Regions/Gazetteers/Categories views. -->
     <div id="atlas_results_panel">
+      <div id="atlas_results_view" class="atlas-panel-view active">
         <div class="results-panel-header" style="display:none;">
             <span id="atlas_results_count" class="small text-muted"></span>
             <button id="atlas_close_results" class="btn btn-sm btn-outline-secondary ms-auto"
@@ -191,6 +193,7 @@
             </div>
             <div id="atlas_search_results"></div>
         </div>
+      </div><!-- /atlas_results_view -->
     </div>
 
     <!-- BETA: dynamic Atlas portal — per-place detail resolved on demand from

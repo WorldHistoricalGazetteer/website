@@ -17,6 +17,12 @@
     height: calc(100vh - 110px);  /* viewport minus header + footer */
     min-height: 400px;
     overflow: hidden;
+    /* Map + panel read as one rounded card: the radius/border live on the
+       layout (clipped by overflow:hidden), so the map keeps rounded LEFT
+       corners and the panel rounded RIGHT corners, joined by a divider. */
+    border: 1px solid #dfe3e6;
+    border-radius: 12px;
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.08);
 }
 
 #hero_map {
@@ -103,11 +109,25 @@
     white-space: nowrap;
     transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
-.search-mode-toggle .btn.active {
+/* Mode identity: Areas = teal (territory), Places = burgundy (place names). */
+.search-mode-toggle .btn[data-search-mode="areas"].active {
+    background: #2c7a7b;
+    border-color: #24696a;
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(44, 122, 123, 0.35);
+}
+.search-mode-toggle .btn[data-search-mode="toponyms"].active {
     background: #7b2d3b;
     border-color: #6b2533;
     color: #fff;
     box-shadow: 0 1px 4px rgba(123, 45, 59, 0.35);
+}
+/* Subtle wash across the search bar echoing the active mode's colour. */
+#floating_search.mode-areas .floating-search-inner {
+    background: linear-gradient(120deg, rgba(44, 122, 123, 0.14), rgba(255, 255, 255, 0.90) 62%);
+}
+#floating_search.mode-toponyms .floating-search-inner {
+    background: linear-gradient(120deg, rgba(123, 45, 59, 0.14), rgba(255, 255, 255, 0.90) 62%);
 }
 .search-mode-toggle .btn:hover:not(.active) {
     background: #f5e6e8;
@@ -400,9 +420,9 @@
     position: relative;
     flex: 0 0 340px;
     width: 340px;
-    height: 100%;
+    height: 100%;                 /* flush with the map, aligned top & bottom */
     background: rgba(255, 255, 255, 0.96);
-    box-shadow: -2px 0 12px rgba(0, 0, 0, 0.12);
+    border-left: 1px solid #dfe3e6;  /* divider joining the map's square right edge */
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -415,6 +435,34 @@
     border-bottom: 1px solid #dee2e6;
     flex-shrink: 0;
 }
+
+/* Swappable panel views (results + relocated Regions/Gazetteers/Categories). */
+.atlas-panel-view { display: none; }
+.atlas-panel-view.active {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+/* Neutralise the Bootstrap offcanvas fixed-overlay geometry now that the
+   Regions/Gazetteers/Categories panels live in-flow inside the fixed column. */
+#atlas_results_panel .atlas-panel-view {
+    position: static;
+    transform: none;
+    visibility: visible;
+    width: auto;
+    max-width: none;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+}
+.atlas-view-back { color: #5a6b7b; text-decoration: none; }
+.atlas-view-back:hover { color: #34495e; }
+/* Offcanvas bodies were sized for a wider drawer; keep them within the 340px
+   column (vertical scroll only). */
+#atlas_results_panel .atlas-panel-view .offcanvas-body { overflow-x: hidden; }
+#atlas_results_panel .atlas-panel-view .authority-list { padding-left: 14px !important; }
 
 /* Idle-state generic instructions (shown when no search is active) */
 .atlas-default-panel {

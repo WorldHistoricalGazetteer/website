@@ -561,6 +561,9 @@ Promise.all([
         switchSearchMode('areas');
     });
 
+    // Relocate Regions/Gazetteers/Categories into the fixed panel as views.
+    initPanelViews();
+
     // ── BETA: cluster merge-sensitivity (θ) slider — re-clusters live ──
     const thetaSlider = document.getElementById('atlas_cluster_theta');
     if (thetaSlider) {
@@ -896,6 +899,9 @@ function updateTreeBadge() {
 
 function switchSearchMode(mode) {
     searchMode = mode;
+    // Mode tint on the floating search bar (Areas = teal, Places = burgundy).
+    const fs = document.getElementById('floating_search');
+    if (fs) { fs.classList.remove('mode-areas', 'mode-toponyms'); fs.classList.add('mode-' + mode); }
     const input = document.getElementById('atlas_search_input');
     const toponymBtns = document.querySelectorAll('.toponym-only-btn');
     const areasBtns = document.querySelectorAll('.areas-only-btn');
@@ -2019,6 +2025,50 @@ function renderToponymResults(data) {
 }
 
 /* ── Results panel show/hide ── */
+
+// ── Fixed-panel views ──
+// Relocate the Regions/Gazetteers/Categories offcanvas into the results panel as
+// swappable views (Replace + back). IDs and inner content are preserved so all
+// existing wiring (queried by id) keeps working; only the display changes.
+function initPanelViews() {
+    const panel = document.getElementById('atlas_results_panel');
+    if (!panel) return;
+    ['layers_offcanvas', 'gazetteers_offcanvas', 'categories_offcanvas'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.remove('offcanvas', 'offcanvas-end', 'atlas-offcanvas', 'show');
+        el.classList.add('atlas-panel-view');
+        el.removeAttribute('tabindex');
+        // Replace the offcanvas × with a Back control (returns to results).
+        const header = el.querySelector('.offcanvas-header');
+        if (header) {
+            header.querySelectorAll('[data-bs-dismiss="offcanvas"]').forEach(b => b.remove());
+            const back = document.createElement('button');
+            back.type = 'button';
+            back.className = 'btn btn-sm btn-link atlas-view-back p-0 me-2';
+            back.title = 'Back to results';
+            back.innerHTML = '<i class="fas fa-arrow-left"></i>';
+            back.addEventListener('click', showResultsView);
+            header.insertBefore(back, header.firstChild);
+        }
+        panel.appendChild(el);   // move into the fixed panel (keeps listeners)
+    });
+    document.querySelectorAll('[data-panel-view]').forEach(btn => {
+        btn.addEventListener('click', () => showPanelView(btn.dataset.panelView));
+    });
+}
+
+function showPanelView(id) {
+    const panel = document.getElementById('atlas_results_panel');
+    if (!panel) return;
+    panel.querySelectorAll('.atlas-panel-view').forEach(v => v.classList.remove('active'));
+    const view = document.getElementById(id);
+    if (view) view.classList.add('active');
+}
+
+function showResultsView() {
+    showPanelView('atlas_results_view');
+}
 
 // The panel is a permanent column; "show" just swaps the idle instructions out
 // for results, "hide" (clear/close) swaps them back and resets the controls.
