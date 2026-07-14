@@ -296,9 +296,11 @@ function wireTemporalControl() {
             temporalMode = btn.dataset.temporalMode;
             const tc = document.getElementById('temporal_control');
             tc.classList.toggle('temporal-off', temporalMode === 'off');
+            updateGazetteerPeriodSwitch();
             applyTemporalLive();
         });
     });
+    updateGazetteerPeriodSwitch();
 
     // Drag the whole range band (shift both handles, preserving span).
     const wrap = document.querySelector('.temporal-slider-wrap');
@@ -359,6 +361,22 @@ function resetTemporalControl() {
     const offBtn = document.querySelector('#temporal_control .temporal-mode-toggle .btn[data-temporal-mode="off"]');
     if (offBtn) offBtn.classList.add('active');
     document.getElementById('temporal_control')?.classList.add('temporal-off');
+    updateGazetteerPeriodSwitch();
+}
+
+// The Gazetteers "Hide gazetteers outside Date Range filter" switch only makes
+// sense while a Date Range filter is active — disable + clear it otherwise.
+function updateGazetteerPeriodSwitch() {
+    const sw = document.getElementById('gazetteer_filter_period');
+    if (!sw) return;
+    const active = temporalMode !== 'off';
+    sw.disabled = !active;
+    if (!active && sw.checked) {
+        sw.checked = false;
+        sw.dispatchEvent(new Event('change', { bubbles: true })); // hides the stub note if now all-off
+    }
+    const label = sw.closest('.form-check')?.querySelector('.form-check-label');
+    if (label) label.classList.toggle('text-muted', !active);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -626,6 +644,13 @@ Promise.all([
         const bs = window.bootstrap;
         if (!bs || !bs.Tooltip) return false;
         document.querySelectorAll('#floating_search [data-bs-toggle="tooltip"]').forEach(el => {
+            // Move the native `title` into a BS data attr and drop it, so the
+            // browser's own tooltip doesn't ALSO pop up alongside the styled one.
+            const t = el.getAttribute('title');
+            if (t != null) {
+                if (!el.getAttribute('data-bs-title')) el.setAttribute('data-bs-title', t);
+                el.removeAttribute('title');
+            }
             bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' });
         });
         return true;
@@ -635,6 +660,24 @@ Promise.all([
         let tries = 0;
         const ttTimer = setInterval(() => { if (initAtlasTooltips() || ++tries > 20) clearInterval(ttTimer); }, 150);
     }
+
+    // ── Tooltip on/off preference (for experienced users) — persisted; hides
+    //    every rendered tooltip on this page via a body class. ──
+    const TT_OFF_KEY = 'whg_atlas_tooltips_off';
+    const ttToggle = document.getElementById('atlas_tooltips_toggle');
+    const applyTooltipPref = () => {
+        const off = localStorage.getItem(TT_OFF_KEY) === '1';
+        document.body.classList.toggle('atlas-tooltips-off', off);
+        if (ttToggle) ttToggle.checked = !off;
+    };
+    if (ttToggle) {
+        ttToggle.addEventListener('change', () => {
+            const off = !ttToggle.checked;
+            localStorage.setItem(TT_OFF_KEY, off ? '1' : '0');
+            document.body.classList.toggle('atlas-tooltips-off', off);
+        });
+    }
+    applyTooltipPref();
 
     // ── Wire exact match toggle ──
     document.getElementById('atlas_exact_match').addEventListener('click', function () {
@@ -1121,7 +1164,7 @@ function applyTilesetGating(mode) {
         label.setAttribute('data-bs-title', newTitle);
         label.setAttribute('data-bs-original-title', newTitle);
         try {
-            const tt = bootstrap.Tooltip.getInstance(label);
+            const tt = window.bootstrap && window.bootstrap.Tooltip.getInstance(label);
             if (tt) tt.setContent({ '.tooltip-inner': newTitle });
         } catch (e) { /* no tooltip yet — picked up on next init */ }
     });
@@ -1364,11 +1407,12 @@ function updateViewportTooltip() {
     } else {
         text = 'Constrain search to the current map viewport (clears any selected areas)';
     }
-    wrap.setAttribute('title', text);
-    wrap.setAttribute('data-bs-original-title', text);
+    // Use data-bs-title (not `title`) so no native tooltip pops up beside the BS one.
+    wrap.setAttribute('data-bs-title', text);
+    wrap.removeAttribute('title');
     // Update Bootstrap tooltip if initialised on the wrapper
     try {
-        const tt = bootstrap.Tooltip.getInstance(wrap);
+        const tt = window.bootstrap && window.bootstrap.Tooltip.getInstance(wrap);
         if (tt) tt.setContent({'.tooltip-inner': text});
     } catch (e) { /* */ }
 }
@@ -1581,6 +1625,9 @@ function initiateToponymSearch(opts = {}) {
     console.log('Atlas: initiating toponym search', options);
 
     showResultsPanel();
+    // A fresh search returns focus to the results view — otherwise an open
+    // Gazetteers/Categories/Regions panel would obscure the new results.
+    showResultsView();
     const resultsDiv = document.getElementById('atlas_search_results');
     resultsDiv.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Searching…</div>';
 
@@ -1664,7 +1711,7 @@ function openAtlasPortal(pid) {
     const body = document.getElementById('atlas_portal_body');
     document.getElementById('atlas_portal_title').textContent = 'Place';
     body.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
-    bootstrap.Modal.getOrCreateInstance(document.getElementById('atlas_portal_modal')).show();
+    window.bootstrap.Modal.getOrCreateInstance(document.getElementById('atlas_portal_modal')).show();
     $.ajax({
         url: '/atlas/place/?id=' + encodeURIComponent(pid),
         success: (place) => renderPortal(place, pid),

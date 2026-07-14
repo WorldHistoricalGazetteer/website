@@ -27,6 +27,11 @@
 .palette-places { color: var(--atlas-places); }
 .palette-time   { color: var(--atlas-time); }
 
+/* Tooltip opt-out (set from the Explore-the-Atlas switch) — hide every rendered
+   Bootstrap tooltip on the page. Tooltip nodes are appended to <body>, so this
+   must live at body scope, not inside the Atlas container. */
+body.atlas-tooltips-off .tooltip { display: none !important; }
+
 /* ═══════════════════════════════════════════════════════════════════
    Container-constrained hero map layout
    ═══════════════════════════════════════════════════════════════════ */
@@ -603,6 +608,19 @@
     font-size: 0.72rem;
     color: #90a4ae;
     margin: 0;
+}
+.atlas-default-panel .adp-tooltip-toggle {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #eef0f2;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.atlas-default-panel .adp-tooltip-toggle .form-check-label {
+    font-size: 0.75rem;
+    color: #7f8c8d;
+    cursor: pointer;
 }
 
 #atlas_result_container {

@@ -221,6 +221,10 @@
                     <li>Filter by year with the <strong class="adp-time">Date Range</strong> slider.</li>
                 </ul>
                 <p class="adp-hint">Results and clustering controls appear here.</p>
+                <div class="adp-tooltip-toggle form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="atlas_tooltips_toggle" checked>
+                    <label class="form-check-label" for="atlas_tooltips_toggle">Show control tooltips</label>
+                </div>
             </div>
             <div id="atlas_no_results" class="bg-light p-2 rounded" style="display:none;">
                 No results — please modify your search terms or filters.
@@ -368,9 +372,9 @@
                 </label>
             </div>
             <div class="form-check form-switch small">
-                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_period">
+                <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_period" disabled>
                 <label class="form-check-label small" for="gazetteer_filter_period">
-                    Hide gazetteers outside <strong>Period</strong> filter
+                    Hide gazetteers outside <strong>Date Range</strong> filter
                 </label>
             </div>
             <div class="gazetteer-stub-note small text-muted fst-italic mt-2 d-none">
