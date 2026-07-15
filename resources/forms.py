@@ -3,11 +3,32 @@ from django.contrib.postgres.forms import SimpleArrayField
 from django.db import models
 from .models import Resource
 
+
+# Django 4.2 removed multiple-file support from ClearableFileInput/FileInput
+# (attrs={'multiple': True} now raises). Use the documented dedicated classes.
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class MultipleFileField(forms.FileField):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("widget", MultipleFileInput())
+        super().__init__(*args, **kwargs)
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+        if isinstance(data, (list, tuple)):
+            result = [single_file_clean(d, initial) for d in data]
+        else:
+            result = single_file_clean(data, initial)
+        return result
+
+
 class ResourceModelForm(forms.ModelForm):
     keywords = SimpleArrayField(forms.CharField())
     gradelevels = SimpleArrayField(forms.CharField())
-    files = forms.FileField()
-    images = forms.FileField()
+    files = MultipleFileField()
+    images = MultipleFileField()
 
     class Meta:
         model = Resource
@@ -22,8 +43,6 @@ class ResourceModelForm(forms.ModelForm):
             'description': forms.Textarea(attrs={
                 'rows': 3, 'cols': 49, 'class': 'textarea'
             }),
-            'files': forms.ClearableFileInput(attrs={'multiple': True}),
-            'images': forms.ClearableFileInput(attrs={'multiple': True})
         }
 
     def __init__(self, *args, **kwargs):
