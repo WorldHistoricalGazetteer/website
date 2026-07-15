@@ -379,9 +379,9 @@
             </div>
             <div class="gazetteer-stub-note small text-muted fst-italic mt-2 d-none">
                 <i class="fas fa-info-circle me-1"></i>
-                Coverage filtering is not yet implemented — the switch will activate
-                once gazetteer-level <code>h3_coverage</code> and <code>temporal_extent</code>
-                arrive via the extended <code>/suggest</code> API (Master Plan Phase 2).
+                <strong>Area</strong> coverage filtering isn't wired yet — each gazetteer's
+                spatial footprint (its <code>h3_coverage</code>) is too large to intersect in
+                the browser. The <strong>Date Range</strong> filter above is live.
             </div>
         </div>
 
@@ -420,6 +420,7 @@
             <label class="authority-item form-check"
                    data-bs-toggle="tooltip"
                    data-bs-title="{{ g.description|default:g.name }}"
+                   data-namespace="{{ g.namespace }}"
                    data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
                    data-gazetteer-type="{{ g.gazetteer_type }}">
                 <input class="form-check-input authority-cb" type="checkbox"
@@ -588,6 +589,7 @@
     const has_areas = {{ has_areas|yesno:"true,false" }};
     const user_areas = {{ user_areas|safe }};
     const available_sources = {{ available_sources|safe }};
+    const gazetteer_temporal = {{ gazetteer_temporal|safe }};
     const atlas_toponym = {% if toponym %}"{{ toponym|escapejs }}"{% else %}null{% endif %};
 </script>
 

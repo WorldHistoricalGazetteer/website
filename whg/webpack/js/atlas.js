@@ -256,6 +256,32 @@ const debouncedTemporalResearch = debounce(() => {
 function applyTemporalLive() {
     throttledTemporalRender();     // instant preview on what's already loaded
     debouncedTemporalResearch();   // authoritative top-N in-range from the index
+    applyGazetteerCoverageFilter(); // re-filter the Gazetteers list if its Date Range switch is on
+}
+
+// ── Gazetteers coverage filtering (client-side) ──
+// Temporal is wired here (tiny [earliest,latest] per authority from the registry);
+// the spatial "Area" switch remains a stub (per-authority H3 sets are 6k–425k
+// cells — too large to ship to the client).
+function temporalCoverageOverlaps(extent, from, to) {
+    if (!Array.isArray(extent) || extent.length < 2) return true;   // unknown → keep visible
+    const e0 = extent[0], e1 = extent[1];
+    if (e0 == null && e1 == null) return true;                       // fully undated → keep visible
+    const lo = (e0 == null) ? -Infinity : e0;
+    const hi = (e1 == null) ? Infinity : e1;
+    return lo <= to && hi >= from;                                   // interval overlap
+}
+function applyGazetteerCoverageFilter() {
+    const temporalMap = (typeof gazetteer_temporal !== 'undefined') ? gazetteer_temporal : {};
+    const periodSw = document.getElementById('gazetteer_filter_period');
+    const periodOn = periodSw && periodSw.checked && !periodSw.disabled;
+    document.querySelectorAll('#gazetteers_offcanvas .authority-item[data-namespace]').forEach(item => {
+        let hide = false;
+        if (periodOn && !temporalCoverageOverlaps(temporalMap[item.dataset.namespace], temporalFrom, temporalTo)) {
+            hide = true;
+        }
+        item.classList.toggle('coverage-hidden', hide);
+    });
 }
 
 function wireTemporalControl() {
@@ -787,15 +813,18 @@ Promise.all([
         mineToggle.addEventListener('change', () => updateGazetteerListVisibility());
     }
 
-    // ── Gazetteers offcanvas: stub-note handler for unimplemented coverage filters. ──
-    // Show the stub note when either Area or Period switch is on; hide when both off.
+    // ── Gazetteers coverage filters ──
+    // Date Range switch is FUNCTIONAL (temporal overlap, client-side). The Area
+    // switch is still a stub (per-authority H3 sets too large to ship) — its note
+    // shows only while IT is on.
     document.querySelectorAll('#gazetteers_offcanvas .gazetteer-stub-switch').forEach(sw => {
         sw.addEventListener('change', () => {
+            applyGazetteerCoverageFilter();
             const card = sw.closest('.gazetteer-coverage-filters');
             if (!card) return;
             const note = card.querySelector('.gazetteer-stub-note');
-            const anyOn = card.querySelectorAll('.gazetteer-stub-switch:checked').length > 0;
-            if (note) note.classList.toggle('d-none', !anyOn);
+            const areaSw = document.getElementById('gazetteer_filter_area');
+            if (note) note.classList.toggle('d-none', !(areaSw && areaSw.checked));
         });
     });
 

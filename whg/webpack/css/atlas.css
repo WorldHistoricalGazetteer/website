@@ -572,6 +572,8 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
    divider. Pad the lists enough to clear it and zero the item's negative margin. */
 #atlas_results_panel .atlas-panel-view .authority-list { padding-left: 26px !important; }
 #atlas_results_panel .atlas-panel-view .authority-item { margin-left: 0 !important; }
+/* Authority hidden by an active coverage filter (Date Range / Area). */
+.authority-item.coverage-hidden { display: none !important; }
 
 /* Idle-state generic instructions (shown when no search is active) */
 .atlas-default-panel {

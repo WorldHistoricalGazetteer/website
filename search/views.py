@@ -204,6 +204,12 @@ class AtlasPageView(TemplateView):
                 'citation_text', 'rights_holder', 'source_url',
                 'contributors_csl', 'license__spdx_id', 'license__label',
                 'license__url', 'license_url',
+                # Temporal coverage — [earliest, latest] with the ongoing-null
+                # convention (pushed by push_gazetteer_inventory). Drives the
+                # "Hide gazetteers outside Date Range filter" switch. (h3_coverage
+                # is intentionally NOT surfaced here — the per-authority H3 sets
+                # run 6k–425k cells, far too large to ship to the client.)
+                'temporal_extent',
             )
         )
         specialist_gazetteers = list(
@@ -216,6 +222,12 @@ class AtlasPageView(TemplateView):
         )
         context['gazetteer_inventory'] = gazetteer_inventory
         context['specialist_gazetteers'] = specialist_gazetteers
+        # Compact namespace → [earliest, latest] map for the client-side
+        # "Hide gazetteers outside Date Range filter" coverage switch.
+        context['gazetteer_temporal'] = json.dumps({
+            g['namespace']: (g['temporal_extent'] or [])
+            for g in gazetteer_inventory
+        })
         return context
 
 
