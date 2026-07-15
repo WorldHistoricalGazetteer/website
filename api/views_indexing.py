@@ -114,6 +114,7 @@ class GazetteerInventoryView(AuthenticatedAPIView):
             "record_count": int(entry.get("record_count") or 0),
             "status": str(entry.get("status") or "published"),
             "h3_coverage": entry.get("h3_coverage", []),
+            "h3_coverage_coarse": entry.get("h3_coverage_coarse", []),
             "temporal_extent": entry.get("temporal_extent", []),
         }
         owner_user_id = entry.get("owner_user_id")

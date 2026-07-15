@@ -218,6 +218,11 @@ class GazetteerRegistryEntry(models.Model):
     # Either the literal string "global" (for global-coverage authorities)
     # or a list of compacted H3 cell IDs.
     h3_coverage = models.JSONField(default=list)
+    # Condensed res-2 rollup of ``h3_coverage`` (≤842 cells global, ~200 KB
+    # total across authorities) — small enough to ship to the browser for the
+    # Atlas "Hide gazetteers outside Area filter" switch (h3-js intersection).
+    # "global" for global-coverage authorities. Pushed by push_gazetteer_inventory.
+    h3_coverage_coarse = models.JSONField(default=list)
     # ``[min_start_year, max_end_year]`` with each endpoint optionally null.
     temporal_extent = models.JSONField(default=list)
 

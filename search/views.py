@@ -206,10 +206,13 @@ class AtlasPageView(TemplateView):
                 'license__url', 'license_url',
                 # Temporal coverage — [earliest, latest] with the ongoing-null
                 # convention (pushed by push_gazetteer_inventory). Drives the
-                # "Hide gazetteers outside Date Range filter" switch. (h3_coverage
-                # is intentionally NOT surfaced here — the per-authority H3 sets
-                # run 6k–425k cells, far too large to ship to the client.)
+                # "Hide gazetteers outside Date Range filter" switch.
                 'temporal_extent',
+                # Condensed res-2 H3 coverage rollup ("global" | list of cells) —
+                # small enough to ship; drives the "Hide gazetteers outside Area
+                # filter" switch (h3-js intersection). The FINE `h3_coverage`
+                # (6k–425k cells) is deliberately NOT surfaced.
+                'h3_coverage_coarse',
             )
         )
         specialist_gazetteers = list(
@@ -226,6 +229,12 @@ class AtlasPageView(TemplateView):
         # "Hide gazetteers outside Date Range filter" coverage switch.
         context['gazetteer_temporal'] = json.dumps({
             g['namespace']: (g['temporal_extent'] or [])
+            for g in gazetteer_inventory
+        })
+        # namespace → condensed res-2 H3 coverage ("global" | [cells]) for the
+        # "Hide gazetteers outside Area filter" switch (client-side h3-js).
+        context['gazetteer_h3'] = json.dumps({
+            g['namespace']: (g['h3_coverage_coarse'] if g['h3_coverage_coarse'] else [])
             for g in gazetteer_inventory
         })
         return context

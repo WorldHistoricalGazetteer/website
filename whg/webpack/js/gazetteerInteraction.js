@@ -320,7 +320,7 @@ function renderRelations(data) {
     `;
 }
 
-function renderLinks(data) {
+function renderLinks(data, hasWiki) {
     const links = (data.links || []).filter((l) => l && l.identifier);
     if (links.length === 0) return '';
     // Group by host (URL) or namespace prefix, matching what the user
@@ -359,9 +359,12 @@ function renderLinks(data) {
             </div>
         `;
     }).join('');
+    const wikiHint = hasWiki
+        ? ' <span class="popup-wiki-mark popup-wiki-hint" title="Includes Wikipedia" aria-hidden="true">W</span>'
+        : '';
     return `
         <details class="popup-section">
-            <summary>External links</summary>
+            <summary>External links${wikiHint}</summary>
             <div class="popup-section-body">${groupHtml}</div>
         </details>
     `;
@@ -385,20 +388,54 @@ function renderDepictionGallery(data) {
     `;
 }
 
+/** Wikipedia links among the external links, with their language edition. */
+function wikipediaLinks(data) {
+    const out = [];
+    for (const l of (data.links || [])) {
+        const id = l && l.identifier;
+        if (!id) continue;
+        const m = /https?:\/\/([a-z-]+)\.(?:m\.)?wikipedia\.org\/[^\s]+/i.exec(id);
+        if (!m) continue;
+        const url = safeUrl(id);
+        if (url) out.push({ url, lang: m[1].toLowerCase() });
+    }
+    return out;
+}
+
+/** A prominent "Wikipedia" call-out (Wikipedia articles are high-value, so we
+ *  surface them above the general External-links list rather than burying them). */
+function renderWikipediaLink(data) {
+    const wl = wikipediaLinks(data);
+    if (!wl.length) return '';
+    const primary = wl.find((l) => l.lang === 'en') || wl[0];
+    const more = wl.length - 1;
+    const langBadge = primary.lang && primary.lang !== 'en'
+        ? `<span class="popup-wiki-lang">${esc(primary.lang)}</span>` : '';
+    const moreBadge = more > 0 ? `<span class="popup-wiki-more">+${more}</span>` : '';
+    return `
+        <a class="popup-wikipedia" href="${esc(primary.url)}" target="_blank" rel="noopener"
+           title="Read this place on Wikipedia">
+            <span class="popup-wiki-mark" aria-hidden="true">W</span>
+            <span class="popup-wiki-text">Wikipedia</span>${langBadge}${moreBadge}
+        </a>`;
+}
+
 /** Compose the full popup HTML from a gateway PlaceDetail dict. */
 function renderPopup(data) {
+    const hasWiki = wikipediaLinks(data).length > 0;
     return `
 <div class="whg-gazetteer-popup">
     ${renderHeader(data)}
     ${renderDepictionHero(data)}
     ${renderChips(data)}
+    ${renderWikipediaLink(data)}
     <div class="popup-body">
         ${renderMetaList(data)}
         ${renderDescription(data)}
         ${renderNames(data)}
         ${renderTemporalGeometries(data)}
         ${renderRelations(data)}
-        ${renderLinks(data)}
+        ${renderLinks(data, hasWiki)}
         ${renderDepictionGallery(data)}
     </div>
 </div>`;

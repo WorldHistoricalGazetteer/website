@@ -1122,6 +1122,43 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     flex: 1 1 auto;
     min-height: 0;
 }
+/* Prominent Wikipedia call-out (surfaced above the External-links list). */
+.whg-gazetteer-popup .popup-wikipedia {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 12px 6px;
+    padding: 3px 10px 3px 4px;
+    border: 1px solid #dfe3e6;
+    border-radius: 14px;
+    background: #fff;
+    color: #202122;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none;
+}
+.whg-gazetteer-popup .popup-wikipedia:hover { border-color: #a2a9b1; background: #f8f9fa; }
+/* The Wikipedia "W" mark — the wordmark's serif W in a black roundel. */
+.whg-gazetteer-popup .popup-wiki-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: #202122;
+    color: #fff;
+    font-family: "Linux Libertine", Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    font-size: 0.72rem;
+    line-height: 1;
+}
+.whg-gazetteer-popup .popup-wiki-lang,
+.whg-gazetteer-popup .popup-wiki-more {
+    font-size: 0.62rem; font-weight: 600; color: #54595d;
+    background: #eaecf0; border-radius: 8px; padding: 0 5px; text-transform: uppercase;
+}
+/* Smaller inline hint on the "External links" summary. */
+.whg-gazetteer-popup .popup-wiki-hint { width: 14px; height: 14px; font-size: 0.58rem; vertical-align: -2px; }
 
 .whg-gazetteer-popup .popup-meta-list {
     display: grid;

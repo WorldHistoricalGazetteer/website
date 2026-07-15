@@ -361,27 +361,25 @@
             and link/distinct affordances scoped to that gazetteer.
         </p>
 
-        <!-- Coverage filters card (Master Plan §1.4.1 — sketch UI; the switches operate but
-             the underlying functionality is not yet implemented. The stub-note appears when
-             either switch is on, and is hidden again when both are off.) -->
+        <!-- Coverage filters card (Master Plan §1.4.1). Both switches filter the
+             gazetteer list client-side: Area = res-2 H3 intersection with the
+             selected area(s) (registry h3_coverage_coarse); Date Range = temporal
+             overlap (registry temporal_extent). Each is disabled (with an
+             explanatory tooltip) until its input filter is active. -->
         <div class="gazetteer-card gazetteer-coverage-filters mb-2">
-            <div class="form-check form-switch small mb-1">
+            <div class="form-check form-switch small mb-1" data-bs-toggle="tooltip"
+                 data-bs-title="Select one or more areas (in Areas mode) first — then this hides gazetteers whose coverage doesn’t include the selected area.">
                 <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_area" disabled>
                 <label class="form-check-label small" for="gazetteer_filter_area">
                     Hide gazetteers outside <strong>Area</strong> filter
                 </label>
             </div>
-            <div class="form-check form-switch small">
+            <div class="form-check form-switch small" data-bs-toggle="tooltip"
+                 data-bs-title="Turn on the Date Range filter first — then this hides gazetteers whose dates don’t overlap it.">
                 <input class="form-check-input gazetteer-stub-switch" type="checkbox" id="gazetteer_filter_period" disabled>
                 <label class="form-check-label small" for="gazetteer_filter_period">
                     Hide gazetteers outside <strong>Date Range</strong> filter
                 </label>
-            </div>
-            <div class="gazetteer-stub-note small text-muted fst-italic mt-2 d-none">
-                <i class="fas fa-info-circle me-1"></i>
-                <strong>Area</strong> coverage filtering isn't wired yet — each gazetteer's
-                spatial footprint (its <code>h3_coverage</code>) is too large to intersect in
-                the browser. The <strong>Date Range</strong> filter above is live.
             </div>
         </div>
 
@@ -590,6 +588,7 @@
     const user_areas = {{ user_areas|safe }};
     const available_sources = {{ available_sources|safe }};
     const gazetteer_temporal = {{ gazetteer_temporal|safe }};
+    const gazetteer_h3 = {{ gazetteer_h3|safe }};
     const atlas_toponym = {% if toponym %}"{{ toponym|escapejs }}"{% else %}null{% endif %};
 </script>
 

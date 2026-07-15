@@ -16,6 +16,7 @@ import heroMap from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
+import { polygonToCells, latLngToCell } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
@@ -271,14 +272,49 @@ function temporalCoverageOverlaps(extent, from, to) {
     const hi = (e1 == null) ? Infinity : e1;
     return lo <= to && hi >= from;                                   // interval overlap
 }
+// Res-2 H3 cells the selected area(s) touch — matches the registry's
+// `h3_coverage_coarse` resolution. polygonToCells covers big areas; the per-
+// vertex cells catch areas smaller than a (huge, ~86,000 km²) res-2 hex.
+const COVERAGE_H3_RES = 2;
+function computeAreaH3Cells() {
+    const cells = new Set();
+    for (const r of selectedRegions) {
+        const geom = r && r.geometry;
+        if (!geom) continue;
+        const polys = geom.type === 'MultiPolygon' ? geom.coordinates
+            : (geom.type === 'Polygon' ? [geom.coordinates] : []);
+        for (const polyCoords of polys) {
+            try { polygonToCells(polyCoords, COVERAGE_H3_RES, true).forEach(c => cells.add(c)); } catch (e) { /* */ }
+            for (const pt of (polyCoords[0] || [])) {
+                try { cells.add(latLngToCell(pt[1], pt[0], COVERAGE_H3_RES)); } catch (e) { /* */ }
+            }
+        }
+    }
+    return cells;
+}
+
 function applyGazetteerCoverageFilter() {
     const temporalMap = (typeof gazetteer_temporal !== 'undefined') ? gazetteer_temporal : {};
+    const h3Map = (typeof gazetteer_h3 !== 'undefined') ? gazetteer_h3 : {};
     const periodSw = document.getElementById('gazetteer_filter_period');
     const periodOn = periodSw && periodSw.checked && !periodSw.disabled;
+    const areaSw = document.getElementById('gazetteer_filter_area');
+    const areaOn = areaSw && areaSw.checked && !areaSw.disabled;
+    const areaCells = areaOn ? computeAreaH3Cells() : null;
     document.querySelectorAll('#gazetteers_offcanvas .authority-item[data-namespace]').forEach(item => {
+        const ns = item.dataset.namespace;
         let hide = false;
-        if (periodOn && !temporalCoverageOverlaps(temporalMap[item.dataset.namespace], temporalFrom, temporalTo)) {
+        if (periodOn && !temporalCoverageOverlaps(temporalMap[ns], temporalFrom, temporalTo)) {
             hide = true;
+        }
+        if (!hide && areaOn && areaCells) {
+            const cov = h3Map[ns];
+            if (cov === 'global') { /* global coverage always overlaps */ }
+            else if (Array.isArray(cov) && cov.length) {
+                let overlap = false;
+                for (const c of cov) { if (areaCells.has(c)) { overlap = true; break; } }
+                if (!overlap) hide = true;
+            } /* else: no coarse coverage → unknown → keep visible */
         }
         item.classList.toggle('coverage-hidden', hide);
     });
@@ -402,8 +438,21 @@ function updateGazetteerAreaSwitch() {
     setGazetteerCoverageSwitch('gazetteer_filter_area', selectedRegions.length > 0);
 }
 
+// Wrapper tooltips explaining why a coverage switch is disabled (a disabled
+// input can't fire hover, so the tooltip lives on the enclosing .form-check).
+const COVERAGE_TOOLTIPS = {
+    gazetteer_filter_area: {
+        off: 'Select one or more areas (in Areas mode) first — then this hides gazetteers whose coverage doesn’t include the selected area.',
+        on: 'Hides gazetteers whose coverage doesn’t overlap the selected area(s).',
+    },
+    gazetteer_filter_period: {
+        off: 'Turn on the Date Range filter first — then this hides gazetteers whose dates don’t overlap it.',
+        on: 'Hides gazetteers whose date coverage doesn’t overlap the Date Range.',
+    },
+};
+
 // Enable/disable a coverage-filter switch, clearing it (and its stub note) when
-// disabled, and dimming its label.
+// disabled, dimming its label, and updating its wrapper tooltip.
 function setGazetteerCoverageSwitch(id, active) {
     const sw = document.getElementById(id);
     if (!sw) return;
@@ -412,8 +461,22 @@ function setGazetteerCoverageSwitch(id, active) {
         sw.checked = false;
         sw.dispatchEvent(new Event('change', { bubbles: true })); // hides the stub note if now all-off
     }
-    const label = sw.closest('.form-check')?.querySelector('.form-check-label');
-    if (label) label.classList.toggle('text-muted', !active);
+    const wrap = sw.closest('.form-check');
+    if (wrap) {
+        const label = wrap.querySelector('.form-check-label');
+        if (label) label.classList.toggle('text-muted', !active);
+        const tips = COVERAGE_TOOLTIPS[id];
+        if (tips) {
+            const text = active ? tips.on : tips.off;
+            wrap.setAttribute('data-bs-title', text);
+            try {
+                if (window.bootstrap) {
+                    const tt = window.bootstrap.Tooltip.getOrCreateInstance(wrap, { trigger: 'hover' });
+                    tt.setContent({ '.tooltip-inner': text });
+                }
+            } catch (e) { /* bootstrap not ready — initAtlasTooltips picks it up */ }
+        }
+    }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -680,7 +743,7 @@ Promise.all([
     const initAtlasTooltips = () => {
         const bs = window.bootstrap;
         if (!bs || !bs.Tooltip) return false;
-        document.querySelectorAll('#floating_search [data-bs-toggle="tooltip"]').forEach(el => {
+        document.querySelectorAll('#floating_search [data-bs-toggle="tooltip"], .gazetteer-coverage-filters [data-bs-toggle="tooltip"]').forEach(el => {
             // Move the native `title` into a BS data attr and drop it, so the
             // browser's own tooltip doesn't ALSO pop up alongside the styled one.
             const t = el.getAttribute('title');
@@ -814,18 +877,11 @@ Promise.all([
     }
 
     // ── Gazetteers coverage filters ──
-    // Date Range switch is FUNCTIONAL (temporal overlap, client-side). The Area
-    // switch is still a stub (per-authority H3 sets too large to ship) — its note
-    // shows only while IT is on.
+    // Both switches are now FUNCTIONAL, client-side: Date Range = temporal
+    // overlap (registry temporal_extent); Area = res-2 H3 intersection with the
+    // selected area(s) (registry h3_coverage_coarse + h3-js).
     document.querySelectorAll('#gazetteers_offcanvas .gazetteer-stub-switch').forEach(sw => {
-        sw.addEventListener('change', () => {
-            applyGazetteerCoverageFilter();
-            const card = sw.closest('.gazetteer-coverage-filters');
-            if (!card) return;
-            const note = card.querySelector('.gazetteer-stub-note');
-            const areaSw = document.getElementById('gazetteer_filter_area');
-            if (note) note.classList.toggle('d-none', !(areaSw && areaSw.checked));
-        });
+        sw.addEventListener('change', () => applyGazetteerCoverageFilter());
     });
 
     // ── Specialist Gazetteers: parent row click reveals the inline dropdown. ──
@@ -1624,6 +1680,7 @@ function updateSelectionOverlay() {
 
 function renderSelectionChips() {
     updateGazetteerAreaSwitch();   // keep the coverage "Area" switch in sync with the selection
+    applyGazetteerCoverageFilter(); // re-filter the gazetteer list if the Area switch is on
     const container = document.getElementById('selection_chips');
     if (selectedRegions.length === 0) {
         container.innerHTML = '';
@@ -2339,12 +2396,11 @@ function clearAll() {
     document.querySelectorAll('#gazetteers_offcanvas .authority-cb').forEach(cb => {
         cb.checked = filterSelections.has(cb.value);
     });
-    // Reset stub-note and the unimplemented coverage switches.
+    // Reset the coverage switches + re-apply (clears any coverage filtering).
     document.querySelectorAll('#gazetteers_offcanvas .gazetteer-stub-switch').forEach(sw => {
         sw.checked = false;
     });
-    const stubNote = document.querySelector('#gazetteers_offcanvas .gazetteer-stub-note');
-    if (stubNote) stubNote.classList.add('d-none');
+    applyGazetteerCoverageFilter();
 
     // Hide results
     hideResultsPanel();

@@ -303,13 +303,21 @@ class EntityFeatureView(AuthenticatedAPIView):
         if filetype not in ['lpf', 'tsv']:
             filetype = 'lpf'
 
-        # CRC places — fetch from gateway and return LPF
+        # CRC places — fetch from gateway.
         if obj_type == "place" and is_crc_place_id(obj_id):
-            if filetype != 'lpf':
-                raise Http404("TSV export is not available for CRC places.")
             crc_place = _fetch_crc_place(obj_id, user=request.user)
             if not crc_place:
                 raise Http404(f"CRC place not found: {obj_id}")
+            # variant=popup → return the RAW gateway PlaceDetail dict. The Atlas
+            # gazetteer-feature popup (whg/webpack/js/gazetteerInteraction.js)
+            # renders directly from its native fields (title, names[].label,
+            # types, geometries, relations, links, descriptions) — the LPF
+            # conversion renames them (names[].toponym, …), which is why the
+            # popup previously showed only the type chip. Default → LPF.
+            if request.GET.get('variant') == 'popup':
+                return Response(crc_place, status=status.HTTP_200_OK)
+            if filetype != 'lpf':
+                raise Http404("TSV export is not available for CRC places.")
             lpf = _crc_place_to_lpf(crc_place, request=request)
             return Response(lpf, status=status.HTTP_200_OK)
 
