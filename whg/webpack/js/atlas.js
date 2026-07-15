@@ -260,10 +260,57 @@ function applyTemporalLive() {
     applyGazetteerCoverageFilter(); // re-filter the Gazetteers list if its Date Range switch is on
 }
 
+// ── Gazetteers coverage maps (temporal + coarse H3) ──
+// Fetched from /atlas/registry/coverage/ and cached in IndexedDB, keyed by the
+// page's `registry_version`, so the ~200 KB coarse-H3 payload is downloaded once
+// per registry change instead of inlined on every Atlas page load.
+let coverageTemporal = {};   // namespace → [earliest, latest]
+let coverageH3 = {};         // namespace → "global" | [res-2 cells]
+
+const IDB_NAME = 'whg-atlas';
+const IDB_STORE = 'registry';
+function idbOpen() {
+    return new Promise((resolve, reject) => {
+        let req;
+        try { req = indexedDB.open(IDB_NAME, 1); } catch (e) { return reject(e); }
+        req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (e) { /* */ } };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+}
+function idbGet(key) {
+    return idbOpen().then(db => new Promise((res, rej) => {
+        const r = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+}
+function idbPut(key, val) {
+    return idbOpen().then(db => new Promise((res, rej) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(val, key);
+        tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+    }));
+}
+
+// Populate coverageTemporal/coverageH3 — from IndexedDB when the cached version
+// matches the page's registry_version (no network), else fetch + re-cache.
+async function loadRegistryCoverage() {
+    const version = (typeof registry_version !== 'undefined') ? registry_version : null;
+    const useMaps = (t, h) => { coverageTemporal = t || {}; coverageH3 = h || {}; applyGazetteerCoverageFilter(); };
+    try {
+        if (version) {
+            const cached = await idbGet('coverage');
+            if (cached && cached.version === version) { useMaps(cached.temporal, cached.h3); return; }
+        }
+        const data = await fetch('/atlas/registry/coverage/', { credentials: 'same-origin' }).then(r => r.json());
+        useMaps(data.temporal, data.h3);
+        if (data.version) { try { await idbPut('coverage', { version: data.version, temporal: data.temporal, h3: data.h3 }); } catch (e) { /* best-effort cache */ } }
+    } catch (e) {
+        console.warn('Atlas: registry coverage load failed (coverage filters will keep all gazetteers visible)', e);
+    }
+}
+
 // ── Gazetteers coverage filtering (client-side) ──
-// Temporal is wired here (tiny [earliest,latest] per authority from the registry);
-// the spatial "Area" switch remains a stub (per-authority H3 sets are 6k–425k
-// cells — too large to ship to the client).
 function temporalCoverageOverlaps(extent, from, to) {
     if (!Array.isArray(extent) || extent.length < 2) return true;   // unknown → keep visible
     const e0 = extent[0], e1 = extent[1];
@@ -294,8 +341,8 @@ function computeAreaH3Cells() {
 }
 
 function applyGazetteerCoverageFilter() {
-    const temporalMap = (typeof gazetteer_temporal !== 'undefined') ? gazetteer_temporal : {};
-    const h3Map = (typeof gazetteer_h3 !== 'undefined') ? gazetteer_h3 : {};
+    const temporalMap = coverageTemporal;
+    const h3Map = coverageH3;
     const periodSw = document.getElementById('gazetteer_filter_period');
     const periodOn = periodSw && periodSw.checked && !periodSw.disabled;
     const areaSw = document.getElementById('gazetteer_filter_area');
@@ -608,6 +655,9 @@ function setupWelcomePanel() {
     }
 }
 waitDocumentReady().then(setupWelcomePanel);
+// Load the gazetteer coverage maps (IndexedDB-cached, version-gated) — decoupled
+// from the map, so the coverage filters work even if the map is slow/unavailable.
+waitDocumentReady().then(loadRegistryCoverage);
 
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready

@@ -204,15 +204,10 @@ class AtlasPageView(TemplateView):
                 'citation_text', 'rights_holder', 'source_url',
                 'contributors_csl', 'license__spdx_id', 'license__label',
                 'license__url', 'license_url',
-                # Temporal coverage — [earliest, latest] with the ongoing-null
-                # convention (pushed by push_gazetteer_inventory). Drives the
-                # "Hide gazetteers outside Date Range filter" switch.
-                'temporal_extent',
-                # Condensed res-2 H3 coverage rollup ("global" | list of cells) —
-                # small enough to ship; drives the "Hide gazetteers outside Area
-                # filter" switch (h3-js intersection). The FINE `h3_coverage`
-                # (6k–425k cells) is deliberately NOT surfaced.
-                'h3_coverage_coarse',
+                # NB: temporal_extent + h3_coverage_coarse are NOT inlined here —
+                # they're served (and IndexedDB-cached client-side, keyed by
+                # registry_version) via atlas_registry_coverage() so the ~200 KB
+                # coarse-H3 payload isn't re-sent on every page load.
             )
         )
         specialist_gazetteers = list(
@@ -225,19 +220,45 @@ class AtlasPageView(TemplateView):
         )
         context['gazetteer_inventory'] = gazetteer_inventory
         context['specialist_gazetteers'] = specialist_gazetteers
-        # Compact namespace → [earliest, latest] map for the client-side
-        # "Hide gazetteers outside Date Range filter" coverage switch.
-        context['gazetteer_temporal'] = json.dumps({
-            g['namespace']: (g['temporal_extent'] or [])
-            for g in gazetteer_inventory
-        })
-        # namespace → condensed res-2 H3 coverage ("global" | [cells]) for the
-        # "Hide gazetteers outside Area filter" switch (client-side h3-js).
-        context['gazetteer_h3'] = json.dumps({
-            g['namespace']: (g['h3_coverage_coarse'] if g['h3_coverage_coarse'] else [])
-            for g in gazetteer_inventory
-        })
+        # Version stamp for the client's IndexedDB coverage cache — the browser
+        # only re-fetches atlas_registry_coverage() when this changes.
+        context['registry_version'] = _registry_version()
         return context
+
+
+def _registry_version() -> str:
+    """A cheap change-stamp for the authority registry: the latest updated_at
+    plus the row count. `updated_at` is auto_now, so any inventory push bumps it,
+    invalidating the client's cached coverage maps."""
+    from django.db.models import Max, Count
+    from api.models import GazetteerRegistryEntry
+    agg = (GazetteerRegistryEntry.objects
+           .filter(entry_class='authority')
+           .aggregate(m=Max('updated_at'), n=Count('id')))
+    return f"{agg['m'].isoformat() if agg['m'] else '0'}|{agg['n']}"
+
+
+def atlas_registry_coverage(request):
+    """Coverage maps for the Atlas Gazetteers filters, cached client-side in
+    IndexedDB keyed by ``version``:
+      { version, temporal: {ns: [earliest, latest]}, h3: {ns: "global"|[cells]} }
+    Moved out of the inline page context so the ~200 KB coarse-H3 payload is
+    fetched once per registry version rather than on every Atlas page load."""
+    from api.models import GazetteerRegistryEntry
+    rows = (GazetteerRegistryEntry.objects
+            .filter(entry_class='authority')
+            .values('namespace', 'temporal_extent', 'h3_coverage_coarse'))
+    temporal = {}
+    h3 = {}
+    for g in rows:
+        ns = g['namespace']
+        temporal[ns] = g['temporal_extent'] or []
+        h3[ns] = g['h3_coverage_coarse'] if g['h3_coverage_coarse'] else []
+    return JsonResponse({
+        'version': _registry_version(),
+        'temporal': temporal,
+        'h3': h3,
+    })
 
 
 def atlas_search(request):

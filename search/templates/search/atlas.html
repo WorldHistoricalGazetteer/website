@@ -401,10 +401,12 @@
         <!-- Explore-mode capabilities note (only visible while in Explore mode) -->
         <div class="gazetteer-explore-note small mb-2 d-none" data-mode-visible="explore">
             <i class="fas fa-info-circle me-1"></i>
-            While exploring, signed-in users can add <strong>Attestations</strong>
+            <span class="badge bg-warning text-dark align-middle me-1" style="font-size:0.6rem;">Under development</span>
+            While exploring, signed-in users will be able to add <strong>Attestations</strong>
             to any place. When exploring one of <strong>your own</strong> gazetteers,
-            you can additionally add places, edit data and metadata, and adjust the
+            you will additionally be able to add places, edit data and metadata, and adjust the
             clustering — equivalent to the reconciliation / accessioning workflow in v3.2.
+            (Being built as part of the Collaborative Workbench.)
         </div>
 
         <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on).
@@ -587,8 +589,9 @@
     const has_areas = {{ has_areas|yesno:"true,false" }};
     const user_areas = {{ user_areas|safe }};
     const available_sources = {{ available_sources|safe }};
-    const gazetteer_temporal = {{ gazetteer_temporal|safe }};
-    const gazetteer_h3 = {{ gazetteer_h3|safe }};
+    // Coverage maps (temporal + coarse H3) are fetched from /atlas/registry/coverage/
+    // and IndexedDB-cached, keyed by this version stamp (see atlas.js).
+    const registry_version = "{{ registry_version|escapejs }}";
     const atlas_toponym = {% if toponym %}"{{ toponym|escapejs }}"{% else %}null{% endif %};
 </script>
 
