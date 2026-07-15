@@ -325,9 +325,11 @@ function temporalCoverageOverlaps(extent, from, to) {
 const COVERAGE_H3_RES = 2;
 function computeAreaH3Cells() {
     const cells = new Set();
-    for (const r of selectedRegions) {
-        const geom = r && r.geometry;
-        if (!geom) continue;
+    // Area geometries arrive as Polygon, MultiPolygon, OR GeometryCollection
+    // (the boundary sources wrap selections in a GeometryCollection) — recurse.
+    const addGeom = (geom) => {
+        if (!geom) return;
+        if (geom.type === 'GeometryCollection') { (geom.geometries || []).forEach(addGeom); return; }
         const polys = geom.type === 'MultiPolygon' ? geom.coordinates
             : (geom.type === 'Polygon' ? [geom.coordinates] : []);
         for (const polyCoords of polys) {
@@ -336,7 +338,8 @@ function computeAreaH3Cells() {
                 try { cells.add(latLngToCell(pt[1], pt[0], COVERAGE_H3_RES)); } catch (e) { /* */ }
             }
         }
-    }
+    };
+    for (const r of selectedRegions) addGeom(r && r.geometry);
     return cells;
 }
 
