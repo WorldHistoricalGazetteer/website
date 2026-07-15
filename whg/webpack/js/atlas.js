@@ -16,7 +16,7 @@ import heroMap from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
-import { polygonToCells, latLngToCell } from 'h3-js';
+import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
@@ -311,8 +311,16 @@ function applyGazetteerCoverageFilter() {
             const cov = h3Map[ns];
             if (cov === 'global') { /* global coverage always overlaps */ }
             else if (Array.isArray(cov) && cov.length) {
+                // The coarse set is COMPACTED (cells at res 0–2). A res-2 area
+                // cell overlaps if it, or either coarser ancestor (res-1/res-0),
+                // is in the set.
+                const covSet = new Set(cov);
                 let overlap = false;
-                for (const c of cov) { if (areaCells.has(c)) { overlap = true; break; } }
+                for (const c of areaCells) {
+                    if (covSet.has(c) || covSet.has(cellToParent(c, 1)) || covSet.has(cellToParent(c, 0))) {
+                        overlap = true; break;
+                    }
+                }
                 if (!overlap) hide = true;
             } /* else: no coarse coverage → unknown → keep visible */
         }
