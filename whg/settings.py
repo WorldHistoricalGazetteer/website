@@ -23,6 +23,20 @@ except ImportError:
 
 ENV_CONTEXT = os.environ.get('ENV_CONTEXT', 'dev-whgazetteer-org')  # Default if ENV_CONTEXT is not set
 
+# ── Elasticsearch read-only guard ────────────────────────────────────────────
+# dev/local have no ES index of their own and are pointed at the PRODUCTION
+# indexes (whg/pub). Wrap ES_CONN so publishing / re-indexing / any write path
+# on a non-prod context cannot mutate the live production index. Reads pass
+# through unchanged, so search still works against production data.
+ES_READ_ONLY = ENV_CONTEXT != 'whgazetteer-org' and globals().get('ES_WHG') in ('whg', 'pub')
+if ES_READ_ONLY and 'ES_CONN' in globals():
+    try:
+        from .es_readonly import make_read_only
+        ES_CONN = make_read_only(ES_CONN)
+        print(f"ES_CONN is READ-ONLY (context '{ENV_CONTEXT}' points at production index '{globals().get('ES_WHG')}')")
+    except Exception as _es_ro_err:  # never let the guard break startup
+        print(f'WARNING: ES read-only guard not applied: {_es_ro_err}')
+
 sentry_sdk.init(
     dsn="https://3e76c8ff5cb9409181fc2ac916b6e0af@errors.whgazetteer.org/1",
     integrations=[DjangoIntegration()],
