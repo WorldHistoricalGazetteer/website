@@ -21,7 +21,7 @@ click-plugins==1.1.1
 click-repl==0.2.0
 colorama==0.4.6
 commonmark==0.9.1
-cryptography==46.0.6
+cryptography==49.0.0
 datapackage==1.15.2
 decorator==5.1.1
 deepdiff==8.6.2
@@ -94,7 +94,7 @@ ordered-set==4.1.0
 pandas==1.4.1
 parameterized==0.7.4
 petl==1.7.12
-Pillow==11.3.0
+Pillow==12.3.0
 pip-search==0.0.12
 prometheus-client==0.17.1
 prompt-toolkit==3.0.38
