@@ -9,7 +9,7 @@ from django.core.cache import caches
 from django.http import HttpResponseForbidden
 from django.urls import path, re_path, include
 from django.views.decorators.cache import cache_page
-from django.views.generic.base import TemplateView
+from django.views.generic.base import TemplateView, RedirectView
 # For CDNfallbacks
 from django.views.static import serve
 
@@ -54,6 +54,13 @@ def trigger_error(request):
 
 urlpatterns = [
                   path('glitchtip-debug/', trigger_error),
+
+                  # place#120: documentation lives at docs.whgazetteer.org/content/...
+                  # Requests that drop the `docs.` subdomain (e.g. whgazetteer.org/content/
+                  # v4/architecture/database.html) 404'd; redirect them to the docs site.
+                  path('content/<path:subpath>',
+                       RedirectView.as_view(url='https://docs.whgazetteer.org/content/%(subpath)s',
+                                            permanent=False, query_string=True)),
 
                   # home page
                   path('', views.Home30a.as_view(), name="home"),

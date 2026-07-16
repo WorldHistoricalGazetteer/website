@@ -3,7 +3,7 @@
 from django.urls import path
 from django.conf.urls.static import static
 from django.conf import settings
-from django.views.generic.base import TemplateView
+from django.views.generic.base import TemplateView, RedirectView
 
 from . import views
 from elastic.es_utils import fetch
@@ -36,5 +36,12 @@ urlpatterns = [
     
     # ??
     path('<int:id>/full', views.PlaceFullView.as_view(), name='place-full'),
+
+    # place#120: a bare /places/<id> (no /portal/ or /detail suffix) 404'd; redirect
+    # it to the portal so external/legacy place links resolve gracefully. Placed last
+    # so the suffixed routes above always match first.
+    path('<int:pid>/', RedirectView.as_view(pattern_name='places:place-portal-pid',
+                                             permanent=False, query_string=True),
+         name='place-bare-redirect'),
 
 ] + static(settings.MEDIA_URL, document_root = settings.MEDIA_ROOT)
