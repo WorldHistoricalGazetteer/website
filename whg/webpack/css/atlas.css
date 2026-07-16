@@ -1195,6 +1195,12 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     font-weight: 700;
     font-size: 0.72rem;
     line-height: 1;
+    box-sizing: border-box;
+    /* The serif cap-W has no descender, so flex-centring (which centres the
+       line-box) leaves it sitting optically high in the roundel — the empty
+       lower half pulls the perceived centre down. Nudge the glyph down a touch
+       so it reads centred. em-relative, so it scales to the smaller hint too. */
+    padding-top: 0.11em;
 }
 .whg-gazetteer-popup .popup-wiki-lang,
 .whg-gazetteer-popup .popup-wiki-more {
