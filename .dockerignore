@@ -1,0 +1,22 @@
+# The Dockerfile only COPYs requirements.txt; everything else is bind-mounted at
+# runtime, so keep the build context tiny. Excluding these does NOT affect the
+# image — it just stops ~6 GB (mostly .git) being shipped to the daemon per build.
+.git
+.github
+venv
+.venv
+node_modules
+static/webpack
+static
+media
+**/__pycache__
+**/*.pyc
+**/*.pyo
+*.log
+.env
+.env/*
+developer
+scratchpad
+.idea
+.vscode
+*.sqlite3
