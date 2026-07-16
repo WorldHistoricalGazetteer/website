@@ -420,6 +420,78 @@ function renderWikipediaLink(data) {
         </a>`;
 }
 
+/** Colour-code the licence badge by permissiveness of the source's terms. */
+function licenceClass(a) {
+    const spdx = (a.license__spdx_id || '').toUpperCase();
+    const pc = a.license__permits_commercial;
+    const ar = a.license__attribution_required;
+    const custom = a.license__custom;
+    if (!spdx && !a.license__label) return 'lic-unknown';
+    // Fully open: CC0 / PDDL / public domain, or commercial-OK with no attribution.
+    if (spdx.includes('CC0') || spdx.includes('PDDL') ||
+        spdx.indexOf('PUBLIC') === 0 || (pc === true && ar === false)) {
+        return 'lic-open';
+    }
+    // Restrictive: non-commercial, all-rights-reserved, or bespoke terms.
+    if (pc === false || spdx.includes('-NC') || spdx.includes('ARR') ||
+        custom === true) {
+        return 'lic-restrictive';
+    }
+    // Attribution and/or share-alike required (the CC-BY / CC-BY-SA middle ground).
+    return 'lic-attribution';
+}
+
+/** "Source & licence" footer: a colour-coded badge (linking to the licence
+ *  deed, with a tooltip) built from the registry attribution the server
+ *  attaches to the popup payload. Empty when no attribution is available. */
+function renderAttribution(data) {
+    const a = data && data.attribution;
+    if (!a) return '';
+    const spdx = a.license__spdx_id || '';
+    const label = a.license__label || '';
+    const deed = a.license__url || a.license_url || '';
+    const rights = a.rights_holder || '';
+    const srcName = a.name || '';
+    if (!spdx && !label && !rights && !srcName) return '';
+    const code = spdx || '©';
+    const cls = licenceClass(a);
+    const tip = [
+        label || (spdx || 'Licence not specified'),
+        rights ? `© ${rights}` : '',
+        deed ? 'Click for licence terms' : '',
+    ].filter(Boolean).join(' · ');
+    const inner = `<span class="whg-licence-code">${esc(code)}</span>`;
+    const badge = deed
+        ? `<a class="whg-licence-badge ${cls}" href="${esc(deed)}" target="_blank" rel="noopener noreferrer" data-bs-toggle="tooltip" title="${esc(tip)}">${inner}</a>`
+        : `<span class="whg-licence-badge ${cls}" data-bs-toggle="tooltip" title="${esc(tip)}">${inner}</span>`;
+    const src = srcName
+        ? `<span class="whg-licence-source">${esc(srcName)}</span>`
+        : '';
+    return `
+        <div class="popup-attribution">
+            <span class="popup-attribution-label">Source &amp; licence</span>
+            <span class="popup-attribution-value">${src}${badge}</span>
+        </div>`;
+}
+
+/** Initialise Bootstrap tooltips inside the (transient) map popup. The popup
+ *  DOM lives outside atlas.js's tooltip scopes, so it needs its own init;
+ *  mirrors initAtlasTooltips (move native title → data-bs-title so the
+ *  browser tooltip doesn't double up). Degrades to the native title when
+ *  Bootstrap isn't loaded. */
+function initPopupTooltips() {
+    const bs = (typeof window !== 'undefined') && window.bootstrap;
+    if (!bs || !bs.Tooltip) return;
+    document.querySelectorAll('.whg-gazetteer-popup [data-bs-toggle="tooltip"]').forEach((el) => {
+        const t = el.getAttribute('title');
+        if (t != null) {
+            if (!el.getAttribute('data-bs-title')) el.setAttribute('data-bs-title', t);
+            el.removeAttribute('title');
+        }
+        bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover', container: 'body' });
+    });
+}
+
 /** Compose the full popup HTML from a gateway PlaceDetail dict. */
 function renderPopup(data) {
     const hasWiki = wikipediaLinks(data).length > 0;
@@ -438,6 +510,7 @@ function renderPopup(data) {
         ${renderLinks(data, hasWiki)}
         ${renderDepictionGallery(data)}
     </div>
+    ${renderAttribution(data)}
 </div>`;
 }
 
@@ -654,6 +727,7 @@ export default class GazetteerInteraction {
                     console.log('[WHG popup]', placeId, data);
                 }
                 this._popup.setHTML(renderPopup(data));
+                initPopupTooltips();
             })
             .catch((err) => {
                 if (err.name === 'AbortError') return;

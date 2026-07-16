@@ -315,6 +315,15 @@ class EntityFeatureView(AuthenticatedAPIView):
             # conversion renames them (names[].toponym, …), which is why the
             # popup previously showed only the type chip. Default → LPF.
             if request.GET.get('variant') == 'popup':
+                # Attach the source authority's attribution (registry,
+                # per-namespace) so the popup can render a licence badge —
+                # same shape as the Atlas portal modal (search.views.atlas_place).
+                from api.attribution import registry_attribution
+                ns = crc_place.get("namespace") or (
+                    obj_id.split(":", 1)[0] if ":" in obj_id else "")
+                attribution = registry_attribution(ns)
+                if attribution:
+                    crc_place["attribution"] = attribution
                 return Response(crc_place, status=status.HTTP_200_OK)
             if filetype != 'lpf':
                 raise Http404("TSV export is not available for CRC places.")

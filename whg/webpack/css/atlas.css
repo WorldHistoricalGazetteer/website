@@ -1122,6 +1122,50 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     flex: 1 1 auto;
     min-height: 0;
 }
+
+/* "Source & licence" attribution footer + colour-coded licence badge. */
+.whg-gazetteer-popup .popup-attribution {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 12px 8px;
+    border-top: 1px solid #ecf0f1;
+    flex: 0 0 auto;
+    font-size: 0.7rem;
+}
+.whg-gazetteer-popup .popup-attribution-label {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 0.58rem;
+    font-weight: 600;
+    color: #95a5a6;
+}
+.whg-gazetteer-popup .popup-attribution-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.whg-gazetteer-popup .whg-licence-source { color: #566573; }
+.whg-gazetteer-popup .whg-licence-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.66rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-decoration: none;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+.whg-gazetteer-popup a.whg-licence-badge:hover { filter: brightness(0.95); }
+.whg-gazetteer-popup .whg-licence-badge.lic-open        { background: #d5f5e3; color: #1e6b3a; }
+.whg-gazetteer-popup .whg-licence-badge.lic-attribution { background: #fdebd0; color: #7e5109; }
+.whg-gazetteer-popup .whg-licence-badge.lic-restrictive { background: #fadbd8; color: #922b21; }
+.whg-gazetteer-popup .whg-licence-badge.lic-unknown     { background: #eaecee; color: #5d6d7e; }
+
 /* Prominent Wikipedia call-out (surfaced above the External-links list). */
 .whg-gazetteer-popup .popup-wikipedia {
     display: inline-flex;

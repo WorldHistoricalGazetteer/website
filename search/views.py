@@ -323,16 +323,10 @@ def atlas_place(request):
 
     # Enrich with the source authority's attribution (registry, per-namespace).
     ns = place.get("namespace") or (pid.split(":", 1)[0] if ":" in pid else "")
-    if ns:
-        from api.models import GazetteerRegistryEntry
-        entry = (GazetteerRegistryEntry.objects
-                 .filter(namespace=ns, entry_class="authority")
-                 .values("id", "name", "description", "citation_text",
-                         "rights_holder", "source_url", "license_url",
-                         "license__spdx_id", "license__label", "license__url")
-                 .first())
-        if entry:
-            place["attribution"] = entry
+    from api.attribution import registry_attribution
+    attribution = registry_attribution(ns)
+    if attribution:
+        place["attribution"] = attribution
     return JsonResponse(place)
 
 

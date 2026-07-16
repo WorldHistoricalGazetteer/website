@@ -37,6 +37,32 @@ def attribution_for(namespaces):
     return out
 
 
+def registry_attribution(namespace):
+    """Full per-source attribution for a single namespace, drawn from the
+    registry's ``authority`` row.
+
+    Returns a flat dict ready to attach to a place as ``place["attribution"]``
+    (or ``None`` when the namespace is unknown / not an authority). Shared by
+    the Atlas portal modal (``search.views.atlas_place``) and the Atlas
+    gazetteer-feature map popup (``api.views_entity.EntityFeatureView``), so
+    both surface identical source/licence metadata. The ``license`` FK is
+    exposed as flat spanned fields (``license__spdx_id`` etc.) — consistent
+    with how it is consumed elsewhere — plus the permissiveness flags the
+    client uses to colour-code the licence badge.
+    """
+    ns = (namespace or '').strip().lower()
+    if not ns:
+        return None
+    return (GazetteerRegistryEntry.objects
+            .filter(namespace=ns, entry_class='authority')
+            .values('id', 'name', 'description', 'citation_text',
+                    'rights_holder', 'source_url', 'license_url',
+                    'license__spdx_id', 'license__label', 'license__url',
+                    'license__permits_commercial', 'license__share_alike',
+                    'license__attribution_required', 'license__custom')
+            .first())
+
+
 def attribution_block(namespaces):
     """Full attribution envelope: per-source attribution + the WHG overlay.
 
