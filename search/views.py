@@ -78,6 +78,14 @@ class SearchPageView(TemplateView):
                 # Handle the case where the toponym does not exist in the database table
                 context['toponym'] = None
 
+        # Ensure the temporal/spatial context vars always exist so the template's
+        # {% if earliest_date %} / {% if unique_countries %} guards don't emit a
+        # noisy VariableDoesNotExist on every search render (place#120).
+        context.setdefault('earliest_date', None)
+        context.setdefault('latest_date', None)
+        context.setdefault('unique_countries', None)
+        context.setdefault('yearspans', None)
+
         context['media_url'] = settings.MEDIA_URL
         context['dslist'] = dslist
         context['search_params'] = self.request.session.get('search_params')

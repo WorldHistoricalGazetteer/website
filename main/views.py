@@ -1490,10 +1490,12 @@ def statusView(request):
     except:
         context["status_database"] = "down"
 
-    # celery recon task
+    # celery recon task — bounded wait so the status page can't hang if a worker
+    # is slow/unavailable (place#120: blocking .get() with no timeout returned no
+    # HTTP response at all).
     try:
         result = testAdd.delay(8, 8)
-        context["status_tasks"] = "up" if result.get() == 16 else 'error'
+        context["status_tasks"] = "up" if result.get(timeout=10) == 16 else 'error'
     except:
         context["status_tasks"] = "down"
 

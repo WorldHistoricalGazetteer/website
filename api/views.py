@@ -1626,6 +1626,13 @@ class RegionViewSet(View):
         description='UN Statistical Division Sub-Region').order_by('title')
     serializer_class = AreaSerializer
 
+    def get(self, request, *args, **kwargs):
+        # place#120: the view previously defined no HTTP handler, so GET /api/regions/
+        # returned 405. Return the UN sub-regions as a plain JSON list (mirrors
+        # AreaListView; avoids DRF serializer-context coupling in a bare View).
+        regions = list(self.queryset.values('id', 'title'))
+        return JsonResponse(regions, safe=False)
+
 
 # Country Geometries from ccode list
 @extend_schema(exclude=True)
