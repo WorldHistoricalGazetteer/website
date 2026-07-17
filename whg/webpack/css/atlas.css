@@ -1099,10 +1099,20 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 .whg-gazetteer-popup .popup-chips {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 4px;
     padding: 0 12px 6px;
     flex: 0 0 auto;
 }
+/* The inline Wikipedia "W" badge — a compact circular mark sized to sit level
+   with the type / ccode chips (reuses .popup-wiki-mark for the roundel). */
+.whg-gazetteer-popup .popup-chip-wiki {
+    width: 16px; height: 16px;
+    font-size: 0.62rem;
+    text-decoration: none;
+    flex: 0 0 auto;
+}
+.whg-gazetteer-popup a.popup-chip-wiki:hover { background: #000; }
 
 .whg-gazetteer-popup .popup-chip {
     font-size: 0.7rem;
@@ -1166,23 +1176,8 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 .whg-gazetteer-popup .whg-licence-badge.lic-restrictive { background: #fadbd8; color: #922b21; }
 .whg-gazetteer-popup .whg-licence-badge.lic-unknown     { background: #eaecee; color: #5d6d7e; }
 
-/* Prominent Wikipedia call-out (surfaced above the External-links list). */
-.whg-gazetteer-popup .popup-wikipedia {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin: 2px 12px 6px;
-    padding: 3px 10px 3px 4px;
-    border: 1px solid #dfe3e6;
-    border-radius: 14px;
-    background: #fff;
-    color: #202122;
-    font-size: 0.78rem;
-    font-weight: 600;
-    text-decoration: none;
-}
-.whg-gazetteer-popup .popup-wikipedia:hover { border-color: #a2a9b1; background: #f8f9fa; }
-/* The Wikipedia "W" mark — the wordmark's serif W in a black roundel. */
+/* The Wikipedia "W" mark — the wordmark's serif W in a black roundel, reused
+   by the inline chip badge (.popup-chip-wiki). */
 .whg-gazetteer-popup .popup-wiki-mark {
     display: inline-flex;
     align-items: center;
@@ -1199,16 +1194,10 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     /* The serif cap-W has no descender, so flex-centring (which centres the
        line-box) leaves it sitting optically high in the roundel — the empty
        lower half pulls the perceived centre down. Nudge the glyph down a touch
-       so it reads centred. em-relative, so it scales to the smaller hint too. */
+       so it reads centred. em-relative, so it scales to the smaller inline
+       chip badge too. */
     padding-top: 0.11em;
 }
-.whg-gazetteer-popup .popup-wiki-lang,
-.whg-gazetteer-popup .popup-wiki-more {
-    font-size: 0.62rem; font-weight: 600; color: #54595d;
-    background: #eaecf0; border-radius: 8px; padding: 0 5px; text-transform: uppercase;
-}
-/* Smaller inline hint on the "External links" summary. */
-.whg-gazetteer-popup .popup-wiki-hint { width: 14px; height: 14px; font-size: 0.58rem; vertical-align: -2px; }
 
 .whg-gazetteer-popup .popup-meta-list {
     display: grid;

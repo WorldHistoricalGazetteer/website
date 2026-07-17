@@ -1,16 +1,36 @@
+const LANG_KEY = 'whg_lang';
+
 function getPreferredLanguage() {
-    // First check for a URL override
+    // 1. Explicit per-visit override via ?lang= takes precedence.
     const urlParams = new URLSearchParams(window.location.search);
     const langParam = urlParams.get('lang');
     if (langParam && languages[langParam]) {
         console.info(`Overriding language to ${langParam} from URL parameter`);
         return langParam;
     }
-    // Get the browser's language setting by splitting at the hyphen to get the language code
+    // 2. Persisted user preference (set via the map language selector) — shared
+    //    site-wide and remembered between visits.
+    try {
+        const stored = localStorage.getItem(LANG_KEY);
+        if (stored && languages[stored]) return stored;
+    } catch (e) { /* localStorage unavailable (e.g. private mode) */ }
+    // 3. Otherwise fall back to the browser's language.
     const browserLang = navigator.language || navigator.userLanguage;
     const langCode = browserLang.split('-')[0];
     console.info(`Detected browser language: ${browserLang}, using code: ${langCode}`);
     return languages[langCode] ? langCode : 'local'; // Default to 'local' if not found
+}
+
+/** Persist (or clear, when given a falsy/unknown code) the user's preferred
+ *  language site-wide. Used by the map language selector; read back by
+ *  getPreferredLanguage() so every consumer (map labels, Wikipedia links, …)
+ *  stays in sync. */
+function setPreferredLanguage(code) {
+    try {
+        if (code && languages[code]) localStorage.setItem(LANG_KEY, code);
+        else localStorage.removeItem(LANG_KEY);
+    } catch (e) { /* localStorage unavailable */ }
+    return code;
 }
 
 const languages = {
@@ -253,4 +273,4 @@ const languages = {
 }
 
 export default languages;
-export { getPreferredLanguage };
+export { getPreferredLanguage, setPreferredLanguage };

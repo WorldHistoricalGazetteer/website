@@ -2,7 +2,7 @@
 
 import Layerset from './layerset';
 import { attributionString } from './utilities';
-import languages, {getPreferredLanguage} from './languages.js';
+import languages, {getPreferredLanguage, setPreferredLanguage} from './languages.js';
 
 import MapboxDraw from "@mapbox/mapbox-gl-draw";
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css'
@@ -263,8 +263,11 @@ class acmeStyleControl {
 						const currentLang = this._map.preferredLanguage || 'local';
 
 						languageSelect.addEventListener('change', (event) => {
-							// Update the stored preference when changed
+							// Update the stored preference when changed, and persist it
+							// site-wide (localStorage) so it survives reloads and drives
+							// other consumers such as popup Wikipedia links.
 							this._map.preferredLanguage = event.target.value;
+							setPreferredLanguage(event.target.value);
 							styleJSON.layers.forEach(layer => {
 								const metadata = layer.metadata;
 								if (metadata && metadata['whg:group'] === 'Labels' && layer.source === 'openmaptiles') {

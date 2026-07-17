@@ -12,6 +12,8 @@
 // cluster centroids carry no individual ``place_id``; labels are excluded
 // because labels-without-shapes feel ambiguous.
 //
+import { getPreferredLanguage } from './languages.js';
+
 // Popup data is fetched from ``/entity/place:{id}/api?variant=popup`` which
 // returns the raw gateway PlaceDetail JSON. Rendering happens client-side
 // so the full data is inspectable from the browser console.
@@ -166,6 +168,8 @@ function renderChips(data) {
     for (const cc of data.ccodes || []) {
         chips.push(`<span class="popup-chip popup-chip-cc">${esc(cc)}</span>`);
     }
+    const wikiBadge = renderWikipediaBadge(data);
+    if (wikiBadge) chips.push(wikiBadge);
     if (chips.length === 0) return '';
     return `<div class="popup-chips">${chips.join('')}</div>`;
 }
@@ -320,7 +324,7 @@ function renderRelations(data) {
     `;
 }
 
-function renderLinks(data, hasWiki) {
+function renderLinks(data) {
     const links = (data.links || []).filter((l) => l && l.identifier);
     if (links.length === 0) return '';
     // Group by host (URL) or namespace prefix, matching what the user
@@ -359,12 +363,9 @@ function renderLinks(data, hasWiki) {
             </div>
         `;
     }).join('');
-    const wikiHint = hasWiki
-        ? ' <span class="popup-wiki-mark popup-wiki-hint" title="Includes Wikipedia" aria-hidden="true">W</span>'
-        : '';
     return `
         <details class="popup-section">
-            <summary>External links${wikiHint}</summary>
+            <summary>External links</summary>
             <div class="popup-section-body">${groupHtml}</div>
         </details>
     `;
@@ -402,22 +403,30 @@ function wikipediaLinks(data) {
     return out;
 }
 
-/** A prominent "Wikipedia" call-out (Wikipedia articles are high-value, so we
- *  surface them above the general External-links list rather than burying them). */
-function renderWikipediaLink(data) {
+/** Pick the best Wikipedia article for the badge, honouring the user's
+ *  preferred language (persisted via languages.js), then English, then whatever
+ *  edition is available. */
+function preferredWikipediaLink(data) {
     const wl = wikipediaLinks(data);
-    if (!wl.length) return '';
-    const primary = wl.find((l) => l.lang === 'en') || wl[0];
-    const more = wl.length - 1;
-    const langBadge = primary.lang && primary.lang !== 'en'
-        ? `<span class="popup-wiki-lang">${esc(primary.lang)}</span>` : '';
-    const moreBadge = more > 0 ? `<span class="popup-wiki-more">+${more}</span>` : '';
-    return `
-        <a class="popup-wikipedia" href="${esc(primary.url)}" target="_blank" rel="noopener"
-           title="Read this place on Wikipedia">
-            <span class="popup-wiki-mark" aria-hidden="true">W</span>
-            <span class="popup-wiki-text">Wikipedia</span>${langBadge}${moreBadge}
-        </a>`;
+    if (!wl.length) return null;
+    let pref = 'en';
+    try { pref = getPreferredLanguage(); } catch (e) {}
+    // 'local' = "use map-local names" — no specific Wikipedia edition, so fall
+    // through to English.
+    return (pref && pref !== 'local' && wl.find((l) => l.lang === pref))
+        || wl.find((l) => l.lang === 'en')
+        || wl[0];
+}
+
+/** A small circular Wikipedia "W" badge that sits inline among the type / ccode
+ *  chips, linking to the preferred-language article. Empty when none. */
+function renderWikipediaBadge(data) {
+    const link = preferredWikipediaLink(data);
+    if (!link) return '';
+    const label = link.lang && link.lang !== 'en'
+        ? `Read this place on Wikipedia (${link.lang})`
+        : 'Read this place on Wikipedia';
+    return `<a class="popup-chip-wiki popup-wiki-mark" href="${esc(link.url)}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}">W</a>`;
 }
 
 /** Colour-code the licence badge by permissiveness of the source's terms. */
@@ -494,20 +503,18 @@ function initPopupTooltips() {
 
 /** Compose the full popup HTML from a gateway PlaceDetail dict. */
 function renderPopup(data) {
-    const hasWiki = wikipediaLinks(data).length > 0;
     return `
 <div class="whg-gazetteer-popup">
     ${renderHeader(data)}
     ${renderDepictionHero(data)}
     ${renderChips(data)}
-    ${renderWikipediaLink(data)}
     <div class="popup-body">
         ${renderMetaList(data)}
         ${renderDescription(data)}
         ${renderNames(data)}
         ${renderTemporalGeometries(data)}
         ${renderRelations(data)}
-        ${renderLinks(data, hasWiki)}
+        ${renderLinks(data)}
         ${renderDepictionGallery(data)}
     </div>
     ${renderAttribution(data)}
