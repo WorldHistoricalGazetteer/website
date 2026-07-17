@@ -17,9 +17,7 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="glitchtip-dsn" content="{{ GLITCHTIP_DSN }}">
     {% if user.is_authenticated %}
-    {# Language preference: expose the save endpoint (used by languages.js) and,
-       for a user with a saved preference, seed whg_lang localStorage before any
-       bundle runs so the Profile choice is authoritative across machines. #}
+    {# Language preference: save endpoint for languages.js, and seed whg_lang from the profile before bundles run. #}
     <meta name="whg-lang-endpoint" content="{% url 'accounts:profile-language' %}">
     {% if user.preferred_language %}<script>try{localStorage.setItem('whg_lang','{{ user.preferred_language|escapejs }}');}catch(e){}</script>{% endif %}
     {% endif %}
