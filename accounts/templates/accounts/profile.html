@@ -254,6 +254,18 @@
           </label>
         </div>
       </form>
+
+      <div class="mt-3">
+        <label for="preferred-language" class="form-check-label fw-semibold mb-1 d-block">
+          Preferred language
+          <i class="fas fa-info-circle text-muted smaller" data-bs-toggle="tooltip"
+             title="Sets the language for place-name map labels and popup Wikipedia links, remembered across your devices."></i>
+        </label>
+        <select id="preferred-language" class="form-select form-select-sm"
+                data-current="{{ user.preferred_language }}" style="max-width: 260px;">
+          {# options populated by profile.js from the shared language list #}
+        </select>
+      </div>
     </section>
 
     <hr>

@@ -81,6 +81,11 @@ class User(AbstractUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     news_permitted = models.BooleanField(default=False)
 
+    # UI language preference — a short code (e.g. 'en', 'de', or 'local' for
+    # "as recorded"). Mirrors the client-side ``whg_lang`` localStorage so
+    # signed-in users keep their choice across machines and sessions.
+    preferred_language = models.CharField(max_length=8, blank=True, default="")
+
     # Legacy fields - keep for migration period
     must_reset_password = models.BooleanField(default=False)
 

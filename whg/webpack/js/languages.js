@@ -30,6 +30,24 @@ function setPreferredLanguage(code) {
         if (code && languages[code]) localStorage.setItem(LANG_KEY, code);
         else localStorage.removeItem(LANG_KEY);
     } catch (e) { /* localStorage unavailable */ }
+    // Signed-in users: also persist to their Profile so the choice follows them
+    // across machines and sessions. The endpoint meta is rendered only when
+    // authenticated (base template); anonymous users stay localStorage-only.
+    try {
+        const ep = document.querySelector('meta[name="whg-lang-endpoint"]');
+        if (ep && ep.content) {
+            const csrf = document.querySelector('meta[name="csrf-token"]');
+            fetch(ep.content, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': csrf ? csrf.content : '',
+                },
+                body: 'language=' + encodeURIComponent(code || ''),
+            }).catch(() => {});
+        }
+    } catch (e) { /* ignore persistence failures */ }
     return code;
 }
 

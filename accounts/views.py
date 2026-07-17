@@ -396,6 +396,22 @@ def profile_news_toggle(request):
 
 
 @login_required
+@require_POST
+def profile_language_set(request):
+    """Persist the signed-in user's UI language preference — a short code such
+    as 'en', 'de', or 'local' ("as recorded"), or '' to clear it. Mirrors the
+    client-side ``whg_lang`` localStorage so the choice follows the user across
+    machines. Called by languages.js::setPreferredLanguage from both the profile
+    selector and the map language control."""
+    code = (request.POST.get('language') or '').strip().lower()
+    if code and not (2 <= len(code) <= 8 and code.replace('-', '').isalpha()):
+        return JsonResponse({'status': 'error', 'message': 'invalid language code'}, status=400)
+    request.user.preferred_language = code
+    request.user.save(update_fields=['preferred_language'])
+    return JsonResponse({'status': 'success', 'preferred_language': code})
+
+
+@login_required
 def profile_delete(request):
     if request.method == 'POST':
         user = request.user

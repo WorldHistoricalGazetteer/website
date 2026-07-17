@@ -1,6 +1,7 @@
 // profile.js
 
 import {initClipboard} from './utilities'
+import languages, {getPreferredLanguage, setPreferredLanguage} from './languages.js';
 
 const {apiTokenUrl, newsToggleUrl, csrfToken, domain} = window.profileConfig;
 const tokenSection = document.getElementById('api-token-section');
@@ -142,5 +143,26 @@ if (newsCheckbox) {
         }).catch(() => {
             alert('Failed to save news preferences.');
         });
+    });
+}
+
+// Preferred-language selector — populated from the shared language list. On
+// change, setPreferredLanguage() writes localStorage AND (since we're signed
+// in) persists to the user's Profile via the whg-lang-endpoint meta, so it
+// follows them across machines and drives map labels + popup Wikipedia links.
+const langSelect = document.getElementById('preferred-language');
+if (langSelect) {
+    const current = langSelect.dataset.current || getPreferredLanguage();
+    Object.entries(languages).forEach(([code, names]) => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent = code === 'local'
+            ? 'Local (as recorded)'
+            : (names.local || names.en || code);
+        if (code === current) opt.selected = true;
+        langSelect.appendChild(opt);
+    });
+    langSelect.addEventListener('change', function () {
+        setPreferredLanguage(langSelect.value);
     });
 }

@@ -16,6 +16,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <meta name="glitchtip-dsn" content="{{ GLITCHTIP_DSN }}">
+    {% if user.is_authenticated %}
+    {# Language preference: expose the save endpoint (used by languages.js) and,
+       for a user with a saved preference, seed whg_lang localStorage before any
+       bundle runs so the Profile choice is authoritative across machines. #}
+    <meta name="whg-lang-endpoint" content="{% url 'accounts:profile-language' %}">
+    {% if user.preferred_language %}<script>try{localStorage.setItem('whg_lang','{{ user.preferred_language|escapejs }}');}catch(e){}</script>{% endif %}
+    {% endif %}
     <meta name="env-context" content="{{ ENV_CONTEXT }}">
     <meta name="glitchtip-release" content="{{ GLITCHTIP_RELEASE }}">
     {% if user.is_authenticated %}
