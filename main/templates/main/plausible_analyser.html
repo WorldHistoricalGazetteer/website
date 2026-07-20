@@ -72,6 +72,36 @@
     {% endfor %}
   </div>
 
+  <!-- WHG platform figures (DB + registry) — registered users, reach & index size -->
+  <div class="card mb-4">
+    <div class="card-body">
+      <h6 class="card-title"><i class="fas fa-database me-1 text-secondary"></i>WHG platform
+        <span class="text-muted small fw-normal">— registered users, reach &amp; index size</span></h6>
+      <div class="row g-2">
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ users.total }}</div><div class="small text-muted">Registered users<br>(total)</div></div></div></div>
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ users.active_in_period }}</div><div class="small text-muted">Registered, signed in<br>this period</div></div></div></div>
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ users.new_in_period }}</div><div class="small text-muted">New sign-ups<br>this period</div></div></div></div>
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ users.visitors_in_period }}</div><div class="small text-muted">Visitors this period<br><span style="font-size:.72rem">(mostly signed-out)</span></div></div></div></div>
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ visitor_countries }}</div><div class="small text-muted">Countries<br>(visitors)</div></div></div></div>
+        <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+          <div class="h4 mb-0">{{ named_entities_display|default:"—" }}</div><div class="small text-muted">Named entities<br>(index)</div></div></div></div>
+      </div>
+      <div class="alert alert-light border mt-3 mb-0">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <span class="fw-semibold text-muted small"><i class="fas fa-quote-left me-1"></i>Copy-ready for the grant abstract ({{ period_label }})</span>
+          <button type="button" class="btn btn-sm btn-outline-secondary py-0"
+                  onclick="navigator.clipboard.writeText(document.getElementById('an-abstract').innerText); this.textContent='Copied';">Copy</button>
+        </div>
+        <div id="an-abstract" class="small">The WHG currently has {{ users.total }} registered users and is in active use by visitors from {{ visitor_countries }} countries, with {{ topline.visitors }} visitors and {{ topline.pageviews }} pageviews over the {{ period_label|lower }}. We have created an index of {{ named_entities_display|default:"##" }} named entities{% if source_gazetteers %} drawn from {{ source_gazetteers }} source gazetteers{% endif %}, with a codebase available at <a href="{{ repo_url }}">{{ repo_url }}</a>.</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Visitors over time -->
   <div class="card mb-4"><div class="card-body">
     <h6 class="card-title"><i class="fas fa-chart-area me-1 text-secondary"></i>Visitors over time

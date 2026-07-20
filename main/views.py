@@ -1195,6 +1195,47 @@ def plausible_analyser_view(request):
     maxlog = max(logs.values()) if logs else 1
     country_colors = {code: _blue(lv / maxlog) for code, lv in logs.items()}
 
+    # ── WHG platform figures: registered users (DB), reach, and index size —
+    #    for the admin view and the grant-abstract "Building on a Prototype"
+    #    numbers, with a per-period registered-vs-signed-out split. ──
+    from django.utils import timezone
+    from datetime import timedelta
+    from django.db.models import Sum
+    from django.contrib.auth import get_user_model
+    UserModel = get_user_model()
+
+    # Window start matching the selected Plausible period (approx for DB filters).
+    if period == 'month':
+        since = timezone.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:
+        _days = {'7d': 7, '30d': 30, '6mo': 182, '12mo': 365}.get(period, 30)
+        since = timezone.now() - timedelta(days=_days)
+
+    reg = UserModel.objects.filter(is_active=True)
+    users = {
+        'total': reg.count(),
+        'new_in_period': reg.filter(date_joined__gte=since).count(),
+        'active_in_period': reg.filter(last_login__gte=since).count(),
+        # Plausible is cookieless, so its visitor count can't identify accounts;
+        # it is the whole audience, predominantly signed-out.
+        'visitors_in_period': tot_visitors,
+    }
+    # Distinct countries visitors came from (ISO-2 codes with >0 visitors).
+    visitor_countries = len(country_map)
+
+    # Index size ("named entities"): sum of per-authority record counts from the
+    # gazetteer registry, kept current by the indexing pipeline's inventory push.
+    named_entities_display = None
+    source_gazetteers = None
+    try:
+        from api.models import GazetteerRegistryEntry
+        _auth = GazetteerRegistryEntry.objects.filter(entry_class='authority').exclude(id='whg')
+        _n = _auth.aggregate(n=Sum('record_count'))['n'] or 0
+        named_entities_display = f"{_n:,}" if _n else None
+        source_gazetteers = _auth.count()
+    except Exception:  # noqa: BLE001 — never let the registry break the analytics page
+        pass
+
     sections = [
         {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
         {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket', 'rows': merge('source', 'source', 8)},
@@ -1227,6 +1268,11 @@ def plausible_analyser_view(request):
 
     return render(request, 'main/plausible_analyser.html', {
         'period': period, 'periods': PLAUSIBLE_PERIODS,
+        'period_label': dict(PLAUSIBLE_PERIODS).get(period, period),
+        'users': users, 'visitor_countries': visitor_countries,
+        'named_entities_display': named_entities_display,
+        'source_gazetteers': source_gazetteers,
+        'repo_url': 'https://github.com/WorldHistoricalGazetteer/website',
         'topline': topline, 'per_site': per_site, 'chart': chart,
         'sections': sections, 'donuts': donuts,
         'country_map': country_map, 'country_colors': country_colors,
