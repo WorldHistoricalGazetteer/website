@@ -106,6 +106,7 @@ const PlaceList = {
     qstr: '', ccode: '', typeVal: '',   // active Country / Type facet selections
     //  typeVal encodes the Type dropdown pick: '' | 'aat:<id>' | 'src:<identifier>'
     reqSeq: 0, loading: false, hasMore: false,
+    effMode: 'in',   // match mode the current query settled on (in→starts fallback)
     els: null, wired: false, _debouncedFilter: null,
 
     /** Inject atlas.js collaborators once at page init.
@@ -124,6 +125,7 @@ const PlaceList = {
         this.label = label || namespace;
         this.hits = []; this.aatLabels = {}; this.total = null;
         this.qstr = ''; this.ccode = ''; this.typeVal = ''; this.hasMore = false;
+        this.effMode = 'in';
         this.els.search.value = '';
         this.els.ccodeSel.innerHTML = '<option value="">All countries</option>';
         this.els.typeSel.innerHTML = '<option value="">All types</option>';
@@ -221,12 +223,16 @@ const PlaceList = {
     // With an empty box we send `browse:true` — a namespace-filtered, alphabetical
     // match-all with a REAL total; typing switches to the ranked search. Either
     // way `offset` walks the result list a page at a time.
-    _fetchPage(reset) {
+    //  `mode` (optional) forces the match mode for this call; otherwise a reset
+    //  starts with "in" (contains) and load-more reuses whatever mode the first
+    //  page settled on (this.effMode), so pagination stays consistent.
+    _fetchPage(reset, mode) {
         if (!this.cfg || this.loading) return;
         if (!reset && (!this.hasMore || this.hits.length >= OFFSET_CAP)) return;
 
         const seq = reset ? ++this.reqSeq : this.reqSeq;
         const offset = reset ? 0 : this.hits.length;
+        const reqMode = mode || (reset ? 'in' : (this.effMode || 'in'));
         this.loading = true;
         if (reset) {
             this.hits = [];
@@ -243,14 +249,15 @@ const PlaceList = {
         const opts = this.cfg.getBaseOptions(this.qstr) || {};
         opts.qstr = this.qstr;
         opts.namespaces = [this.ns];
-        // Prefix ("starts") match, NOT "in" (substring): the gateway's substring
-        // index is only populated for the big global sources (gn/wd/osm), so
-        // "in" silently returns zero hits for most authority gazetteers
-        // (tgn, pl, iv, alc, …) — "starts" is served wherever "in" is AND for
-        // those, so a typeahead like "cov" → Coventry works everywhere the
-        // gazetteer's toponyms are searchable at all. (gb/ukhc return nothing in
-        // any mode — a separate gateway indexing gap, tracked upstream.)
-        opts.mode = 'starts';
+        // Prefer "in" (contains / substring). The gateway's substring index is
+        // only populated for the big global sources (gn/wd/osm); for the many
+        // authority gazetteers (iv, tgn, pl, alc, …) "in" yields nothing, so the
+        // response handler falls back to "starts" (prefix) when a fresh "in"
+        // query comes back empty. That gives true contains wherever the gateway
+        // supports it, and prefix everywhere else. (True contains for those
+        // sources — and any search for gb/ukhc — needs gateway n-gram indexing;
+        // tracked upstream.)
+        opts.mode = reqMode;
         opts.size = PAGE_SIZE;
         opts.offset = offset;
         opts.browse = !this.qstr;   // empty box → browse the whole gazetteer
@@ -281,6 +288,17 @@ const PlaceList = {
                 // Surface gateway-down to the shared banner (place#125 resilience).
                 if (this.cfg.onGatewayStatus) this.cfg.onGatewayStatus(data.gateway !== false);
                 const page = Array.isArray(data.hits) ? data.hits : [];
+                // Contains→prefix fallback: a fresh "in" (contains) query that the
+                // gateway can't serve for this gazetteer returns empty — retry once
+                // as "starts" (prefix) so the box still finds places. Only when the
+                // gateway is actually up (else the banner already explains the void).
+                if (reset && this.qstr && reqMode === 'in'
+                        && data.gateway !== false && page.length === 0) {
+                    this.effMode = 'starts';
+                    this._fetchPage(true, 'starts');
+                    return;
+                }
+                this.effMode = reqMode;
                 this.hits = this.hits.concat(page);
                 this.total = (typeof data.total === 'number') ? data.total : this.hits.length;
                 // Facets are whole-namespace for browse; keep first-seen labels.
