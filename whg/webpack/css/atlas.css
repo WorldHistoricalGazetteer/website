@@ -832,11 +832,57 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 /* AAT type chips are links to Getty — keep the chip look (no underline). */
 a.pl-chip { text-decoration: none; }
 a.pl-chip.pl-type:hover { text-decoration: underline; }
+/* Clickable AAT chips are links → standard link cursor (not the info cursor). */
+a.pl-chip.pl-aat { cursor: pointer; }
 .pl-type { background: #f4f0f7; color: #6a5a78; }
 .pl-cc { background: #eef4ec; color: #4f6b4a; letter-spacing: .3px; }
 /* Chips carrying an informative tooltip (AAT scope-note / country name) get the
    help cursor (?+arrow) to signal there's more on hover. */
 .pl-chip.pl-info { cursor: help; }
+
+/* Per-row share (copy-link) button — top-right of the row. */
+.placelist-row .pl-share {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    z-index: 1;
+    border: 0;
+    background: transparent;
+    color: #b6c0c8;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.78rem;
+    line-height: 1;
+}
+.placelist-row:hover .pl-share { color: #8794a0; }
+.placelist-row .pl-share:hover { color: #2980b9; }
+.pl-row-title { padding-right: 22px; }   /* clear of the share button */
+
+/* Bootstrap HTML tooltip content for AAT chips (left-aligned, credit line). */
+.tt-aat { text-align: left; }
+.tt-aat-label { font-weight: 600; }
+.tt-aat-id { font-size: 0.85em; opacity: 0.75; }
+.tt-aat-desc { margin-top: 3px; }
+.tt-aat-credit { margin-top: 5px; font-size: 0.8em; font-style: italic; opacity: 0.85; }
+
+/* Transient "link copied" toast. */
+.atlas-copy-toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    z-index: 2000;
+    background: rgba(33, 43, 54, 0.95);
+    color: #fff;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.atlas-copy-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .pl-nogeom {
     font-size: 0.66rem;
     color: #9a6a2f;
@@ -1417,10 +1463,22 @@ a.pl-chip.pl-type:hover { text-decoration: underline; }
    help cursor (?+arrow) signals it, matching the Explore place list. */
 .whg-gazetteer-popup .popup-chip-type[data-aat],
 .whg-gazetteer-popup .popup-chip-cc[title] { cursor: help; }
-/* AAT type chips are links to Getty — keep the chip look (no underline;
-   the chip's own colour still applies). */
+/* AAT type chips are links to Getty — keep the chip look (no underline; the
+   chip's own colour still applies) and use a standard link cursor. */
 .whg-gazetteer-popup a.popup-chip { text-decoration: none; }
+.whg-gazetteer-popup a.popup-chip-type[data-aat] { cursor: pointer; }
 .whg-gazetteer-popup a.popup-chip-type:hover { text-decoration: underline; }
+/* Popup share (copy-link) button. */
+.whg-gazetteer-popup .popup-share {
+    border: 0;
+    background: transparent;
+    color: #6b7885;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.whg-gazetteer-popup .popup-share:hover { color: #2980b9; }
 
 .whg-gazetteer-popup .popup-body {
     padding: 0 12px 6px;

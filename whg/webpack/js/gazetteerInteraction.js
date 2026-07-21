@@ -120,6 +120,22 @@ export function aatTooltip(idOrKey) {
     return `${head}\n${AAT_CREDIT}`;
 }
 
+/** Rich HTML tooltip for an AAT concept — label, id, scope note and the Getty /
+ *  ODC-By credit — for Bootstrap tooltips (html:true) in the Gazetteer list.
+ *  Every interpolated value is escaped, so the result is safe as innerHTML. */
+export function aatTooltipHtml(idOrKey) {
+    if (idOrKey == null || idOrKey === '') return '';
+    const key = /^aat:/.test(String(idOrKey)) ? String(idOrKey) : `aat:${idOrKey}`;
+    const v = AAT_VOCAB[key];
+    let html = '<div class="tt-aat">';
+    if (v && v.label) html += `<div class="tt-aat-label">${esc(v.label)}</div>`;
+    html += `<div class="tt-aat-id">${esc(key)}</div>`;
+    if (v && v.desc) html += `<div class="tt-aat-desc">${esc(v.desc)}</div>`;
+    html += '<div class="tt-aat-credit">Getty AAT · ODC-By 1.0 — click to open</div>';
+    html += '</div>';
+    return html;
+}
+
 /** Human-readable country name for an ISO code, from the page's global
  *  ``ccode_hash`` (GeoNames/TGN labels). '' when unknown. Shared by the popup
  *  and the place list so both carry the same country tooltip on cc badges. */
@@ -210,9 +226,17 @@ function renderHeader(data) {
             ? `<a class="popup-place-id popup-source-link" href="${esc(srcUrl)}" target="_blank" rel="noopener"
                   title="View this place on the source's website">${esc(placeId)}<i class="fas fa-arrow-up-right-from-square popup-source-ext"></i></a>`
             : `<div class="popup-place-id" title="Source identifier">${esc(placeId)}</div>`;
+    // Copy a shareable deep link (?gazetteer=&place=) to this place. Handled by
+    // a document-level delegate in atlas.js (where the URL builder lives).
+    const shareHtml = placeId
+        ? `<button type="button" class="popup-share" data-share-pid="${esc(placeId)}"
+                   title="Copy a link to this place" aria-label="Copy link to this place">
+               <i class="fas fa-share-nodes"></i></button>`
+        : '';
     return `
         <div class="popup-header">
             ${titleHtml}
+            ${shareHtml}
             ${idHtml}
         </div>
     `;
@@ -851,6 +875,11 @@ export default class GazetteerInteraction {
                 closeOnClick: false,
                 maxWidth: '400px',
                 className: POPUP_CLASS,
+            });
+            // When the popup is dismissed (× button or teardown), drop the
+            // ?place= deep link so the URL reflects that nothing is focused.
+            this._popup.on('close', () => {
+                try { document.dispatchEvent(new CustomEvent('whg:map-popup-close')); } catch (e) {}
             });
         }
         this._popup

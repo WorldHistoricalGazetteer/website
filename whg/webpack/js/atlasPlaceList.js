@@ -30,7 +30,7 @@ import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
-import { aatTooltip, aatUrl, ccName } from './gazetteerInteraction.js';
+import { aatTooltipHtml, aatUrl, ccName } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -107,6 +107,7 @@ const PlaceList = {
     //  typeVal encodes the Type dropdown pick: '' | 'aat:<id>' | 'src:<identifier>'
     reqSeq: 0, loading: false, hasMore: false,
     effMode: 'in',   // match mode the current query settled on (in→starts fallback)
+    _pendingFocus: null,   // place_id to focus once the first page has loaded (deep link)
     els: null, wired: false, _debouncedFilter: null,
 
     /** Inject atlas.js collaborators once at page init.
@@ -139,6 +140,12 @@ const PlaceList = {
         this._fetchPage(true);
     },
 
+    /** Reopen the already-loaded Place List for the current gazetteer (used when
+     *  the user re-clicks the selected Explore gazetteer after closing the list). */
+    reopen() {
+        if (this.ns && this.cfg) this.cfg.showPanelView(VIEW_ID);
+    },
+
     /** Return to the Gazetteers (Explore) panel. Only steals the view when the
      *  Place List is the one on screen, so a Filter-mode toggle elsewhere is a
      *  no-op. */
@@ -166,6 +173,16 @@ const PlaceList = {
         };
         if (this.wired) return;
         this.wired = true;
+
+        // Styled (Bootstrap) HTML tooltips for the virtualised rows — one
+        // delegated instance so re-mounted chips are covered without per-row
+        // init. Bootstrap may load slightly after first open, so retry briefly.
+        if (!this._initTooltips()) {
+            let tries = 0;
+            const t = setInterval(() => {
+                if (this._initTooltips() || ++tries > 20) clearInterval(t);
+            }, 150);
+        }
 
         view.querySelector('.placelist-back')
             .addEventListener('click', () => this.close());
@@ -200,6 +217,13 @@ const PlaceList = {
 
         // One delegated click handler for every (re-mounted) row.
         this.els.rows.addEventListener('click', (e) => {
+            // The share button copies a deep link — don't open the place.
+            const share = e.target.closest('.pl-share');
+            if (share) {
+                e.stopPropagation();
+                if (this.cfg.copyLink) this.cfg.copyLink(share.dataset.pid);
+                return;
+            }
             // A click on an AAT type-chip link opens Getty — don't also open the place.
             if (e.target.closest('a')) return;
             const row = e.target.closest('.placelist-row');
@@ -212,6 +236,23 @@ const PlaceList = {
         // the shown place — drop the list's row highlight so it reads as a plain
         // list again.
         document.addEventListener('whg:map-place-click', () => this._clearSelection());
+    },
+
+    /** One delegated Bootstrap tooltip for all row chips (styled HTML). Rendered
+     *  to <body> so it isn't clipped by the scroll overflow. Returns false until
+     *  Bootstrap is available. */
+    _initTooltips() {
+        const bs = window.bootstrap;
+        if (!bs || !bs.Tooltip || !this.els || this._tooltip) return !!this._tooltip;
+        this._tooltip = new bs.Tooltip(this.els.scroll, {
+            selector: '[data-bs-toggle="tooltip"]',
+            html: true,
+            container: 'body',
+            trigger: 'hover',
+            placement: 'top',
+            delay: { show: 200, hide: 0 },
+        });
+        return true;
     },
 
     _clearSelection() {
@@ -315,6 +356,13 @@ const PlaceList = {
                     ? `${this.total.toLocaleString()} place${this.total === 1 ? '' : 's'}` : '';
                 this._render();
                 this._updateStatus();
+                // Deep link: once the first page is in, focus the requested place
+                // (opens its popup/modal + highlights its row if it's on this page).
+                if (offset === 0 && this._pendingFocus) {
+                    const p = this._pendingFocus;
+                    this._pendingFocus = null;
+                    this.focusPlace(p);
+                }
             })
             .catch(err => {
                 if (seq !== this.reqSeq) return;
@@ -395,30 +443,39 @@ const PlaceList = {
         const range = formatRange(hit.temporal_range);
         const variants = variantsHtml(variantLabels(hit.names, hit.title),
             { className: 'pl-row-variants', tooltip: false });
+        // Chips use Bootstrap tooltips (styled HTML), initialised once as a
+        // delegated instance on the scroll container (_initTooltips).
         let meta = '';
         if (nogeom) {
-            meta += `<span class="pl-nogeom" title="No location — opens as a detail card">no location</span>`;
+            meta += `<span class="pl-nogeom" data-bs-toggle="tooltip" data-bs-title="No location — opens as a detail card">no location</span>`;
         }
         if (range) {
-            meta += `<span class="temporal-chip" title="Attested date range">${esc(range)}</span>`;
+            meta += `<span class="temporal-chip" data-bs-toggle="tooltip" data-bs-title="Attested date range">${esc(range)}</span>`;
         }
         meta += types.map(t => {
             // AAT types link to their canonical Getty concept page and carry the
-            // Getty AAT / ODC-By credit in the tooltip; the row-click handler
-            // ignores clicks that land on a link so this opens Getty, not the place.
+            // Getty AAT / ODC-By credit in a rich (HTML) tooltip; the row-click
+            // handler ignores clicks on links so this opens Getty, not the place.
             if (t.aat) {
-                return `<a class="pl-chip pl-type pl-info" href="${esc(aatUrl(t.aat))}"`
+                return `<a class="pl-chip pl-type pl-aat" href="${esc(aatUrl(t.aat))}"`
                     + ` target="_blank" rel="noopener noreferrer" data-aat="aat:${esc(t.aat)}"`
-                    + ` title="${esc(aatTooltip(t.aat))}">${esc(t.label)}</a>`;
+                    + ` data-bs-toggle="tooltip" data-bs-html="true"`
+                    + ` data-bs-title="${esc(aatTooltipHtml(t.aat))}">${esc(t.label)}</a>`;
             }
             return `<span class="pl-chip pl-type">${esc(t.label)}</span>`;
         }).join('');
         meta += ccodes.map(c => {
             const name = ccName(c);
-            const attrs = name ? ` title="${esc(name)}"` : '';
+            const attrs = name ? ` data-bs-toggle="tooltip" data-bs-title="${esc(name)}"` : '';
             return `<span class="pl-chip pl-cc${name ? ' pl-info' : ''}"${attrs}>${esc(c)}</span>`;
         }).join('');
+        const shareBtn = hit.place_id
+            ? `<button type="button" class="pl-share" data-pid="${esc(hit.place_id)}"`
+              + ` title="Copy a link to this place" aria-label="Copy link to this place">`
+              + `<i class="fas fa-share-nodes"></i></button>`
+            : '';
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
+            + shareBtn
             + `<div class="pl-row-title">${title}</div>`
             + variants
             + `<div class="pl-row-meta">${meta}</div>`
@@ -432,7 +489,14 @@ const PlaceList = {
         this._clearSelection();
         const row = this.els.rows.querySelector(`.placelist-row[data-idx="${idx}"]`);
         if (row) row.classList.add('pl-selected');
+        this._openHit(hit);
+    },
 
+    // Open a hit's popup (with geometry) or detail modal (without), and record it
+    // as the URL-shareable focused place. Shared by row clicks and deep links.
+    _openHit(hit) {
+        if (!hit || !hit.place_id) return;
+        if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(hit.place_id);
         const geom = hitGeometry(hit);
         if (geom) {
             let bb = null;
@@ -442,10 +506,51 @@ const PlaceList = {
                 ? [hit.repr_point[0], hit.repr_point[1]]
                 : (bb ? [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2] : null);
             if (lngLat) heroMap.openPlacePopup(hit.place_id, lngLat);
+            else this.cfg.openPortal(hit.place_id);   // geometry present but unplottable
         } else {
             // No geometry — the standalone detail modal over the map area.
             this.cfg.openPortal(hit.place_id);
         }
+    },
+
+    /** Queue a place to focus once the first page loads (deep link entry point). */
+    setPendingFocus(pid) { this._pendingFocus = pid || null; },
+
+    /** Focus a specific place by id: highlight + scroll to its row if it's on the
+     *  loaded page, then open its popup (with geometry) or detail modal (without).
+     *  When the place isn't among the loaded hits (e.g. deep-linked into a large
+     *  browse list), resolve it via /atlas/place/ and open it directly. */
+    focusPlace(placeId) {
+        if (!placeId || !this.cfg) return;
+        const idx = this.hits.findIndex(h => h && h.place_id === placeId);
+        if (idx >= 0) {
+            this._clearSelection();
+            this._scrollToRow(idx);
+            const row = this.els && this.els.rows.querySelector(`.placelist-row[data-idx="${idx}"]`);
+            if (row) row.classList.add('pl-selected');
+            this._openHit(this.hits[idx]);
+            return;
+        }
+        // Not on this page — resolve the record to decide popup vs modal.
+        fetch('/atlas/place/?id=' + encodeURIComponent(placeId), { credentials: 'same-origin' })
+            .then(r => (r.ok ? r.json() : null))
+            .then(place => {
+                if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(placeId);
+                if (place && hitGeometry(place)) {
+                    this._openHit(place);
+                } else {
+                    this.cfg.openPortal(placeId);
+                }
+            })
+            .catch(() => { this.cfg.openPortal(placeId); });
+    },
+
+    /** Scroll the virtual list so row ``idx`` is comfortably in view. */
+    _scrollToRow(idx) {
+        if (!this.els) return;
+        const target = Math.max(0, idx * ROW_H - (this.els.scroll.clientHeight / 2));
+        this.els.scroll.scrollTop = target;
+        this._render();
     },
 
     // ── Status line ───────────────────────────────────────────────────────

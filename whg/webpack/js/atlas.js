@@ -813,7 +813,23 @@ Promise.all([
         showPanelView: showPanelView,
         getCsrf: () => csrfToken,
         onGatewayStatus: setGatewayAvailable,   // report gateway up/down from list fetches
+        onPlaceFocused: updatePlaceUrl,         // reflect the opened place in the URL
+        copyLink: copyPlaceLink,                // row share button → clipboard
     });
+
+    // Copy-link delegate for the map popup's share button (the popup HTML is
+    // re-rendered freely, so bind once at document level).
+    document.addEventListener('click', (e) => {
+        const share = e.target.closest && e.target.closest('.popup-share');
+        if (!share) return;
+        e.preventDefault();
+        copyPlaceLink(share.getAttribute('data-share-pid'));
+    });
+    // Keep the ?place= link in step with map-driven selections + popup close.
+    document.addEventListener('whg:map-place-click', (e) => {
+        if (e.detail && e.detail.placeId) updatePlaceUrl(e.detail.placeId);
+    });
+    document.addEventListener('whg:map-popup-close', () => updatePlaceUrl(null));
 
     // Gateway-down notice: wire the dismiss button and run a proactive liveness
     // probe so the "limited functionality" banner appears on load, not only
@@ -1001,6 +1017,18 @@ Promise.all([
         emitGazetteerSelection(mode);
     });
 
+    // Re-clicking the ALREADY-selected Explore gazetteer fires no 'change' (a
+    // radio only changes once), so a Place List closed via its back button
+    // couldn't be reopened without first picking a different gazetteer. Catch the
+    // re-click and reopen the existing list for the current selection.
+    document.querySelector('#gazetteers_offcanvas').addEventListener('click', (e) => {
+        const cb = e.target.closest && e.target.closest('.authority-cb');
+        if (!cb || cb.type !== 'radio') return;
+        const body = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
+        const mode = (body && body.dataset.mode) || 'filter';
+        if (mode === 'explore' && cb.value === exploreSelection) PlaceList.reopen();
+    });
+
     // ── Gazetteers offcanvas: Filter | Explore mode toggle (Master Plan §1.4) ──
     // Sketch only — backend support for the unified /suggest list and the Explorer view
     // arrives in Phases 2 and 4.
@@ -1160,7 +1188,13 @@ Promise.all([
         const params = new URLSearchParams(location.search);
         // A ?gazetteer=<ns> deep link implies Places → Explore on that gazetteer
         // (the Place List's shareable URL), even without an explicit panel/gmode.
-        const wantGazetteer = params.get('gazetteer');
+        // ?place=<id> focuses a specific record; when it's given without an
+        // explicit gazetteer, derive the gazetteer from the id's namespace.
+        const wantPlace = params.get('place');
+        let wantGazetteer = params.get('gazetteer');
+        if (!wantGazetteer && wantPlace && wantPlace.indexOf(':') > 0) {
+            wantGazetteer = wantPlace.slice(0, wantPlace.indexOf(':'));
+        }
         if (params.get('panel') === 'gazetteers' || wantGazetteer) {
             const placesBtn = document.querySelector(
                 '.search-mode-toggle .btn[data-search-mode="toponyms"]'
@@ -1190,6 +1224,9 @@ Promise.all([
                             if (radio && !radio.disabled && radio.type === 'radio') {
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
+                                // emitGazetteerSelection → PlaceList.open ran; queue the
+                                // requested place to focus once its first page loads.
+                                if (wantPlace) PlaceList.setPendingFocus(wantPlace);
                             } else if (++tries < 20) {
                                 setTimeout(pick, 100);
                             }
@@ -1699,6 +1736,63 @@ function updateExploreUrl(ns) {
     } catch (e) { /* URL API unavailable */ }
 }
 
+// ── Shareable per-place deep link (?place=<place_id>) ──
+// A place popup/modal focus is reflected in the URL so a shared link reopens the
+// same place; on a cold load the deep-link handler resolves it (popup for placed
+// records, detail modal for geometry-less ones — see PlaceList.focusPlace).
+function updatePlaceUrl(pid) {
+    try {
+        const url = new URL(window.location.href);
+        if (pid) url.searchParams.set('place', pid);
+        else url.searchParams.delete('place');
+        window.history.replaceState(null, '', url);
+    } catch (e) { /* URL API unavailable */ }
+}
+
+// The gazetteer a place belongs to — the active Explore selection, else the
+// namespace prefix of its id (so a link carries enough to reload the tileset).
+function gazetteerForPid(pid) {
+    if (exploreSelection) return exploreSelection;
+    return (pid && pid.indexOf(':') > 0) ? pid.slice(0, pid.indexOf(':')) : null;
+}
+
+// A clean, shareable URL for a place: origin + path + ?gazetteer=&place=.
+function buildPlaceShareUrl(pid) {
+    const url = new URL(window.location.origin + window.location.pathname);
+    const gz = gazetteerForPid(pid);
+    if (gz) url.searchParams.set('gazetteer', gz);
+    url.searchParams.set('place', pid);
+    return url.toString();
+}
+
+// Copy a place's shareable link to the clipboard, with a small confirmation.
+function copyPlaceLink(pid) {
+    if (!pid) return;
+    const link = buildPlaceShareUrl(pid);
+    const ok = () => showCopyToast('Link copied to clipboard');
+    const fallback = () => { try { window.prompt('Copy this link:', link); } catch (e) { /* */ } };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link).then(ok).catch(fallback);
+    } else {
+        fallback();
+    }
+}
+
+// Lightweight transient toast (bottom-centre) for copy confirmation.
+function showCopyToast(msg) {
+    let t = document.getElementById('atlas_copy_toast');
+    if (!t) {
+        t = document.createElement('div');
+        t.id = 'atlas_copy_toast';
+        t.className = 'atlas-copy-toast';
+        document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._hideTimer);
+    t._hideTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
 /* ── Mirror the active gazetteer selection into filterState ──
    Tri-state: parent fully checked → 'whg' (compact alias for "all WHG datasets");
    parent indeterminate → explicit list of child specialist ids; parent unchecked
@@ -1733,6 +1827,7 @@ function emitGazetteerSelection(mode) {
         // drop the shareable ?gazetteer= param.
         PlaceList.close();
         updateExploreUrl(null);
+        updatePlaceUrl(null);
         setAtlasMapMode('places');   // no longer exploring — Places basemap
     } else {
         exploreSelection = composed[0] || null;
@@ -1752,10 +1847,14 @@ function emitGazetteerSelection(mode) {
             else if (item) label = item.textContent.trim();
             PlaceList.open(exploreSelection, label);
             updateExploreUrl(exploreSelection);
+            // New gazetteer → clear any stale ?place (a deep-linked focus restores
+            // it after the first page loads via PlaceList.focusPlace).
+            updatePlaceUrl(null);
             setAtlasMapMode('explore');   // apply the basemap remembered for Explore
         } else {
             PlaceList.close();
             updateExploreUrl(null);
+            updatePlaceUrl(null);
             setAtlasMapMode('places');
         }
     }
