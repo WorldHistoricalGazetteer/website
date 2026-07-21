@@ -715,27 +715,46 @@ def _snag_github_body(snag, user, role):
           'GlitchTip diagnostics for the same session._')
 
 
+def _suggestion_github_body(snag, user, role):
+    """Issue body for a beta *suggestion* — lighter than a snag (no severity/steps/
+    session/browser diagnostics; just who, which feature, and the idea)."""
+    def block(label, val):
+        return f'\n**{label}**\n{val.strip()}\n' if (val or '').strip() else ''
+    return (
+        f'**Suggested by:** {getattr(user, "name", "") or user.username} ({role})\n'
+        f'**Feature:** {snag.feature or "—"}\n'
+        + block('Suggestion', snag.what)
+        + '\n---\n_Filed via the WHG on-site beta suggestion form._')
+
+
 def _file_snag_to_github(snag, user):
-    """Best-effort: open a GitHub issue for the snag. Returns the issue URL, or '' if unfiled (no token
-    or API error). Never raises — the snag is already saved locally regardless."""
+    """Best-effort: open a GitHub issue for the snag or suggestion. Returns the issue URL, or '' if
+    unfiled (no token or API error). Never raises — the record is already saved locally regardless."""
     token = getattr(settings, 'GITHUB_SNAG_TOKEN', '')
     repo = getattr(settings, 'GITHUB_SNAG_REPO', '')
     if not token or not repo:
         return ''
     import requests
     role = 'staff' if user.is_staff else 'beta'
-    labels = ['beta-snag'] + ([f'sev:{snag.severity}'] if snag.severity else [])
+    if snag.kind == 'suggestion':
+        title = f'[suggestion] {snag.title}'
+        body = _suggestion_github_body(snag, user, role)
+        labels = ['suggestion']
+    else:
+        title = f'[beta] {snag.title}'
+        body = _snag_github_body(snag, user, role)
+        labels = ['beta-snag'] + ([f'sev:{snag.severity}'] if snag.severity else [])
     try:
         r = requests.post(
             f'https://api.github.com/repos/{repo}/issues',
             headers={'Authorization': f'Bearer {token}', 'Accept': 'application/vnd.github+json'},
-            json={'title': f'[beta] {snag.title}', 'body': _snag_github_body(snag, user, role), 'labels': labels},
+            json={'title': title, 'body': body, 'labels': labels},
             timeout=15)
         if r.status_code in (200, 201):
             return r.json().get('html_url', '')
-        logger.warning('beta snag: GitHub file failed (%s): %s', r.status_code, r.text[:300])
+        logger.warning('beta %s: GitHub file failed (%s): %s', snag.kind, r.status_code, r.text[:300])
     except Exception as e:  # noqa: BLE001
-        logger.warning('beta snag: GitHub file error: %s', e)
+        logger.warning('beta %s: GitHub file error: %s', snag.kind, e)
     return ''
 
 
@@ -764,6 +783,33 @@ def beta_snag(request):
         return render(request, 'main/beta_snag.html', {'submitted': snag, 'github_url': gh_url})
     return render(request, 'main/beta_snag.html',
                   {'page': request.GET.get('page', ''), 'session': request.GET.get('session', '')})
+
+
+@login_required
+def beta_suggestion(request):
+    """On-site beta *suggestion* form — a lighter sibling of ``beta_snag`` for ideas /
+    improvements rather than bugs. Files a ``[suggestion]`` GitHub issue (label
+    ``suggestion``) and stores a ``BetaSnag(kind='suggestion')``, without the snag
+    form's diagnostic capture (severity / steps / session / browser)."""
+    if not request.user.can_access_beta:
+        raise Http404()
+    from main.models import BetaSnag
+    if request.method == 'POST':
+        d = request.POST
+        title = (d.get('title') or '').strip()
+        if not title:
+            return render(request, 'main/beta_suggestion.html',
+                          {'error': 'Please give your suggestion a short title.', 'form': d})
+        suggestion = BetaSnag.objects.create(
+            kind='suggestion', reporter=request.user, title=title[:300],
+            what=(d.get('what') or '')[:8000], feature=(d.get('feature') or '')[:80],
+            page_url=(d.get('page_url') or '')[:500])
+        gh_url = _file_snag_to_github(suggestion, request.user)
+        if gh_url:
+            suggestion.github_url = gh_url
+            suggestion.save(update_fields=['github_url'])
+        return render(request, 'main/beta_suggestion.html', {'submitted': suggestion, 'github_url': gh_url})
+    return render(request, 'main/beta_suggestion.html', {'page': request.GET.get('page', '')})
 
 
 @login_required

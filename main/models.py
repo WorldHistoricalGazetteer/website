@@ -24,6 +24,11 @@ class BetaSnag(models.Model):
     it to the tester's GlitchTip errors, so the technical trace behind a report is one lookup away."""
     SEVERITY_CHOICES = [('blocker', 'Blocker'), ('major', 'Major'), ('minor', 'Minor'),
                         ('cosmetic', 'Cosmetic')]
+    # A snag is a problem report (diagnostic-heavy); a suggestion is a lighter
+    # "wouldn't it be nice if…" idea. Both file to the planning repo as issues,
+    # but suggestions skip the severity/steps/session/browser capture.
+    KIND_CHOICES = [('snag', 'Snag'), ('suggestion', 'Suggestion')]
+    kind = models.CharField(max_length=16, default='snag', choices=KIND_CHOICES)
     reporter = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
                                  related_name='beta_snags')
     title = models.CharField(max_length=300)
@@ -43,7 +48,7 @@ class BetaSnag(models.Model):
         ordering = ['-created']
 
     def __str__(self):
-        return f'snag #{self.pk}: {self.title[:60]}'
+        return f'{self.kind} #{self.pk}: {self.title[:60]}'
 
 
 class DownloadFile(models.Model):
