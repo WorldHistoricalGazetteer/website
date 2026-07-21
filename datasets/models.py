@@ -86,6 +86,12 @@ class Dataset(models.Model):
     webpage = models.URLField(null=True, blank=True)
     create_date = models.DateTimeField(null=True, auto_now_add=True)
     uri_base = models.CharField(max_length=200, null=True, blank=True)
+    # Per-place link template to the source's OWN web page, with ``<id>`` for the
+    # record's local id — e.g. ``https://example.org/place/<id>`` (place#121).
+    # Flows into the gazetteer registry so Atlas Explore popups can offer a
+    # "view at source" link for this dataset's places. Distinct from ``webpage``
+    # (the dataset homepage) and ``uri_base`` (a plain id prefix, not a template).
+    web_item = models.CharField(max_length=500, null=True, blank=True)
     image_file = ResizedImageField(
         size=[800, 600], upload_to=ds_image_path, blank=True, null=True
     )

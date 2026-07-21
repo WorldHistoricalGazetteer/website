@@ -156,7 +156,7 @@ class DatasetDetailModelForm(forms.ModelForm):
         # file fields = ('file','rev','uri_base','format','dataset_id','delimiter',
         #   'status','accepted_date','header','numrows')
         fields = ('owner', 'creator', 'contributors', 'source', 'id', 'label', 'title', 'uri_base', 'description',
-                  'citation', 'datatype', 'numlinked', 'webpage', 'featured', 'image_file', 'public', 'pdf')
+                  'citation', 'datatype', 'numlinked', 'webpage', 'web_item', 'featured', 'image_file', 'public', 'pdf')
         widgets = {
             'description': forms.Textarea(attrs={
                 'rows': 2, 'cols': 55, 'class': 'textarea', 'placeholder': 'Brief description'}),
@@ -166,6 +166,9 @@ class DatasetDetailModelForm(forms.ModelForm):
             'source': forms.TextInput(attrs={'size': 50}),
             'contributors': forms.TextInput(attrs={'size': 50}),
             'webpage': forms.TextInput(attrs={'size': 20}),
+            'web_item': forms.TextInput(attrs={
+                'size': 50,
+                'placeholder': 'https://example.org/place/<id>'}),
             'uri_base': forms.TextInput(attrs={'size': 50}),
             'featured': forms.TextInput(attrs={'size': 4}),
             'pdf': forms.FileInput(attrs={'class': 'fileinput'}),

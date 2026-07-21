@@ -254,6 +254,13 @@ class GazetteerRegistryEntry(models.Model):
     rights_holder = models.CharField(max_length=255, null=True, blank=True)
     # Homepage / landing page for the source.
     source_url = models.URLField(null=True, blank=True)
+    # Per-place web template for linking an item to the SOURCE's own human page,
+    # with ``<id>`` standing in for the place's local id — e.g.
+    # ``https://www.geonames.org/<id>`` (place#121). Distinct from ``source_url``
+    # (the gazetteer homepage) and from indexing's ``api_item`` (a JSON endpoint).
+    # Push-managed for authorities; set from the dataset's own template for WHG
+    # datasets. When present, the Atlas popup surfaces a "view at source" link.
+    web_item = models.CharField(max_length=500, null=True, blank=True)
     # Optional CRediT-shaped provider credit where the source documents it:
     # ``[{"name": ..., "role": ..., "orcid": ...}]`` (see §3.3 output shape).
     contributors_csl = models.JSONField(default=list, blank=True)

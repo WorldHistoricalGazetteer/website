@@ -126,7 +126,7 @@ class GazetteerInventoryView(AuthenticatedAPIView):
         # so a push that omits them leaves any prior values intact. These are
         # push-managed: the indexing ``AUTHORITIES`` config is the SoT.
         for key in ("citation_text", "license_url", "rights_holder",
-                    "source_url"):
+                    "source_url", "web_item"):
             if key in entry:
                 defaults[key] = entry.get(key)
         if "contributors" in entry:

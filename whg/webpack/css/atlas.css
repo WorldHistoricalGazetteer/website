@@ -1225,6 +1225,22 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     word-break: break-all;
 }
+/* Source identifier as a "view at source" link (place#121). */
+.whg-gazetteer-popup a.popup-source-link {
+    color: #5a7b9a;
+    text-decoration: none;
+    border-bottom: 1px dotted #b7c4d0;
+}
+.whg-gazetteer-popup a.popup-source-link:hover {
+    color: #2c5f88;
+    border-bottom-color: #2c5f88;
+}
+.whg-gazetteer-popup .popup-source-ext {
+    font-size: 0.58rem;
+    margin-left: 4px;
+    opacity: 0.7;
+    vertical-align: baseline;
+}
 
 .whg-gazetteer-popup .popup-chips {
     display: flex;

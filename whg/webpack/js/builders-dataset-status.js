@@ -183,6 +183,11 @@ $(function() {
 		$(".form-webpage").toggleClass("hidden")
 		$(".btn-ds").toggleClass("hidden")
 	})
+	$(".edit-web_item").click(function() {
+		$(".editing-web_item").toggleClass("hidden")
+		$(".form-web_item").toggleClass("hidden")
+		$(".btn-ds").toggleClass("hidden")
+	})
 	$(".edit-featured").click(function() {
 		$(".editing-featured").toggleClass("hidden")
 		$(".form-featured").toggleClass("hidden")

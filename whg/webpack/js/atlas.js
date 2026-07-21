@@ -19,6 +19,7 @@ import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
+import { setWebTemplates } from './gazetteerInteraction.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -82,8 +83,16 @@ const NS_NAMES = {
 const _nsNames = {};
 fetch('/api/sources/', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
     .then(r => (r.ok ? r.json() : null))
-    .then(d => { ((d && d.sources) || []).forEach(s => { if (s.namespace && s.name) _nsNames[s.namespace] = s.name; }); })
-    .catch(() => { /* fall back to the static NS_NAMES map */ });
+    .then(d => {
+        const webMap = {};
+        ((d && d.sources) || []).forEach(s => {
+            if (s.namespace && s.name) _nsNames[s.namespace] = s.name;
+            if (s.namespace && s.web_item) webMap[s.namespace] = s.web_item;
+        });
+        // Feed per-source "view at source" templates to the popup renderer (place#121).
+        setWebTemplates(webMap);
+    })
+    .catch(() => { /* fall back to the static NS_NAMES / built-in web templates */ });
 
 function nsLabel(ns) {
     const k = String(ns || '').toLowerCase();

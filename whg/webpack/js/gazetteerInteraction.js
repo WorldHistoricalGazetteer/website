@@ -51,10 +51,12 @@ function safeUrl(s) {
 // the in-WHG resolver — which is the correct home for WHG-only
 // gazetteers that have no public web equivalent (gb, iv, un, po, …).
 //
-// TODO: source from ``GazetteerRegistryEntry`` once the indexing
-// pipeline (processing/settings.py: AUTHORITIES) pushes a ``web_item``
-// template alongside the existing ``api_item``, and Django exposes it
-// to the Atlas page (e.g. via ``available_sources``).
+// Built-in fallbacks used until the registry map loads (and for resilience if
+// it fails). The authoritative per-namespace ``web_item`` templates now come
+// from ``GazetteerRegistryEntry`` via ``/api/sources/`` (place#121) — atlas.js
+// fetches them and calls ``setWebTemplates()`` below, which merges them in
+// (registry values win, and extend this to gazetteers not listed here, incl.
+// user datasets). ``<id>`` is replaced with the place's local id at build time.
 const NAMESPACE_WEB_TEMPLATES = {
     pl:  'https://pleiades.stoa.org/places/<id>',
     gn:  'https://www.geonames.org/<id>',
@@ -63,6 +65,32 @@ const NAMESPACE_WEB_TEMPLATES = {
     loc: 'https://www.loc.gov/item/<id>/',
     tm:  'https://www.trismegistos.org/place/<id>',
 };
+
+/** Merge registry-supplied ``{namespace: web_item}`` templates into the map.
+ *  Registry values override/extend the built-in fallbacks. Called by atlas.js
+ *  once ``/api/sources/`` resolves. */
+export function setWebTemplates(map) {
+    if (!map || typeof map !== 'object') return;
+    for (const [ns, tpl] of Object.entries(map)) {
+        if (ns && tpl) NAMESPACE_WEB_TEMPLATES[ns] = tpl;
+    }
+}
+
+/** The SOURCE's own human page for a place, built from its namespace's
+ *  ``web_item`` template — e.g. ``gn:2988507`` → ``geonames.org/2988507``.
+ *  Returns '' when the namespace has no template (WHG-only gazetteers) or the
+ *  built URL isn't a safe http(s) link. Used for the popup "view at source"
+ *  link (place#121); the header title itself still points at the in-WHG record. */
+function sourceItemUrl(placeId) {
+    if (!placeId) return '';
+    const ix = placeId.indexOf(':');
+    if (ix <= 0) return '';
+    const ns = placeId.slice(0, ix);
+    const localId = placeId.slice(ix + 1);
+    const template = NAMESPACE_WEB_TEMPLATES[ns];
+    if (!template || !localId) return '';
+    return safeUrl(template.replace('<id>', encodeURIComponent(localId)));
+}
 
 /** Map a related place_id to a useful link target.
  *  - ``osm:r123`` / ``ohm:r123`` → ``{host}/relation/123`` (n=node, w=way)
@@ -122,10 +150,18 @@ function renderHeader(data) {
     const titleHtml = placeId
         ? `<a class="popup-title whg-place-modal-trigger" href="#" data-whg-place-modal="${esc(placeId)}">${esc(title)}</a>`
         : `<span class="popup-title">${esc(title)}</span>`;
+    // When the source publishes a per-item web page (registry ``web_item``),
+    // make the source identifier a link to it (new tab); otherwise plain text.
+    const srcUrl = sourceItemUrl(placeId);
+    const idHtml = !placeId ? ''
+        : srcUrl
+            ? `<a class="popup-place-id popup-source-link" href="${esc(srcUrl)}" target="_blank" rel="noopener"
+                  title="View this place on the source's website">${esc(placeId)}<i class="fas fa-arrow-up-right-from-square popup-source-ext"></i></a>`
+            : `<div class="popup-place-id" title="Source identifier">${esc(placeId)}</div>`;
     return `
         <div class="popup-header">
             ${titleHtml}
-            ${placeId ? `<div class="popup-place-id" title="Source identifier">${esc(placeId)}</div>` : ''}
+            ${idHtml}
         </div>
     `;
 }

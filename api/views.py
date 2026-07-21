@@ -1746,5 +1746,8 @@ class SourceGazetteersView(APIView):
             'core': e.core,
             'gazetteer_type': e.gazetteer_type,
             'temporal_extent': e.temporal_extent or [],
+            # Per-place "view at source" URL template (place#121); '' when the
+            # source has no public per-item page. Powers the Atlas popup link.
+            'web_item': e.web_item or '',
         } for e in qs]
         return Response({'sources': sources})

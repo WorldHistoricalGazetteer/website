@@ -921,6 +921,9 @@ class AuthorityDatasetsView(AuthenticatedAPIView):
                   "id", "title", "label", "description",
                   "ds_status", "public", "authority",
                   "owner_id", "place_count",
+                  # place#121: per-item "view at source" template — flows on to
+                  # the registry (indexing whg-places sidecar → inventory push).
+                  "web_item",
               )
         )
 

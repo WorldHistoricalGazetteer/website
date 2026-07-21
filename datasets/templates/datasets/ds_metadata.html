@@ -101,6 +101,19 @@
               </td>
             </tr> <!-- webpage -->
             <tr>
+              <td style="vertical-align:top;"><b>Source link template</b>
+                <a href="#" class="edit-web_item"><i class="fas fa-edit linky fa-xs"></i></a>
+                <div class="small text-muted" style="font-weight:normal; max-width:200px;">
+                  Optional. A link to each record on the source's own site, using
+                  <code>&lt;id&gt;</code> for the record id — powers a "view at source"
+                  link in Atlas popups.</div>
+              </td>
+              <td>
+                <span class="form-web_item">{{ form.web_item.value|default_if_none:"—" }}</span>
+                <span class="hidden editing-web_item">{{ form.web_item }}</span>&nbsp;
+              </td>
+            </tr> <!-- web_item -->
+            <tr>
               <td style="vertical-align:top;"><b>Description</b>
                 <a href="#" class="edit-description"><i class="fas fa-edit linky fa-xs"></i></a>
               </td>
