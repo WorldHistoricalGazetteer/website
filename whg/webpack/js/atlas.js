@@ -339,17 +339,18 @@ async function loadRegistryCoverage() {
 // aat_vocab_version, and hand it to the popup renderer so type chips get an
 // aat:<id> + description tooltip (place#122). Reusable for any AAT-label need.
 async function loadAatVocab() {
-    const version = (typeof aat_vocab_version !== 'undefined') ? aat_vocab_version : null;
+    // Cache-keyed by registry_version (the vocab tracks the indexed corpus).
+    const version = (typeof registry_version !== 'undefined') ? registry_version : null;
     const use = (byId) => { if (byId && Object.keys(byId).length) setAatVocab(byId); };
     try {
-        if (version && version !== '0') {
+        if (version) {
             const cached = await idbGet('aat_vocab');
             if (cached && cached.version === version && cached.byId) { use(cached.byId); return; }
         }
         const data = await fetch('/types/vocab/', { credentials: 'same-origin' }).then(r => r.json());
         use(data.byId);
-        if (data.version && data.version !== '0' && data.byId) {
-            try { await idbPut('aat_vocab', { version: data.version, byId: data.byId }); } catch (e) { /* best-effort */ }
+        if (version && data.byId) {
+            try { await idbPut('aat_vocab', { version, byId: data.byId }); } catch (e) { /* best-effort */ }
         }
     } catch (e) {
         console.warn('Atlas: AAT vocab load failed (type tooltips fall back to ids only)', e);

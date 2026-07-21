@@ -55,44 +55,43 @@ def _count(query):
 
 # ── AAT vocabulary bulk export (place#122) ──────────────────────────────────
 # The Atlas popup annotates each AAT-mapped type chip with its ``aat:<id>``
-# identifier and scope-note description. Rather than a lookup per chip, the whole
-# vocabulary is shipped once and cached client-side in IndexedDB (keyed by
-# ``place_type_count`` as the version), mirroring the registry-coverage cache.
-# Reusable for any AAT-label/description need.
+# identifier and scope-note description. The whole vocabulary is shipped once and
+# cached client-side in IndexedDB (keyed by registry_version), mirroring the
+# registry-coverage cache. Reusable for any AAT-label/description need.
 #
-# Scope: only concepts that carry a source-vocabulary MAPPING (gn_fcodes /
-# wd_qids / osm_tags / ohm_tags / pleiades_types). These ~366 are exactly the
-# concepts that surface on places as ``aat_ids`` — so this covers every tooltip
-# while keeping the payload ~150 KB (``is_place_type`` alone is ~59k, mostly
-# generic AAT ancestors that never appear as a place type).
-_MAPPING_FIELDS = ("gn_fcodes", "wd_qids", "osm_tags", "ohm_tags", "pleiades_types")
-_VOCAB_QUERY = {
-    "bool": {
-        "should": [{"exists": {"field": f}} for f in _MAPPING_FIELDS],
-        "minimum_should_match": 1,
-    }
-}
-
-
-def place_type_count():
-    """Cheap cache-version signal for the AAT vocab — the number of mapped
-    place-type concepts. Bumps whenever a mapping is added/removed."""
-    return _count(_VOCAB_QUERY)
-
-
+# Scope: exactly the AAT concepts that actually appear on places (a terms agg on
+# ``types.aat_ids`` over the places index — ~3,200 concepts). ``is_place_type``
+# alone is ~59k (mostly generic AAT ancestors that never surface as a place
+# type), and the concept docs' own mapping fields (gn_fcodes/…) are incomplete,
+# so neither is a reliable proxy — the in-use set is derived from the data.
 def get_type_vocab():
-    """The full place-type AAT vocabulary as ``{"aat:<id>": {label, desc}}``.
-    ``label`` = the AAT term; ``desc`` = the English scope note (trimmed)."""
-    rows = _search(_VOCAB_QUERY, source=["aat_id", "term", "note"], size=8000)
+    """AAT concepts in use on places as ``{"aat:<id>": {label, desc}}`` — ``label``
+    = the AAT term, ``desc`` = the (trimmed) English scope note."""
+    agg = _es().search(
+        index="places", size=0, request_timeout=45,
+        aggs={"t": {"nested": {"path": "types"}, "aggs": {
+            "ids": {"terms": {"field": "types.aat_ids", "size": 6000}}
+        }}},
+    )
+    ids = [b["key"] for b in agg["aggregations"]["t"]["ids"]["buckets"]]
+    if not ids:
+        return {}
     by_id = {}
-    for r in rows:
-        aid = r.get("aat_id")
+    # Fetch term + scope note for the in-use concepts (types index _id = aat:<id>).
+    docs = _es().mget(
+        index=TYPES_INDEX, ids=[f"aat:{i}" for i in ids],
+        _source=["aat_id", "term", "note"], request_timeout=20,
+    )
+    for d in docs.get("docs", []):
+        if not d.get("found"):
+            continue
+        s = d.get("_source", {})
+        aid = s.get("aat_id")
         if aid is None:
             continue
-        note = r.get("note") or ""
         by_id[f"aat:{aid}"] = {
-            "label": r.get("term") or "",
-            "desc": note[:600],  # trim long scope notes for a tooltip
+            "label": s.get("term") or "",
+            "desc": (s.get("note") or "")[:600],  # trim long scope notes for a tooltip
         }
     return by_id
 

@@ -46,24 +46,34 @@ def type_tree_search(request):
 
 
 def type_vocab(request):
-    """Bulk AAT place-type vocabulary for client-side annotation (place#122).
+    """Bulk AAT vocabulary (concepts in use on places) for client-side annotation.
 
-    GET /types/vocab/ → {"version": "<count>", "byId": {"aat:<id>": {label, desc}}}
+    GET /types/vocab/ → {"byId": {"aat:<id>": {label, desc}}}
 
     Powers the Atlas popup type-chip tooltips (aat:<id> + scope-note description).
-    ~5,800 concepts; cached in IndexedDB keyed by ``version`` (place-type count),
-    fetched only when the page's ``aat_vocab_version`` global differs. Reads the
-    curated `types` ES index; returns an empty vocab (not an error) if ES is down.
+    ~3,200 concepts; the client caches it in IndexedDB keyed by ``registry_version``.
+    Server-side cached (24h) so the underlying places aggregation runs rarely.
+    Returns an empty vocab (not an error) if ES is unavailable (place#122).
     """
+    from django.core.cache import cache
+    ckey = 'aat_type_vocab_v1'
+    try:
+        cached = cache.get(ckey)
+        if cached is not None:
+            return JsonResponse(cached)
+    except Exception:
+        pass
     try:
         by_id = es_tree.get_type_vocab()
-        # Version = the same count the page ships as aat_vocab_version, so the
-        # client's IndexedDB cache validates without a refetch.
-        version = str(es_tree.place_type_count())
     except Exception as e:
         logger.warning("type_vocab: ES unavailable (%s)", e)
-        return JsonResponse({'version': '0', 'byId': {}})
-    return JsonResponse({'version': version, 'byId': by_id})
+        return JsonResponse({'byId': {}})
+    payload = {'byId': by_id}
+    try:
+        cache.set(ckey, payload, 60 * 60 * 24)  # 24h; the places agg is ~5s
+    except Exception:
+        pass
+    return JsonResponse(payload)
 
 
 def type_expand(request):
