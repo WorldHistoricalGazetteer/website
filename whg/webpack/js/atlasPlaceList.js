@@ -30,7 +30,7 @@ import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
-import { aatTooltip, ccName } from './gazetteerInteraction.js';
+import { aatTooltip, aatUrl, ccName } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -200,6 +200,8 @@ const PlaceList = {
 
         // One delegated click handler for every (re-mounted) row.
         this.els.rows.addEventListener('click', (e) => {
+            // A click on an AAT type-chip link opens Getty — don't also open the place.
+            if (e.target.closest('a')) return;
             const row = e.target.closest('.placelist-row');
             if (!row) return;
             const idx = parseInt(row.dataset.idx, 10);
@@ -401,9 +403,15 @@ const PlaceList = {
             meta += `<span class="temporal-chip" title="Attested date range">${esc(range)}</span>`;
         }
         meta += types.map(t => {
-            const tip = t.aat ? aatTooltip(t.aat) : '';
-            const attrs = tip ? ` title="${esc(tip)}" data-aat="aat:${esc(t.aat)}"` : '';
-            return `<span class="pl-chip pl-type${tip ? ' pl-info' : ''}"${attrs}>${esc(t.label)}</span>`;
+            // AAT types link to their canonical Getty concept page and carry the
+            // Getty AAT / ODC-By credit in the tooltip; the row-click handler
+            // ignores clicks that land on a link so this opens Getty, not the place.
+            if (t.aat) {
+                return `<a class="pl-chip pl-type pl-info" href="${esc(aatUrl(t.aat))}"`
+                    + ` target="_blank" rel="noopener noreferrer" data-aat="aat:${esc(t.aat)}"`
+                    + ` title="${esc(aatTooltip(t.aat))}">${esc(t.label)}</a>`;
+            }
+            return `<span class="pl-chip pl-type">${esc(t.label)}</span>`;
         }).join('');
         meta += ccodes.map(c => {
             const name = ccName(c);

@@ -829,6 +829,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     padding: 1px 6px;
     flex-shrink: 0;
 }
+/* AAT type chips are links to Getty — keep the chip look (no underline). */
+a.pl-chip { text-decoration: none; }
+a.pl-chip.pl-type:hover { text-decoration: underline; }
 .pl-type { background: #f4f0f7; color: #6a5a78; }
 .pl-cc { background: #eef4ec; color: #4f6b4a; letter-spacing: .3px; }
 /* Chips carrying an informative tooltip (AAT scope-note / country name) get the
@@ -1414,6 +1417,10 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
    help cursor (?+arrow) signals it, matching the Explore place list. */
 .whg-gazetteer-popup .popup-chip-type[data-aat],
 .whg-gazetteer-popup .popup-chip-cc[title] { cursor: help; }
+/* AAT type chips are links to Getty — keep the chip look (no underline;
+   the chip's own colour still applies). */
+.whg-gazetteer-popup a.popup-chip { text-decoration: none; }
+.whg-gazetteer-popup a.popup-chip-type:hover { text-decoration: underline; }
 
 .whg-gazetteer-popup .popup-body {
     padding: 0 12px 6px;

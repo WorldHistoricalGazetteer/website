@@ -93,17 +93,31 @@ function typeAatKey(t) {
     return (typeof id === 'string' && /^aat:\d+$/.test(id)) ? id : '';
 }
 
-/** Tooltip text for an AAT concept: the namespaced id, its label, and (when
- *  present) its scope-note description. Accepts a bare numeric id (``12345``)
- *  or an ``aat:12345`` key. Falls back to the key alone when the concept isn't
- *  in the loaded vocab. Exported so the Explore place list can carry the exact
- *  same type-chip tooltip as the popup (place#122). */
+// Point-of-use attribution for AAT place types (Getty ODC-By 1.0). The full
+// statement lives on the Credits page; here we carry the source name in the
+// tooltip and link each concept to its canonical Getty URI (both required-
+// friendly under ODC-By where the full statement can't fit inline).
+const AAT_CREDIT = 'Place type: Getty AAT — ODC-By 1.0';
+
+/** Canonical Getty concept page for an AAT id (bare ``12345`` or ``aat:12345``).
+ *  '' when no numeric id can be extracted. */
+export function aatUrl(idOrKey) {
+    const m = String(idOrKey == null ? '' : idOrKey).match(/(\d+)/);
+    return m ? `https://vocab.getty.edu/page/aat/${m[1]}` : '';
+}
+
+/** Tooltip text for an AAT concept: the namespaced id, its label, its scope-note
+ *  description (when present), and the Getty AAT / ODC-By attribution line.
+ *  Accepts a bare numeric id (``12345``) or an ``aat:12345`` key. Exported so the
+ *  Explore place list carries the exact same tooltip as the popup (place#122). */
 export function aatTooltip(idOrKey) {
     if (idOrKey == null || idOrKey === '') return '';
     const key = /^aat:/.test(String(idOrKey)) ? String(idOrKey) : `aat:${idOrKey}`;
     const v = AAT_VOCAB[key];
-    if (!v) return key;
-    return v.desc ? `${key} · ${v.label}\n${v.desc}` : `${key} · ${v.label}`;
+    const head = v
+        ? (v.desc ? `${key} · ${v.label}\n${v.desc}` : `${key} · ${v.label}`)
+        : key;
+    return `${head}\n${AAT_CREDIT}`;
 }
 
 /** Human-readable country name for an ISO code, from the page's global
@@ -233,19 +247,18 @@ function renderChips(data) {
         if (!label || seenTypeLabels.has(label)) continue;
         seenTypeLabels.add(label);
         const cls = isPrimary ? 'popup-chip popup-chip-type' : 'popup-chip popup-chip-type popup-chip-secondary';
-        // AAT-mapped types get a tooltip with the namespaced concept id and its
-        // scope-note description (place#122); custom types keep the source id.
+        // AAT-mapped types link to their canonical Getty concept page and carry
+        // the AAT / ODC-By attribution in the tooltip (place#122; Getty ODC-By);
+        // custom types keep the source id as a plain chip.
         const aatKey = typeAatKey(t);
-        let title = '';
         if (aatKey) {
-            const v = AAT_VOCAB[aatKey];
-            title = v && v.desc ? `${aatKey} · ${v.label}\n${v.desc}` : (v ? `${aatKey} · ${v.label}` : aatKey);
-        } else if (t.identifier) {
-            title = String(t.identifier);
+            chips.push(`<a class="${cls}" href="${esc(aatUrl(aatKey))}" target="_blank"`
+                + ` rel="noopener noreferrer" data-aat="${esc(aatKey)}"`
+                + ` title="${esc(aatTooltip(aatKey))}">${esc(label)}</a>`);
+        } else {
+            const titleAttr = t.identifier ? ` title="${esc(String(t.identifier))}"` : '';
+            chips.push(`<span class="${cls}"${titleAttr}>${esc(label)}</span>`);
         }
-        const titleAttr = title ? ` title="${esc(title)}"` : '';
-        const aatAttr = aatKey ? ` data-aat="${esc(aatKey)}"` : '';
-        chips.push(`<span class="${cls}"${aatAttr}${titleAttr}>${esc(label)}</span>`);
         isPrimary = false;
     }
     if (data.boundary && !NON_ADMIN_BOUNDARIES.has(String(data.boundary).toLowerCase())) {
