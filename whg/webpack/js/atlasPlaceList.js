@@ -161,6 +161,17 @@ const PlaceList = {
             const idx = parseInt(row.dataset.idx, 10);
             if (!Number.isNaN(idx)) this._onRowClick(idx);
         });
+
+        // A click on a MAP marker (not a list row) makes the map the source of
+        // the shown place — drop the list's row highlight so it reads as a plain
+        // list again.
+        document.addEventListener('whg:map-place-click', () => this._clearSelection());
+    },
+
+    _clearSelection() {
+        if (!this.els) return;
+        this.els.rows.querySelectorAll('.placelist-row.pl-selected')
+            .forEach(r => r.classList.remove('pl-selected'));
     },
 
     // ── Data ──────────────────────────────────────────────────────────────
@@ -190,6 +201,7 @@ const PlaceList = {
         const opts = this.cfg.getBaseOptions(this.qstr) || {};
         opts.qstr = this.qstr;
         opts.namespaces = [this.ns];
+        opts.mode = 'in';           // substring "contains" match (not exact/fuzzy)
         opts.size = PAGE_SIZE;
         opts.offset = offset;
         opts.browse = !this.qstr;   // empty box → browse the whole gazetteer
@@ -312,8 +324,7 @@ const PlaceList = {
     _onRowClick(idx) {
         const hit = this.hits[idx];
         if (!hit) return;
-        this.els.rows.querySelectorAll('.placelist-row.pl-selected')
-            .forEach(r => r.classList.remove('pl-selected'));
+        this._clearSelection();
         const row = this.els.rows.querySelector(`.placelist-row[data-idx="${idx}"]`);
         if (row) row.classList.add('pl-selected');
 

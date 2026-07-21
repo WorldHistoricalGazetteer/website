@@ -685,6 +685,13 @@ export default class GazetteerInteraction {
         if (!this.map || !e.features || e.features.length === 0) return;
         const placeId = e.features[0].properties && e.features[0].properties.place_id;
         if (!placeId) return;
+        // Signal a MAP-driven place selection (distinct from a list-row click) so
+        // the Place List can drop its row highlight — the map is now the source
+        // of the shown place. Dispatched only here, not in openPopup (which the
+        // list also drives).
+        try {
+            document.dispatchEvent(new CustomEvent('whg:map-place-click', { detail: { placeId } }));
+        } catch (err) { /* CustomEvent unsupported */ }
         this.openPopup(placeId, e.lngLat);
     }
 

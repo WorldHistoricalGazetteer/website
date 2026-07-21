@@ -120,9 +120,17 @@ def crc_search(options: dict, user=None) -> dict | None:
     if not _is_enabled(user):
         return None
 
+    # Search mode: an explicit, valid `mode` wins (e.g. the Place List sends
+    # "in" for substring/"contains" matching); otherwise fall back to the
+    # exact/fuzzy toggle used by the main toponym search.
+    _valid_modes = {"exact", "starts", "in", "fuzzy", "phonetic"}
+    _mode = options.get("mode")
+    if _mode not in _valid_modes:
+        _mode = "exact" if options.get("exact") else "fuzzy"
+
     body = {
         "query": (options.get("qstr") or "").strip() or None,
-        "mode": "exact" if options.get("exact") else "fuzzy",
+        "mode": _mode,
         "size": int(options.get("size") or 100),
         "geom": "full",
         "include_hard_links": True,
