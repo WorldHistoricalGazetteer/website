@@ -809,7 +809,24 @@ Promise.all([
         openPortal: openAtlasPortal,
         showPanelView: showPanelView,
         getCsrf: () => csrfToken,
+        onGatewayStatus: setGatewayAvailable,   // report gateway up/down from list fetches
     });
+
+    // Gateway-down notice: wire the dismiss button and run a proactive liveness
+    // probe so the "limited functionality" banner appears on load, not only
+    // after a failed search.
+    const gwBanner = document.getElementById('atlas_gateway_banner');
+    if (gwBanner) {
+        const dismissBtn = gwBanner.querySelector('.agb-dismiss');
+        if (dismissBtn) dismissBtn.addEventListener('click', () => {
+            gatewayBannerDismissed = true;
+            gwBanner.hidden = true;
+        });
+    }
+    fetch('/atlas/status/', { credentials: 'same-origin' })
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => { if (d) setGatewayAvailable(d.gateway !== false); })
+        .catch(() => { /* status probe itself failed — stay silent */ });
 
     // ── BETA: cluster merge-sensitivity (θ) slider — re-clusters live ──
     const thetaSlider = document.getElementById('atlas_cluster_theta');
@@ -1883,6 +1900,24 @@ function renderSelectionChips() {
     });
 }
 
+/* ── Gateway availability banner ──
+   Shows a prominent notice when the CRC gateway (the Pitt CRC VM / search
+   service) is unreachable, so the limited functionality is obvious. Driven
+   proactively by /atlas/status/ on load and reactively by any gateway response
+   carrying ``gateway:false``. Once the user dismisses it, it stays hidden until
+   the gateway recovers, so a flaky session doesn't nag. */
+let gatewayBannerDismissed = false;
+function setGatewayAvailable(up) {
+    const banner = document.getElementById('atlas_gateway_banner');
+    if (!banner) return;
+    if (up) {
+        gatewayBannerDismissed = false;   // recovered — re-arm a future warning
+        banner.hidden = true;
+    } else if (!gatewayBannerDismissed) {
+        banner.hidden = false;
+    }
+}
+
 /* ── Toponym search ── */
 
 function initiateToponymSearch(opts = {}) {
@@ -2159,6 +2194,7 @@ function initiateGatewaySearch(options) {
         contentType: 'application/json',
         headers: { 'X-CSRFToken': csrfToken },
         success: (data) => {
+            setGatewayAvailable(data && data.gateway !== false);
             gatewayData = data;
             seedClusterControls(data.clustering_params);
             renderClusters();

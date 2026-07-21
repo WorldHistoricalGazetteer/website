@@ -269,6 +269,20 @@ def atlas_registry_coverage(request):
     })
 
 
+def atlas_status(request):
+    """Lightweight CRC-gateway liveness for the Atlas UI, so it can warn about
+    limited functionality when the gateway (Pitt CRC VM) is unreachable.
+
+    ``{"gateway": true|false}`` — ``false`` when the VM is down/unconfigured or
+    the user can't use the gateway. Deliberately cheap (short-timeout probe) so
+    it can be polled on page load without blocking. Not beta-gated beyond
+    requiring auth: a signed-in user gets an honest status either way."""
+    if not request.user.is_authenticated:
+        return JsonResponse({"gateway": False})
+    from api.crc_client import crc_health
+    return JsonResponse({"gateway": bool(crc_health(user=request.user))})
+
+
 def atlas_search(request):
     """Atlas search — proxy to the CRC gateway ``POST /api/search`` with the
     clustering fuel, returning the full response for the browser clusterer

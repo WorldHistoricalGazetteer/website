@@ -65,6 +65,27 @@ def _headers() -> dict:
     return headers
 
 
+def crc_health(user=None) -> bool:
+    """Quick reachability probe of the CRC gateway (the Pitt CRC VM).
+
+    Returns ``True`` when the gateway answers at all (any HTTP status — even a
+    404 means the VM/service is reachable), ``False`` when it is unconfigured,
+    the user isn't eligible, or the host is unreachable (connection refused /
+    timeout — i.e. the VM is down). Uses a SHORT fixed timeout so a down VM
+    doesn't stall the Atlas page: this is a liveness check, not a query.
+    """
+    if not _is_enabled(user):
+        return False
+    try:
+        # A cheap GET to the gateway root; any HTTP response = reachable.
+        requests.get(_gateway_url() + "/", headers=_headers(), timeout=3)
+        return True
+    except (requests.Timeout, requests.ConnectionError):
+        return False
+    except Exception:  # pragma: no cover — defensive; treat as reachable-unknown
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------

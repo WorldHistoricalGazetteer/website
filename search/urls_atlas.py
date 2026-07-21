@@ -5,7 +5,8 @@ Reuses existing search API endpoints (/search/index/, /search/boundaries/, etc.)
 """
 from django.urls import path
 
-from search.views import AtlasPageView, atlas_search, atlas_place, atlas_registry_coverage
+from search.views import (AtlasPageView, atlas_search, atlas_place,
+                          atlas_registry_coverage, atlas_status)
 
 urlpatterns = [
     path('', AtlasPageView.as_view(), name='atlas-page'),
@@ -13,6 +14,7 @@ urlpatterns = [
     # or these paths are captured as toponyms.
     path('search/', atlas_search, name='atlas-search'),
     path('place/', atlas_place, name='atlas-place'),
+    path('status/', atlas_status, name='atlas-status'),
     path('registry/coverage/', atlas_registry_coverage, name='atlas-registry-coverage'),
     path('<str:toponym>', AtlasPageView.as_view(), name='atlas-page-toponym'),
 ]

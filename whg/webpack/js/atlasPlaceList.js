@@ -278,6 +278,8 @@ const PlaceList = {
             .then(data => {
                 if (seq !== this.reqSeq) return;   // a newer query superseded this one
                 this.loading = false;
+                // Surface gateway-down to the shared banner (place#125 resilience).
+                if (this.cfg.onGatewayStatus) this.cfg.onGatewayStatus(data.gateway !== false);
                 const page = Array.isArray(data.hits) ? data.hits : [];
                 this.hits = this.hits.concat(page);
                 this.total = (typeof data.total === 'number') ? data.total : this.hits.length;

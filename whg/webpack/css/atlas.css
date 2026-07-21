@@ -1,6 +1,49 @@
 /* /whg/webpack/css/atlas.css */
 /* WHG Atlas — Hero Map Explorer Layout */
 
+/* ── Gateway-unavailable banner ─────────────────────────────────────────
+   Prominent top-centre notice shown when the CRC gateway (Pitt VM / search
+   service) is unreachable, so the limited functionality is obvious. */
+.atlas-gateway-banner {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1200;                 /* above map + floating controls */
+    max-width: min(640px, calc(100vw - 32px));
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 14px;
+    background: #fff3cd;
+    color: #6b4e00;
+    border: 1px solid #e0b64d;
+    border-left: 5px solid #d9a015;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+.atlas-gateway-banner[hidden] { display: none; }
+.atlas-gateway-banner .agb-icon {
+    color: #d9a015;
+    font-size: 1.05rem;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+.atlas-gateway-banner .agb-text { flex: 1; }
+.atlas-gateway-banner .agb-text strong { color: #5a4200; }
+.atlas-gateway-banner .agb-dismiss {
+    flex-shrink: 0;
+    background: transparent;
+    border: 0;
+    color: #97711a;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.atlas-gateway-banner .agb-dismiss:hover { color: #5a4200; }
+
 /* ═══════════════════════════════════════════════════════════════════
    Atlas colour palette — a small dictionary of purpose-hint colours
    reused across the UI so each function reads by colour:

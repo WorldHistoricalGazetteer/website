@@ -30,6 +30,20 @@
     <!-- Opaque overlay that hides the map until globe mode has fully rendered -->
     <div id="map_loading_overlay" class="map-loading-overlay"></div>
 
+    <!-- Prominent notice shown when the CRC gateway (search service) is
+         unreachable — set visible by atlas.js via setGatewayAvailable(false). -->
+    <div id="atlas_gateway_banner" class="atlas-gateway-banner" role="alert" hidden>
+        <i class="fas fa-triangle-exclamation agb-icon" aria-hidden="true"></i>
+        <span class="agb-text">
+            <strong>Search service temporarily unavailable.</strong>
+            Place search and place details are offline right now — map browsing
+            still works. Please try again shortly.
+        </span>
+        <button type="button" class="agb-dismiss" aria-label="Dismiss">
+            <i class="fas fa-times" aria-hidden="true"></i>
+        </button>
+    </div>
+
     <!-- Viewport-mode indicator: T-markers at the centre of each map edge whose
          arrows point inward, framing the current view as the search extent.
          Shown only while Viewport constraint is active. -->
