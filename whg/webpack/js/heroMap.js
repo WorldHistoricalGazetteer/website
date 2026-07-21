@@ -828,6 +828,21 @@ class HeroMap {
         }
     }
 
+    /**
+     * Open the gazetteer place popup for ``pid`` at ``lngLat`` — the
+     * programmatic entry point used by the Place List panel (list-row clicks),
+     * mirroring an on-map feature click. Reuses the GazetteerInteraction popup
+     * so a click and a list selection re-target the same popup. Lazily creates
+     * the interaction if a tileset click hasn't wired one yet.
+     */
+    openPlacePopup(pid, lngLat) {
+        if (!this.map || !pid || !lngLat) return;
+        if (!this._gazetteerInteraction) {
+            this._gazetteerInteraction = new GazetteerInteraction(this.map);
+        }
+        this._gazetteerInteraction.openPopup(pid, lngLat);
+    }
+
     /** Tear down the currently-shown dynamic gazetteer, if any. */
     hideGazetteer() {
         if (!this.map) return;

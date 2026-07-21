@@ -18,6 +18,7 @@ import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
+import PlaceList from './atlasPlaceList.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -754,6 +755,16 @@ Promise.all([
 
     // Relocate Regions/Gazetteers/Categories into the fixed panel as views.
     initPanelViews();
+
+    // BETA: Gazetteer → Explore "Place Lists" panel (place#125). Inject the
+    // atlas.js collaborators it needs (search-option builder, portal opener,
+    // panel switcher, CSRF token) so the module stays free of a circular import.
+    PlaceList.configure({
+        getBaseOptions: gatherToponymOptions,
+        openPortal: openAtlasPortal,
+        showPanelView: showPanelView,
+        getCsrf: () => csrfToken,
+    });
 
     // ── BETA: cluster merge-sensitivity (θ) slider — re-clusters live ──
     const thetaSlider = document.getElementById('atlas_cluster_theta');
@@ -1511,6 +1522,8 @@ function emitGazetteerSelection(mode) {
     if (mode === 'filter') {
         filterSelections.clear();
         composed.forEach(v => filterSelections.add(v));
+        // Leaving Explore for Filter: dismiss the Place List if it's on screen.
+        PlaceList.close();
     } else {
         exploreSelection = composed[0] || null;
         // Mirror the Explore selection onto the map: load the gazetteer's
@@ -1518,6 +1531,16 @@ function emitGazetteerSelection(mode) {
         // resolve to their tileserver name (``whg-892``) inside setActiveSource.
         if (layerPalette && exploreSelection) {
             layerPalette.setActiveSource(exploreSelection);
+            // Open the browsable Place List for the selected gazetteer alongside
+            // the map tileset (place#125) — the friendly name comes from the
+            // ticked authority row's label.
+            let label = exploreSelection;
+            const el = offcanvas.querySelector(`.authority-cb[value="${exploreSelection.replace(/"/g, '\\"')}"]`);
+            const item = el && el.closest('.authority-item');
+            if (item) label = item.textContent.trim();
+            PlaceList.open(exploreSelection, label);
+        } else {
+            PlaceList.close();
         }
     }
     filterState.set('authorities', composed);

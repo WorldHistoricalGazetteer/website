@@ -232,6 +232,33 @@
             <div id="atlas_search_results"></div>
         </div>
       </div><!-- /atlas_results_view -->
+
+      <!-- BETA: Gazetteer → Explore "Place Lists" (place#125). A browsable,
+           searchable, virtualised list of one gazetteer's places — including
+           those without geometry, which the map tileset can't show. Driven by
+           whg/webpack/js/atlasPlaceList.js. -->
+      <div id="atlas_placelists_view" class="atlas-panel-view">
+        <div class="placelist-header">
+            <button type="button" class="btn btn-sm placelist-back"
+                    title="Back to Gazetteers">
+                <i class="fas fa-arrow-left me-1"></i>Gazetteers
+            </button>
+            <div class="placelist-heading">
+                <span class="placelist-title"></span>
+                <span class="placelist-count small text-muted"></span>
+            </div>
+        </div>
+        <div class="placelist-search-wrap">
+            <i class="fas fa-magnifying-glass placelist-search-icon"></i>
+            <input type="text" class="form-control form-control-sm placelist-search"
+                   placeholder="Filter places in this gazetteer…" autocomplete="off"
+                   aria-label="Filter places">
+        </div>
+        <div class="placelist-status small text-muted"></div>
+        <div class="placelist-scroll">
+            <div class="placelist-rows"></div>
+        </div>
+      </div><!-- /atlas_placelists_view -->
     </div>
 
     <!-- BETA: dynamic Atlas portal — per-place detail resolved on demand from

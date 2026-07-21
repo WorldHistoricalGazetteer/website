@@ -575,6 +575,123 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 /* Authority hidden by an active coverage filter (Date Range / Area). */
 .authority-item.coverage-hidden { display: none !important; }
 
+/* ── Gazetteer → Explore "Place Lists" panel (place#125) ──────────────────
+   A virtualised (evicting) list of a single gazetteer's places, shown in the
+   fixed results column beside the map. See whg/webpack/js/atlasPlaceList.js. */
+#atlas_placelists_view .placelist-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #dee2e6;
+    flex-shrink: 0;
+}
+/* Styled like .atlas-view-back but a distinct class: showPanelView() auto-hides
+   any .atlas-view-back when no toponym search has run (gatewayData null), which
+   would wrongly hide the Place List's own back button. */
+.placelist-back {
+    color: #4f46b8;
+    background: #eeecf9;
+    border: 1px solid #ddd9f4;
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.placelist-back:hover { background: #e3e0f4; color: #3a34a0; }
+.placelist-heading {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;                 /* let the title ellipsize instead of overflowing */
+    line-height: 1.2;
+}
+.placelist-title {
+    font-weight: 600;
+    color: #2f3a45;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.placelist-count { font-size: 0.72rem; }
+.placelist-search-wrap {
+    position: relative;
+    padding: 8px 14px 6px;
+    flex-shrink: 0;
+}
+.placelist-search-icon {
+    position: absolute;
+    left: 22px;
+    top: 50%;
+    transform: translateY(-40%);
+    color: #9aa5ad;
+    font-size: 0.78rem;
+    pointer-events: none;
+}
+.placelist-search { padding-left: 28px; }
+.placelist-status {
+    padding: 0 14px 6px;
+    flex-shrink: 0;
+    font-size: 0.72rem;
+}
+/* The scroll viewport owns all the vertical space; rows are absolutely
+   positioned inside a spacer whose height == totalRows × ROW_H, so only the
+   rows near the viewport are ever mounted. */
+.placelist-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+}
+.placelist-rows { position: relative; width: 100%; }
+.placelist-row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 56px;                 /* == ROW_H in atlasPlaceList.js */
+    box-sizing: border-box;
+    padding: 7px 14px;
+    border-bottom: 1px solid #eef1f3;
+    cursor: pointer;
+    overflow: hidden;
+}
+.placelist-row:hover { background: #f5faff; }
+.placelist-row.pl-selected { background: #eef6ff; box-shadow: inset 3px 0 0 #2980b9; }
+.pl-row-title {
+    font-weight: 600;
+    color: #b0413e;               /* matches .cluster-title */
+    font-size: 0.88rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pl-row-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.pl-chip {
+    font-size: 0.66rem;
+    border-radius: 4px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+}
+.pl-type { background: #f4f0f7; color: #6a5a78; }
+.pl-cc { background: #eef4ec; color: #4f6b4a; letter-spacing: .3px; }
+.pl-nogeom {
+    font-size: 0.66rem;
+    color: #9a6a2f;
+    background: #fbf3e6;
+    border-radius: 4px;
+    padding: 1px 6px;
+    flex-shrink: 0;
+}
+.placelist-row.pl-nogeom-row .pl-row-title { color: #7a5b58; }
+
 /* Idle-state generic instructions (shown when no search is active) */
 .atlas-default-panel {
     padding: 24px 18px;

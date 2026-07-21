@@ -685,6 +685,17 @@ export default class GazetteerInteraction {
         if (!this.map || !e.features || e.features.length === 0) return;
         const placeId = e.features[0].properties && e.features[0].properties.place_id;
         if (!placeId) return;
+        this.openPopup(placeId, e.lngLat);
+    }
+
+    /**
+     * Open (or re-target) the place popup for ``placeId`` at ``lngLat``.
+     * Shared by the on-map click handler (``_onClick``) and the Place List
+     * panel, which drives it programmatically for list-row clicks. ``lngLat``
+     * is a ``{lng, lat}`` object or ``[lng, lat]`` pair (a place's repr_point).
+     */
+    openPopup(placeId, lngLat) {
+        if (!this.map || !placeId || !lngLat) return;
 
         if (this._abortController) {
             try { this._abortController.abort(); } catch (err) {}
@@ -704,7 +715,7 @@ export default class GazetteerInteraction {
             });
         }
         this._popup
-            .setLngLat(e.lngLat)
+            .setLngLat(lngLat)
             .setHTML(LOADING_HTML)
             .addTo(this.map);
 
