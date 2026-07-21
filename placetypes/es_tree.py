@@ -56,15 +56,27 @@ def _count(query):
 # ── AAT vocabulary bulk export (place#122) ──────────────────────────────────
 # The Atlas popup annotates each AAT-mapped type chip with its ``aat:<id>``
 # identifier and scope-note description. Rather than a lookup per chip, the whole
-# place-type vocabulary is shipped once and cached client-side in IndexedDB
-# (keyed by ``place_type_count`` as the version), mirroring the registry-coverage
-# cache. Reusable for any other AAT-label/description need.
-_VOCAB_QUERY = {"term": {"is_place_type": True}}
+# vocabulary is shipped once and cached client-side in IndexedDB (keyed by
+# ``place_type_count`` as the version), mirroring the registry-coverage cache.
+# Reusable for any AAT-label/description need.
+#
+# Scope: only concepts that carry a source-vocabulary MAPPING (gn_fcodes /
+# wd_qids / osm_tags / ohm_tags / pleiades_types). These ~366 are exactly the
+# concepts that surface on places as ``aat_ids`` — so this covers every tooltip
+# while keeping the payload ~150 KB (``is_place_type`` alone is ~59k, mostly
+# generic AAT ancestors that never appear as a place type).
+_MAPPING_FIELDS = ("gn_fcodes", "wd_qids", "osm_tags", "ohm_tags", "pleiades_types")
+_VOCAB_QUERY = {
+    "bool": {
+        "should": [{"exists": {"field": f}} for f in _MAPPING_FIELDS],
+        "minimum_should_match": 1,
+    }
+}
 
 
 def place_type_count():
-    """Cheap cache-version signal for the AAT vocab — the number of place-type
-    concepts. Bumps whenever the curated vocabulary grows/shrinks."""
+    """Cheap cache-version signal for the AAT vocab — the number of mapped
+    place-type concepts. Bumps whenever a mapping is added/removed."""
     return _count(_VOCAB_QUERY)
 
 

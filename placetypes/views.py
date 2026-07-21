@@ -57,10 +57,13 @@ def type_vocab(request):
     """
     try:
         by_id = es_tree.get_type_vocab()
+        # Version = the same count the page ships as aat_vocab_version, so the
+        # client's IndexedDB cache validates without a refetch.
+        version = str(es_tree.place_type_count())
     except Exception as e:
         logger.warning("type_vocab: ES unavailable (%s)", e)
         return JsonResponse({'version': '0', 'byId': {}})
-    return JsonResponse({'version': str(len(by_id)), 'byId': by_id})
+    return JsonResponse({'version': version, 'byId': by_id})
 
 
 def type_expand(request):
