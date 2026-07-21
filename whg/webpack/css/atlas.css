@@ -5,6 +5,18 @@
    Small always-visible control; opens a compact menu of basemap choices,
    remembered per Atlas mode. */
 .atlas-basemap-switcher { position: relative; display: inline-block; }
+/* Set the Basemap button apart from the slate controls with a light earthy
+   brown — it acts on the map backdrop, not the search/filter flow. */
+#atlas_basemap_btn {
+    background: #b08968;
+    border-color: #98764f;
+    color: #fff;
+}
+#atlas_basemap_btn:hover { background: #9c7752; }
+#atlas_basemap_btn[aria-expanded="true"] {
+    background: #8f6a45;
+    border-color: #7c5a38;
+}
 .atlas-basemap-menu {
     position: absolute;
     top: calc(100% + 6px);
@@ -1719,14 +1731,16 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     border-bottom-right-radius: 0 !important;
 }
 /* Ensure the pill group items share the control-button style */
-#areas_control_pill .btn {
+#areas_control_pill .btn,
+#toponym_control_pill .btn {
     font-size: 0.7rem;
     white-space: nowrap;
     background: rgba(44, 62, 80, 0.8);
     border-color: rgba(44, 62, 80, 0.6);
     color: #fff;
 }
-#areas_control_pill .btn:hover:not(:disabled):not(.active) {
+#areas_control_pill .btn:hover:not(:disabled):not(.active),
+#toponym_control_pill .btn:hover:not(:disabled):not(.active) {
     background: rgba(44, 62, 80, 1);
 }
 
