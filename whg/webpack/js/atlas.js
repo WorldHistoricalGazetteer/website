@@ -1099,17 +1099,23 @@ Promise.all([
                         '#gazetteers_offcanvas .gazetteer-mode-toggle .btn[data-gazetteer-mode="explore"]'
                     );
                     if (exploreBtn) exploreBtn.click();
-                    // Pre-select the requested gazetteer radio → opens its Place List.
-                    // setGazetteerMode('explore') has just converted the inputs to
-                    // radios, so tick it and fire change to run the normal flow.
+                    // Pre-select the requested gazetteer radio → opens its Place
+                    // List. On a slow cold load the authority list / radio swap can
+                    // lag, so poll (≤2s) until the (enabled) radio exists, then tick
+                    // it and fire change to run the normal selection flow LAST.
                     if (wantGazetteer) {
-                        const radio = document.querySelector(
-                            `#gazetteers_offcanvas .authority-cb[value="${wantGazetteer.replace(/"/g, '\\"')}"]`
-                        );
-                        if (radio && !radio.disabled) {
-                            radio.checked = true;
-                            radio.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
+                        const sel = `#gazetteers_offcanvas .authority-cb[value="${wantGazetteer.replace(/"/g, '\\"')}"]`;
+                        let tries = 0;
+                        const pick = () => {
+                            const radio = document.querySelector(sel);
+                            if (radio && !radio.disabled && radio.type === 'radio') {
+                                radio.checked = true;
+                                radio.dispatchEvent(new Event('change', { bubbles: true }));
+                            } else if (++tries < 20) {
+                                setTimeout(pick, 100);
+                            }
+                        };
+                        pick();
                     }
                 }
             }, 50);
