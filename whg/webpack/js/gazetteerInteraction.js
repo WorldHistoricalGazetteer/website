@@ -76,6 +76,22 @@ export function setWebTemplates(map) {
     }
 }
 
+// AAT place-type vocabulary (id → {label, desc}), prefetched by atlas.js and
+// cached in IndexedDB (place#122). Empty until set; tooltips degrade to the
+// aat:<id> alone when a concept isn't in the vocab.
+let AAT_VOCAB = {};
+export function setAatVocab(byId) {
+    if (byId && typeof byId === 'object') AAT_VOCAB = byId;
+}
+
+/** The AAT concept id for a popup type entry, or '' — from the resolved
+ *  ``aat_ids`` the gateway now ships, else an ``aat:NNN`` identifier. */
+function typeAatKey(t) {
+    if (t && Array.isArray(t.aat_ids) && t.aat_ids.length) return `aat:${t.aat_ids[0]}`;
+    const id = t && t.identifier;
+    return (typeof id === 'string' && /^aat:\d+$/.test(id)) ? id : '';
+}
+
 /** The SOURCE's own human page for a place, built from its namespace's
  *  ``web_item`` template — e.g. ``gn:2988507`` → ``geonames.org/2988507``.
  *  Returns '' when the namespace has no template (WHG-only gazetteers) or the
@@ -195,7 +211,19 @@ function renderChips(data) {
         if (!label || seenTypeLabels.has(label)) continue;
         seenTypeLabels.add(label);
         const cls = isPrimary ? 'popup-chip popup-chip-type' : 'popup-chip popup-chip-type popup-chip-secondary';
-        chips.push(`<span class="${cls}">${esc(label)}</span>`);
+        // AAT-mapped types get a tooltip with the namespaced concept id and its
+        // scope-note description (place#122); custom types keep the source id.
+        const aatKey = typeAatKey(t);
+        let title = '';
+        if (aatKey) {
+            const v = AAT_VOCAB[aatKey];
+            title = v && v.desc ? `${aatKey} · ${v.label}\n${v.desc}` : (v ? `${aatKey} · ${v.label}` : aatKey);
+        } else if (t.identifier) {
+            title = String(t.identifier);
+        }
+        const titleAttr = title ? ` title="${esc(title)}"` : '';
+        const aatAttr = aatKey ? ` data-aat="${esc(aatKey)}"` : '';
+        chips.push(`<span class="${cls}"${aatAttr}${titleAttr}>${esc(label)}</span>`);
         isPrimary = false;
     }
     if (data.boundary && !NON_ADMIN_BOUNDARIES.has(String(data.boundary).toLowerCase())) {
@@ -705,6 +733,18 @@ export default class GazetteerInteraction {
         }
         this._handlers = [];
         this._currentId = null;
+    }
+
+    /** Close the place popup (if open) without unbinding the map handlers, so
+     *  subsequent feature clicks still work. Aborts any in-flight popup fetch. */
+    closePopup() {
+        if (this._abortController) {
+            try { this._abortController.abort(); } catch (e) {}
+            this._abortController = null;
+        }
+        if (this._popup) {
+            try { this._popup.remove(); } catch (e) {}
+        }
     }
 
     _onEnter() {

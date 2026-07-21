@@ -19,7 +19,7 @@ import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
-import { setWebTemplates } from './gazetteerInteraction.js';
+import { setWebTemplates, setAatVocab } from './gazetteerInteraction.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -138,17 +138,31 @@ function toponymsList(toponyms, extraClass) {
         + `<span class="toponym-names">, ${rest.map(esc).join(', ')}</span></details>`
         + `</div>`;
 }
-// Distinct AAT type labels for one place record, resolved via the result-set
-// facet label map (aat_id → friendly label; falls back to the raw id).
-function memberTypes(m, aatLabels) {
+// Distinct type labels for one place record. Prefers AAT-resolved labels
+// (normalised, cross-source) via the result-set facet map (aat_id → friendly
+// label). Places whose source type has NO AAT mapping (custom types — place#122)
+// carry no aat_ids, so fall back to the source's own ``types[].sourceLabel`` so
+// their types are still surfaced (the popup already does this).
+function placeTypeLabels(m, aatLabels) {
     const seen = new Set();
     const out = [];
-    (m.aat_ids || []).forEach(id => {
-        const label = aatLabels[id] || String(id);
-        const k = label.toLowerCase();
-        if (!seen.has(k)) { seen.add(k); out.push(label); }
-    });
+    const add = (label) => {
+        if (label == null || label === '') return;
+        const s = String(label);
+        const k = s.toLowerCase();
+        if (!seen.has(k)) { seen.add(k); out.push(s); }
+    };
+    (m.aat_ids || []).forEach(id => add((aatLabels && aatLabels[id]) || null));
+    if (!out.length) {
+        (m.types || []).forEach(t => {
+            if (t && typeof t === 'object') add(t.sourceLabel || t.label || t.identifier);
+        });
+    }
     return out;
+}
+// Back-compat alias — cluster cards call memberTypes(m, aatLabels).
+function memberTypes(m, aatLabels) {
+    return placeTypeLabels(m, aatLabels);
 }
 // Given a per-member array of display-string lists, split into the entries
 // common to ALL members (intersection, case-insensitive) and each member's
@@ -317,6 +331,28 @@ async function loadRegistryCoverage() {
         if (data.version) { try { await idbPut('coverage', { version: data.version, temporal: data.temporal, h3: data.h3 }); } catch (e) { /* best-effort cache */ } }
     } catch (e) {
         console.warn('Atlas: registry coverage load failed (coverage filters will keep all gazetteers visible)', e);
+    }
+}
+
+// Prefetch the AAT place-type vocabulary (id → label + scope note) into the same
+// IndexedDB store (key 'aat_vocab'), version-gated by the page's
+// aat_vocab_version, and hand it to the popup renderer so type chips get an
+// aat:<id> + description tooltip (place#122). Reusable for any AAT-label need.
+async function loadAatVocab() {
+    const version = (typeof aat_vocab_version !== 'undefined') ? aat_vocab_version : null;
+    const use = (byId) => { if (byId && Object.keys(byId).length) setAatVocab(byId); };
+    try {
+        if (version && version !== '0') {
+            const cached = await idbGet('aat_vocab');
+            if (cached && cached.version === version && cached.byId) { use(cached.byId); return; }
+        }
+        const data = await fetch('/types/vocab/', { credentials: 'same-origin' }).then(r => r.json());
+        use(data.byId);
+        if (data.version && data.version !== '0' && data.byId) {
+            try { await idbPut('aat_vocab', { version: data.version, byId: data.byId }); } catch (e) { /* best-effort */ }
+        }
+    } catch (e) {
+        console.warn('Atlas: AAT vocab load failed (type tooltips fall back to ids only)', e);
     }
 }
 
@@ -671,6 +707,7 @@ waitDocumentReady().then(setupWelcomePanel);
 // Load the gazetteer coverage maps (IndexedDB-cached, version-gated) — decoupled
 // from the map, so the coverage filters work even if the map is slow/unavailable.
 waitDocumentReady().then(loadRegistryCoverage);
+waitDocumentReady().then(loadAatVocab);
 
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready
@@ -1040,7 +1077,17 @@ Promise.all([
     });
 
     // ── BETA AAT type facet: toggle a hierarchical type filter, re-search ──
-    $(document).on('click', '#atlas_type_facets .type-facet-chip', function () {
+    $(document).on('click', '#atlas_type_facets .type-facet-chip-custom', function (e) {
+        // Custom (non-AAT) source type — toggle an exact `types` identifier filter.
+        e.stopPropagation();
+        const id = $(this).data('type-id');
+        if (id == null || id === '') return;
+        const key = String(id);
+        const i = selectedTypes.indexOf(key);
+        if (i >= 0) selectedTypes.splice(i, 1); else selectedTypes.push(key);
+        initiateToponymSearch({ preserveFacets: true });
+    });
+    $(document).on('click', '#atlas_type_facets .type-facet-chip:not(.type-facet-chip-custom)', function () {
         const id = parseInt($(this).data('aat-id'), 10);
         if (Number.isNaN(id)) return;
         const i = selectedAatTypes.indexOf(id);
@@ -1049,6 +1096,7 @@ Promise.all([
     });
     $(document).on('click', '#atlas_type_facets .type-facet-clear', function () {
         selectedAatTypes = [];
+        selectedTypes = [];
         initiateToponymSearch({ preserveFacets: true });
     });
 
@@ -1844,7 +1892,7 @@ function initiateToponymSearch(opts = {}) {
     // (preserveFacets) re-searches with the same query + updated facet filter.
     // A fresh query also re-enables θ auto-fit; a preserved re-search (facets /
     // temporal) keeps the user's manual θ if they set one.
-    if (!opts.preserveFacets) { selectedAatTypes = []; thetaUserSet = false; thetaNeedsFit = true; }
+    if (!opts.preserveFacets) { selectedAatTypes = []; selectedTypes = []; thetaUserSet = false; thetaNeedsFit = true; }
     const input = document.getElementById('atlas_search_input');
     const qstr = input.value.trim();
 
@@ -1852,6 +1900,10 @@ function initiateToponymSearch(opts = {}) {
         console.log('Atlas: need a search term or type filter');
         return;
     }
+
+    // Starting a search leaves Explore browsing behind — dismiss any open
+    // gazetteer place popup so it doesn't linger over the new results.
+    try { heroMap.closePlacePopup(); } catch (e) { /* map not ready */ }
 
     const options = gatherToponymOptions(qstr);
     console.log('Atlas: initiating toponym search', options);
@@ -1903,6 +1955,7 @@ let clusterFC = null;              // last plotted FeatureCollection (feature.id
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
 let lastClusters = [];             // last clusterHits() clusters (for the portal's live context)
 let selectedAatTypes = [];         // AAT concept ids selected in the type facet (hierarchical filter)
+let selectedTypes = [];            // custom (non-AAT) source type identifiers selected in the facet (place#122)
 
 // Render the result-driven AAT type facet from the gateway's facets.aat_types
 // ([{aat_id,label,count}]). Clicking a chip toggles a hierarchical aat_types
@@ -1911,17 +1964,29 @@ function renderTypeFacets(facets) {
     const el = document.getElementById('atlas_type_facets');
     if (!el) return;
     const types = (facets && facets.aat_types) || [];
-    if (!types.length && !selectedAatTypes.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    // Custom (non-AAT) source types, from the gateway's dedicated facet (place#122).
+    const customTypes = (facets && facets.custom_types) || [];
+    const anySelected = selectedAatTypes.length || selectedTypes.length;
+    if (!types.length && !customTypes.length && !anySelected) { el.style.display = 'none'; el.innerHTML = ''; return; }
     el.style.display = '';
     let h = '<span class="type-facets-label">Types:</span>';
     types.forEach(t => {
         const sel = selectedAatTypes.includes(t.aat_id);
         h += `<button class="type-facet-chip${sel ? ' selected' : ''}" data-aat-id="${t.aat_id}" `
-            + `title="${escapeHtml(t.label || '')}${sel ? ' (selected)' : ''}">`
+            + `title="${escapeHtml(t.label || '')} (aat:${t.aat_id})${sel ? ' — selected' : ''}">`
             + `${escapeHtml(t.label || String(t.aat_id))} <span class="type-facet-count">${t.count}</span></button>`;
     });
+    // Custom source types — a distinct chip style, filtered via the exact-source
+    // `types` identifier rather than the hierarchical AAT path.
+    customTypes.forEach(t => {
+        const sel = selectedTypes.includes(t.identifier);
+        const label = t.label || t.identifier;
+        h += `<button class="type-facet-chip type-facet-chip-custom${sel ? ' selected' : ''}" data-type-id="${escapeHtml(t.identifier)}" `
+            + `title="Custom type ${escapeHtml(t.identifier)}${sel ? ' — selected' : ''}">`
+            + `${escapeHtml(label)} <span class="type-facet-count">${t.count}</span></button>`;
+    });
     // A "clear" affordance for any selected types not present in the current facet list.
-    if (selectedAatTypes.length) {
+    if (anySelected) {
         h += `<button class="type-facet-clear" title="Clear type filter"><i class="fas fa-times"></i> clear</button>`;
     }
     el.innerHTML = h;
@@ -2279,7 +2344,10 @@ function gatherToponymOptions(qstr) {
         qstr: qstr,
         idx: eswhg,
         fclasses: treeIds.join(','),
-        types: treeIds,
+        // `types` = exact source-vocabulary identifiers. Preserve the AAT tree's
+        // contribution and append custom (non-AAT) source-type facet selections
+        // (place#122); the result-facet AAT chips drive `aat_types` separately.
+        types: treeIds.concat(selectedTypes),
         temporal: temporalMode !== 'off',
         start: temporalFrom,
         end: temporalTo,

@@ -662,7 +662,7 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     position: absolute;
     left: 0;
     right: 0;
-    height: 56px;                 /* == ROW_H in atlasPlaceList.js */
+    height: 74px;                 /* == ROW_H in atlasPlaceList.js */
     box-sizing: border-box;
     padding: 7px 14px;
     border-bottom: 1px solid #eef1f3;
@@ -678,6 +678,21 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+/* Alternate name forms (toponym variants), truncated with a "+N more"
+   indicator — mirrors the cluster cards' .toponyms-list. */
+.pl-row-variants {
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: #6b7885;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.pl-variant-more {
+    margin-left: 5px;
+    color: #8a97a4;
+    font-style: italic;
 }
 .pl-row-meta {
     display: flex;
@@ -1857,6 +1872,13 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 }
 .type-facet-chip:hover { border-color: #2980b9; }
 .type-facet-chip.selected { background: #2980b9; color: #fff; border-color: #2980b9; }
+/* Custom (non-AAT) source types — dashed border + amber tint to distinguish from
+   the normalised AAT type chips (place#122). */
+.type-facet-chip-custom {
+    border-style: dashed; border-color: #c8a26a; background: #fdf7ee; color: #6b5427;
+}
+.type-facet-chip-custom:hover { border-color: #b3863f; }
+.type-facet-chip-custom.selected { background: #b3863f; color: #fff; border-color: #b3863f; }
 .type-facet-count { opacity: 0.7; font-variant-numeric: tabular-nums; }
 .type-facet-clear { font-size: 0.72rem; background: none; border: none; color: #8a8f94; cursor: pointer; }
 .type-facet-clear:hover { color: #b0413e; }

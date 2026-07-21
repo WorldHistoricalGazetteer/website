@@ -53,6 +53,38 @@ def _count(query):
     return resp.get("count", 0)
 
 
+# ── AAT vocabulary bulk export (place#122) ──────────────────────────────────
+# The Atlas popup annotates each AAT-mapped type chip with its ``aat:<id>``
+# identifier and scope-note description. Rather than a lookup per chip, the whole
+# place-type vocabulary is shipped once and cached client-side in IndexedDB
+# (keyed by ``place_type_count`` as the version), mirroring the registry-coverage
+# cache. Reusable for any other AAT-label/description need.
+_VOCAB_QUERY = {"term": {"is_place_type": True}}
+
+
+def place_type_count():
+    """Cheap cache-version signal for the AAT vocab — the number of place-type
+    concepts. Bumps whenever the curated vocabulary grows/shrinks."""
+    return _count(_VOCAB_QUERY)
+
+
+def get_type_vocab():
+    """The full place-type AAT vocabulary as ``{"aat:<id>": {label, desc}}``.
+    ``label`` = the AAT term; ``desc`` = the English scope note (trimmed)."""
+    rows = _search(_VOCAB_QUERY, source=["aat_id", "term", "note"], size=8000)
+    by_id = {}
+    for r in rows:
+        aid = r.get("aat_id")
+        if aid is None:
+            continue
+        note = r.get("note") or ""
+        by_id[f"aat:{aid}"] = {
+            "label": r.get("term") or "",
+            "desc": note[:600],  # trim long scope notes for a tooltip
+        }
+    return by_id
+
+
 def _strip_diacritics(text):
     if not text:
         return text or ""

@@ -627,6 +627,9 @@
     // Coverage maps (temporal + coarse H3) are fetched from /atlas/registry/coverage/
     // and IndexedDB-cached, keyed by this version stamp (see atlas.js).
     const registry_version = "{{ registry_version|escapejs }}";
+    // AAT vocabulary (id → label + scope note) is fetched from /types/vocab/ and
+    // IndexedDB-cached, keyed by this version (place-type count); see atlas.js.
+    const aat_vocab_version = "{{ aat_vocab_version|escapejs }}";
     const atlas_toponym = {% if toponym %}"{{ toponym|escapejs }}"{% else %}null{% endif %};
 </script>
 

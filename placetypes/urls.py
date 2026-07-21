@@ -16,6 +16,9 @@ urlpatterns = [
     # Expand selected AAT ids to include all descendants (for the reconciliation Scope picker)
     path('expand/', views.type_expand, name='type-expand'),
 
+    # Bulk AAT vocabulary (id → label + scope-note) for Atlas popup tooltips (place#122)
+    path('vocab/', views.type_vocab, name='type-vocab'),
+
     # Mapping UI
     path('mapping/', views_mapping.mapping_dashboard, name='mapping-dashboard'),
 

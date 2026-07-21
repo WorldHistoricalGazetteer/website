@@ -33,7 +33,8 @@ import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
 const OFFSET_CAP = 10000;   // gateway offset ceiling (ES max_result_window)
-const ROW_H = 56;           // px — fixed row height (enables simple virtualisation)
+const ROW_H = 74;           // px — fixed row height (enables simple virtualisation);
+                            //      title + optional variants line + meta chips
 const OVERSCAN = 6;         // rows mounted above/below the viewport
 const VIEW_ID = 'atlas_placelists_view';
 
@@ -58,11 +59,69 @@ function hitGeometry(hit) {
     return null;
 }
 
+// Type labels for a hit: AAT-resolved labels (from the result facets) when the
+// place has an AAT mapping, else the source's own ``types[].sourceLabel`` so
+// custom / unmapped types are still shown (place#122).
+function hitTypeLabels(hit, aatLabels) {
+    const seen = new Set();
+    const out = [];
+    const add = (label) => {
+        if (label == null || label === '') return;
+        const s = String(label);
+        const k = s.toLowerCase();
+        if (!seen.has(k)) { seen.add(k); out.push(s); }
+    };
+    (hit.aat_ids || []).forEach(id => add(aatLabels && aatLabels[id]));
+    if (!out.length) {
+        (hit.types || []).forEach(t => {
+            if (t && typeof t === 'object') add(t.sourceLabel || t.label || t.identifier);
+        });
+    }
+    return out;
+}
+
+// Alternate name forms (toponym variants) for a hit, other than its headline
+// title. The gateway packs surface forms into comma-joined ``names[].label``
+// (same shape the cluster cards read), so split, trim and de-dupe (ci), and
+// drop the one that merely replicates the title.
+function hitVariants(hit) {
+    const titleKey = String(hit.title || '').trim().toLowerCase();
+    const seen = new Set();
+    const out = [];
+    (hit.names || []).forEach(n => String((n && n.label) || '').split(',').forEach(t => {
+        const s = t.trim();
+        const k = s.toLowerCase();
+        if (s && k !== titleKey && !seen.has(k)) { seen.add(k); out.push(s); }
+    }));
+    return out;
+}
+
+// Variant-name line for a row, mirroring the cluster cards' truncation rule
+// (atlas.js ``toponymsList``): up to 5 shown inline; beyond that, the first 3
+// plus a "<n> more" indicator. The list is fixed-row-height virtualised, so a
+// row can't grow — the full set is offered via the ``title`` tooltip rather than
+// an expanding <details> toggle.
+function variantsHtml(variants) {
+    if (!variants.length) return '';
+    const full = variants.join(', ');
+    let inner;
+    if (variants.length <= 5) {
+        inner = `<span class="pl-variant-names">${variants.map(esc).join(', ')}</span>`;
+    } else {
+        const shown = variants.slice(0, 3).map(esc).join(', ');
+        const more = variants.length - 3;
+        inner = `<span class="pl-variant-names">${shown}</span>`
+            + `<span class="pl-variant-more">+${more} more</span>`;
+    }
+    return `<div class="pl-row-variants" title="${esc(full)}">${inner}</div>`;
+}
+
 const PlaceList = {
     cfg: null,
     ns: null, label: '',
     hits: [], aatLabels: {}, total: null,
-    qstr: '', ccode: '', aatType: '',   // active Country / Type facet selections
+    qstr: '', ccode: '', typeVal: '',   // active Country / Type facet selections
+    //  typeVal encodes the Type dropdown pick: '' | 'aat:<id>' | 'src:<identifier>'
     reqSeq: 0, loading: false, hasMore: false,
     els: null, wired: false, _debouncedFilter: null,
 
@@ -81,7 +140,7 @@ const PlaceList = {
         this.ns = namespace;
         this.label = label || namespace;
         this.hits = []; this.aatLabels = {}; this.total = null;
-        this.qstr = ''; this.ccode = ''; this.aatType = ''; this.hasMore = false;
+        this.qstr = ''; this.ccode = ''; this.typeVal = ''; this.hasMore = false;
         this.els.search.value = '';
         this.els.ccodeSel.innerHTML = '<option value="">All countries</option>';
         this.els.typeSel.innerHTML = '<option value="">All types</option>';
@@ -139,7 +198,7 @@ const PlaceList = {
             this._fetchPage(true);
         });
         this.els.typeSel.addEventListener('change', (e) => {
-            this.aatType = e.target.value;
+            this.typeVal = e.target.value;
             this._fetchPage(true);
         });
 
@@ -209,9 +268,12 @@ const PlaceList = {
         opts.bounds = { type: 'GeometryCollection', geometries: [] };
         opts.spatial = 'none';
         // The Place List owns its own Country / Type filters (independent of the
-        // main Atlas facets), driven by this panel's dropdowns.
+        // main Atlas facets), driven by this panel's dropdowns. The Type pick is
+        // routed to `aat_types` (AAT) or `types` (custom source id) by its prefix
+        // (place#122).
         opts.countries = this.ccode ? [this.ccode] : [];
-        opts.aat_types = this.aatType ? [this.aatType] : [];
+        opts.aat_types = this.typeVal.startsWith('aat:') ? [this.typeVal.slice(4)] : [];
+        opts.types = this.typeVal.startsWith('src:') ? [this.typeVal.slice(4)] : [];
 
         fetch('/atlas/search/', {
             method: 'POST',
@@ -271,12 +333,19 @@ const PlaceList = {
                     label: c.code + (c.count ? ` (${c.count.toLocaleString()})` : ''),
                 })));
         }
-        if (!this.aatType) {
-            this._fillSelect(this.els.typeSel, 'All types',
-                (facets.aat_types || []).map(t => ({
-                    value: String(t.aat_id),
-                    label: (t.label || t.aat_id) + (t.count ? ` (${t.count.toLocaleString()})` : ''),
-                })));
+        if (!this.typeVal) {
+            // AAT types (routed to aat_types) + custom source types (place#122,
+            // routed to types), each option value prefixed so _fetchPage can tell
+            // them apart. Custom labels get a subtle marker.
+            const aatOpts = (facets.aat_types || []).map(t => ({
+                value: 'aat:' + t.aat_id,
+                label: (t.label || t.aat_id) + (t.count ? ` (${t.count.toLocaleString()})` : ''),
+            }));
+            const customOpts = (facets.custom_types || []).map(t => ({
+                value: 'src:' + t.identifier,
+                label: (t.label || t.identifier) + ' ⚑' + (t.count ? ` (${t.count.toLocaleString()})` : ''),
+            }));
+            this._fillSelect(this.els.typeSel, 'All types', aatOpts.concat(customOpts));
         }
         const anyC = this.els.ccodeSel.options.length > 1;
         const anyT = this.els.typeSel.options.length > 1;
@@ -305,9 +374,9 @@ const PlaceList = {
         if (!hit) return '';
         const title = esc(hit.title || hit.place_id || '(untitled)');
         const nogeom = !hitGeometry(hit);
-        const types = (hit.aat_ids || [])
-            .map(id => this.aatLabels[id]).filter(Boolean).slice(0, 3);
+        const types = hitTypeLabels(hit, this.aatLabels).slice(0, 3);
         const ccodes = (hit.ccodes || []).slice(0, 3);
+        const variants = variantsHtml(hitVariants(hit));
         let meta = '';
         if (nogeom) {
             meta += `<span class="pl-nogeom" title="No location — opens as a detail card">no location</span>`;
@@ -316,6 +385,7 @@ const PlaceList = {
         meta += ccodes.map(c => `<span class="pl-chip pl-cc">${esc(c)}</span>`).join('');
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
             + `<div class="pl-row-title" title="${title}">${title}</div>`
+            + variants
             + `<div class="pl-row-meta">${meta}</div>`
             + `</div>`;
     },

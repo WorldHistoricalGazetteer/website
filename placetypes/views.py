@@ -45,6 +45,24 @@ def type_tree_search(request):
     return JsonResponse(results, safe=False)
 
 
+def type_vocab(request):
+    """Bulk AAT place-type vocabulary for client-side annotation (place#122).
+
+    GET /types/vocab/ → {"version": "<count>", "byId": {"aat:<id>": {label, desc}}}
+
+    Powers the Atlas popup type-chip tooltips (aat:<id> + scope-note description).
+    ~5,800 concepts; cached in IndexedDB keyed by ``version`` (place-type count),
+    fetched only when the page's ``aat_vocab_version`` global differs. Reads the
+    curated `types` ES index; returns an empty vocab (not an error) if ES is down.
+    """
+    try:
+        by_id = es_tree.get_type_vocab()
+    except Exception as e:
+        logger.warning("type_vocab: ES unavailable (%s)", e)
+        return JsonResponse({'version': '0', 'byId': {}})
+    return JsonResponse({'version': str(len(by_id)), 'byId': by_id})
+
+
 def type_expand(request):
     """
     Expand a set of AAT identifiers to include all of their descendants.

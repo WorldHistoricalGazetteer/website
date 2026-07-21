@@ -843,6 +843,12 @@ class HeroMap {
         this._gazetteerInteraction.openPopup(pid, lngLat);
     }
 
+    /** Close the gazetteer place popup, if one is open, leaving map handlers
+     *  intact. Used e.g. when a new search is initiated. */
+    closePlacePopup() {
+        if (this._gazetteerInteraction) this._gazetteerInteraction.closePopup();
+    }
+
     /** Tear down the currently-shown dynamic gazetteer, if any. */
     hideGazetteer() {
         if (!this.map) return;

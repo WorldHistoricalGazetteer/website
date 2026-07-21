@@ -231,6 +231,14 @@ class AtlasPageView(TemplateView):
         # Version stamp for the client's IndexedDB coverage cache — the browser
         # only re-fetches atlas_registry_coverage() when this changes.
         context['registry_version'] = _registry_version()
+        # AAT vocabulary cache-version (place#122) — the place-type concept count.
+        # The client caches the ~5,800-entry vocab in IndexedDB and only refetches
+        # /types/vocab/ when this changes. Defensive: ES-down → '0' (no prefetch).
+        try:
+            from placetypes.es_tree import place_type_count
+            context['aat_vocab_version'] = str(place_type_count())
+        except Exception:
+            context['aat_vocab_version'] = '0'
         return context
 
 
