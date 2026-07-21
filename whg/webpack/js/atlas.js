@@ -20,6 +20,7 @@ import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, setAatVocab } from './gazetteerInteraction.js';
+import { variantLabels } from './toponyms.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -106,25 +107,22 @@ function ccLabel(cc) {
     const e = (window.ccode_hash || {})[cc];
     return (e && (e.gnlabel || e.tgnlabel)) || cc;
 }
-// Distinct toponyms attested by one place record. Each gateway ``names[]`` entry
-// packs surface forms into a comma-joined ``label``; split, trim, de-dupe (ci).
+// Distinct toponyms attested by one place record, EXCLUDING the record's own
+// canonical title (which is already shown as the card / member headline — no
+// point repeating it in the variants list). Delegates to the shared extractor
+// (js/toponyms.js) so clusters, the place list and popups agree.
 function memberToponyms(m) {
-    const seen = new Set();
-    const out = [];
-    (m.names || []).forEach(n => String(n.label || '').split(',').forEach(t => {
-        const s = t.trim();
-        const k = s.toLowerCase();
-        if (s && !seen.has(k)) { seen.add(k); out.push(s); }
-    }));
-    return out;
+    return variantLabels(m.names, m.title);
 }
 // Toponym variants for a cluster (common to all) or a member (extras), rendered
-// as plain inline comma-separated text (chips waste space). A single entry just
-// replicates the headline title, so it's omitted. A toggle that reveals only one
-// or two names wastes a click, so show up to five inline; collapse only when at
-// least three would be hidden (first three inline + "<n> more toponyms" toggle).
+// as plain inline comma-separated text (chips waste space). The canonical title
+// is already stripped upstream (memberToponyms → variantLabels), so every entry
+// here is a genuine variant worth showing — even a lone one. A toggle that
+// reveals only one or two names wastes a click, so show up to five inline;
+// collapse only when at least three would be hidden (first three inline +
+// "<n> more toponyms" toggle).
 function toponymsList(toponyms, extraClass) {
-    if (!toponyms || toponyms.length <= 1) return '';
+    if (!toponyms || toponyms.length === 0) return '';
     const esc = t => escapeHtml(t);
     const cls = `toponyms-list${extraClass ? ' ' + extraClass : ''}`;
     if (toponyms.length <= 5) {

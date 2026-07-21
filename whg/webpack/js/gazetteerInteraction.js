@@ -13,6 +13,7 @@
 // because labels-without-shapes feel ambiguous.
 //
 import { getPreferredLanguage } from './languages.js';
+import { variantLabels } from './toponyms.js';
 
 // Popup data is fetched from ``/entity/place:{id}/api?variant=popup`` which
 // returns the raw gateway PlaceDetail JSON. Rendering happens client-side
@@ -90,6 +91,27 @@ function typeAatKey(t) {
     if (t && Array.isArray(t.aat_ids) && t.aat_ids.length) return `aat:${t.aat_ids[0]}`;
     const id = t && t.identifier;
     return (typeof id === 'string' && /^aat:\d+$/.test(id)) ? id : '';
+}
+
+/** Tooltip text for an AAT concept: the namespaced id, its label, and (when
+ *  present) its scope-note description. Accepts a bare numeric id (``12345``)
+ *  or an ``aat:12345`` key. Falls back to the key alone when the concept isn't
+ *  in the loaded vocab. Exported so the Explore place list can carry the exact
+ *  same type-chip tooltip as the popup (place#122). */
+export function aatTooltip(idOrKey) {
+    if (idOrKey == null || idOrKey === '') return '';
+    const key = /^aat:/.test(String(idOrKey)) ? String(idOrKey) : `aat:${idOrKey}`;
+    const v = AAT_VOCAB[key];
+    if (!v) return key;
+    return v.desc ? `${key} · ${v.label}\n${v.desc}` : `${key} · ${v.label}`;
+}
+
+/** Human-readable country name for an ISO code, from the page's global
+ *  ``ccode_hash`` (GeoNames/TGN labels). '' when unknown. Shared by the popup
+ *  and the place list so both carry the same country tooltip on cc badges. */
+export function ccName(cc) {
+    const e = ((typeof window !== 'undefined' && window.ccode_hash) || {})[cc];
+    return (e && (e.gnlabel || e.tgnlabel)) || '';
 }
 
 /** The SOURCE's own human page for a place, built from its namespace's
@@ -230,7 +252,9 @@ function renderChips(data) {
         chips.push(`<span class="popup-chip popup-chip-admin">${esc(data.boundary)}</span>`);
     }
     for (const cc of data.ccodes || []) {
-        chips.push(`<span class="popup-chip popup-chip-cc">${esc(cc)}</span>`);
+        const name = ccName(cc);
+        const titleAttr = name ? ` title="${esc(name)}"` : '';
+        chips.push(`<span class="popup-chip popup-chip-cc"${titleAttr}>${esc(cc)}</span>`);
     }
     const wikiBadge = renderWikipediaBadge(data);
     if (wikiBadge) chips.push(wikiBadge);
@@ -280,8 +304,27 @@ function renderDescription(data) {
 
 function renderNames(data) {
     const title = data.title || '';
-    const names = (data.names || []).filter((n) => n && n.label && n.label !== title);
+    // Drop the canonical title (case-insensitively) — it's already the popup
+    // header, so it shouldn't repeat in the variants. Keep the full name objects
+    // (lang / timespans) for the expanded detail.
+    const titleKey = String(title).trim().toLowerCase();
+    const names = (data.names || []).filter(
+        (n) => n && n.label && String(n.label).trim().toLowerCase() !== titleKey);
     if (names.length === 0) return '';
+
+    // Compact, truncated preview line (same rule as the cluster cards / place
+    // list): up to 5 labels inline, else the first 3 + "+N more". The shared
+    // extractor also splits any comma-packed labels and de-dupes.
+    const labels = variantLabels(names, title);
+    let preview;
+    if (labels.length <= 5) {
+        preview = `<span class="tv-names">${labels.map(esc).join(', ')}</span>`;
+    } else {
+        preview = `<span class="tv-names">${labels.slice(0, 3).map(esc).join(', ')}</span>`
+            + `<span class="tv-more">+${labels.length - 3} more</span>`;
+    }
+
+    // Expanding reveals the full list with per-name language + attested dates.
     const items = names.map((n) => `
         <li>
             <span class="popup-name-label">${esc(n.label)}</span>
@@ -290,8 +333,8 @@ function renderNames(data) {
         </li>
     `).join('');
     return `
-        <details class="popup-section" open>
-            <summary>Alternative names (${names.length})</summary>
+        <details class="popup-section popup-variants">
+            <summary><span class="tv-lead">Also known as</span> ${preview}</summary>
             <div class="popup-section-body"><ul class="popup-name-list">${items}</ul></div>
         </details>
     `;

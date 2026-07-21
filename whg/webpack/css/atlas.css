@@ -680,19 +680,26 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     text-overflow: ellipsis;
 }
 /* Alternate name forms (toponym variants), truncated with a "+N more"
-   indicator — mirrors the cluster cards' .toponyms-list. */
-.pl-row-variants {
-    margin-top: 2px;
-    font-size: 0.72rem;
+   indicator. Shared across the place list, cluster cards and map popups via the
+   ``.toponym-variants`` helper (js/toponyms.js). */
+.toponym-variants {
     color: #6b7885;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.pl-variant-more {
+.toponym-variants .tv-lead { color: #9aa6b2; font-style: italic; margin-right: 3px; }
+.toponym-variants .tv-more {
     margin-left: 5px;
-    color: #8a97a4;
+    color: #9aa6b2;
     font-style: italic;
+}
+/* Place-list rows: variants sit distinctly below the (larger) title. */
+.pl-row-variants {
+    margin-top: 1px;
+    font-size: 0.66rem;           /* clearly smaller than the .pl-row-title (0.88rem) */
+    line-height: 1.2;
+    color: #7c8894;
 }
 .pl-row-meta {
     display: flex;
@@ -710,6 +717,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 }
 .pl-type { background: #f4f0f7; color: #6a5a78; }
 .pl-cc { background: #eef4ec; color: #4f6b4a; letter-spacing: .3px; }
+/* Chips carrying an informative tooltip (AAT scope-note / country name) get the
+   help cursor (?+arrow) to signal there's more on hover. */
+.pl-chip.pl-info { cursor: help; }
 .pl-nogeom {
     font-size: 0.66rem;
     color: #9a6a2f;
@@ -1286,6 +1296,10 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 .whg-gazetteer-popup .popup-chip-secondary { opacity: 0.78; }
 .whg-gazetteer-popup .popup-chip-admin { background: #fdebd0; color: #7e5109; }
 .whg-gazetteer-popup .popup-chip-cc { background: #d5f5e3; color: #1e6b3a; }
+/* AAT type chips and country cc badges carry an informative tooltip — the
+   help cursor (?+arrow) signals it, matching the Explore place list. */
+.whg-gazetteer-popup .popup-chip-type[data-aat],
+.whg-gazetteer-popup .popup-chip-cc[title] { cursor: help; }
 
 .whg-gazetteer-popup .popup-body {
     padding: 0 12px 6px;
@@ -1441,6 +1455,27 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 }
 .whg-gazetteer-popup .popup-section-body {
     padding: 4px 0 4px 14px;
+}
+
+/* "Also known as" variants: the summary carries a truncated inline preview, so
+   the name text must not inherit the section summary's uppercase/bold. */
+.whg-gazetteer-popup .popup-variants > summary { text-transform: none; }
+.whg-gazetteer-popup .popup-variants .tv-lead {
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #34495e;
+    margin-right: 4px;
+}
+.whg-gazetteer-popup .popup-variants .tv-names {
+    font-weight: 400;
+    color: #55606b;
+}
+.whg-gazetteer-popup .popup-variants .tv-more {
+    font-weight: 400;
+    font-style: italic;
+    color: #9aa6b2;
+    margin-left: 5px;
+    text-transform: none;
 }
 
 .whg-gazetteer-popup .popup-name-list,

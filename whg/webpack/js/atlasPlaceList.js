@@ -29,6 +29,8 @@
 import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
+import { variantLabels, variantsHtml } from './toponyms.js';
+import { aatTooltip, ccName } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -45,6 +47,21 @@ function esc(s) {
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Attested date range for a hit, formatted exactly as the main search results'
+// temporal chips (atlas.js formatRange/formatYear): a single year, or a
+// dash-joined span, with BCE marked. '' when the hit carries no dates.
+function formatYear(y) {
+    if (y == null) return '';
+    return y < 0 ? `${-y} BCE` : `${y}`;
+}
+function formatRange(tr) {
+    if (!Array.isArray(tr) || tr.length !== 2) return '';
+    const [s, e] = tr;
+    if (s == null && e == null) return '';
+    if (s === e) return formatYear(s);
+    return `${formatYear(s)}–${formatYear(e)}`; // en-dash
+}
+
 // Geometry a hit can be fitted to: full geometries if present, else its
 // representative point. Returns null for a place with no location at all.
 function hitGeometry(hit) {
@@ -59,61 +76,27 @@ function hitGeometry(hit) {
     return null;
 }
 
-// Type labels for a hit: AAT-resolved labels (from the result facets) when the
+// Type chips for a hit: AAT-resolved labels (from the result facets) when the
 // place has an AAT mapping, else the source's own ``types[].sourceLabel`` so
-// custom / unmapped types are still shown (place#122).
-function hitTypeLabels(hit, aatLabels) {
+// custom / unmapped types are still shown (place#122). Returns objects carrying
+// the AAT id (when any) so the row can attach the same concept tooltip the map
+// popup uses.
+function hitTypeChips(hit, aatLabels) {
     const seen = new Set();
     const out = [];
-    const add = (label) => {
+    const add = (label, aat) => {
         if (label == null || label === '') return;
         const s = String(label);
         const k = s.toLowerCase();
-        if (!seen.has(k)) { seen.add(k); out.push(s); }
+        if (!seen.has(k)) { seen.add(k); out.push({ label: s, aat: aat || null }); }
     };
-    (hit.aat_ids || []).forEach(id => add(aatLabels && aatLabels[id]));
+    (hit.aat_ids || []).forEach(id => add(aatLabels && aatLabels[id], id));
     if (!out.length) {
         (hit.types || []).forEach(t => {
-            if (t && typeof t === 'object') add(t.sourceLabel || t.label || t.identifier);
+            if (t && typeof t === 'object') add(t.sourceLabel || t.label || t.identifier, null);
         });
     }
     return out;
-}
-
-// Alternate name forms (toponym variants) for a hit, other than its headline
-// title. The gateway packs surface forms into comma-joined ``names[].label``
-// (same shape the cluster cards read), so split, trim and de-dupe (ci), and
-// drop the one that merely replicates the title.
-function hitVariants(hit) {
-    const titleKey = String(hit.title || '').trim().toLowerCase();
-    const seen = new Set();
-    const out = [];
-    (hit.names || []).forEach(n => String((n && n.label) || '').split(',').forEach(t => {
-        const s = t.trim();
-        const k = s.toLowerCase();
-        if (s && k !== titleKey && !seen.has(k)) { seen.add(k); out.push(s); }
-    }));
-    return out;
-}
-
-// Variant-name line for a row, mirroring the cluster cards' truncation rule
-// (atlas.js ``toponymsList``): up to 5 shown inline; beyond that, the first 3
-// plus a "<n> more" indicator. The list is fixed-row-height virtualised, so a
-// row can't grow — the full set is offered via the ``title`` tooltip rather than
-// an expanding <details> toggle.
-function variantsHtml(variants) {
-    if (!variants.length) return '';
-    const full = variants.join(', ');
-    let inner;
-    if (variants.length <= 5) {
-        inner = `<span class="pl-variant-names">${variants.map(esc).join(', ')}</span>`;
-    } else {
-        const shown = variants.slice(0, 3).map(esc).join(', ');
-        const more = variants.length - 3;
-        inner = `<span class="pl-variant-names">${shown}</span>`
-            + `<span class="pl-variant-more">+${more} more</span>`;
-    }
-    return `<div class="pl-row-variants" title="${esc(full)}">${inner}</div>`;
 }
 
 const PlaceList = {
@@ -372,19 +355,36 @@ const PlaceList = {
 
     _rowHtml(hit, i) {
         if (!hit) return '';
+        // The title and the variants line are shown in full inline, so a tooltip
+        // that merely repeats them is noise — omit it. AAT type chips and cc
+        // badges DO carry an informative tooltip (concept scope-note / country
+        // name), so those get the info cursor.
         const title = esc(hit.title || hit.place_id || '(untitled)');
         const nogeom = !hitGeometry(hit);
-        const types = hitTypeLabels(hit, this.aatLabels).slice(0, 3);
+        const types = hitTypeChips(hit, this.aatLabels).slice(0, 3);
         const ccodes = (hit.ccodes || []).slice(0, 3);
-        const variants = variantsHtml(hitVariants(hit));
+        const range = formatRange(hit.temporal_range);
+        const variants = variantsHtml(variantLabels(hit.names, hit.title),
+            { className: 'pl-row-variants', tooltip: false });
         let meta = '';
         if (nogeom) {
             meta += `<span class="pl-nogeom" title="No location — opens as a detail card">no location</span>`;
         }
-        meta += types.map(t => `<span class="pl-chip pl-type">${esc(t)}</span>`).join('');
-        meta += ccodes.map(c => `<span class="pl-chip pl-cc">${esc(c)}</span>`).join('');
+        if (range) {
+            meta += `<span class="temporal-chip" title="Attested date range">${esc(range)}</span>`;
+        }
+        meta += types.map(t => {
+            const tip = t.aat ? aatTooltip(t.aat) : '';
+            const attrs = tip ? ` title="${esc(tip)}" data-aat="aat:${esc(t.aat)}"` : '';
+            return `<span class="pl-chip pl-type${tip ? ' pl-info' : ''}"${attrs}>${esc(t.label)}</span>`;
+        }).join('');
+        meta += ccodes.map(c => {
+            const name = ccName(c);
+            const attrs = name ? ` title="${esc(name)}"` : '';
+            return `<span class="pl-chip pl-cc${name ? ' pl-info' : ''}"${attrs}>${esc(c)}</span>`;
+        }).join('');
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
-            + `<div class="pl-row-title" title="${title}">${title}</div>`
+            + `<div class="pl-row-title">${title}</div>`
             + variants
             + `<div class="pl-row-meta">${meta}</div>`
             + `</div>`;
