@@ -765,10 +765,64 @@ class HeroMap {
             this._gazetteerInteraction = new GazetteerInteraction(this.map);
         }
         this._gazetteerInteraction.attach(id, baseIds);
+        this._addGazetteerLabels(id, vectorLayers, baseIds);
         if (tilejson && Array.isArray(tilejson.bounds) && tilejson.bounds.length === 4) {
             this.applyProjectionForBounds(tilejson.bounds);
             try { this.map.fitViewport(tilejson.bounds); } catch (e) {}
         }
+    }
+
+    /**
+     * Add canonical-name labels for a dynamic gazetteer's own features (Explore
+     * mode). The gazetteer tiles carry ``name`` / ``name_local`` / ``name_en``
+     * per place; clustered aggregate features carry only a ``point_count``, so
+     * filtering those out leaves labels on individual places. Language follows
+     * the map's preferred-language setting, mirroring the context place labels.
+     * Placed above the gazetteer shape layers (no ``beforeId``) so names sit on
+     * top; ``eraseSource`` (called on switch/hide) removes it with the source.
+     *
+     * @param {string} id — the gazetteer/source id
+     * @param {Array}  vectorLayers — tilejson.vector_layers (or [{id}])
+     * @param {string[]} baseIds — per-vector-layer base ids (match _fill/_line/_circle)
+     */
+    _addGazetteerLabels(id, vectorLayers, baseIds) {
+        if (!this.map) return;
+        const lang = this.map.preferredLanguage;
+        const textField = (!lang || lang === 'local')
+            ? ['coalesce', ['get', 'name_local'], ['get', 'name'], ['get', 'name_en'], '']
+            : ['coalesce', ['get', `name_${lang}`], ['get', 'name_en'], ['get', 'name_local'], ['get', 'name'], ''];
+        vectorLayers.forEach((vl, i) => {
+            const labelId = `${baseIds[i]}_label`;
+            if (this.map.getLayer(labelId)) return;
+            try {
+                this.map.addLayer({
+                    id: labelId,
+                    type: 'symbol',
+                    source: id,
+                    'source-layer': vl.id,
+                    // Individual places only — skip clustered aggregate features.
+                    filter: ['!', ['has', 'point_count']],
+                    layout: {
+                        'text-field': textField,
+                        'text-font': ['Open Sans Regular'],
+                        'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 10, 13],
+                        'text-anchor': 'top',
+                        'text-offset': [0, 0.6],
+                        'text-optional': true,
+                        'text-allow-overlap': false,
+                        'text-padding': 4,
+                        'text-max-width': 8,
+                    },
+                    paint: {
+                        'text-color': '#33404d',
+                        'text-halo-color': 'rgba(255, 255, 255, 0.9)',
+                        'text-halo-width': 1.2,
+                    },
+                });
+            } catch (e) {
+                console.warn('heroMap._addGazetteerLabels: failed', labelId, e);
+            }
+        });
     }
 
     /**

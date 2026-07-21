@@ -243,7 +243,14 @@ const PlaceList = {
         const opts = this.cfg.getBaseOptions(this.qstr) || {};
         opts.qstr = this.qstr;
         opts.namespaces = [this.ns];
-        opts.mode = 'in';           // substring "contains" match (not exact/fuzzy)
+        // Prefix ("starts") match, NOT "in" (substring): the gateway's substring
+        // index is only populated for the big global sources (gn/wd/osm), so
+        // "in" silently returns zero hits for most authority gazetteers
+        // (tgn, pl, iv, alc, …) — "starts" is served wherever "in" is AND for
+        // those, so a typeahead like "cov" → Coventry works everywhere the
+        // gazetteer's toponyms are searchable at all. (gb/ukhc return nothing in
+        // any mode — a separate gateway indexing gap, tracked upstream.)
+        opts.mode = 'starts';
         opts.size = PAGE_SIZE;
         opts.offset = offset;
         opts.browse = !this.qstr;   // empty box → browse the whole gazetteer
