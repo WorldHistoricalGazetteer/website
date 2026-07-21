@@ -134,6 +134,21 @@
                         style="display:none;">
                     <i class="fas fa-sitemap me-1"></i>Categories
                 </button>
+
+                <!-- Basemap style switcher — always visible; remembers a style
+                     per Atlas mode (Areas / Places / Explore) in localStorage. -->
+                <div class="atlas-basemap-switcher">
+                    <button id="atlas_basemap_btn" class="btn btn-sm" type="button"
+                            aria-haspopup="true" aria-expanded="false"
+                            data-bs-toggle="tooltip"
+                            title="Basemap — choose the map background for this mode">
+                        <i class="fas fa-layer-group me-1"></i>Basemap
+                    </button>
+                    <div id="atlas_basemap_menu" class="atlas-basemap-menu" role="menu" hidden>
+                        <div class="basemap-menu-head">Basemap for <span class="basemap-menu-mode"></span></div>
+                        <div class="basemap-menu-options"></div>
+                    </div>
+                </div>
             </div>
         </div>
 

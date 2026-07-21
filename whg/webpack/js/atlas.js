@@ -588,6 +588,9 @@ function setGazetteerCoverageSwitch(id, active) {
 
 function waitMapLoad() {
     return heroMap.init().then(() => {
+        // Apply the basemap remembered for the initial (Areas) mode, once the
+        // map exists. No-op when it's already the default WHG Context style.
+        applyBasemapForMode();
         // Wire click on result features
         heroMap.map.on('click', function (e) {
             const features = heroMap.map.queryRenderedFeatures(e.point);
@@ -827,6 +830,9 @@ Promise.all([
         .then(r => (r.ok ? r.json() : null))
         .then(d => { if (d) setGatewayAvailable(d.gateway !== false); })
         .catch(() => { /* status probe itself failed — stay silent */ });
+
+    // Per-mode basemap style switcher (persisted in localStorage).
+    initBasemapSwitcher();
 
     // ── BETA: cluster merge-sensitivity (θ) slider — re-clusters live ──
     const thetaSlider = document.getElementById('atlas_cluster_theta');
@@ -1246,6 +1252,96 @@ function updateTreeBadge() {
     else $badge.hide();
 }
 
+/* ── Basemap style switcher (per-mode, persisted) ──
+   The Atlas map remembers a basemap style per mode (Areas / Places / Explore)
+   in localStorage, so e.g. Gazetteer Explore can use a detailed OSM/Satellite
+   backdrop while Areas stays on the minimal WHG Context style. The swap keeps
+   all overlays intact (heroMap.setBasemapStyle). */
+const ATLAS_STYLE_KEY = 'whg.atlas_style';
+const ATLAS_BASEMAPS = [
+    { id: 'whg-context', label: 'WHG Context', hint: 'Minimal, low-clutter' },
+    { id: 'whg-enhanced', label: 'WHG Enhanced', hint: 'More physical / terrain context' },
+    { id: 'OSM', label: 'OpenStreetMap', hint: 'Roads, settlements, labels' },
+    { id: 'Satellite', label: 'Satellite', hint: 'Aerial imagery' },
+];
+const ATLAS_DEFAULT_BASEMAP = 'whg-context';
+const ATLAS_MODE_LABELS = { areas: 'Areas', places: 'Places', explore: 'Gazetteer Explore' };
+let atlasMapMode = 'areas';   // 'areas' | 'places' | 'explore'
+
+function readBasemapPrefs() {
+    try { return JSON.parse(localStorage.getItem(ATLAS_STYLE_KEY)) || {}; }
+    catch (e) { return {}; }
+}
+function basemapForMode(mode) {
+    const id = readBasemapPrefs()[mode];
+    return ATLAS_BASEMAPS.some(s => s.id === id) ? id : ATLAS_DEFAULT_BASEMAP;
+}
+function persistBasemapForMode(mode, id) {
+    const prefs = readBasemapPrefs();
+    prefs[mode] = id;
+    try { localStorage.setItem(ATLAS_STYLE_KEY, JSON.stringify(prefs)); } catch (e) { /* private mode */ }
+}
+
+// Apply the persisted basemap for the current mode + refresh the menu highlight.
+function applyBasemapForMode() {
+    heroMap.setBasemapStyle(basemapForMode(atlasMapMode));
+    updateBasemapMenu();
+}
+// Record the map's current mode and re-apply its remembered basemap.
+function setAtlasMapMode(mode) {
+    if (mode === atlasMapMode) { updateBasemapMenu(); return; }
+    atlasMapMode = mode;
+    applyBasemapForMode();
+}
+
+function updateBasemapMenu() {
+    const menu = document.getElementById('atlas_basemap_menu');
+    if (!menu) return;
+    const modeLabel = menu.querySelector('.basemap-menu-mode');
+    if (modeLabel) modeLabel.textContent = ATLAS_MODE_LABELS[atlasMapMode] || atlasMapMode;
+    const active = basemapForMode(atlasMapMode);
+    menu.querySelectorAll('.basemap-option').forEach(el => {
+        const on = el.dataset.styleId === active;
+        el.classList.toggle('active', on);
+        el.setAttribute('aria-checked', on ? 'true' : 'false');
+    });
+}
+
+function initBasemapSwitcher() {
+    const btn = document.getElementById('atlas_basemap_btn');
+    const menu = document.getElementById('atlas_basemap_menu');
+    if (!btn || !menu) return;
+    const optionsWrap = menu.querySelector('.basemap-menu-options');
+    optionsWrap.innerHTML = ATLAS_BASEMAPS.map(s =>
+        `<button type="button" class="basemap-option" role="menuitemradio" aria-checked="false" data-style-id="${escapeHtml(s.id)}">`
+        + `<span class="basemap-option-label">${escapeHtml(s.label)}</span>`
+        + `<span class="basemap-option-hint">${escapeHtml(s.hint)}</span>`
+        + `</button>`
+    ).join('');
+
+    const closeMenu = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+    const openMenu = () => { updateBasemapMenu(); menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (menu.hidden) openMenu(); else closeMenu();
+    });
+    optionsWrap.addEventListener('click', (e) => {
+        const opt = e.target.closest('.basemap-option');
+        if (!opt) return;
+        const id = opt.dataset.styleId;
+        persistBasemapForMode(atlasMapMode, id);
+        heroMap.setBasemapStyle(id);
+        updateBasemapMenu();
+        closeMenu();
+    });
+    // Dismiss on outside click / Escape.
+    document.addEventListener('click', (e) => {
+        if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) closeMenu(); });
+    updateBasemapMenu();
+}
+
 function switchSearchMode(mode) {
     searchMode = mode;
     // Mode tint on the floating search bar (Areas = indigo, Places = burgundy).
@@ -1265,8 +1361,8 @@ function switchSearchMode(mode) {
         hideResultsPanel();
         heroMap.clearResultFeatures();
 
-        // Ensure whg-context style is active for area search
         heroMap.ensureContextStyle();
+        setAtlasMapMode('areas');   // apply the basemap remembered for Areas
     } else {
         const chipLabels = selectedRegions.map(r => r.label).join(', ');
         if (useViewport && !heroMap.isGlobeMode()) {
@@ -1278,6 +1374,9 @@ function switchSearchMode(mode) {
         }
         toponymBtns.forEach(btn => btn.style.display = '');
         areasBtns.forEach(btn => btn.style.display = 'none');
+        // Places mode: apply its basemap unless a gazetteer is being explored
+        // (Explore keeps its own basemap, set on gazetteer selection).
+        setAtlasMapMode(heroMap.isExploring() ? 'explore' : 'places');
     }
     input.value = '';
     closeAreaDropdown();
@@ -1634,6 +1733,7 @@ function emitGazetteerSelection(mode) {
         // drop the shareable ?gazetteer= param.
         PlaceList.close();
         updateExploreUrl(null);
+        setAtlasMapMode('places');   // no longer exploring — Places basemap
     } else {
         exploreSelection = composed[0] || null;
         // Mirror the Explore selection onto the map: load the gazetteer's
@@ -1652,9 +1752,11 @@ function emitGazetteerSelection(mode) {
             else if (item) label = item.textContent.trim();
             PlaceList.open(exploreSelection, label);
             updateExploreUrl(exploreSelection);
+            setAtlasMapMode('explore');   // apply the basemap remembered for Explore
         } else {
             PlaceList.close();
             updateExploreUrl(null);
+            setAtlasMapMode('places');
         }
     }
     filterState.set('authorities', composed);

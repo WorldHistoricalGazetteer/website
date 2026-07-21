@@ -133,6 +133,7 @@ class HeroMap {
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
+        this._currentBasemap = 'whg-context';   // active basemap style id (see setBasemapStyle)
         this._gazetteerInteraction = null;
         this._contextLayerIds = [];
         this._settlementDiagnostic = null;
@@ -1403,6 +1404,87 @@ class HeroMap {
         if (this._boundaryLayerIds.length === 0) {
             this._initBoundaryLayers();
         }
+    }
+
+    /** The active basemap style id (e.g. 'whg-context', 'OSM'). */
+    getBasemapStyle() { return this._currentBasemap; }
+
+    /** True while a dynamic gazetteer tileset is shown (Explore mode). */
+    isExploring() { return !!this._currentGazetteer; }
+
+    /**
+     * Swap the basemap to another WHG tileserver style WITHOUT losing the
+     * Atlas overlays. Uses the same overlay-preserving ``transformStyle`` as
+     * whg_maplibre's acmeStyleControl: every source/layer that isn't part of
+     * the base style (i.e. everything the Atlas added — result/overlay/context/
+     * gazetteer/boundary layers) is re-grafted onto the new basemap in one
+     * frame, so nothing flashes out. Projection, camera and preferred-language
+     * labels are re-applied after the new style loads.
+     *
+     * @param {string} styleId — a tileserver style id from ${TILEBOSS}/styles/<id>
+     * @returns {Promise}
+     */
+    setBasemapStyle(styleId) {
+        if (!this.map || !styleId || styleId === this._currentBasemap) {
+            return Promise.resolve();
+        }
+        const url = `${process.env.TILEBOSS}/styles/${styleId}/style.json`;
+        const wasGlobe = this.isGlobeMode();
+        return fetch(url)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then(styleJSON => {
+                this.map.setStyle(styleJSON, {
+                    diff: false,   // native diff can't handle a full basemap swap
+                    transformStyle: (previousStyle, nextStyle) => {
+                        // Keep every source/layer the app added on top of the
+                        // OLD base (those not tracked in map.baseStyle).
+                        const sources = { ...nextStyle.sources };
+                        Object.keys(previousStyle.sources).forEach(k => {
+                            if (!this.map.baseStyle.sources.includes(k)) {
+                                sources[k] = previousStyle.sources[k];
+                            }
+                        });
+                        const layers = [
+                            ...nextStyle.layers,
+                            ...previousStyle.layers.filter(
+                                l => !this.map.baseStyle.layers.includes(l.id)),
+                        ];
+                        // The new style becomes the base for the next swap.
+                        this.map.baseStyle.sources = Object.keys(nextStyle.sources);
+                        this.map.baseStyle.layers = nextStyle.layers.map(l => l.id);
+                        return { ...nextStyle, sources, layers };
+                    },
+                });
+                this._currentBasemap = styleId;
+                this.map.once('style.load', () => {
+                    this._applyLanguageToBaseLabels();
+                    // A basemap can carry its own projection default — restore ours.
+                    this._programmaticProjection = true;
+                    try { this.map.setProjection({ type: wasGlobe ? 'globe' : 'mercator' }); } catch (e) {}
+                    this.map.once('idle', () => { this._programmaticProjection = false; });
+                    // Boundary layer ids may have changed with the base — rescan.
+                    this._boundaryLayerIds = [];
+                    this.ensureContextStyle();
+                });
+            })
+            .catch(e => { console.warn('heroMap.setBasemapStyle failed', styleId, e); });
+    }
+
+    /** Re-apply the map's preferred-language coalesce to the base style's
+     *  OpenMapTiles label layers (mirrors whg_maplibre's on-load logic) so a
+     *  freshly-swapped basemap honours the language preference. */
+    _applyLanguageToBaseLabels() {
+        if (!this.map) return;
+        const lang = this.map.preferredLanguage || 'local';
+        const style = this.map.getStyle();
+        (style.layers || []).forEach(layer => {
+            if (layer.layout && layer.layout['text-field'] && layer.source === 'openmaptiles') {
+                const textField = lang === 'local'
+                    ? ['coalesce', ['get', 'name:local'], ['get', 'name'], ['get', 'name:en']]
+                    : ['coalesce', ['get', `name:${lang}`], ['get', 'name'], ['get', 'name:en']];
+                try { this.map.setLayoutProperty(layer.id, 'text-field', textField); } catch (e) {}
+            }
+        });
     }
 
     // ── Projection detection ──

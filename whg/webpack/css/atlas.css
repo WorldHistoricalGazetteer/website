@@ -1,6 +1,65 @@
 /* /whg/webpack/css/atlas.css */
 /* WHG Atlas — Hero Map Explorer Layout */
 
+/* ── Basemap style switcher ─────────────────────────────────────────────
+   Small always-visible control; opens a compact menu of basemap choices,
+   remembered per Atlas mode. */
+.atlas-basemap-switcher { position: relative; display: inline-block; }
+.atlas-basemap-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1100;
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid #d5dbe0;
+    border-radius: 8px;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18);
+    padding: 6px;
+}
+.atlas-basemap-menu[hidden] { display: none; }
+.atlas-basemap-menu .basemap-menu-head {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7f8c96;
+    padding: 2px 8px 6px;
+    border-bottom: 1px solid #eef1f4;
+    margin-bottom: 4px;
+}
+.atlas-basemap-menu .basemap-menu-mode { color: #34495e; font-weight: 600; }
+.atlas-basemap-menu .basemap-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: 0;
+    border-radius: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+.atlas-basemap-menu .basemap-option:hover { background: #f2f6fa; }
+.atlas-basemap-menu .basemap-option.active { background: #e9f2fb; }
+.atlas-basemap-menu .basemap-option.active .basemap-option-label::after {
+    content: "\f00c";                 /* fa check */
+    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+    font-weight: 900;
+    color: #2980b9;
+    margin-left: 8px;
+    font-size: 0.8em;
+}
+.atlas-basemap-menu .basemap-option-label {
+    display: block;
+    font-size: 0.85rem;
+    color: #2c3e50;
+    font-weight: 600;
+}
+.atlas-basemap-menu .basemap-option-hint {
+    display: block;
+    font-size: 0.72rem;
+    color: #8a97a2;
+}
+
 /* ── Gateway-unavailable banner ─────────────────────────────────────────
    Prominent top-centre notice shown when the CRC gateway (Pitt VM / search
    service) is unreachable, so the limited functionality is obvious. */
