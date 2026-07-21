@@ -249,10 +249,18 @@
             </div>
         </div>
         <div class="placelist-search-wrap">
-            <i class="fas fa-magnifying-glass placelist-search-icon"></i>
             <input type="text" class="form-control form-control-sm placelist-search"
-                   placeholder="Filter places in this gazetteer…" autocomplete="off"
-                   aria-label="Filter places">
+                   placeholder="Search places in this gazetteer…" autocomplete="off"
+                   aria-label="Search places">
+            <i class="fas fa-magnifying-glass placelist-search-icon"></i>
+        </div>
+        <div class="placelist-filters" style="display:none;">
+            <select class="form-select form-select-sm placelist-ccode" aria-label="Filter by country">
+                <option value="">All countries</option>
+            </select>
+            <select class="form-select form-select-sm placelist-type" aria-label="Filter by place type">
+                <option value="">All types</option>
+            </select>
         </div>
         <div class="placelist-status small text-muted"></div>
         <div class="placelist-scroll">

@@ -130,6 +130,21 @@ def crc_search(options: dict, user=None) -> dict | None:
         "include_embeddings": True,
     }
 
+    # Browse mode (Atlas Place List): enumerate a whole gazetteer with no query
+    # — the gateway returns a namespace-filtered, alphabetically-ordered match-all
+    # with a real total and offset pagination. Ignored by the gateway when a query
+    # is present.
+    if options.get("browse"):
+        body["browse"] = True
+
+    # Offset pagination (browse list + any paged consumer).
+    offset = options.get("offset")
+    if offset:
+        try:
+            body["offset"] = max(0, int(offset))
+        except (TypeError, ValueError):
+            pass
+
     countries = options.get("countries")
     if countries:
         if isinstance(countries, str):

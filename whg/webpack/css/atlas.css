@@ -619,16 +619,29 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     padding: 8px 14px 6px;
     flex-shrink: 0;
 }
+/* Icon sits at the RIGHT of the field so it never overlaps typed text. */
 .placelist-search-icon {
     position: absolute;
-    left: 22px;
+    right: 24px;
     top: 50%;
-    transform: translateY(-40%);
+    transform: translateY(-50%);
     color: #9aa5ad;
     font-size: 0.78rem;
     pointer-events: none;
 }
-.placelist-search { padding-left: 28px; }
+.placelist-search { padding-right: 26px; }
+.placelist-filters {
+    display: flex;
+    gap: 6px;
+    padding: 0 14px 6px;
+    flex-shrink: 0;
+}
+.placelist-filters .form-select {
+    font-size: 0.75rem;
+    padding: 2px 20px 2px 8px;
+    min-width: 0;                 /* allow the two selects to share the row evenly */
+    flex: 1 1 0;
+}
 .placelist-status {
     padding: 0 14px 6px;
     flex-shrink: 0;

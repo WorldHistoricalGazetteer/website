@@ -31,8 +31,8 @@ import heroMap from './heroMap';
 import { getPreferredLanguage } from './languages.js';
 import debounce from 'lodash/debounce';
 
-const PAGE_SIZE = 100;      // initial fetch + growth increment
-const MAX_SIZE = 10000;     // ES max_result_window — the hard browse ceiling
+const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
+const OFFSET_CAP = 10000;   // gateway offset ceiling (ES max_result_window)
 const ROW_H = 56;           // px — fixed row height (enables simple virtualisation)
 const OVERSCAN = 6;         // rows mounted above/below the viewport
 const VIEW_ID = 'atlas_placelists_view';
@@ -62,7 +62,8 @@ const PlaceList = {
     cfg: null,
     ns: null, label: '',
     hits: [], aatLabels: {}, total: null,
-    qstr: '', reqSeq: 0, loading: false, hasMore: false,
+    qstr: '', ccode: '', aatType: '',   // active Country / Type facet selections
+    reqSeq: 0, loading: false, hasMore: false,
     els: null, wired: false, _debouncedFilter: null,
 
     /** Inject atlas.js collaborators once at page init.
@@ -80,8 +81,11 @@ const PlaceList = {
         this.ns = namespace;
         this.label = label || namespace;
         this.hits = []; this.aatLabels = {}; this.total = null;
-        this.qstr = ''; this.hasMore = false;
+        this.qstr = ''; this.ccode = ''; this.aatType = ''; this.hasMore = false;
         this.els.search.value = '';
+        this.els.ccodeSel.innerHTML = '<option value="">All countries</option>';
+        this.els.typeSel.innerHTML = '<option value="">All types</option>';
+        this.els.filters.style.display = 'none';
         this.els.title.textContent = this.label;
         this.els.count.textContent = '';
         this.els.rows.innerHTML = '';
@@ -109,6 +113,9 @@ const PlaceList = {
             title: view.querySelector('.placelist-title'),
             count: view.querySelector('.placelist-count'),
             search: view.querySelector('.placelist-search'),
+            filters: view.querySelector('.placelist-filters'),
+            ccodeSel: view.querySelector('.placelist-ccode'),
+            typeSel: view.querySelector('.placelist-type'),
             status: view.querySelector('.placelist-status'),
             scroll: view.querySelector('.placelist-scroll'),
             rows: view.querySelector('.placelist-rows'),
@@ -122,6 +129,18 @@ const PlaceList = {
         this.els.search.addEventListener('input', (e) => {
             this.qstr = e.target.value.trim();
             this._debouncedFilter();
+        });
+
+        // Country / Type facet filters — an offered set built from the gateway's
+        // whole-gazetteer aggregations (populated on each fetch); changing either
+        // re-queries from the top.
+        this.els.ccodeSel.addEventListener('change', (e) => {
+            this.ccode = e.target.value;
+            this._fetchPage(true);
+        });
+        this.els.typeSel.addEventListener('change', (e) => {
+            this.aatType = e.target.value;
+            this._fetchPage(true);
         });
 
         let ticking = false;
@@ -145,15 +164,20 @@ const PlaceList = {
     },
 
     // ── Data ──────────────────────────────────────────────────────────────
+    // Pages via the gateway's real `offset` pagination and accumulates hits.
+    // With an empty box we send `browse:true` — a namespace-filtered, alphabetical
+    // match-all with a REAL total; typing switches to the ranked search. Either
+    // way `offset` walks the result list a page at a time.
     _fetchPage(reset) {
         if (!this.cfg || this.loading) return;
-        const size = reset ? PAGE_SIZE : Math.min(this.hits.length + PAGE_SIZE, MAX_SIZE);
-        if (!reset && (!this.hasMore || this.hits.length >= MAX_SIZE)) return;
+        if (!reset && (!this.hasMore || this.hits.length >= OFFSET_CAP)) return;
 
         const seq = reset ? ++this.reqSeq : this.reqSeq;
+        const offset = reset ? 0 : this.hits.length;
         this.loading = true;
         if (reset) {
             this.hits = [];
+            this.aatLabels = {};
             this.els.rows.innerHTML = '';
             this.els.rows.style.height = '0px';
             this.els.scroll.scrollTop = 0;
@@ -166,10 +190,16 @@ const PlaceList = {
         const opts = this.cfg.getBaseOptions(this.qstr) || {};
         opts.qstr = this.qstr;
         opts.namespaces = [this.ns];
-        opts.size = size;
+        opts.size = PAGE_SIZE;
+        opts.offset = offset;
+        opts.browse = !this.qstr;   // empty box → browse the whole gazetteer
         opts.cluster = false;
         opts.bounds = { type: 'GeometryCollection', geometries: [] };
         opts.spatial = 'none';
+        // The Place List owns its own Country / Type filters (independent of the
+        // main Atlas facets), driven by this panel's dropdowns.
+        opts.countries = this.ccode ? [this.ccode] : [];
+        opts.aat_types = this.aatType ? [this.aatType] : [];
 
         fetch('/atlas/search/', {
             method: 'POST',
@@ -184,13 +214,16 @@ const PlaceList = {
             .then(data => {
                 if (seq !== this.reqSeq) return;   // a newer query superseded this one
                 this.loading = false;
-                this.hits = Array.isArray(data.hits) ? data.hits : [];
+                const page = Array.isArray(data.hits) ? data.hits : [];
+                this.hits = this.hits.concat(page);
                 this.total = (typeof data.total === 'number') ? data.total : this.hits.length;
-                this.aatLabels = {};
+                // Facets are whole-namespace for browse; keep first-seen labels.
                 ((data.facets && data.facets.aat_types) || [])
-                    .forEach(f => { this.aatLabels[f.aat_id] = f.label; });
-                // A full page implies more may exist (until the ceiling).
-                this.hasMore = this.hits.length >= size && this.hits.length < MAX_SIZE;
+                    .forEach(f => { if (!(f.aat_id in this.aatLabels)) this.aatLabels[f.aat_id] = f.label; });
+                if (offset === 0) this._populateFacets(data.facets);
+                this.hasMore = page.length >= PAGE_SIZE
+                    && this.hits.length < this.total
+                    && this.hits.length < OFFSET_CAP;
                 this.els.rows.style.height = (this.hits.length * ROW_H) + 'px';
                 this.els.count.textContent = this.total != null
                     ? `${this.total.toLocaleString()} place${this.total === 1 ? '' : 's'}` : '';
@@ -211,6 +244,36 @@ const PlaceList = {
         if (el.scrollTop + el.clientHeight >= el.scrollHeight - ROW_H * OVERSCAN) {
             this._fetchPage(false);
         }
+    },
+
+    // Offered-set Country / Type filters, built from the gateway's whole-gazetteer
+    // aggregations. A facet is only (re)built while it is NOT the active filter —
+    // a filtered aggregation collapses to the single selected value, so we keep
+    // the full option list for whichever dimension the user is filtering on.
+    _populateFacets(facets) {
+        facets = facets || {};
+        if (!this.ccode) {
+            this._fillSelect(this.els.ccodeSel, 'All countries',
+                (facets.countries || []).map(c => ({
+                    value: c.code,
+                    label: c.code + (c.count ? ` (${c.count.toLocaleString()})` : ''),
+                })));
+        }
+        if (!this.aatType) {
+            this._fillSelect(this.els.typeSel, 'All types',
+                (facets.aat_types || []).map(t => ({
+                    value: String(t.aat_id),
+                    label: (t.label || t.aat_id) + (t.count ? ` (${t.count.toLocaleString()})` : ''),
+                })));
+        }
+        const anyC = this.els.ccodeSel.options.length > 1;
+        const anyT = this.els.typeSel.options.length > 1;
+        this.els.filters.style.display = (anyC || anyT) ? '' : 'none';
+    },
+
+    _fillSelect(sel, allLabel, opts) {
+        sel.innerHTML = `<option value="">${esc(allLabel)}</option>`
+            + opts.map(o => `<option value="${esc(o.value)}">${esc(o.label)}</option>`).join('');
     },
 
     // ── Rendering (fixed-height virtual window) ───────────────────────────
@@ -276,12 +339,14 @@ const PlaceList = {
         if (!this.hits.length) {
             this._setStatus(this.qstr
                 ? 'No matching places.'
-                : 'No places to browse — type to search this gazetteer.');
+                : 'No places to browse in this gazetteer.');
             return;
         }
         let s = `Showing ${this.hits.length.toLocaleString()}`;
         if (this.total != null && this.total > this.hits.length) s += ` of ${this.total.toLocaleString()}`;
-        if (this.hits.length >= MAX_SIZE) s += ' · refine your search to see more';
+        if (this.hits.length >= OFFSET_CAP && this.total > this.hits.length) {
+            s += ' · refine with search or filters to see more';
+        }
         this._setStatus(s);
     },
 };

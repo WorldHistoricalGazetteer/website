@@ -1079,7 +1079,10 @@ Promise.all([
     // as if the user had clicked them by hand.
     {
         const params = new URLSearchParams(location.search);
-        if (params.get('panel') === 'gazetteers') {
+        // A ?gazetteer=<ns> deep link implies Places → Explore on that gazetteer
+        // (the Place List's shareable URL), even without an explicit panel/gmode.
+        const wantGazetteer = params.get('gazetteer');
+        if (params.get('panel') === 'gazetteers' || wantGazetteer) {
             const placesBtn = document.querySelector(
                 '.search-mode-toggle .btn[data-search-mode="toponyms"]'
             );
@@ -1090,12 +1093,24 @@ Promise.all([
             setTimeout(() => {
                 const trigger = document.getElementById('open_gazetteers_modal');
                 if (trigger) trigger.click();
-                const gmode = params.get('gmode') === 'explore' ? 'explore' : 'filter';
+                const gmode = (params.get('gmode') === 'explore' || wantGazetteer) ? 'explore' : 'filter';
                 if (gmode === 'explore') {
                     const exploreBtn = document.querySelector(
                         '#gazetteers_offcanvas .gazetteer-mode-toggle .btn[data-gazetteer-mode="explore"]'
                     );
                     if (exploreBtn) exploreBtn.click();
+                    // Pre-select the requested gazetteer radio → opens its Place List.
+                    // setGazetteerMode('explore') has just converted the inputs to
+                    // radios, so tick it and fire change to run the normal flow.
+                    if (wantGazetteer) {
+                        const radio = document.querySelector(
+                            `#gazetteers_offcanvas .authority-cb[value="${wantGazetteer.replace(/"/g, '\\"')}"]`
+                        );
+                        if (radio && !radio.disabled) {
+                            radio.checked = true;
+                            radio.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
                 }
             }, 50);
         }
@@ -1492,6 +1507,20 @@ function applyTypePillFilter() {
     });
 }
 
+// Reflect the current Explore-mode gazetteer selection in the URL as
+// ``?gazetteer=<ns>`` so the view is shareable/bookmarkable and survives a
+// reload (a cold load of such a URL opens Places → Explore on that gazetteer;
+// see the deep-link handler on init). replaceState avoids polluting history as
+// the user tries different gazetteers.
+function updateExploreUrl(ns) {
+    try {
+        const url = new URL(window.location.href);
+        if (ns) url.searchParams.set('gazetteer', ns);
+        else url.searchParams.delete('gazetteer');
+        window.history.replaceState(null, '', url);
+    } catch (e) { /* URL API unavailable */ }
+}
+
 /* ── Mirror the active gazetteer selection into filterState ──
    Tri-state: parent fully checked → 'whg' (compact alias for "all WHG datasets");
    parent indeterminate → explicit list of child specialist ids; parent unchecked
@@ -1522,8 +1551,10 @@ function emitGazetteerSelection(mode) {
     if (mode === 'filter') {
         filterSelections.clear();
         composed.forEach(v => filterSelections.add(v));
-        // Leaving Explore for Filter: dismiss the Place List if it's on screen.
+        // Leaving Explore for Filter: dismiss the Place List if it's on screen and
+        // drop the shareable ?gazetteer= param.
         PlaceList.close();
+        updateExploreUrl(null);
     } else {
         exploreSelection = composed[0] || null;
         // Mirror the Explore selection onto the map: load the gazetteer's
@@ -1533,14 +1564,18 @@ function emitGazetteerSelection(mode) {
             layerPalette.setActiveSource(exploreSelection);
             // Open the browsable Place List for the selected gazetteer alongside
             // the map tileset (place#125) — the friendly name comes from the
-            // ticked authority row's label.
+            // ticked authority row's label span (excludes the "core" badge).
             let label = exploreSelection;
             const el = offcanvas.querySelector(`.authority-cb[value="${exploreSelection.replace(/"/g, '\\"')}"]`);
             const item = el && el.closest('.authority-item');
-            if (item) label = item.textContent.trim();
+            const nameEl = item && item.querySelector('.form-check-label');
+            if (nameEl) label = nameEl.textContent.trim();
+            else if (item) label = item.textContent.trim();
             PlaceList.open(exploreSelection, label);
+            updateExploreUrl(exploreSelection);
         } else {
             PlaceList.close();
+            updateExploreUrl(null);
         }
     }
     filterState.set('authorities', composed);
