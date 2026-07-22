@@ -815,6 +815,7 @@ class HeroMap {
                     type: 'symbol',
                     source: id,
                     'source-layer': vl.id,
+                    minzoom: 8,   // match the point layer — no labels under the heatmap (place#133)
                     // Individual places only — skip clustered aggregate features.
                     filter: ['!', ['has', 'point_count']],
                     layout: {

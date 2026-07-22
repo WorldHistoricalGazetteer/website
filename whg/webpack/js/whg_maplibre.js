@@ -105,9 +105,39 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	const vectorLayers = (tilejson.vector_layers && tilejson.vector_layers.length)
 		? tilejson.vector_layers
 		: [{ id }];
+	// Point-density rendering (place#133): the tiles are pre-clustered to z8
+	// (tippecanoe --cluster-maxzoom 8), so at low zoom raw point features are a
+	// misleadingly-sparse scatter. Show a density HEATMAP (weighted by the
+	// pre-baked sqrt_point_count) below the threshold, and only reveal the
+	// individual-point circles once zoomed past it — cross-fading between them.
+	const POINT_MINZOOM = 8;   // ~ tiles' --cluster-maxzoom; raw points from here
+	const HEAT_MAXZOOM = 9;    // heatmap only at low zoom, faded out by here
 	for (const vl of vectorLayers) {
 		const sourceLayer = vl.id;
 		const baseId = vectorLayers.length > 1 ? `${id}__${sourceLayer}` : id;
+		if (!this.getLayer(`${baseId}_heat`)) {
+			this.addLayer({
+				id: `${baseId}_heat`, type: 'heatmap', source: id, 'source-layer': sourceLayer,
+				maxzoom: HEAT_MAXZOOM,
+				filter: ['==', ['geometry-type'], 'Point'],
+				paint: {
+					// Weight by the cluster's pre-computed sqrt(point_count) so big
+					// clusters don't saturate; un-clustered singletons weigh 1.
+					'heatmap-weight': ['coalesce', ['get', 'sqrt_point_count'], 1],
+					'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, HEAT_MAXZOOM, 3],
+					'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 12, HEAT_MAXZOOM, 28],
+					'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
+						0, 'rgba(0,0,0,0)',
+						0.2, 'rgba(103,169,207,0.55)',
+						0.4, 'rgb(120,198,121)',
+						0.6, 'rgb(255,237,160)',
+						0.8, 'rgb(253,141,60)',
+						1, 'rgb(224,64,64)'],
+					// Fade out as the individual points take over near the threshold.
+					'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], HEAT_MAXZOOM - 2, 0.85, HEAT_MAXZOOM, 0],
+				},
+			}, beforeId);
+		}
 		if (!this.getLayer(`${baseId}_fill`)) {
 			this.addLayer({
 				id: `${baseId}_fill`, type: 'fill', source: id, 'source-layer': sourceLayer,
@@ -125,8 +155,15 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 		if (!this.getLayer(`${baseId}_circle`)) {
 			this.addLayer({
 				id: `${baseId}_circle`, type: 'circle', source: id, 'source-layer': sourceLayer,
+				minzoom: POINT_MINZOOM,   // raw points only once zoomed in (place#133)
 				filter: ['==', ['geometry-type'], 'Point'],
-				paint: { 'circle-radius': 4, 'circle-color': '#e04040', 'circle-stroke-color': '#fff', 'circle-stroke-width': 1, 'circle-opacity': 0.85 },
+				paint: {
+					'circle-radius': 4, 'circle-color': '#e04040',
+					'circle-stroke-color': '#fff', 'circle-stroke-width': 1,
+					// Fade the points in as the heatmap fades out.
+					'circle-opacity': ['interpolate', ['linear'], ['zoom'], POINT_MINZOOM, 0, HEAT_MAXZOOM, 0.85],
+					'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], POINT_MINZOOM, 0, HEAT_MAXZOOM, 1],
+				},
 			}, beforeId);
 		}
 	}
