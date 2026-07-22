@@ -2529,7 +2529,10 @@ function renderClusters() {
 
 // Search-type dropdown state → label + active item. Modes map 1:1 to the
 // gateway match modes (exact | starts | in | phonetic).
-const SEARCH_MODE_LABELS = { exact: 'Exact', starts: 'Starts with', in: 'Contains', phonetic: 'Phonetic' };
+// Labels chosen so the pill reads as a phrase with the text box to its right
+// (e.g. "Exactly London", "Sounds like London"). Internal modes still map 1:1
+// to the gateway match modes (exact | starts | in | phonetic).
+const SEARCH_MODE_LABELS = { exact: 'Exactly', starts: 'Starts with', in: 'Contains', phonetic: 'Sounds like' };
 function setSearchMatchMode(mode) {
     if (!SEARCH_MODE_LABELS[mode]) mode = 'in';
     searchMatchMode = mode;

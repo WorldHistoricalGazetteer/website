@@ -339,14 +339,20 @@ body.atlas-tooltips-off .tooltip:not(.tt-advisory) { display: none !important; }
     position: relative; /* anchor the area-results dropdown directly beneath the input */
 }
 .search-input-group .form-control {
-    border-radius: 6px 0 0 6px;
     font-size: 0.85rem;
 }
 .search-input-group .btn {
     font-size: 0.8rem;
     border-color: #ced4da;
 }
-/* Search-type dropdown (Exact / Starts / Contains / Phonetic). */
+/* Explicit rounding for the reordered pill (type ▸ text ▸ search ▸ clear): the
+   type dropdown is now the first child (left-rounded) and Clear the last
+   (right-rounded); the middle controls are square. */
+.search-input-group > #atlas_searchmode_btn { border-radius: 6px 0 0 6px; }
+.search-input-group > #atlas_search_input,
+.search-input-group > #atlas_initiate_search { border-radius: 0; }
+.search-input-group > #atlas_clear_search { border-radius: 0 6px 6px 0; }
+/* Search-type dropdown (Exactly / Starts with / Contains / Sounds like). */
 #atlas_searchmode_btn { white-space: nowrap; }
 .atlas-searchmode-menu {
     font-size: 0.82rem;

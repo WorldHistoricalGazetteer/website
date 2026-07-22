@@ -82,31 +82,32 @@
                 </button>
             </div>
 
-            <!-- Search input -->
+            <!-- Search input — order reads left→right as a phrase: TYPE ▸ TEXT ▸ search ▸ clear
+                 (e.g. "Contains  [London]"). -->
             <div class="search-input-group input-group input-group-sm">
-                <input id="atlas_search_input" class="form-control" type="text"
-                       autocomplete="off" spellcheck="false"
-                       placeholder="Search for regions…"/>
-                <button id="atlas_clear_search" class="btn btn-outline-secondary" type="button"
-                        data-bs-toggle="tooltip" title="Clear search">
-                    <i class="fas fa-times"></i>
-                </button>
-                <button id="atlas_initiate_search" class="btn btn-outline-secondary btn-success" type="button"
-                        data-bs-toggle="tooltip" title="Search">
-                    <i class="fas fa-search"></i>
-                </button>
                 <button id="atlas_searchmode_btn" class="btn btn-outline-secondary dropdown-toggle" type="button"
                         data-bs-toggle="dropdown" aria-expanded="false"
                         title="Choose how place names are matched">
                     <span id="atlas_searchmode_label">Contains</span>
                 </button>
-                <ul class="dropdown-menu dropdown-menu-end atlas-searchmode-menu">
-                    <li><button type="button" class="dropdown-item" data-searchmode="exact">Exact</button></li>
+                <ul class="dropdown-menu atlas-searchmode-menu">
+                    <li><button type="button" class="dropdown-item" data-searchmode="exact">Exactly</button></li>
                     <li><button type="button" class="dropdown-item" data-searchmode="starts">Starts with</button></li>
                     <li><button type="button" class="dropdown-item active" data-searchmode="in">Contains</button></li>
                     <li><hr class="dropdown-divider"></li>
-                    <li><button type="button" class="dropdown-item" data-searchmode="phonetic">Phonetic <span class="text-muted small">· sounds-like, slower</span></button></li>
+                    <li><button type="button" class="dropdown-item" data-searchmode="phonetic">Sounds like</button></li>
                 </ul>
+                <input id="atlas_search_input" class="form-control" type="text"
+                       autocomplete="off" spellcheck="false"
+                       placeholder="Search for regions…"/>
+                <button id="atlas_initiate_search" class="btn btn-outline-secondary btn-success" type="button"
+                        data-bs-toggle="tooltip" title="Search">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button id="atlas_clear_search" class="btn btn-outline-secondary" type="button"
+                        data-bs-toggle="tooltip" title="Clear search">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
 
             <!-- Control buttons (Viewport+Regions areas-only; Gazetteers & Categories toponym-only) -->
