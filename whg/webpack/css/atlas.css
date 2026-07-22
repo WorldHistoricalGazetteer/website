@@ -136,7 +136,7 @@
     /* Translucent frosted background shared by the floating controls, temporal
        control, map popups and the top-right map controls — one knob for how
        much the map (markers) shows through. */
-    --atlas-panel-bg:     rgba(255, 255, 255, 0.68);
+    --atlas-panel-bg:     rgba(255, 255, 255, 0.75);
 }
 
 /* Generic palette-coloured text — reuse anywhere a word should read by purpose
