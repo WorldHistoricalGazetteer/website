@@ -47,6 +47,16 @@ function writeGlobeDisabled(disabled) {
     } catch (e) { /* localStorage unavailable */ }
 }
 
+// Debug flag — enable by adding ``?debug`` to the URL or setting
+// ``localStorage['whg.debug'] = '1'``. When on, the MapLibre map is exposed as
+// ``window.heroMapInstance`` for console/automation access (queryRenderedFeatures,
+// project, etc.). Off by default so nothing leaks the map into the global scope.
+function isDebugEnabled() {
+    try { if (localStorage.getItem('whg.debug') === '1') return true; } catch (e) { /* */ }
+    try { return /[?&]debug\b/.test(window.location.search); } catch (e) { /* */ }
+    return false;
+}
+
 // Layer IDs use a neutral ``_atlas_overlay_`` prefix rather than
 // ``_atlas_context_``: the global error handler in whg_maplibre.js
 // classifies any error message containing the substring "context" as a
@@ -213,6 +223,10 @@ class HeroMap {
                 });
 
                 this._ready = true;
+                // Debug hook: expose the map for console/automation when enabled.
+                if (isDebugEnabled()) {
+                    try { window.heroMapInstance = this.map; } catch (e) { /* */ }
+                }
                 resolve(this.map);
             });
         });
