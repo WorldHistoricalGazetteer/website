@@ -25,10 +25,21 @@ function waitMapLoad() {
 			.newLayerset('places', null, 'plain');
 			
 			whg_map.setFeatureState({ source: 'places', id: 0 }, { highlight: true });
-			whg_map.fitBounds(bbox(featureCollection), {
-		        padding: 30,
-		        duration: 1000,
-		    });
+			// Only fit when the geometry yields a real bounding box. A place with no
+			// geometry gives an empty FeatureCollection, so turf bbox returns
+			// [Infinity, Infinity, -Infinity, -Infinity] and fitBounds throws
+			// "Invalid LngLat latitude value: must be between -90 and 90". Clamp any
+			// finite-but-out-of-range coordinate into the valid LngLat range too.
+			const b = bbox(featureCollection);
+			if (b && b.every(Number.isFinite)) {
+				const sw = [Math.max(-180, Math.min(180, b[0])), Math.max(-90, Math.min(90, b[1]))];
+				const ne = [Math.max(-180, Math.min(180, b[2])), Math.max(-90, Math.min(90, b[3]))];
+				whg_map.fitBounds([sw, ne], {
+			        padding: 30,
+			        duration: 1000,
+			    });
+			}
+			// else: no geometry to fit — leave the default map view.
             
             resolve();
         });
