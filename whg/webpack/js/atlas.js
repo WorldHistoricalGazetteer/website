@@ -591,6 +591,8 @@ function waitMapLoad() {
         // Apply the basemap remembered for the initial (Areas) mode, once the
         // map exists. No-op when it's already the default WHG Context style.
         applyBasemapForMode();
+        // Reflect the current zoom in the URL so a shared link restores it.
+        heroMap.map.on('zoomend', () => updateZoomUrl(heroMap.map.getZoom()));
         // Wire click on result features
         heroMap.map.on('click', function (e) {
             const features = heroMap.map.queryRenderedFeatures(e.point);
@@ -1195,6 +1197,18 @@ Promise.all([
         if (!wantGazetteer && wantPlace && wantPlace.indexOf(':') > 0) {
             wantGazetteer = wantPlace.slice(0, wantPlace.indexOf(':'));
         }
+        // Shared-view zoom: applied to the focused place, or (gazetteer-only) once
+        // the gazetteer's own bounds-fit has settled.
+        const zParam = params.get('z');
+        if (zParam != null && !isNaN(parseFloat(zParam))) pendingZoom = parseFloat(zParam);
+        if (pendingZoom != null && !wantPlace) {
+            setTimeout(() => {
+                if (heroMap.map && pendingZoom != null) {
+                    try { heroMap.map.setZoom(pendingZoom); } catch (e) { /* */ }
+                    pendingZoom = null;
+                }
+            }, 1400);
+        }
         if (params.get('panel') === 'gazetteers' || wantGazetteer) {
             const placesBtn = document.querySelector(
                 '.search-mode-toggle .btn[data-search-mode="toponyms"]'
@@ -1225,8 +1239,9 @@ Promise.all([
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
                                 // emitGazetteerSelection → PlaceList.open ran; queue the
-                                // requested place to focus once its first page loads.
-                                if (wantPlace) PlaceList.setPendingFocus(wantPlace);
+                                // requested place (+ shared zoom) to focus once its
+                                // first page loads.
+                                if (wantPlace) PlaceList.setPendingFocus(wantPlace, pendingZoom);
                             } else if (++tries < 20) {
                                 setTimeout(pick, 100);
                             }
@@ -1749,6 +1764,18 @@ function updatePlaceUrl(pid) {
     } catch (e) { /* URL API unavailable */ }
 }
 
+// Keep the current map zoom in the URL (?z=) so a shared/bookmarked link
+// reconstructs the same zoom level. Tracked live on zoomend.
+let pendingZoom = null;   // ?z from a cold load, applied once the view settles
+function updateZoomUrl(z) {
+    try {
+        if (z == null || isNaN(z)) return;
+        const url = new URL(window.location.href);
+        url.searchParams.set('z', Number(z).toFixed(2));
+        window.history.replaceState(null, '', url);
+    } catch (e) { /* URL API unavailable */ }
+}
+
 // The gazetteer a place belongs to — the active Explore selection, else the
 // namespace prefix of its id (so a link carries enough to reload the tileset).
 function gazetteerForPid(pid) {
@@ -1762,6 +1789,10 @@ function buildPlaceShareUrl(pid) {
     const gz = gazetteerForPid(pid);
     if (gz) url.searchParams.set('gazetteer', gz);
     url.searchParams.set('place', pid);
+    // Preserve the current zoom so the shared view reconstructs it.
+    if (heroMap.map) {
+        try { url.searchParams.set('z', heroMap.map.getZoom().toFixed(2)); } catch (e) { /* */ }
+    }
     return url.toString();
 }
 

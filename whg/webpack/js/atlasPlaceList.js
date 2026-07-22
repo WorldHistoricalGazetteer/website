@@ -108,6 +108,7 @@ const PlaceList = {
     reqSeq: 0, loading: false, hasMore: false,
     effMode: 'in',   // match mode the current query settled on (in→starts fallback)
     _pendingFocus: null,   // place_id to focus once the first page has loaded (deep link)
+    _pendingZoom: null,    // zoom to restore for the deep-linked place (shared view)
     els: null, wired: false, _debouncedFilter: null,
 
     /** Inject atlas.js collaborators once at page init.
@@ -360,8 +361,10 @@ const PlaceList = {
                 // (opens its popup/modal + highlights its row if it's on this page).
                 if (offset === 0 && this._pendingFocus) {
                     const p = this._pendingFocus;
+                    const z = this._pendingZoom;
                     this._pendingFocus = null;
-                    this.focusPlace(p);
+                    this._pendingZoom = null;
+                    this.focusPlace(p, z);
                 }
             })
             .catch(err => {
@@ -494,17 +497,23 @@ const PlaceList = {
 
     // Open a hit's popup (with geometry) or detail modal (without), and record it
     // as the URL-shareable focused place. Shared by row clicks and deep links.
-    _openHit(hit) {
+    // ``zoom`` (optional) restores a shared view's zoom, centred on the place;
+    // otherwise the map fits the place's geometry.
+    _openHit(hit, zoom) {
         if (!hit || !hit.place_id) return;
         if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(hit.place_id);
         const geom = hitGeometry(hit);
         if (geom) {
             let bb = null;
             try { if (typeof window.bbox === 'function') bb = window.bbox(geom); } catch (e) { /* */ }
-            if (bb) { try { heroMap.map.fitViewport(bb, 9); } catch (e) { /* */ } }
             const lngLat = (Array.isArray(hit.repr_point) && hit.repr_point.length >= 2)
                 ? [hit.repr_point[0], hit.repr_point[1]]
                 : (bb ? [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2] : null);
+            if (zoom != null && lngLat) {
+                try { heroMap.map.jumpTo({ center: lngLat, zoom: zoom }); } catch (e) { /* */ }
+            } else if (bb) {
+                try { heroMap.map.fitViewport(bb, 9); } catch (e) { /* */ }
+            }
             if (lngLat) heroMap.openPlacePopup(hit.place_id, lngLat);
             else this.cfg.openPortal(hit.place_id);   // geometry present but unplottable
         } else {
@@ -513,14 +522,19 @@ const PlaceList = {
         }
     },
 
-    /** Queue a place to focus once the first page loads (deep link entry point). */
-    setPendingFocus(pid) { this._pendingFocus = pid || null; },
+    /** Queue a place (and an optional shared-view zoom) to focus once the first
+     *  page loads (deep link entry point). */
+    setPendingFocus(pid, zoom) {
+        this._pendingFocus = pid || null;
+        this._pendingZoom = (zoom == null || isNaN(zoom)) ? null : Number(zoom);
+    },
 
     /** Focus a specific place by id: highlight + scroll to its row if it's on the
      *  loaded page, then open its popup (with geometry) or detail modal (without).
      *  When the place isn't among the loaded hits (e.g. deep-linked into a large
-     *  browse list), resolve it via /atlas/place/ and open it directly. */
-    focusPlace(placeId) {
+     *  browse list), resolve it via /atlas/place/ and open it directly. ``zoom``
+     *  restores a shared view's zoom, centred on the place. */
+    focusPlace(placeId, zoom) {
         if (!placeId || !this.cfg) return;
         const idx = this.hits.findIndex(h => h && h.place_id === placeId);
         if (idx >= 0) {
@@ -528,17 +542,17 @@ const PlaceList = {
             this._scrollToRow(idx);
             const row = this.els && this.els.rows.querySelector(`.placelist-row[data-idx="${idx}"]`);
             if (row) row.classList.add('pl-selected');
-            this._openHit(this.hits[idx]);
+            this._openHit(this.hits[idx], zoom);
             return;
         }
         // Not on this page — resolve the record to decide popup vs modal.
         fetch('/atlas/place/?id=' + encodeURIComponent(placeId), { credentials: 'same-origin' })
             .then(r => (r.ok ? r.json() : null))
             .then(place => {
-                if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(placeId);
                 if (place && hitGeometry(place)) {
-                    this._openHit(place);
+                    this._openHit(place, zoom);
                 } else {
+                    if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(placeId);
                     this.cfg.openPortal(placeId);
                 }
             })

@@ -255,9 +255,12 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     position: absolute;
     top: 12px;
     left: 12px;
+    /* Fill responsively toward — but clear (margin) — the map's top-right
+       zoom/globe controls, so the search input isn't compressed by the wider
+       control cluster (Basemap etc.). */
+    right: 56px;
+    width: auto;
     z-index: 10;
-    max-width: 580px;
-    width: calc(100% - 24px);
 }
 
 .floating-search-inner {
@@ -274,7 +277,8 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     border-radius: 10px;
     padding: 6px 10px;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18);
-    max-width: 626px;
+    /* Expand to fill the widened #floating_search (search input grows with it). */
+    max-width: none;
 }
 
 /* Search mode toggle — primary mode switch uses a burgundy accent
@@ -721,8 +725,11 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     line-height: 1.2;
 }
 .placelist-title {
-    font-weight: 600;
-    color: #2f3a45;
+    /* Match the active Places pill's fill so the panel reads as a Places view,
+       and make the gazetteer name distinctive (larger + bolder). */
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--atlas-places);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -787,7 +794,7 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 .placelist-row.pl-selected { background: #eef6ff; box-shadow: inset 3px 0 0 #2980b9; }
 .pl-row-title {
     font-weight: 600;
-    color: #b0413e;               /* matches .cluster-title */
+    color: var(--atlas-places);   /* matches the active Places pill fill */
     font-size: 0.88rem;
     white-space: nowrap;
     overflow: hidden;
@@ -891,7 +898,8 @@ a.pl-chip.pl-aat { cursor: pointer; }
     padding: 1px 6px;
     flex-shrink: 0;
 }
-.placelist-row.pl-nogeom-row .pl-row-title { color: #7a5b58; }
+/* No-geometry rows keep the Places colour but muted, as a subtle cue. */
+.placelist-row.pl-nogeom-row .pl-row-title { color: var(--atlas-places); opacity: 0.68; }
 
 /* Idle-state generic instructions (shown when no search is active) */
 .atlas-default-panel {
@@ -1393,6 +1401,14 @@ a.pl-chip.pl-aat { cursor: pointer; }
     flex: 0 0 auto;
 }
 
+/* Title + share button on one line to save vertical space. */
+.whg-gazetteer-popup .popup-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+.whg-gazetteer-popup .popup-title-row .popup-title { flex: 1 1 auto; min-width: 0; }
+.whg-gazetteer-popup .popup-title-row .popup-share { flex: 0 0 auto; align-self: flex-start; }
 .whg-gazetteer-popup .popup-title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -1862,13 +1878,15 @@ a.pl-chip.pl-aat { cursor: pointer; }
    Responsive
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Wide screens: expand floating search panel */
+/* Wide screens: let the floating search fill to the right:56px inset (clearing
+   the map's top-right controls) instead of capping it — keeps the search input
+   from being compressed by the wider control cluster. */
 @media (min-width: 992px) {
     #floating_search {
-        max-width: 980px;
+        max-width: none;
     }
     .floating-search-inner {
-        max-width: 626px;
+        max-width: none;
     }
 }
 

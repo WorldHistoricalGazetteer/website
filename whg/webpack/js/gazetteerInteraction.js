@@ -233,10 +233,14 @@ function renderHeader(data) {
                    title="Copy a link to this place" aria-label="Copy link to this place">
                <i class="fas fa-share-nodes"></i></button>`
         : '';
+    // Title and share button share one row (saves vertical space); the source
+    // id sits on the line below.
     return `
         <div class="popup-header">
-            ${titleHtml}
-            ${shareHtml}
+            <div class="popup-title-row">
+                ${titleHtml}
+                ${shareHtml}
+            </div>
             ${idHtml}
         </div>
     `;
