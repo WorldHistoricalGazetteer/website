@@ -19,7 +19,7 @@ import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
-import { setWebTemplates } from './gazetteerInteraction.js';
+import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
 import { idbGet, idbPut, loadAatVocab } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
 import './toggle-truncate.js';
@@ -804,6 +804,18 @@ Promise.all([
         e.preventDefault();
         copyPlaceLink(share.getAttribute('data-share-pid'));
     });
+
+    // "Attest" button (map popup + geometry-less overlay). The authoring flow is
+    // being built as part of the Collaborative Workbench; for now, signed-in
+    // users get a "coming soon" toast (anonymous users see a disabled button
+    // with a sign-in tooltip, so they never reach here). Bound once at document
+    // level since the popup/overlay HTML is re-rendered freely.
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.whg-attest-btn');
+        if (!btn || btn.disabled) return;
+        e.preventDefault();
+        showCopyToast('Attestations are coming soon — you’ll be able to link this place to others.');
+    });
     // Keep the ?place= link in step with map-driven selections + popup close.
     document.addEventListener('whg:map-place-click', (e) => {
         if (e.detail && e.detail.placeId) updatePlaceUrl(e.detail.placeId);
@@ -1013,14 +1025,6 @@ Promise.all([
     document.querySelectorAll('#gazetteers_offcanvas .gazetteer-mode-toggle .btn').forEach(btn => {
         btn.addEventListener('click', () => setGazetteerMode(btn.dataset.gazetteerMode));
     });
-
-    // ── Gazetteers offcanvas: My-Gazetteers toggle (Explore mode only) ──
-    // Swaps between the standard gazetteer list and the (placeholder) per-user list
-    // grouped into Published / Pending. Real data arrives via /suggest in Phase 2.
-    const mineToggle = document.getElementById('gazetteer_mine_toggle');
-    if (mineToggle) {
-        mineToggle.addEventListener('change', () => updateGazetteerListVisibility());
-    }
 
     // ── Gazetteers coverage filters ──
     // Both switches are now FUNCTIONAL, client-side: Date Range = temporal
@@ -1500,40 +1504,16 @@ function setGazetteerMode(mode) {
         });
     }
 
-    // The My-Gazetteers toggle is Explore-mode-only; reset it when leaving Explore.
-    if (mode === 'filter') {
-        const mineToggle = document.getElementById('gazetteer_mine_toggle');
-        if (mineToggle) mineToggle.checked = false;
-    }
-    updateGazetteerListVisibility();
-
     // Gazetteers flagged ``no_explore`` (e.g. OSM/OHM) are disabled in Explore
     // mode and re-enabled in Filter mode.
     applyTilesetGating(mode);
 
-    // Re-apply the group/type/search visibility filter after the input-type swap.
+    // Re-apply the group/type/search visibility filter after the input-type swap
+    // (also restores the standard-vs-My-Gazetteers list swap for the active group).
     applyGazetteerListFilter();
 
     // Mirror the resulting selection into filterState.
     emitGazetteerSelection(mode);
-}
-
-/**
- * Show the standard gazetteer list or the (placeholder) My-Gazetteers list, depending
- * on the My-Gazetteers toggle. Only meaningful in Explore mode for authenticated users.
- */
-function updateGazetteerListVisibility() {
-    const offcanvas = document.getElementById('gazetteers_offcanvas');
-    if (!offcanvas) return;
-    const standardList = offcanvas.querySelector('.standard-gazetteers-list');
-    const myList = offcanvas.querySelector('.my-gazetteers-list');
-    if (!standardList) return;
-
-    const mineToggle = document.getElementById('gazetteer_mine_toggle');
-    const showMine = !!(mineToggle && mineToggle.checked && myList);
-
-    standardList.classList.toggle('d-none', showMine);
-    if (myList) myList.classList.toggle('d-none', !showMine);
 }
 
 /* ── Explore-mode gating for ``no_explore`` gazetteers ──
@@ -1624,6 +1604,18 @@ function applyGazetteerListFilter() {
     const type = _activePill('.gazetteer-type-pill-filter', 'gazTypePill');
     const searchEl = offcanvas.querySelector('.gazetteer-search');
     const q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+
+    // "Mine" is its own status-grouped view: swap the standard list for the
+    // My-Gazetteers list and hide the type/search controls (they don't apply).
+    const mine = group === 'mine';
+    const standardList = offcanvas.querySelector('.standard-gazetteers-list');
+    const myList = offcanvas.querySelector('.my-gazetteers-list');
+    const typePill = offcanvas.querySelector('.gazetteer-type-pill-filter');
+    if (standardList) standardList.classList.toggle('d-none', mine);
+    if (myList) myList.classList.toggle('d-none', !mine);
+    if (typePill) typePill.classList.toggle('d-none', mine);
+    if (searchEl) searchEl.classList.toggle('d-none', mine);
+    if (mine) return;
 
     let anyVisible = false;
     offcanvas.querySelectorAll('.standard-gazetteers-list .gaz-entry').forEach((row) => {
@@ -2244,6 +2236,10 @@ function renderPortal(place, pid) {
     } else {
         h += `<hr><p class="text-muted small">Not grouped with any other place at the current merge settings.</p>`;
     }
+    // Per-place actions (Attest) — same control as the map popup, for records
+    // that lack geometry and so open in this overlay instead of a popup.
+    const attest = renderAttestControl(pid);
+    if (attest) h += `<div class="portal-actions mt-2 pt-2 border-top">${attest}</div>`;
     document.getElementById('atlas_portal_body').innerHTML = h;
 }
 

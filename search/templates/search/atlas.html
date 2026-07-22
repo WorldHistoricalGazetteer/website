@@ -461,32 +461,6 @@
             </div>
         </div>
 
-        <!-- "My Gazetteers" card (Explore mode only; placeholder data — backend /suggest
-             extension with `owner_user_id` and `status` is pending Phase 2).
-             NOTE: the user.is_authenticated guard is intentionally omitted during the
-             sketch phase so colleagues without accounts can review the intent. The guard will
-             be reintroduced once this is wired to real per-user data. -->
-        <div class="gazetteer-card gazetteer-mine-card mb-2 d-none" data-mode-visible="explore">
-            <div class="form-check form-switch small">
-                <input class="form-check-input" type="checkbox" id="gazetteer_mine_toggle">
-                <label class="form-check-label small" for="gazetteer_mine_toggle">
-                    <i class="fas fa-user me-1"></i><strong>My Gazetteers</strong>
-                    <span class="text-muted">— show only your published and pending gazetteers</span>
-                </label>
-            </div>
-        </div>
-
-        <!-- Explore-mode capabilities note (only visible while in Explore mode) -->
-        <div class="gazetteer-explore-note small mb-2 d-none" data-mode-visible="explore">
-            <i class="fas fa-info-circle me-1"></i>
-            <span class="badge bg-warning text-dark align-middle me-1" style="font-size:0.6rem;">Under development</span>
-            While exploring, signed-in users will be able to add <strong>Attestations</strong>
-            to any place. When exploring one of <strong>your own</strong> gazetteers,
-            you will additionally be able to add places, edit data and metadata, and adjust the
-            clustering — equivalent to the reconciliation / accessioning workflow in v3.2.
-            (Being built as part of the Collaborative Workbench.)
-        </div>
-
         <!-- Root gazetteer filters (place#136 restructure): source-group pill
              (All | Reference | Contributed), type pill (All | Standard |
              Itinerary | Network), and a corpus-wide name search. Reference =
@@ -502,6 +476,10 @@
                         rel="tooltip" data-bs-title="Established reference gazetteers (GeoNames, Getty TGN, Pleiades, Wikidata, …).">Reference</button>
                 <button type="button" class="btn" data-gaz-group-pill="contributed"
                         rel="tooltip" data-bs-title="Gazetteers contributed by WHG researchers.">Contributed</button>
+                {% if user.is_authenticated %}
+                <button type="button" class="btn" data-gaz-group-pill="mine"
+                        rel="tooltip" data-bs-title="Your own gazetteers, grouped by status.">Mine</button>
+                {% endif %}
             </div>
             <div class="gazetteer-type-pill-filter btn-group btn-group-sm w-100 mb-1" role="group"
                  aria-label="Gazetteer type filter">
@@ -521,7 +499,7 @@
              My-Gazetteers toggle is on). Reference rows from `gazetteer_inventory`
              (authorities), Contributed rows from `specialist_gazetteers` (WHG
              datasets). Only `core` authorities are pre-checked. -->
-        <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
+        <div class="authority-list standard-gazetteers-list">
             {% for g in gazetteer_inventory %}{% if g.id != "whg" %}{% include "search/_gaz_entry.html" %}{% endif %}{% endfor %}
             {% for g in specialist_gazetteers %}{% include "search/_gaz_entry.html" %}{% endfor %}
             {% if not gazetteer_inventory and not specialist_gazetteers %}
@@ -535,35 +513,22 @@
             </p>
         </div>
 
-        <!-- "My Gazetteers" placeholder list (visible only when the toggle above is on; sketch
-             quality — every entry is illustrative, not real user data). The real list is
-             populated from the extended /suggest API (Phase 2 + 4).
-             NOTE: as with the toggle above, the user.is_authenticated guard is
-             intentionally omitted for the sketch period. -->
-        <div class="authority-list my-gazetteers-list d-none" style="padding-left: 25px;">
-            <p class="small text-muted fst-italic mb-1">
-                Placeholder data — illustrates the published / pending grouping. The
-                real list will be populated from the extended <code>/suggest</code> API.
-            </p>
-
+        {% if user.is_authenticated %}
+        <!-- "My Gazetteers" list — shown when the "Mine" group pill is active
+             (place#136). The signed-in user's own registry entries, grouped by
+             status; empty sections show a "None yet" placeholder so each
+             section's purpose is clear. Rows use the shared _gaz_entry.html
+             partial (with a status badge). -->
+        <div class="authority-list my-gazetteers-list d-none">
             <div class="my-gazetteers-section mb-2">
                 <div class="filter-header d-flex align-items-center mb-1 mt-1">
                     <span class="categories fw-bold" style="font-size: 0.75rem;">
                         <i class="fas fa-check-circle me-1 text-success"></i>Published
                     </span>
                 </div>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample published Dataset (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:welsh-place-names">
-                    <span class="form-check-label">Welsh Place Names <span class="text-muted small">(sample dataset)</span></span>
-                </label>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample published Collection (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:roman-britain-sites">
-                    <span class="form-check-label">Roman Britain Sites <span class="text-muted small">(sample collection)</span></span>
-                </label>
+                {% for g in my_gazetteers.published %}{% include "search/_gaz_entry.html" %}{% empty %}
+                <p class="small text-muted fst-italic mb-0 my-gaz-none">None yet — your published gazetteers appear here.</p>
+                {% endfor %}
             </div>
 
             <div class="my-gazetteers-section mb-2">
@@ -572,18 +537,9 @@
                         <i class="fas fa-lock me-1 text-secondary"></i>Private
                     </span>
                 </div>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample private Dataset — visible only to you (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:fieldwork-notes-2024">
-                    <span class="form-check-label">Fieldwork Notes 2024 <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
-                </label>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample private Collection — work-in-progress, never published (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:thesis-corpus">
-                    <span class="form-check-label">Thesis Corpus <span class="badge bg-secondary text-light ms-1" style="font-size: 0.6rem;">private</span></span>
-                </label>
+                {% for g in my_gazetteers.private %}{% include "search/_gaz_entry.html" %}{% empty %}
+                <p class="small text-muted fst-italic mb-0 my-gaz-none">None yet — gazetteers kept private to you appear here.</p>
+                {% endfor %}
             </div>
 
             <div class="my-gazetteers-section">
@@ -592,20 +548,12 @@
                         <i class="fas fa-clock me-1 text-warning"></i>Pending
                     </span>
                 </div>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample pending Dataset awaiting reconciliation (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:medieval-pilgrimage-routes">
-                    <span class="form-check-label">Medieval Pilgrimage Routes <span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">draft</span></span>
-                </label>
-                <label class="authority-item form-check"
-                       data-bs-toggle="tooltip"
-                       data-bs-title="Sample dataset under editorial review (placeholder).">
-                    <input class="form-check-input authority-cb" type="checkbox" value="my:hanseatic-ports">
-                    <span class="form-check-label">Hanseatic Ports <span class="badge bg-info text-dark ms-1" style="font-size: 0.6rem;">submitted</span></span>
-                </label>
+                {% for g in my_gazetteers.pending %}{% include "search/_gaz_entry.html" %}{% empty %}
+                <p class="small text-muted fst-italic mb-0 my-gaz-none">None yet — gazetteers awaiting review appear here.</p>
+                {% endfor %}
             </div>
         </div>
+        {% endif %}
 
     </div>
 </div>

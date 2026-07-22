@@ -1296,6 +1296,33 @@ a.pl-chip.pl-aat { cursor: pointer; }
    coverage filter's .coverage-hidden (either hides the row). */
 #gazetteers_offcanvas .gaz-entry.gaz-hidden { display: none !important; }
 
+/* Tighten the gazetteer list indent — the checkbox's own 1.5em (Bootstrap
+   .form-check) is enough; drop the extra container padding that wasted space. */
+#gazetteers_offcanvas .standard-gazetteers-list,
+#gazetteers_offcanvas .my-gazetteers-list { padding-left: 2px; }
+#gazetteers_offcanvas .gaz-check { padding-left: 1.4em; }
+
+/* My Gazetteers status sections. */
+#gazetteers_offcanvas .my-gazetteers-section .filter-header .categories { color: #34495e; }
+#gazetteers_offcanvas .my-gaz-none { padding-left: 2px; }
+
+/* Per-place "Attest" action (map popup + geometry-less portal overlay, place#136). */
+.whg-gazetteer-popup .popup-actions {
+    padding: 6px 12px 8px;
+    border-top: 1px solid #ecf0f1;
+}
+.whg-attest-btn {
+    font-size: 0.7rem;
+    padding: 0.12rem 0.55rem;
+    border: 1px solid rgba(44, 62, 80, 0.25);
+    background: #fff;
+    color: #2c3e50;
+    border-radius: 0.2rem;
+}
+.whg-attest-btn:not(:disabled):hover { background: #2c3e50; color: #fff; }
+.whg-attest-btn:disabled { opacity: 0.5; }
+.whg-attest-wrap { cursor: not-allowed; }
+
 /* "core" badge alignment within the authority-item label. */
 #gazetteers_offcanvas .authority-item .badge {
     vertical-align: middle;

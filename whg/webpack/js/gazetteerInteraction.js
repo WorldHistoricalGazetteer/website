@@ -645,6 +645,37 @@ function renderAttribution(data) {
         </div>`;
 }
 
+/** Per-place action bar for the popup: an "Attest" button for asserting
+ *  attestations (hard links) about this place. The authoring flow is being
+ *  built as part of the Collaborative Workbench; for now the button is enabled
+ *  for signed-in users (click explains what's coming) and disabled with an
+ *  explanatory tooltip for anonymous users. Shared with the geometry-less
+ *  overlay via renderAttestControl(). */
+function isLoggedIn() {
+    return !!(typeof document !== 'undefined' &&
+              document.querySelector('meta[name="user-id"]'));
+}
+
+export function renderAttestControl(placeId) {
+    if (!placeId) return '';
+    const inner = '<i class="fas fa-link me-1"></i>Attest';
+    if (isLoggedIn()) {
+        return `<button type="button" class="btn btn-sm whg-attest-btn" data-attest-pid="${esc(placeId)}"
+                        data-bs-toggle="tooltip" data-bs-title="Add an attestation about this place">${inner}</button>`;
+    }
+    // Disabled buttons don't fire hover, so the tooltip lives on a wrapper span.
+    return `<span class="whg-attest-wrap d-inline-block" tabindex="0"
+                  data-bs-toggle="tooltip" data-bs-title="Sign in to add an attestation about this place">
+                <button type="button" class="btn btn-sm whg-attest-btn" disabled>${inner}</button>
+            </span>`;
+}
+
+function renderActions(data) {
+    const control = renderAttestControl(data && data.place_id);
+    if (!control) return '';
+    return `<div class="popup-actions">${control}</div>`;
+}
+
 /** Initialise Bootstrap tooltips inside the (transient) map popup. The popup
  *  DOM lives outside atlas.js's tooltip scopes, so it needs its own init;
  *  mirrors initAtlasTooltips (move native title → data-bs-title so the
@@ -680,6 +711,7 @@ function renderPopup(data) {
         ${renderDepictionGallery(data)}
     </div>
     ${renderAttribution(data)}
+    ${renderActions(data)}
 </div>`;
 }
 

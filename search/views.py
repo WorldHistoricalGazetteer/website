@@ -380,10 +380,72 @@ class AtlasPageView(TemplateView):
 
         context['gazetteer_inventory'] = gazetteer_inventory
         context['specialist_gazetteers'] = specialist_gazetteers
+
+        # My Gazetteers (place#136): the signed-in user's OWN registry entries,
+        # enriched like the others and grouped by status into Published /
+        # Private / Pending sections (empty sections show a placeholder in the
+        # template). Shown under the "Mine" group pill.
+        my_gazetteers = {'published': [], 'private': [], 'pending': []}
+        if _authed:
+            mine = list(
+                GazetteerRegistryEntry.objects
+                .filter(owner=self.request.user)
+                .order_by('name')
+                .values('id', 'name', 'description', 'namespace',
+                        'gazetteer_type', 'record_count', 'status', *_reg_fields)
+            )
+            _mine_pks = [int(str(r['id']).split(':', 1)[1]) for r in mine
+                         if ':' in str(r.get('id', ''))
+                         and str(r['id']).split(':', 1)[1].isdigit()]
+            _mine_ds = dict(
+                Dataset.objects.filter(pk__in=_mine_pks)
+                .values_list('pk', 'public')
+            )
+            _mine_dl = dict(
+                Dataset.objects.filter(pk__in=_mine_pks)
+                .values_list('pk', 'downloadable')
+            )
+            _PENDING = {'draft', 'submitted', 'pending', 'rejected'}
+            for row in mine:
+                rid = str(row.get('id') or '')
+                pk = int(rid.split(':', 1)[1]) if (
+                    ':' in rid and rid.split(':', 1)[1].isdigit()) else None
+                row['licence_pill'] = _licence_pill(row)
+                row['csl_json'] = _csl_json(row)
+                row['download'] = _specialist_download(row, _mine_dl.get(pk), True)
+                row['gaz_group'] = 'mine'
+                row['dom_id'] = _dom_slug('mine', rid)
+                status = row.get('status') or 'published'
+                if status in _PENDING:
+                    section = 'pending'
+                    row['status_badge'] = {
+                        'cls': _STATUS_BADGE_CLS.get(status, 'bg-secondary'),
+                        'label': status,
+                    }
+                elif _mine_ds.get(pk) is False:
+                    section = 'private'
+                    row['status_badge'] = {'cls': 'bg-secondary', 'label': 'private'}
+                else:
+                    section = 'published'
+                    row['status_badge'] = {'cls': 'bg-success', 'label': 'published'}
+                my_gazetteers[section].append(row)
+        context['my_gazetteers'] = my_gazetteers
+
         # Version stamp for the client's IndexedDB coverage cache — the browser
         # only re-fetches atlas_registry_coverage() when this changes.
         context['registry_version'] = _registry_version()
         return context
+
+
+# Bootstrap badge classes per registry status, for the My-Gazetteers section
+# badges (place#136).
+_STATUS_BADGE_CLS = {
+    'published': 'bg-success',
+    'submitted': 'bg-info text-dark',
+    'pending':   'bg-info text-dark',
+    'draft':     'bg-warning text-dark',
+    'rejected':  'bg-danger',
+}
 
 
 def _registry_version() -> str:
