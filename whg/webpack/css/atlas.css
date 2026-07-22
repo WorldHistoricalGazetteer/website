@@ -133,6 +133,10 @@
     --atlas-places-soft:  #f6e9ec;
     --atlas-time:         #c2410c;
     --atlas-time-soft:    #fbede4;
+    /* Translucent frosted background shared by the floating controls, temporal
+       control, map popups and the top-right map controls — one knob for how
+       much the map (markers) shows through. */
+    --atlas-panel-bg:     rgba(255, 255, 255, 0.68);
 }
 
 /* Generic palette-coloured text — reuse anywhere a word should read by purpose
@@ -275,7 +279,7 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     gap: 6px;
     /* Translucent so map markers under the bar remain detectable; a light
        backdrop blur keeps text legible without hiding the markers. */
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--atlas-panel-bg);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     border: 2px solid #cfd3da;   /* strong mode-coloured border (set per mode below) */
@@ -421,7 +425,7 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     margin-top: 6px;
     width: 300px;
     /* Match the search bar: translucent enough that map markers show through. */
-    background-color: rgba(255, 255, 255, 0.55);
+    background-color: var(--atlas-panel-bg);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     /* Strong ochre border (time) — matches the site's BETA buttons; clearly
@@ -1366,7 +1370,7 @@ a.pl-chip.pl-aat { cursor: pointer; }
     padding: 0;
     /* Same translucency as the control panels so map markers under the popup
        stay perceptible; the backdrop blur keeps the detail text legible. */
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--atlas-panel-bg);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
@@ -1377,7 +1381,7 @@ a.pl-chip.pl-aat { cursor: pointer; }
 /* Match the control-panel translucency on the map's own top-right control set
    (zoom +/- and the globe switch) so markers underneath stay perceptible. */
 #hero_map .maplibregl-ctrl-group {
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--atlas-panel-bg);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
 }
