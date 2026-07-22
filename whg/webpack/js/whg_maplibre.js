@@ -124,8 +124,10 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 					// Weight by the cluster's pre-computed sqrt(point_count) so big
 					// clusters don't saturate; un-clustered singletons weigh 1.
 					'heatmap-weight': ['coalesce', ['get', 'sqrt_point_count'], 1],
-					'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, HEAT_MAXZOOM, 3],
-					'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 12, HEAT_MAXZOOM, 28],
+					'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1.2, HEAT_MAXZOOM, 3],
+					// Wide radius at low zoom so the sparse (heavily-clustered) tile
+					// points blend into a density field rather than discrete blobs.
+					'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 22, 4, 26, HEAT_MAXZOOM, 40],
 					'heatmap-color': ['interpolate', ['linear'], ['heatmap-density'],
 						0, 'rgba(0,0,0,0)',
 						0.2, 'rgba(103,169,207,0.55)',
