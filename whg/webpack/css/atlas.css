@@ -273,11 +273,11 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
        (fit-content) bar doesn't collapse its controls onto a second line. */
     flex-wrap: nowrap;
     gap: 6px;
-    /* Slightly translucent so strong map features (dark markers) under the bar
-       remain perceptible; backdrop blur keeps the text legible. */
-    background: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    /* Translucent so map markers under the bar remain detectable; a light
+       backdrop blur keeps text legible without hiding the markers. */
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     border: 2px solid #cfd3da;   /* strong mode-coloured border (set per mode below) */
     border-radius: 10px;
     padding: 6px 10px;
@@ -420,10 +420,10 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 #temporal_control {
     margin-top: 6px;
     width: 300px;
-    /* Match the search bar's slight translucency so map features show through. */
-    background-color: rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    /* Match the search bar: translucent enough that map markers show through. */
+    background-color: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     /* Strong ochre border (time) — matches the site's BETA buttons; clearly
        distinct from the indigo Areas / burgundy Places borders. */
     border: 2px solid var(--atlas-time);
@@ -1409,14 +1409,15 @@ a.pl-chip.pl-aat { cursor: pointer; }
     flex: 0 0 auto;
 }
 
-/* Title + share button on one line to save vertical space. */
+/* Title + share button on one line to save vertical space. The title takes only
+   its natural width so the share button sits just after it (small margin) rather
+   than floating out to the right next to the close button. */
 .whg-gazetteer-popup .popup-title-row {
     display: flex;
     align-items: baseline;
-    gap: 6px;
 }
-.whg-gazetteer-popup .popup-title-row .popup-title { flex: 1 1 auto; min-width: 0; }
-.whg-gazetteer-popup .popup-title-row .popup-share { flex: 0 0 auto; align-self: flex-start; }
+.whg-gazetteer-popup .popup-title-row .popup-title { flex: 0 1 auto; min-width: 0; }
+.whg-gazetteer-popup .popup-title-row .popup-share { flex: 0 0 auto; margin-left: 5px; }
 .whg-gazetteer-popup .popup-title {
     font-weight: 600;
     font-size: 0.95rem;

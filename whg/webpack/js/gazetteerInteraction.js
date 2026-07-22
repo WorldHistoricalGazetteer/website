@@ -876,6 +876,10 @@ export default class GazetteerInteraction {
                 // re-target the same popup instead of MapLibre's
                 // outside-click listener tearing it down.
                 closeOnClick: false,
+                // Don't auto-focus the first focusable element on open — it left
+                // a focus outline on the popup (title, then share button) when a
+                // popup opened from a shared ?place= deep link.
+                focusAfterOpen: false,
                 maxWidth: '400px',
                 className: POPUP_CLASS,
             });
