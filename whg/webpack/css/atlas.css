@@ -255,13 +255,12 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     position: absolute;
     top: 12px;
     left: 12px;
-    /* Fill the MAP width responsively: #floating_search is positioned over
-       #explorer (map + a permanent 340px results panel), so the right inset must
-       clear BOTH the panel (340px) and the map's top-right zoom/globe controls
-       (~56px). Keeps the search input from being compressed by the wider control
-       cluster (Basemap etc.) without running under the side panel. */
-    right: calc(340px + 56px);   /* 340px == #atlas_results_panel width */
-    width: auto;
+    /* Default width is content-based (an ideal search-input width, set on
+       .search-input-group). The widening is a MAXIMUM, not a fill: cap it so the
+       bar can never run under the permanent 340px results panel or the map's
+       top-right zoom/globe controls (~56px) — 340 + 56 + 12(left) = 408. */
+    width: fit-content;
+    max-width: calc(100% - 408px);
     z-index: 10;
 }
 
@@ -272,7 +271,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
-    background: rgba(255, 255, 255, 0.92);
+    /* Slightly translucent so strong map features (dark markers) under the bar
+       remain perceptible; backdrop blur keeps the text legible. */
+    background: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 2px solid #cfd3da;   /* strong mode-coloured border (set per mode below) */
@@ -322,7 +323,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 
 /* Search input group */
 .search-input-group {
-    flex: 1;
+    /* Ideal default input width (drives the bar's content-based width); shrinks
+       on narrow screens, and can grow only up to the bar's max-width. */
+    flex: 1 1 340px;
     min-width: 0;
     position: relative; /* anchor the area-results dropdown directly beneath the input */
 }
@@ -415,7 +418,8 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 #temporal_control {
     margin-top: 6px;
     width: 300px;
-    background-color: rgba(255, 255, 255, 0.92);
+    /* Match the search bar's slight translucency so map features show through. */
+    background-color: rgba(255, 255, 255, 0.82);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     /* Strong ochre border (time) — matches the site's BETA buttons; clearly
@@ -1880,13 +1884,8 @@ a.pl-chip.pl-aat { cursor: pointer; }
    Responsive
    ═══════════════════════════════════════════════════════════════════ */
 
-/* Wide screens: let the floating search fill to the right:56px inset (clearing
-   the map's top-right controls) instead of capping it — keeps the search input
-   from being compressed by the wider control cluster. */
+/* Wide screens: the inner fills its (content-sized, panel-clearing) container. */
 @media (min-width: 992px) {
-    #floating_search {
-        max-width: none;
-    }
     .floating-search-inner {
         max-width: none;
     }
