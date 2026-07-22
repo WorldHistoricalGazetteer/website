@@ -763,6 +763,28 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     pointer-events: none;
 }
 .placelist-search { padding-right: 26px; }
+
+/* "Filtered by Date Range" reminder — shown while the global Date Range filter
+   is active, since it also scopes this Explore list. Ochre = the time palette. */
+.placelist-datefilter {
+    margin: 0 14px 6px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: var(--atlas-time-soft);
+    color: var(--atlas-time);
+    border: 1px solid var(--atlas-time);
+    font-size: 0.72rem;
+    line-height: 1.3;
+    flex-shrink: 0;
+}
+.placelist-datefilter[hidden] { display: none; }
+.placelist-datefilter i { margin-right: 5px; }
+.placelist-datefilter strong { font-weight: 700; }
+.placelist-datefilter-range {
+    margin-left: 4px;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
 .placelist-filters {
     display: flex;
     gap: 6px;

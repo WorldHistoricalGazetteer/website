@@ -276,10 +276,24 @@ const debouncedTemporalResearch = debounce(() => {
     const input = document.getElementById('atlas_search_input');
     if (gatewayData && input && input.value.trim()) initiateToponymSearch({ preserveFacets: true });
 }, 550);
+// Explore Place List — reflect the active Date Range as an indicator and
+// re-query the gazetteer within the range (the gateway filters browse/search by
+// the temporal params already carried in gatherToponymOptions).
+function temporalFilterLabel() {
+    if (temporalMode === 'off') return '';
+    const range = `${formatYear(temporalFrom)}–${formatYear(temporalTo)}`;
+    return temporalMode === 'undated' ? `${range} + undated` : range;
+}
+function updatePlaceListTemporal() {
+    PlaceList.setTemporalFilter(temporalFilterLabel());
+}
+const debouncedPlaceListRefresh = debounce(() => PlaceList.refresh(), 400);
 function applyTemporalLive() {
     throttledTemporalRender();     // instant preview on what's already loaded
     debouncedTemporalResearch();   // authoritative top-N in-range from the index
     applyGazetteerCoverageFilter(); // re-filter the Gazetteers list if its Date Range switch is on
+    updatePlaceListTemporal();     // Explore list: update the date-filter indicator
+    debouncedPlaceListRefresh();   // Explore list: re-query within the range
 }
 
 // ── Gazetteers coverage maps (temporal + coarse H3) ──
@@ -1877,6 +1891,7 @@ function emitGazetteerSelection(mode) {
             if (nameEl) label = nameEl.textContent.trim();
             else if (item) label = item.textContent.trim();
             PlaceList.open(exploreSelection, label);
+            updatePlaceListTemporal();   // reflect an already-active Date Range
             updateExploreUrl(exploreSelection);
             // New gazetteer → clear any stale ?place (a deep-linked focus restores
             // it after the first page loads via PlaceList.focusPlace).

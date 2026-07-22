@@ -145,6 +145,28 @@ const PlaceList = {
         if (this.ns && this.cfg) this.cfg.showPanelView(VIEW_ID);
     },
 
+    /** Re-query the list from the top with the current filters (incl. the global
+     *  Date Range). Called when the temporal filter changes — only while the
+     *  Place List is the visible panel, to avoid wasted fetches. */
+    refresh() {
+        const view = document.getElementById(VIEW_ID);
+        if (this.ns && this.cfg && view && view.classList.contains('active')) {
+            this._fetchPage(true);
+        }
+    },
+
+    /** Show/update the "Filtered by Date Range" indicator (``label`` = the range,
+     *  or '' to hide). Driven by atlas.js on temporal changes / list open. */
+    setTemporalFilter(label) {
+        if (!this.els || !this.els.datefilter) return;
+        if (label) {
+            if (this.els.datefilterRange) this.els.datefilterRange.textContent = label;
+            this.els.datefilter.hidden = false;
+        } else {
+            this.els.datefilter.hidden = true;
+        }
+    },
+
     /** Return to the Gazetteers (Explore) panel. Only steals the view when the
      *  Place List is the one on screen, so a Filter-mode toggle elsewhere is a
      *  no-op. */
@@ -169,6 +191,8 @@ const PlaceList = {
             status: view.querySelector('.placelist-status'),
             scroll: view.querySelector('.placelist-scroll'),
             rows: view.querySelector('.placelist-rows'),
+            datefilter: view.querySelector('.placelist-datefilter'),
+            datefilterRange: view.querySelector('.placelist-datefilter-range'),
         };
         if (this.wired) return;
         this.wired = true;
