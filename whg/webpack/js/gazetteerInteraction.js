@@ -212,12 +212,11 @@ function renderTimespanList(arr) {
 function renderHeader(data) {
     const placeId = data.place_id || '';
     const title = data.title || placeId;
-    // The title points at the in-WHG record; render as a modal trigger
-    // (same UX as relation links to in-WHG places) rather than a new-tab
-    // /entity/ link that would land on raw LPF JSON.
-    const titleHtml = placeId
-        ? `<a class="popup-title whg-place-modal-trigger" href="#" data-whg-place-modal="${esc(placeId)}">${esc(title)}</a>`
-        : `<span class="popup-title">${esc(title)}</span>`;
+    // Plain title (not a link): the modal-trigger opened an unwanted entity
+    // preview, and — being the first focusable element — took a focus outline
+    // when the popup opened from a shared ?place= deep link. The "view at source"
+    // link below and the in-WHG detail modal (row click) remain the ways in.
+    const titleHtml = `<span class="popup-title">${esc(title)}</span>`;
     // When the source publishes a per-item web page (registry ``web_item``),
     // make the source identifier a link to it (new tab); otherwise plain text.
     const srcUrl = sourceItemUrl(placeId);

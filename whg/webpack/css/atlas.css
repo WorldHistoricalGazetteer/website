@@ -1426,9 +1426,6 @@ a.pl-chip.pl-aat { cursor: pointer; }
     line-height: 1.25;
     display: block;
 }
-.whg-gazetteer-popup .popup-title:hover {
-    text-decoration: underline;
-}
 
 .whg-gazetteer-popup .popup-place-id {
     font-size: 0.68rem;
