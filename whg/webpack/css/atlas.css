@@ -1386,6 +1386,25 @@ a.pl-chip.pl-aat { cursor: pointer; }
     -webkit-backdrop-filter: blur(2px);
 }
 
+/* Lightweight hover name tooltip (rendered from tile props — no fetch).
+   pointer-events:none so it never steals hover from the marker underneath. */
+.maplibregl-popup.whg-hover-popup-anchor { pointer-events: none; z-index: 3; }
+.maplibregl-popup.whg-hover-popup-anchor .maplibregl-popup-tip { display: none; }
+.maplibregl-popup.whg-hover-popup-anchor .maplibregl-popup-content {
+    padding: 3px 8px;
+    background: var(--atlas-panel-bg);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.22);
+    border-radius: 4px;
+}
+.whg-hover-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #2c3e50;
+    white-space: nowrap;
+}
+
 /* Keep the MapLibre close button above any popup content and ensure it
  * has a comfortable hit area in the top-right corner of the popup. */
 .maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-close-button {

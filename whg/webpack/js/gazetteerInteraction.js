@@ -23,6 +23,7 @@ const API_PREFIX = '/entity/place:';
 const API_SUFFIX = '/api?variant=popup';
 const SHAPE_SUFFIXES = ['_fill', '_line', '_circle'];
 const POPUP_CLASS = 'whg-gazetteer-popup-anchor';
+const HOVER_POPUP_CLASS = 'whg-hover-popup-anchor';
 const LOADING_HTML = '<div class="whg-gazetteer-popup"><div class="popup-loading">Loading…</div></div>';
 const ERROR_HTML = '<div class="whg-gazetteer-popup"><div class="popup-loading">Failed to load place details.</div></div>';
 
@@ -771,6 +772,8 @@ export default class GazetteerInteraction {
         this._currentId = null;
         this._handlers = [];
         this._popup = null;
+        this._hoverPopup = null;   // lightweight name tooltip (no fetch)
+        this._hoverKey = null;     // currently-hovered feature key (dedupe)
         this._abortController = null;
         _bindModalDelegate();
     }
@@ -788,12 +791,14 @@ export default class GazetteerInteraction {
                 const layerId = `${baseId}${suffix}`;
                 if (!this.map.getLayer(layerId)) continue;
                 const enter = () => this._onEnter();
+                const move = (e) => this._onMove(e);
                 const leave = () => this._onLeave();
                 const click = (e) => this._onClick(e);
                 this.map.on('mouseenter', layerId, enter);
+                this.map.on('mousemove', layerId, move);
                 this.map.on('mouseleave', layerId, leave);
                 this.map.on('click', layerId, click);
-                this._handlers.push({ layerId, enter, leave, click });
+                this._handlers.push({ layerId, enter, move, leave, click });
             }
         }
     }
@@ -808,13 +813,15 @@ export default class GazetteerInteraction {
             try { this._popup.remove(); } catch (e) {}
         }
         if (this.map) {
-            for (const { layerId, enter, leave, click } of this._handlers) {
+            for (const { layerId, enter, move, leave, click } of this._handlers) {
                 try { this.map.off('mouseenter', layerId, enter); } catch (e) {}
+                try { this.map.off('mousemove', layerId, move); } catch (e) {}
                 try { this.map.off('mouseleave', layerId, leave); } catch (e) {}
                 try { this.map.off('click', layerId, click); } catch (e) {}
             }
             this.map.getCanvas().style.cursor = '';
         }
+        this._hideHover();
         this._handlers = [];
         this._currentId = null;
     }
@@ -839,6 +846,64 @@ export default class GazetteerInteraction {
     _onLeave() {
         if (!this.map) return;
         this.map.getCanvas().style.cursor = '';
+        this._hideHover();
+    }
+
+    /** Lightweight hover label tooltip — renders the feature's name straight
+     *  from the vector-tile properties (NO server fetch). The click path (full
+     *  detail) is unaffected. Deduped so it only rebuilds when the hovered
+     *  feature changes. */
+    _onMove(e) {
+        if (!this.map || !e.features || e.features.length === 0) return;
+        const f = e.features[0];
+        const p = f.properties || {};
+        const key = p.place_id
+            || (p.point_count != null ? `cluster:${p.point_count}:${Math.round(e.lngLat.lng * 1e4)}` : null)
+            || `${e.lngLat.lng},${e.lngLat.lat}`;
+        if (key === this._hoverKey && this._hoverPopup) return;   // same feature — nothing to do
+        const label = this._featureLabel(p);
+        if (!label) { this._hideHover(); return; }
+        this._hoverKey = key;
+        // Anchor to the marker's own coordinates when it's a point (stable),
+        // else the cursor position (polygon/line features).
+        let lngLat = e.lngLat;
+        const g = f.geometry;
+        if (g && g.type === 'Point' && Array.isArray(g.coordinates)) lngLat = g.coordinates;
+        if (!this._hoverPopup) {
+            this._hoverPopup = new whg_maplibre.Popup({
+                closeButton: false,
+                closeOnClick: false,
+                focusAfterOpen: false,
+                offset: 10,
+                maxWidth: '260px',
+                className: HOVER_POPUP_CLASS,
+            });
+        }
+        this._hoverPopup
+            .setLngLat(lngLat)
+            .setHTML(`<div class="whg-hover-label">${esc(label)}</div>`)
+            .addTo(this.map);
+    }
+
+    _hideHover() {
+        this._hoverKey = null;
+        if (this._hoverPopup) { try { this._hoverPopup.remove(); } catch (e) {} }
+    }
+
+    /** The feature's display name from tile props (language-aware, mirroring the
+     *  gazetteer label layer). Clustered aggregates show their count. */
+    _featureLabel(p) {
+        let lang = 'local';
+        try { lang = getPreferredLanguage() || 'local'; } catch (e) {}
+        const name = (!lang || lang === 'local')
+            ? (p.name_local || p.name || p.name_en)
+            : (p['name_' + lang] || p.name_en || p.name_local || p.name);
+        if (name) return String(name);
+        if (p.point_count != null) {
+            const n = p.point_count_abbreviated || p.point_count;
+            return `${n} places`;
+        }
+        return '';
     }
 
     _onClick(e) {
