@@ -157,6 +157,14 @@ module.exports = {
 		          to: 'CDNfallbacks/',
 		        },
 		        {
+		          from: 'node_modules/maplibre-gl/dist/maplibre-gl.js',
+		          to: 'CDNfallbacks/',
+		        },
+		        {
+		          from: 'node_modules/maplibre-gl/dist/maplibre-gl.css',
+		          to: 'CDNfallbacks/',
+		        },
+		        {
 		          from: 'node_modules/@turf/turf/turf.min.js',
 		          to: 'CDNfallbacks/',
 		        },
