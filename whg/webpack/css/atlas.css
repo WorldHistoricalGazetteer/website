@@ -255,10 +255,12 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     position: absolute;
     top: 12px;
     left: 12px;
-    /* Fill responsively toward — but clear (margin) — the map's top-right
-       zoom/globe controls, so the search input isn't compressed by the wider
-       control cluster (Basemap etc.). */
-    right: 56px;
+    /* Fill the MAP width responsively: #floating_search is positioned over
+       #explorer (map + a permanent 340px results panel), so the right inset must
+       clear BOTH the panel (340px) and the map's top-right zoom/globe controls
+       (~56px). Keeps the search input from being compressed by the wider control
+       cluster (Basemap etc.) without running under the side panel. */
+    right: calc(340px + 56px);   /* 340px == #atlas_results_panel width */
     width: auto;
     z-index: 10;
 }
