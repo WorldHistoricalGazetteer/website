@@ -1,0 +1,16 @@
+{% extends "admin/change_list.html" %}
+{% block content %}
+  <ul class="messagelist">
+    <li class="info">
+      Only the curatorial flags — <strong>core</strong>, <strong>region_source</strong>
+      (selectable Source in the Atlas Regions panel), <strong>no_explore</strong>
+      (hide from Atlas Explore mode) and <strong>gazetteer_type</strong> — are editable
+      here. Everything else (name, counts, coverage, attribution, licence and the
+      download-legality flags) is managed by the indexing inventory push and refreshes
+      on each run. Use the per-row <strong>Re-ingest</strong> button, or the
+      &ldquo;Re-ingest selected&rdquo; bulk action, to enqueue a fresh-source-data
+      ingestion via the CRC gateway.
+    </li>
+  </ul>
+  {{ block.super }}
+{% endblock %}

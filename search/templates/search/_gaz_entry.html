@@ -20,6 +20,7 @@ data-gaz-group for the root group-pill filter.
             <input class="form-check-input authority-cb" type="checkbox"
                    value="{{ g.id }}"{% if g.core %} checked{% endif %}>
             <span class="form-check-label">{{ g.name }}</span>
+            {% if g.namespace %}<span class="badge gaz-ns-badge ms-1" title="Namespace">{{ g.namespace }}</span>{% endif %}
             {% if g.status_badge %}<span class="badge {{ g.status_badge.cls }} ms-1" style="font-size: 0.55rem; vertical-align: middle;">{{ g.status_badge.label }}</span>{% endif %}
             {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
             {% if g.namespace %}<span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>{% endif %}

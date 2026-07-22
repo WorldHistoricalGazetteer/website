@@ -345,8 +345,8 @@ class AtlasPageView(TemplateView):
             .filter(entry_class='dataset', namespace='whg')
             .order_by('name')
             .values(
-                'id', 'name', 'description', 'gazetteer_type', 'record_count',
-                *_reg_fields,
+                'id', 'name', 'description', 'namespace', 'gazetteer_type',
+                'record_count', *_reg_fields,
             )
         )
         # Resolve local Dataset.downloadable for the specialist rows (registry id

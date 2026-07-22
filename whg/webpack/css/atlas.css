@@ -1349,6 +1349,19 @@ a.pl-chip.pl-aat { cursor: pointer; }
 #gazetteers_offcanvas .authority-item .badge {
     vertical-align: middle;
 }
+/* Namespace badge — a distinct monospace slate-blue pill so each gazetteer's
+   namespace (gn, wd, tgn, kain_par, whg, …) reads as an identifier, clearly
+   apart from the licence / core / status badges. */
+#gazetteers_offcanvas .gaz-ns-badge {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.55rem;
+    font-weight: 600;
+    vertical-align: middle;
+    color: #33507a;
+    background: #e7ecf4;
+    border: 1px solid #cdd8e6;
+    padding: 0 5px;
+}
 
 /* ── Rich gazetteer rows: licence badge, citation, metadata, download (place#136) ── */
 #gazetteers_offcanvas .gaz-entry-row {
