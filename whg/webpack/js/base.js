@@ -162,7 +162,11 @@ window.loadResource = function (element) {
         if (element.crossorigin) resource.crossorigin = element.crossorigin;
 
         var localResource = resource.cloneNode();
-        localResource[isCSS ? 'href' : 'src'] = `/CDNfallbacks/${element.localUrl}`;
+        // Fallbacks live under the served static root (/static/webpack/CDNfallbacks/),
+        // NOT a bare /CDNfallbacks/ (which 403s — there's no nginx location for it,
+        // so no CDN fallback ever actually loaded). This is what makes the local
+        // copy usable when a CDN is unreachable (see the 2026-07-22 maplibre outage).
+        localResource[isCSS ? 'href' : 'src'] = `/static/webpack/CDNfallbacks/${element.localUrl}`;
 
         resource.onload = function () {
             // console.log(`Loaded CDN resource ${element.cdnUrl}`);
