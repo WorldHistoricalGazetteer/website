@@ -1318,7 +1318,10 @@ a.pl-chip.pl-aat { cursor: pointer; }
     text-align: right;
 }
 #atlas_portal_body .portal-actions { text-align: right; }
-.whg-attest-btn {
+/* Scoped under the popup / portal so these beat Bootstrap's single-class
+   .btn / .btn-sm (a bare .whg-attest-btn ties them and loses on source order). */
+.whg-gazetteer-popup .whg-attest-btn,
+#atlas_portal_body .whg-attest-btn {
     font-size: 0.62rem;
     line-height: 1.4;
     padding: 0.1rem 0.6rem;
@@ -1328,10 +1331,13 @@ a.pl-chip.pl-aat { cursor: pointer; }
     border-radius: 999px;
     font-weight: 600;
 }
-.whg-attest-btn .fa-file-signature { font-size: 0.9em; }
-.whg-attest-btn:not(.whg-attest-off):hover { background: #5b3aa6; color: #fff; border-color: #5b3aa6; }
+.whg-gazetteer-popup .whg-attest-btn .fa-file-signature,
+#atlas_portal_body .whg-attest-btn .fa-file-signature { font-size: 0.9em; }
+.whg-gazetteer-popup .whg-attest-btn:not(.whg-attest-off):hover,
+#atlas_portal_body .whg-attest-btn:not(.whg-attest-off):hover { background: #5b3aa6; color: #fff; border-color: #5b3aa6; }
 /* aria-disabled look-alike — kept hoverable so the advisory tooltip fires. */
-.whg-attest-btn.whg-attest-off { opacity: 0.55; cursor: not-allowed; }
+.whg-gazetteer-popup .whg-attest-btn.whg-attest-off,
+#atlas_portal_body .whg-attest-btn.whg-attest-off { opacity: 0.55; cursor: not-allowed; }
 
 /* "core" badge alignment within the authority-item label. */
 #gazetteers_offcanvas .authority-item .badge {
