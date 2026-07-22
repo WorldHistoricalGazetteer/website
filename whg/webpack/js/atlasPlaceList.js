@@ -131,7 +131,6 @@ const PlaceList = {
         this.els.typeSel.innerHTML = '<option value="">All types</option>';
         this.els.filters.style.display = 'none';
         this.els.title.textContent = this.label;
-        this.els.count.textContent = '';
         this.els.rows.innerHTML = '';
         this.els.rows.style.height = '0px';
         this.els.scroll.scrollTop = 0;
@@ -183,7 +182,6 @@ const PlaceList = {
         this.els = {
             view,
             title: view.querySelector('.placelist-title'),
-            count: view.querySelector('.placelist-count'),
             search: view.querySelector('.placelist-search'),
             filters: view.querySelector('.placelist-filters'),
             ccodeSel: view.querySelector('.placelist-ccode'),
@@ -375,13 +373,6 @@ const PlaceList = {
                     && this.hits.length < this.total
                     && this.hits.length < OFFSET_CAP;
                 this.els.rows.style.height = (this.hits.length * ROW_H) + 'px';
-                // Header count = the gazetteer's real size (from browse). A search's
-                // `total` is an approximate candidate pool (gateway nuance, place#127),
-                // so don't overwrite the header with it — leave the browse total.
-                if (!this.qstr) {
-                    this.els.count.textContent = this.total != null
-                        ? `${this.total.toLocaleString()} place${this.total === 1 ? '' : 's'}` : '';
-                }
                 this._render();
                 this._updateStatus();
                 // Deep link: once the first page is in, focus the requested place

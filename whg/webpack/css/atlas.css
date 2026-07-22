@@ -145,10 +145,13 @@
 .palette-places { color: var(--atlas-places); }
 .palette-time   { color: var(--atlas-time); }
 
-/* Tooltip opt-out (set from the Explore-the-Atlas switch) — hide every rendered
-   Bootstrap tooltip on the page. Tooltip nodes are appended to <body>, so this
-   must live at body scope, not inside the Atlas container. */
-body.atlas-tooltips-off .tooltip { display: none !important; }
+/* Tooltip opt-out (set from the Explore-the-Atlas switch) — hide rendered
+   Bootstrap tooltips on the page. Tooltip nodes are appended to <body>, so this
+   must live at body scope, not inside the Atlas container. ADVISORY tooltips
+   (marked via data-bs-custom-class="tt-advisory" on the trigger — e.g. the
+   explanation on a disabled download or attest button) are exempt: they convey
+   why something is unavailable, so the toggle must not suppress them. */
+body.atlas-tooltips-off .tooltip:not(.tt-advisory) { display: none !important; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Container-constrained hero map layout
@@ -749,15 +752,14 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
 }
 .placelist-title {
     /* Match the active Places pill's fill so the panel reads as a Places view,
-       and make the gazetteer name distinctive (larger + bolder). */
+       and make the gazetteer name distinctive (larger + bolder). Long names wrap
+       in full rather than truncating (the place count moved to the status line). */
     font-weight: 700;
     font-size: 1rem;
     color: var(--atlas-places);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    word-break: break-word;
 }
-.placelist-count { font-size: 0.72rem; }
 .placelist-search-wrap {
     position: relative;
     padding: 8px 14px 6px;
@@ -1307,21 +1309,28 @@ a.pl-chip.pl-aat { cursor: pointer; }
 #gazetteers_offcanvas .my-gazetteers-section .filter-header .categories { color: #34495e; }
 #gazetteers_offcanvas .my-gaz-none { padding-left: 2px; }
 
-/* Per-place "Attest" action (map popup + geometry-less portal overlay, place#136). */
+/* Per-place "Attest" action (map popup + geometry-less portal overlay, place#136).
+   Right-aligned, a distinctive violet rounded pill so it reads as a deliberate,
+   separate action from the informational body above. */
 .whg-gazetteer-popup .popup-actions {
     padding: 6px 12px 8px;
     border-top: 1px solid #ecf0f1;
+    text-align: right;
 }
+#atlas_portal_body .portal-actions { text-align: right; }
 .whg-attest-btn {
-    font-size: 0.7rem;
-    padding: 0.12rem 0.55rem;
-    border: 1px solid rgba(44, 62, 80, 0.25);
-    background: #fff;
-    color: #2c3e50;
-    border-radius: 0.2rem;
+    font-size: 0.62rem;
+    line-height: 1.4;
+    padding: 0.1rem 0.6rem;
+    border: 1px solid #7e57c2;
+    background: #f3effb;
+    color: #5b3aa6;
+    border-radius: 999px;
+    font-weight: 600;
 }
-.whg-attest-btn:not(:disabled):hover { background: #2c3e50; color: #fff; }
-.whg-attest-btn:disabled { opacity: 0.5; }
+.whg-attest-btn .fa-file-signature { font-size: 0.9em; }
+.whg-attest-btn:not(:disabled):hover { background: #5b3aa6; color: #fff; border-color: #5b3aa6; }
+.whg-attest-btn:disabled { opacity: 0.55; }
 .whg-attest-wrap { cursor: not-allowed; }
 
 /* "core" badge alignment within the authority-item label. */
@@ -1418,6 +1427,27 @@ a.pl-chip.pl-aat { cursor: pointer; }
 #gazetteers_offcanvas .gaz-dl-btn:disabled { opacity: 0.5; }
 #gazetteers_offcanvas .gaz-dl-wrap { cursor: not-allowed; }
 #gazetteers_offcanvas .gaz-citation-label { font-weight: 600; }
+/* Verbatim hand-authored citation (place#139 interim fix) — shown instead of the
+   structured formatter when the registry provides citation_text. */
+#gazetteers_offcanvas .gaz-citation-verbatim {
+    margin: 0 0 5px;
+    padding: 0.4rem 0.5rem;
+    background: #fff;
+    border: 1px solid rgba(44, 62, 80, 0.15);
+    border-radius: 0.2rem;
+    font-size: 0.7rem;
+    line-height: 1.35;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+#gazetteers_offcanvas .gaz-citation-copy {
+    font-size: 0.68rem;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid rgba(44, 62, 80, 0.25);
+    background: #fff;
+    color: #2c3e50;
+}
+#gazetteers_offcanvas .gaz-citation-copy:hover { background: #2c3e50; color: #fff; }
 /* Compact the embedded citation formatter widget inside the panel. */
 #gazetteers_offcanvas .gaz-citation .csl-container { padding: 0.4rem !important; }
 #gazetteers_offcanvas .gaz-citation .formatted-citation { font-size: 0.7rem; }

@@ -1566,13 +1566,40 @@ function applyTilesetGating(mode) {
    see search/templates/search/_gaz_entry.html. atlas.js only wires behaviour:
    lazy citation init, the group/type/search filter, and selection emit. ── */
 
-/** Lazily construct the citation widget inside an opened .gaz-meta panel. */
+/** Lazily construct the citation inside an opened .gaz-meta panel.
+ *  place#139 interim fix: when the registry carries a hand-authored
+ *  `citation_text` (data-gaz-citation), show it VERBATIM — the auto-built CSL
+ *  uses rights_holder as author + "(n.d.)" and silently drops the real creators
+ *  (e.g. kain_par). Only when there's no citation_text do we fall back to the
+ *  structured CSL widget (citationFormatter). */
 function initGazCitation(meta) {
     if (!meta || meta.dataset.citationInit === '1') return;
     const el = meta.querySelector('.gaz-citation');
+    if (!el) return;
+
+    const verbatim = (meta.dataset.gazCitation || '').trim();
+    if (verbatim) {
+        el.innerHTML = '';
+        const p = document.createElement('p');
+        p.className = 'gaz-citation-verbatim';
+        p.textContent = verbatim;
+        el.appendChild(p);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm gaz-citation-copy';
+        btn.innerHTML = '<i class="fas fa-copy me-1"></i>Copy citation';
+        btn.addEventListener('click', () => {
+            try { navigator.clipboard.writeText(verbatim); } catch (e) {}
+            showCopyToast('Citation copied to clipboard.');
+        });
+        el.appendChild(btn);
+        meta.dataset.citationInit = '1';
+        return;
+    }
+
     const csl = meta.dataset.gazCsl;
     const CF = window.WHGCitationFormatter;
-    if (!el || !csl || !CF) return;
+    if (!csl || !CF) return;
     el.setAttribute('data-csl-json', csl);
     try {
         new CF(el);

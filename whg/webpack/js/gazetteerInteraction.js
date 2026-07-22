@@ -668,8 +668,10 @@ export function renderAttestControl(placeId) {
                         data-bs-toggle="tooltip" data-bs-title="Add an attestation about this place — assert or correct ${esc(ATTEST_SCOPE)}.">${inner}</button>`;
     }
     // Disabled buttons don't fire hover, so the tooltip lives on a wrapper span.
+    // Marked advisory so the "Show control tooltips" opt-out doesn't suppress it.
     return `<span class="whg-attest-wrap d-inline-block" tabindex="0"
-                  data-bs-toggle="tooltip" data-bs-title="Sign in to attest this place — to assert or correct ${esc(ATTEST_SCOPE)}.">
+                  data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory"
+                  data-bs-title="Sign in to attest this place — to assert or correct ${esc(ATTEST_SCOPE)}.">
                 <button type="button" class="btn btn-sm whg-attest-btn" disabled>${inner}</button>
             </span>`;
 }

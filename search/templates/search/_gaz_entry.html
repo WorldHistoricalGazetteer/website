@@ -50,8 +50,12 @@ data-gaz-group for the root group-pill filter.
             </button>
         </span>
     </div>
+    {% comment %}place#139 interim fix: carry the hand-authored citation_text so the
+    widget can prefer it verbatim over the auto-built (rights_holder/n.d.) CSL,
+    which drops real creators. Falls back to data-gaz-csl when citation_text is
+    absent.{% endcomment %}
     <div class="collapse gaz-meta" id="gazmeta-{{ g.dom_id }}"
-         data-gaz-csl="{{ g.csl_json }}">
+         data-gaz-csl="{{ g.csl_json }}" data-gaz-citation="{{ g.citation_text|default:'' }}">
         <div class="gaz-meta-inner">
             {% if g.description %}<p class="gaz-meta-desc">{{ g.description }}</p>{% endif %}
             <dl class="gaz-meta-dl">
@@ -73,7 +77,7 @@ data-gaz-group for the root group-pill filter.
                 </div>
                 {% else %}
                 <span class="gaz-dl-wrap d-inline-block" tabindex="0"
-                      data-bs-toggle="tooltip" data-bs-title="{{ dl.tip }}">
+                      data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory" data-bs-title="{{ dl.tip }}">
                     <button type="button" class="btn btn-sm gaz-dl-btn" disabled>
                         <i class="fas fa-download me-1"></i>Download
                     </button>
