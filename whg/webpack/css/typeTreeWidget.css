@@ -1,0 +1,126 @@
+/* typeTreeWidget.css — base styling for the shared AAT type-tree widget
+ * (typeTreeWidget.js). Imported by the widget itself, so every consumer (Atlas
+ * offcanvas, Map-your-Data scope/type modals, the Workbench type picker —
+ * place#134) gets consistent, self-contained styling. Atlas keeps its own
+ * offcanvas-scoped size overrides in atlas.css. Kept intentionally light: the
+ * widget otherwise leans on Bootstrap + FontAwesome. */
+
+.tt-root,
+.tt-children {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+.tt-children {
+    padding-left: 16px;
+}
+.tt-node {
+    list-style: none;
+    padding: 0;
+    line-height: 1.4;
+}
+.tt-toggle {
+    display: inline-block;
+    width: 14px;
+    text-align: center;
+    cursor: pointer;
+    color: #6c757d;
+    user-select: none;
+}
+.tt-toggle.tt-leaf {
+    cursor: default;
+}
+.tt-label {
+    cursor: pointer;
+}
+.tt-guide > .tt-label {
+    color: #6c757d;
+    font-style: italic;
+    cursor: pointer;
+}
+.tt-cb {
+    vertical-align: middle;
+    cursor: pointer;
+}
+.tt-highlight > .tt-label {
+    background: #fff3cd;
+    border-radius: 3px;
+    padding: 0 3px;
+}
+
+/* fclass badges */
+.tt-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    background: #e9ecef;
+    color: #495057;
+    vertical-align: middle;
+}
+
+/* Loading / error / empty states */
+.tt-loading,
+.tt-error {
+    color: #6c757d;
+    font-size: 0.85rem;
+    padding: 0.5rem 0;
+}
+.tt-error {
+    color: #b02a37;
+}
+
+/* Sticky search box at the top of the scrollable tree */
+.tt-search {
+    margin-bottom: 0.5rem;
+}
+.tt-search-input-wrap {
+    position: relative;
+}
+.tt-search-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #adb5bd;
+    font-size: 1.1rem;
+    line-height: 1;
+}
+.tt-search-clear:hover {
+    color: #6c757d;
+}
+
+/* Body-appended search-results dropdown (fixed-position, so it must carry its
+ * own chrome and sit above Bootstrap modals — z-index > 1055). */
+.tt-search-results {
+    position: fixed;
+    z-index: 2000;
+    max-height: 280px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    display: none;
+}
+.tt-search-item {
+    padding: 5px 10px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #f1f3f5;
+}
+.tt-search-item:last-child {
+    border-bottom: 0;
+}
+.tt-search-item:hover,
+.tt-search-item.tt-search-active {
+    background: #eef4fb;
+}
+.tt-search-empty {
+    padding: 6px 10px;
+    color: #6c757d;
+    font-size: 0.85rem;
+}

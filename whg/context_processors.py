@@ -29,3 +29,29 @@ def asset_version(request):
     APP_VERSION when unset (e.g. a bare local checkout)."""
     v = getattr(settings, 'GLITCHTIP_RELEASE', None) or getattr(settings, 'APP_VERSION', 'dev')
     return {'asset_version': v}
+
+
+def registry_version(request):
+    """A cheap authority-registry change-stamp emitted on every page (base template
+    ``<meta name="registry-version">``), so the shared IndexedDB caches — Atlas
+    coverage maps AND the AAT place-type vocabulary (place#134) — are keyed
+    consistently across Atlas, Map-your-Data and the Workbench. Mirrors
+    ``search.views._registry_version`` (latest ``updated_at`` + row count, both
+    bumped by any inventory push). Cached briefly so a page load costs no DB work
+    on the hot path; on any error the meta is emitted empty (client then always
+    fetches the vocab fresh — correct, just uncached)."""
+    from django.core.cache import cache
+    ckey = 'registry_version_stamp'
+    try:
+        v = cache.get(ckey)
+        if v is None:
+            from django.db.models import Max, Count
+            from api.models import GazetteerRegistryEntry
+            agg = (GazetteerRegistryEntry.objects
+                   .filter(entry_class='authority')
+                   .aggregate(m=Max('updated_at'), n=Count('id')))
+            v = f"{agg['m'].isoformat() if agg['m'] else '0'}|{agg['n']}"
+            cache.set(ckey, v, 300)  # 5 min; the stamp only moves on inventory pushes
+    except Exception:
+        v = ''
+    return {'registry_version': v}

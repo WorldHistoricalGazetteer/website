@@ -23,6 +23,8 @@
     {% endif %}
     <meta name="env-context" content="{{ ENV_CONTEXT }}">
     <meta name="glitchtip-release" content="{{ GLITCHTIP_RELEASE }}">
+    {# Authority-registry change-stamp: keys the shared IndexedDB caches (Atlas coverage + AAT vocab, place#134) so each is fetched once per registry change across Atlas, Map-your-Data and the Workbench. #}
+    <meta name="registry-version" content="{{ registry_version|default:'' }}">
     {% if user.is_authenticated %}
     <meta name="user-id" content="user_{{ user.id }}">
     {% endif %}

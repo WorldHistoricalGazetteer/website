@@ -19,7 +19,8 @@ import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
-import { setWebTemplates, setAatVocab } from './gazetteerInteraction.js';
+import { setWebTemplates } from './gazetteerInteraction.js';
+import { idbGet, idbPut, loadAatVocab } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
@@ -303,30 +304,9 @@ function applyTemporalLive() {
 let coverageTemporal = {};   // namespace → [earliest, latest]
 let coverageH3 = {};         // namespace → "global" | [res-2 cells]
 
-const IDB_NAME = 'whg-atlas';
-const IDB_STORE = 'registry';
-function idbOpen() {
-    return new Promise((resolve, reject) => {
-        let req;
-        try { req = indexedDB.open(IDB_NAME, 1); } catch (e) { return reject(e); }
-        req.onupgradeneeded = () => { try { req.result.createObjectStore(IDB_STORE); } catch (e) { /* */ } };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-    });
-}
-function idbGet(key) {
-    return idbOpen().then(db => new Promise((res, rej) => {
-        const r = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
-        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
-    }));
-}
-function idbPut(key, val) {
-    return idbOpen().then(db => new Promise((res, rej) => {
-        const tx = db.transaction(IDB_STORE, 'readwrite');
-        tx.objectStore(IDB_STORE).put(val, key);
-        tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-    }));
-}
+// The IndexedDB helpers (idbGet/idbPut, DB whg-atlas / store registry) and the
+// AAT-vocab loader now live in ./aatVocab.js so Map-your-Data and the Workbench
+// share the same cache (place#134). Coverage still uses the same store below.
 
 // Populate coverageTemporal/coverageH3 — from IndexedDB when the cached version
 // matches the page's registry_version (no network), else fetch + re-cache.
@@ -346,28 +326,11 @@ async function loadRegistryCoverage() {
     }
 }
 
-// Prefetch the AAT place-type vocabulary (id → label + scope note) into the same
-// IndexedDB store (key 'aat_vocab'), version-gated by the page's
-// aat_vocab_version, and hand it to the popup renderer so type chips get an
-// aat:<id> + description tooltip (place#122). Reusable for any AAT-label need.
-async function loadAatVocab() {
-    // Cache-keyed by registry_version (the vocab tracks the indexed corpus).
-    const version = (typeof registry_version !== 'undefined') ? registry_version : null;
-    const use = (byId) => { if (byId && Object.keys(byId).length) setAatVocab(byId); };
-    try {
-        if (version) {
-            const cached = await idbGet('aat_vocab');
-            if (cached && cached.version === version && cached.byId) { use(cached.byId); return; }
-        }
-        const data = await fetch('/types/vocab/', { credentials: 'same-origin' }).then(r => r.json());
-        use(data.byId);
-        if (version && data.byId) {
-            try { await idbPut('aat_vocab', { version, byId: data.byId }); } catch (e) { /* best-effort */ }
-        }
-    } catch (e) {
-        console.warn('Atlas: AAT vocab load failed (type tooltips fall back to ids only)', e);
-    }
-}
+// The AAT place-type vocabulary (id → label + scope note) is prefetched into the
+// shared IndexedDB store (key 'aat_vocab') by loadAatVocab() in ./aatVocab.js and
+// handed to the popup renderer so type chips get an aat:<id> + description
+// tooltip (place#122). It's now shared with Map-your-Data + the Workbench
+// (place#134); see waitDocumentReady().then(loadAatVocab) below.
 
 // ── Gazetteers coverage filtering (client-side) ──
 function temporalCoverageOverlaps(extent, from, to) {
@@ -725,7 +688,7 @@ waitDocumentReady().then(setupWelcomePanel);
 // Load the gazetteer coverage maps (IndexedDB-cached, version-gated) — decoupled
 // from the map, so the coverage filters work even if the map is slow/unavailable.
 waitDocumentReady().then(loadRegistryCoverage);
-waitDocumentReady().then(loadAatVocab);
+waitDocumentReady().then(() => loadAatVocab());
 
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready

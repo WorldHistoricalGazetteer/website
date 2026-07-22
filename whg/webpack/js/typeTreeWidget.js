@@ -17,6 +17,8 @@
  *   });
  */
 
+import '../css/typeTreeWidget.css';
+
 const TREE_URL = '/types/tree/';
 
 /** GeoNames feature-class labels shown as badge tooltips. */
@@ -44,6 +46,12 @@ export default class TypeTreeWidget {
         this._onchange = opts.onchange || function () {};
         this._initialised = false;
         this._searchTimer = null;
+        // Concepts selected but not (yet) materialised in the lazily-loaded tree —
+        // id → label. Lets the widget round-trip a caller-supplied selection
+        // (setSelected) and still report it (getSelectedConcepts) before the
+        // relevant branch has been expanded. Used by the Map-your-Data + Workbench
+        // pickers (place#134); the Atlas filter never sets it.
+        this._pending = new Map();
     }
 
     /* ------------------------------------------------------------ *
@@ -102,6 +110,9 @@ export default class TypeTreeWidget {
                 }
             }
 
+            // Apply any selection set before init (setSelected called early).
+            this._applyPending(this.$el);
+
             // Initialise Bootstrap tooltips on all badges rendered so far
             this._initTooltips(this.$el);
         } catch (err) {
@@ -141,11 +152,113 @@ export default class TypeTreeWidget {
 
     /** Clear every checkbox. */
     clearAll() {
+        this._pending = new Map();
         this.$el.find('.tt-cb')
             .prop('checked', false)
             .prop('indeterminate', false);
         this.$el.find('.tt-highlight').removeClass('tt-highlight');
         this._onchange();
+    }
+
+    /* ------------------------------------------------------------ *
+     *  Selection round-tripping (chip-based pickers — place#134)
+     * ------------------------------------------------------------ */
+
+    /**
+     * Return the minimal selected set as ``[{id: 'aat:<id>', text}]`` — the same
+     * minimal set as getSelectedIdentifiers(), but carrying each concept's label
+     * (from the rendered node, or a caller-supplied fallback / pending label).
+     * Includes selections not yet rendered in the lazily-loaded tree.
+     *
+     * @param {Object} [labelFallback] - id → label used when a node isn't in the DOM
+     */
+    getSelectedConcepts(labelFallback) {
+        const out = [];
+        const seen = new Set();
+        if (this._initialised) {
+            const walk = ($nodes) => {
+                $nodes.each((_, el) => {
+                    const $n = $(el);
+                    const $cb = $n.children('.tt-cb');
+                    if ($cb.prop('checked')) {
+                        const id = $cb.val();
+                        if (!seen.has(id)) { seen.add(id); out.push({ id, text: this._labelOf($n, id, labelFallback) }); }
+                    } else if ($cb.prop('indeterminate')) {
+                        walk($n.children('.tt-children').children('.tt-node'));
+                    }
+                });
+            };
+            walk(this.$el.find('> .tt-root > .tt-node'));
+        }
+        // Selections whose node hasn't been rendered yet (never expanded to).
+        this._pending.forEach((text, id) => {
+            if (!seen.has(id)) { seen.add(id); out.push({ id, text: text || (labelFallback && labelFallback[id]) || '' }); }
+        });
+        return out;
+    }
+
+    /**
+     * Replace the selection with ``concepts`` (``[{id, text}]`` or bare id strings).
+     * Any concept whose node is already rendered is checked immediately (cascading
+     * to descendants); the rest are held in ``_pending`` and applied as their
+     * branch is expanded. Fires onchange.
+     */
+    setSelected(concepts) {
+        this._pending = new Map();
+        (concepts || []).forEach((c) => {
+            const id = (c && c.id) ? c.id : c;
+            if (id) this._pending.set(id, (c && c.text) || '');
+        });
+        if (this._initialised) {
+            this.$el.find('.tt-cb').prop('checked', false).prop('indeterminate', false);
+            this._applyPending(this.$el);
+        }
+        this._onchange();
+    }
+
+    /** Deselect one concept by id (``aat:<id>``). Fires onchange. */
+    deselect(id) {
+        this._pending.delete(id);
+        if (this._initialised) {
+            const $node = this.$el.find('.tt-node').filter(function () { return $(this).attr('data-id') === id; });
+            if ($node.length) {
+                $node.children('.tt-cb').prop('checked', false).prop('indeterminate', false);
+                $node.find('.tt-cb').prop('checked', false).prop('indeterminate', false);
+                this._updateAncestors($node);
+            }
+        }
+        this._onchange();
+    }
+
+    /** Apply any pending selections that now have a rendered node within $scope. */
+    _applyPending($scope) {
+        if (!this._pending.size) return;
+        const self = this;
+        const touched = [];
+        ($scope || this.$el).find('.tt-node').each(function () {
+            const $li = $(this);
+            const id = $li.attr('data-id');
+            if (id && self._pending.has(id)) {
+                const $cb = $li.children('.tt-cb');
+                if ($cb.length) {
+                    $cb.prop('checked', true).prop('indeterminate', false);
+                    // Cascade to any already-loaded descendants (later-loaded ones
+                    // inherit via the parentChecked branch in _toggle).
+                    $li.find('.tt-cb').prop('checked', true).prop('indeterminate', false);
+                    self._pending.delete(id);
+                    touched.push($li);
+                }
+            }
+        });
+        touched.forEach(($li) => this._updateAncestors($li));
+    }
+
+    /** Best label for a node: its rendered text, else a fallback map, else ''. */
+    _labelOf($n, id, labelFallback) {
+        const t = ($n.children('.tt-label').text() || '').trim();
+        if (t) return t;
+        if (labelFallback && labelFallback[id]) return labelFallback[id];
+        return '';
     }
 
     /* ------------------------------------------------------------ *
@@ -261,6 +374,8 @@ export default class TypeTreeWidget {
                     $children.append($child);
                 });
                 $li.data('loaded', true);
+                // Check any pending selections that live in this newly-loaded branch.
+                this._applyPending($children);
                 // Initialise Bootstrap tooltips on newly loaded children
                 this._initTooltips($children);
             } catch (err) {

@@ -9,6 +9,13 @@
 // /reconcile service, candidate review, enrichment, and selective submission.
 
 import '../css/reconciliation.css';
+import TypeTreeWidget from './typeTreeWidget.js';
+import { loadAatVocab, aatLabel } from './aatVocab.js';
+
+// Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
+// the Workbench — place#134) so chosen concepts can show a Getty label for a
+// stored aat:<id> even before its tree branch is expanded.
+loadAatVocab();
 
 // Lazy-loaded chunks (proj4, Temporal) are served from Django's static dir. Set the webpack public
 // path explicitly: this entry is loaded as a type="module" script, so document.currentScript is null
@@ -4001,107 +4008,74 @@ async function fetchJson(url) {
 }
 function createAatPicker(ids, opts) {
   opts = opts || {};
-  let selection = [];      // [{id, text}]
-  let treeLoaded = false;
-  const selIds = () => new Set(selection.map((t) => t.id));
+  // The shared TypeTreeWidget (typeTreeWidget.js) is the single source of truth —
+  // search + browse + tri-state selection all live in it (place#134 retires the
+  // inline duplicate tree that used to live here). The chip list below is a view
+  // of the widget's selection; `labelFor` remembers labels for stored ids whose
+  // tree branch hasn't been expanded, so chips + the scope summary stay populated.
+  let widget = null;
+  let pending = [];        // selection [{id, text}] set before the widget mounts
+  const labelFor = {};     // id → label, for chips/summary when a node isn't rendered
   const notify = () => { if (opts.onChange) opts.onChange(getSelection()); };
+
+  function currentConcepts() {
+    return (widget && widget._initialised) ? widget.getSelectedConcepts(labelFor) : pending.slice();
+  }
   function renderSelected() {
     const box = el(ids.selected); if (!box) return;
-    if (!selection.length) { box.innerHTML = `<span class="text-muted small">${esc(opts.emptyText || 'None selected.')}</span>`; return; }
-    box.innerHTML = selection.map((t) =>
-      `<span class="recon-aat-chip">${esc(truncateText(t.text, 30))}` +
-      `<button type="button" class="recon-aat-chip-x" data-id="${esc(t.id)}" title="remove" aria-label="remove">×</button></span>`).join(' ');
-    box.querySelectorAll('.recon-aat-chip-x').forEach((b) => b.addEventListener('click', () => remove(b.dataset.id)));
+    const sel = currentConcepts();
+    if (!sel.length) { box.innerHTML = `<span class="text-muted small">${esc(opts.emptyText || 'None selected.')}</span>`; return; }
+    box.innerHTML = sel.map((t) => {
+      const label = t.text || labelFor[t.id] || aatLabel(t.id) || t.id;
+      return `<span class="recon-aat-chip" title="${esc(t.id)}">${esc(truncateText(label, 30))}` +
+        `<button type="button" class="recon-aat-chip-x" data-id="${esc(t.id)}" title="remove" aria-label="remove">×</button></span>`;
+    }).join(' ');
+    box.querySelectorAll('.recon-aat-chip-x').forEach((b) => b.addEventListener('click', () => {
+      if (widget && widget._initialised) widget.deselect(b.dataset.id);
+      else { pending = pending.filter((t) => t.id !== b.dataset.id); }
+      renderSelected(); notify();
+    }));
   }
-  function add(id, text) { if (!selection.some((t) => t.id === id)) { selection.push({ id, text }); renderSelected(); syncChecks(); notify(); } }
-  function remove(id) { selection = selection.filter((t) => t.id !== id); renderSelected(); syncChecks(); notify(); }
-  function syncChecks() {
-    const tree = el(ids.tree); if (!tree) return; const sel = selIds();
-    tree.querySelectorAll('.aat-cb').forEach((cb) => { const li = cb.closest('.aat-node'); if (li) cb.checked = sel.has(li.dataset.id); });
-  }
-  // One tree row. Guide terms (AAT organisational nodes) are expand-only — no checkbox.
-  function nodeHtml(node) {
-    const sel = selIds();
-    const caret = node.children === true ? '<span class="aat-caret" role="button" title="expand">▸</span>' : '<span class="aat-caret-spacer"></span>';
-    const cb = node.guide ? '' : `<input type="checkbox" class="aat-cb"${sel.has(node.id) ? ' checked' : ''} title="${esc(opts.checkboxTitle || 'select this type')}">`;
-    const fc = (node.fclasses && node.fclasses.length) ? ` <span class="text-muted small">${esc(node.fclasses.join(''))}</span>` : '';
-    return `<li class="aat-node" data-id="${esc(node.id)}" data-loaded="0">` +
-      `<div class="aat-row">${caret}${cb}<span class="aat-label${node.guide ? ' aat-guide' : ''}">${esc(node.text)}</span>${fc}</div>` +
-      '<ul class="aat-children d-none"></ul></li>';
-  }
-  async function initTree() {
-    if (treeLoaded) return;
-    const tree = el(ids.tree); if (!tree) return;
-    tree.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>loading…</span>';
-    try { const nodes = await fetchJson('/types/tree/'); tree.innerHTML = `<ul class="aat-tree">${nodes.map(nodeHtml).join('')}</ul>`; treeLoaded = true; }
-    catch (err) { tree.innerHTML = `<span class="text-danger small">Could not load types: ${esc(err.message)}</span>`; }
-  }
-  async function expandNode(li) {
-    const ul = li.querySelector(':scope > .aat-children');
-    const caret = li.querySelector(':scope > .aat-row .aat-caret');
-    if (li.dataset.loaded === '1') { ul.classList.toggle('d-none'); if (caret) caret.textContent = ul.classList.contains('d-none') ? '▸' : '▾'; return; }
-    if (caret) caret.textContent = '⟳';
-    try { const kids = await fetchJson(`/types/tree/${li.dataset.id.slice(4)}/`); ul.innerHTML = kids.map(nodeHtml).join(''); li.dataset.loaded = '1'; ul.classList.remove('d-none'); if (caret) caret.textContent = '▾'; }
-    catch (err) { if (caret) caret.textContent = '▸'; }
-  }
-  function toggleFromNode(li, on) { const text = li.querySelector(':scope > .aat-row .aat-label').textContent; if (on) add(li.dataset.id, text); else remove(li.dataset.id); }
-  function bindTree() {
-    const tree = el(ids.tree); if (!tree || tree.dataset.bound) return;
-    tree.dataset.bound = '1';
-    tree.addEventListener('click', (e) => {
-      const caret = e.target.closest('.aat-caret');
-      if (caret) { const li = caret.closest('.aat-node'); if (li) expandNode(li); return; }
-      const label = e.target.closest('.aat-label');
-      if (label && !label.classList.contains('aat-guide')) { const li = label.closest('.aat-node'); const cb = li.querySelector(':scope > .aat-row .aat-cb'); if (cb) { cb.checked = !cb.checked; toggleFromNode(li, cb.checked); } }
+  function ensureWidget() {
+    if (widget) return widget;
+    const mount = el(ids.tree); if (!mount) return null;
+    widget = new TypeTreeWidget('#' + ids.tree, {
+      onchange: () => {
+        // Keep the label cache warm so chips survive a later collapse/reset.
+        currentConcepts().forEach((t) => { if (t.text) labelFor[t.id] = t.text; });
+        renderSelected(); notify();
+      },
     });
-    tree.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('aat-cb')) toggleFromNode(e.target.closest('.aat-node'), e.target.checked); });
-  }
-  async function search() {
-    const q = (el(ids.q) || {}).value;
-    const box = el(ids.results); if (!box) return;
-    if (!q || q.trim().length < 2) { box.innerHTML = '<span class="text-muted small">Type at least 2 letters.</span>'; return; }
-    box.innerHTML = '<span class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>searching…</span>';
-    try {
-      const results = await fetchJson(`/types/tree/search/?q=${encodeURIComponent(q.trim())}`);
-      if (!results.length) { box.innerHTML = '<span class="text-muted small">No matching types.</span>'; return; }
-      const sel = selIds();
-      box.innerHTML = results.map((r) => { const id = 'aat:' + r.aat_id;
-        return `<button type="button" class="btn btn-sm ${sel.has(id) ? 'btn-primary' : 'btn-outline-secondary'} text-start d-block w-100 mb-1 recon-aat-hit" data-id="${esc(id)}" data-text="${esc(r.text)}">` +
-          `${truncate(r.text, 44)} <span class="text-muted small">aat:${esc(String(r.aat_id))}</span></button>`; }).join('');
-      box.querySelectorAll('.recon-aat-hit').forEach((b) => b.addEventListener('click', () => {
-        if (selection.some((t) => t.id === b.dataset.id)) remove(b.dataset.id); else add(b.dataset.id, b.dataset.text);
-        b.classList.toggle('btn-primary'); b.classList.toggle('btn-outline-secondary');
-      }));
-    } catch (err) { box.innerHTML = `<span class="text-danger small">Search failed: ${esc(err.message)}</span>`; }
+    // Seed the selection before init() so it's held in _pending and applied as the
+    // tree renders (chips never flicker empty during the initial load).
+    if (pending.length) widget.setSelected(pending);
+    widget.init();
+    return widget;
   }
   function reset(newSelection) {
-    selection = (newSelection || []).map((t) => ({ id: t.id, text: t.text }));
-    treeLoaded = false;
-    const tree = el(ids.tree); if (tree) tree.innerHTML = '';
-    const browse = el(ids.browse); if (browse) browse.open = false;
-    const q = el(ids.q); if (q) q.value = '';
-    const results = el(ids.results); if (results) results.innerHTML = '';
+    pending = (newSelection || []).map((t) => ({ id: t.id, text: t.text }));
+    pending.forEach((t) => { if (t.text) labelFor[t.id] = t.text; });
+    if (widget && widget._initialised) widget.setSelected(pending);
     renderSelected();
   }
-  function getSelection() { return selection.map((t) => ({ id: t.id, text: t.text })); }
+  function getSelection() { return currentConcepts().map((t) => ({ id: t.id, text: t.text })); }
   function init() {
-    bindTree();
-    const s = el(ids.search); if (s) s.addEventListener('click', search);
-    const q = el(ids.q);
-    if (q) {
-      q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
-      let timer = null;
-      q.addEventListener('input', () => { clearTimeout(timer); const v = q.value.trim(); if (v.length < 3) { const r = el(ids.results); if (r) r.innerHTML = ''; return; } timer = setTimeout(search, 300); });
-    }
-    const browse = el(ids.browse); if (browse) browse.addEventListener('toggle', () => { if (browse.open) initTree(); });
+    // Mount lazily when the "browse" <details> first opens (keeps first paint
+    // cheap); if there's no <details> wrapper, mount immediately.
+    const browse = el(ids.browse);
+    if (browse) {
+      if (browse.open) ensureWidget();
+      browse.addEventListener('toggle', () => { if (browse.open) ensureWidget(); });
+    } else ensureWidget();
+    renderSelected();
   }
   return { init, reset, getSelection };
 }
 
 // Scope-filter instance (in the Scope modal's "What" section).
 const scopeAat = createAatPicker(
-  { q: 'recon-scope-aat-q', search: 'recon-scope-aat-search', results: 'recon-scope-aat-results', selected: 'recon-scope-aat-selected', tree: 'recon-scope-aat-tree', browse: 'recon-scope-aat-browse' },
-  { emptyText: 'No place types selected — any type is allowed.', checkboxTitle: 'scope to this type and its descendants' },
+  { selected: 'recon-scope-aat-selected', tree: 'recon-scope-aat-tree', browse: 'recon-scope-aat-browse' },
+  { emptyText: 'No place types selected — any type is allowed.' },
 );
 // ── Per-row AAT place types ──────────────────────────────────────────────────────────────────────
 // Types are assigned per row in the data-browser table (turn on Edit cells → click a cell in the
@@ -4140,8 +4114,8 @@ function renderTypePrompt() {
 let _typeRow = -1; // the row whose place type is being assigned in the picker modal
 // Type-map picker instance (its own modal).
 const typeMapAat = createAatPicker(
-  { q: 'recon-tm-aat-q', search: 'recon-tm-aat-search', results: 'recon-tm-aat-results', selected: 'recon-tm-aat-selected', tree: 'recon-tm-aat-tree', browse: 'recon-tm-aat-browse' },
-  { emptyText: 'No type assigned to this value yet.', checkboxTitle: 'apply this type to rows with this value' },
+  { selected: 'recon-tm-aat-selected', tree: 'recon-tm-aat-tree', browse: 'recon-tm-aat-browse' },
+  { emptyText: 'No type assigned to this value yet.' },
 );
 // Open the AAT picker (shared modal) to assign type(s) to a single row — reached by clicking a cell in
 // the type-role column while the data browser is in edit mode.

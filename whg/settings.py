@@ -304,6 +304,7 @@ TEMPLATES = [
                 'whg.context_processors.environment',
                 'whg.context_processors.app_version',
                 'whg.context_processors.asset_version',
+                'whg.context_processors.registry_version',
             ],
             'builtins': [
                 'whg.builtins',

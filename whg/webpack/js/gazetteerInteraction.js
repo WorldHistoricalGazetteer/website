@@ -86,6 +86,17 @@ export function setAatVocab(byId) {
     if (byId && typeof byId === 'object') AAT_VOCAB = byId;
 }
 
+/** The human label for an AAT concept from the shared vocab cache, or '' when the
+ *  concept isn't in the (in-use) vocab. Accepts a bare id (``12345``) or ``aat:12345``
+ *  key. Lets Map-your-Data / Workbench chips show a Getty label for a stored id
+ *  without re-fetching (place#134). */
+export function aatLabel(idOrKey) {
+    if (idOrKey == null || idOrKey === '') return '';
+    const key = /^aat:/.test(String(idOrKey)) ? String(idOrKey) : `aat:${idOrKey}`;
+    const v = AAT_VOCAB[key];
+    return (v && v.label) || '';
+}
+
 /** The AAT concept id for a popup type entry, or '' — from the resolved
  *  ``aat_ids`` the gateway now ships, else an ``aat:NNN`` identifier. */
 function typeAatKey(t) {

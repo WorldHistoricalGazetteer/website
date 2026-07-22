@@ -8,8 +8,14 @@
 // per-item `when`) rides along on each item's `_raw` and is round-tripped untouched.
 
 import { esc, truncate, csrf } from './wb-shell.js';
+import { openAatPicker } from './wb-aat-modal.js';
+import { loadAatVocab, aatUrl, aatTooltipHtml, aatLabel } from './aatVocab.js';
 
 const RECON_ENDPOINT = '/reconcile';
+const AAT_RE = /^aat:\d+$/;
+
+// Warm the shared AAT vocab cache (labels/tooltips), shared with Atlas + MyD (place#134).
+loadAatVocab();
 
 // One-line human description of a GeoJSON geometry, for the collapsed geometry summary.
 function geomSummary(g) {
@@ -29,7 +35,8 @@ function geomSummary(g) {
 }
 
 // Generic repeatable-list editor over a sub-container. fields: [{k, placeholder, width}].
-function listEditor(box, arr, fields, factory, onChange) {
+// `afterRender(box)` (optional) runs after every (re-)render, for per-row decoration.
+function listEditor(box, arr, fields, factory, onChange, afterRender) {
   function render() {
     box.innerHTML = arr.map((_, i) => `<div class="wb-item" data-i="${i}">${
       fields.map((f) => `<input class="form-control form-control-sm wb-f" data-k="${f.k}" placeholder="${esc(f.placeholder)}" ${f.width ? `style="max-width:${f.width}"` : ''} value="${esc(arr[i][f.k] == null ? '' : arr[i][f.k])}">`).join('')
@@ -40,6 +47,7 @@ function listEditor(box, arr, fields, factory, onChange) {
       row.querySelectorAll('.wb-f').forEach((inp) => inp.addEventListener('input', (e) => { arr[i][e.target.dataset.k] = e.target.value; onChange(); }));
       row.querySelector('.btn-rm').addEventListener('click', () => { arr.splice(i, 1); render(); onChange(); });
     });
+    if (afterRender) afterRender(box);
   }
   render();
   return { add() { arr.push(factory()); render(); onChange(); }, render };
@@ -57,7 +65,9 @@ const SECTIONS = `
     <button type="button" class="btn btn-sm btn-outline-secondary wb-rf-add" data-list="names"><i class="fas fa-plus me-1"></i>Add a name</button></div>
   <div class="wb-rf-block"><div class="wb-rf-h">Place types</div>
     <div class="wb-rf-types"></div>
-    <button type="button" class="btn btn-sm btn-outline-secondary wb-rf-add" data-list="types"><i class="fas fa-plus me-1"></i>Add a type</button></div>
+    <div class="d-flex gap-2 mt-1">
+      <button type="button" class="btn btn-sm btn-outline-primary wb-rf-aat-pick"><i class="fas fa-shapes me-1"></i>Pick from Getty AAT</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary wb-rf-add" data-list="types"><i class="fas fa-plus me-1"></i>Add a custom type</button></div></div>
   <div class="wb-rf-block"><div class="wb-rf-h">Location / geometry</div><div class="wb-rf-coord"></div></div>
   <div class="wb-rf-block"><div class="wb-rf-h">Dates</div>
     <div class="input-group input-group-sm" style="max-width:26rem;">
@@ -93,11 +103,59 @@ export function renderRecordFields(container, rec, opts = {}) {
   $('.wb-rf-end').addEventListener('input', (e) => { rec.dates.end = e.target.value === '' ? null : parseInt(e.target.value, 10); onChange(); });
 
   const namesEd = listEditor($('.wb-rf-names'), rec.names, [{ k: 'toponym', placeholder: 'name' }, { k: 'lang', placeholder: 'lang', width: '6rem' }], () => ({ toponym: '', lang: '', _raw: {} }), onChange);
-  const typesEd = listEditor($('.wb-rf-types'), rec.types, [{ k: 'label', placeholder: 'type label' }, { k: 'identifier', placeholder: 'aat:… (optional)', width: '12rem' }], () => ({ label: '', identifier: '', _raw: {} }), onChange);
+  // Types stay free-text-editable (custom / non-AAT types are allowed), and rows
+  // carrying an aat:<id> get a Getty-linked tooltip icon (place#134, mirrors the
+  // Atlas popup chips). The "Pick from Getty AAT" button below opens the shared
+  // TypeTreeWidget modal to add/replace the AAT-typed rows.
+  const typesEd = listEditor($('.wb-rf-types'), rec.types,
+    [{ k: 'label', placeholder: 'type label' }, { k: 'identifier', placeholder: 'aat:… or custom', width: '12rem' }],
+    () => ({ label: '', identifier: '', _raw: {} }), onChange, decorateTypeRows);
   const linksEd = listEditor($('.wb-rf-links'), rec.links, [{ k: 'type', placeholder: 'closeMatch', width: '9rem' }, { k: 'identifier', placeholder: 'wd:Q… / gn:… / URL' }], () => ({ type: 'closeMatch', identifier: '' }), onChange);
   const descrEd = listEditor($('.wb-rf-descriptions'), rec.descriptions, [{ k: 'value', placeholder: 'description' }, { k: 'lang', placeholder: 'lang', width: '6rem' }], () => ({ value: '', lang: '', _raw: {} }), onChange);
   const editors = { names: namesEd, types: typesEd, links: linksEd, descriptions: descrEd };
   container.querySelectorAll('.wb-rf-add').forEach((b) => b.addEventListener('click', () => editors[b.dataset.list].add()));
+
+  // Add a Getty link + rich AAT tooltip to each type row whose identifier is aat:<id>.
+  function decorateTypeRows(box) {
+    box.querySelectorAll('.wb-item').forEach((row) => {
+      const i = +row.dataset.i;
+      const id = rec.types[i] && rec.types[i].identifier;
+      if (!id || !AAT_RE.test(id)) return;
+      const a = document.createElement('a');
+      a.href = aatUrl(id); a.target = '_blank'; a.rel = 'noopener';
+      a.className = 'wb-rf-aat-link ms-1';
+      a.innerHTML = '<i class="fas fa-up-right-from-square"></i>';
+      a.setAttribute('data-bs-toggle', 'tooltip');
+      a.setAttribute('data-bs-html', 'true');
+      a.setAttribute('title', aatTooltipHtml(id));
+      row.querySelector('.btn-rm').before(a);
+      if (window.bootstrap && window.bootstrap.Tooltip && !window.bootstrap.Tooltip.getInstance(a)) new window.bootstrap.Tooltip(a);
+    });
+  }
+
+  // "Pick from Getty AAT": open the shared modal preloaded with this record's
+  // current AAT types; on Apply, replace the AAT-typed rows (keeping custom ones)
+  // in place so the editor's array binding is preserved.
+  $('.wb-rf-aat-pick').addEventListener('click', () => {
+    const selected = rec.types.filter((t) => t.identifier && AAT_RE.test(t.identifier)).map((t) => ({ id: t.identifier, text: t.label || aatLabel(t.identifier) || '' }));
+    openAatPicker({
+      title: rec.title ? `Place types — ${truncate(rec.title, 40)}` : 'Place types',
+      selected,
+      onApply: (concepts) => {
+        const byId = {};
+        rec.types.forEach((t) => { if (t.identifier) byId[t.identifier] = t; });
+        const custom = rec.types.filter((t) => !(t.identifier && AAT_RE.test(t.identifier)));
+        const aatRows = concepts.map((c) => {
+          const existing = byId[c.id];
+          return { label: c.text || (existing && existing.label) || aatLabel(c.id) || '', identifier: c.id, _raw: (existing && existing._raw) || {} };
+        });
+        const merged = aatRows.concat(custom);
+        rec.types.splice(0, rec.types.length, ...merged);
+        typesEd.render();
+        onChange();
+      },
+    });
+  });
 
   // Geometry editor: a summary + a lazily-mounted MapLibre draw map (recon-map.js picker) supporting
   // single AND multi point/line/polygon. Read-only for complex/annotated geometry (view-only map).
