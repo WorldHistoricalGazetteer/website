@@ -1292,6 +1292,100 @@ a.pl-chip.pl-aat { cursor: pointer; }
     vertical-align: middle;
 }
 
+/* ── Rich gazetteer rows: licence badge, citation, metadata, download (place#136) ── */
+#gazetteers_offcanvas .gaz-entry-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+#gazetteers_offcanvas .gaz-entry .gaz-check {
+    flex: 1 1 auto;
+    min-width: 0;
+    cursor: pointer;
+}
+#gazetteers_offcanvas .gaz-entry .gaz-check .form-check-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#gazetteers_offcanvas .gaz-entry-actions {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+/* Licence pill — same palette as the map-popup badge, panel-scoped. */
+#gazetteers_offcanvas .whg-licence-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    border-radius: 10px;
+    font-size: 0.6rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-decoration: none;
+    border: 1px solid transparent;
+    white-space: nowrap;
+}
+#gazetteers_offcanvas a.whg-licence-badge:hover { filter: brightness(0.95); }
+#gazetteers_offcanvas .whg-licence-badge.lic-open        { background: #d5f5e3; color: #1e6b3a; }
+#gazetteers_offcanvas .whg-licence-badge.lic-attribution { background: #fdebd0; color: #7e5109; }
+#gazetteers_offcanvas .whg-licence-badge.lic-restrictive { background: #fadbd8; color: #922b21; }
+#gazetteers_offcanvas .whg-licence-badge.lic-unknown     { background: #eaecee; color: #5d6d7e; }
+
+#gazetteers_offcanvas .gaz-meta-toggle {
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: rgba(44, 62, 80, 0.5);
+    line-height: 1;
+    font-size: 0.85rem;
+}
+#gazetteers_offcanvas .gaz-meta-toggle:hover { color: #2c3e50; }
+#gazetteers_offcanvas .gaz-meta-toggle[aria-expanded="true"] { color: #2c3e50; }
+
+#gazetteers_offcanvas .gaz-meta {
+    margin: 2px 0 6px 22px;
+    padding: 8px 10px;
+    background: rgba(44, 62, 80, 0.03);
+    border: 1px solid rgba(44, 62, 80, 0.08);
+    border-radius: 0.25rem;
+    font-size: 0.76rem;
+    color: #34495e;
+}
+#gazetteers_offcanvas .gaz-meta-desc { margin: 0 0 6px; }
+#gazetteers_offcanvas .gaz-meta-dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 8px;
+    row-gap: 2px;
+    margin: 0 0 8px;
+}
+#gazetteers_offcanvas .gaz-meta-dl dt {
+    font-weight: 600;
+    color: #566573;
+    text-transform: uppercase;
+    font-size: 0.6rem;
+    letter-spacing: 0.03em;
+    align-self: center;
+}
+#gazetteers_offcanvas .gaz-meta-dl dd { margin: 0; word-break: break-word; }
+#gazetteers_offcanvas .gaz-meta-actions { margin-bottom: 8px; }
+#gazetteers_offcanvas .gaz-dl-btn {
+    font-size: 0.7rem;
+    padding: 0.12rem 0.5rem;
+    border: 1px solid rgba(44, 62, 80, 0.25);
+    background: #fff;
+    color: #2c3e50;
+}
+#gazetteers_offcanvas .gaz-dl-group .gaz-dl-btn:hover { background: #2c3e50; color: #fff; }
+#gazetteers_offcanvas .gaz-dl-btn:disabled { opacity: 0.5; }
+#gazetteers_offcanvas .gaz-dl-wrap { cursor: not-allowed; }
+#gazetteers_offcanvas .gaz-citation-label { font-weight: 600; }
+/* Compact the embedded citation formatter widget inside the panel. */
+#gazetteers_offcanvas .gaz-citation .csl-container { padding: 0.4rem !important; }
+#gazetteers_offcanvas .gaz-citation .formatted-citation { font-size: 0.7rem; }
+#gazetteers_offcanvas .gaz-citation .form-select { font-size: 0.7rem; }
+
 /* ═══════════════════════════════════════════════════════════════════
    Type tree overrides for atlas offcanvas
    — remove bullet points, reduce font size

@@ -24,7 +24,7 @@ async function loadAndRegisterCSLTemplates() {
     }
 }
 
-class CitationFormatter {
+export class CitationFormatter {
     constructor(element) {
         this.cslStyles = {
             'APA': 'apa',
@@ -205,4 +205,12 @@ class CitationFormatter {
 export function initializeCitationFormatters() {
     const citationElements = document.querySelectorAll('[data-csl-json]');
     citationElements.forEach(element => new CitationFormatter(element));
+}
+
+// Expose the class globally so pages that build citation widgets lazily (e.g.
+// the Atlas Gazetteers panel, place#136) can construct one on demand without
+// re-bundling citation-js into their own entry point. The base bundle imports
+// this module on every page, so the global is always available.
+if (typeof window !== 'undefined') {
+    window.WHGCitationFormatter = CitationFormatter;
 }

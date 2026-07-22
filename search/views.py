@@ -125,6 +125,110 @@ class SearchPageView(TemplateView):
         return context
 
 
+# ── Gazetteers-panel row enrichment (place#136) ─────────────────────────────
+# The Atlas Gazetteers offcanvas surfaces, per gazetteer: a colour-coded licence
+# badge, a citation tool, an expandable metadata section, and a download button.
+# These helpers derive the display data from the registry ``.values()`` dicts.
+
+def _licence_pill(row):
+    """Server-side twin of ``gazetteerInteraction.js::licenceClass`` +
+    ``renderAttribution`` for the offcanvas rows. Returns a small dict
+    (``cls``/``code``/``deed``/``tip``) or ``None`` when there's nothing to show.
+    Kept in sync with the JS: any change to the colour buckets there should be
+    mirrored here (and vice versa)."""
+    spdx = row.get('license__spdx_id') or ''
+    label = row.get('license__label') or ''
+    deed = row.get('license__url') or row.get('license_url') or ''
+    rights = row.get('rights_holder') or ''
+    if not spdx and not label and not rights:
+        return None
+    up = spdx.upper()
+    pc = row.get('license__permits_commercial')
+    ar = row.get('license__attribution_required')
+    custom = row.get('license__custom')
+    if not spdx and not label:
+        cls = 'lic-unknown'
+    elif ('CC0' in up or 'PDDL' in up or up.startswith('PUBLIC')
+          or (pc is True and ar is False)):
+        cls = 'lic-open'
+    elif pc is False or '-NC' in up or 'ARR' in up or custom is True:
+        cls = 'lic-restrictive'
+    else:
+        cls = 'lic-attribution'
+    tip = [label or spdx or 'Licence not specified']
+    if rights:
+        tip.append('© ' + rights)
+    if deed:
+        tip.append('Click for licence terms')
+    return {'cls': cls, 'code': spdx or '©', 'deed': deed, 'tip': ' · '.join(tip)}
+
+
+def _csl_json(row):
+    """A minimal CSL-JSON object for the citation tool (citationFormatter.js
+    reads it off ``data-csl-json`` and adds the accessed date + URL client-side).
+    Built from the registry attribution fields; ``type: dataset``."""
+    csl = {'type': 'dataset', 'title': row.get('name') or ''}
+    if row.get('rights_holder'):
+        csl['publisher'] = row['rights_holder']
+    if row.get('source_url'):
+        csl['URL'] = row['source_url']
+    authors = [{'literal': c['name']} for c in (row.get('contributors_csl') or [])
+               if isinstance(c, dict) and c.get('name')]
+    if authors:
+        csl['author'] = authors
+    elif row.get('rights_holder'):
+        csl['author'] = [{'literal': row['rights_holder']}]
+    return json.dumps(csl)
+
+
+def _authority_download(row):
+    """Download affordance for an *authority* gazetteer row. Authorities live in
+    the CRC gateway (no local queryset to stream), so the button is always shown
+    but disabled — the tooltip explains why, driven by the place#136 flags.
+    ``downloadable`` datasets (Specialist Gazetteers) get a real, enabled button
+    via ``_specialist_download`` instead."""
+    reason = row.get('download_blocked_reason') or ''
+    if row.get('downloadable') is False:
+        if reason == 'licence-restricted':
+            tip = ('Not available for download — licence-restricted. '
+                   'Available for search & reconciliation.')
+        elif reason == 'volume-exceeds-cap':
+            tip = ('Not available for download — dataset too large to re-host. '
+                   'Available for search & reconciliation.')
+        else:
+            tip = ('Not available for download. '
+                   'Available for search & reconciliation.')
+    else:
+        tip = ('Bulk download of this authority isn’t offered here yet — its '
+               'records are available for search & reconciliation.')
+    return {'enabled': False, 'entity': '', 'filetypes': [], 'tip': tip}
+
+
+def _specialist_download(row, dataset_downloadable, user_authenticated):
+    """Download affordance for a Specialist Gazetteer (a WHG-namespaced local
+    ``Dataset``, registry id ``whg:<pk>``). Real, enabled download via the shared
+    ``/entity/dataset:<pk>/api`` streaming endpoint when the dataset is
+    downloadable and the user is signed in."""
+    reg_id = str(row.get('id') or '')
+    pk = reg_id.split(':', 1)[1] if ':' in reg_id else ''
+    if not pk or dataset_downloadable is None:
+        return {'enabled': False, 'entity': '', 'filetypes': [],
+                'tip': 'Download unavailable.'}
+    if dataset_downloadable is False:
+        return {'enabled': False, 'entity': '', 'filetypes': [],
+                'tip': ('Not available for download — obtain it from its '
+                        'original source.')}
+    if not user_authenticated:
+        return {'enabled': False, 'entity': f'dataset:{pk}', 'filetypes': [],
+                'tip': 'Sign in to download this gazetteer.'}
+    return {
+        'enabled': True,
+        'entity': f'dataset:{pk}',
+        'filetypes': ['lpf', 'tsv'],
+        'tip': 'Download this gazetteer as Linked Places Format (LPF) or TSV.',
+    }
+
+
 class AtlasPageView(TemplateView):
     """
     The Atlas (Explorer) page — a hero-map spatio-temporal explorer
@@ -199,33 +303,70 @@ class AtlasPageView(TemplateView):
         # Falls back to an empty queryset before the inventory push has run;
         # the data migration in api/migrations/0003 seeds the ten current
         # authorities so the page renders even on a fresh DB.
+        # Attribution / licence / download fields feed the per-row licence
+        # badge, citation tool, metadata section and download button (place#136).
+        _reg_fields = (
+            'citation_text', 'rights_holder', 'source_url', 'contributors_csl',
+            'license__spdx_id', 'license__label', 'license__url', 'license_url',
+            'license__permits_commercial', 'license__attribution_required',
+            'license__custom',
+            # Download-legality + volume flags (place#136).
+            'downloadable', 'redistributable', 'download_blocked_reason',
+            # temporal_extent is tiny ([min, max]) so it's inlined for the
+            # metadata section; h3_coverage_coarse stays out (served/cached
+            # separately via atlas_registry_coverage()).
+            'temporal_extent',
+        )
         gazetteer_inventory = list(
             GazetteerRegistryEntry.objects
             .filter(entry_class='authority')
             .order_by('name')
             .values(
                 'id', 'name', 'description', 'namespace', 'core',
-                'no_explore', 'gazetteer_type', 'record_count',
-                # Attribution fields (citations Phase 4) — surfaced in the
-                # Gazetteers offcanvas. license_url falls back to the deed
-                # URL on the resolved License row.
-                'citation_text', 'rights_holder', 'source_url',
-                'contributors_csl', 'license__spdx_id', 'license__label',
-                'license__url', 'license_url',
-                # NB: temporal_extent + h3_coverage_coarse are NOT inlined here —
-                # they're served (and IndexedDB-cached client-side, keyed by
-                # registry_version) via atlas_registry_coverage() so the ~200 KB
-                # coarse-H3 payload isn't re-sent on every page load.
+                'no_explore', 'gazetteer_type', 'record_count', *_reg_fields,
             )
         )
+        for row in gazetteer_inventory:
+            row['licence_pill'] = _licence_pill(row)
+            row['csl_json'] = _csl_json(row)
+            row['download'] = _authority_download(row)
+
         specialist_gazetteers = list(
             GazetteerRegistryEntry.objects
             .filter(entry_class='dataset', namespace='whg')
             .order_by('name')
             .values(
                 'id', 'name', 'description', 'gazetteer_type', 'record_count',
+                *_reg_fields,
             )
         )
+        # Resolve local Dataset.downloadable for the specialist rows (registry id
+        # ``whg:<pk>``) so their download buttons reflect the real dataset state.
+        _spec_pks = []
+        for row in specialist_gazetteers:
+            rid = str(row.get('id') or '')
+            if ':' in rid and rid.split(':', 1)[1].isdigit():
+                _spec_pks.append(int(rid.split(':', 1)[1]))
+        _ds_downloadable = dict(
+            Dataset.objects.filter(pk__in=_spec_pks)
+            .values_list('pk', 'downloadable')
+        )
+        _authed = self.request.user.is_authenticated
+        for row in specialist_gazetteers:
+            rid = str(row.get('id') or '')
+            pk = int(rid.split(':', 1)[1]) if (
+                ':' in rid and rid.split(':', 1)[1].isdigit()) else None
+            row['licence_pill'] = _licence_pill(row)
+            row['csl_json'] = _csl_json(row)
+            row['download'] = _specialist_download(
+                row, _ds_downloadable.get(pk), _authed)
+            # contributors_csl is a JSON list; the json_script payload keeps it,
+            # but the licence FK spanned fields are only needed for the pill and
+            # can be dropped to keep the payload lean.
+            for k in ('license__permits_commercial',
+                      'license__attribution_required', 'license__custom'):
+                row.pop(k, None)
+
         context['gazetteer_inventory'] = gazetteer_inventory
         context['specialist_gazetteers'] = specialist_gazetteers
         # Version stamp for the client's IndexedDB coverage cache — the browser

@@ -1,6 +1,7 @@
 <!-- /search/templates/search/atlas.html -->
 {% extends "main/base_webpack.html" %}
 {% load static %}
+{% load humanize %}
 
 {% block maplibre %}
 <script type="text/javascript">
@@ -494,18 +495,83 @@
         <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
             {% for g in gazetteer_inventory %}
             {% if g.id != "whg" %}
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="{{ g.description|default:g.name }}"
-                   data-namespace="{{ g.namespace }}"
-                   data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
-                   data-gazetteer-type="{{ g.gazetteer_type }}">
-                <input class="form-check-input authority-cb" type="checkbox"
-                       value="{{ g.id }}"{% if g.core %} checked{% endif %}>
-                <span class="form-check-label">{{ g.name }}</span>
-                {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>
-            </label>
+            <div class="authority-item gaz-entry"
+                 data-namespace="{{ g.namespace }}"
+                 data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
+                 data-gazetteer-type="{{ g.gazetteer_type }}">
+                <div class="gaz-entry-row">
+                    <label class="form-check gaz-check mb-0"
+                           data-bs-toggle="tooltip"
+                           data-bs-title="{{ g.description|default:g.name }}">
+                        <input class="form-check-input authority-cb" type="checkbox"
+                               value="{{ g.id }}"{% if g.core %} checked{% endif %}>
+                        <span class="form-check-label">{{ g.name }}</span>
+                        {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
+                        <span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>
+                    </label>
+                    <span class="gaz-entry-actions">
+                        {% if g.licence_pill %}
+                        {% if g.licence_pill.deed %}
+                        <a class="whg-licence-badge {{ g.licence_pill.cls }}" href="{{ g.licence_pill.deed }}"
+                           target="_blank" rel="noopener noreferrer"
+                           data-bs-toggle="tooltip" data-bs-title="{{ g.licence_pill.tip }}">
+                            <span class="whg-licence-code">{{ g.licence_pill.code }}</span>
+                        </a>
+                        {% else %}
+                        <span class="whg-licence-badge {{ g.licence_pill.cls }}"
+                              data-bs-toggle="tooltip" data-bs-title="{{ g.licence_pill.tip }}">
+                            <span class="whg-licence-code">{{ g.licence_pill.code }}</span>
+                        </span>
+                        {% endif %}
+                        {% endif %}
+                        <button type="button" class="btn btn-sm gaz-meta-toggle collapsed"
+                                data-bs-toggle="collapse" data-bs-target="#gazmeta-auth-{{ g.namespace }}"
+                                aria-expanded="false" aria-controls="gazmeta-auth-{{ g.namespace }}"
+                                title="Details, citation &amp; download">
+                            <i class="fas fa-circle-info"></i>
+                        </button>
+                    </span>
+                </div>
+                <div class="collapse gaz-meta" id="gazmeta-auth-{{ g.namespace }}"
+                     data-gaz-csl="{{ g.csl_json }}">
+                    <div class="gaz-meta-inner">
+                        {% if g.description %}<p class="gaz-meta-desc">{{ g.description }}</p>{% endif %}
+                        <dl class="gaz-meta-dl">
+                            {% if g.record_count %}<dt>Records</dt><dd>{{ g.record_count|intcomma }}</dd>{% endif %}
+                            {% if g.temporal_extent %}<dt>Dates</dt><dd>{{ g.temporal_extent.0|default:"—" }} – {{ g.temporal_extent.1|default:"—" }}</dd>{% endif %}
+                            {% if g.rights_holder %}<dt>Rights</dt><dd>{{ g.rights_holder }}</dd>{% endif %}
+                            {% if g.source_url %}<dt>Source</dt><dd><a href="{{ g.source_url }}" target="_blank" rel="noopener noreferrer">Visit source <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.7em;"></i></a></dd>{% endif %}
+                        </dl>
+                        <div class="gaz-meta-actions">
+                            {% with dl=g.download %}
+                            {% if dl.enabled %}
+                            <div class="btn-group btn-group-sm gaz-dl-group" role="group" aria-label="Download">
+                                {% for ft in dl.filetypes %}
+                                <a class="btn gaz-dl-btn" href="/entity/{{ dl.entity }}/api?filetype={{ ft }}" download
+                                   data-bs-toggle="tooltip" data-bs-title="Download as {{ ft|upper }}">
+                                    <i class="fas fa-download me-1"></i>{{ ft|upper }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="gaz-dl-wrap d-inline-block" tabindex="0"
+                                  data-bs-toggle="tooltip" data-bs-title="{{ dl.tip }}">
+                                <button type="button" class="btn btn-sm gaz-dl-btn" disabled>
+                                    <i class="fas fa-download me-1"></i>Download
+                                </button>
+                            </span>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                        <div class="gaz-citation-wrap">
+                            <div class="gaz-citation-label small text-muted mb-1">
+                                <i class="fas fa-quote-left me-1"></i>Cite this gazetteer
+                            </div>
+                            <div class="gaz-citation"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             {% endif %}
             {% empty %}
             <p class="small text-muted fst-italic">

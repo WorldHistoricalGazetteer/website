@@ -3,6 +3,7 @@ import logging
 import os
 import time
 import zlib
+from urllib.parse import quote as urlquote
 
 import redis
 from celery import shared_task
@@ -143,6 +144,62 @@ def stream_from_file(filepath):
     with open(filepath, 'rb') as f:
         while chunk := f.read(8192):
             yield chunk
+
+
+def build_streaming_download_response(request, obj_type, obj, filetype='lpf'):
+    """Return a configured ``StreamingHttpResponse`` that streams ``obj`` as a
+    gzipped LPF or TSV download.
+
+    Extracted from ``api.views_entity.EntityFeatureView`` so the same
+    cache-aware streaming path can serve BOTH the legacy dataset/collection UI
+    and the Atlas Gazetteers panel's download buttons (place#136) without
+    either re-implementing the cache-lock / header logic. Callers are
+    responsible for authorisation and for the ``obj.downloadable`` gate — this
+    helper only builds the response once an object is cleared for download.
+
+    ``obj`` must be a resolved model instance (a ``Dataset`` or place-class
+    ``Collection``); ``obj_type``/``filetype`` follow the same conventions as
+    the entity API (``filetype`` ∈ {``lpf``, ``tsv``}).
+    """
+    from django.http import StreamingHttpResponse
+
+    obj_id = str(obj.pk)
+    content_type = ("application/geo+json" if filetype == 'lpf'
+                    else "text/tab-separated-values")
+    cache_path = FileCache.get_cache_path(obj_type, obj_id, filetype=filetype)
+    filename = f"whg_{obj_type}_{obj_id}.{filetype}"
+
+    # Stream from cache if available.
+    if FileCache.is_cached(obj_type, obj_id, filetype=filetype):
+        logger.debug(f"Serving cached {filetype.upper()} for {obj_type}:{obj_id}")
+        response = StreamingHttpResponse(
+            stream_from_file(cache_path), content_type=content_type)
+        response["Content-Length"] = str(os.path.getsize(cache_path))
+    else:
+        # Cache miss. The first request to win the build lock streams live AND
+        # writes the cache (publish-on-complete, so an interrupted stream can't
+        # poison the cache — see developer/diagnosis-truncated-lpf-downloads.md).
+        if not FileCache.is_building(obj_type, obj_id, filetype=filetype) \
+                and FileCache.acquire_build_lock(obj_type, obj_id, filetype=filetype):
+            logger.debug(f"Acquired build lock for {filetype.upper()} {obj_type}:{obj_id}")
+            response = StreamingHttpResponse(
+                stream_live(obj_type, obj, request,
+                            cache_filepath=cache_path, filetype=filetype),
+                content_type=content_type)
+        else:
+            # Someone else holds the lock (or is building) — stream live, no cache.
+            logger.debug(f"Cache busy for {filetype.upper()} {obj_type}:{obj_id}, streaming live")
+            response = StreamingHttpResponse(
+                stream_live(obj_type, obj, request, filetype=filetype),
+                content_type=content_type)
+
+    response['Content-Disposition'] = f'attachment; filename="{urlquote(filename)}"'
+    response['Content-Encoding'] = 'gzip'
+    response['X-Format'] = ('Linked Places Format (LPF)' if filetype == 'lpf'
+                            else 'Tab-separated values (TSV)')
+    response['X-Format-Version'] = 'v1.1' if filetype == 'lpf' else 'v1'
+    response['X-Compatible-With'] = 'GeoJSON' if filetype == 'lpf' else 'WHG TSV consumer'
+    return response
 
 
 def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):

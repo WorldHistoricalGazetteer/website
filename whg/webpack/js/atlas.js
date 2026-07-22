@@ -1036,6 +1036,21 @@ Promise.all([
         sw.addEventListener('change', () => applyGazetteerCoverageFilter());
     });
 
+    // ── Per-gazetteer metadata expander: lazily build the citation widget on
+    //    first open (place#136). The CSL-JSON lives on the .gaz-meta collapse as
+    //    data-gaz-csl; we copy it onto the inner .gaz-citation and hand it to the
+    //    globally-exposed CitationFormatter (base bundle sets window.WHGCitationFormatter).
+    //    Deferred so we don't build one citation-js instance per gazetteer up-front. ──
+    const gazOffcanvasEl = document.getElementById('gazetteers_offcanvas');
+    if (gazOffcanvasEl) {
+        gazOffcanvasEl.addEventListener('shown.bs.collapse', (e) => {
+            const meta = e.target;
+            if (meta && meta.classList && meta.classList.contains('gaz-meta')) {
+                initGazCitation(meta);
+            }
+        });
+    }
+
     // ── Specialist Gazetteers: parent row click reveals the inline dropdown. ──
     // Lazy-render only; the actual tri-state propagation to children is handled
     // by the offcanvas change handler so that clicking either the input OR the
@@ -1550,16 +1565,22 @@ function applyTilesetGating(mode) {
             if (disabled) input.checked = false;
         }
         label.classList.toggle('disabled', disabled);
-        if (!label.dataset.bsTitleOriginal) {
-            label.dataset.bsTitleOriginal = label.getAttribute('data-bs-title') || '';
+        // The descriptive tooltip lives on the inner .gaz-check label (the rich
+        // rows split the checkbox/name into their own label so the badge/actions
+        // sit outside it); fall back to the row itself for the legacy structure.
+        const ttEl = label.querySelector('.gaz-check') || label;
+        if (!ttEl.dataset.bsTitleOriginal) {
+            ttEl.dataset.bsTitleOriginal = ttEl.getAttribute('data-bs-title') || '';
         }
         const newTitle = disabled
             ? 'This gazetteer is not available in Explore mode'
-            : label.dataset.bsTitleOriginal;
-        label.setAttribute('data-bs-title', newTitle);
-        label.setAttribute('data-bs-original-title', newTitle);
+            : ttEl.dataset.bsTitleOriginal;
+        // base.js uses a delegated tooltip whose title() reads data-bs-title at
+        // show time, so updating the attribute is what actually changes the text.
+        ttEl.setAttribute('data-bs-title', newTitle);
+        ttEl.setAttribute('data-bs-original-title', newTitle);
         try {
-            const tt = window.bootstrap && window.bootstrap.Tooltip.getInstance(label);
+            const tt = window.bootstrap && window.bootstrap.Tooltip.getInstance(ttEl);
             if (tt) tt.setContent({ '.tooltip-inner': newTitle });
         } catch (e) { /* no tooltip yet — picked up on next init */ }
     });
@@ -1588,6 +1609,86 @@ function getSpecialistData() {
     }
 }
 
+/** Escape a string for safe interpolation into an HTML attribute or text node. */
+function gazEsc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** Format an integer with thousands separators (mirrors Django's intcomma). */
+function gazComma(n) {
+    if (n == null || n === '') return '';
+    const v = Number(n);
+    return isNaN(v) ? '' : v.toLocaleString('en-US');
+}
+
+/** Build the licence pill + info toggle actions for a gazetteer row, mirroring
+ *  the server-rendered standard rows (search/atlas.html). `p` = g.licence_pill. */
+function gazActionsMarkup(g, metaId) {
+    const p = g.licence_pill;
+    let badge = '';
+    if (p) {
+        const inner = `<span class="whg-licence-code">${gazEsc(p.code)}</span>`;
+        badge = p.deed
+            ? `<a class="whg-licence-badge ${gazEsc(p.cls)}" href="${gazEsc(p.deed)}" target="_blank" rel="noopener noreferrer" data-bs-toggle="tooltip" data-bs-title="${gazEsc(p.tip)}">${inner}</a>`
+            : `<span class="whg-licence-badge ${gazEsc(p.cls)}" data-bs-toggle="tooltip" data-bs-title="${gazEsc(p.tip)}">${inner}</span>`;
+    }
+    return `<span class="gaz-entry-actions">${badge}` +
+        `<button type="button" class="btn btn-sm gaz-meta-toggle collapsed" data-bs-toggle="collapse" data-bs-target="#${metaId}" aria-expanded="false" aria-controls="${metaId}" title="Details, citation &amp; download"><i class="fas fa-circle-info"></i></button>` +
+        `</span>`;
+}
+
+/** Build the download control for a gazetteer row. `dl` = g.download. */
+function gazDownloadMarkup(dl) {
+    if (dl && dl.enabled) {
+        const btns = (dl.filetypes || []).map(ft =>
+            `<a class="btn gaz-dl-btn" href="/entity/${gazEsc(dl.entity)}/api?filetype=${gazEsc(ft)}" download data-bs-toggle="tooltip" data-bs-title="Download as ${gazEsc(ft.toUpperCase())}"><i class="fas fa-download me-1"></i>${gazEsc(ft.toUpperCase())}</a>`
+        ).join('');
+        return `<div class="btn-group btn-group-sm gaz-dl-group" role="group" aria-label="Download">${btns}</div>`;
+    }
+    const tip = gazEsc((dl && dl.tip) || 'Not available for download.');
+    return `<span class="gaz-dl-wrap d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-title="${tip}"><button type="button" class="btn btn-sm gaz-dl-btn" disabled><i class="fas fa-download me-1"></i>Download</button></span>`;
+}
+
+/** Build the collapsible metadata panel for a gazetteer row. */
+function gazMetaMarkup(g, metaId) {
+    const rows = [];
+    if (g.record_count) rows.push(`<dt>Records</dt><dd>${gazComma(g.record_count)}</dd>`);
+    const te = g.temporal_extent;
+    if (Array.isArray(te) && te.length) {
+        const a = (te[0] == null ? '—' : te[0]);
+        const b = (te[1] == null ? '—' : te[1]);
+        rows.push(`<dt>Dates</dt><dd>${gazEsc(a)} – ${gazEsc(b)}</dd>`);
+    }
+    if (g.rights_holder) rows.push(`<dt>Rights</dt><dd>${gazEsc(g.rights_holder)}</dd>`);
+    if (g.source_url) rows.push(`<dt>Source</dt><dd><a href="${gazEsc(g.source_url)}" target="_blank" rel="noopener noreferrer">Visit source <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.7em;"></i></a></dd>`);
+    const desc = g.description ? `<p class="gaz-meta-desc">${gazEsc(g.description)}</p>` : '';
+    const dl = gazDownloadMarkup(g.download);
+    return `<div class="collapse gaz-meta" id="${metaId}" data-gaz-csl="${gazEsc(g.csl_json || '')}">` +
+        `<div class="gaz-meta-inner">${desc}` +
+        `<dl class="gaz-meta-dl">${rows.join('')}</dl>` +
+        `<div class="gaz-meta-actions">${dl}</div>` +
+        `<div class="gaz-citation-wrap"><div class="gaz-citation-label small text-muted mb-1"><i class="fas fa-quote-left me-1"></i>Cite this gazetteer</div><div class="gaz-citation"></div></div>` +
+        `</div></div>`;
+}
+
+/** Lazily construct the citation widget inside an opened .gaz-meta panel. */
+function initGazCitation(meta) {
+    if (!meta || meta.dataset.citationInit === '1') return;
+    const el = meta.querySelector('.gaz-citation');
+    const csl = meta.dataset.gazCsl;
+    const CF = window.WHGCitationFormatter;
+    if (!el || !csl || !CF) return;
+    el.setAttribute('data-csl-json', csl);
+    try {
+        new CF(el);
+        meta.dataset.citationInit = '1';
+    } catch (err) {
+        console.warn('[atlas] citation widget init failed', err);
+    }
+}
+
 function renderSpecialistList() {
     if (_specialistRendered) return;
     const list = document.querySelector('#gazetteers_offcanvas .specialist-list');
@@ -1602,19 +1703,25 @@ function renderSpecialistList() {
     const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
     const inputType = mode === 'explore' ? 'radio' : 'checkbox';
     const nameAttr = mode === 'explore' ? ' name="gazetteer_explore"' : '';
-    const html = data.map(g => {
-        const desc = (g.description || g.name || '').replace(/"/g, '&quot;');
+    const html = data.map((g, i) => {
+        const desc = gazEsc(g.description || g.name || '');
         const type = g.gazetteer_type || 'standard';
+        const metaId = `gazmeta-spec-${i}`;
         return `
-            <label class="authority-item form-check"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="${desc}"
-                   data-gazetteer-type="${type}"
-                   data-specialist-id="${g.id}">
-                <input class="form-check-input authority-cb" type="${inputType}"${nameAttr}
-                       value="${g.id}">
-                <span class="form-check-label">${g.name}</span>
-            </label>
+            <div class="authority-item gaz-entry"
+                 data-gazetteer-type="${gazEsc(type)}"
+                 data-specialist-id="${gazEsc(g.id)}">
+                <div class="gaz-entry-row">
+                    <label class="form-check gaz-check mb-0"
+                           data-bs-toggle="tooltip" data-bs-title="${desc}">
+                        <input class="form-check-input authority-cb" type="${inputType}"${nameAttr}
+                               value="${gazEsc(g.id)}">
+                        <span class="form-check-label">${gazEsc(g.name)}</span>
+                    </label>
+                    ${gazActionsMarkup(g, metaId)}
+                </div>
+                ${gazMetaMarkup(g, metaId)}
+            </div>
         `;
     }).join('');
     list.innerHTML = html;
@@ -1626,8 +1733,11 @@ function renderSpecialistList() {
         search.dataset.wired = '1';
         search.addEventListener('input', () => {
             const q = search.value.trim().toLowerCase();
-            list.querySelectorAll('label.authority-item').forEach(l => {
-                const text = (l.textContent || '').toLowerCase();
+            list.querySelectorAll('.authority-item').forEach(l => {
+                // Match on the gazetteer name only (the row now also contains
+                // metadata/citation/download text that shouldn't affect search).
+                const nameEl = l.querySelector('.form-check-label');
+                const text = ((nameEl ? nameEl.textContent : l.textContent) || '').toLowerCase();
                 l.classList.toggle('d-none', q && !text.includes(q));
             });
             applyTypePillFilter();
@@ -1656,8 +1766,8 @@ function applyParentToggleToChildren(checkedAll) {
     );
     children.forEach(cb => {
         // Only toggle visible (non-d-none, non-disabled) children.
-        const label = cb.closest('label');
-        if (label && label.classList.contains('d-none')) return;
+        const row = cb.closest('.authority-item');
+        if (row && row.classList.contains('d-none')) return;
         cb.checked = !!checkedAll;
     });
     recountSpecialistTriState();
@@ -1707,7 +1817,7 @@ function applyTypePillFilter() {
         : Array.from(filterRow.querySelectorAll('[data-gazetteer-type-pill].active'))
             .map(b => b.dataset.gazetteerTypePill);
     const showAll = !activePills || activePills.length === 0;
-    list.querySelectorAll('label.authority-item').forEach(label => {
+    list.querySelectorAll('.authority-item').forEach(label => {
         if (showAll) {
             // Restore visibility unless the search-box has hidden this row.
             // (We can't distinguish source-of-hide; safe default: show.)
