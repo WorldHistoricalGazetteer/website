@@ -232,13 +232,15 @@ function renderHeader(data) {
                    title="Copy a link to this place" aria-label="Copy link to this place">
                <i class="fas fa-share-nodes"></i></button>`
         : '';
-    // Title and share button share one row (saves vertical space); the source
-    // id sits on the line below.
+    // Title, share button and (when present) the Wikipedia mark share one row
+    // (saves vertical space); the source id sits on the line below.
+    const wikiHtml = renderWikipediaBadge(data);
     return `
         <div class="popup-header">
             <div class="popup-title-row">
                 ${titleHtml}
                 ${shareHtml}
+                ${wikiHtml}
             </div>
             ${idHtml}
         </div>
@@ -296,8 +298,7 @@ function renderChips(data) {
         const titleAttr = name ? ` title="${esc(name)}"` : '';
         chips.push(`<span class="popup-chip popup-chip-cc"${titleAttr}>${esc(cc)}</span>`);
     }
-    const wikiBadge = renderWikipediaBadge(data);
-    if (wikiBadge) chips.push(wikiBadge);
+    // Wikipedia mark now lives inline in the title row (renderHeader).
     if (chips.length === 0) return '';
     return `<div class="popup-chips">${chips.join('')}</div>`;
 }

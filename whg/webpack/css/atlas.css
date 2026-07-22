@@ -1417,7 +1417,8 @@ a.pl-chip.pl-aat { cursor: pointer; }
     align-items: baseline;
 }
 .whg-gazetteer-popup .popup-title-row .popup-title { flex: 0 1 auto; min-width: 0; }
-.whg-gazetteer-popup .popup-title-row .popup-share { flex: 0 0 auto; margin-left: 5px; }
+.whg-gazetteer-popup .popup-title-row .popup-share,
+.whg-gazetteer-popup .popup-title-row .popup-chip-wiki { flex: 0 0 auto; margin-left: 5px; }
 .whg-gazetteer-popup .popup-title {
     font-weight: 600;
     font-size: 0.95rem;
