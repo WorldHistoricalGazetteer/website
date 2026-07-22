@@ -224,13 +224,13 @@ function renderHeader(data) {
     const idHtml = !placeId ? ''
         : srcUrl
             ? `<a class="popup-place-id popup-source-link" href="${esc(srcUrl)}" target="_blank" rel="noopener"
-                  title="View this place on the source's website">${esc(placeId)}<i class="fas fa-arrow-up-right-from-square popup-source-ext"></i></a>`
-            : `<div class="popup-place-id" title="Source identifier">${esc(placeId)}</div>`;
+                  data-bs-toggle="tooltip" data-bs-title="View this place on the source's website">${esc(placeId)}<i class="fas fa-arrow-up-right-from-square popup-source-ext"></i></a>`
+            : `<div class="popup-place-id" data-bs-toggle="tooltip" data-bs-title="Source identifier">${esc(placeId)}</div>`;
     // Copy a shareable deep link (?gazetteer=&place=) to this place. Handled by
     // a document-level delegate in atlas.js (where the URL builder lives).
     const shareHtml = placeId
         ? `<button type="button" class="popup-share" data-share-pid="${esc(placeId)}"
-                   title="Copy a link to this place" aria-label="Copy link to this place">
+                   data-bs-toggle="tooltip" data-bs-title="Copy a link to this place" aria-label="Copy link to this place">
                <i class="fas fa-share-nodes"></i></button>`
         : '';
     // Title, share button and (when present) the Wikipedia mark share one row
@@ -284,9 +284,11 @@ function renderChips(data) {
         if (aatKey) {
             chips.push(`<a class="${cls}" href="${esc(aatUrl(aatKey))}" target="_blank"`
                 + ` rel="noopener noreferrer" data-aat="${esc(aatKey)}"`
-                + ` title="${esc(aatTooltip(aatKey))}">${esc(label)}</a>`);
+                + ` data-bs-toggle="tooltip" data-bs-html="true"`
+                + ` data-bs-title="${esc(aatTooltipHtml(aatKey))}">${esc(label)}</a>`);
         } else {
-            const titleAttr = t.identifier ? ` title="${esc(String(t.identifier))}"` : '';
+            const titleAttr = t.identifier
+                ? ` data-bs-toggle="tooltip" data-bs-title="${esc(String(t.identifier))}"` : '';
             chips.push(`<span class="${cls}"${titleAttr}>${esc(label)}</span>`);
         }
         isPrimary = false;
@@ -296,7 +298,7 @@ function renderChips(data) {
     }
     for (const cc of data.ccodes || []) {
         const name = ccName(cc);
-        const titleAttr = name ? ` title="${esc(name)}"` : '';
+        const titleAttr = name ? ` data-bs-toggle="tooltip" data-bs-title="${esc(name)}"` : '';
         chips.push(`<span class="popup-chip popup-chip-cc"${titleAttr}>${esc(cc)}</span>`);
     }
     // Wikipedia mark now lives inline in the title row (renderHeader).
@@ -575,7 +577,7 @@ function renderWikipediaBadge(data) {
     const label = link.lang && link.lang !== 'en'
         ? `Read this place on Wikipedia (${link.lang})`
         : 'Read this place on Wikipedia';
-    return `<a class="popup-chip-wiki popup-wiki-mark" href="${esc(link.url)}" target="_blank" rel="noopener" title="${esc(label)}" aria-label="${esc(label)}">W</a>`;
+    return `<a class="popup-chip-wiki popup-wiki-mark" href="${esc(link.url)}" target="_blank" rel="noopener" data-bs-toggle="tooltip" data-bs-title="${esc(label)}" aria-label="${esc(label)}">W</a>`;
 }
 
 /** Colour-code the licence badge by permissiveness of the source's terms. */
@@ -620,8 +622,8 @@ function renderAttribution(data) {
     ].filter(Boolean).join(' · ');
     const inner = `<span class="whg-licence-code">${esc(code)}</span>`;
     const badge = deed
-        ? `<a class="whg-licence-badge ${cls}" href="${esc(deed)}" target="_blank" rel="noopener noreferrer" data-bs-toggle="tooltip" title="${esc(tip)}">${inner}</a>`
-        : `<span class="whg-licence-badge ${cls}" data-bs-toggle="tooltip" title="${esc(tip)}">${inner}</span>`;
+        ? `<a class="whg-licence-badge ${cls}" href="${esc(deed)}" target="_blank" rel="noopener noreferrer" data-bs-toggle="tooltip" data-bs-title="${esc(tip)}">${inner}</a>`
+        : `<span class="whg-licence-badge ${cls}" data-bs-toggle="tooltip" data-bs-title="${esc(tip)}">${inner}</span>`;
     const src = srcName
         ? `<span class="whg-licence-source">${esc(srcName)}</span>`
         : '';
@@ -764,6 +766,27 @@ function _bindModalDelegate() {
     });
 }
 
+// Styled (Bootstrap) HTML tooltips for popup content (type/cc chips, licence
+// badge, share/wiki/source links) — one delegated instance, matching the Explore
+// list, instead of native browser title tips. Bootstrap loads via a deferred CDN
+// script, so this is called on each openPopup and no-ops once bound.
+let _popupTooltipsBound = false;
+function _bindPopupTooltips() {
+    if (_popupTooltipsBound) return;
+    const bs = (typeof window !== 'undefined') && window.bootstrap;
+    if (!bs || !bs.Tooltip) return;   // not ready yet — retry on the next popup
+    _popupTooltipsBound = true;
+    new bs.Tooltip(document.body, {
+        selector: '.whg-gazetteer-popup-anchor [data-bs-toggle="tooltip"]',
+        html: true,
+        container: 'body',
+        trigger: 'hover',
+        placement: 'top',
+        animation: false,   // instant hide so a closing popup can't orphan a tip
+        delay: { show: 150, hide: 0 },
+    });
+}
+
 /* ─── Controller ─────────────────────────────────────────────────────── */
 
 export default class GazetteerInteraction {
@@ -810,6 +833,7 @@ export default class GazetteerInteraction {
             this._abortController = null;
         }
         if (this._popup) {
+            this._hidePopupTooltips();
             try { this._popup.remove(); } catch (e) {}
         }
         if (this.map) {
@@ -834,8 +858,23 @@ export default class GazetteerInteraction {
             this._abortController = null;
         }
         if (this._popup) {
+            this._hidePopupTooltips();
             try { this._popup.remove(); } catch (e) {}
         }
+    }
+
+    /** Dismiss any open Bootstrap tooltip inside the popup before it is removed,
+     *  so a hovered chip's tooltip can't orphan (mirrors the list's guard). */
+    _hidePopupTooltips() {
+        const bs = window.bootstrap;
+        if (!bs || !bs.Tooltip || !this._popup) return;
+        let el = null;
+        try { el = this._popup.getElement && this._popup.getElement(); } catch (e) {}
+        if (!el) return;
+        el.querySelectorAll('[aria-describedby]').forEach(t => {
+            const inst = bs.Tooltip.getInstance(t);
+            if (inst) { try { inst.hide(); } catch (e) {} }
+        });
     }
 
     _onEnter() {
@@ -928,6 +967,8 @@ export default class GazetteerInteraction {
      */
     openPopup(placeId, lngLat) {
         if (!this.map || !placeId || !lngLat) return;
+
+        _bindPopupTooltips();   // styled Bootstrap tooltips for popup content
 
         if (this._abortController) {
             try { this._abortController.abort(); } catch (err) {}
