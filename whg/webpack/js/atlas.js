@@ -990,14 +990,8 @@ Promise.all([
         if (!e.target.classList.contains('authority-cb')) return;
         const offcanvasBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
         const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
-
-        if (e.target.closest('.specialist-list')) {
-            // Specialist child change → recount parent tri-state.
-            recountSpecialistTriState();
-        } else if (e.target.closest('.specialist-gazetteers-parent')) {
-            // Parent toggled directly (input or label) → propagate to children.
-            applyParentToggleToChildren(e.target.checked);
-        }
+        // Reference + Contributed gazetteers are now peers in one list, so any
+        // checked row contributes directly — no parent tri-state to reconcile.
         emitGazetteerSelection(mode);
     });
 
@@ -1045,26 +1039,23 @@ Promise.all([
     if (gazOffcanvasEl) {
         gazOffcanvasEl.addEventListener('shown.bs.collapse', (e) => {
             const meta = e.target;
-            if (meta && meta.classList && meta.classList.contains('gaz-meta')) {
-                initGazCitation(meta);
-            }
+            if (!meta || !meta.classList || !meta.classList.contains('gaz-meta')) return;
+            initGazCitation(meta);
+            // Accordion: only one metadata section open at a time — close any
+            // other open .gaz-meta (updates its toggle's aria/collapsed too).
+            gazOffcanvasEl.querySelectorAll('.gaz-meta.show').forEach((other) => {
+                if (other !== meta && window.bootstrap && window.bootstrap.Collapse) {
+                    window.bootstrap.Collapse.getOrCreateInstance(other).hide();
+                }
+            });
         });
     }
 
-    // ── Specialist Gazetteers: parent row click reveals the inline dropdown. ──
-    // Lazy-render only; the actual tri-state propagation to children is handled
-    // by the offcanvas change handler so that clicking either the input OR the
-    // label text fires it.
-    document.querySelectorAll('#gazetteers_offcanvas .specialist-gazetteers-parent').forEach(label => {
-        label.addEventListener('click', () => {
-            const expansion = document.querySelector('#gazetteers_offcanvas .specialist-gazetteers-expansion');
-            if (!expansion) return;
-            if (expansion.classList.contains('d-none')) {
-                renderSpecialistList();
-                expansion.classList.remove('d-none');
-            }
-        });
-    });
+    // ── Gazetteer list filters (place#136 restructure): source-group pill
+    //    (All | Reference | Contributed), type pill (All | Standard | Itinerary |
+    //    Network) and corpus-wide name search. Group + type selections persist to
+    //    localStorage; search filters within the active group. ──
+    initGazetteerListFilters();
 
     // ── Tileset gating for ``no_explore`` gazetteers (OSM, OHM in Explore mode). ──
     applyTilesetGating(document.querySelector('#gazetteers_offcanvas .offcanvas-body')?.dataset.mode || 'filter');
@@ -1520,10 +1511,8 @@ function setGazetteerMode(mode) {
     // mode and re-enabled in Filter mode.
     applyTilesetGating(mode);
 
-    // Re-apply type-pill filter visibility & state if the Specialist expansion
-    // is open (the [data-mode-visible] loop above has already toggled the row's
-    // visibility, but the underlying child filtering must re-run).
-    applyTypePillFilter();
+    // Re-apply the group/type/search visibility filter after the input-type swap.
+    applyGazetteerListFilter();
 
     // Mirror the resulting selection into filterState.
     emitGazetteerSelection(mode);
@@ -1593,85 +1582,9 @@ function applyTilesetGating(mode) {
     }
 }
 
-/* ── Specialist Gazetteers — lazy render of children, tri-state, search, type pills ──
-   The expansion is hidden by default and rendered on first parent-row interaction.
-   Children are rendered with .authority-cb so the existing offcanvas change
-   delegation routes them through recountSpecialistTriState. */
-let _specialistRendered = false;
-
-function getSpecialistData() {
-    const tag = document.getElementById('specialist_gazetteers_data');
-    if (!tag) return [];
-    try {
-        return JSON.parse(tag.textContent) || [];
-    } catch (e) {
-        return [];
-    }
-}
-
-/** Escape a string for safe interpolation into an HTML attribute or text node. */
-function gazEsc(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-/** Format an integer with thousands separators (mirrors Django's intcomma). */
-function gazComma(n) {
-    if (n == null || n === '') return '';
-    const v = Number(n);
-    return isNaN(v) ? '' : v.toLocaleString('en-US');
-}
-
-/** Build the licence pill + info toggle actions for a gazetteer row, mirroring
- *  the server-rendered standard rows (search/atlas.html). `p` = g.licence_pill. */
-function gazActionsMarkup(g, metaId) {
-    const p = g.licence_pill;
-    let badge = '';
-    if (p) {
-        const inner = `<span class="whg-licence-code">${gazEsc(p.code)}</span>`;
-        badge = p.deed
-            ? `<a class="whg-licence-badge ${gazEsc(p.cls)}" href="${gazEsc(p.deed)}" target="_blank" rel="noopener noreferrer" data-bs-toggle="tooltip" data-bs-title="${gazEsc(p.tip)}">${inner}</a>`
-            : `<span class="whg-licence-badge ${gazEsc(p.cls)}" data-bs-toggle="tooltip" data-bs-title="${gazEsc(p.tip)}">${inner}</span>`;
-    }
-    return `<span class="gaz-entry-actions">${badge}` +
-        `<button type="button" class="btn btn-sm gaz-meta-toggle collapsed" data-bs-toggle="collapse" data-bs-target="#${metaId}" aria-expanded="false" aria-controls="${metaId}" title="Details, citation &amp; download"><i class="fas fa-circle-info"></i></button>` +
-        `</span>`;
-}
-
-/** Build the download control for a gazetteer row. `dl` = g.download. */
-function gazDownloadMarkup(dl) {
-    if (dl && dl.enabled) {
-        const btns = (dl.filetypes || []).map(ft =>
-            `<a class="btn gaz-dl-btn" href="/entity/${gazEsc(dl.entity)}/api?filetype=${gazEsc(ft)}" download data-bs-toggle="tooltip" data-bs-title="Download as ${gazEsc(ft.toUpperCase())}"><i class="fas fa-download me-1"></i>${gazEsc(ft.toUpperCase())}</a>`
-        ).join('');
-        return `<div class="btn-group btn-group-sm gaz-dl-group" role="group" aria-label="Download">${btns}</div>`;
-    }
-    const tip = gazEsc((dl && dl.tip) || 'Not available for download.');
-    return `<span class="gaz-dl-wrap d-inline-block" tabindex="0" data-bs-toggle="tooltip" data-bs-title="${tip}"><button type="button" class="btn btn-sm gaz-dl-btn" disabled><i class="fas fa-download me-1"></i>Download</button></span>`;
-}
-
-/** Build the collapsible metadata panel for a gazetteer row. */
-function gazMetaMarkup(g, metaId) {
-    const rows = [];
-    if (g.record_count) rows.push(`<dt>Records</dt><dd>${gazComma(g.record_count)}</dd>`);
-    const te = g.temporal_extent;
-    if (Array.isArray(te) && te.length) {
-        const a = (te[0] == null ? '—' : te[0]);
-        const b = (te[1] == null ? '—' : te[1]);
-        rows.push(`<dt>Dates</dt><dd>${gazEsc(a)} – ${gazEsc(b)}</dd>`);
-    }
-    if (g.rights_holder) rows.push(`<dt>Rights</dt><dd>${gazEsc(g.rights_holder)}</dd>`);
-    if (g.source_url) rows.push(`<dt>Source</dt><dd><a href="${gazEsc(g.source_url)}" target="_blank" rel="noopener noreferrer">Visit source <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.7em;"></i></a></dd>`);
-    const desc = g.description ? `<p class="gaz-meta-desc">${gazEsc(g.description)}</p>` : '';
-    const dl = gazDownloadMarkup(g.download);
-    return `<div class="collapse gaz-meta" id="${metaId}" data-gaz-csl="${gazEsc(g.csl_json || '')}">` +
-        `<div class="gaz-meta-inner">${desc}` +
-        `<dl class="gaz-meta-dl">${rows.join('')}</dl>` +
-        `<div class="gaz-meta-actions">${dl}</div>` +
-        `<div class="gaz-citation-wrap"><div class="gaz-citation-label small text-muted mb-1"><i class="fas fa-quote-left me-1"></i>Cite this gazetteer</div><div class="gaz-citation"></div></div>` +
-        `</div></div>`;
-}
+/* ── Gazetteer rows are now server-rendered as peers (Reference + Contributed);
+   see search/templates/search/_gaz_entry.html. atlas.js only wires behaviour:
+   lazy citation init, the group/type/search filter, and selection emit. ── */
 
 /** Lazily construct the citation widget inside an opened .gaz-meta panel. */
 function initGazCitation(meta) {
@@ -1689,144 +1602,71 @@ function initGazCitation(meta) {
     }
 }
 
-function renderSpecialistList() {
-    if (_specialistRendered) return;
-    const list = document.querySelector('#gazetteers_offcanvas .specialist-list');
-    if (!list) return;
-    const data = getSpecialistData();
-    if (!data.length) {
-        list.innerHTML = '<p class="small text-muted fst-italic mb-0">No specialist gazetteers registered yet.</p>';
-        _specialistRendered = true;
-        return;
-    }
-    const offcanvasBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
-    const mode = (offcanvasBody && offcanvasBody.dataset.mode) || 'filter';
-    const inputType = mode === 'explore' ? 'radio' : 'checkbox';
-    const nameAttr = mode === 'explore' ? ' name="gazetteer_explore"' : '';
-    const html = data.map((g, i) => {
-        const desc = gazEsc(g.description || g.name || '');
-        const type = g.gazetteer_type || 'standard';
-        const metaId = `gazmeta-spec-${i}`;
-        return `
-            <div class="authority-item gaz-entry"
-                 data-gazetteer-type="${gazEsc(type)}"
-                 data-specialist-id="${gazEsc(g.id)}">
-                <div class="gaz-entry-row">
-                    <label class="form-check gaz-check mb-0"
-                           data-bs-toggle="tooltip" data-bs-title="${desc}">
-                        <input class="form-check-input authority-cb" type="${inputType}"${nameAttr}
-                               value="${gazEsc(g.id)}">
-                        <span class="form-check-label">${gazEsc(g.name)}</span>
-                    </label>
-                    ${gazActionsMarkup(g, metaId)}
-                </div>
-                ${gazMetaMarkup(g, metaId)}
-            </div>
-        `;
-    }).join('');
-    list.innerHTML = html;
-    _specialistRendered = true;
+/* ── Gazetteer list filter: source group + type + name search ──
+   All three narrow the single unified list (Reference authorities + Contributed
+   WHG datasets). Group ('all'|'reference'|'contributed') and type
+   ('all'|'standard'|'itinerary'|'network') are single-select pills persisted to
+   localStorage; search matches the gazetteer name within the active group.
+   Rows are hidden via .gaz-hidden, which is independent of the coverage filter's
+   .coverage-hidden (either class hides the row). */
+const GAZ_GROUP_KEY = 'whg_atlas_gaz_group';
+const GAZ_TYPE_KEY = 'whg_atlas_gaz_type';
 
-    // Wire the search input (once).
-    const search = document.querySelector('#gazetteers_offcanvas .specialist-search');
-    if (search && !search.dataset.wired) {
-        search.dataset.wired = '1';
-        search.addEventListener('input', () => {
-            const q = search.value.trim().toLowerCase();
-            list.querySelectorAll('.authority-item').forEach(l => {
-                // Match on the gazetteer name only (the row now also contains
-                // metadata/citation/download text that shouldn't affect search).
-                const nameEl = l.querySelector('.form-check-label');
-                const text = ((nameEl ? nameEl.textContent : l.textContent) || '').toLowerCase();
-                l.classList.toggle('d-none', q && !text.includes(q));
-            });
-            applyTypePillFilter();
-            recountSpecialistTriState();
-        });
-    }
+function _activePill(selector, attr) {
+    const btn = document.querySelector(`#gazetteers_offcanvas ${selector} .btn.active`);
+    return (btn && btn.dataset[attr]) || 'all';
+}
 
-    // Wire the type-pill filter (once).
-    document.querySelectorAll('#gazetteers_offcanvas .gazetteer-type-pill-filter [data-gazetteer-type-pill]').forEach(btn => {
-        if (btn.dataset.wired) return;
-        btn.dataset.wired = '1';
+function applyGazetteerListFilter() {
+    const offcanvas = document.getElementById('gazetteers_offcanvas');
+    if (!offcanvas) return;
+    const group = _activePill('.gazetteer-group-pill', 'gazGroupPill');
+    const type = _activePill('.gazetteer-type-pill-filter', 'gazTypePill');
+    const searchEl = offcanvas.querySelector('.gazetteer-search');
+    const q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+
+    let anyVisible = false;
+    offcanvas.querySelectorAll('.standard-gazetteers-list .gaz-entry').forEach((row) => {
+        const rowGroup = row.dataset.gazGroup || '';
+        const rowType = row.dataset.gazetteerType || 'standard';
+        const nameEl = row.querySelector('.form-check-label');
+        const name = (nameEl ? nameEl.textContent : '').toLowerCase();
+        const hide =
+            (group !== 'all' && rowGroup !== group) ||
+            (type !== 'all' && rowType !== type) ||
+            (q && !name.includes(q));
+        row.classList.toggle('gaz-hidden', hide);
+        if (!hide) anyVisible = true;
+    });
+    const empty = offcanvas.querySelector('.gazetteer-no-matches');
+    if (empty) empty.classList.toggle('d-none', anyVisible);
+}
+
+function _wireGazPillGroup(selector, attr, storageKey) {
+    const group = document.querySelector(`#gazetteers_offcanvas ${selector}`);
+    if (!group) return;
+    // Restore the persisted choice.
+    let saved = null;
+    try { saved = localStorage.getItem(storageKey); } catch (e) {}
+    const buttons = Array.from(group.querySelectorAll('.btn'));
+    if (saved && buttons.some(b => b.dataset[attr] === saved)) {
+        buttons.forEach(b => b.classList.toggle('active', b.dataset[attr] === saved));
+    }
+    buttons.forEach((btn) => {
         btn.addEventListener('click', () => {
-            btn.classList.toggle('active');
-            applyTypePillFilter();
-            recountSpecialistTriState();
+            buttons.forEach(b => b.classList.toggle('active', b === btn));
+            try { localStorage.setItem(storageKey, btn.dataset[attr]); } catch (e) {}
+            applyGazetteerListFilter();
         });
     });
-
-    applyTypePillFilter();
-    recountSpecialistTriState();
 }
 
-function applyParentToggleToChildren(checkedAll) {
-    const children = document.querySelectorAll(
-        '#gazetteers_offcanvas .specialist-list .authority-cb'
-    );
-    children.forEach(cb => {
-        // Only toggle visible (non-d-none, non-disabled) children.
-        const row = cb.closest('.authority-item');
-        if (row && row.classList.contains('d-none')) return;
-        cb.checked = !!checkedAll;
-    });
-    recountSpecialistTriState();
-}
-
-function recountSpecialistTriState() {
-    const parentInput = document.querySelector(
-        '#gazetteers_offcanvas .specialist-gazetteers-parent .authority-cb'
-    );
-    if (!parentInput) return;
-    // Count *all* children regardless of search/pill visibility so that the
-    // 'whg' alias is only emitted when literally every Specialist Gazetteer
-    // is selected, never when filtering merely hides some rows.
-    const allChildren = Array.from(document.querySelectorAll(
-        '#gazetteers_offcanvas .specialist-list .authority-cb'
-    ));
-    if (!allChildren.length) {
-        parentInput.indeterminate = false;
-        return;
-    }
-    const checkedCount = allChildren.filter(cb => cb.checked).length;
-    if (checkedCount === 0) {
-        parentInput.checked = false;
-        parentInput.indeterminate = false;
-    } else if (checkedCount === allChildren.length) {
-        parentInput.checked = true;
-        parentInput.indeterminate = false;
-    } else {
-        parentInput.checked = false;
-        parentInput.indeterminate = true;
-    }
-}
-
-/* ── Type-pill filter (Explore-only sketch) ──
-   Hides Specialist children whose data-gazetteer-type is not in the active pill
-   set. Convention: when *all* pills are off, fall back to "show all" (matches
-   the page's existing area/region selection convention). */
-function applyTypePillFilter() {
-    const filterRow = document.querySelector('#gazetteers_offcanvas .gazetteer-type-pill-filter');
-    if (!filterRow) return;
-    const list = document.querySelector('#gazetteers_offcanvas .specialist-list');
-    if (!list) return;
-    // If filter row is hidden (Filter mode), force show all.
-    const hidden = filterRow.classList.contains('d-none');
-    const activePills = hidden
-        ? null
-        : Array.from(filterRow.querySelectorAll('[data-gazetteer-type-pill].active'))
-            .map(b => b.dataset.gazetteerTypePill);
-    const showAll = !activePills || activePills.length === 0;
-    list.querySelectorAll('.authority-item').forEach(label => {
-        if (showAll) {
-            // Restore visibility unless the search-box has hidden this row.
-            // (We can't distinguish source-of-hide; safe default: show.)
-            label.classList.remove('d-none');
-            return;
-        }
-        const t = label.dataset.gazetteerType || 'standard';
-        label.classList.toggle('d-none', !activePills.includes(t));
-    });
+function initGazetteerListFilters() {
+    _wireGazPillGroup('.gazetteer-group-pill', 'gazGroupPill', GAZ_GROUP_KEY);
+    _wireGazPillGroup('.gazetteer-type-pill-filter', 'gazTypePill', GAZ_TYPE_KEY);
+    const searchEl = document.querySelector('#gazetteers_offcanvas .gazetteer-search');
+    if (searchEl) searchEl.addEventListener('input', () => applyGazetteerListFilter());
+    applyGazetteerListFilter();
 }
 
 // Reflect the current Explore-mode gazetteer selection in the URL as
@@ -1917,32 +1757,16 @@ function showCopyToast(msg) {
 }
 
 /* ── Mirror the active gazetteer selection into filterState ──
-   Tri-state: parent fully checked → 'whg' (compact alias for "all WHG datasets");
-   parent indeterminate → explicit list of child specialist ids; parent unchecked
-   → no Specialist contribution. Standard authority selections are always sent
-   verbatim. */
+   Reference (authority) and Contributed (WHG) gazetteers are peers in one list,
+   so every checked row is sent verbatim by its id (authority namespace, or
+   ``whg:<pk>`` for a contributed dataset). */
 function emitGazetteerSelection(mode) {
     const offcanvas = document.getElementById('gazetteers_offcanvas');
     if (!offcanvas) return;
-    // Standard list values only — never include specialist children here, since
-    // the parent's tri-state below decides whether to expand to explicit ids.
-    const standardChecked = Array.from(
-        offcanvas.querySelectorAll('.standard-gazetteers-list > .authority-item .authority-cb:checked')
+    const composed = Array.from(
+        offcanvas.querySelectorAll('.standard-gazetteers-list .authority-cb:checked')
     ).map(el => el.value);
 
-    const parentInput = offcanvas.querySelector(
-        '.specialist-gazetteers-parent .authority-cb'
-    );
-    let composed = standardChecked.slice();
-    if (parentInput && parentInput.indeterminate) {
-        // Drop the bare 'whg' alias (the parent isn't fully checked) and
-        // substitute the explicit list of selected child specialist ids.
-        composed = composed.filter(v => v !== 'whg');
-        const childIds = Array.from(offcanvas.querySelectorAll(
-            '.specialist-list .authority-cb:checked'
-        )).map(el => el.value);
-        composed = composed.concat(childIds);
-    }
     if (mode === 'filter') {
         filterSelections.clear();
         composed.forEach(v => filterSelections.add(v));

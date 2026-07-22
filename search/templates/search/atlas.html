@@ -487,145 +487,53 @@
             (Being built as part of the Collaborative Workbench.)
         </div>
 
-        <!-- Standard gazetteer list (visible by default; hidden when the My-Gazetteers toggle is on).
-             Populated from `gazetteer_inventory` (api.GazetteerRegistryEntry rows with
-             entry_class='authority'). Only `core` rows are pre-checked. The Specialist
-             Gazetteers parent row is hardcoded after the loop because it's a UI grouping
-             (the WHG-namespaced datasets it expands), not a true authority entry. -->
-        <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
-            {% for g in gazetteer_inventory %}
-            {% if g.id != "whg" %}
-            <div class="authority-item gaz-entry"
-                 data-namespace="{{ g.namespace }}"
-                 data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
-                 data-gazetteer-type="{{ g.gazetteer_type }}">
-                <div class="gaz-entry-row">
-                    <label class="form-check gaz-check mb-0"
-                           data-bs-toggle="tooltip"
-                           data-bs-title="{{ g.description|default:g.name }}">
-                        <input class="form-check-input authority-cb" type="checkbox"
-                               value="{{ g.id }}"{% if g.core %} checked{% endif %}>
-                        <span class="form-check-label">{{ g.name }}</span>
-                        {% if g.core %}<span class="badge bg-secondary ms-1" style="font-size: 0.55rem; vertical-align: middle;">core</span>{% endif %}
-                        <span class="gazetteer-count text-muted small ms-1" data-namespace="{{ g.namespace }}"></span>
-                    </label>
-                    <span class="gaz-entry-actions">
-                        {% if g.licence_pill %}
-                        {% if g.licence_pill.deed %}
-                        <a class="whg-licence-badge {{ g.licence_pill.cls }}" href="{{ g.licence_pill.deed }}"
-                           target="_blank" rel="noopener noreferrer"
-                           data-bs-toggle="tooltip" data-bs-title="{{ g.licence_pill.tip }}">
-                            <span class="whg-licence-code">{{ g.licence_pill.code }}</span>
-                        </a>
-                        {% else %}
-                        <span class="whg-licence-badge {{ g.licence_pill.cls }}"
-                              data-bs-toggle="tooltip" data-bs-title="{{ g.licence_pill.tip }}">
-                            <span class="whg-licence-code">{{ g.licence_pill.code }}</span>
-                        </span>
-                        {% endif %}
-                        {% endif %}
-                        <button type="button" class="btn btn-sm gaz-meta-toggle collapsed"
-                                data-bs-toggle="collapse" data-bs-target="#gazmeta-auth-{{ g.namespace }}"
-                                aria-expanded="false" aria-controls="gazmeta-auth-{{ g.namespace }}"
-                                title="Details, citation &amp; download">
-                            <i class="fas fa-circle-info"></i>
-                        </button>
-                    </span>
-                </div>
-                <div class="collapse gaz-meta" id="gazmeta-auth-{{ g.namespace }}"
-                     data-gaz-csl="{{ g.csl_json }}">
-                    <div class="gaz-meta-inner">
-                        {% if g.description %}<p class="gaz-meta-desc">{{ g.description }}</p>{% endif %}
-                        <dl class="gaz-meta-dl">
-                            {% if g.record_count %}<dt>Records</dt><dd>{{ g.record_count|intcomma }}</dd>{% endif %}
-                            {% if g.temporal_extent %}<dt>Dates</dt><dd>{{ g.temporal_extent.0|default:"—" }} – {{ g.temporal_extent.1|default:"—" }}</dd>{% endif %}
-                            {% if g.rights_holder %}<dt>Rights</dt><dd>{{ g.rights_holder }}</dd>{% endif %}
-                            {% if g.source_url %}<dt>Source</dt><dd><a href="{{ g.source_url }}" target="_blank" rel="noopener noreferrer">Visit source <i class="fas fa-arrow-up-right-from-square ms-1" style="font-size:0.7em;"></i></a></dd>{% endif %}
-                        </dl>
-                        <div class="gaz-meta-actions">
-                            {% with dl=g.download %}
-                            {% if dl.enabled %}
-                            <div class="btn-group btn-group-sm gaz-dl-group" role="group" aria-label="Download">
-                                {% for ft in dl.filetypes %}
-                                <a class="btn gaz-dl-btn" href="/entity/{{ dl.entity }}/api?filetype={{ ft }}" download
-                                   data-bs-toggle="tooltip" data-bs-title="Download as {{ ft|upper }}">
-                                    <i class="fas fa-download me-1"></i>{{ ft|upper }}
-                                </a>
-                                {% endfor %}
-                            </div>
-                            {% else %}
-                            <span class="gaz-dl-wrap d-inline-block" tabindex="0"
-                                  data-bs-toggle="tooltip" data-bs-title="{{ dl.tip }}">
-                                <button type="button" class="btn btn-sm gaz-dl-btn" disabled>
-                                    <i class="fas fa-download me-1"></i>Download
-                                </button>
-                            </span>
-                            {% endif %}
-                            {% endwith %}
-                        </div>
-                        <div class="gaz-citation-wrap">
-                            <div class="gaz-citation-label small text-muted mb-1">
-                                <i class="fas fa-quote-left me-1"></i>Cite this gazetteer
-                            </div>
-                            <div class="gaz-citation"></div>
-                        </div>
-                    </div>
-                </div>
+        <!-- Root gazetteer filters (place#136 restructure): source-group pill
+             (All | Reference | Contributed), type pill (All | Standard |
+             Itinerary | Network), and a corpus-wide name search. Reference =
+             authority gazetteers; Contributed = WHG-contributed datasets — both
+             now render as peer rows in a single list (no sublist). The group and
+             type selections are persisted to localStorage (atlas.js). Search
+             filters within the active group. -->
+        <div class="gazetteer-filter-controls mb-2">
+            <div class="gazetteer-group-pill btn-group btn-group-sm w-100 mb-1" role="group"
+                 aria-label="Gazetteer source group">
+                <button type="button" class="btn active" data-gaz-group-pill="all">All</button>
+                <button type="button" class="btn" data-gaz-group-pill="reference"
+                        rel="tooltip" data-bs-title="Established reference gazetteers (GeoNames, Getty TGN, Pleiades, Wikidata, …).">Reference</button>
+                <button type="button" class="btn" data-gaz-group-pill="contributed"
+                        rel="tooltip" data-bs-title="Gazetteers contributed by WHG researchers.">Contributed</button>
             </div>
-            {% endif %}
-            {% empty %}
+            <div class="gazetteer-type-pill-filter btn-group btn-group-sm w-100 mb-1" role="group"
+                 aria-label="Gazetteer type filter">
+                <button type="button" class="btn active" data-gaz-type-pill="all">All</button>
+                <button type="button" class="btn" data-gaz-type-pill="standard"
+                        rel="tooltip" data-bs-title="Gazetteers without sequence/network metadata.">Standard</button>
+                <button type="button" class="btn" data-gaz-type-pill="itinerary"
+                        rel="tooltip" data-bs-title="Sketch — gazetteers with embedded sequence metadata.">Itinerary</button>
+                <button type="button" class="btn" data-gaz-type-pill="network"
+                        rel="tooltip" data-bs-title="Sketch — gazetteers with embedded network metadata.">Network</button>
+            </div>
+            <input class="form-control form-control-sm gazetteer-search" type="search"
+                   placeholder="Search gazetteers by name…" aria-label="Search gazetteers by name">
+        </div>
+
+        <!-- Unified gazetteer list (visible by default; hidden when the
+             My-Gazetteers toggle is on). Reference rows from `gazetteer_inventory`
+             (authorities), Contributed rows from `specialist_gazetteers` (WHG
+             datasets). Only `core` authorities are pre-checked. -->
+        <div class="authority-list standard-gazetteers-list" style="padding-left: 25px;">
+            {% for g in gazetteer_inventory %}{% if g.id != "whg" %}{% include "search/_gaz_entry.html" %}{% endif %}{% endfor %}
+            {% for g in specialist_gazetteers %}{% include "search/_gaz_entry.html" %}{% endfor %}
+            {% if not gazetteer_inventory and not specialist_gazetteers %}
             <p class="small text-muted fst-italic">
                 No gazetteers registered. Run the indexing pipeline's
                 <code>push_gazetteer_inventory</code> to populate the list.
             </p>
-            {% endfor %}
-
-            <!-- Specialist Gazetteers — UI grouping that expands to the inline list
-                 of WHG-namespaced datasets. Hardcoded so it is present regardless of
-                 the inventory state (and so the inventory pipeline can't accidentally
-                 remove the parent by reclassifying the underlying rows). -->
-            <label class="authority-item form-check specialist-gazetteers-parent"
-                   data-bs-toggle="tooltip"
-                   data-bs-title="WHG-curated specialist gazetteers — datasets and collections contributed by researchers."
-                   data-no-explore="0"
-                   data-gazetteer-type="standard">
-                <input class="form-check-input authority-cb" type="checkbox" value="whg">
-                <span class="form-check-label">Specialist Gazetteers</span>
-                <span class="gazetteer-count text-muted small ms-1" data-namespace="whg"></span>
-            </label>
-            <!-- Specialist Gazetteers expansion (lazy-rendered by atlas.js when the
-                 parent row is first interacted with). The type-pill filter is sketch
-                 only and Explore-mode-visible via [data-mode-visible]. -->
-            <div class="specialist-gazetteers-expansion d-none">
-                <div class="gazetteer-type-pill-filter btn-group btn-group-sm w-100 mb-2 d-none"
-                     data-mode-visible="explore" role="group" aria-label="Gazetteer type filter">
-                    <button type="button" class="btn active" data-gazetteer-type-pill="standard"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Datasets, Place Collections, and Dataset Collections without sequence/network metadata.">
-                        Standard
-                    </button>
-                    <button type="button" class="btn" data-gazetteer-type-pill="itinerary"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Sketch — datasets with embedded sequence metadata.">
-                        Itinerary
-                    </button>
-                    <button type="button" class="btn" data-gazetteer-type-pill="network"
-                            data-bs-toggle="tooltip"
-                            data-bs-title="Sketch — datasets with embedded network metadata.">
-                        Network
-                    </button>
-                </div>
-                <input class="form-control form-control-sm specialist-search mb-2"
-                       type="search" placeholder="Search Specialist Gazetteers…">
-                <div class="specialist-list authority-list" style="padding-left: 0;">
-                    <!-- Populated by atlas.js::renderSpecialistList -->
-                </div>
-            </div>
+            {% endif %}
+            <p class="small text-muted fst-italic gazetteer-no-matches d-none">
+                No gazetteers match the current filters.
+            </p>
         </div>
-
-        <!-- Specialist Gazetteers payload — emitted as a JSON script tag for
-             atlas.js::renderSpecialistList to consume on demand. -->
-        {{ specialist_gazetteers|json_script:"specialist_gazetteers_data" }}
 
         <!-- "My Gazetteers" placeholder list (visible only when the toggle above is on; sketch
              quality — every entry is illustrative, not real user data). The real list is

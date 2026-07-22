@@ -1,6 +1,7 @@
 # various search.views
 
 import logging
+import re
 from datetime import datetime
 
 import simplejson as json
@@ -181,6 +182,12 @@ def _csl_json(row):
     return json.dumps(csl)
 
 
+def _dom_slug(prefix, s):
+    """A DOM-id / selector-safe slug for a gazetteer row (e.g. ``ref-gn`` or
+    ``con-whg-657``); registry ids like ``whg:657`` contain a colon."""
+    return f"{prefix}-{re.sub(r'[^a-z0-9]+', '-', str(s).lower()).strip('-')}"
+
+
 def _authority_download(row):
     """Download affordance for an *authority* gazetteer row. Authorities live in
     the CRC gateway (no local queryset to stream), so the button is always shown
@@ -330,6 +337,8 @@ class AtlasPageView(TemplateView):
             row['licence_pill'] = _licence_pill(row)
             row['csl_json'] = _csl_json(row)
             row['download'] = _authority_download(row)
+            row['gaz_group'] = 'reference'
+            row['dom_id'] = _dom_slug('ref', row.get('id'))
 
         specialist_gazetteers = list(
             GazetteerRegistryEntry.objects
@@ -360,6 +369,8 @@ class AtlasPageView(TemplateView):
             row['csl_json'] = _csl_json(row)
             row['download'] = _specialist_download(
                 row, _ds_downloadable.get(pk), _authed)
+            row['gaz_group'] = 'contributed'
+            row['dom_id'] = _dom_slug('con', row.get('id'))
             # contributors_csl is a JSON list; the json_script payload keeps it,
             # but the licence FK spanned fields are only needed for the pill and
             # can be dropped to keep the payload lean.

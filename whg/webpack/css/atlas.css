@@ -1265,27 +1265,36 @@ a.pl-chip.pl-aat { cursor: pointer; }
     margin: 0;
 }
 
-/* Sketch type-pill filter — three toggle buttons styled like the existing
-   Filter|Explore mode toggle. Active = included, inactive = excluded.
-   Explicit borders + box-shadow dividers so the segments read distinctly even
-   when adjacent buttons share an active state. */
-#gazetteers_offcanvas .gazetteer-type-pill-filter .btn {
+/* Segmented pill filters (place#136): source group (All | Reference |
+   Contributed) and type (All | Standard | Itinerary | Network) — single-select,
+   styled like the Filter|Explore mode toggle. Active = selected. Explicit
+   borders + box-shadow dividers so the segments read distinctly. */
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn,
+#gazetteers_offcanvas .gazetteer-group-pill .btn {
     font-size: 0.7rem;
     padding: 0.15rem 0.4rem;
     border: 1px solid rgba(44, 62, 80, 0.25);
     background: #fff;
     color: #34495e;
 }
-#gazetteers_offcanvas .gazetteer-type-pill-filter .btn + .btn {
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn + .btn,
+#gazetteers_offcanvas .gazetteer-group-pill .btn + .btn {
     /* Hairline divider between segments — visible against both active and
        inactive backgrounds because it sits over the button's own border. */
     box-shadow: inset 1px 0 0 rgba(44, 62, 80, 0.35);
 }
-#gazetteers_offcanvas .gazetteer-type-pill-filter .btn.active {
+#gazetteers_offcanvas .gazetteer-type-pill-filter .btn.active,
+#gazetteers_offcanvas .gazetteer-group-pill .btn.active {
     background: #2c3e50;
     color: #fff;
     border-color: #2c3e50;
 }
+#gazetteers_offcanvas .gazetteer-search {
+    font-size: 0.78rem;
+}
+/* Rows filtered out by the group/type/search pills — independent of the
+   coverage filter's .coverage-hidden (either hides the row). */
+#gazetteers_offcanvas .gaz-entry.gaz-hidden { display: none !important; }
 
 /* "core" badge alignment within the authority-item label. */
 #gazetteers_offcanvas .authority-item .badge {
