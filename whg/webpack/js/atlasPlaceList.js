@@ -205,6 +205,9 @@ const PlaceList = {
 
         let ticking = false;
         this.els.scroll.addEventListener('scroll', () => {
+            // Dismiss any open chip tooltip immediately so it can't orphan when
+            // the row it's attached to is re-rendered out of the virtual window.
+            this._hideRowTooltip();
             if (ticking) return;
             ticking = true;
             requestAnimationFrame(() => {
@@ -249,9 +252,25 @@ const PlaceList = {
             container: 'body',
             trigger: 'hover',
             placement: 'top',
+            // No fade: a tooltip must vanish instantly when the virtual list
+            // re-renders its trigger out from under it (otherwise the fade-out
+            // orphans a stuck tooltip at the page origin).
+            animation: false,
             delay: { show: 200, hide: 0 },
         });
         return true;
+    },
+
+    /** Dismiss any open row tooltip — the trigger carries ``aria-describedby``
+     *  while its tooltip is shown. Called before the virtual list re-renders
+     *  (e.g. on scroll) so a tooltip can't detach and stick to the page. */
+    _hideRowTooltip() {
+        const bs = window.bootstrap;
+        if (!bs || !bs.Tooltip || !this.els) return;
+        this.els.rows.querySelectorAll('[aria-describedby]').forEach(el => {
+            const inst = bs.Tooltip.getInstance(el);
+            if (inst) { try { inst.hide(); } catch (e) { /* */ } }
+        });
     },
 
     _clearSelection() {
@@ -407,6 +426,9 @@ const PlaceList = {
     // ── Rendering (fixed-height virtual window) ───────────────────────────
     _render() {
         if (!this.els) return;
+        // Replacing the rows' innerHTML below would orphan any open tooltip whose
+        // trigger is about to be removed — dismiss it first.
+        this._hideRowTooltip();
         const n = this.hits.length;
         const scrollTop = this.els.scroll.scrollTop;
         const clientH = this.els.scroll.clientHeight || 400;
