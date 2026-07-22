@@ -1749,5 +1749,12 @@ class SourceGazetteersView(APIView):
             # Per-place "view at source" URL template (place#121); '' when the
             # source has no public per-item page. Powers the Atlas popup link.
             'web_item': e.web_item or '',
+            # Download legality + volume (place#136). ``downloadable`` gates
+            # any "Download this dataset" affordance; ``redistributable`` is
+            # the underlying legal fact; ``download_blocked_reason`` explains a
+            # blocked download ("licence-restricted" / "volume-exceeds-cap").
+            'downloadable': e.downloadable,
+            'redistributable': e.redistributable,
+            'download_blocked_reason': e.download_blocked_reason or '',
         } for e in qs]
         return Response({'sources': sources})

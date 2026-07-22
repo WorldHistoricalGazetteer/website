@@ -76,7 +76,16 @@ class GazetteerInventoryView(AuthenticatedAPIView):
               "license_url":   "https://...",    // optional deed override
               "rights_holder": "Unxos GmbH",
               "source_url":    "https://www.geonames.org/",
-              "contributors":  [{"name": "...", "role": "...", "orcid": "..."}]
+              "contributors":  [{"name": "...", "role": "...", "orcid": "..."}],
+
+              // Download legality + volume (place#136; always sent as
+              // booleans). ``downloadable`` = redistributable AND within the
+              // indexing volume cap; ``download_blocked_reason`` present only
+              // when downloadable is false ("licence-restricted" /
+              // "volume-exceeds-cap"):
+              "redistributable": true,
+              "downloadable":    true,
+              "download_blocked_reason": null
             },
             ...
           ]
@@ -131,6 +140,21 @@ class GazetteerInventoryView(AuthenticatedAPIView):
                 defaults[key] = entry.get(key)
         if "contributors" in entry:
             defaults["contributors_csl"] = entry.get("contributors") or []
+
+        # Download legality + volume (place#136). Push-owned: derived at ingest
+        # from licence + record_count, not curation. ``redistributable`` and
+        # ``downloadable`` are always sent as booleans (``false`` is a real
+        # fact), so their presence is the signal. ``download_blocked_reason`` is
+        # only sent when downloadable is false, so we clear any stale reason
+        # whenever downloadable is present. These gate only whether a *download*
+        # of the source data is offered — search / reconciliation are untouched.
+        if "redistributable" in entry:
+            defaults["redistributable"] = bool(entry.get("redistributable"))
+        if "downloadable" in entry:
+            defaults["downloadable"] = bool(entry.get("downloadable"))
+            defaults["download_blocked_reason"] = (
+                entry.get("download_blocked_reason") or None
+            )
         # Resolve the SPDX code to a seeded ``License`` row. Unknown codes are
         # logged and skipped (license left untouched) rather than failing the
         # whole entry — flexibility over strictness (design decision 3).

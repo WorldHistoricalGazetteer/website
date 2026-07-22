@@ -39,11 +39,12 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
 
     list_display = (
         'id', 'name', 'namespace', 'core', 'region_source', 'no_explore',
-        'gazetteer_type', 'status', 'record_count',
+        'gazetteer_type', 'status', 'record_count', 'downloadable',
         'reingest_status', 'reingest_finished_at', 'reingest_button',
     )
     list_filter = (
         'core', 'region_source', 'no_explore', 'gazetteer_type',
+        'downloadable', 'redistributable',
         'reingest_status', 'status', 'namespace',
     )
     list_editable = ('core', 'region_source', 'no_explore', 'gazetteer_type')
@@ -52,6 +53,7 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
         'id', 'name', 'description', 'namespace', 'entry_class', 'owner',
         'record_count', 'status', 'h3_coverage', 'temporal_extent',
         'is_global', 'updated_at',
+        'redistributable', 'downloadable', 'download_blocked_reason',
         'reingest_status', 'reingest_started_at', 'reingest_finished_at',
         'reingest_job_id', 'reingest_message',
     )
@@ -76,6 +78,18 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
             'fields': (
                 'reingest_status', 'reingest_started_at',
                 'reingest_finished_at', 'reingest_job_id', 'reingest_message',
+            ),
+        }),
+        ("Download legality + volume (managed by ingestion pipeline)", {
+            'description': (
+                "Derived at ingest from licence + record_count (place#136). "
+                "``downloadable`` gates any 'Download this dataset' affordance; "
+                "``redistributable`` is the underlying legal fact (a source can "
+                "be redistributable but still non-downloadable purely on volume "
+                "grounds). Search & reconciliation are unaffected."
+            ),
+            'fields': (
+                'redistributable', 'downloadable', 'download_blocked_reason',
             ),
         }),
         ("Inventory (managed by ingestion pipeline)", {

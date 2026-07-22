@@ -59,7 +59,11 @@ def registry_attribution(namespace):
                     'rights_holder', 'source_url', 'license_url',
                     'license__spdx_id', 'license__label', 'license__url',
                     'license__permits_commercial', 'license__share_alike',
-                    'license__attribution_required', 'license__custom')
+                    'license__attribution_required', 'license__custom',
+                    # Download legality + volume (place#136) — lets the popup
+                    # conditionally offer a source-data download.
+                    'downloadable', 'redistributable',
+                    'download_blocked_reason')
             .first())
 
 

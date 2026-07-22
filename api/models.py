@@ -265,6 +265,32 @@ class GazetteerRegistryEntry(models.Model):
     # ``[{"name": ..., "role": ..., "orcid": ...}]`` (see §3.3 output shape).
     contributors_csl = models.JSONField(default=list, blank=True)
 
+    # ── Download legality + volume (place#136) ──────────────────────────
+    # Push-managed like the attribution fields above (NOT admin-curated):
+    # they derive from licence + record_count computed at ingest, so a push
+    # refreshes them from the canonical indexing ``AUTHORITIES`` config.
+    # They govern ONLY whether WHG offers a downloadable copy of the source
+    # data — indexing / search / reconciliation are permitted for every
+    # authority regardless (those run server-side and never expose raw data).
+    #
+    # ``redistributable``: the legal determination — may WHG re-host /
+    # redistribute a copy of this authority's data? Recorded explicitly per
+    # authority (implicit in licence for many: CC0/CC-BY/CC-BY-SA ⇒ yes;
+    # UKDS EULA / bespoke non-redistribution ⇒ no).
+    redistributable = models.BooleanField(default=True)
+    # ``downloadable``: the effective flag the UI acts on —
+    # ``redistributable AND record_count <= DOWNLOAD_MAX_RECORDS`` (the volume
+    # half prevents a legally-open but very large authority — gn/osm/wd/ohm/gb,
+    # millions of records — being offered as a bulk download that could
+    # overburden the server). Gates any "Download this dataset" affordance.
+    downloadable = models.BooleanField(default=True)
+    # Why a download isn't offered, set only when ``downloadable`` is false:
+    # ``"licence-restricted"`` or ``"volume-exceeds-cap"``. Null when
+    # downloadable (a push clears any stale reason).
+    download_blocked_reason = models.CharField(
+        max_length=32, null=True, blank=True,
+    )
+
     # Curatorial fields managed via the Django admin only — the inventory
     # push from the indexing pipeline deliberately omits these so it never
     # overwrites staff curation. Defaults must mirror the migration so
