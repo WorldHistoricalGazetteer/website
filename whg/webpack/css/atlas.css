@@ -269,7 +269,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     z-index: 5;   /* lift above #temporal_control so the area dropdown isn't obscured */
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    /* One row on desktop (mobile re-enables wrap below) so a content-sized
+       (fit-content) bar doesn't collapse its controls onto a second line. */
+    flex-wrap: nowrap;
     gap: 6px;
     /* Slightly translucent so strong map features (dark markers) under the bar
        remain perceptible; backdrop blur keeps the text legible. */
