@@ -275,9 +275,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     gap: 6px;
     /* Translucent so map markers under the bar remain detectable; a light
        backdrop blur keeps text legible without hiding the markers. */
-    background: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
     border: 2px solid #cfd3da;   /* strong mode-coloured border (set per mode below) */
     border-radius: 10px;
     padding: 6px 10px;
@@ -421,9 +421,9 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     margin-top: 6px;
     width: 300px;
     /* Match the search bar: translucent enough that map markers show through. */
-    background-color: rgba(255, 255, 255, 0.6);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    background-color: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
     /* Strong ochre border (time) — matches the site's BETA buttons; clearly
        distinct from the indigo Areas / burgundy Places borders. */
     border: 2px solid var(--atlas-time);
@@ -1364,11 +1364,22 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .maplibregl-popup.whg-gazetteer-popup-anchor .maplibregl-popup-content {
     max-width: 400px;
     padding: 0;
-    background: rgba(255, 255, 255, 0.97);
-    backdrop-filter: blur(12px);
+    /* Same translucency as the control panels so map markers under the popup
+       stay perceptible; the backdrop blur keeps the detail text legible. */
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.06);
     border-radius: 6px;
     overflow: hidden;
+}
+
+/* Match the control-panel translucency on the map's own top-right control set
+   (zoom +/- and the globe switch) so markers underneath stay perceptible. */
+#hero_map .maplibregl-ctrl-group {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
 }
 
 /* Keep the MapLibre close button above any popup content and ensure it
