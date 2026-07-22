@@ -1296,10 +1296,11 @@ a.pl-chip.pl-aat { cursor: pointer; }
    coverage filter's .coverage-hidden (either hides the row). */
 #gazetteers_offcanvas .gaz-entry.gaz-hidden { display: none !important; }
 
-/* Tighten the gazetteer list indent — the checkbox's own 1.5em (Bootstrap
-   .form-check) is enough; drop the extra container padding that wasted space. */
-#gazetteers_offcanvas .standard-gazetteers-list,
-#gazetteers_offcanvas .my-gazetteers-list { padding-left: 2px; }
+/* Tighten the gazetteer list indent — the checkbox's own room (Bootstrap
+   .form-check) is enough. The offcanvas sits inside #atlas_results_panel, whose
+   `.authority-list { padding-left: 26px !important }` would otherwise win, so
+   this override matches its specificity, is !important, and comes later. */
+#gazetteers_offcanvas .offcanvas-body .authority-list { padding-left: 0 !important; }
 #gazetteers_offcanvas .gaz-check { padding-left: 1.4em; }
 
 /* My Gazetteers status sections. */

@@ -656,16 +656,20 @@ function isLoggedIn() {
               document.querySelector('meta[name="user-id"]'));
 }
 
+// What an attestation can cover — surfaced in the button tooltip so users
+// understand the breadth (kept in step with the "coming soon" toast in atlas.js).
+const ATTEST_SCOPE = "its name(s), dates, geometry, place types, external links and relations to other places";
+
 export function renderAttestControl(placeId) {
     if (!placeId) return '';
-    const inner = '<i class="fas fa-link me-1"></i>Attest';
+    const inner = '<i class="fas fa-file-signature me-1"></i>Attest';
     if (isLoggedIn()) {
         return `<button type="button" class="btn btn-sm whg-attest-btn" data-attest-pid="${esc(placeId)}"
-                        data-bs-toggle="tooltip" data-bs-title="Add an attestation about this place">${inner}</button>`;
+                        data-bs-toggle="tooltip" data-bs-title="Add an attestation about this place — assert or correct ${esc(ATTEST_SCOPE)}.">${inner}</button>`;
     }
     // Disabled buttons don't fire hover, so the tooltip lives on a wrapper span.
     return `<span class="whg-attest-wrap d-inline-block" tabindex="0"
-                  data-bs-toggle="tooltip" data-bs-title="Sign in to add an attestation about this place">
+                  data-bs-toggle="tooltip" data-bs-title="Sign in to attest this place — to assert or correct ${esc(ATTEST_SCOPE)}.">
                 <button type="button" class="btn btn-sm whg-attest-btn" disabled>${inner}</button>
             </span>`;
 }

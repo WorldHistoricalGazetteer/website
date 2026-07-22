@@ -814,7 +814,7 @@ Promise.all([
         const btn = e.target.closest && e.target.closest('.whg-attest-btn');
         if (!btn || btn.disabled) return;
         e.preventDefault();
-        showCopyToast('Attestations are coming soon — you’ll be able to link this place to others.');
+        showCopyToast('Attestations are coming soon — you’ll be able to assert or correct this place’s name(s), dates, geometry, place types, external links and relations to other places.');
     });
     // Keep the ?place= link in step with map-driven selections + popup close.
     document.addEventListener('whg:map-place-click', (e) => {
