@@ -94,12 +94,17 @@ var jquery_ui_dependent_fallbacks = [
 
 var maplibre_fallbacks = [
     {
-        cdnUrl: 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.js',
+        // PINNED to 5.3.1 (the version in package.json / built against). Do NOT
+        // use @latest here: maplibre-gl 6.0.0 (a breaking major) shipped and
+        // @latest now 302-redirects to it — unpkg was 503ing that resolution
+        // and 6.x would break the 5.x-built app anyway, taking the Atlas map
+        // down. Keep this in step with package.json's maplibre-gl version.
+        cdnUrl: 'https://unpkg.com/maplibre-gl@5.3.1/dist/maplibre-gl.js',
         localUrl: 'maplibre-gl.js',
         position: 'head',
     },
     {
-        cdnUrl: 'https://unpkg.com/maplibre-gl@latest/dist/maplibre-gl.css',
+        cdnUrl: 'https://unpkg.com/maplibre-gl@5.3.1/dist/maplibre-gl.css',
         localUrl: 'maplibre-gl.css',
         position: 'head'
     },
