@@ -332,8 +332,13 @@ const PlaceList = {
                     && this.hits.length < this.total
                     && this.hits.length < OFFSET_CAP;
                 this.els.rows.style.height = (this.hits.length * ROW_H) + 'px';
-                this.els.count.textContent = this.total != null
-                    ? `${this.total.toLocaleString()} place${this.total === 1 ? '' : 's'}` : '';
+                // Header count = the gazetteer's real size (from browse). A search's
+                // `total` is an approximate candidate pool (gateway nuance, place#127),
+                // so don't overwrite the header with it — leave the browse total.
+                if (!this.qstr) {
+                    this.els.count.textContent = this.total != null
+                        ? `${this.total.toLocaleString()} place${this.total === 1 ? '' : 's'}` : '';
+                }
                 this._render();
                 this._updateStatus();
                 // Deep link: once the first page is in, focus the requested place
@@ -557,7 +562,11 @@ const PlaceList = {
             return;
         }
         let s = `Showing ${this.hits.length.toLocaleString()}`;
-        if (this.total != null && this.total > this.hits.length) s += ` of ${this.total.toLocaleString()}`;
+        // "of Y" only when browsing — a search's total is an approximate candidate
+        // pool (place#127), so we don't imply an exact match count.
+        if (!this.qstr && this.total != null && this.total > this.hits.length) {
+            s += ` of ${this.total.toLocaleString()}`;
+        }
         if (this.hits.length >= OFFSET_CAP && this.total > this.hits.length) {
             s += ' · refine with search or filters to see more';
         }

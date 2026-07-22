@@ -190,7 +190,6 @@ def _crc_place_to_preview(crc_place: dict) -> dict:
     title = crc_place.get("title", "")
     names_raw = crc_place.get("names", [])
     ccodes = crc_place.get("ccodes", [])
-    fclasses = crc_place.get("fclasses", [])
     types_raw = crc_place.get("types", [])
 
     # Build names in the same format as PlacePreviewSerializer
@@ -200,13 +199,33 @@ def _crc_place_to_preview(crc_place: dict) -> dict:
         if label:
             names.append({"toponym": label})
 
-    # Build types — match PlaceTypeSerializer output shape
+    # Place types (AAT / source place-type wording). Prefer the source's own
+    # ``sourceLabel`` (e.g. "human settlement"), as the map popup does — the CRC
+    # ``label`` can carry the source *name* ("indexvillaris") rather than a type,
+    # so it must not win (place#128). ``format_list`` reads ``label``.
     types = []
     for t in types_raw:
         if isinstance(t, dict):
-            types.append(t)
-        elif isinstance(t, str):
-            types.append({"label": t})
+            lbl = t.get("sourceLabel") or t.get("label") or t.get("identifier")
+        else:
+            lbl = t
+        if lbl:
+            types.append({"label": str(lbl)})
+
+    # Timespans → "start-end" strings, mirroring PlacePreviewSerializer
+    # .get_year_ranges. The CRC place carries flat ``timespans:[{start,end}]``;
+    # previously this was hard-coded to [] so Timespans always read "N/A" (place#128).
+    year_ranges = []
+    for ts in (crc_place.get("timespans") or []):
+        if not isinstance(ts, dict):
+            continue
+        start, end = ts.get("start"), ts.get("end")
+        if start is not None and end is not None:
+            year_ranges.append(f"{start}-{end}")
+        elif start is not None:
+            year_ranges.append(f"{start}-")
+        elif end is not None:
+            year_ranges.append(f"-{end}")
 
     # Derive namespace label for "dataset" field
     ns = place_id.split(":", 1)[0] if ":" in place_id else "CRC"
@@ -217,8 +236,7 @@ def _crc_place_to_preview(crc_place: dict) -> dict:
         "names": names,
         "types": types,
         "ccodes": ccodes,
-        "fclasses": fclasses,
-        "year_ranges": [],
+        "year_ranges": year_ranges,
         "dataset": f"[{ns.upper()}]",
     }
 
