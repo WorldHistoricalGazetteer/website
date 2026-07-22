@@ -355,19 +355,18 @@ function getTourSteps() {
             },
         },
 
-        /* ── 4. Exact / fuzzy match ─────────────────────────────── */
+        /* ── 4. Search match type ───────────────────────────────── */
         {
-            element: '#atlas_exact_match',
+            element: '#atlas_searchmode_btn',
             popover: {
-                title: 'Exact / Fuzzy Match',
+                title: 'Search match type',
                 description:
-                    'Toggle between matching modes for toponym searches:<br><br>' +
-                    '<strong>Fuzzy</strong> (default) — finds phonetically similar names. ' +
-                    'Searching "Konstantinopolis" will also find "Constantinople", ' +
-                    '"Kostantiniyye", etc.<br><br>' +
-                    '<strong>Exact</strong> — precise spelling match only. ' +
-                    'Use this when you know the exact form of a place name and want to ' +
-                    'avoid false positives.',
+                    'Choose how place names are matched:<br><br>' +
+                    '<strong>Contains</strong> (default) — the name contains what you typed.<br>' +
+                    '<strong>Exact</strong> / <strong>Starts with</strong> — precise or prefix match.<br>' +
+                    '<strong>Phonetic</strong> — finds sounds-like names (e.g. ' +
+                    '"Konstantinopolis" → "Constantinople", "Kostantiniyye"). ' +
+                    'It\'s the slower option, so it\'s off by default.',
                 side: 'bottom',
                 align: 'center',
             },

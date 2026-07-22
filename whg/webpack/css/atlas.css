@@ -343,6 +343,17 @@ body.atlas-tooltips-off .tooltip { display: none !important; }
     font-size: 0.8rem;
     border-color: #ced4da;
 }
+/* Search-type dropdown (Exact / Starts / Contains / Phonetic). */
+#atlas_searchmode_btn { white-space: nowrap; }
+.atlas-searchmode-menu {
+    font-size: 0.82rem;
+    z-index: 1200;   /* above the floating-search stacking context + map */
+}
+.atlas-searchmode-menu .dropdown-item { padding: 4px 12px; }
+.atlas-searchmode-menu .dropdown-item.active {
+    background: var(--atlas-places);
+    color: #fff;
+}
 /* The green Search button's grey group-border contrasts against its fill and
    makes it look mis-aligned with its (transparent-fill) neighbours; match the
    border to the fill so it reads as one solid block flush with the row. */

@@ -37,7 +37,7 @@ let layerPalette = null;
 let areaRouter = null;
 let temporalMode = 'off';       // 'off' | 'range' | 'undated'
 let searchMode = 'areas';       // 'areas' | 'toponyms'
-let exactMatch = false;
+let searchMatchMode = 'in';   // main Places search match type: exact | starts | in (contains) | phonetic
 let useViewport = false;       // viewport-constraint toggle (non-globe only)
 let clusterResults = true;
 let selectedRegions = [];        // Array of {id, label, admin_level, namespace, geometry}
@@ -698,7 +698,7 @@ function setupWelcomePanel() {
         '.atlas-control-buttons .btn',
         '#temporal_control',
         '#atlas_initiate_search',
-        '#atlas_exact_match',
+        '#atlas_searchmode_btn',
         '#atlas_clear_search',
         '.maplibregl-ctrl-zoom-in',
         '.maplibregl-ctrl-zoom-out',
@@ -951,11 +951,16 @@ Promise.all([
     }
     applyTooltipPref();
 
-    // ── Wire exact match toggle ──
-    document.getElementById('atlas_exact_match').addEventListener('click', function () {
-        exactMatch = !exactMatch;
-        this.classList.toggle('active', exactMatch);
-        this.setAttribute('aria-pressed', exactMatch);
+    // ── Wire search-type dropdown (Exact / Starts / Contains / Phonetic) ──
+    document.querySelectorAll('.atlas-searchmode-menu .dropdown-item[data-searchmode]').forEach(item => {
+        item.addEventListener('click', () => {
+            setSearchMatchMode(item.dataset.searchmode);
+            // Re-run the current search under the new match type.
+            const input = document.getElementById('atlas_search_input');
+            if (searchMode === 'toponyms' && input && input.value.trim()) {
+                initiateToponymSearch({ preserveFacets: true });
+            }
+        });
     });
 
     // ── Wire viewport constraint toggle ──
@@ -2585,6 +2590,19 @@ function renderClusters() {
     }
 }
 
+// Search-type dropdown state → label + active item. Modes map 1:1 to the
+// gateway match modes (exact | starts | in | phonetic).
+const SEARCH_MODE_LABELS = { exact: 'Exact', starts: 'Starts with', in: 'Contains', phonetic: 'Phonetic' };
+function setSearchMatchMode(mode) {
+    if (!SEARCH_MODE_LABELS[mode]) mode = 'in';
+    searchMatchMode = mode;
+    const label = document.getElementById('atlas_searchmode_label');
+    if (label) label.textContent = SEARCH_MODE_LABELS[mode];
+    document.querySelectorAll('.atlas-searchmode-menu .dropdown-item[data-searchmode]').forEach(el => {
+        el.classList.toggle('active', el.dataset.searchmode === mode);
+    });
+}
+
 function gatherToponymOptions(qstr) {
     const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
 
@@ -2634,7 +2652,10 @@ function gatherToponymOptions(qstr) {
         start: temporalFrom,
         end: temporalTo,
         undated: temporalMode === 'undated',
-        exact: exactMatch,
+        // Match type chosen in the search-type dropdown. Default "in" (contains)
+        // via the gateway n-gram index; "phonetic" is the opt-in sounds-like
+        // similarity search (slower). (The Place List overrides mode itself.)
+        mode: searchMatchMode,
         cluster: clusterResults,
         bounds: bounds,
         regions: [],
@@ -2855,10 +2876,8 @@ function clearAll() {
         updateTreeBadge();
     }
 
-    // Reset exact match
-    exactMatch = false;
-    const emBtn = document.getElementById('atlas_exact_match');
-    if (emBtn) { emBtn.classList.remove('active'); emBtn.setAttribute('aria-pressed', 'false'); }
+    // Reset search match type to the default (Contains)
+    setSearchMatchMode('in');
 
     // Reset viewport constraint
     useViewport = false;

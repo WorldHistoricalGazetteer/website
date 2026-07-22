@@ -94,11 +94,18 @@
                         data-bs-toggle="tooltip" title="Search">
                     <i class="fas fa-search"></i>
                 </button>
-                <button id="atlas_exact_match" class="btn btn-outline-secondary" type="button"
-                        aria-pressed="false"
-                        data-bs-toggle="tooltip" title="Toggle exact match">
-                    <i class="fas fa-crosshairs"></i>
+                <button id="atlas_searchmode_btn" class="btn btn-outline-secondary dropdown-toggle" type="button"
+                        data-bs-toggle="dropdown" aria-expanded="false"
+                        title="Choose how place names are matched">
+                    <i class="fas fa-magnifying-glass me-1"></i><span id="atlas_searchmode_label">Contains</span>
                 </button>
+                <ul class="dropdown-menu dropdown-menu-end atlas-searchmode-menu">
+                    <li><button type="button" class="dropdown-item" data-searchmode="exact">Exact</button></li>
+                    <li><button type="button" class="dropdown-item" data-searchmode="starts">Starts with</button></li>
+                    <li><button type="button" class="dropdown-item active" data-searchmode="in">Contains</button></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><button type="button" class="dropdown-item" data-searchmode="phonetic">Phonetic <span class="text-muted small">· sounds-like, slower</span></button></li>
+                </ul>
             </div>
 
             <!-- Control buttons (Viewport+Regions areas-only; Gazetteers & Categories toponym-only) -->
