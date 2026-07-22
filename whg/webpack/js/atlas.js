@@ -890,7 +890,15 @@ Promise.all([
     const initAtlasTooltips = () => {
         const bs = window.bootstrap;
         if (!bs || !bs.Tooltip) return false;
-        document.querySelectorAll('#floating_search [data-bs-toggle="tooltip"], .gazetteer-coverage-filters [data-bs-toggle="tooltip"]').forEach(el => {
+        document.querySelectorAll(
+            '#floating_search [data-bs-toggle="tooltip"], .gazetteer-coverage-filters [data-bs-toggle="tooltip"], ' +
+            // ADVISORY tooltips (disabled download / disabled-anon attest, etc.):
+            // give them their OWN instance rather than relying on the body-delegated
+            // tooltip (which doesn't reliably fire on a wrapped disabled control).
+            // getOrCreateInstance reads their data-bs-custom-class="tt-advisory", so
+            // the rendered tip carries that class and survives the tooltips-off toggle.
+            '#gazetteers_offcanvas [data-bs-custom-class~="tt-advisory"]'
+        ).forEach(el => {
             // Move the native `title` into a BS data attr and drop it, so the
             // browser's own tooltip doesn't ALSO pop up alongside the styled one.
             const t = el.getAttribute('title');
@@ -2268,6 +2276,15 @@ function renderPortal(place, pid) {
     const attest = renderAttestControl(pid);
     if (attest) h += `<div class="portal-actions mt-2 pt-2 border-top">${attest}</div>`;
     document.getElementById('atlas_portal_body').innerHTML = h;
+    // Advisory tooltips (e.g. the disabled-anon Attest explanation) need their own
+    // instance so they survive the "Show control tooltips" opt-out.
+    try {
+        const bs = window.bootstrap;
+        if (bs && bs.Tooltip) {
+            document.querySelectorAll('#atlas_portal_body [data-bs-custom-class~="tt-advisory"]')
+                .forEach(el => bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' }));
+        }
+    } catch (e) { /* bootstrap not ready — delegated tooltip still applies */ }
 }
 
 // Fallback weights when the gateway ships no clustering_params (mirrors
