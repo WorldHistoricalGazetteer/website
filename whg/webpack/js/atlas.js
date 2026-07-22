@@ -812,7 +812,7 @@ Promise.all([
     // level since the popup/overlay HTML is re-rendered freely.
     document.addEventListener('click', (e) => {
         const btn = e.target.closest && e.target.closest('.whg-attest-btn');
-        if (!btn || btn.disabled) return;
+        if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return;
         e.preventDefault();
         showCopyToast('Attestations are coming soon — you’ll be able to assert or correct this place’s name(s), dates, geometry, place types, external links and relations to other places.');
     });

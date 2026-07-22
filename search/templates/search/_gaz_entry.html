@@ -76,12 +76,13 @@ data-gaz-group for the root group-pill filter.
                     {% endfor %}
                 </div>
                 {% else %}
-                <span class="gaz-dl-wrap d-inline-block" tabindex="0"
-                      data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory" data-bs-title="{{ dl.tip }}">
-                    <button type="button" class="btn btn-sm gaz-dl-btn" disabled>
-                        <i class="fas fa-download me-1"></i>Download
-                    </button>
-                </span>
+                {% comment %}Not a real `disabled` attribute (that sets pointer-events:none
+                and kills the hover), but an aria-disabled look-alike so the advisory
+                tooltip still fires on hover.{% endcomment %}
+                <button type="button" class="btn btn-sm gaz-dl-btn gaz-dl-off" aria-disabled="true"
+                        data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory" data-bs-title="{{ dl.tip }}">
+                    <i class="fas fa-download me-1"></i>Download
+                </button>
                 {% endif %}
                 {% endwith %}
             </div>

@@ -1329,9 +1329,9 @@ a.pl-chip.pl-aat { cursor: pointer; }
     font-weight: 600;
 }
 .whg-attest-btn .fa-file-signature { font-size: 0.9em; }
-.whg-attest-btn:not(:disabled):hover { background: #5b3aa6; color: #fff; border-color: #5b3aa6; }
-.whg-attest-btn:disabled { opacity: 0.55; }
-.whg-attest-wrap { cursor: not-allowed; }
+.whg-attest-btn:not(.whg-attest-off):hover { background: #5b3aa6; color: #fff; border-color: #5b3aa6; }
+/* aria-disabled look-alike — kept hoverable so the advisory tooltip fires. */
+.whg-attest-btn.whg-attest-off { opacity: 0.55; cursor: not-allowed; }
 
 /* "core" badge alignment within the authority-item label. */
 #gazetteers_offcanvas .authority-item .badge {
@@ -1424,8 +1424,9 @@ a.pl-chip.pl-aat { cursor: pointer; }
     color: #2c3e50;
 }
 #gazetteers_offcanvas .gaz-dl-group .gaz-dl-btn:hover { background: #2c3e50; color: #fff; }
-#gazetteers_offcanvas .gaz-dl-btn:disabled { opacity: 0.5; }
-#gazetteers_offcanvas .gaz-dl-wrap { cursor: not-allowed; }
+/* aria-disabled look-alike — kept hoverable (no pointer-events:none) so its
+   advisory tooltip fires; just greyed with a not-allowed cursor. */
+#gazetteers_offcanvas .gaz-dl-btn.gaz-dl-off { opacity: 0.5; cursor: not-allowed; }
 #gazetteers_offcanvas .gaz-citation-label { font-weight: 600; }
 /* Verbatim hand-authored citation (place#139 interim fix) — shown instead of the
    structured formatter when the registry provides citation_text. */
