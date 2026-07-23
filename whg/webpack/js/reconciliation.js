@@ -2959,6 +2959,21 @@ function rowVariants(rowIdx) {
     .split(/[;|]/).forEach((s) => { const t = s.trim(); if (t) out.push(t); }));
   return [...new Set(out)];
 }
+// The variants actually SENT with a reconcile query. Normalised here exactly as the gateway would do
+// it — blanks dropped, case-insensitive duplicates of each other and of the primary toponym removed,
+// capped at MAX_QUERY_VARIANTS — so the gateway has nothing left to discard and `variants` stays
+// positionally aligned with the `variant_vectors` we compute in-browser. See place#144.
+const MAX_QUERY_VARIANTS = 10;
+function queryVariants(rowIdx, primary) {
+  const seen = new Set([normName(primary)]);
+  const out = [];
+  rowVariants(rowIdx).forEach((v) => {
+    const n = normName(v);
+    if (!n || seen.has(n) || out.length >= MAX_QUERY_VARIANTS) return;
+    seen.add(n); out.push(v);
+  });
+  return out;
+}
 
 // ── Multi-column (iterative, containment-chained) reconciliation ─────────────
 // The spatial hierarchy is expressed per-column: a container column has role 'contains' with a
@@ -3010,6 +3025,50 @@ function resolvedPlaceIds(colIndex, rowIdx) {
 // then matches same-named parishes in *other* counties). Strip the prefix before sending `contained_in`.
 // Keep the prefixed id everywhere else (it is the identifier we surface and export). See place#111.
 function barePlaceId(id) { return typeof id === 'string' && id.startsWith('place:') ? id.slice(6) : id; }
+
+// ── Merged admin values: one reconciliation, one decision, applied to every row ───────────────────
+// Admin/parent columns merge identical values so a county appearing in hundreds of rows is reconciled
+// ONCE — and, equally, reviewed once: confirming it applies to every row sharing that value. The merge
+// unit is the value + country hint + confirmed parent containment, so two same-named places under
+// different parents stay separate decisions. Place-name columns are never merged. reconcilePass() and
+// the review queue BOTH derive their grouping from mergeSig(), so they can't drift apart. See #143.
+function mergeSig(colIndex, rowIdx, parentCol) {
+  const r = Number(rowIdx);
+  const row = project.rows[r]; if (!row) return null;
+  if (parentCol === undefined) {
+    const chain = reconChain(); const pos = chain.indexOf(colIndex);
+    parentCol = pos > 0 ? chain[pos - 1] : -1;
+  }
+  const val = String(row[colIndex] == null ? '' : row[colIndex]).trim();
+  if (!val) return null;
+  const countryIdx = colIndexByRole('country');
+  const country = (countryIdx >= 0 && isCcode(row[countryIdx])) ? String(row[countryIdx]).trim().toUpperCase() : '';
+  const pids = parentCol >= 0 ? resolvedPlaceIds(parentCol, r).map(barePlaceId).sort().join(',') : '';
+  return normName(val) + '|' + country + '|' + pids;
+}
+// Is this column one whose identical values are merged? (everything except the place-name leaf)
+function mergesValues(colIndex) { return colIndex >= 0 && colIndex !== colIndexByRole('name'); }
+// Every "<col>:<row>" key that shares a merge unit with this one — just itself for a place-name column.
+function mergeGroupKeys(colIndex, rowIdx) {
+  const self = colIndex + ':' + Number(rowIdx);
+  if (!mergesValues(colIndex)) return [self];
+  const mine = mergeSig(colIndex, rowIdx);
+  if (mine == null) return [self];
+  const out = [];
+  for (let r = 0; r < project.rows.length; r++) if (mergeSig(colIndex, r) === mine) out.push(colIndex + ':' + r);
+  return out.length ? out : [self];
+}
+// Write (or clear) a decision for a key AND every row merged with it, so one confirmation propagates.
+function setDecision(key, dec) {
+  project.decisions = project.decisions || {};
+  const ci = key.indexOf(':');
+  const keys = mergeGroupKeys(Number(key.slice(0, ci)), key.slice(ci + 1));
+  keys.forEach((k) => {
+    if (dec) project.decisions[k] = clone(dec); // clone: siblings must not alias one object
+    else delete project.decisions[k];
+  });
+  return keys.length;
+}
 
 // ── Stage state machine (iterative, review-gated reconciliation) ─────────────
 // A column is reconciled only after the column above it in the chain has been reviewed & confirmed,
@@ -3560,7 +3619,20 @@ function renderColSwitcher() {
 // Reviewable rows (those with ≥1 candidate).
 function reviewableKeys(built) {
   const arr = [];
-  built.map.forEach((v, key) => { const m = project.matches[key]; if (m && m.top && rowPasses(rowKeyIndex(key), built)) arr.push({ key, rows: v.rows.length, name: v.query, country: v.country }); });
+  const merged = mergesValues(built.colIndex); // admin column → one review per distinct value
+  const seen = merged ? new Map() : null;      // mergeSig → index into arr
+  built.map.forEach((v, key) => {
+    const m = project.matches[key];
+    if (!(m && m.top && rowPasses(rowKeyIndex(key), built))) return;
+    const entry = { key, rows: v.rows.length, name: v.query, country: v.country };
+    if (!merged) { arr.push(entry); return; }
+    const sig = mergeSig(built.colIndex, rowKeyIndex(key));
+    if (sig == null) { arr.push(entry); return; }
+    const at = seen.get(sig);
+    // One card per merge unit; `rows` accumulates so the reviewer sees (and is sorted by) real impact.
+    if (at == null) { seen.set(sig, arr.length); entry.merged = true; arr.push(entry); }
+    else arr[at].rows += v.rows.length;
+  });
   arr.sort((a, b) => b.rows - a.rows);
   return arr;
 }
@@ -3651,7 +3723,10 @@ function renderReviewCard() {
   card.innerHTML =
     `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
        <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
-         <span class="text-muted small ms-2">${meta.rows.toLocaleString()} row${meta.rows === 1 ? '' : 's'} · ${reviewPos + 1} of ${reviewMeta.length}</span></div>
+         <span class="text-muted small ms-2">${meta.rows.toLocaleString()} row${meta.rows === 1 ? '' : 's'} · ${reviewPos + 1} of ${reviewMeta.length}</span>
+         ${meta.merged && meta.rows > 1 ? `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1"
+            title="Identical values under the same parent share one reconciliation and one decision">
+            <i class="fas fa-object-group me-1"></i>applies to all ${meta.rows.toLocaleString()} rows</span>` : ''}</div>
        <div>${REVIEW_BADGE[effectiveStatus(meta.key)] || ''}</div>
      </div>
      <ol class="recon-cand-list">${list || '<li class="text-muted">No candidates were returned for this name.</li>'}</ol>
@@ -4516,8 +4591,10 @@ function acceptCandidate(ci) {
   const at = list.findIndex((a) => a.ci === ci);
   if (at >= 0) list.splice(at, 1);
   else list.push({ ci, place_id: c.id, label: c.name, score: c.score });
-  if (list.length) project.decisions[meta.key] = { status: 'accepted', accepted: list };
-  else delete project.decisions[meta.key]; // unselected the last → back to undecided
+  // Propagates to every row merged with this one (admin columns) — candidate indices are shared,
+  // because the merged rows were fanned the same candidate list. See setDecision / mergeSig.
+  if (list.length) setDecision(meta.key, { status: 'accepted', accepted: list });
+  else setDecision(meta.key, null); // unselected the last → back to undecided
   afterDecision(false); // don't auto-advance; multi-select stays on the card
 }
 function reviewAction(act) {
@@ -4525,9 +4602,8 @@ function reviewAction(act) {
   if (act === 'prev') return advance(-1);
   if (act === 'more') return loadMoreCandidates();
   const meta = reviewMeta[reviewPos]; if (!meta) return;
-  if (act === 'undo') { if (project.decisions) delete project.decisions[meta.key]; return afterDecision(false); }
-  project.decisions = project.decisions || {};
-  project.decisions[meta.key] = { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' };
+  if (act === 'undo') { setDecision(meta.key, null); return afterDecision(false); }
+  setDecision(meta.key, { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' });
   afterDecision(true);
 }
 // Fetch a larger batch of candidates for the current name (re-query with a higher limit).
@@ -4779,9 +4855,8 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   } else {
     const groups = new Map();
     rawEntries.forEach(([key, v]) => {
-      const row = key.slice(key.indexOf(':') + 1);
-      const pids = parentCol >= 0 ? resolvedPlaceIds(parentCol, row).map(barePlaceId).sort().join(',') : '';
-      const gk = normName(v.query) + '|' + (v.country || '') + '|' + pids;
+      const gk = mergeSig(colIndex, key.slice(key.indexOf(':') + 1), parentCol);
+      if (gk == null) { units.push({ repKey: key, memberKeys: [key], v }); return; }
       let g = groups.get(gk);
       if (!g) { g = { repKey: key, memberKeys: [], v }; groups.set(gk, g); }
       g.memberKeys.push(key);
@@ -4792,19 +4867,34 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   let done = 0;
   updateProgress(done, total);
 
-  // Language-conditioned Symphonym embeddings (int8, 128-d) — one per unit (representative value).
-  let embByKey = null;
+  // Language-conditioned Symphonym embeddings (int8, 128-d) — one per unit (representative value),
+  // plus one per DISTINCT name variant across the pass. Embedding the variants here means the gateway
+  // doesn't have to embed them server-side (place#144), and they're deduped so a spelling repeated
+  // across rows costs one embed. Primaries occupy [0, units.length), variants follow.
+  let embByKey = null;      // unit repKey → vector
+  let embByVariant = null;  // variant string → vector
   if (phoneticEnabled() && units.length) {
     try {
       const mod = await loadSymphonym();
       const lang = getLang();
       const names = units.map((u) => u.v.query);
-      const int8 = await mod.embedNames(names, {
+      const variantForms = [];
+      if (perRow) {
+        const seen = new Set();
+        units.forEach((u) => queryVariants(u.repKey.slice(u.repKey.indexOf(':') + 1), u.v.query)
+          .forEach((s) => { if (!seen.has(s)) { seen.add(s); variantForms.push(s); } }));
+      }
+      const int8 = await mod.embedNames(names.concat(variantForms), {
         lang,
         onProgress: (d, t) => setReconSummary(`${passLabel}<i class="fas fa-spinner fa-spin me-1"></i>embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`),
       });
+      const vecAt = (i) => Array.from(int8.subarray(i * 128, i * 128 + 128));
       embByKey = {};
-      units.forEach((u, idx) => { embByKey[u.repKey] = Array.from(int8.subarray(idx * 128, idx * 128 + 128)); });
+      units.forEach((u, idx) => { embByKey[u.repKey] = vecAt(idx); });
+      if (variantForms.length) {
+        embByVariant = {};
+        variantForms.forEach((s, i) => { embByVariant[s] = vecAt(units.length + i); });
+      }
     } catch (err) { console.error('[recon] embedding failed; using text matching', err); }
   }
 
@@ -4819,8 +4909,19 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
       // Name variants (alt_names): alternative spellings tried alongside the primary toponym — only for
-      // the place-name column (variants of a container's own value aren't a modelled concept).
-      if (perRow) { const vars = rowVariants(row); if (vars.length) q.variants = vars; }
+      // the place-name column (variants of a container's own value aren't a modelled concept). Their
+      // in-browser embeddings ride along positionally, so the gateway can skip the server-side embed;
+      // a null entry (or none at all) just means "embed this one yourself".
+      if (perRow) {
+        const vars = queryVariants(row, v.query);
+        if (vars.length) {
+          q.variants = vars;
+          if (embByVariant) {
+            const vecs = vars.map((s) => embByVariant[s] || null);
+            if (vecs.some(Boolean)) q.variant_vectors = vecs;
+          }
+        }
+      }
       // Containment: scope this column's query by ALL the parent column's confirmed places for the
       // same row (a parent may closeMatch several records) — "within any of them".
       if (parentCol >= 0) {

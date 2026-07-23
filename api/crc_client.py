@@ -295,6 +295,16 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         variants = [str(v).strip() for v in variants if str(v).strip()]
         if variants:
             body["variants"] = variants
+            # Client-computed int8 128-d Symphonym embeddings, one per variant, POSITIONALLY aligned
+            # with `variants` — lets the gateway skip the server-side embed. A null entry means "embed
+            # this one yourself". Only forwarded when the lengths agree, since a mismatch would
+            # silently pair vectors with the wrong spellings.
+            vecs = raw.get("variant_vectors")
+            if isinstance(vecs, (list, tuple)) and len(vecs) == len(variants):
+                body["variant_vectors"] = [
+                    list(v) if isinstance(v, (list, tuple)) and len(v) == 128 else None
+                    for v in vecs
+                ]
 
     # Country codes – accept list ["US","GB"] or comma-delimited string "US,GB"
     countries = raw.get("countries")
