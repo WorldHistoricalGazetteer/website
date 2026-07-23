@@ -3219,8 +3219,11 @@ function renderScopeNotice() {
       parts.push(`<div class="text-muted mb-1"><i class="fas fa-circle-info me-1"></i>Boundary taken from
         ${idList(s.containers_linked, 3)} (same place).</div>`);
     }
-    if ((s.containers_approximated || []).length) {
-      // Some containers had no boundary and were ignored → the scope is NARROWER than asked for.
+    if (s.mode === 'polygon' && (s.containers_approximated || []).length) {
+      // Only a PARTIAL honour: other containers supplied real boundaries and the point-only ones were
+      // dropped from the union, so the scope is NARROWER than asked for. Deliberately not shown for
+      // mode 'linked-polygon' — there the point-only container is still listed here, but it was
+      // resolved through a co-referent's boundary rather than ignored, so warning would be wrong.
       parts.push(`<div class="alert alert-warning py-2 px-3 mb-2">
         <i class="fas fa-triangle-exclamation me-1"></i>Some places you scoped to have no boundary and were
         <strong>ignored</strong>: ${idList(s.containers_approximated, 6)}. Results are narrower than you asked for.</div>`);
