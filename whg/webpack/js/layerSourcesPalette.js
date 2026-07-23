@@ -310,19 +310,23 @@ export default class LayerSourcesPalette {
     }
 
     /**
-     * Programmatically select a source by id. If the id matches a registered
-     * Region Source radio, ticks it and runs the same change path the user
-     * would trigger by clicking. If the id has no matching radio (e.g. a
-     * specialist gazetteer's tileset like ``whg-892``), unticks the radios
-     * and applies the tileset directly via ``heroMap.showBoundaries``.
+     * Programmatically select a source by id, mirroring an Atlas Gazetteers
+     * Explore-mode selection onto the map.
      *
-     * Used by the Atlas Gazetteers offcanvas to mirror Explore-mode selections
-     * onto the map.
+     * TIERED admin sources (osm/ohm) are region-boundary layers with their own
+     * admin-level UI, not explorable coverage gazetteers, so they keep the
+     * radio/boundary path. Every other selection — including authority
+     * gazetteers that the base whg-context style ALSO registers as a
+     * region-source radio (clio, nl, po) — is loaded via the generic gazetteer
+     * loader so its place#140 coverage footprint renders and the map zooms to
+     * its bounds. (Previously any radio-backed id short-circuited to
+     * ``showBoundaries``, so clio/nl/po never rendered as gazetteers — the map
+     * neither zoomed nor changed and the prior gazetteer's markers persisted.)
      */
     setActiveSource(id) {
         if (!id) return;
         const radio = this._panel.querySelector(`.layer-source-radio[value="${id}"]`);
-        if (radio) {
+        if (radio && TIERED_SOURCES.has(id)) {
             if (!radio.checked) radio.checked = true;
             radio.dispatchEvent(new Event('change'));
             return;

@@ -764,6 +764,15 @@ class HeroMap {
         // Always rebuild context layers so their z-order stays correct
         // relative to the freshly-loaded gazetteer fill/line/circle.
         this._removeContextLayers();
+        // Some authority gazetteers (clio/nl/po) are pre-registered as sources in
+        // the base whg-context style — with their own context fill/line layers
+        // that draw the raw polygons at ALL zooms. Exploring them must not reuse
+        // that stale source (it has a restrictive minzoom and would let those base
+        // layers undercut the low-zoom coverage footprint), so erase it first and
+        // let loadGazetteerStyle add a fresh source from the gazetteer's tilejson.
+        if (this.map.getSource(id)) {
+            try { this.map.eraseSource(id); } catch (e) {}
+        }
         let tilejson = null;
         try {
             tilejson = await this.map.loadGazetteerStyle(id);
