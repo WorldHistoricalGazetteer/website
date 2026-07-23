@@ -160,7 +160,10 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	// gazetteer source-layers); see the place#140 note above.
 	for (const [key, color, r, g, j, , seed] of COV_LAYERS) {
 		const imgId = `whg_cov_${key}`;
-		if (!this.hasImage(imgId)) this.addImage(imgId, _covSprite(color, r, g, j, seed), { pixelRatio: 2 });
+		// NB register at pixelRatio 1 (the default). Passing `{pixelRatio:2}` with
+		// a runtime `ImageData` makes MapLibre paint the pattern INVISIBLE (verified
+		// live on 5.3.1) — the footprint fill then renders nothing.
+		if (!this.hasImage(imgId)) this.addImage(imgId, _covSprite(color, r, g, j, seed));
 	}
 	for (const vl of vectorLayers) {
 		const sourceLayer = vl.id;
