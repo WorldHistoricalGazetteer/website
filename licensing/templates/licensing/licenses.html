@@ -77,7 +77,8 @@
   .lic-arrange-note p { margin: 0; font-size: .9rem; color: #5a4a1e; }
   .lc-arrange { font-size: .78rem; color: #8a6400; background: #fff8e6; border: 1px solid #f0dca2;
     border-radius: 6px; padding: .3rem .5rem; margin: 0 0 .1rem; }
-  .lc-arrange i { margin-right: .25rem; }
+  .lc-arrange .arr-emoji { margin-right: .1rem; }
+  .arr-emoji { font-size: .95em; }
   /* Disabled (non-linking) badge / link for custom licences with no deed URL */
   .lc-badge-static { background: #7a8794; cursor: help; }
   .lc-nolink { font-size: .82rem; color: #99a0a8; cursor: help; }
@@ -133,7 +134,7 @@
   {% endif %}
 
   <div class="lic-arrange-note">
-    <h2><i class="fas fa-handshake me-1"></i>“By arrangement” — beyond the licence</h2>
+    <h2><span class="arr-emoji">🤝</span> “By arrangement” — beyond the licence</h2>
     <p>
       When you contribute data through the WHG Workbench, you can add two optional
       conditions on top of your chosen licence: allow <strong>commercial use</strong>
@@ -146,7 +147,7 @@
   </div>
 
   <div class="lic-picker" id="lic-picker">
-    <div class="lp-title"><i class="fas fa-wand-magic-sparkles me-1"></i>Which licence fits your terms?</div>
+    <div class="lp-title">Which licence fits your terms?</div>
     <p class="lp-sub">Answer as many as you like — the licences below filter to those that match. Leave a question on “Any” to ignore it.</p>
     <div class="lp-questions">
       <div class="lp-q">
@@ -198,7 +199,7 @@
     <span class="k"><span class="lc-prop perm yes"><i class="fas fa-check"></i></span> permitted</span>
     <span class="k"><span class="lc-prop cond yes"><i class="fas fa-check"></i></span> required condition</span>
     <span class="k"><span class="lc-prop perm no"><i class="fas fa-xmark"></i></span> not permitted / not required</span>
-    <span class="k"><i class="fas fa-handshake" style="color:#8a6400"></i> available <em>by arrangement</em></span>
+    <span class="k"><span class="arr-emoji">🤝</span> available <em>by arrangement</em></span>
     <span class="k text-muted">“Adaptations” = the right to remix, transform or build upon the data.</span>
   </div>
 
@@ -230,7 +231,7 @@
             <i class="fas {% if lic.permits_commercial %}fa-check{% else %}fa-xmark{% endif %}"></i>Commercial use
           </li>
           {% if lic.no_derivatives is None %}
-          <li class="lc-prop unknown"><i class="fas fa-circle-question"></i>Adaptations: see terms</li>
+          <li class="lc-prop unknown"><i class="fas fa-circle-info"></i>Adaptations: see terms</li>
           {% else %}
           <li class="lc-prop perm {% if lic.no_derivatives %}no{% else %}yes{% endif %}">
             <i class="fas {% if lic.no_derivatives %}fa-xmark{% else %}fa-check{% endif %}"></i>Adaptations
@@ -245,7 +246,7 @@
         </ul>
 
         {% if not lic.permits_commercial or lic.no_derivatives %}
-        <p class="lc-arrange"><i class="fas fa-handshake"></i> Contributors can offer
+        <p class="lc-arrange"><span class="arr-emoji">🤝</span> Contributors can offer
           {% if not lic.permits_commercial and lic.no_derivatives %}commercial use and adaptations{% elif not lic.permits_commercial %}commercial use{% else %}adaptations{% endif %}
           <strong>by arrangement</strong>.</p>
         {% endif %}
@@ -346,12 +347,21 @@
     apply();
   });
 
-  // Bootstrap tooltips (e.g. on the disabled badges of custom, deed-less licences).
-  var bs = window.bootstrap;
-  if (bs && bs.Tooltip) {
+  // Bootstrap tooltips (e.g. on the disabled badges of custom, deed-less
+  // licences). Bootstrap is a deferred bundle that may load AFTER this inline
+  // script, so poll briefly until it's ready.
+  function initTips() {
+    var bs = window.bootstrap;
+    if (!bs || !bs.Tooltip) return false;
     document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
       bs.Tooltip.getOrCreateInstance(el);
     });
+    return true;
+  }
+  if (!initTips()) {
+    var tries = 0;
+    var timer = setInterval(function () { if (initTips() || ++tries > 40) clearInterval(timer); }, 150);
+    window.addEventListener('load', initTips);
   }
 })();
 </script>

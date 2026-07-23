@@ -124,7 +124,7 @@ function propsHtml(e) {
   const cond = (yes, lbl) =>
     `<li class="lp-prop cond ${yes ? 'yes' : 'no'}"><i class="fas ${yes ? 'fa-check' : 'fa-xmark'}"></i>${lbl}</li>`;
   const adapt = e.no_derivatives === null
-    ? `<li class="lp-prop unknown"><i class="fas fa-circle-question"></i>Adaptations: see terms</li>`
+    ? `<li class="lp-prop unknown"><i class="fas fa-circle-info"></i>Adaptations: see terms</li>`
     : perm(!e.no_derivatives, 'Adaptations');
   return `<ul class="lp-props">`
     + perm(e.permits_commercial, 'Commercial use') + adapt
@@ -162,7 +162,7 @@ function buildModal() {
     <div class="modal-dialog modal-dialog-scrollable modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title"><i class="fas fa-scale-balanced me-2"></i>Choose a licence for your data</h5>
+          <h5 class="modal-title">Choose a licence for your data</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">

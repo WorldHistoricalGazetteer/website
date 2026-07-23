@@ -18,7 +18,7 @@ Renders nothing when `license` is falsy — callers decide on a fallback
   {% if commercial_on_request or adaptations_on_request %}
     <span class="badge border" style="background:#fff8e6;color:#8a6400;border-color:#f0dca2 !important;"
           title="The rights-holder will consider requests for uses the licence does not itself grant; WHG forwards enquiries.">
-      <i class="fas fa-handshake me-1"></i>{% if commercial_on_request and adaptations_on_request %}commercial use &amp; adaptations{% elif commercial_on_request %}commercial use{% else %}adaptations{% endif %} by arrangement
+🤝 {% if commercial_on_request and adaptations_on_request %}commercial use &amp; adaptations{% elif commercial_on_request %}commercial use{% else %}adaptations{% endif %} by arrangement
     </span>
   {% endif %}
   {% if rights_statement %}
