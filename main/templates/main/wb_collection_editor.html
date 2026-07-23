@@ -58,9 +58,20 @@
         <label class="form-label small mb-1" for="wb-desc">Description</label>
         <textarea id="wb-desc" class="form-control" rows="3" maxlength="3000" placeholder="What this is about"></textarea>
       </div>
-      <div class="mb-0">
+      <div class="mb-2">
         <label class="form-label small mb-1" for="wb-keywords">Keywords <span class="text-muted">(comma-separated)</span></label>
         <input id="wb-keywords" class="form-control" placeholder="trade, medieval, Baltic">
+      </div>
+      <div class="mb-0">
+        <label class="form-label small mb-1">Licence</label>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <button type="button" id="wb-license-btn" class="btn btn-sm btn-outline-primary">
+            <i class="fas fa-scale-balanced me-1"></i>Choose a licence…
+          </button>
+          <span id="wb-license-display" class="small"></span>
+          <button type="button" id="wb-license-clear" class="btn btn-sm btn-link text-muted p-0 small" hidden>clear</button>
+        </div>
+        <div class="form-text small">How others may reuse your data — a guided picker helps you choose.</div>
       </div>
     </div>
   </section>

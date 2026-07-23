@@ -98,6 +98,8 @@ def checkout_place_collection(collection):
         'title': collection.title, 'description': collection.description or '',
         'keywords': list(collection.keywords or []),
         'license': (collection.license.spdx_id if getattr(collection, 'license', None) else ''),
+        'commercial_on_request': bool(getattr(collection, 'commercial_on_request', False)),
+        'adaptations_on_request': bool(getattr(collection, 'adaptations_on_request', False)),
         'places': places,
     }
     return snapshot, collection_state_hash(collection)
@@ -313,6 +315,10 @@ def checkout_gazetteer_group(collection):
         gazetteers.append({'dataset_id': d.id, 'title': d.title, 'centroid': c})
     snapshot = {
         'title': collection.title, 'description': collection.description or '',
-        'keywords': list(collection.keywords or []), 'gazetteers': gazetteers,
+        'keywords': list(collection.keywords or []),
+        'license': (collection.license.spdx_id if getattr(collection, 'license', None) else ''),
+        'commercial_on_request': bool(getattr(collection, 'commercial_on_request', False)),
+        'adaptations_on_request': bool(getattr(collection, 'adaptations_on_request', False)),
+        'gazetteers': gazetteers,
     }
     return snapshot, collection_state_hash(collection)

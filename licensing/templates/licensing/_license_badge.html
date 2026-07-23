@@ -2,8 +2,10 @@
 Render a source-licence badge.
 
 Context:
-  license          a licensing.License instance (or None)
-  rights_statement optional free-text rights (e.g. for custom licences)
+  license                a licensing.License instance (or None)
+  rights_statement       optional free-text rights (e.g. for custom licences)
+  commercial_on_request  optional bool — commercial use offered "by arrangement"
+  adaptations_on_request optional bool — adaptations offered "by arrangement"
 
 Renders nothing when `license` is falsy — callers decide on a fallback
 (typically the WHG overlay statement) themselves.
@@ -13,6 +15,12 @@ Renders nothing when `license` is falsy — callers decide on a fallback
      class="badge bg-light text-dark border" title="{{ license.label }}">
     {{ license.spdx_id }}
   </a>
+  {% if commercial_on_request or adaptations_on_request %}
+    <span class="badge border" style="background:#fff8e6;color:#8a6400;border-color:#f0dca2 !important;"
+          title="The rights-holder will consider requests for uses the licence does not itself grant; WHG forwards enquiries.">
+      <i class="fas fa-handshake me-1"></i>{% if commercial_on_request and adaptations_on_request %}commercial use &amp; adaptations{% elif commercial_on_request %}commercial use{% else %}adaptations{% endif %} by arrangement
+    </span>
+  {% endif %}
   {% if rights_statement %}
     <div class="small text-muted mt-1">{{ rights_statement }}</div>
   {% endif %}

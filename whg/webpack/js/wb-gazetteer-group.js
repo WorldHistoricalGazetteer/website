@@ -9,6 +9,7 @@ import '../css/reconciliation.css';
 import { el, esc, truncate, debounce, statusBadge, openStore, serverBridge, mountAccordion, haversineKm, centroid } from './wb-shell.js';
 import { searchDatasets } from './recon-sync.js';
 import { mountCollab } from './wb-collab.js';
+import { wireLicenseControl } from './licensePicker.js';
 
 // eslint-disable-next-line camelcase, no-undef
 __webpack_public_path__ = '/static/webpack/';
@@ -17,14 +18,21 @@ const DB_NAME = 'whg-wb-gazetteer-group';
 const store = openStore(DB_NAME);
 const bridge = serverBridge('gazetteer_group');
 let status = null;
+let licenseControl = null;   // set in bindMeta(); .render() refreshes the badge
 
 // Members: {dataset_id, title}. Snapshot matches doctypes._errs_gazetteer_group / publish_gazetteer_group.
-let project = { title: '', description: '', keywords: [], gazetteers: [] };
+let project = { title: '', description: '', keywords: [], license: '',
+                commercial_on_request: false, adaptations_on_request: false, gazetteers: [] };
 
 const snapshot = () => ({
   title: project.title.trim() || 'Untitled group',
   description: project.description || '',
   keywords: project.keywords || [],
+  // SPDX id + "by arrangement" flags resolved onto the Collection by
+  // workbench/publish.py::_apply_scope.
+  license: project.license || '',
+  commercial_on_request: !!project.commercial_on_request,
+  adaptations_on_request: !!project.adaptations_on_request,
   gazetteers: project.gazetteers.map((g) => ({ dataset_id: g.dataset_id, title: g.title })),
 });
 
@@ -47,11 +55,27 @@ function bindMeta() {
   el('wb-keywords').addEventListener('input', (e) => {
     project.keywords = e.target.value.split(',').map((k) => k.trim()).filter(Boolean); touched();
   });
+  // Guided licence picker (modal) rather than a bare dropdown.
+  licenseControl = wireLicenseControl({
+    button: el('wb-license-btn'),
+    display: el('wb-license-display'),
+    clearBtn: el('wb-license-clear'),
+    getChoice: () => ({ spdx: project.license || '',
+      commercial_on_request: !!project.commercial_on_request,
+      adaptations_on_request: !!project.adaptations_on_request }),
+    setChoice: (c) => {
+      project.license = c.spdx || '';
+      project.commercial_on_request = !!c.commercial_on_request;
+      project.adaptations_on_request = !!c.adaptations_on_request;
+      touched();
+    },
+  });
 }
 function fillMeta() {
   el('wb-title').value = project.title || '';
   el('wb-desc').value = project.description || '';
   el('wb-keywords').value = (project.keywords || []).join(', ');
+  if (licenseControl) licenseControl.render();
 }
 
 // ── search + add gazetteers ───────────────────────────────────────────────────
@@ -143,7 +167,8 @@ function flash(node, msg, kind) { if (node) node.innerHTML = msg ? `<div class="
 
 async function clearDraft() {
   await store.clear();
-  project = { title: '', description: '', keywords: [], gazetteers: [] };
+  project = { title: '', description: '', keywords: [], license: '',
+              commercial_on_request: false, adaptations_on_request: false, gazetteers: [] };
   fillMeta(); render(); status.saved();
   el('wb-publish-result').innerHTML = ''; el('wb-save-result').innerHTML = '';
 }
@@ -168,6 +193,9 @@ async function init() {
     if (r.ok && r.data && r.data.snapshot) {
       const s = r.data.snapshot;
       project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [],
+                  license: s.license || '',
+                  commercial_on_request: !!s.commercial_on_request,
+                  adaptations_on_request: !!s.adaptations_on_request,
                   gazetteers: (s.gazetteers || []).map((g) => ({ dataset_id: g.dataset_id,
                     title: g.title || ('dataset ' + g.dataset_id), tip: g.tip || '', centroid: g.centroid || null })) };
     }

@@ -12,6 +12,7 @@
 import { el, esc, truncate, debounce, csrf, openStore, statusBadge, serverBridge, mountAccordion, haversineKm, centroid, WB_COLORS } from './wb-shell.js';
 import { mountCollab } from './wb-collab.js';
 import { mountNer } from './wb-ner.js';
+import { wireLicenseControl } from './licensePicker.js';
 
 const RECON_ENDPOINT = '/reconcile';
 const SEARCH_LIMIT = 8;
@@ -44,12 +45,19 @@ export function mountCollectionEditor(cfg) {
   const bridge = serverBridge(cfg.docType);
   const memberWord = cfg.memberWord || 'place';
   let status = null;
-  let project = { title: '', description: '', keywords: [], places: [] };
+  let licenseControl = null;   // set in bindMeta(); .render() refreshes the badge
+  let project = { title: '', description: '', keywords: [], license: '',
+                  commercial_on_request: false, adaptations_on_request: false, places: [] };
 
   const snapshot = () => ({
     title: project.title.trim() || 'Untitled',
     description: project.description || '',
     keywords: project.keywords || [],
+    // SPDX id + "by arrangement" flags resolved onto the Collection by
+    // workbench/publish.py::_apply_scope.
+    license: project.license || '',
+    commercial_on_request: !!project.commercial_on_request,
+    adaptations_on_request: !!project.adaptations_on_request,
     places: project.places.map((p, i) => ({ id: p.id, title: p.title, note: p.note || undefined, seq: i })),
   });
 
@@ -76,11 +84,27 @@ export function mountCollectionEditor(cfg) {
       project.keywords = e.target.value.split(',').map((k) => k.trim()).filter(Boolean);
       touched();
     });
+    // Guided licence picker (modal) rather than a bare dropdown.
+    licenseControl = wireLicenseControl({
+      button: el('wb-license-btn'),
+      display: el('wb-license-display'),
+      clearBtn: el('wb-license-clear'),
+      getChoice: () => ({ spdx: project.license || '',
+        commercial_on_request: !!project.commercial_on_request,
+        adaptations_on_request: !!project.adaptations_on_request }),
+      setChoice: (c) => {
+        project.license = c.spdx || '';
+        project.commercial_on_request = !!c.commercial_on_request;
+        project.adaptations_on_request = !!c.adaptations_on_request;
+        touched();
+      },
+    });
   }
   function fillMeta() {
     el('wb-title').value = project.title || '';
     el('wb-desc').value = project.description || '';
     el('wb-keywords').value = (project.keywords || []).join(', ');
+    if (licenseControl) licenseControl.render();
   }
 
   // ── search + add ───────────────────────────────────────────────────────────
@@ -250,7 +274,8 @@ export function mountCollectionEditor(cfg) {
 
   async function clearDraft() {
     await store.clear();
-    project = { title: '', description: '', keywords: [], places: [] };
+    project = { title: '', description: '', keywords: [], license: '',
+                commercial_on_request: false, adaptations_on_request: false, places: [] };
     fillMeta(); renderPlaces(); status.saved();
     el('wb-publish-result').innerHTML = ''; el('wb-save-result').innerHTML = '';
   }
@@ -276,6 +301,9 @@ export function mountCollectionEditor(cfg) {
       if (r.ok && r.data && r.data.snapshot) {
         const s = r.data.snapshot;
         project = { title: s.title || '', description: s.description || '', keywords: s.keywords || [],
+                    license: s.license || '',
+                    commercial_on_request: !!s.commercial_on_request,
+                    adaptations_on_request: !!s.adaptations_on_request,
                     places: (s.places || []).map((p) => ({ id: p.id, title: p.title || p.id, note: p.note || '',
                       tip: p.tip || '', lng: p.lng != null ? p.lng : null, lat: p.lat != null ? p.lat : null })) };
       }

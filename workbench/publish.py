@@ -106,7 +106,8 @@ def _reindex_hook(collection):
 
 
 def _apply_scope(collection, snapshot):
-    """Write shared scope fields (keywords, license) from the snapshot onto the collection."""
+    """Write shared scope fields (keywords, license, by-arrangement flags) from the
+    snapshot onto the collection."""
     kws = snapshot.get('keywords')
     if isinstance(kws, list):
         collection.keywords = [str(k)[:50] for k in kws if str(k).strip()][:50]
@@ -118,6 +119,10 @@ def _apply_scope(collection, snapshot):
                or License.objects.filter(label__iexact=lic).first())
         if obj:
             collection.license = obj
+    # "By arrangement" qualifiers (contact-for-permission) — soften a licence's
+    # commercial/adaptation prohibition to "the rights-holder will consider it".
+    collection.commercial_on_request = bool(snapshot.get('commercial_on_request'))
+    collection.adaptations_on_request = bool(snapshot.get('adaptations_on_request'))
 
 
 @transaction.atomic

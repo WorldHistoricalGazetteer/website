@@ -113,6 +113,19 @@ class Collection(models.Model):
         null=True, blank=True,
         help_text="Free-text rights, for custom licences or extra conditions.",
     )
+    # "By arrangement" qualifiers layered on top of the chosen licence: the
+    # rights-holder will CONSIDER requests for a use the licence itself forbids
+    # (commercial use / adaptations). Not a blanket grant — enquiries are routed
+    # to the contributor via WHG. Only meaningful when the base licence restricts
+    # the corresponding axis.
+    commercial_on_request = models.BooleanField(
+        default=False,
+        help_text="Licence forbids commercial use, but the rights-holder will consider requests.",
+    )
+    adaptations_on_request = models.BooleanField(
+        default=False,
+        help_text="Licence forbids adaptations, but the rights-holder will consider requests.",
+    )
 
     # modified, 20220902: 'place' or 'dataset'; no default
     collection_class = models.CharField(choices=COLLECTIONCLASSES, max_length=12)

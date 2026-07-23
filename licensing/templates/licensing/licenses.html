@@ -70,6 +70,18 @@
 
   .lic-foot { margin-top: 2rem; font-size: .85rem; color: #667; border-top: 1px solid #e6eaee; padding-top: 1rem; }
 
+  /* "By arrangement" callout + per-card note */
+  .lic-arrange-note { border: 1px solid #e6d3a8; border-left: 5px solid #d9a015; background: #fffdf6;
+    border-radius: 8px; padding: .9rem 1.15rem; margin: 0 0 1.75rem; }
+  .lic-arrange-note h2 { font-size: 1.02rem; font-weight: 600; margin: 0 0 .35rem; color: #6b4e00; }
+  .lic-arrange-note p { margin: 0; font-size: .9rem; color: #5a4a1e; }
+  .lc-arrange { font-size: .78rem; color: #8a6400; background: #fff8e6; border: 1px solid #f0dca2;
+    border-radius: 6px; padding: .3rem .5rem; margin: 0 0 .1rem; }
+  .lc-arrange i { margin-right: .25rem; }
+  /* Disabled (non-linking) badge / link for custom licences with no deed URL */
+  .lc-badge-static { background: #7a8794; cursor: help; }
+  .lc-nolink { font-size: .82rem; color: #99a0a8; cursor: help; }
+
   /* Licence picker */
   .lic-picker { border: 1px solid #cfe0ee; background: #f4f9fd; border-radius: 10px;
     padding: 1rem 1.15rem 1.1rem; margin: 0 0 1.75rem; }
@@ -119,6 +131,19 @@
     </p>
   </div>
   {% endif %}
+
+  <div class="lic-arrange-note">
+    <h2><i class="fas fa-handshake me-1"></i>“By arrangement” — beyond the licence</h2>
+    <p>
+      When you contribute data through the WHG Workbench, you can add two optional
+      conditions on top of your chosen licence: allow <strong>commercial use</strong>
+      and/or <strong>adaptations</strong> <strong>by arrangement</strong>. This signals
+      that although the licence itself doesn't grant these, you'll consider requests
+      case-by-case — WHG passes enquiries to you and your contact details stay private.
+      Look for the <i class="fas fa-handshake" style="color:#8a6400"></i> note on the
+      licences below where this applies.
+    </p>
+  </div>
 
   <div class="lic-picker" id="lic-picker">
     <div class="lp-title"><i class="fas fa-wand-magic-sparkles me-1"></i>Which licence fits your terms?</div>
@@ -173,6 +198,7 @@
     <span class="k"><span class="lc-prop perm yes"><i class="fas fa-check"></i></span> permitted</span>
     <span class="k"><span class="lc-prop cond yes"><i class="fas fa-check"></i></span> required condition</span>
     <span class="k"><span class="lc-prop perm no"><i class="fas fa-xmark"></i></span> not permitted / not required</span>
+    <span class="k"><i class="fas fa-handshake" style="color:#8a6400"></i> available <em>by arrangement</em></span>
     <span class="k text-muted">“Adaptations” = the right to remix, transform or build upon the data.</span>
   </div>
 
@@ -189,8 +215,12 @@
         data-attribution="{% if lic.attribution_required %}1{% else %}0{% endif %}"
         data-sharealike="{% if lic.share_alike %}1{% else %}0{% endif %}">
         <div class="lc-head">
+          {% if lic.deed_url %}
           <a class="lc-badge" href="{{ lic.deed_url }}" target="_blank" rel="noopener"
              title="Read the {{ lic.label }} licence">{{ lic.spdx_id }}</a>
+          {% else %}
+          <span class="lc-badge lc-badge-static" data-bs-toggle="tooltip" data-bs-title="{{ lic.deed_note }}">{{ lic.spdx_id }}</span>
+          {% endif %}
           <span class="lc-name">{{ lic.label }}</span>
         </div>
         {% if lic.notes %}<p class="lc-notes">{{ lic.notes }}</p>{% endif %}
@@ -214,8 +244,18 @@
           </li>
         </ul>
 
+        {% if not lic.permits_commercial or lic.no_derivatives %}
+        <p class="lc-arrange"><i class="fas fa-handshake"></i> Contributors can offer
+          {% if not lic.permits_commercial and lic.no_derivatives %}commercial use and adaptations{% elif not lic.permits_commercial %}commercial use{% else %}adaptations{% endif %}
+          <strong>by arrangement</strong>.</p>
+        {% endif %}
+
         <div class="lc-links">
+          {% if lic.deed_url %}
           <a href="{{ lic.deed_url }}" target="_blank" rel="noopener">Read the licence <i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>
+          {% else %}
+          <span class="lc-nolink" data-bs-toggle="tooltip" data-bs-title="{{ lic.deed_note }}">No licence deed <i class="fas fa-circle-info fa-xs"></i></span>
+          {% endif %}
           {% if lic.spdx_url %}<a href="{{ lic.spdx_url }}" target="_blank" rel="noopener">SPDX <i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
         </div>
 
@@ -305,6 +345,14 @@
     });
     apply();
   });
+
+  // Bootstrap tooltips (e.g. on the disabled badges of custom, deed-less licences).
+  var bs = window.bootstrap;
+  if (bs && bs.Tooltip) {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) {
+      bs.Tooltip.getOrCreateInstance(el);
+    });
+  }
 })();
 </script>
 {% endblock %}
