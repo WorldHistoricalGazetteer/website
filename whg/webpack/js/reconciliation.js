@@ -1225,7 +1225,10 @@ function updatePaneSummaries() {
       const built = buildUniqueQueries();
       let matched = 0, nomatch = 0, pending = 0;
       if (built) built.map.forEach((v, key) => { const m = project.matches[key]; if (!m) pending++; else if (m.top) matched++; else nomatch++; });
-      sc.textContent = `${matched.toLocaleString()} matched · ${nomatch.toLocaleString()} no match · ${pending.toLocaleString()} pending`;
+      // Don't report a fail-closed scope as "N no match" — nothing was matched against (place#144).
+      sc.textContent = (scopeFailed() && !matched)
+        ? 'region not applied — no results'
+        : `${matched.toLocaleString()} matched · ${nomatch.toLocaleString()} no match · ${pending.toLocaleString()} pending`;
     } else sc.textContent = '';
   }
 }
