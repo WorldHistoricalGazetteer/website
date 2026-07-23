@@ -1,0 +1,310 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block title %}<title>WHG · Licences</title>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .lic-page { max-width: 1000px; margin: 0 auto; padding-bottom: 3rem; }
+  .lic-page .lic-lead { font-size: 1.05rem; color: #444; }
+  .lic-page h1 { font-weight: 600; }
+
+  /* WHG overlay callout */
+  .lic-overlay {
+    border: 1px solid #e0b64d; border-left: 5px solid #d9a015;
+    background: #fff8e6; border-radius: 8px; padding: 1rem 1.15rem; margin: 1.25rem 0 1.75rem;
+  }
+  .lic-overlay h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 .35rem; color: #6b4e00; }
+  .lic-overlay p { margin: 0; font-size: .92rem; color: #5a4a1e; }
+
+  /* Legend */
+  .lic-legend { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: center;
+    font-size: .82rem; color: #555; background: #f6f8fa; border: 1px solid #e6eaee;
+    border-radius: 8px; padding: .6rem .9rem; margin-bottom: 2rem; }
+  .lic-legend .k { display: inline-flex; align-items: center; gap: .35rem; }
+
+  /* Sections */
+  .lic-section { margin-bottom: 2.25rem; }
+  .lic-section > h2 { font-size: 1.2rem; font-weight: 600; margin-bottom: .15rem; }
+  .lic-section > .blurb { color: #666; font-size: .9rem; margin-bottom: 1rem; max-width: 70ch; }
+
+  /* Card grid */
+  .lic-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+  .lic-card { border: 1px solid #e2e6ea; border-radius: 10px; padding: 1rem 1.1rem;
+    background: #fff; display: flex; flex-direction: column; }
+  .lic-card .lc-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: .5rem; margin-bottom: .1rem; }
+  .lc-badge { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem;
+    font-weight: 600; text-decoration: none; color: #fff; background: #495867;
+    padding: .12rem .5rem; border-radius: 5px; white-space: nowrap; }
+  .lc-badge:hover { background: #2a3540; color: #fff; }
+  .lc-name { font-size: .9rem; color: #333; }
+  .lc-notes { font-size: .8rem; color: #777; margin: .35rem 0 0; }
+
+  /* Property pills */
+  .lc-props { list-style: none; padding: 0; margin: .75rem 0 .35rem; display: flex; flex-wrap: wrap; gap: .35rem; }
+  .lc-prop { font-size: .74rem; padding: .12rem .5rem; border-radius: 999px; display: inline-flex;
+    align-items: center; gap: .3rem; border: 1px solid transparent; white-space: nowrap; }
+  .lc-prop i { font-size: .72rem; }
+  /* permissions granted (green) / withheld (muted) */
+  .lc-prop.perm.yes { background: #e6f4ea; color: #1b7a3d; border-color: #bfe3cb; }
+  .lc-prop.perm.no  { background: #f2f3f5; color: #99a0a8; border-color: #e3e6e9; }
+  /* required conditions (amber) / not required (muted) */
+  .lc-prop.cond.yes { background: #fff3d6; color: #8a6400; border-color: #f0dca2; }
+  .lc-prop.cond.no  { background: #f2f3f5; color: #99a0a8; border-color: #e3e6e9; }
+  .lc-prop.unknown  { background: #f2f3f5; color: #99a0a8; border-color: #e3e6e9; }
+
+  /* Links row */
+  .lc-links { margin-top: auto; padding-top: .7rem; display: flex; flex-wrap: wrap; gap: .35rem .9rem; font-size: .82rem; }
+  .lc-links a { text-decoration: none; }
+  .lc-links a:hover { text-decoration: underline; }
+
+  /* Translations */
+  .lc-langs { margin-top: .55rem; }
+  .lc-langs > summary { cursor: pointer; font-size: .8rem; color: #4a5b6b; list-style: none; }
+  .lc-langs > summary::-webkit-details-marker { display: none; }
+  .lc-langs > summary::before { content: "▸ "; color: #90a0ad; }
+  .lc-langs[open] > summary::before { content: "▾ "; }
+  .lc-lang-list { display: flex; flex-wrap: wrap; gap: .3rem .75rem; margin-top: .5rem; }
+  .lc-lang-list a { font-size: .8rem; text-decoration: none; color: #365; }
+  .lc-lang-list a:hover { text-decoration: underline; }
+
+  .lic-foot { margin-top: 2rem; font-size: .85rem; color: #667; border-top: 1px solid #e6eaee; padding-top: 1rem; }
+
+  /* Licence picker */
+  .lic-picker { border: 1px solid #cfe0ee; background: #f4f9fd; border-radius: 10px;
+    padding: 1rem 1.15rem 1.1rem; margin: 0 0 1.75rem; }
+  .lic-picker .lp-title { font-weight: 600; font-size: 1.02rem; margin-bottom: .1rem; color: #234; }
+  .lic-picker .lp-sub { font-size: .84rem; color: #667; margin-bottom: .85rem; }
+  .lp-questions { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .7rem 1.5rem; }
+  .lp-q { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+  .lp-q .lp-label { font-size: .88rem; color: #333; }
+  .lp-seg { display: inline-flex; border: 1px solid #b9cede; border-radius: 7px; overflow: hidden; flex-shrink: 0; }
+  .lp-seg button { border: 0; background: #fff; color: #4a5b6b; font-size: .78rem; padding: .22rem .6rem;
+    cursor: pointer; border-left: 1px solid #dbe6ef; }
+  .lp-seg button:first-child { border-left: 0; }
+  .lp-seg button:hover { background: #eef5fb; }
+  .lp-seg button.active { background: #2f6db0; color: #fff; }
+  .lp-foot { display: flex; align-items: center; gap: 1rem; margin-top: .9rem; font-size: .85rem; }
+  .lp-foot #lp-count { color: #234; font-weight: 500; }
+  .lp-foot #lp-reset { color: #2f6db0; text-decoration: none; }
+  .lp-foot #lp-reset:hover { text-decoration: underline; }
+  #lp-empty { display: none; color: #8a6400; background: #fff8e6; border: 1px solid #f0dca2;
+    border-radius: 8px; padding: .7rem .9rem; font-size: .88rem; margin-bottom: 1.5rem; }
+  .lp-hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container lic-page">
+
+  <h1 class="mt-3">Licences in the World Historical Gazetteer</h1>
+  <p class="lic-lead">
+    Every dataset, collection and reference gazetteer in WHG carries an explicit
+    licence describing how its data may be reused. This page lists all
+    {{ license_count }} licences currently recognised by the system, so that
+    <strong>contributors can choose the terms</strong> under which they share
+    their work, and so that anyone reusing WHG data can see exactly what each
+    licence permits. Each entry links to the official licence text, including
+    non-English versions where the licence publishes them.
+  </p>
+
+  {% if whg_overlay %}
+  <div class="lic-overlay">
+    <h2>WHG's own licence, applied alongside each source</h2>
+    <p>
+      The aggregated World Historical Gazetteer database is itself published under the
+      <a href="{{ whg_overlay.url }}" target="_blank" rel="noopener">{{ whg_overlay.label }} ({{ whg_overlay.spdx_id }})</a>
+      licence. This is asserted <em>in addition to</em> — never instead of — each
+      source's own terms: your data always keeps the licence you choose below.
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="lic-picker" id="lic-picker">
+    <div class="lp-title"><i class="fas fa-wand-magic-sparkles me-1"></i>Which licence fits your terms?</div>
+    <p class="lp-sub">Answer as many as you like — the licences below filter to those that match. Leave a question on “Any” to ignore it.</p>
+    <div class="lp-questions">
+      <div class="lp-q">
+        <span class="lp-label">Allow <strong>commercial</strong> use?</span>
+        <span class="lp-seg" data-filter="commercial">
+          <button type="button" data-val="any" class="active">Any</button>
+          <button type="button" data-val="1">Yes</button>
+          <button type="button" data-val="0">No</button>
+        </span>
+      </div>
+      <div class="lp-q">
+        <span class="lp-label">Allow <strong>adaptations</strong> (remixing)?</span>
+        <span class="lp-seg" data-filter="adaptations">
+          <button type="button" data-val="any" class="active">Any</button>
+          <button type="button" data-val="1">Yes</button>
+          <button type="button" data-val="0">No</button>
+        </span>
+      </div>
+      <div class="lp-q">
+        <span class="lp-label">Require <strong>attribution</strong> (credit)?</span>
+        <span class="lp-seg" data-filter="attribution">
+          <button type="button" data-val="any" class="active">Any</button>
+          <button type="button" data-val="1">Yes</button>
+          <button type="button" data-val="0">No</button>
+        </span>
+      </div>
+      <div class="lp-q">
+        <span class="lp-label">Require <strong>ShareAlike</strong> (keep open)?</span>
+        <span class="lp-seg" data-filter="sharealike">
+          <button type="button" data-val="any" class="active">Any</button>
+          <button type="button" data-val="1">Yes</button>
+          <button type="button" data-val="0">No</button>
+        </span>
+      </div>
+    </div>
+    <div class="lp-foot">
+      <span id="lp-count"></span>
+      <a href="#" id="lp-reset" hidden>Reset all</a>
+    </div>
+  </div>
+
+  <div id="lp-empty">
+    No licence in the vocabulary matches every answer. Try setting one of the
+    questions back to “Any” — for example, most licences that forbid commercial
+    use also require attribution.
+  </div>
+
+  <div class="lic-legend">
+    <span class="k"><span class="lc-prop perm yes"><i class="fas fa-check"></i></span> permitted</span>
+    <span class="k"><span class="lc-prop cond yes"><i class="fas fa-check"></i></span> required condition</span>
+    <span class="k"><span class="lc-prop perm no"><i class="fas fa-xmark"></i></span> not permitted / not required</span>
+    <span class="k text-muted">“Adaptations” = the right to remix, transform or build upon the data.</span>
+  </div>
+
+  {% for section in sections %}
+  {% if section.licenses %}
+  <section class="lic-section" id="{{ section.key }}">
+    <h2>{{ section.title }}</h2>
+    <p class="blurb">{{ section.blurb }}</p>
+    <div class="lic-grid">
+      {% for lic in section.licenses %}
+      <article class="lic-card"
+        data-commercial="{% if lic.permits_commercial %}1{% else %}0{% endif %}"
+        data-adaptations="{% if lic.no_derivatives is None %}unknown{% elif lic.no_derivatives %}0{% else %}1{% endif %}"
+        data-attribution="{% if lic.attribution_required %}1{% else %}0{% endif %}"
+        data-sharealike="{% if lic.share_alike %}1{% else %}0{% endif %}">
+        <div class="lc-head">
+          <a class="lc-badge" href="{{ lic.deed_url }}" target="_blank" rel="noopener"
+             title="Read the {{ lic.label }} licence">{{ lic.spdx_id }}</a>
+          <span class="lc-name">{{ lic.label }}</span>
+        </div>
+        {% if lic.notes %}<p class="lc-notes">{{ lic.notes }}</p>{% endif %}
+
+        <ul class="lc-props">
+          <li class="lc-prop perm {% if lic.permits_commercial %}yes{% else %}no{% endif %}">
+            <i class="fas {% if lic.permits_commercial %}fa-check{% else %}fa-xmark{% endif %}"></i>Commercial use
+          </li>
+          {% if lic.no_derivatives is None %}
+          <li class="lc-prop unknown"><i class="fas fa-circle-question"></i>Adaptations: see terms</li>
+          {% else %}
+          <li class="lc-prop perm {% if lic.no_derivatives %}no{% else %}yes{% endif %}">
+            <i class="fas {% if lic.no_derivatives %}fa-xmark{% else %}fa-check{% endif %}"></i>Adaptations
+          </li>
+          {% endif %}
+          <li class="lc-prop cond {% if lic.attribution_required %}yes{% else %}no{% endif %}">
+            <i class="fas {% if lic.attribution_required %}fa-check{% else %}fa-xmark{% endif %}"></i>Attribution
+          </li>
+          <li class="lc-prop cond {% if lic.share_alike %}yes{% else %}no{% endif %}">
+            <i class="fas {% if lic.share_alike %}fa-check{% else %}fa-xmark{% endif %}"></i>ShareAlike
+          </li>
+        </ul>
+
+        <div class="lc-links">
+          <a href="{{ lic.deed_url }}" target="_blank" rel="noopener">Read the licence <i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>
+          {% if lic.spdx_url %}<a href="{{ lic.spdx_url }}" target="_blank" rel="noopener">SPDX <i class="fas fa-arrow-up-right-from-square fa-xs"></i></a>{% endif %}
+        </div>
+
+        {% if lic.translations %}
+        <details class="lc-langs">
+          <summary>Read in another language ({{ lic.translations|length }})</summary>
+          <div class="lc-lang-list">
+            {% for t in lic.translations %}
+            <a href="{{ t.url }}" hreflang="{{ t.code }}" lang="{{ t.code }}" target="_blank" rel="noopener">{{ t.label }}</a>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+  {% endfor %}
+
+  <p class="lic-foot">
+    Choosing a licence for your own contribution? More open terms (public domain
+    or Attribution) let the widest range of scholars, students and tools reuse
+    your work; ShareAlike keeps derivatives open; NonCommercial and NoDerivatives
+    limit reuse. If you are unsure, WHG recommends an Attribution licence such as
+    <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC&nbsp;BY&nbsp;4.0</a>.
+    Ready to share data? See <a href="{% url 'submit-dataset' %}">Contribute to WHG</a>.
+    This list is generated directly from WHG's licence vocabulary and updates as
+    it grows.
+  </p>
+
+</div>
+
+<script>
+(function () {
+  var picker = document.getElementById('lic-picker');
+  if (!picker) return;
+  var keys = ['commercial', 'adaptations', 'attribution', 'sharealike'];
+  var state = { commercial: 'any', adaptations: 'any', attribution: 'any', sharealike: 'any' };
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.lic-card'));
+  var sections = Array.prototype.slice.call(document.querySelectorAll('.lic-section'));
+  var countEl = document.getElementById('lp-count');
+  var resetEl = document.getElementById('lp-reset');
+  var emptyEl = document.getElementById('lp-empty');
+
+  function apply() {
+    var shown = 0;
+    cards.forEach(function (card) {
+      var ok = true;
+      for (var i = 0; i < keys.length; i++) {
+        var want = state[keys[i]];
+        if (want === 'any') continue;
+        // A definite preference never matches a licence whose value is unknown
+        // (bespoke/custom terms).
+        if (card.dataset[keys[i]] !== want) { ok = false; break; }
+      }
+      card.classList.toggle('lp-hidden', !ok);
+      if (ok) shown++;
+    });
+    sections.forEach(function (sec) {
+      var vis = sec.querySelector('.lic-card:not(.lp-hidden)');
+      sec.classList.toggle('lp-hidden', !vis);
+    });
+    var filtering = keys.some(function (k) { return state[k] !== 'any'; });
+    countEl.textContent = filtering ? (shown + ' of ' + cards.length + ' licences match') : '';
+    resetEl.hidden = !filtering;
+    emptyEl.style.display = (filtering && shown === 0) ? 'block' : 'none';
+  }
+
+  picker.querySelectorAll('.lp-seg').forEach(function (seg) {
+    var key = seg.getAttribute('data-filter');
+    seg.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        seg.querySelectorAll('button').forEach(function (b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        state[key] = btn.getAttribute('data-val');
+        apply();
+      });
+    });
+  });
+
+  resetEl.addEventListener('click', function (e) {
+    e.preventDefault();
+    keys.forEach(function (k) { state[k] = 'any'; });
+    picker.querySelectorAll('.lp-seg button').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-val') === 'any');
+    });
+    apply();
+  });
+})();
+</script>
+{% endblock %}

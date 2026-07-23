@@ -18,6 +18,7 @@ import resources.views
 from accounts import orcid
 from accounts.views import profile_edit
 from datasets.views import PublicListsView  # , DataListsView
+from licensing import views as licensing_views
 from main import views
 from resources.views import TeachingPortalView
 from sitemap.views import StaticViewSitemap, ToponymSitemap
@@ -164,6 +165,7 @@ urlpatterns = [
                   # path('contact/', views.contact_view, name='contact'),
                   path('contact_modal/', views.contact_modal_view, name='contact-modal'),
                   path('license/', views.license_view, name='license'),
+                  path('licenses/', licensing_views.licenses_view, name='licenses'),
                   path('terms_of_use/', views.terms_of_use_view, name='terms_of_use'),
                   path('privacy_policy/', views.privacy_policy_view, name='privacy_policy'),
                   path('success/', views.contactSuccessView, name='success'),
