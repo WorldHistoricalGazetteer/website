@@ -1190,16 +1190,34 @@ def reconcile_place_es(query, user=None):
     # 2. CRC gateway search (fail-safe: returns [] on error)
     #    Compute the CRC-specific namespace set (everything except "whg").
     crc_hits = []
+    crc_meta = {}
     # Only call the gateway when at least one CRC namespace is wanted
     # (or when no namespace filter was given at all).
     if gateway_in_play:
-        crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces)
+        crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces, meta=crc_meta)
+
+    # The gateway fails CLOSED on an explicitly scoped query it cannot constrain: rather than
+    # answering with unscoped results it returns none and reports scope.applied = False. Legacy hits
+    # can't honour that scope either, so they must not resurrect the leak through the back door —
+    # drop them and let the empty result stand as the deliberate answer (place#144).
+    scope_info = crc_meta.get("scope")
+    if scope_info is not None and scope_info.get("applied") is False and legacy_hits:
+        logger.info("reconcile: dropping legacy hits — gateway reports scope.applied=false")
+        legacy_hits = []
+
+    # Response-level metadata passed through to the client. Absent entirely on an older gateway, so
+    # the client can distinguish "no scope reported" from "scope not applied".
+    extra = {}
+    if scope_info is not None:
+        extra["scope"] = scope_info
+    if crc_meta.get("variants_used") is not None:
+        extra["variants_used"] = crc_meta["variants_used"]
 
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits
 
     if not all_hits:
-        return {"result": [], "geojson": None}
+        return {"result": [], "geojson": None, **extra}
 
     # 4. Deduplicate by place_id (prefer legacy hits)
     seen_ids = set()
@@ -1227,7 +1245,8 @@ def reconcile_place_es(query, user=None):
         results.append(candidate)
 
     return {
-        "result": results
+        "result": results,
+        **extra,
     }
 
 

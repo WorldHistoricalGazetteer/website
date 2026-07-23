@@ -240,7 +240,8 @@ def crc_search(options: dict, user=None) -> dict | None:
     return None
 
 
-def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None) -> list[dict]:
+def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None,
+                         meta: dict | None = None) -> list[dict]:
     """
     Call the CRC gateway ``/api/reconcile`` endpoint.
 
@@ -253,6 +254,12 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             results to (e.g. ``{"gn", "tgn"}``).  ``None`` means no
             filtering.  The set should *not* contain ``"whg"`` (legacy
             places are handled separately).
+        meta: Optional dict, populated in place with the gateway's
+            response-level metadata (``scope``, ``variants_used``) so the
+            caller can propagate it to the client.  Left untouched when the
+            gateway predates those fields or the call failed — callers MUST
+            treat a missing ``scope`` as "old gateway, previous behaviour"
+            and never infer ``applied: False`` from its absence (place#144).
 
     Returns:
         List of dicts in the same shape as ES ``hits.hits`` entries, i.e.
@@ -368,6 +375,16 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     except Exception as e:
         logger.warning("CRC gateway unexpected error: %s", e)
         return []
+
+    # Response-level metadata (place#144). `scope` is present only when the query carried
+    # contained_in/bounds; `variants_used` echoes the alt_names actually queried after dedupe and
+    # the gateway's 10-form cap. Both are absent on gateways predating the change — we simply leave
+    # `meta` unset in that case so the caller keeps the previous behaviour.
+    if meta is not None and isinstance(data, dict):
+        if data.get("scope") is not None:
+            meta["scope"] = data["scope"]
+        if data.get("variants_used") is not None:
+            meta["variants_used"] = data["variants_used"]
 
     return _adapt_hits(data)
 

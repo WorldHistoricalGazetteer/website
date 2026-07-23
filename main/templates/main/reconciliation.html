@@ -282,6 +282,11 @@
       <div class="small text-muted mt-1" id="recon-progress-text"></div>
     </div>
 
+    <!-- Scope / variant reporting from the gateway (place#144): whether the geographic scope was
+         actually applied, how (own boundary / a co-referent's / bbox), and which name variants were
+         queried. Absent on gateways predating that change. Populated by reconciliation.js. -->
+    <div id="recon-scope-notice" class="small my-2"></div>
+
     <div id="recon-recon-summary" class="recon-recon-summary small my-2"></div>
 
     <!-- Facets & filters — slice the reconciled rows by status/score/value/…; drives the results table,

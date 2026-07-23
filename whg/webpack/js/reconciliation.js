@@ -1253,9 +1253,10 @@ function resetUI() {
   el('recon-review-map').classList.add('d-none');
   el('recon-fullmap-pane').classList.add('d-none');
   el('recon-export').classList.add('d-none');
+  lastScope = null; lastVariantsDropped = 0; // drop any gateway scope report from the previous dataset
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
-    'recon-review-card', 'recon-review-progress'].forEach((id) => {
+    'recon-scope-notice', 'recon-review-card', 'recon-review-progress'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
   });
   const input = el('recon-file'); if (input) input.value = '';
@@ -3180,6 +3181,59 @@ async function postReconcile(queries, csrf, attempt = 0) {
 }
 
 function setReconSummary(html) { el('recon-recon-summary').innerHTML = html; }
+
+// ── Gateway scope / variant reporting (place#144) ────────────────────────────
+// The gateway reports, per query, whether the geographic scope could actually be applied. Crucially
+// `scope.applied === false` means it FAILED CLOSED: it refused to answer an explicitly scoped query
+// with unscoped results, so an empty result is deliberate and must NOT be presented as "no matches".
+// A gateway predating this sends no `scope` key at all — treat undefined as "previous behaviour",
+// never as applied:false.
+let lastScope = null;          // scope object from the most recent run (dataset-wide, so one per run)
+let lastVariantsDropped = 0;   // name variants we sent that the gateway didn't query (cap/dedupe)
+function scopeFailed() { return !!(lastScope && lastScope.applied === false); }
+function idList(ids, max) {
+  const a = (ids || []).slice(0, max || 4).map((s) => esc(String(s)));
+  const more = (ids || []).length - a.length;
+  return a.join(', ') + (more > 0 ? ` +${more} more` : '');
+}
+function renderScopeNotice() {
+  const box = el('recon-scope-notice'); if (!box) return;
+  if (!lastScope) { box.innerHTML = lastVariantsDropped ? variantNoteHTML() : ''; return; }
+  const s = lastScope;
+  const parts = [];
+  if (s.applied === false) {
+    // Fail-closed: say the region couldn't be applied, NOT "no candidates found".
+    parts.push(`<div class="alert alert-danger py-2 px-3 mb-2">
+      <i class="fas fa-circle-exclamation me-1"></i><strong>The region you chose couldn’t be applied</strong>, so no
+      results were returned — this is <em>not</em> “no matches”.
+      ${s.message ? `<div class="mt-1">${esc(s.message)}</div>` : ''}
+      ${(s.containers_unresolved || []).length ? `<div class="mt-1 text-muted">No usable geometry for: ${idList(s.containers_unresolved, 6)}</div>` : ''}
+      <div class="mt-1">Pick a different region in <strong>Scope&nbsp;→&nbsp;Where</strong>, or clear the scope and reconcile again.</div>
+    </div>`);
+  } else {
+    if (s.mode === 'linked-polygon' && (s.containers_linked || []).length) {
+      // A real boundary, just borrowed from a sameAs/exactMatch record of the same place — a quiet note.
+      parts.push(`<div class="text-muted mb-1"><i class="fas fa-circle-info me-1"></i>Boundary taken from
+        ${idList(s.containers_linked, 3)} (same place).</div>`);
+    }
+    if ((s.containers_approximated || []).length) {
+      // Some containers had no boundary and were ignored → the scope is NARROWER than asked for.
+      parts.push(`<div class="alert alert-warning py-2 px-3 mb-2">
+        <i class="fas fa-triangle-exclamation me-1"></i>Some places you scoped to have no boundary and were
+        <strong>ignored</strong>: ${idList(s.containers_approximated, 6)}. Results are narrower than you asked for.</div>`);
+    }
+    if (s.approximate === true) {
+      parts.push(`<div class="text-muted mb-1"><i class="fas fa-circle-info me-1"></i>Scope is approximate
+        (bounding box) — results may include places just outside it.</div>`);
+    }
+  }
+  if (lastVariantsDropped) parts.push(variantNoteHTML());
+  box.innerHTML = parts.join('');
+}
+function variantNoteHTML() {
+  return `<div class="text-muted"><i class="fas fa-circle-info me-1"></i>${lastVariantsDropped.toLocaleString()}
+    name variant${lastVariantsDropped === 1 ? ' was' : 's were'} not queried (duplicates removed, max 10 per row).</div>`;
+}
 function toggleRunning(on) {
   running = on;
   el('recon-run').classList.toggle('d-none', on);
@@ -3275,13 +3329,23 @@ function renderResultsTable(built) {
     else nomatch += 1;
     if (project.decisions && project.decisions[key] && project.decisions[key].status === 'accepted') accepted += 1;
   });
-  setReconSummary(
-    `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> ` +
-    `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto, <strong>${accepted.toLocaleString()}</strong> accepted)</span> · ` +
-    `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
-    `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
-    `across <strong>${built.map.size.toLocaleString()}</strong> rows, ` +
-    `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
+  // When the gateway failed the scope closed, every row came back empty BY DESIGN. Reporting that as
+  // "N no match" would send the user hunting for a data problem that doesn't exist, so say what
+  // actually happened instead (the full explanation is in the scope notice above). See place#144.
+  if (scopeFailed() && !matched) {
+    setReconSummary(
+      `<span class="text-danger"><i class="fas fa-circle-exclamation me-1"></i><strong>No results — the region you
+       chose couldn’t be applied.</strong></span> <span class="text-muted">These rows were not matched against
+       anything; this is not “no match”. Adjust <strong>Scope&nbsp;→&nbsp;Where</strong> and reconcile again.</span>`);
+  } else {
+    setReconSummary(
+      `<span class="text-success"><strong>${matched.toLocaleString()}</strong> matched</span> ` +
+      `<span class="text-muted">(<strong>${auto.toLocaleString()}</strong> auto, <strong>${accepted.toLocaleString()}</strong> accepted)</span> · ` +
+      `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
+      `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
+      `across <strong>${built.map.size.toLocaleString()}</strong> rows, ` +
+      `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
+  }
 
   // Build the full ordered row-info list once; the table is virtualised (only the visible window is
   // in the DOM), so it copes with very large datasets — off-screen rows are evicted on scroll.
@@ -4616,6 +4680,7 @@ async function reconcileStage() {
   if (pos >= chain.length) { setReconSummary('<span class="text-success"><i class="fas fa-check me-1"></i>All columns reconciled &amp; confirmed.</span>'); return; }
   if (columnState(pos) === 'review') { setReconSummary('<span class="text-warning">Confirm this column’s matches (Step 4) before reconciling the next.</span>'); return; }
   reconStaleNote = ''; // a fresh run clears any "parent changed" notice
+  lastScope = null; lastVariantsDropped = 0; renderScopeNotice(); // and any previous scope report
   project.matches = project.matches || {};
   trackOnce('MyD: reconcile', { columns: String(chain.length) });
   toggleRunning(true);
@@ -4768,13 +4833,22 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       break;
     }
     slice.forEach((u, j) => {
-      const result = applyNsToCandidates((data['q' + j] && data['q' + j].result) || [], colIndex);
+      const qd = data['q' + j] || {};
+      // Gateway scope/variant reporting (place#144). Scope is dataset-wide, so the first one we see
+      // in a run describes the whole run. `undefined` means an older gateway — leave lastScope null.
+      if (qd.scope && !lastScope) lastScope = qd.scope;
+      if (Array.isArray(qd.variants_used)) {
+        const sent = perRow ? rowVariants(u.repKey.slice(u.repKey.indexOf(':') + 1)).length : 0;
+        if (sent > qd.variants_used.length) lastVariantsDropped += sent - qd.variants_used.length;
+      }
+      const result = applyNsToCandidates(qd.result || [], colIndex);
       const at = new Date().toISOString();
       // Fan the single reconciliation to every row sharing this value+containment (admin merge).
       u.memberKeys.forEach((mk) => {
         project.matches[mk] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at };
       });
     });
+    renderScopeNotice();
     done += slice.length;
     updateProgress(done, total);
     renderResults(built);
