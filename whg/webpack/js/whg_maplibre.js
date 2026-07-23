@@ -82,6 +82,50 @@ maplibregl.Map.prototype.clearHighlights = function () {
 	this.highlights = [];
 }
 
+// Polygon-gazetteer coverage footprint (place#140). Polygon gazetteers can't use
+// the point `_heat` layer (MapLibre heatmaps consume Point geometry only), so at
+// low zoom they looked deceptively sparse. The indexing pipeline now bakes a
+// single dissolved footprint polygon (tagged `coverage:1`, present z0–7) into
+// each polygon gazetteer's source-layer, plus the real boundaries (z8+). Here we
+// paint that footprint as a warm mottled "heat-like" fill — the polygon analogue
+// of the point density heatmap — that cross-fades to the true boundaries on
+// zoom-in. Styling is fully client-side: three runtime-generated `fill-pattern`
+// sprites (soft radial blobs on a seeded jittered grid) alpha-blend into an
+// organic mottle. Point gazetteers carry no `coverage` feature, so these layers
+// render nothing for them and their behaviour is unchanged.
+const COV_MAXZOOM = 8;      // footprint fades out here; boundaries take over (z8+)
+const COV_OVERALL = 0.7;    // GLOBAL opacity multiplier — never 1.0, always basemap bleed-through
+const _COV_C = { RED: [224, 64, 64], ORANGE: [253, 141, 60], YELLOW: [255, 237, 160] };
+const _covRgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+// [key, colour, blobRadius, grid(g×g), jitter, baseOpacity, seed]  bottom→top
+const COV_LAYERS = [
+	['red',    _COV_C.RED,    24, 3, 9, 0.45, 101],
+	['orange', _COV_C.ORANGE, 16, 4, 7, 0.50, 202],
+	['yellow', _COV_C.YELLOW, 10, 6, 5, 0.60, 303],
+];
+
+// Build one seamless 72px mottle tile: soft radial blobs on a seeded jittered
+// grid, wrapped across tile edges so `fill-pattern` repeats without seams. The
+// LCG keeps the scatter deterministic (stable mottle across sessions).
+function _covSprite(color, radius, grid, jit, seed) {
+	const TILE = 72;
+	let s = seed >>> 0;
+	const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+	const cv = document.createElement('canvas');
+	cv.width = cv.height = TILE;
+	const x = cv.getContext('2d'), cell = TILE / grid, pts = [];
+	for (let i = 0; i < grid; i++) for (let j = 0; j < grid; j++)
+		pts.push([(i + 0.5) * cell + (rnd() * 2 - 1) * jit, (j + 0.5) * cell + (rnd() * 2 - 1) * jit]);
+	pts.forEach(([px, py]) => {
+		for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+			const gx = px + dx * TILE, gy = py + dy * TILE, g = x.createRadialGradient(gx, gy, 0, gx, gy, radius);
+			g.addColorStop(0, _covRgba(color, 1)); g.addColorStop(1, _covRgba(color, 0));
+			x.fillStyle = g; x.beginPath(); x.arc(gx, gy, radius, 0, 7); x.fill();
+		}
+	});
+	return x.getImageData(0, 0, TILE, TILE);
+}
+
 // Dynamically load a gazetteer vector tileset (one not in the base whg-context
 // style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
 // so the caller (heroMap.showGazetteer) can read vector_layers + bounds. The
@@ -112,6 +156,12 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	// individual-point circles once zoomed past it — cross-fading between them.
 	const POINT_MINZOOM = 8;   // ~ tiles' --cluster-maxzoom; raw points from here
 	const HEAT_MAXZOOM = 9;    // heatmap only at low zoom, faded out by here
+	// Register the coverage mottle sprites once per map (shared across all
+	// gazetteer source-layers); see the place#140 note above.
+	for (const [key, color, r, g, j, , seed] of COV_LAYERS) {
+		const imgId = `whg_cov_${key}`;
+		if (!this.hasImage(imgId)) this.addImage(imgId, _covSprite(color, r, g, j, seed), { pixelRatio: 2 });
+	}
 	for (const vl of vectorLayers) {
 		const sourceLayer = vl.id;
 		const baseId = vectorLayers.length > 1 ? `${id}__${sourceLayer}` : id;
@@ -119,7 +169,8 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 			this.addLayer({
 				id: `${baseId}_heat`, type: 'heatmap', source: id, 'source-layer': sourceLayer,
 				maxzoom: HEAT_MAXZOOM,
-				filter: ['==', ['geometry-type'], 'Point'],
+				// Defensive: coverage carries no Point geometry anyway (place#140).
+				filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'coverage']]],
 				paint: {
 					// Weight by the cluster's pre-computed sqrt(point_count) so big
 					// clusters don't saturate; un-clustered singletons weigh 1.
@@ -143,14 +194,16 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 		if (!this.getLayer(`${baseId}_fill`)) {
 			this.addLayer({
 				id: `${baseId}_fill`, type: 'fill', source: id, 'source-layer': sourceLayer,
-				filter: ['==', ['geometry-type'], 'Polygon'],
+				// Exclude the coverage footprint (place#140) — it has its own
+				// `_coverage_*` layers and must not double-draw or become clickable.
+				filter: ['all', ['==', ['geometry-type'], 'Polygon'], ['!', ['has', 'coverage']]],
 				paint: { 'fill-color': 'rgb(100, 140, 190)', 'fill-opacity': 0.12, 'fill-outline-color': 'rgba(50, 80, 120, 0.35)' },
 			}, beforeId);
 		}
 		if (!this.getLayer(`${baseId}_line`)) {
 			this.addLayer({
 				id: `${baseId}_line`, type: 'line', source: id, 'source-layer': sourceLayer,
-				filter: ['match', ['geometry-type'], ['Polygon', 'LineString'], true, false],
+				filter: ['all', ['match', ['geometry-type'], ['Polygon', 'LineString'], true, false], ['!', ['has', 'coverage']]],
 				paint: { 'line-color': '#2563eb', 'line-width': 1, 'line-opacity': 0.6 },
 			}, beforeId);
 		}
@@ -166,6 +219,30 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 					'circle-opacity': ['interpolate', ['linear'], ['zoom'], POINT_MINZOOM, 0, HEAT_MAXZOOM, 0.85],
 					'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], POINT_MINZOOM, 0, HEAT_MAXZOOM, 1],
 				},
+			}, beforeId);
+		}
+		// place#140 coverage footprint: three mottle `fill-pattern` layers
+		// (bottom→top RED, ORANGE, YELLOW) + a solid red border, all gated to
+		// the low zooms (maxzoom COV_MAXZOOM) and filtered to the single
+		// dissolved `coverage:1` feature. They render nothing for point
+		// gazetteers (no coverage feature) and are excluded from interaction.
+		for (const [key, , , , , op] of COV_LAYERS) {
+			const covId = `${baseId}_coverage_${key}`;
+			if (!this.getLayer(covId)) {
+				this.addLayer({
+					id: covId, type: 'fill', source: id, 'source-layer': sourceLayer,
+					maxzoom: COV_MAXZOOM,
+					filter: ['==', ['get', 'coverage'], 1],
+					paint: { 'fill-pattern': `whg_cov_${key}`, 'fill-opacity': op * COV_OVERALL },
+				}, beforeId);
+			}
+		}
+		if (!this.getLayer(`${baseId}_coverage_line`)) {
+			this.addLayer({
+				id: `${baseId}_coverage_line`, type: 'line', source: id, 'source-layer': sourceLayer,
+				maxzoom: COV_MAXZOOM,
+				filter: ['==', ['get', 'coverage'], 1],
+				paint: { 'line-color': _covRgba(_COV_C.RED, 1), 'line-width': 1.5, 'line-opacity': 0.8 },
 			}, beforeId);
 		}
 	}
