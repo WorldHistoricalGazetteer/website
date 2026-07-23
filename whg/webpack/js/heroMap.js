@@ -1473,6 +1473,10 @@ class HeroMap {
                 this._currentBasemap = styleId;
                 this.map.once('style.load', () => {
                     this._applyLanguageToBaseLabels();
+                    // setStyle wipes the image atlas, so the re-grafted place#140
+                    // coverage `fill-pattern` layers now point at missing sprites —
+                    // re-register them or the mottle silently vanishes on swap.
+                    try { this.map.ensureCoverageSprites(); } catch (e) {}
                     // A basemap can carry its own projection default — restore ours.
                     this._programmaticProjection = true;
                     try { this.map.setProjection({ type: wasGlobe ? 'globe' : 'mercator' }); } catch (e) {}

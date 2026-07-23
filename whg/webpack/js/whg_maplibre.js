@@ -87,19 +87,30 @@ maplibregl.Map.prototype.clearHighlights = function () {
 // low zoom they looked deceptively sparse. The indexing pipeline now bakes a
 // single dissolved footprint polygon (tagged `coverage:1`, present z0–7) into
 // each polygon gazetteer's source-layer, plus the real boundaries (z8+). Here we
-// paint that footprint as a warm mottled "heat-like" fill — the polygon analogue
-// of the point density heatmap — that cross-fades to the true boundaries on
+// paint that footprint as a mottled "heat-like" fill — the polygon analogue of
+// the point density heatmap — that cross-fades to the true boundaries on
 // zoom-in. Styling is fully client-side: three runtime-generated `fill-pattern`
 // sprites (soft radial blobs on a seeded jittered grid) alpha-blend into an
 // organic mottle. Point gazetteers carry no `coverage` feature, so these layers
 // render nothing for them and their behaviour is unchanged.
+//
+// NB the sprites live in the map's image atlas, which `setStyle` (basemap swap)
+// wipes — so `ensureCoverageSprites` below is re-run after every style load
+// (see heroMap.setBasemapStyle), otherwise the re-grafted fill-pattern layers
+// reference missing images and the mottle silently vanishes.
 const COV_MAXZOOM = 8;      // footprint fades out here; boundaries take over (z8+)
 const COV_OVERALL = 0.7;    // GLOBAL opacity multiplier — never 1.0, always basemap bleed-through
-const _COV_C = { RED: [224, 64, 64], ORANGE: [253, 141, 60], YELLOW: [255, 237, 160] };
+// Palette: a BLUE base (matching the z8+ boundary colour and the point-heatmap
+// ramp's low end) with warm ORANGE/YELLOW sparkle, so the mottle reads as a
+// coverage/heat field yet stays coherent with the blue boundaries and doesn't
+// clash with the red road network some basemaps draw. (Earlier a red base +
+// red border competed badly with those roads.)
+const COV_BORDER = '#2563eb';   // == the `_line` boundary colour (z8+ handoff)
+const _COV_C = { BLUE: [79, 143, 214], ORANGE: [253, 141, 60], YELLOW: [255, 237, 160] };
 const _covRgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 // [key, colour, blobRadius, grid(g×g), jitter, baseOpacity, seed]  bottom→top
 const COV_LAYERS = [
-	['red',    _COV_C.RED,    24, 3, 9, 0.45, 101],
+	['blue',   _COV_C.BLUE,   24, 3, 9, 0.45, 101],
 	['orange', _COV_C.ORANGE, 16, 4, 7, 0.50, 202],
 	['yellow', _COV_C.YELLOW, 10, 6, 5, 0.60, 303],
 ];
@@ -125,6 +136,18 @@ function _covSprite(color, radius, grid, jit, seed) {
 	});
 	return x.getImageData(0, 0, TILE, TILE);
 }
+
+// (Re-)register the coverage mottle sprites in the map's image atlas. Idempotent
+// (skips any already present) and safe to call after every `setStyle`, which
+// clears the atlas — see the place#140 note above. Registered at the default
+// pixelRatio 1: passing `{pixelRatio:2}` with a runtime `ImageData` makes
+// MapLibre (5.3.1) paint the pattern INVISIBLE.
+maplibregl.Map.prototype.ensureCoverageSprites = function () {
+	for (const [key, color, r, g, j, , seed] of COV_LAYERS) {
+		const imgId = `whg_cov_${key}`;
+		if (!this.hasImage(imgId)) this.addImage(imgId, _covSprite(color, r, g, j, seed));
+	}
+};
 
 // Dynamically load a gazetteer vector tileset (one not in the base whg-context
 // style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
@@ -156,15 +179,9 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	// individual-point circles once zoomed past it — cross-fading between them.
 	const POINT_MINZOOM = 8;   // ~ tiles' --cluster-maxzoom; raw points from here
 	const HEAT_MAXZOOM = 9;    // heatmap only at low zoom, faded out by here
-	// Register the coverage mottle sprites once per map (shared across all
-	// gazetteer source-layers); see the place#140 note above.
-	for (const [key, color, r, g, j, , seed] of COV_LAYERS) {
-		const imgId = `whg_cov_${key}`;
-		// NB register at pixelRatio 1 (the default). Passing `{pixelRatio:2}` with
-		// a runtime `ImageData` makes MapLibre paint the pattern INVISIBLE (verified
-		// live on 5.3.1) — the footprint fill then renders nothing.
-		if (!this.hasImage(imgId)) this.addImage(imgId, _covSprite(color, r, g, j, seed));
-	}
+	// Register the coverage mottle sprites (shared across all gazetteer
+	// source-layers); see the place#140 note above.
+	this.ensureCoverageSprites();
 	for (const vl of vectorLayers) {
 		const sourceLayer = vl.id;
 		const baseId = vectorLayers.length > 1 ? `${id}__${sourceLayer}` : id;
@@ -225,10 +242,11 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 			}, beforeId);
 		}
 		// place#140 coverage footprint: three mottle `fill-pattern` layers
-		// (bottom→top RED, ORANGE, YELLOW) + a solid red border, all gated to
-		// the low zooms (maxzoom COV_MAXZOOM) and filtered to the single
-		// dissolved `coverage:1` feature. They render nothing for point
-		// gazetteers (no coverage feature) and are excluded from interaction.
+		// (bottom→top BLUE, ORANGE, YELLOW) + a solid blue border matching the
+		// z8+ boundaries, all gated to the low zooms (maxzoom COV_MAXZOOM) and
+		// filtered to the single dissolved `coverage:1` feature. They render
+		// nothing for point gazetteers (no coverage feature) and are excluded
+		// from interaction.
 		for (const [key, , , , , op] of COV_LAYERS) {
 			const covId = `${baseId}_coverage_${key}`;
 			if (!this.getLayer(covId)) {
@@ -245,7 +263,7 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 				id: `${baseId}_coverage_line`, type: 'line', source: id, 'source-layer': sourceLayer,
 				maxzoom: COV_MAXZOOM,
 				filter: ['==', ['get', 'coverage'], 1],
-				paint: { 'line-color': _covRgba(_COV_C.RED, 1), 'line-width': 1.5, 'line-opacity': 0.8 },
+				paint: { 'line-color': COV_BORDER, 'line-width': 1.5, 'line-opacity': 0.8 },
 			}, beforeId);
 		}
 	}
