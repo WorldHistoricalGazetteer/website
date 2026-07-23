@@ -1201,6 +1201,23 @@ def reconcile_place_es(query, user=None):
     # can't honour that scope either, so they must not resurrect the leak through the back door —
     # drop them and let the empty result stand as the deliberate answer (place#144).
     scope_info = crc_meta.get("scope")
+    # If the gateway never answered but a scope WAS requested, we have already suppressed the legacy
+    # hits (they can't honour it), so returning a bare empty list would look like "no matches". Report
+    # it as an unapplied scope instead, so the client explains the empty result rather than implying
+    # the data is at fault.
+    if scope_info is None and crc_meta.get("error") and (contained_in or query.get("bounds")):
+        scope_info = {
+            "requested": True,
+            "applied": False,
+            "mode": "none",
+            "approximate": False,
+            "containers_polygon": [], "containers_linked": [],
+            "containers_approximated": [], "containers_unresolved": [],
+            "message": "The gazetteer service is temporarily unavailable, so the region you chose "
+                       "could not be applied. No results were returned, rather than results from "
+                       "outside your chosen region. Please try again shortly.",
+        }
+
     if scope_info is not None and scope_info.get("applied") is False and legacy_hits:
         logger.info("reconcile: dropping legacy hits — gateway reports scope.applied=false")
         legacy_hits = []

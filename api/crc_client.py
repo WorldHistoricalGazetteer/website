@@ -363,17 +363,29 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         logger.info("CRC gateway /api/reconcile response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
+    # On every failure path record the reason in `meta`. The caller needs to tell "the gateway had
+    # nothing to say about scope" (older gateway → keep previous behaviour) apart from "the gateway
+    # never answered", because with an active scope it suppresses the legacy hits and would otherwise
+    # return an unexplained empty result. See place#144.
     except requests.Timeout:
         logger.warning("CRC gateway timeout after %ss", _timeout())
+        if meta is not None:
+            meta["error"] = "timeout"
         return []
     except requests.ConnectionError as e:
         logger.warning("CRC gateway connection error: %s", e)
+        if meta is not None:
+            meta["error"] = "connection"
         return []
     except requests.HTTPError as e:
         logger.warning("CRC gateway HTTP error: %s", e)
+        if meta is not None:
+            meta["error"] = "http"
         return []
     except Exception as e:
         logger.warning("CRC gateway unexpected error: %s", e)
+        if meta is not None:
+            meta["error"] = "unexpected"
         return []
 
     # Response-level metadata (place#144). `scope` is present only when the query carried
