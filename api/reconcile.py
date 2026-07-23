@@ -1164,20 +1164,35 @@ def reconcile_place_es(query, user=None):
     """
     namespaces = query.get("namespaces")  # None ⇒ all
 
-    # 1. Legacy ES search — skip when the caller excluded "whg"
+    # A `contained_in` region scope is a HARD constraint (issue #143). The legacy WHG index cannot
+    # enforce it — containment targets are gateway-resident place ids with no counterpart here, and the
+    # legacy `build_es_query` has no containment field to filter on — so unfiltered legacy hits would
+    # leak places OUTSIDE the region and get re-ranked into the results (making scope look like mere
+    # weighting). When the gateway path is also serving this query (which DOES enforce containment), we
+    # therefore drop the unverifiable legacy hits so the scope is respected. Only when the caller has
+    # explicitly restricted to legacy WHG (`namespaces == {"whg"}`, no gateway path) do we keep them,
+    # since suppressing would otherwise return nothing. See the gateway-side handoff (place#144).
+    contained_in = bool((query.get("raw") or {}).get("contained_in"))
+    crc_namespaces = None  # None ⇒ don't filter on the gateway side
+    if namespaces is not None:
+        crc_namespaces = namespaces - {WHG_NAMESPACE}
+    gateway_in_play = namespaces is None or bool(crc_namespaces)
+    suppress_legacy = contained_in and gateway_in_play
+
+    # 1. Legacy ES search — skip when the caller excluded "whg", or when an unenforceable containment
+    #    scope is active and the gateway will serve the (properly scoped) results.
     legacy_hits = []
-    if namespaces is None or WHG_NAMESPACE in namespaces:
+    if (namespaces is None or WHG_NAMESPACE in namespaces) and not suppress_legacy:
         legacy_hits = es_search(query=query)
+    elif suppress_legacy:
+        logger.info("reconcile: suppressing legacy hits — contained_in scope is enforced gateway-side only")
 
     # 2. CRC gateway search (fail-safe: returns [] on error)
     #    Compute the CRC-specific namespace set (everything except "whg").
     crc_hits = []
-    crc_namespaces = None  # None ⇒ don't filter on the gateway side
-    if namespaces is not None:
-        crc_namespaces = namespaces - {WHG_NAMESPACE}
     # Only call the gateway when at least one CRC namespace is wanted
     # (or when no namespace filter was given at all).
-    if namespaces is None or crc_namespaces:
+    if gateway_in_play:
         crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces)
 
     # 3. Merge: legacy first, then CRC

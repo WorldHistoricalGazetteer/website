@@ -59,6 +59,7 @@ const CURRENT = 'current';
 // (see roleSelectHTML / reconChain) so the spatial hierarchy is agnostic and self-ordering.
 const ROLES = [
   ['name', 'Place name'],
+  ['alt_names', 'Name variant(s)'],
   ['country', 'Country / ccode'],
   ['type', 'Feature type'],
   ['lat', 'Latitude'],
@@ -74,7 +75,8 @@ const ROLES = [
 // links (contains:<child>) once all columns are known.
 const ROLE_HINTS = [
   ['name', /^(place|placename|name|toponym|title|label)s?$/i],
-  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough)$/i],
+  ['alt_names', /^(alt.?names?|alternat(e|ive).?names?|name.?variants?|variant.?names?|variants?|aka|also.?known.?as|aliases?)$/i],
+  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough|riding|barony|arrondissement)$/i],
   ['country', /^(country|ccode|iso|nation)$/i],
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
@@ -83,6 +85,25 @@ const ROLE_HINTS = [
   ['date', /^(date|year|start|end|from|to|period|century)$/i],
   ['id', /^(id|uid|key|identifier|wikidata|qid|geonames|gn.?id)$/i],
 ];
+
+// Known administrative hierarchy: coarse → fine. Used by initChain() to order the containment chain by
+// the OBVIOUS real-world nesting (country > region > county > hundred/wapentake/parish > place) rather
+// than just the left-to-right column order, so e.g. a "Parish, County, Region" spreadsheet still nests
+// correctly. Lower rank = coarser (contains the others). Columns whose header isn't recognised keep
+// their dataset order, sorted after the known levels.
+const ADMIN_RANK = [
+  [/^(country|nation|ccode|iso)$/i, 0],
+  [/^(region|province|state|territory|arrondissement)$/i, 10],
+  [/^(county|counties|shire|department|canton|prefecture|riding|barony)$/i, 20],
+  [/^(district|borough|municipality|commune|adm\d|admin\d)$/i, 30],
+  [/^(hundred|wapentake)$/i, 40],
+  [/^(parish)$/i, 45],
+];
+function adminRank(columnName, fallbackIdx) {
+  const n = String(columnName || '').trim();
+  for (const [re, rank] of ADMIN_RANK) if (re.test(n)) return rank;
+  return 100 + fallbackIdx; // unknown levels: keep dataset order, after all known levels
+}
 
 function detectRole(columnName) {
   const n = String(columnName || '').trim();
@@ -94,7 +115,14 @@ function detectRole(columnName) {
 // container columns (in dataset order, coarse → fine) down to the 'name' column via contains:<child>.
 // If no name column was detected, the deepest container becomes the name (the toponym reconciled).
 function initChain(columns) {
-  const containers = columns.map((c, i) => i).filter((i) => columns[i].role === 'container');
+  let containers = columns.map((c, i) => i).filter((i) => columns[i].role === 'container');
+  // Order by the KNOWN administrative hierarchy (country > region > county > hundred/wapentake >
+  // parish …), falling back to dataset column order for unrecognised levels. So a spreadsheet whose
+  // admin columns are in an odd order still nests coarse → fine correctly. See ADMIN_RANK.
+  containers = containers
+    .map((i) => ({ i, rank: adminRank(columns[i].name, i) }))
+    .sort((a, b) => a.rank - b.rank)
+    .map((o) => o.i);
   let nameIdx = columns.findIndex((c) => c.role === 'name');
   if (nameIdx < 0 && containers.length) { nameIdx = containers.pop(); columns[nameIdx].role = 'name'; }
   const seq = nameIdx >= 0 ? [...containers, nameIdx] : containers;
@@ -707,6 +735,61 @@ function renderMapping() {
       refreshFullMapPane(); refreshExport();
     });
   });
+  renderIdNotice();
+}
+
+// ── Identifier column: duplicate detection + UUID generation (issue #143) ─────
+// A dataset's Identifier column should hold UNIQUE values (they become the LPF @id and the reconciliation
+// row key). If the mapped 'id' column has duplicates, warn and offer to mint UUIDs into a new column
+// instead. Minting a UUID id column is offered in any case (even with no id column mapped).
+function idDupInfo() {
+  const idIdx = colIndexByRole('id');
+  if (idIdx < 0) return { idIdx, dups: 0, filled: 0 };
+  const seen = new Set(); let dups = 0, filled = 0;
+  project.rows.forEach((r) => {
+    const v = String(r[idIdx] == null ? '' : r[idIdx]).trim();
+    if (!v) return;
+    filled += 1;
+    if (seen.has(v)) dups += 1; else seen.add(v);
+  });
+  return { idIdx, dups, filled };
+}
+function renderIdNotice() {
+  const box = el('recon-id-notice'); if (!box || !project) return;
+  const { idIdx, dups } = idDupInfo();
+  const genBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0" id="recon-gen-uuid"><i class="fas fa-fingerprint me-1"></i>Generate UUIDs in a new column</button>';
+  if (idIdx >= 0 && dups > 0) {
+    box.innerHTML = `<div class="alert alert-warning py-2 px-3 mb-0 d-flex align-items-center flex-wrap gap-2">
+      <span><i class="fas fa-triangle-exclamation me-1"></i>The <strong>Identifier</strong> column
+      “${esc(truncate(project.columns[idIdx].name, 30))}” has <strong>${dups.toLocaleString()}</strong>
+      duplicate value${dups === 1 ? '' : 's'}. Identifiers should be unique.</span>${genBtn}</div>`;
+  } else {
+    // No duplicate problem — still offer to add a UUID identifier column.
+    box.innerHTML = `<span class="text-muted">${genBtn} <span class="ms-1">Add a unique identifier column if your data has none.</span></span>`;
+  }
+  const b = el('recon-gen-uuid'); if (b) b.addEventListener('click', generateUuidColumn);
+}
+function uuid4() {
+  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (window.crypto ? window.crypto.getRandomValues(new Uint8Array(1))[0] & 15 : Math.floor(Math.random() * 16));
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+function generateUuidColumn() {
+  if (!project) return;
+  pushUndo({ type: 'columns', label: 'generate UUID identifier column', snapshot: columnSnapshot() });
+  // Demote any existing id column to 'other' so the new UUID column is the sole Identifier.
+  const oldId = colIndexByRole('id');
+  if (oldId >= 0) { project.columns[oldId].role = 'other'; delete project.columns[oldId].child; }
+  let name = 'uuid';
+  const taken = new Set(project.columns.map((c) => c.name));
+  let n = 2; while (taken.has(name)) name = `uuid_${n++}`;
+  project.columns.push({ name, role: 'id' });
+  project.rows.forEach((r) => r.push(uuid4()));
+  normalizeChain();
+  renderMapping(); persist(); renderPreview(); refreshExport();
+  flashSaved(`Added “${name}” with a unique UUID per row`);
 }
 
 // ── Cell transforms (light, OpenRefine-style) — clean a column's values in place ──────────────────
@@ -1690,11 +1773,15 @@ function buildLPF(data) {
     // so wrap non-conforming ids as `row:<value>` (a within-dataset local identifier).
     let atId = String(idIdx >= 0 && rec.orig[idIdx] != null && rec.orig[idIdx] !== '' ? rec.orig[idIdx] : (i + 1));
     if (!/^\w+:[^\s]+$/.test(atId) && !/^https?:\/\//.test(atId)) atId = 'row:' + atId.trim().replace(/\s+/g, '_');
+    // Names: the primary toponym plus any alt_names variants the user tagged for this row (issue #143).
+    const names = [];
+    if (title) names.push({ toponym: title });
+    rowVariants(rec.row).forEach((v) => { if (v && v !== title) names.push({ toponym: v }); });
     const feat = {
       '@id': atId,
       type: 'Feature',
       properties: props,
-      names: title ? [{ toponym: title }] : [],
+      names,
     };
     // Place types: assigned per row in the table editor (project.rowTypes, keyed by source row index);
     // rows without their own type fall back to the global Scope → "What" AAT selection.
@@ -2189,7 +2276,7 @@ async function updateFullMap() {
 function phoneticEnabled() {
   const box = el('recon-phonetic');
   if (box) return box.checked;
-  return !(project && project.phonetic === false); // default on
+  return !!(project && project.phonetic === true); // default off
 }
 // Languages offered in the override dropdown (value = Symphonym lang code; 'und' = undetermined).
 const RECON_LANGS = [
@@ -2656,8 +2743,9 @@ async function renderCollab() {
           </select>
           <button class="btn btn-outline-primary" id="recon-save-team" type="button">Save</button>
         </div>
+        <label class="small d-block mb-1 mt-2">…or create a new team:</label>
         <div class="input-group input-group-sm">
-          <input type="text" class="form-control" id="recon-new-team" placeholder="…or create a new team">
+          <input type="text" class="form-control" id="recon-new-team" placeholder="New team name" aria-label="New team name">
           <button class="btn btn-outline-secondary" id="recon-create-team" type="button">Create team</button>
         </div>
       </div>`);
@@ -2667,13 +2755,14 @@ async function renderCollab() {
       fixed once saved).</p>`);
   } else if (project.teamId && (project.role === 'owner')) {
     parts.push('<div id="recon-members" class="small mb-2 text-muted">Loading members…</div>');
-    parts.push(`<div class="input-group input-group-sm mb-3">
+    parts.push(`<div class="input-group input-group-sm mb-1">
         <input type="text" class="form-control" id="recon-invite-id" placeholder="username or email">
         <select class="form-select" id="recon-invite-role" style="max-width:8rem">
           <option value="editor">Editor</option><option value="viewer">Viewer</option><option value="owner">Owner</option>
         </select>
         <button class="btn btn-outline-primary" id="recon-invite-btn" type="button">Invite</button>
-      </div>`);
+      </div>
+      <div id="recon-invite-status" class="small mb-3"></div>`);
   } else if (isServerProject()) {
     parts.push('<p class="small text-muted">Only the team owner can manage members.</p>');
   }
@@ -2761,13 +2850,28 @@ async function loadMembers() {
     await Sync.removeMember(project.teamId, b.dataset.uid); loadMembers();
   }));
 }
+function setInviteStatus(html, kind) {
+  const s = el('recon-invite-status');
+  if (s) s.innerHTML = html ? `<span class="text-${kind || 'muted'}">${html}</span>` : '';
+}
 async function inviteMember() {
   const idf = (el('recon-invite-id') || {}).value;
   const role = (el('recon-invite-role') || {}).value || 'editor';
-  if (!idf || !idf.trim()) return;
-  const res = await Sync.addMember(project.teamId, idf.trim(), role);
-  if (res.status === 200) { if (el('recon-invite-id')) el('recon-invite-id').value = ''; loadMembers(); }
-  else { flashSaved('⚠ ' + ((res.data && res.data.error) || 'could not add that person')); }
+  if (!idf || !idf.trim()) { setInviteStatus('Enter a username or email address.', 'danger'); return; }
+  setInviteStatus('<i class="fas fa-spinner fa-spin me-1"></i>Adding…');
+  const res = await Sync.addMember(project.teamId, idf.trim(), role, project.serverId);
+  if (res.status === 200 && res.data) {
+    if (el('recon-invite-id')) el('recon-invite-id').value = '';
+    const who = esc(res.data.name || res.data.username || 'member');
+    if (res.data.notified) setInviteStatus(`<i class="fas fa-check me-1"></i>Added ${who} and emailed them an invitation.`, 'success');
+    else setInviteStatus(`<i class="fas fa-triangle-exclamation me-1"></i>Added ${who}, but they have no verified email yet, so they couldn't be notified. Ask them to verify an email address on their profile.`, 'warning');
+    loadMembers();
+  } else if (res.status === 404) {
+    // Explicit "no such user" check for the add-a-member UI.
+    setInviteStatus('<i class="fas fa-circle-xmark me-1"></i>No WHG user found with that username or email. They must have a WHG account (with a verified email) before you can add them.', 'danger');
+  } else {
+    setInviteStatus('<i class="fas fa-circle-exclamation me-1"></i>' + esc((res.data && res.data.error) || 'Could not add that person.'), 'danger');
+  }
 }
 async function loadOpenList() {
   const box = el('recon-open-list');
@@ -2783,6 +2887,7 @@ async function loadOpenList() {
   box.querySelectorAll('button[data-pid]').forEach((b) => b.addEventListener('click', () => openServerProject(b.dataset.pid)));
 }
 async function openServerProject(pid) {
+  if (!project) project = { id: CURRENT }; // fresh session (e.g. arriving via an ?open=<id> invite link)
   const res = await Sync.fetchProject(pid);
   if (res.status !== 200 || !res.data) { flashSaved('⚠ could not open that project'); return; }
   const d = res.data;
@@ -2838,6 +2943,18 @@ function getCsrf() {
 function normName(s) { return String(s == null ? '' : s).trim().toLowerCase().replace(/\s+/g, ' '); }
 function colIndexByRole(role) { return project ? project.columns.findIndex((c) => c.role === role) : -1; }
 const isCcode = (v) => /^[A-Za-z]{2}$/.test(String(v == null ? '' : v).trim());
+
+// Columns the user tagged as name variants (alt_names). A row's variants are alternative spellings of
+// its place name, tried alongside the primary toponym during reconciliation (issue #143). Cells may
+// hold several variants separated by ';' or '|'.
+function altNameCols() { return project ? project.columns.map((c, i) => i).filter((i) => project.columns[i].role === 'alt_names') : []; }
+function rowVariants(rowIdx) {
+  const cols = altNameCols(); if (!cols.length) return [];
+  const out = [];
+  cols.forEach((ci) => String(project.rows[rowIdx][ci] == null ? '' : project.rows[rowIdx][ci])
+    .split(/[;|]/).forEach((s) => { const t = s.trim(); if (t) out.push(t); }));
+  return [...new Set(out)];
+}
 
 // ── Multi-column (iterative, containment-chained) reconciliation ─────────────
 // The spatial hierarchy is expressed per-column: a container column has role 'contains' with a
@@ -4576,40 +4693,67 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   renderColSwitcher();
   const colName = truncate(project.columns[colIndex].name, 30);
   const passLabel = passTotal > 1 ? `<span class="text-muted">column ${passNo + 1}/${passTotal} · <strong>${esc(colName)}</strong></span> · ` : '';
-  const entries = [...built.map.entries()].filter(([key]) => !project.matches[key]); // resume: skip done
-  const total = built.map.size;
-  let done = total - entries.length;
+  const nameCol = colIndexByRole('name');
+  const perRow = colIndex === nameCol; // place-name column: reconcile every row individually
+  const rawEntries = [...built.map.entries()].filter(([key]) => !project.matches[key]); // resume: skip done
+
+  // Reconciliation units. Place names (perRow) → one unit per row (never merged: identical toponyms may
+  // be different places the user has already disambiguated). Admin/parent columns → merge identical
+  // values so a county appearing in hundreds of rows is reconciled ONCE and fanned to every row — but
+  // only within the same containment context (same confirmed parent place(s)) and country, so two
+  // same-named places under different parents stay distinct. See issue #143.
+  const units = []; // { repKey, memberKeys:[...], v }
+  if (perRow) {
+    rawEntries.forEach(([key, v]) => units.push({ repKey: key, memberKeys: [key], v }));
+  } else {
+    const groups = new Map();
+    rawEntries.forEach(([key, v]) => {
+      const row = key.slice(key.indexOf(':') + 1);
+      const pids = parentCol >= 0 ? resolvedPlaceIds(parentCol, row).map(barePlaceId).sort().join(',') : '';
+      const gk = normName(v.query) + '|' + (v.country || '') + '|' + pids;
+      let g = groups.get(gk);
+      if (!g) { g = { repKey: key, memberKeys: [], v }; groups.set(gk, g); }
+      g.memberKeys.push(key);
+    });
+    groups.forEach((g) => units.push(g));
+  }
+  const total = units.length;
+  let done = 0;
   updateProgress(done, total);
 
-  // Language-conditioned Symphonym embeddings (int8, 128-d) for this column's values.
+  // Language-conditioned Symphonym embeddings (int8, 128-d) — one per unit (representative value).
   let embByKey = null;
-  if (phoneticEnabled() && entries.length) {
+  if (phoneticEnabled() && units.length) {
     try {
       const mod = await loadSymphonym();
       const lang = getLang();
-      const names = entries.map(([, v]) => v.query);
+      const names = units.map((u) => u.v.query);
       const int8 = await mod.embedNames(names, {
         lang,
         onProgress: (d, t) => setReconSummary(`${passLabel}<i class="fas fa-spinner fa-spin me-1"></i>embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`),
       });
       embByKey = {};
-      entries.forEach(([key], idx) => { embByKey[key] = Array.from(int8.subarray(idx * 128, idx * 128 + 128)); });
+      units.forEach((u, idx) => { embByKey[u.repKey] = Array.from(int8.subarray(idx * 128, idx * 128 + 128)); });
     } catch (err) { console.error('[recon] embedding failed; using text matching', err); }
   }
 
-  for (let b = 0; b < entries.length && !stopRequested; b += RECON_BATCH) {
-    const slice = entries.slice(b, b + RECON_BATCH);
+  for (let b = 0; b < units.length && !stopRequested; b += RECON_BATCH) {
+    const slice = units.slice(b, b + RECON_BATCH);
     const queries = {};
     const nsf = getNsFilter(colIndex); // this column's own source gazetteers
-    slice.forEach(([key, v], j) => {
+    slice.forEach((u, j) => {
+      const key = u.repKey, v = u.v, row = key.slice(key.indexOf(':') + 1);
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
+      // Name variants (alt_names): alternative spellings tried alongside the primary toponym — only for
+      // the place-name column (variants of a container's own value aren't a modelled concept).
+      if (perRow) { const vars = rowVariants(row); if (vars.length) q.variants = vars; }
       // Containment: scope this column's query by ALL the parent column's confirmed places for the
       // same row (a parent may closeMatch several records) — "within any of them".
       if (parentCol >= 0) {
-        const pids = resolvedPlaceIds(parentCol, key.slice(key.indexOf(':') + 1)).map(barePlaceId);
+        const pids = resolvedPlaceIds(parentCol, row).map(barePlaceId);
         if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'within'; }
       }
       applyGlobalScopeToQuery(q, parentCol < 0, !!v.country); // dataset-wide scope (country/date/type/region)
@@ -4623,15 +4767,19 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       stopRequested = true;
       break;
     }
-    slice.forEach(([key], j) => {
+    slice.forEach((u, j) => {
       const result = applyNsToCandidates((data['q' + j] && data['q' + j].result) || [], colIndex);
-      project.matches[key] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at: new Date().toISOString() };
+      const at = new Date().toISOString();
+      // Fan the single reconciliation to every row sharing this value+containment (admin merge).
+      u.memberKeys.forEach((mk) => {
+        project.matches[mk] = { candidates: result, top: result[0] || null, exhausted: result.length < RECON_CAND_LIMIT, at };
+      });
     });
     done += slice.length;
     updateProgress(done, total);
     renderResults(built);
     await persist();
-    if (!stopRequested && b + RECON_BATCH < entries.length) await sleep(150); // gentle throttle
+    if (!stopRequested && b + RECON_BATCH < units.length) await sleep(150); // gentle throttle
   }
 }
 
@@ -4951,11 +5099,17 @@ function init() {
   loadSources().then(() => { if (project && project.matches && Object.keys(project.matches).length) { const built = buildUniqueQueries(); if (built) renderResults(built); } });
 
   showCapabilities();
-  // A ?shared=<token> link opens a read-only copy someone shared; otherwise resume local work.
-  const sharedToken = new URLSearchParams(window.location.search).get('shared');
+  // A ?shared=<token> link opens a read-only copy someone shared; a ?open=<id> link (e.g. from a team
+  // invitation email) opens that saved team project directly; otherwise resume local work.
+  const sp = new URLSearchParams(window.location.search);
+  const sharedToken = sp.get('shared');
+  const openId = sp.get('open');
   if (sharedToken) {
     try { window.history.replaceState({}, '', window.location.pathname); } catch (_) { /* ignore */ }
     handleSharedBootstrap(sharedToken);
+  } else if (openId) {
+    try { window.history.replaceState({}, '', window.location.pathname); } catch (_) { /* ignore */ }
+    loadSaved().then(() => openServerProject(openId));
   } else {
     loadSaved();
   }

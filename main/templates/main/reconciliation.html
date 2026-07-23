@@ -185,6 +185,9 @@
       </table>
     </div>
 
+    <!-- Identifier-column notice (duplicate-value warning + "generate UUIDs") — populated by JS -->
+    <div id="recon-id-notice" class="small mt-2"></div>
+
     <!-- Coordinate-format detection panel (shown when a Coordinates column or a Latitude+Longitude
          pair is mapped) — populated by reconciliation.js -->
     <div class="recon-coords d-none" id="recon-coords"></div>
@@ -260,16 +263,18 @@
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-phonetic-bar">
-      <label class="mb-0"><input type="checkbox" id="recon-phonetic" checked>
-        Phonetic matching <span class="text-muted">(Symphonym embeddings, computed in-browser — ranks candidates by how the name sounds; on by default)</span></label>
+      <label class="mb-0"><input type="checkbox" id="recon-phonetic">
+        Phonetic matching <span class="text-muted">(Symphonym embeddings, computed in-browser — ranks candidates by how the name sounds; off by default)</span></label>
       <label class="mb-0 d-flex align-items-center gap-1">Language
         <select id="recon-lang" class="form-select form-select-sm py-0" style="width:auto"></select>
         <span class="text-muted">(auto-detected — override if wrong)</span>
       </label>
     </div>
     <p class="text-muted small mb-2">
-      <i class="fas fa-circle-info me-1"></i>Every row is reconciled <strong>individually</strong> — identical
-      names are <em>not</em> merged, so each row can be matched to a different place.
+      <i class="fas fa-circle-info me-1"></i><strong>Place names</strong> are reconciled <strong>individually</strong>
+      — identical names are <em>not</em> merged, so each row can be matched to a different place.
+      <strong>Administrative levels</strong> (county, region…) are <strong>merged</strong>: identical values in
+      the same parent are reconciled once and applied to every row.
     </p>
 
     <div class="recon-progress-wrap d-none" id="recon-progress-wrap">

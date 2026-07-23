@@ -604,9 +604,42 @@ def team_members(request, tid):
     if not created:
         m.role = role
         m.save(update_fields=['role'])
+    # Notify the added member by email (issue #143). A properly-signed-up user has a verified email; if
+    # they don't, we can't reach them, so surface that to the owner instead of failing silently.
+    notified = False
+    if getattr(user, 'has_verified_email', False):
+        notified = _notify_team_member(request, team, user, m.role, data.get('project_id'))
     return JsonResponse({'ok': True, 'user_id': user.id, 'username': user.username,
                          'name': getattr(user, 'name', '') or user.username, 'role': m.role,
-                         'created': created})
+                         'created': created,
+                         'has_verified_email': bool(getattr(user, 'has_verified_email', False)),
+                         'notified': notified})
+
+
+def _notify_team_member(request, team, user, role, project_id=None):
+    """Email a user that they've been added to a team, linking to the Map-your-Data project. Best-effort:
+    returns True if the mail was sent. Never raises (a mail failure must not fail the add)."""
+    try:
+        from django.urls import reverse
+        from whgmail.messaging import WHGmail
+        base = reverse('reconciliation')
+        # A team invite that carries the project id deep-links straight into it (init() reads ?open=<id>).
+        url = request.build_absolute_uri(f'{base}?open={project_id}' if project_id else base)
+        inviter = getattr(request.user, 'name', '') or request.user.username
+        role_label = dict(TEAM_ROLES).get(role, role)
+        return bool(WHGmail(request, {
+            'template': 'team_invitation',
+            'subject': f'You have been added to the "{team.title}" team on World Historical Gazetteer',
+            'user': user,
+            'to_email': user.email,
+            'team_name': team.title,
+            'inviter_name': inviter,
+            'member_role': role_label,
+            'project_url': url,
+        }))
+    except Exception:
+        logger.exception('team invite email failed (team=%s user=%s)', team.id, user.id)
+        return False
 
 
 @login_required

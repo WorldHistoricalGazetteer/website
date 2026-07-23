@@ -1,0 +1,18 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>{{ inviter_name }} has added you to the <strong>{{ team_name }}</strong> team on the World Historical Gazetteer, with the role of <strong>{{ member_role }}</strong>.</p>
+
+    <p>Teams let you collaborate on <strong>Map&nbsp;your&nbsp;Data</strong> projects &mdash; reconciling, editing, and building place datasets together.</p>
+
+    <p>
+      <a href="{{ project_url }}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Open the project
+      </a>
+    </p>
+
+    <p>Or copy and paste this link into your browser:</p>
+    <p>{{ project_url }}</p>
+
+    <p>If you weren&rsquo;t expecting this, you can safely ignore this email &mdash; you can also leave the team at any time from the project&rsquo;s <em>Collaborate</em> panel.</p>
+{% endblock %}

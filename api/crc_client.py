@@ -278,6 +278,17 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         body["query_vector"] = list(embedding)
         body["mode"] = "phonetic"
 
+    # Name variants (alt_names, issue #143): alternative spellings for this row, forwarded so the gateway
+    # tries them alongside the primary toponym when ranking candidates. Accept a list or ';'-delimited
+    # string. Harmless on older gateways that don't yet read the field (they ignore unknown keys).
+    variants = raw.get("variants")
+    if variants:
+        if isinstance(variants, str):
+            variants = [v.strip() for v in variants.split(";") if v.strip()]
+        variants = [str(v).strip() for v in variants if str(v).strip()]
+        if variants:
+            body["variants"] = variants
+
     # Country codes – accept list ["US","GB"] or comma-delimited string "US,GB"
     countries = raw.get("countries")
     if countries:

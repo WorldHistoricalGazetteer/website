@@ -82,6 +82,6 @@ export const fetchShared = (token) => req('GET', `/shared/${token}/`);
 export const listTeams = () => req('GET', '/teams/');
 export const createTeam = (title, description) => req('POST', '/teams/', { title, description });
 export const listMembers = (teamId) => req('GET', `/teams/${teamId}/members/`);
-export const addMember = (teamId, identifier, role) =>
-  req('POST', `/teams/${teamId}/members/`, { identifier, role });
+export const addMember = (teamId, identifier, role, projectId) =>
+  req('POST', `/teams/${teamId}/members/`, { identifier, role, project_id: projectId });
 export const removeMember = (teamId, uid) => req('DELETE', `/teams/${teamId}/members/${uid}/`);
