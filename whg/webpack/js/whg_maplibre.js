@@ -1444,7 +1444,8 @@ maplibregl.Map = function (options = {}) {
             return;
         }
 
-        // Check for WebGL/Context errors
+        // Only WebGL / graphics-context loss is genuinely FATAL and unrecoverable
+        // at runtime — that alone warrants the "refresh the page" overlay.
         if (e.error && (
             e.error.message?.includes('WebGL') ||
             e.error.message?.includes('context') ||
@@ -1454,33 +1455,19 @@ maplibregl.Map = function (options = {}) {
             userMessage = 'Graphics context lost. Please refresh.';
         }
 
-        // Check for Style/Network Fetch errors — but ONLY when the error is not
-        // tied to a specific source (``e.sourceId``). Per-source / per-tile fetch
-        // failures are recoverable (MapLibre keeps the rest of the map and
-        // retries), so they must not pop the fatal "refresh the page" overlay.
-        // This matters for wide/global gazetteers (e.g. Cliopatria, Native Land)
-        // that request many tiles at low zoom, where a single transient tileserver
-        // hiccup would otherwise trip the overlay over a perfectly usable map.
-        else if (!e.sourceId && e.error && (
-             (e.error.status && e.error.status >= 400) || // Catch 404, 500, etc.
-             (e.error.message && (
-                 e.error.message.includes('Fetch') ||
-                 e.error.message.includes('Network') ||
-                 e.error.message.includes('Failed to load') ||
-                 e.error.message.includes('style') // Catch style parsing/loading errors
-             ))
-        )) {
-            isFatal = true;
-            userMessage = 'Unable to load map data or style. Please check your connection.';
-            console.warn('Map resource failed to load:', e.error);
-        }
-
-        // If fatal, trigger UI overlay
+        // Everything else — including Fetch/Network/tile-load failures — is a
+        // RUNTIME error that MapLibre recovers from (it retries, or the resource
+        // is non-critical). These must never pop the fatal overlay: wide/global
+        // gazetteers (Cliopatria, Native Land) request many tiles at low zoom, so
+        // a single transient tileserver hiccup — or an aborted request from
+        // swapping sources during Explore switching — would otherwise throw a
+        // scary "Map Error / Refresh Page" modal over a perfectly usable map. A
+        // genuine total outage surfaces as blank tiles (or fails at map creation,
+        // handled separately), not this handler. Log and move on.
         if (isFatal) {
             handleMapCreationFailure(chosenOptions, userMessage, mapInstance);
         } else {
-            // Log non-fatal errors (like missing tiles or minor warnings)
-            console.error('MapLibre runtime error:', e);
+            console.warn('MapLibre runtime error (non-fatal):', e && e.error);
         }
     });
 
