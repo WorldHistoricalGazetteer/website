@@ -313,12 +313,16 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             countries = [c.strip().upper() for c in countries.split(",") if c.strip()]
         body["ccodes"] = countries
 
-    # Namespace filter (e.g. ["wd", "gn"])
-    namespaces = raw.get("namespaces")
-    if namespaces:
-        if isinstance(namespaces, str):
-            namespaces = [n.strip() for n in namespaces.split(",") if n.strip()]
-        body["namespaces"] = namespaces
+    # Namespace filter (e.g. ["wd", "gn"]). Prefer the caller-computed CRC set: it has the legacy
+    # "whg" pseudo-namespace stripped out, which the gateway doesn't know — forwarding it verbatim
+    # would narrow the gateway query to an unknown source. Fall back to whatever the client sent.
+    ns = namespaces if namespaces else raw.get("namespaces")
+    if ns:
+        if isinstance(ns, str):
+            ns = [n.strip() for n in ns.split(",") if n.strip()]
+        elif isinstance(ns, (set, frozenset)):
+            ns = sorted(ns)
+        body["namespaces"] = list(ns)
 
     # Feature classes (e.g. ["A", "P"])
     fclasses = normalised_query.get("fclasses") or raw.get("fclasses")

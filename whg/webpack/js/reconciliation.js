@@ -3790,7 +3790,14 @@ function nsName(id) { const ns = nsFromId(id); return (_sourcesByNs[ns] && _sour
 // (e.g. UK Historic Counties for the County column, a parishes gazetteer for Parish). A column with
 // no explicit choice defaults to ALL sources — a per-column pick never seeds another column's default.
 function getNsFilter(col) {
-  if (project && col != null && project.colConfig && project.colConfig[col] && project.colConfig[col].nsFilter) return project.colConfig[col].nsFilter;
+  if (project && col != null && project.colConfig && project.colConfig[col] && project.colConfig[col].nsFilter) {
+    const f = project.colConfig[col].nsFilter;
+    // Repair the incoherent state the old picker could save: sources ticked but the mode left on
+    // "all", which silently restricted nothing (the ticks were stored and then ignored by both the
+    // query builder and applyNsToCandidates). Ticking sources can only have meant "only these".
+    if (f.mode === 'all' && f.namespaces && f.namespaces.length) return { mode: 'only', namespaces: f.namespaces };
+    return f;
+  }
   return { mode: 'all', namespaces: [] };
 }
 // The Sources picker (and the Re-reconcile button) configure the FOCUSED column — the one shown in
@@ -3857,10 +3864,29 @@ async function populateSourcesModal() {
       `<input type="checkbox" class="recon-ns-cb" value="${esc(ns)}"${f.namespaces.includes(ns) ? ' checked' : ''}> ` +
       `${esc(label)} <span class="text-muted small">(${esc(ns)})</span>${count}</label>`;
   }).join('');
+  // Keep the two controls honest. Ticking a source while the mode is still "all" used to save a
+  // filter that restricted nothing, so ticking now promotes the mode to "only"; conversely choosing
+  // "all" clears the ticks, since they'd have no meaning.
+  if (box) box.querySelectorAll('.recon-ns-cb').forEach((cb) => cb.addEventListener('change', () => {
+    if (!cb.checked) return;
+    const cur = document.querySelector('input[name="recon-ns-mode"]:checked');
+    if (!cur || cur.value === 'all') {
+      const only = document.querySelector('input[name="recon-ns-mode"][value="only"]');
+      if (only) only.checked = true;
+    }
+  }));
+  document.querySelectorAll('input[name="recon-ns-mode"]').forEach((r) => r.addEventListener('change', () => {
+    if (r.checked && r.value === 'all' && box) box.querySelectorAll('.recon-ns-cb').forEach((cb) => { cb.checked = false; });
+  }));
 }
 function applyNsFilter() {
-  const mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
-  const namespaces = [...document.querySelectorAll('.recon-ns-cb:checked')].map((c) => c.value);
+  let mode = (document.querySelector('input[name="recon-ns-mode"]:checked') || {}).value || 'all';
+  let namespaces = [...document.querySelectorAll('.recon-ns-cb:checked')].map((c) => c.value);
+  // Keep mode and selection coherent, so a saved filter can never be a silent no-op:
+  //   "all" + ticked sources  → the ticks are meaningless; drop them.
+  //   "only"/"prioritise" with nothing ticked → would match nothing; fall back to "all".
+  if (mode === 'all') namespaces = [];
+  else if (!namespaces.length) mode = 'all';
   const f = { mode, namespaces };
   const col = sourcesTargetCol();
   if (project && col >= 0) { project.colConfig = project.colConfig || {}; project.colConfig[col] = Object.assign({}, project.colConfig[col], { nsFilter: f }); }
@@ -3875,8 +3901,17 @@ function applyNsFilter() {
       const m = project.matches[k]; if (m && m.candidates) { m.candidates = sortByNsPriority(m.candidates, namespaces); m.top = m.candidates[0] || null; }
     }
   }
+  // Restricting sources can't be applied to matches already in hand: the earlier, unrestricted query
+  // returned the top candidates across ALL gazetteers, so the sources you've just chosen may not
+  // appear in it at all. Only a re-run actually asks the gateway for those sources. Say so, rather
+  // than leaving the old cross-gazetteer candidates on screen looking like the filter was ignored.
+  if (mode === 'only' && project && col >= 0 && colHasMatches(col)) {
+    reconStaleNote = 'Sources changed — re-reconcile this column to search only the sources you chose '
+      + '(the matches below came from the earlier, unrestricted search).';
+  }
   if (project) persist();
   if (project && project.matches) { const built = buildUniqueQueries(); if (built) renderResults(built); }
+  renderColSwitcher(); updateReconButton();
 }
 
 // ── Dataset-wide Scope picker (country / date / feature-type / region) ────────
