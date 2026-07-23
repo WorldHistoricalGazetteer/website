@@ -1437,6 +1437,13 @@ maplibregl.Map = function (options = {}) {
         let isFatal = false;
         let userMessage = 'The map encountered an error.';
 
+        // Aborted requests are benign: whenever a gazetteer/source is swapped
+        // (Atlas Explore switching) MapLibre cancels the old source's in-flight
+        // tile requests, which surface here as abort errors. Ignore them.
+        if (e.error && (e.error.name === 'AbortError' || /abort/i.test(e.error.message || ''))) {
+            return;
+        }
+
         // Check for WebGL/Context errors
         if (e.error && (
             e.error.message?.includes('WebGL') ||
@@ -1447,8 +1454,14 @@ maplibregl.Map = function (options = {}) {
             userMessage = 'Graphics context lost. Please refresh.';
         }
 
-        // Check for Style/Network Fetch errors
-        else if (e.error && (
+        // Check for Style/Network Fetch errors — but ONLY when the error is not
+        // tied to a specific source (``e.sourceId``). Per-source / per-tile fetch
+        // failures are recoverable (MapLibre keeps the rest of the map and
+        // retries), so they must not pop the fatal "refresh the page" overlay.
+        // This matters for wide/global gazetteers (e.g. Cliopatria, Native Land)
+        // that request many tiles at low zoom, where a single transient tileserver
+        // hiccup would otherwise trip the overlay over a perfectly usable map.
+        else if (!e.sourceId && e.error && (
              (e.error.status && e.error.status >= 400) || // Catch 404, 500, etc.
              (e.error.message && (
                  e.error.message.includes('Fetch') ||
