@@ -143,6 +143,9 @@ class HeroMap {
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
+        // True while the shown gazetteer carries a place#140 coverage footprint
+        // (a polygon gazetteer). Drives the "zoom in for detail" hint pill.
+        this._hasCoverage = false;
         this._currentBasemap = 'whg-context';   // active basemap style id (see setBasemapStyle)
         this._gazetteerInteraction = null;
         this._contextLayerIds = [];
@@ -209,6 +212,9 @@ class HeroMap {
 
                 this._wireSpinStop();
                 this._wireProjectionDetection();
+                // Toggle the coverage "zoom in for detail" hint as the zoom
+                // crosses the footprint→boundaries threshold (place#140).
+                this.map.on('zoom', () => this._updateCoverageHint());
 
                 // Fade out the loading overlay once the map is idle
                 // (globe projection has finished its initial render)
@@ -781,6 +787,11 @@ class HeroMap {
         }
         this._gazetteerInteraction.attach(id, baseIds);
         this._addGazetteerLabels(id, vectorLayers, baseIds);
+        // Polygon gazetteers carry a `coverage` field (place#140); points don't.
+        // Drives the low-zoom "zoom in for detail" hint.
+        this._hasCoverage = vectorLayers.some(
+            (vl) => vl && vl.fields && Object.prototype.hasOwnProperty.call(vl.fields, 'coverage'));
+        this._updateCoverageHint();
         if (tilejson && Array.isArray(tilejson.bounds) && tilejson.bounds.length === 4) {
             this.applyProjectionForBounds(tilejson.bounds);
             try { this.map.fitViewport(tilejson.bounds); } catch (e) {}
@@ -928,6 +939,43 @@ class HeroMap {
             try { this.map.eraseSource(this._currentGazetteer); } catch (e) {}
             this._currentGazetteer = null;
         }
+        this._hasCoverage = false;
+        this._updateCoverageHint();
+    }
+
+    /**
+     * Show/hide the coverage-mode hint pill (place#140). Visible only while a
+     * polygon gazetteer is shown below the z8 detail crossover — i.e. when the
+     * map draws just the dissolved coverage footprint, not the individual
+     * boundaries. Created lazily; clicking it zooms past the crossover.
+     */
+    _updateCoverageHint() {
+        if (!this.map) return;
+        const COVERAGE_CROSSOVER_ZOOM = 8;   // == whg_maplibre COV_MAXZOOM / POINT_MINZOOM
+        const show = this._hasCoverage && this.isExploring()
+            && this.map.getZoom() < COVERAGE_CROSSOVER_ZOOM;
+        let el = this._coverageHintEl;
+        if (!el) {
+            if (!show) return;   // don't build the node until first needed
+            const container = this.map.getContainer();
+            el = document.createElement('div');
+            el.id = 'atlas_coverage_hint';
+            el.setAttribute('role', 'button');
+            el.setAttribute('tabindex', '0');
+            el.setAttribute('title', 'Zoom in to reveal individual places');
+            el.innerHTML = '<i class="fas fa-search-plus ach-icon" aria-hidden="true"></i>'
+                + '<span>Coverage view — zoom in to see individual places</span>';
+            const zoomIn = () => {
+                try { this.map.easeTo({ zoom: COVERAGE_CROSSOVER_ZOOM + 0.5, duration: 700 }); } catch (e) {}
+            };
+            el.addEventListener('click', zoomIn);
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zoomIn(); }
+            });
+            container.appendChild(el);
+            this._coverageHintEl = el;
+        }
+        el.classList.toggle('visible', show);
     }
 
     /**

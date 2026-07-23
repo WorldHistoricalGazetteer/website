@@ -115,6 +115,42 @@
 }
 .atlas-gateway-banner .agb-dismiss:hover { color: #5a4200; }
 
+/* ── Coverage-mode hint (place#140) ─────────────────────────────────────
+   When a polygon gazetteer is shown below its z8 detail crossover, only the
+   dissolved coverage footprint is drawn (individual boundaries appear on
+   zoom-in). This pill warns the user that they're seeing an aggregate, and
+   clicking it zooms past the crossover. Bottom-centre, over the map area. */
+#atlas_coverage_hint {
+    position: absolute;
+    bottom: 16px;
+    left: calc(50% - 170px);   /* centre of the map area (340px panel on the right) */
+    transform: translateX(-50%);
+    z-index: 5;                /* above map, below offcanvas panels/menus */
+    display: none;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    background: rgba(20, 28, 38, 0.82);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+    font-size: 0.8rem;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    transition: opacity 0.2s ease, background 0.15s ease;
+}
+#atlas_coverage_hint.visible { display: flex; }
+#atlas_coverage_hint:hover { background: rgba(37, 99, 235, 0.9); }
+#atlas_coverage_hint .ach-icon { font-size: 0.9rem; opacity: 0.9; }
+@media (max-width: 700px) {
+    /* On mobile the panel drops below the map, so the map is full-width. */
+    #atlas_coverage_hint { left: 50%; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Atlas colour palette — a small dictionary of purpose-hint colours
    reused across the UI so each function reads by colour:
@@ -269,6 +305,16 @@ body.atlas-tooltips-off .tooltip:not(.tt-advisory) { display: none !important; }
     width: fit-content;
     max-width: calc(100% - 408px);
     z-index: 10;
+    /* The container's box is far wider/taller than its visible controls (it spans
+       to the right of the 300px temporal control and includes inter-row gutters).
+       Left click-catching, its transparent area would swallow clicks meant for a
+       map popup rising up beneath it — disabling the popup's close button and
+       tooltips. Make the container itself click-through and re-enable pointer
+       events only on its actual control children. */
+    pointer-events: none;
+}
+#floating_search > * {
+    pointer-events: auto;
 }
 
 .floating-search-inner {
