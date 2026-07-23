@@ -1472,8 +1472,14 @@ class HeroMap {
      */
     ensureContextStyle() {
         if (!this.map) return;
-        // Re-scan boundary layers in case style was switched
-        if (this._boundaryLayerIds.length === 0) {
+        // Re-init the boundary layers only if they're genuinely absent from the
+        // current style. Normally transformStyle carries them across a basemap
+        // swap (with their live show/hide + filter state), so re-initing would
+        // wrongly re-hide them and re-bind duplicate hover/click handlers.
+        const present = this._boundaryLayerIds.length > 0
+            && this._boundaryLayerIds.every(id => this.map.getLayer(id));
+        if (!present) {
+            this._boundaryLayerIds = [];
             this._initBoundaryLayers();
         }
     }
@@ -1560,8 +1566,11 @@ class HeroMap {
                     this._programmaticProjection = true;
                     try { this.map.setProjection({ type: wasGlobe ? 'globe' : 'mercator' }); } catch (e) {}
                     this.map.once('idle', () => { this._programmaticProjection = false; });
-                    // Boundary layer ids may have changed with the base — rescan.
-                    this._boundaryLayerIds = [];
+                    // The boundary layers are now carried across the swap by
+                    // transformStyle WITH their live state, so we must NOT reset +
+                    // rescan them here — _initBoundaryLayers would re-hide them and
+                    // re-bind duplicate handlers. Only (re)build them if they are
+                    // genuinely absent (e.g. a first load that raced the swap).
                     this.ensureContextStyle();
                 });
             })
