@@ -3182,7 +3182,13 @@ function applyGlobalScopeToQuery(q, isRoot, hasRowCountry) {
   }
   // Spatial region — root column only, and never over an existing parent containment.
   if (isRoot && !q.contained_in) {
-    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [barePlaceId(r.place.id)]; q.containment = 'fuzzy'; q.relation = 'within'; }
+    // `intersects`, not `within`: the dataset-wide scope is a coarse "restrict to this area" filter,
+    // and an AREA candidate is rarely strictly inside its container once boundaries differ even
+    // slightly. Measured: UKHC historic Welsh counties return ZERO hits as `within` wd:Q25 (Wales)
+    // but match under `intersects` — historic county borders don't nest exactly inside the modern
+    // national polygon. With scope now a HARD filter (place#144), `within` silently discarded valid
+    // matches. See issue #143.
+    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [barePlaceId(r.place.id)]; q.containment = 'fuzzy'; q.relation = 'intersects'; }
     else if (r.mode === 'draw' && r.geometry) { q.bounds = r.geometry; }
   }
 }
