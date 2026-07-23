@@ -1509,17 +1509,32 @@ class HeroMap {
                     diff: false,   // native diff can't handle a full basemap swap
                     transformStyle: (previousStyle, nextStyle) => {
                         // Keep every source/layer the app added on top of the
-                        // OLD base (those not tracked in map.baseStyle).
+                        // OLD base (those not tracked in map.baseStyle) — PLUS the
+                        // Areas>Regions boundary sources/layers. Those are baked
+                        // into the whg-context base style (so map.baseStyle counts
+                        // them as "base"), yet they must survive a basemap swap or
+                        // Areas>Regions shows no polygons on OSM/Satellite/etc.
+                        // Dedupe against nextStyle so switching *back* to a basemap
+                        // that already defines them doesn't create duplicate ids.
+                        const isBoundary = (sourceLayerOrId) =>
+                            BOUNDARY_SOURCE_LAYERS.includes(sourceLayerOrId);
+                        const nextSourceIds = new Set(Object.keys(nextStyle.sources));
+                        const nextLayerIds = new Set(nextStyle.layers.map(l => l.id));
+
                         const sources = { ...nextStyle.sources };
                         Object.keys(previousStyle.sources).forEach(k => {
-                            if (!this.map.baseStyle.sources.includes(k)) {
+                            if (nextSourceIds.has(k)) return;
+                            if (!this.map.baseStyle.sources.includes(k) || isBoundary(k)) {
                                 sources[k] = previousStyle.sources[k];
                             }
                         });
                         const layers = [
                             ...nextStyle.layers,
-                            ...previousStyle.layers.filter(
-                                l => !this.map.baseStyle.layers.includes(l.id)),
+                            ...previousStyle.layers.filter(l => {
+                                if (nextLayerIds.has(l.id)) return false;
+                                return !this.map.baseStyle.layers.includes(l.id)
+                                    || isBoundary(l['source-layer']);
+                            }),
                         ];
                         // The new style becomes the base for the next swap.
                         this.map.baseStyle.sources = Object.keys(nextStyle.sources);
