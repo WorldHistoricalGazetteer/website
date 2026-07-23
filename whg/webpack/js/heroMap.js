@@ -1528,12 +1528,19 @@ class HeroMap {
                                 sources[k] = previousStyle.sources[k];
                             }
                         });
+                        // Boundary layers carry LIVE state (show/hide, the active
+                        // admin-level filter, hover/selected paint), so always take
+                        // them from the previous style and drop the next style's
+                        // fresh copies — an active Areas>Regions selection then
+                        // survives a basemap switch in BOTH directions.
+                        const prevBoundaryIds = new Set(previousStyle.layers
+                            .filter(l => isBoundary(l['source-layer'])).map(l => l.id));
                         const layers = [
-                            ...nextStyle.layers,
+                            ...nextStyle.layers.filter(l => !prevBoundaryIds.has(l.id)),
                             ...previousStyle.layers.filter(l => {
-                                if (nextLayerIds.has(l.id)) return false;
-                                return !this.map.baseStyle.layers.includes(l.id)
-                                    || isBoundary(l['source-layer']);
+                                if (isBoundary(l['source-layer'])) return true;   // carry boundaries + state
+                                if (nextLayerIds.has(l.id)) return false;         // dedupe overlays
+                                return !this.map.baseStyle.layers.includes(l.id); // app-added overlays
                             }),
                         ];
                         // The new style becomes the base for the next swap.
