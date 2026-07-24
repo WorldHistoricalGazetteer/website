@@ -3794,7 +3794,11 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="skip">Skip <kbd>s</kbd></button>
        <button type="button" class="btn btn-sm btn-outline-warning" data-act="nomatch">No match <kbd>n</kbd></button>
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo">Undo <kbd>u</kbd></button>
-       <button type="button" class="btn btn-sm btn-primary ms-auto" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
+       ${(() => { const pend = reviewMeta.filter((r) => needsReview(r.key)).length; return pend > 1
+         ? `<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-act="skipall"
+              title="Mark every remaining unreviewed value in this column as skipped, so you can move on to the next column">
+              Skip all remaining (${pend.toLocaleString()})</button>` : ''; })()}
+       <button type="button" class="btn btn-sm btn-primary${reviewMeta.filter((r) => needsReview(r.key)).length > 1 ? '' : ' ms-auto'}" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
      </div>
      <div class="recon-geom-tools d-flex flex-wrap align-items-center gap-1 mt-2 small">
        <span class="text-muted me-1"><i class="fas fa-location-dot"></i> Location:</span>
@@ -4693,10 +4697,31 @@ function reviewAction(act) {
   if (act === 'next') return advance(1);
   if (act === 'prev') return advance(-1);
   if (act === 'more') return loadMoreCandidates();
+  if (act === 'skipall') return skipAllRemaining();
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   if (act === 'undo') { setDecision(meta.key, null); return afterDecision(false); }
   setDecision(meta.key, { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' });
   afterDecision(true);
+}
+// Skip every value in the ACTIVE column still awaiting review, marking each 'skipped', so the column
+// counts as confirmed and the next column in the chain unlocks. Auto-confirmed and already-decided
+// rows are untouched; a skipped parent simply supplies no containment to its children (each can still
+// be undone individually). Lets you move on to the next column without hand-deciding a long tail. #143
+function skipAllRemaining() {
+  if (!project) return;
+  const built = buildUniqueQueries(); if (!built) return;
+  let n = 0;
+  // colKeys covers the whole column (not just the filtered/visible queue); setDecision propagates to
+  // any rows merged with each key, and once a key is decided needsReview() is false, so siblings and
+  // repeats aren't double-counted.
+  colKeys(built.colIndex).forEach((k) => { if (needsReview(k)) { setDecision(k, { status: 'skipped' }); n += 1; } });
+  if (!n) { flashSaved('Nothing left to review in this column.'); return; }
+  reconStaleNote = '';
+  reconActiveIdx = -1; // let the stage machine advance focus to the next actionable column
+  persist();
+  const b2 = buildUniqueQueries(); if (b2) renderResults(b2);
+  renderColSwitcher(); updateReconButton(); refreshReview();
+  flashSaved(`Skipped ${n.toLocaleString()} unreviewed value${n === 1 ? '' : 's'} — the next column can now be reconciled.`);
 }
 // Fetch a larger batch of candidates for the current name (re-query with a higher limit).
 async function loadMoreCandidates() {
