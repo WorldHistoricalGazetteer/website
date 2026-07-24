@@ -3398,7 +3398,9 @@ function variantNoteHTML() {
 function toggleRunning(on) {
   running = on;
   el('recon-run').classList.toggle('d-none', on);
-  el('recon-stop').classList.toggle('d-none', !on);
+  const stop = el('recon-stop');
+  stop.classList.toggle('d-none', !on);
+  if (on) { stop.disabled = false; stop.innerHTML = '<i class="fas fa-stop me-1"></i>Cancel — keep matches so far'; } // reset from a prior cancel
   const rr = el('recon-rerun'); if (rr && on) rr.classList.add('d-none'); // restored by updateRerunButton after the run
   if (!on) rtSetActivity(null); // release the advisory lock when the run ends (reconcilePass set it)
 }
@@ -5247,7 +5249,11 @@ function init() {
   const rerun = el('recon-rerun');
   if (rerun) rerun.addEventListener('click', () => reReconcileColumn(activeReconCol()));
   const stop = el('recon-stop');
-  if (stop) stop.addEventListener('click', () => { stopRequested = true; });
+  if (stop) stop.addEventListener('click', () => {
+    stopRequested = true;
+    stop.disabled = true; stop.innerHTML = '<i class="fas fa-hourglass-half me-1"></i>Finishing current batch…';
+    flashSaved('Stopping — matches so far are kept; run again to continue.');
+  });
 
   const thr = el('recon-threshold');
   if (thr) thr.addEventListener('input', () => {
