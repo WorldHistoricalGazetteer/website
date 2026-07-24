@@ -3026,6 +3026,42 @@ function resolvedPlaceIds(colIndex, rowIdx) {
 // Keep the prefixed id everywhere else (it is the identifier we surface and export). See place#111.
 function barePlaceId(id) { return typeof id === 'string' && id.startsWith('place:') ? id.slice(6) : id; }
 
+// ── Parent context ("Wrexham, in Denbighshire") ───────────────────────────────
+// When confirming a child column you need to see the containers it sits in — that containment is
+// what scoped the query, so without it a candidate list is hard to judge. Prefers the parent's
+// CONFIRMED match label (the place actually used as the container) and falls back to the raw cell
+// value when the parent isn't resolved. Coarsest LAST, so it reads "parish, in county, in region".
+function parentContext(colIndex, rowIdx) {
+  if (!project) return [];
+  const chain = reconChain();
+  const pos = chain.indexOf(colIndex);
+  if (pos <= 0) return [];
+  const r = Number(rowIdx);
+  const out = [];
+  for (let p = pos - 1; p >= 0; p--) {
+    const c = chain[p];
+    const raw = String(project.rows[r][c] == null ? '' : project.rows[r][c]).trim();
+    const k = c + ':' + r;
+    const acc = acceptedList(project.decisions && project.decisions[k]);
+    const m = (project.matches || {})[k];
+    let matched = null;
+    if (acc.length) matched = acc[0].label;
+    else if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) matched = m.top.name;
+    if (raw || matched) out.push({ colName: project.columns[c].name, value: raw, matched });
+  }
+  return out;
+}
+function parentContextHTML(colIndex, rowIdx, max) {
+  const ctx = parentContext(colIndex, rowIdx);
+  if (!ctx.length) return '';
+  const bits = ctx.slice(0, max || 2).map((c) => {
+    const label = c.matched || c.value;
+    const tip = `${c.colName}: ${c.value}${c.matched && c.matched !== c.value ? ` → matched “${c.matched}”` : (c.matched ? '' : ' (not resolved)')}`;
+    return `<span title="${esc(tip)}"${c.matched ? '' : ' class="fst-italic"'}>${esc(truncateText(label, 24))}</span>`;
+  });
+  return `<span class="recon-parent-ctx text-muted small ms-1">in ${bits.join(' <span class="text-muted">·</span> ')}</span>`;
+}
+
 // ── Merged admin values: one reconciliation, one decision, applied to every row ───────────────────
 // Admin/parent columns merge identical values so a county appearing in hundreds of rows is reconciled
 // ONCE — and, equally, reviewed once: confirming it applies to every row sharing that value. The merge
@@ -3442,7 +3478,9 @@ function resultRowHtml(info) {
     const show = acceptedCandidate(info.key) || m.top;
     if (show) { top = `${truncate(show.name, 50)} <span class="text-muted small">${truncate(show.description || '', 30)}</span>`; score = show.score; }
   }
-  return `<tr data-row><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}</td>` +
+  const ci = info.key.indexOf(':');
+  const ctx = parentContextHTML(Number(info.key.slice(0, ci)), info.key.slice(ci + 1));
+  return `<tr data-row><td>${truncate(info.name, 50)}${info.country ? ` <span class="text-muted">(${esc(info.country)})</span>` : ''}${ctx}</td>` +
          `<td>${status}</td><td>${top}</td><td>${score}</td></tr>`;
 }
 function renderResultsWindow(calibrate) {
@@ -3729,6 +3767,7 @@ function renderReviewCard() {
   card.innerHTML =
     `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
        <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
+         ${parentContextHTML(Number(meta.key.slice(0, meta.key.indexOf(':'))), meta.key.slice(meta.key.indexOf(':') + 1), 3)}
          <span class="text-muted small ms-2">${meta.rows.toLocaleString()} row${meta.rows === 1 ? '' : 's'} · ${reviewPos + 1} of ${reviewMeta.length}</span>
          ${meta.merged && meta.rows > 1 ? `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1"
             title="Identical values under the same parent share one reconciliation and one decision">
