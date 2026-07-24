@@ -2677,26 +2677,34 @@ function updateChatPip() {
 }
 // The teammate-facing bit of my identity + the record I'm on, sent with each message so a recipient can
 // jump to my view. Kept tiny — a column + the review row is the meaningful "where I am".
-const PANE_IDS = ['recon-pane-import', 'recon-result', 'recon-recon', 'recon-review'];
+// The id of the accordion tab (pane) currently open — derived from the DOM, so it covers every pane
+// (import / mapping / reconcile / review / map / export) without a whitelist to keep in step. Exactly
+// one pane is un-collapsed once a dataset is loaded (openPane collapses the rest). Null if none.
 function openPaneId() {
   const open = document.querySelector('.recon-pane:not(.recon-collapsed)');
-  return (open && PANE_IDS.includes(open.id)) ? open.id : null;
+  return open ? open.id : null;
 }
 function captureViewContext() {
-  const ctx = { pane: openPaneId() }; // always record at least the step the sender was on
-  const col = activeReconCol();
+  const ctx = { pane: openPaneId() }; // which accordion tab the sender had open — opening it, not just
+  const col = activeReconCol();       // scrolling, is what makes the jump land in the right place
   if (col >= 0) { ctx.col = col; ctx.colName = project.columns[col] && project.columns[col].name; }
   const meta = reviewMeta[reviewPos];
   if (meta) { ctx.reviewKey = meta.key; ctx.rowName = meta.name; }
   return ctx;
 }
-// Jump to the perspective captured with a message. Perspectives can ROT — the column may have been
-// re-mapped, the record edited away, or the review queue moved on — so we get as close as we can and
-// say so rather than silently doing nothing.
+// Jump to the perspective captured with a message. First OPEN the accordion tab they had open (scrolling
+// alone doesn't reveal a collapsed pane), then focus their column + review record. Perspectives can ROT —
+// the tab may be hidden for us, the column re-mapped, or the record edited away — so we get as close as we
+// can and say so rather than silently doing nothing.
 function applyViewContext(ctx) {
   if (!ctx || !project) return;
   let rotted = false;
-  if (ctx.pane && PANE_IDS.includes(ctx.pane)) openPane(ctx.pane);
+  const paneEl = ctx.pane ? el(ctx.pane) : null;
+  if (paneEl && paneEl.classList.contains('recon-pane') && !paneEl.classList.contains('d-none')) {
+    openPane(ctx.pane); // open that accordion tab (collapsing the others)
+  } else if (ctx.pane) {
+    rotted = true;      // that tab no longer exists / isn't available in our current state
+  }
   const chain = reconChain();
   if (ctx.col != null) {
     const pos = chain.indexOf(ctx.col);
@@ -2707,7 +2715,8 @@ function applyViewContext(ctx) {
     const i = reviewMeta.findIndex((r) => r.key === ctx.reviewKey);
     if (i >= 0) { reviewPos = i; renderReviewCard(); updateReviewProgress(); } else rotted = true; // record gone from the queue
   }
-  const pane = el(ctx.pane || 'recon-recon'); if (pane && pane.scrollIntoView) pane.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  const target = paneEl || el('recon-recon');
+  if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   flashSaved(rotted ? 'Jumped as close as possible — that exact spot has changed since.' : 'Synced to that view.');
 }
 function chatTime(ts) { try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } }
