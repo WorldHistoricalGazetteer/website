@@ -2789,19 +2789,6 @@ function wireChat() {
     clearTimeout(_typingTimer);
     _typingTimer = setTimeout(() => rtSetTyping(false), 1800);
   });
-  // Debug-only demo hook (mirrors the ?debug convention) so a chat session can be shown without a live
-  // teammate: window.__reconChatSim({name,color}, text, contextObj) and __reconChatTyping(name).
-  try {
-    const dbg = /(?:^|[?&])debug\b/.test(location.search) || (window.localStorage && localStorage.getItem('whg.debug') === '1');
-    if (dbg) {
-      window.__reconChatSim = (from, text, context) => {
-        const m = { id: 'sim-' + (++_chatSeq), text, ts: Date.now(), from, context: context || null };
-        _chatSeen.add(m.id); appendChatMessage(m, false);
-        if (!_chatOpen) { _chatUnread += 1; updateChatPip(); }
-      };
-      window.__reconChatTyping = (name) => { const t = el('recon-chat-typing'); if (t) { t.textContent = `${name} is typing…`; setTimeout(() => { if (t.textContent.startsWith(name)) t.textContent = ''; }, 3500); } };
-    }
-  } catch (_) { /* ignore */ }
 }
 // Outline the cells teammates are editing (only those currently visible in the virtualised table).
 function paintPresenceCursors() {
