@@ -28,7 +28,11 @@ const NOOP = { session: null, role: '', enabled: false, breadcrumb() {}, event()
 // wrestle with Request-object headers.
 function isRelevant(url) {
   return typeof url === 'string' &&
-    (url.indexOf('/reconciliation/') > -1 || url.indexOf('/workbench/') > -1 || url.indexOf('/api/place') > -1);
+    // '/reconcile' (the reconciliation API — the busiest beta call) is NOT a substring of
+    // '/reconciliation/' (they diverge at 'e' vs 'i'), so both must be listed or server-side reconcile
+    // errors never carry the X-WHG-Beta-Session header and can't be tied back to a snag.
+    (url.indexOf('/reconcile') > -1 || url.indexOf('/reconciliation/') > -1 ||
+     url.indexOf('/workbench/') > -1 || url.indexOf('/api/place') > -1);
 }
 function shortPath(url) {
   try { return new URL(url, location.origin).pathname; } catch (_) { return String(url).split('?')[0]; }
