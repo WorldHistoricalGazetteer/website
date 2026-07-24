@@ -2693,18 +2693,48 @@ function applyReadOnlyMode() {
 // ── collaborate badge on the button ──────────────────────────────────────────
 function setCollabBadge(state) {
   const b = el('recon-collab-badge');
-  if (!b) return;
-  const map = { local: ['', ''], synced: ['✓ synced', 'text-success'], syncing: ['⋯ syncing', 'text-muted'],
-                offline: ['⚠ offline', 'text-warning'], conflict: ['⚠ conflict', 'text-danger'],
-                viewer: ['view only', 'text-muted'], live: ['● live', 'text-success'] };
-  const [txt, cls] = map[state] || map.local;
-  b.textContent = txt;
-  b.className = 'recon-collab-badge small ms-1 ' + cls;
+  if (b) {
+    // Transient badge on the Collaborate button. 'local' is no longer blank — an empty badge is exactly
+    // what let a device-only project pass for a shared one.
+    const map = { local: ['· not shared', 'text-warning'], synced: ['✓ synced', 'text-success'], syncing: ['⋯ syncing', 'text-muted'],
+                  offline: ['⚠ offline', 'text-warning'], conflict: ['⚠ conflict', 'text-danger'],
+                  viewer: ['view only', 'text-muted'], live: ['● live', 'text-success'] };
+    const [txt, cls] = map[state] || map.local;
+    b.textContent = txt;
+    b.className = 'recon-collab-badge small ms-1 ' + cls;
+  }
+  renderCollabStatus(); // keep the always-visible status in step with every badge change
 }
+// The persistent, unmistakable sharing state (place#112). Distinguishes the cases the old blank badge
+// conflated: on-device-only, private workbench, a live team project (named), a team project whose
+// realtime is down (still saving via REST), and read-only.
 function collabState() {
   if (!isServerProject()) return 'local';
   if (isReadOnly()) return 'viewer';
-  return 'synced';
+  if (project && project.teamPersonal) return 'personal';
+  return rtActive() ? 'live' : 'team-offline';
+}
+const COLLAB_STATUS = {
+  local:          { icon: 'fa-laptop', cls: 'text-warning fw-semibold', text: 'On this device only — not shared' },
+  personal:       { icon: 'fa-lock', cls: 'text-muted', text: 'Private workbench (only you)' },
+  live:           { icon: 'fa-circle text-success', cls: 'text-success fw-semibold', text: 'Live' },
+  'team-offline': { icon: 'fa-triangle-exclamation', cls: 'text-warning', text: 'Team project — reconnecting, saving via backup' },
+  viewer:         { icon: 'fa-eye', cls: 'text-muted', text: 'View only' },
+};
+function renderCollabStatus() {
+  const box = el('recon-collab-status'); if (!box) return;
+  if (!project) { box.innerHTML = ''; return; }
+  const st = collabState();
+  const d = COLLAB_STATUS[st] || COLLAB_STATUS.local;
+  const named = (st === 'live' || st === 'team-offline') && project.teamTitle ? ` · ${esc(truncateText(project.teamTitle, 24))}` : '';
+  const tip = st === 'local' ? 'Save to a team (Collaborate) to work on this with others — right now nothing is shared.'
+    : st === 'personal' ? 'Saved to your own private workbench — not visible to any team.'
+    : st === 'live' ? 'Connected to your team in real time; edits sync to everyone.'
+    : st === 'team-offline' ? 'Saved to a team but the live connection is down — edits are still saved and will sync.'
+    : 'You have view-only access to this project.';
+  box.className = 'recon-collab-status small ' + d.cls;
+  box.title = tip;
+  box.innerHTML = `<i class="fas ${d.icon} me-1"></i>${d.text}${named}`;
 }
 
 // ── modal helpers ──────────────────────────────────────────────────────────
