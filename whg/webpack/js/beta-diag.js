@@ -24,6 +24,15 @@ function makeSession() {
 
 const NOOP = { session: null, role: '', enabled: false, breadcrumb() {}, event() {} };
 
+// The beta tags for Sentry.init's `initialScope`, so EVERY captured event carries beta_session from the
+// very start — including errors thrown during page init, before initBetaDiag() runs (which previously
+// left the earliest, often most telling, errors untagged). Returns null for non-beta users. makeSession()
+// persists to sessionStorage, so the same id is reused by initBetaDiag() later.
+export function betaInitialScope() {
+  if (meta('beta-user') !== '1') return null;
+  return { tags: { beta: 'true', beta_session: makeSession(), user_role: meta('user-role') || 'beta' } };
+}
+
 // Which same-origin calls we augment (Workbench + place API). String-URL requests only, so we never
 // wrestle with Request-object headers.
 function isRelevant(url) {

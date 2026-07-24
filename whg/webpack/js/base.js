@@ -4,7 +4,7 @@ import * as Sentry from '@sentry/browser';
 const {browserTracingIntegration, thirdPartyErrorFilterIntegration, captureConsoleIntegration} = Sentry;
 import {Spinner} from './spin.js';
 import {initWHGModal} from './whg-modal.js';
-import {initBetaDiag} from './beta-diag.js';
+import {initBetaDiag, betaInitialScope} from './beta-diag.js';
 import {initializeCitationFormatters} from './citationFormatter';
 import {base_urls} from './aliases.js';
 import '../css/base.css';
@@ -216,6 +216,9 @@ Promise.all([
         const USER_ID = document.querySelector('meta[name="user-id"]')?.content;
 
         if (GLITCHTIP_DSN) {
+            // Seed the beta tags (beta_session/user_role) at init so even errors thrown during the rest
+            // of page setup are attributable to the tester's session, not just those after initBetaDiag.
+            const betaScope = betaInitialScope();
             Sentry.init({
                 dsn: GLITCHTIP_DSN,
                 integrations: [
@@ -228,6 +231,7 @@ Promise.all([
                 tracesSampleRate: 0.01,
                 environment: ENV_CONTEXT,
                 release: GLITCHTIP_RELEASE,
+                initialScope: betaScope || undefined,
                 ignoreErrors: [
                     // 'MapLibre runtime error: [object Object]', // Exact string
                     // /NetworkError/,                        // Regex
