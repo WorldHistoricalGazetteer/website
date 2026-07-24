@@ -297,7 +297,15 @@ export function renderReviewMap(container, points, rowPoint, opts) {
     redrawGeom();
     if (!clickBound) { m.on('click', onMapClick); clickBound = true; }
     hookLayerPersistence(container);
-    if (!bounds.isEmpty()) m.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });
+    if (!bounds.isEmpty()) {
+      m.fitBounds(bounds, { padding: 48, maxZoom: 12, duration: 0 });
+      // Same-named candidates can be scattered worldwide, so fitting them all zooms right out and the
+      // town you clicked vanishes (snag #147). Keep the focus ON the town: if the fit left us zoomed
+      // far out, re-centre on your own coordinate for this place (else the best candidate) at a
+      // legible zoom, so clicking a town zooms IN to it rather than out.
+      const focus = rowPoint || points.find((p) => p.ci === 0) || points[0];
+      if (focus && m.getZoom() < 6) m.jumpTo({ center: [focus.lon, focus.lat], zoom: 9 });
+    }
   };
   if (m.loaded()) onReady(); else m.once('load', onReady);
 }

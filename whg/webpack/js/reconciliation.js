@@ -247,8 +247,72 @@ function fromDelimited(text) {
   return { columns, rows: matrix.slice(1), total: matrix.length - 1, delimiter };
 }
 
+// ── HTML-entity detection & decoding (snag #149) ────────────────────────────
+// Some source CSVs carry HTML-encoded characters (e.g. "Br&ygrave;n" for "Brỳn"). Standard named and
+// numeric entities decode via the browser; but a few Welsh diacritics (ŵ ŷ and their grave forms) have
+// NO standard named entity, and data often hand-codes them as &wcirc;/&ycirc;/&ygrave;/&wgrave;, which
+// browsers leave raw. We handle both. Purely opt-in — offered on import, never applied silently.
+const NONSTD_ENTITIES = {
+  wcirc: 'ŵ', Wcirc: 'Ŵ', ycirc: 'ŷ', Ycirc: 'Ŷ',
+  ygrave: 'ỳ', Ygrave: 'Ỳ', wgrave: 'ẁ', Wgrave: 'Ẁ',
+  yacute: 'ý', Yacute: 'Ý', wacute: 'ẃ', Wacute: 'Ẃ',
+};
+let _entityTextarea = null;
+function decodeEntities(s) {
+  s = String(s == null ? '' : s);
+  if (s.indexOf('&') < 0) return s;
+  s = s.replace(/&([A-Za-z]+);/g, (m, name) => (name in NONSTD_ENTITIES ? NONSTD_ENTITIES[name] : m));
+  if (s.indexOf('&') < 0) return s;
+  _entityTextarea = _entityTextarea || document.createElement('textarea');
+  _entityTextarea.innerHTML = s; // decodes standard named + numeric (&#…;/&#x…;) entities
+  return _entityTextarea.value;
+}
+const ENTITY_RE = /&(#\d+|#x[0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]+);/;
+// Count cells that look HTML-encoded (a decode would actually change them), with a small sample.
+function scanEntities(rows) {
+  let n = 0; const sample = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]; if (!r) continue;
+    for (let j = 0; j < r.length; j++) {
+      const v = r[j];
+      if (typeof v === 'string' && ENTITY_RE.test(v) && decodeEntities(v) !== v) {
+        n += 1; if (sample.length < 4) sample.push(v.trim());
+      }
+    }
+  }
+  return { n, sample };
+}
+
 // ── State + DOM helpers ─────────────────────────────────────────────────────
 let project = null; // { id, fileName, importedAt, columns:[{name,role}], rows:[[...]], total, delimiter? }
+let _entityScan = null; // {n, sample} from the last import — drives the encoding-fix offer
+
+function renderEncodingNotice() {
+  const box = el('recon-encoding-notice'); if (!box) return;
+  if (!project || !_entityScan || !_entityScan.n) { box.innerHTML = ''; return; }
+  const eg = _entityScan.sample.map((s) => `<code>${esc(truncate(s, 24))}</code>`).join(', ');
+  box.innerHTML = `<div class="alert alert-warning py-2 px-3 mb-0 d-flex align-items-center flex-wrap gap-2">
+    <span><i class="fas fa-triangle-exclamation me-1"></i><strong>${_entityScan.n.toLocaleString()}</strong>
+    value${_entityScan.n === 1 ? '' : 's'} look HTML-encoded (e.g. ${eg}). These won't match well until decoded.</span>
+    <button type="button" class="btn btn-sm btn-outline-primary py-0" id="recon-fix-encoding">
+      <i class="fas fa-wand-magic-sparkles me-1"></i>Convert to proper characters</button>
+    <button type="button" class="btn btn-sm btn-link text-muted py-0" id="recon-dismiss-encoding">Ignore</button></div>`;
+  const fix = el('recon-fix-encoding'); if (fix) fix.addEventListener('click', fixEncoding);
+  const dis = el('recon-dismiss-encoding'); if (dis) dis.addEventListener('click', () => { _entityScan = null; renderEncodingNotice(); });
+}
+function fixEncoding() {
+  if (!project) return;
+  pushUndo({ type: 'columns', label: 'convert HTML-encoded characters', snapshot: columnSnapshot() });
+  let changed = 0;
+  project.rows.forEach((r) => { for (let j = 0; j < r.length; j++) { const d = decodeEntities(r[j]); if (d !== r[j]) { r[j] = d; changed += 1; } } });
+  _entityScan = null;
+  normalizeChain(); // values changed → matches may be stale; handled by the invalidation note below
+  if (project.matches && Object.keys(project.matches).length) { reconStaleNote = 'Values changed (encoding fix) — re-reconcile affected columns.'; }
+  persist();
+  renderAll();
+  renderEncodingNotice();
+  flashSaved(`Converted ${changed.toLocaleString()} value${changed === 1 ? '' : 's'} to proper characters.`);
+}
 
 function el(id) { return document.getElementById(id); }
 function esc(v) {
@@ -1316,7 +1380,9 @@ async function finishImport(parsed, fileName, format) {
   });
   stopRealtime();               // a fresh import replaces any prior (server) project
   setCollabBadge('local');      // …so it's device-only until saved (clear any stale badge)
+  _entityScan = scanEntities(project.rows); // detect HTML-encoded characters to offer a one-click fix
   renderAll();
+  renderEncodingNotice();
   if (navigator.storage && navigator.storage.persist) {
     try { await navigator.storage.persist(); } catch (_) { /* best effort */ }
   }
@@ -2354,7 +2420,9 @@ async function loadSaved() {
       project = saved;
       migrateLegacyChain(); // convert old 'county'-role + chainOrder projects to contains: links
       normalizeChain();     // defensively drop any orphaned containment links
+      _entityScan = scanEntities(project.rows); // still offer the encoding fix on a resumed project
       renderAll();
+      renderEncodingNotice();
       showResume();
       applyReadOnlyMode();
       setCollabBadge(collabState());
@@ -2516,6 +2584,11 @@ function repaintForSections(changed) {
   if (changed.has('decisions') || changed.has('matches') || changed.has('geom')) {
     const built = buildUniqueQueries();
     if (built) renderResults(built); else refreshReview(); // refreshReview keeps the review position
+    // A teammate's reconcile/decisions change the stage state and the remaining-to-reconcile count, so
+    // refresh the Reconcile/Continue button and the column pills — without this the receiving client
+    // showed a stale "N remaining" (e.g. 223 vs 23 across members). Safe: no review-position reset. #150
+    renderColSwitcher();
+    updateReconButton();
   }
   if (changed.has('meta')) { refreshReconSection(); renderCoords(); renderDates(); refreshExport(); }
   updatePaneSummaries();
@@ -3435,6 +3508,7 @@ function isAutoConfirmed(top, threshold, cands) {
 // ── Candidate review (Phase 4) ───────────────────────────────────────────────
 let reviewMeta = []; // [{key, rows, name, country}] — one per reviewable row
 let reviewPos = 0;
+let _lastDecisionKey = null; // the row most recently decided — so Undo reverts THAT even after auto-advance (snag #148)
 
 const REVIEW_BADGE = {
   accepted: '<span class="badge bg-success">accepted ✓</span>',
@@ -4736,6 +4810,7 @@ function acceptCandidate(ci) {
   // because the merged rows were fanned the same candidate list. See setDecision / mergeSig.
   if (list.length) setDecision(meta.key, { status: 'accepted', accepted: list });
   else setDecision(meta.key, null); // unselected the last → back to undecided
+  _lastDecisionKey = list.length ? meta.key : null;
   afterDecision(false); // don't auto-advance; multi-select stays on the card
 }
 function reviewAction(act) {
@@ -4744,9 +4819,31 @@ function reviewAction(act) {
   if (act === 'more') return loadMoreCandidates();
   if (act === 'skipall') return skipAllRemaining();
   const meta = reviewMeta[reviewPos]; if (!meta) return;
-  if (act === 'undo') { setDecision(meta.key, null); return afterDecision(false); }
+  if (act === 'undo') {
+    // Undo the MOST RECENT decision even though Reject/Skip auto-advanced past it — then jump back to
+    // that row so the reversal is visible. Falls back to the current row when nothing was just decided.
+    const k = (_lastDecisionKey && project.decisions && project.decisions[_lastDecisionKey]) ? _lastDecisionKey : meta.key;
+    const label = keyLabel(k);
+    setDecision(k, null);
+    _lastDecisionKey = null;
+    const idx = reviewMeta.findIndex((r) => r.key === k);
+    if (idx >= 0) reviewPos = idx; // return focus to the row we just reverted
+    flashSaved(label ? `Undone — “${truncate(label, 30)}” is back to undecided.` : 'Decision undone.');
+    return afterDecision(false);
+  }
   setDecision(meta.key, { status: act === 'reject' ? 'rejected' : act === 'skip' ? 'skipped' : 'nomatch' });
+  _lastDecisionKey = meta.key;
+  const verb = act === 'reject' ? 'Rejected' : act === 'skip' ? 'Skipped' : 'Marked “no match”';
+  flashSaved(`${verb} “${truncate(meta.name, 30)}” — press Undo (u) to reverse.`);
   afterDecision(true);
+}
+// The display name for a review key (row value), for undo feedback.
+function keyLabel(key) {
+  const hit = reviewMeta.find((r) => r.key === key);
+  if (hit) return hit.name;
+  const ci = key.indexOf(':');
+  const col = Number(key.slice(0, ci)), row = Number(key.slice(ci + 1));
+  return project.rows[row] ? String(project.rows[row][col] || '') : '';
 }
 // Skip every value in the ACTIVE column still awaiting review, marking each 'skipped', so the column
 // counts as confirmed and the next column in the chain unlocks. Auto-confirmed and already-decided
