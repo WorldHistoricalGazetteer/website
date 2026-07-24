@@ -2500,10 +2500,13 @@ async function maybeStartRealtime() {
   try {
     const mod = await loadRT();
     const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/collab';
+    _rtMe = rtIdentity(tok.data.token); // my display identity, for chat attribution (place#154)
+    resetChat();
     mod.connect({
       serverId: project.serverId, token: tok.data.token, wsUrl,
-      user: rtIdentity(tok.data.token),
-      onStatus: (s) => setCollabBadge(s === 'connected' ? 'live' : (s === 'unauthorized' ? 'offline' : 'syncing')),
+      user: _rtMe,
+      onStatus: (s) => { setCollabBadge(s === 'connected' ? 'live' : (s === 'unauthorized' ? 'offline' : 'syncing'));
+                         if (s === 'connected') { _chatConnectedAt = Date.now(); showChatToggle(true); } },
       onSynced: () => rtOnSynced(mod),
       onRemote: applyRemoteProject,
       onPresence: renderPresence,
@@ -2601,6 +2604,7 @@ function stopRealtime() {
   if (RT) { try { RT.disconnect(); } catch (_) { /* ignore */ } }
   _applyingRemote = false;
   _rtPresence = [];
+  resetChat(); // team chat is per-live-session; clear it and hide the toggle
   renderPresence([]);
 }
 
@@ -2642,7 +2646,131 @@ function renderPresence(states) {
     }).join('');
     box.classList.toggle('d-none', !_rtPresence.length);
   }
+  receiveChat(_rtPresence); // pick up any new chat messages / typing state riding on awareness (#154)
   paintPresenceCursors();
+}
+
+// ── Ephemeral team chat (place#154) ──────────────────────────────────────────
+// Messages are carried on the awareness channel (see recon-collab-rt sendMessage/setTyping): live-only,
+// never persisted, seen only by teammates connected right now. Each peer's `msg` field holds their most
+// recent message; we render each new id once, ignoring anything older than our own connect time so a
+// late joiner doesn't replay the last thing said.
+let _rtMe = null;              // my {name, color} for attribution
+let _chatSeen = new Set();     // message ids already shown
+let _chatSeq = 0;              // local message counter
+const _chatTag = Math.random().toString(36).slice(2, 8); // per-tab id prefix
+let _chatOpen = false;
+let _chatUnread = 0;
+let _chatConnectedAt = 0;      // ms; ignore messages older than this
+function resetChat() {
+  _chatSeen = new Set(); _chatUnread = 0; _chatOpen = false; _chatConnectedAt = 0;
+  const list = el('recon-chat-messages'); if (list) list.innerHTML = '';
+  const t = el('recon-chat-typing'); if (t) t.textContent = '';
+  const p = el('recon-chat-panel'); if (p) { p.classList.remove('open'); p.hidden = true; }
+  showChatToggle(false); updateChatPip();
+}
+function showChatToggle(on) { const b = el('recon-chat-toggle'); if (b) b.classList.toggle('d-none', !on); }
+function updateChatPip() {
+  const pip = el('recon-chat-pip'); if (!pip) return;
+  pip.textContent = _chatUnread > 9 ? '9+' : String(_chatUnread);
+  pip.classList.toggle('d-none', !_chatUnread || _chatOpen);
+}
+// The teammate-facing bit of my identity + the record I'm on, sent with each message so a recipient can
+// jump to my view. Kept tiny — a column + the review row is the meaningful "where I am".
+function captureViewContext() {
+  const ctx = {};
+  const col = activeReconCol();
+  if (col >= 0) { ctx.col = col; ctx.colName = project.columns[col] && project.columns[col].name; }
+  const meta = reviewMeta[reviewPos];
+  if (meta) { ctx.reviewKey = meta.key; ctx.rowName = meta.name; }
+  return (ctx.col != null || ctx.reviewKey) ? ctx : null;
+}
+function applyViewContext(ctx) {
+  if (!ctx || !project) return;
+  const chain = reconChain();
+  if (ctx.col != null) { const pos = chain.indexOf(ctx.col); if (pos >= 0) { reconActiveIdx = pos; renderColSwitcher(); } }
+  openPane('recon-recon');
+  refreshReview();
+  if (ctx.reviewKey) {
+    const i = reviewMeta.findIndex((r) => r.key === ctx.reviewKey);
+    if (i >= 0) { reviewPos = i; renderReviewCard(); updateReviewProgress(); }
+  }
+  const pane = el('recon-recon'); if (pane && pane.scrollIntoView) pane.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  flashSaved('Synced to their view');
+}
+function chatTime(ts) { try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } }
+function appendChatMessage(msg, mine) {
+  const list = el('recon-chat-messages'); if (!list) return;
+  const who = mine ? 'You' : ((msg.from && msg.from.name) || 'Teammate');
+  const color = mine ? '#1565c0' : ((msg.from && msg.from.color) || '#888');
+  const ctx = msg.context;
+  const hint = ctx && (ctx.rowName || ctx.colName)
+    ? `<div class="recon-chat-ctx">on ${ctx.rowName ? '“' + esc(truncate(ctx.rowName, 22)) + '”' : ''}${ctx.colName ? (ctx.rowName ? ' · ' : '') + esc(truncate(ctx.colName, 18)) : ''}</div>` : '';
+  const go = (!mine && ctx) ? '<button type="button" class="btn btn-link recon-chat-goto">Go to their view</button>' : '';
+  const div = document.createElement('div');
+  div.className = 'recon-chat-msg' + (mine ? ' recon-chat-msg--mine' : '');
+  div.innerHTML = `<div class="recon-chat-meta"><span class="recon-chat-name" style="color:${esc(color)}">${esc(who)}</span>`
+    + `<span class="recon-chat-time">${chatTime(msg.ts)}</span></div><div class="recon-chat-text">${esc(msg.text)}</div>${hint}${go}`;
+  if (go) div.querySelector('.recon-chat-goto').addEventListener('click', () => applyViewContext(ctx));
+  list.appendChild(div);
+  list.scrollTop = list.scrollHeight;
+}
+function receiveChat(states) {
+  let typers = [];
+  (states || []).forEach((s) => {
+    const m = s.msg;
+    if (m && m.id && !_chatSeen.has(m.id) && (m.ts || 0) >= _chatConnectedAt) {
+      _chatSeen.add(m.id);
+      appendChatMessage(m, false);
+      if (!_chatOpen) { _chatUnread += 1; updateChatPip(); }
+    }
+    if (s.typing && (Date.now() - s.typing) < 4000) typers.push((s.user && s.user.name) || 'Someone');
+  });
+  const t = el('recon-chat-typing');
+  if (t) t.textContent = typers.length ? (typers.length === 1 ? `${typers[0]} is typing…` : `${typers.length} people are typing…`) : '';
+}
+function sendChat() {
+  const inp = el('recon-chat-input'); if (!inp) return;
+  const text = (inp.value || '').trim(); if (!text || !rtActive()) return;
+  const msg = { id: `${_chatTag}-${++_chatSeq}`, text, ts: Date.now(), from: _rtMe || { name: 'You' }, context: captureViewContext() };
+  RT.sendMessage(msg);
+  appendChatMessage(msg, true);
+  inp.value = ''; rtSetTyping(false);
+}
+function rtSetTyping(on) { if (rtActive()) RT.setTyping(on); }
+function toggleChat(open) {
+  const p = el('recon-chat-panel'); if (!p) return;
+  _chatOpen = (open != null) ? open : !_chatOpen;
+  p.hidden = false;
+  requestAnimationFrame(() => p.classList.toggle('open', _chatOpen));
+  if (_chatOpen) { _chatUnread = 0; updateChatPip(); const inp = el('recon-chat-input'); if (inp) inp.focus(); }
+  else updateChatPip();
+}
+let _typingTimer = null;
+function wireChat() {
+  const on = (id, ev, fn) => { const e = el(id); if (e) e.addEventListener(ev, fn); };
+  on('recon-chat-toggle', 'click', () => toggleChat());
+  on('recon-chat-close', 'click', () => toggleChat(false));
+  on('recon-chat-send', 'click', sendChat);
+  on('recon-chat-input', 'keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+  on('recon-chat-input', 'input', () => {
+    rtSetTyping(true);
+    clearTimeout(_typingTimer);
+    _typingTimer = setTimeout(() => rtSetTyping(false), 1800);
+  });
+  // Debug-only demo hook (mirrors the ?debug convention) so a chat session can be shown without a live
+  // teammate: window.__reconChatSim({name,color}, text, contextObj) and __reconChatTyping(name).
+  try {
+    const dbg = /(?:^|[?&])debug\b/.test(location.search) || (window.localStorage && localStorage.getItem('whg.debug') === '1');
+    if (dbg) {
+      window.__reconChatSim = (from, text, context) => {
+        const m = { id: 'sim-' + (++_chatSeq), text, ts: Date.now(), from, context: context || null };
+        _chatSeen.add(m.id); appendChatMessage(m, false);
+        if (!_chatOpen) { _chatUnread += 1; updateChatPip(); }
+      };
+      window.__reconChatTyping = (name) => { const t = el('recon-chat-typing'); if (t) { t.textContent = `${name} is typing…`; setTimeout(() => { if (t.textContent.startsWith(name)) t.textContent = ''; }, 3500); } };
+    }
+  } catch (_) { /* ignore */ }
 }
 // Outline the cells teammates are editing (only those currently visible in the virtualised table).
 function paintPresenceCursors() {
@@ -5617,6 +5745,7 @@ function init() {
   loadSources().then(() => { if (project && project.matches && Object.keys(project.matches).length) { const built = buildUniqueQueries(); if (built) renderResults(built); } });
 
   showCapabilities();
+  wireChat(); // team-chat panel (place#154); the toggle stays hidden until a live team project connects
   // A ?shared=<token> link opens a read-only copy someone shared; a ?open=<id> link (e.g. from a team
   // invitation email) opens that saved team project directly; otherwise resume local work.
   const sp = new URLSearchParams(window.location.search);

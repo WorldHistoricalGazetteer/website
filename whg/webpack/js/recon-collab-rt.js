@@ -177,13 +177,24 @@ export function setCursor(cursor) {
 export function setActivity(activity) {
   if (provider) provider.awareness.setLocalStateField('activity', activity || null);
 }
+// Ephemeral team chat (place#154): messages ride the awareness channel — never persisted, delivered only
+// to members connected right now. `msg` holds the latest sent message ({id,text,ts,from,context}); peers
+// show each new id once. `typing` is a timestamp for the "…is typing" hint. Both clear when the client
+// drops, so nothing is stored anywhere.
+export function sendMessage(msg) {
+  if (provider) provider.awareness.setLocalStateField('msg', msg || null);
+}
+export function setTyping(on) {
+  if (provider) provider.awareness.setLocalStateField('typing', on ? Date.now() : null);
+}
 function publicStates() {
   if (!provider) return [];
   const me = provider.awareness.clientID;
   const out = [];
   provider.awareness.getStates().forEach((state, id) => {
     if (id === me || !state || !state.user) return;
-    out.push({ id, user: state.user, cursor: state.cursor || null, activity: state.activity || null });
+    out.push({ id, user: state.user, cursor: state.cursor || null, activity: state.activity || null,
+               msg: state.msg || null, typing: state.typing || null });
   });
   return out;
 }

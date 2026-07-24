@@ -152,6 +152,12 @@
              live team one (place#112). Populated by renderCollabStatus(). -->
         <span id="recon-collab-status" class="recon-collab-status small" role="status"></span>
         <span id="recon-presence" class="recon-presence d-none" aria-label="People editing this project"></span>
+        <!-- Ephemeral team chat (place#154): shown only while connected to a live team project. -->
+        <button type="button" id="recon-chat-toggle" class="btn btn-sm btn-outline-primary d-none position-relative"
+                title="Team chat — message the people working with you right now (not saved)">
+          <i class="fas fa-comment-dots"></i>
+          <span id="recon-chat-pip" class="recon-chat-pip d-none"></span>
+        </button>
         <span id="recon-saved" class="recon-saved small text-success"></span>
         <div class="btn-group btn-group-sm" role="group" aria-label="Undo/redo">
           <button type="button" id="recon-undo" class="btn btn-outline-secondary" title="Nothing to undo" disabled>
@@ -523,6 +529,23 @@
       </div>
     </div>
   </div>
+
+  <!-- Ephemeral team-chat slide-out (place#154). Messages are live-only (awareness channel); never saved. -->
+  <aside id="recon-chat-panel" class="recon-chat-panel" aria-label="Team chat" hidden>
+    <div class="recon-chat-head">
+      <span><i class="fas fa-comment-dots me-1"></i>Team chat</span>
+      <button type="button" id="recon-chat-close" class="btn btn-sm btn-link p-0" title="Close">
+        <i class="fas fa-xmark"></i></button>
+    </div>
+    <div class="recon-chat-note">Messages are visible only to teammates online now — nothing is saved.</div>
+    <div id="recon-chat-messages" class="recon-chat-messages"></div>
+    <div id="recon-chat-typing" class="recon-chat-typing"></div>
+    <div class="recon-chat-compose">
+      <input type="text" id="recon-chat-input" class="form-control form-control-sm" maxlength="500"
+             placeholder="Message your team…" autocomplete="off">
+      <button type="button" id="recon-chat-send" class="btn btn-sm btn-primary">Send</button>
+    </div>
+  </aside>
 
   <!-- Collaborate hub (place#112) — body rendered by reconciliation.js -->
   <div class="modal fade" id="recon-collab-modal" tabindex="-1" aria-hidden="true" aria-labelledby="recon-collab-title">
