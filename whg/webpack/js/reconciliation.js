@@ -5049,6 +5049,8 @@ async function tourReconcileAll() {
 async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   const built = buildUniqueQueries(colIndex);
   if (!built || !built.map.size) return;
+  // Ancestor columns coarsest→finest above this one, for containment fallback (parent, grandparent, …).
+  const ancestorCols = reconChain().slice(0, Math.max(0, passNo)); // chain[0..passNo-1]
   reconActiveIdx = passNo; // show this column's progress/results while it runs
   renderColSwitcher();
   rtSetActivity({ type: 'reconciling', column: project.columns[colIndex] && project.columns[colIndex].name }); // tell teammates (advisory lock)
@@ -5136,17 +5138,22 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
           }
         }
       }
-      // Containment: scope this column's query by ALL the parent column's confirmed places for the
-      // same row (a parent may closeMatch several records) — "within any of them".
-      // `intersects`, not `within`: administrative polygons from DIFFERENT gazetteers almost never
-      // nest exactly — a Kain parish boundary is not strictly inside a UKHC county boundary, any more
-      // than a UKHC county is strictly inside the modern Wales polygon (measured: zero hits under
-      // `within`). Since the gateway enforces containment as a hard filter (place#144), `within`
-      // discards valid children over sub-kilometre boundary disagreement. See issue #143.
-      if (parentCol >= 0) {
-        const pids = resolvedPlaceIds(parentCol, row).map(barePlaceId);
-        if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'intersects'; }
+      // Containment: scope this column's query within the confirmed places of the NEAREST resolved
+      // ancestor — the direct parent if it matched, else its parent (grandparent), and so on up the
+      // chain. Only when NO ancestor resolved for this row does it fall through to the dataset-wide
+      // scope below. This keeps precision when an intermediate level (e.g. a parish) was skipped or
+      // unmatched but a coarser one (its county) was confirmed — without it, such a row would widen all
+      // the way to the whole dataset. "within any of them" (an ancestor may closeMatch several records).
+      // `intersects`, not `within`: administrative polygons from DIFFERENT gazetteers almost never nest
+      // exactly — a Kain parish boundary is not strictly inside a UKHC county, any more than a UKHC
+      // county is strictly inside the modern Wales polygon (measured: zero hits under `within`). Since
+      // the gateway enforces containment as a hard filter (place#144), `within` discards valid children
+      // over sub-kilometre boundary disagreement. See issue #143.
+      let pids = [];
+      for (let a = ancestorCols.length - 1; a >= 0 && !pids.length; a--) {
+        pids = resolvedPlaceIds(ancestorCols[a], row).map(barePlaceId);
       }
+      if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'intersects'; }
       applyGlobalScopeToQuery(q, parentCol < 0, !!v.country); // dataset-wide scope (country/date/type/region)
       queries['q' + j] = q;
     });
