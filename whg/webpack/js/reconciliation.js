@@ -2677,26 +2677,38 @@ function updateChatPip() {
 }
 // The teammate-facing bit of my identity + the record I'm on, sent with each message so a recipient can
 // jump to my view. Kept tiny — a column + the review row is the meaningful "where I am".
+const PANE_IDS = ['recon-pane-import', 'recon-result', 'recon-recon', 'recon-review'];
+function openPaneId() {
+  const open = document.querySelector('.recon-pane:not(.recon-collapsed)');
+  return (open && PANE_IDS.includes(open.id)) ? open.id : null;
+}
 function captureViewContext() {
-  const ctx = {};
+  const ctx = { pane: openPaneId() }; // always record at least the step the sender was on
   const col = activeReconCol();
   if (col >= 0) { ctx.col = col; ctx.colName = project.columns[col] && project.columns[col].name; }
   const meta = reviewMeta[reviewPos];
   if (meta) { ctx.reviewKey = meta.key; ctx.rowName = meta.name; }
-  return (ctx.col != null || ctx.reviewKey) ? ctx : null;
+  return ctx;
 }
+// Jump to the perspective captured with a message. Perspectives can ROT — the column may have been
+// re-mapped, the record edited away, or the review queue moved on — so we get as close as we can and
+// say so rather than silently doing nothing.
 function applyViewContext(ctx) {
   if (!ctx || !project) return;
+  let rotted = false;
+  if (ctx.pane && PANE_IDS.includes(ctx.pane)) openPane(ctx.pane);
   const chain = reconChain();
-  if (ctx.col != null) { const pos = chain.indexOf(ctx.col); if (pos >= 0) { reconActiveIdx = pos; renderColSwitcher(); } }
-  openPane('recon-recon');
+  if (ctx.col != null) {
+    const pos = chain.indexOf(ctx.col);
+    if (pos >= 0) { reconActiveIdx = pos; renderColSwitcher(); } else rotted = true; // column no longer in the chain
+  }
   refreshReview();
   if (ctx.reviewKey) {
     const i = reviewMeta.findIndex((r) => r.key === ctx.reviewKey);
-    if (i >= 0) { reviewPos = i; renderReviewCard(); updateReviewProgress(); }
+    if (i >= 0) { reviewPos = i; renderReviewCard(); updateReviewProgress(); } else rotted = true; // record gone from the queue
   }
-  const pane = el('recon-recon'); if (pane && pane.scrollIntoView) pane.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  flashSaved('Synced to their view');
+  const pane = el(ctx.pane || 'recon-recon'); if (pane && pane.scrollIntoView) pane.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  flashSaved(rotted ? 'Jumped as close as possible — that exact spot has changed since.' : 'Synced to that view.');
 }
 function chatTime(ts) { try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } }
 function appendChatMessage(msg, mine) {
@@ -2706,12 +2718,22 @@ function appendChatMessage(msg, mine) {
   const ctx = msg.context;
   const hint = ctx && (ctx.rowName || ctx.colName)
     ? `<div class="recon-chat-ctx">on ${ctx.rowName ? '“' + esc(truncate(ctx.rowName, 22)) + '”' : ''}${ctx.colName ? (ctx.rowName ? ' · ' : '') + esc(truncate(ctx.colName, 18)) : ''}</div>` : '';
-  const go = (!mine && ctx) ? '<button type="button" class="btn btn-link recon-chat-goto">Go to their view</button>' : '';
+  // Every message carries a jump-to-the-sender's-perspective button (captured at send time). The
+  // perspective may have rotted since — a BS tooltip says so.
+  const tip = `Jump to where ${mine ? 'you were' : 'they were'} working when this was sent. `
+    + 'Views can move on (columns re-mapped, records edited, the queue advanced), so it may no longer match.';
+  const persp = ctx ? `<button type="button" class="btn btn-sm recon-chat-goto" data-bs-toggle="tooltip"`
+    + ` data-bs-placement="top" title="${esc(tip)}"><i class="fas fa-location-crosshairs me-1"></i>`
+    + `${mine ? 'My view then' : 'Their view'}</button>` : '';
   const div = document.createElement('div');
   div.className = 'recon-chat-msg' + (mine ? ' recon-chat-msg--mine' : '');
   div.innerHTML = `<div class="recon-chat-meta"><span class="recon-chat-name" style="color:${esc(color)}">${esc(who)}</span>`
-    + `<span class="recon-chat-time">${chatTime(msg.ts)}</span></div><div class="recon-chat-text">${esc(msg.text)}</div>${hint}${go}`;
-  if (go) div.querySelector('.recon-chat-goto').addEventListener('click', () => applyViewContext(ctx));
+    + `<span class="recon-chat-time">${chatTime(msg.ts)}</span></div><div class="recon-chat-text">${esc(msg.text)}</div>${hint}${persp}`;
+  if (persp) {
+    const b = div.querySelector('.recon-chat-goto');
+    b.addEventListener('click', () => applyViewContext(ctx));
+    if (window.bootstrap && window.bootstrap.Tooltip) { try { new window.bootstrap.Tooltip(b); } catch (_) { /* ignore */ } }
+  }
   list.appendChild(div);
   list.scrollTop = list.scrollHeight;
 }

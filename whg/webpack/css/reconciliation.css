@@ -611,7 +611,11 @@ body.recon-viewer #recon-viewer-badge { cursor: help; }
 .recon-chat-time { color: #9a9a9a; margin-left: .3rem; }
 .recon-chat-text { white-space: pre-wrap; word-break: break-word; }
 .recon-chat-ctx { font-size: .7rem; color: #6a6a6a; margin-top: .15rem; font-style: italic; }
-.recon-chat-goto { font-size: .72rem; margin-top: .1rem; }
+.recon-chat-goto { display: inline-flex; align-items: center; margin-top: .25rem; padding: .05rem .4rem;
+  font-size: .72rem; line-height: 1.5; border: 1px solid #cdd6e0; background: #fff; color: #37414b;
+  border-radius: .35rem; }
+.recon-chat-goto:hover { border-color: #0d6efd; color: #0d6efd; }
+.recon-chat-msg--mine .recon-chat-goto { border-color: #b9d4f2; }
 .recon-chat-typing { min-height: 1.1rem; padding: 0 .8rem .3rem; font-size: .72rem;
   color: #8a8a8a; font-style: italic; }
 .recon-chat-compose { display: flex; gap: .4rem; padding: .5rem .8rem; border-top: 1px solid #eee; }
