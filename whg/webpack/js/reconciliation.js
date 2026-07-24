@@ -2544,6 +2544,8 @@ function colorFor(seed) {
 
 // Publish where I'm working (a cell or a review row) so teammates see my cursor.
 function rtSetCursor(cursor) { if (rtActive()) RT.setCursor(cursor); }
+function rtSetActivity(activity) { if (rtActive()) RT.setActivity(activity); }
+let _peerReconciling = null; // {name, column} when a teammate is mid-reconcile — soft-locks our button
 
 // ── Presence UI (awareness) ──────────────────────────────────────────────────
 function initials(name) {
@@ -2551,6 +2553,11 @@ function initials(name) {
 }
 function renderPresence(states) {
   _rtPresence = states || [];
+  // Advisory reconcile lock (place#112): is any teammate mid-reconcile? If so, soft-block our own run.
+  const busy = _rtPresence.find((s) => s.activity && s.activity.type === 'reconciling');
+  const wasLocked = !!_peerReconciling;
+  _peerReconciling = busy ? { name: (busy.user && busy.user.name) || 'A teammate', column: busy.activity.column } : null;
+  if (wasLocked !== !!_peerReconciling || _peerReconciling) updateReconButton(); // reflect (un)lock
   const box = el('recon-presence');
   if (box) {
     box.innerHTML = _rtPresence.map((s) => {
@@ -3258,8 +3265,13 @@ function applyGlobalScopeToQuery(q, isRoot, hasRowCountry) {
     if (s.end != null) q.end = s.end;
     if (s.undated) q.undated = true;
   }
-  // Spatial region — root column only, and never over an existing parent containment.
-  if (isRoot && !q.contained_in) {
+  // Spatial region — applied whenever the query has NO parent containment, on ANY column, not just the
+  // root. A child column is normally scoped by its parent's confirmed place(s) (`contained_in`, tighter
+  // than the dataset region), so we don't override that. BUT when a parent was skipped or found no
+  // match, the child inherits NO containment — and without this it would fall through to a GLOBAL
+  // search, returning (and auto-confirming) places on the wrong continent despite the dataset scope.
+  // So the region is a FLOOR: parent containment if present, else the dataset region. See issue #143.
+  if (!q.contained_in && !q.bounds) {
     // `intersects`, not `within`: the dataset-wide scope is a coarse "restrict to this area" filter,
     // and an AREA candidate is rarely strictly inside its container once boundaries differ even
     // slightly. Measured: UKHC historic Welsh counties return ZERO hits as `within` wd:Q25 (Wales)
@@ -3388,6 +3400,7 @@ function toggleRunning(on) {
   el('recon-run').classList.toggle('d-none', on);
   el('recon-stop').classList.toggle('d-none', !on);
   const rr = el('recon-rerun'); if (rr && on) rr.classList.add('d-none'); // restored by updateRerunButton after the run
+  if (!on) rtSetActivity(null); // release the advisory lock when the run ends (reconcilePass set it)
 }
 function updateProgress(done, total) {
   el('recon-progress-wrap').classList.remove('d-none');
@@ -4849,6 +4862,18 @@ function updateReconButton() {
   updateRerunButton(chain);
   updateSourcesLabel(); // keep the Sources button label pointed at the focused column
   updateScopeLabel();   // reflect any saved dataset-wide scope (e.g. after resume)
+  // Advisory lock: a teammate is running a reconcile — soft-block ours (and Re-reconcile) so two
+  // members don't fire the same heavy, gateway-hammering pass at once (place#112). Advisory only:
+  // awareness clears if they drop, so it can never deadlock. Never blocks our own in-flight run.
+  if (_peerReconciling && !running) {
+    const who = esc(_peerReconciling.name);
+    const oncol = _peerReconciling.column ? ` <strong>${esc(truncate(_peerReconciling.column, 20))}</strong>` : '';
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-user-lock me-1"></i>${who} is reconciling…`;
+    const rr = el('recon-rerun'); if (rr) rr.disabled = true;
+    if (help) help.innerHTML = `${who} is reconciling${oncol} for this team right now. Your Reconcile is paused so the team doesn’t run the same search twice — it re-enables when they finish.`;
+    return;
+  }
   if (colIndexByRole('name') < 0) { // no place-name column yet → guide the user to map one
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile';
@@ -4985,6 +5010,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   if (!built || !built.map.size) return;
   reconActiveIdx = passNo; // show this column's progress/results while it runs
   renderColSwitcher();
+  rtSetActivity({ type: 'reconciling', column: project.columns[colIndex] && project.columns[colIndex].name }); // tell teammates (advisory lock)
   const colName = truncate(project.columns[colIndex].name, 30);
   const passLabel = passTotal > 1 ? `<span class="text-muted">column ${passNo + 1}/${passTotal} · <strong>${esc(colName)}</strong></span> · ` : '';
   const nameCol = colIndexByRole('name');

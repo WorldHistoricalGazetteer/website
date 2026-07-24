@@ -170,13 +170,20 @@ function jsonEq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 export function setCursor(cursor) {
   if (provider) provider.awareness.setLocalStateField('cursor', cursor || null);
 }
+// Advisory activity broadcast over awareness (place#112): e.g. {type:'reconciling', column:'parish'}.
+// Peers use it to soft-lock the Reconcile button so two members don't kick off the same heavy,
+// gateway-hammering pass at once. Advisory only — awareness is best-effort and clears if a client
+// drops, so it can never deadlock. Pass null to clear.
+export function setActivity(activity) {
+  if (provider) provider.awareness.setLocalStateField('activity', activity || null);
+}
 function publicStates() {
   if (!provider) return [];
   const me = provider.awareness.clientID;
   const out = [];
   provider.awareness.getStates().forEach((state, id) => {
     if (id === me || !state || !state.user) return;
-    out.push({ id, user: state.user, cursor: state.cursor || null });
+    out.push({ id, user: state.user, cursor: state.cursor || null, activity: state.activity || null });
   });
   return out;
 }
