@@ -76,14 +76,28 @@ def prune_snapshots(project):
 
 
 def _find_user(identifier):
-    """Resolve an invitee by username (reliable) then email (best-effort; email is encrypted)."""
+    """Resolve an invitee by username (exact) or email.
+
+    `email` is a non-deterministic ``EncryptedTextField``, so ``filter(email=…)`` can NEVER match the
+    ciphertext — email invites always failed and the owner had to fall back to the (unfriendly) username
+    (snag #153). When the identifier looks like an email we instead decrypt-and-compare: invites are a
+    rare, owner-initiated action and the user table is small (~1.3k), so the scan cost is acceptable.
+    """
     identifier = (identifier or '').strip()
     if not identifier:
         return None
     u = User.objects.filter(username__iexact=identifier).first()
     if u:
         return u
-    return User.objects.filter(email=identifier).first()
+    if '@' in identifier:
+        target = identifier.lower()
+        for cand in User.objects.exclude(email__isnull=True).only('id', 'email').iterator():
+            try:
+                if cand.email and cand.email.strip().lower() == target:
+                    return cand
+            except Exception:
+                continue
+    return None
 
 
 # ── projects ──────────────────────────────────────────────────────────────────

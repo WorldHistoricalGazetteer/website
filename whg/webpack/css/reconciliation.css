@@ -403,7 +403,13 @@
 .recon-role-select.role-coords  { border-left-color: #2e7d32; }
 .recon-role-select.role-date    { border-left-color: #b26a00; }
 .recon-role-select.role-id      { border-left-color: #455a64; }
-.recon-role-select.role-other   { border-left-color: #cfcfcf; }
+.recon-role-select.role-other   { border-left-color: #cfcfcf; color: #8a8a8a; font-style: italic; }
+/* De-emphasise the "Other (ignore)" option so it doesn't hide among the real roles (snag #153).
+   Chrome/Edge/Firefox honour colour/font-style on <option>. */
+.recon-role-select .recon-role-opt-other { color: #8a8a8a; font-style: italic; }
+/* A disabled Reconcile button can't show its title tooltip (disabled controls ignore hover), so allow
+   pointer events on it — clicks are still blocked by [disabled], but the "why" tooltip now appears. */
+#recon-run:disabled { pointer-events: auto; cursor: not-allowed; }
 
 /* Phase 5 — Enrich & export */
 .recon-export-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; }

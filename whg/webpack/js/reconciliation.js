@@ -349,7 +349,9 @@ async function persist() {
 function isChildRole(role) { return role === 'name' || role === 'contains'; } // a valid containment child
 function roleSelectHTML(colIndex, col) {
   const cur = col.role === 'contains' ? `contains:${col.child}` : col.role;
-  const std = ROLES.map(([val, label]) => `<option value="${val}"${val === cur ? ' selected' : ''}>${label}</option>`);
+  // 'Other (ignore)' is de-emphasised (greyed/italic) so it reads as "not a real role" and stands out
+  // among the meaningful options instead of hiding among them (snag #153).
+  const std = ROLES.map(([val, label]) => `<option value="${val}"${val === cur ? ' selected' : ''}${val === 'other' ? ' class="recon-role-opt-other"' : ''}>${val === 'other' ? '— ' + label + ' —' : label}</option>`);
   // Containment options: this column CONTAINS another column (its child). Only place/area columns —
   // the place name or another container — are offered as children; ignored/coordinate/date/… columns
   // are not. Selecting one makes THIS column their container (one level up in the hierarchy).
@@ -4994,6 +4996,7 @@ async function continueReconcile() {
 // then the next column unlocks.
 function updateReconButton() {
   const btn = el('recon-run'); if (!btn || !project) return;
+  btn.title = ''; // cleared each render; the review-state branch sets an explanatory tooltip
   const help = el('recon-recon-help');
   const chain = reconChain();
   updateRerunButton(chain);
@@ -5037,6 +5040,11 @@ function updateReconButton() {
     btn.disabled = true;
     const isLast = pos >= chain.length - 1;
     btn.innerHTML = `<i class="fas fa-list-check me-1"></i>${isLast ? `Review ${colName}` : `Confirm ${colName} to continue`}`;
+    // Why it's disabled, as a hover tooltip (snag #153). Disabled buttons don't fire hover events, so
+    // recon.css re-enables pointer-events on this one so the title actually shows.
+    btn.title = isLast
+      ? `Reconciled — now review and confirm its matches in Step 4 (below).`
+      : `Review and confirm this column's matches in Step 4 before the next column can be reconciled.`;
     if (help) help.innerHTML = isLast
       ? `Reconciled <strong>${colName}</strong> — the final column. <strong>Review &amp; confirm</strong> its matches (Step 4).`
       : `Reconciled <strong>${colName}</strong>. <strong>Review &amp; confirm</strong> its matches (Step 4) — then <strong>${esc(truncate(project.columns[chain[pos + 1]].name, 18))}</strong> unlocks, scoped within the places you confirmed here.`;
