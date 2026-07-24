@@ -4855,6 +4855,44 @@ function refreshReconSection() {
   updateReconButton();
 }
 
+// Value-bearing units in a column that have no match yet — i.e. rows still to reconcile (e.g. after a
+// Cancel, which keeps what was fetched and leaves the rest unqueried). Merged admin values count once.
+function unreconciledUnits(col) {
+  if (col == null || col < 0 || !project) return 0;
+  const built = buildUniqueQueries(col); if (!built) return 0;
+  let n = 0; built.map.forEach((v, key) => { if (!project.matches[key]) n += 1; });
+  return n;
+}
+// Show a "Continue reconciling (N)" button when the focused column is PARTIALLY reconciled — some
+// matches present, some rows still unqueried — so a cancelled run can be resumed without the
+// Re-reconcile button's clear-and-restart. Hidden while running or soft-locked by a teammate.
+function updateContinueButton() {
+  const b = el('recon-continue'); if (!b || !project) return;
+  const col = activeReconCol();
+  const rem = (col >= 0 && colHasMatches(col)) ? unreconciledUnits(col) : 0;
+  const show = rem > 0 && !running && !_peerReconciling;
+  b.classList.toggle('d-none', !show);
+  if (show) b.innerHTML = `<i class="fas fa-play me-1"></i>Continue reconciling (${rem.toLocaleString()})`;
+}
+// Reconcile only the not-yet-matched rows of the focused column (reconcilePass skips rows that already
+// have matches), keeping existing matches. The resume companion to Cancel.
+async function continueReconcile() {
+  if (running || !project) return;
+  const chain = reconChain();
+  const col = activeReconCol();
+  const pos = chain.indexOf(col);
+  if (pos < 0) return;
+  reconStaleNote = '';
+  trackOnce('MyD: reconcile', { columns: String(chain.length) });
+  toggleRunning(true); openPane('recon-recon'); stopRequested = false;
+  await reconcilePass(col, pos > 0 ? chain[pos - 1] : -1, getCsrf(), pos, chain.length);
+  toggleRunning(false);
+  reconActiveIdx = pos;
+  const built = buildUniqueQueries(); if (built) renderResults(built);
+  renderColSwitcher(); updateReconButton(); refreshReview();
+  await persist();
+}
+
 // Drive the Reconcile button + help text from the current stage: reconcile one column, review it,
 // then the next column unlocks.
 function updateReconButton() {
@@ -4862,6 +4900,7 @@ function updateReconButton() {
   const help = el('recon-recon-help');
   const chain = reconChain();
   updateRerunButton(chain);
+  updateContinueButton();
   updateSourcesLabel(); // keep the Sources button label pointed at the focused column
   updateScopeLabel();   // reflect any saved dataset-wide scope (e.g. after resume)
   // Advisory lock: a teammate is running a reconcile — soft-block ours (and Re-reconcile) so two
@@ -5248,6 +5287,8 @@ function init() {
   if (run) run.addEventListener('click', reconcileStage);
   const rerun = el('recon-rerun');
   if (rerun) rerun.addEventListener('click', () => reReconcileColumn(activeReconCol()));
+  const cont = el('recon-continue');
+  if (cont) cont.addEventListener('click', continueReconcile);
   const stop = el('recon-stop');
   if (stop) stop.addEventListener('click', () => {
     stopRequested = true;

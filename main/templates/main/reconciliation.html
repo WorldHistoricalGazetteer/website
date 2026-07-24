@@ -242,6 +242,10 @@
                 title="Clear this column's matches and reconcile it again (e.g. after changing its Sources). Downstream columns are reset.">
           <i class="fas fa-rotate me-1"></i><span id="recon-rerun-label">Re-reconcile</span>
         </button>
+        <button type="button" id="recon-continue" class="btn btn-sm btn-outline-primary d-none"
+                title="Reconcile only the rows in this column that don't have a match yet (e.g. after you cancelled) — existing matches are kept.">
+          <i class="fas fa-play me-1"></i>Continue reconciling
+        </button>
         <button type="button" id="recon-run" class="btn btn-sm btn-primary">
           <i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile
         </button>
