@@ -2283,11 +2283,23 @@ function phoneticEnabled() {
   return !!(project && project.phonetic === true); // default off
 }
 // Languages offered in the override dropdown (value = Symphonym lang code; 'und' = undetermined).
+// The Symphonym model is conditioned on ~1,900 languages (static/webpack/symphonym/lang_vocab.json);
+// this list is only what we surface. Keep the Celtic languages in it: a Welsh/Irish/Gaelic toponym
+// list embedded as English gets materially worse phonetic matches, and until these were offered the
+// only Latin-script choice was English (detectLang() defaults there). Codes verified against the
+// vocab; anything it doesn't know falls back to <UNK> rather than failing.
 const RECON_LANGS = [
-  ['und', 'Undetermined'], ['en', 'English'], ['fr', 'French'], ['de', 'German'], ['es', 'Spanish'],
-  ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['ru', 'Russian'], ['pl', 'Polish'],
-  ['ar', 'Arabic'], ['zh', 'Chinese'], ['ja', 'Japanese'], ['ko', 'Korean'], ['el', 'Greek'],
-  ['he', 'Hebrew'], ['tr', 'Turkish'], ['hi', 'Hindi'], ['th', 'Thai'],
+  ['und', 'Undetermined'], ['en', 'English'],
+  ['cy', 'Welsh'], ['ga', 'Irish'], ['gd', 'Scottish Gaelic'], ['gv', 'Manx'], ['kw', 'Cornish'], ['br', 'Breton'],
+  ['fr', 'French'], ['de', 'German'], ['es', 'Spanish'], ['it', 'Italian'], ['pt', 'Portuguese'],
+  ['nl', 'Dutch'], ['ca', 'Catalan'], ['eu', 'Basque'], ['la', 'Latin'],
+  ['da', 'Danish'], ['no', 'Norwegian'], ['sv', 'Swedish'], ['is', 'Icelandic'], ['fi', 'Finnish'], ['et', 'Estonian'],
+  ['pl', 'Polish'], ['cs', 'Czech'], ['sk', 'Slovak'], ['sl', 'Slovene'], ['hu', 'Hungarian'], ['ro', 'Romanian'],
+  ['hr', 'Croatian'], ['sr', 'Serbian'], ['bg', 'Bulgarian'], ['uk', 'Ukrainian'], ['ru', 'Russian'],
+  ['lt', 'Lithuanian'], ['lv', 'Latvian'],
+  ['el', 'Greek'], ['tr', 'Turkish'], ['ar', 'Arabic'], ['fa', 'Persian'], ['he', 'Hebrew'], ['yi', 'Yiddish'],
+  ['hi', 'Hindi'], ['ur', 'Urdu'], ['th', 'Thai'], ['vi', 'Vietnamese'], ['id', 'Indonesian'], ['ms', 'Malay'],
+  ['sw', 'Swahili'], ['zh', 'Chinese'], ['ja', 'Japanese'], ['ko', 'Korean'],
 ];
 // Guess a default language from the dominant non-Latin script across the dataset's names; Latin → English.
 function detectLang() {
@@ -3059,7 +3071,7 @@ function parentContextHTML(colIndex, rowIdx, max) {
     const tip = `${c.colName}: ${c.value}${c.matched && c.matched !== c.value ? ` → matched “${c.matched}”` : (c.matched ? '' : ' (not resolved)')}`;
     return `<span title="${esc(tip)}"${c.matched ? '' : ' class="fst-italic"'}>${esc(truncateText(label, 24))}</span>`;
   });
-  return `<span class="recon-parent-ctx text-muted small ms-1">in ${bits.join(' <span class="text-muted">·</span> ')}</span>`;
+  return `<span class="recon-parent-ctx text-muted small ms-1"> in ${bits.join(' <span class="text-muted">·</span> ')}</span>`;
 }
 
 // ── Merged admin values: one reconciliation, one decision, applied to every row ───────────────────
