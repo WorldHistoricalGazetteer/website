@@ -6,6 +6,8 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
+from users.models import email_lookup_hash
+
 User = get_user_model()
 # from accounts.models import Profile
 
@@ -80,8 +82,11 @@ class EmailForm(forms.Form):
 
     def clean_email(self):
         email = self.cleaned_data.get('email')
-        # Check if email is already in use by another verified user
-        if email and User.objects.filter(email=email, email_confirmed=True).exclude(
+        # Reject an email already verified on another account. Query the indexed lookup hash — the email
+        # column is encrypted, so filter(email=…) never matches (this check used to silently pass, so
+        # duplicate verified emails slipped through). See users.models.email_lookup_hash.
+        h = email_lookup_hash(email)
+        if h and User.objects.filter(email_hash=h, email_confirmed=True).exclude(
                 pk=self.user.pk if self.user else None
         ).exists():
             raise ValidationError(
