@@ -280,8 +280,12 @@ def send_invitation(request, kind, to_email, target_url=None):
         'home_url': absolute(request, '/'),
         'atlas_url': absolute(request, reverse('atlas-page')),
         'docs_url': 'https://docs.whgazetteer.org',
-        # Reply-To must not be the sender: their address is never disclosed.
-        'reply_to': settings.DEFAULT_FROM_EDITORIAL,
+        # Reply-To must not be the sender: their address is never disclosed. Deliberately
+        # DEFAULT_FROM_EMAIL rather than DEFAULT_FROM_EDITORIAL — the editorial setting is a
+        # named individual's inbox (als512@pitt.edu on prod), and a stranger's reply to an
+        # unsolicited invitation should not land on one person. Replies go to the no-reply
+        # WHG address; the email itself carries the unsubscribe link and a contact route.
+        'reply_to': settings.DEFAULT_FROM_EMAIL,
         # Give mail clients a native unsubscribe affordance (and us the deliverability
         # credit for offering one). The URL carries only the signed hash.
         'extra_headers': {
