@@ -18,6 +18,8 @@ import requests
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import transaction
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -603,7 +605,7 @@ def team_members(request, tid):
         return _err('invalid role')
     user = _find_user(data.get('identifier'))
     if not user:
-        return _err('no user found with that username or email', 404)
+        return _invite_prospective_member(request, data.get('identifier'))
     m, created = TeamMember.objects.get_or_create(team=team, user=user, defaults={'role': role})
     if not created:
         m.role = role
@@ -618,6 +620,41 @@ def team_members(request, tid):
                          'created': created,
                          'has_verified_email': bool(getattr(user, 'has_verified_email', False)),
                          'notified': notified})
+
+
+def _invite_prospective_member(request, identifier):
+    """Nobody holds that username/email. If it's an email address, offer to bring them to WHG
+    rather than dead-ending on a 404 (place#155) — the collaborator you want is often the one
+    who hasn't signed up yet.
+
+    They are *not* added to the team, and deliberately no pending-invitation row is created:
+    that would mean storing the address of someone with no account, which is exactly what
+    place#155 exists to avoid. The owner re-adds them once they have signed up.
+
+    The invitation is the generic "join WHG" one. It does not name the team — a stranger who
+    may never sign up shouldn't learn that a team exists or what it is called.
+    """
+    identifier = (identifier or '').strip()
+    if '@' not in identifier:
+        return _err('no user found with that username or email', 404)
+
+    try:
+        validate_email(identifier)
+    except ValidationError:
+        return _err('no user found with that username, and that is not a valid email address', 404)
+
+    from main.invitations import InvitationError, send_invitation
+    try:
+        send_invitation(request, kind='join', to_email=identifier)
+    except InvitationError as e:
+        return _err(str(e), getattr(e, 'status', 400))
+
+    return JsonResponse({
+        'ok': True,
+        'invited': True,
+        'message': ('Nobody with that address has a WHG account yet, so we have emailed them an '
+                    'invitation to create one. Add them to the team once they have signed up.'),
+    })
 
 
 def _notify_team_member(request, team, user, role, project_id=None):

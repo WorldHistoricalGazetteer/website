@@ -212,7 +212,12 @@ def absolute(request, path):
 
 
 class InvitationError(Exception):
-    """A refusal we're happy to show the sender."""
+    """A refusal we're happy to show the sender. ``status`` is the HTTP status an API
+    caller should use (429 when the sender has run out of their daily quota)."""
+
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.status = status
 
 
 def send_invitation(request, kind, to_email, target_url=None):
@@ -242,7 +247,8 @@ def send_invitation(request, kind, to_email, target_url=None):
     if sender_remaining(user) <= 0:
         raise InvitationError(
             f'You have reached the limit of {DAILY_LIMIT} invitations in 24 hours. '
-            'Please try again tomorrow.'
+            'Please try again tomorrow.',
+            status=429,
         )
 
     # Both of these are deliberately reported with the same wording as success would

@@ -86,7 +86,8 @@ export function mountCollab({ bridge, getSnapshot, getTitle, container, onSaved 
       <div class="mb-3">
         <label class="form-label small mb-1">Invite people to this team ${rtNote}</label>
         <div class="input-group input-group-sm mb-1">
-          <input id="wb-collab-invite" class="form-control" placeholder="username">
+          <input id="wb-collab-invite" class="form-control" placeholder="username or email"
+                 title="An email address with no WHG account gets an invitation to sign up.">
           <select id="wb-collab-role" class="form-select" style="max-width:8rem;">
             <option value="editor">Editor</option><option value="viewer">Viewer</option>
           </select>
@@ -166,7 +167,13 @@ export function mountCollab({ bridge, getSnapshot, getTitle, container, onSaved 
       if (!who) return;
       const r = await addMember(selectedTeam, who, role);
       const msg = el('wb-collab-invite-msg');
-      if (r.ok) { msg.innerHTML = `<span class="text-success">Added ${esc(who)}.</span>`; el('wb-collab-invite').value = ''; loadMembers(); }
+      // No WHG account behind that address: the server emailed them an invitation to join
+      // instead of 404-ing (place#155). Nobody was added to the team, so don't say "Added".
+      if (r.ok && r.data && r.data.invited) {
+        msg.innerHTML = `<span class="text-info">${esc(r.data.message || 'Invitation sent.')}</span>`;
+        el('wb-collab-invite').value = '';
+      }
+      else if (r.ok) { msg.innerHTML = `<span class="text-success">Added ${esc(who)}.</span>`; el('wb-collab-invite').value = ''; loadMembers(); }
       else { msg.innerHTML = `<span class="text-danger">${esc((r.data && r.data.error) || 'Could not add that user.')}</span>`; }
     });
   }
