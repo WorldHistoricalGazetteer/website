@@ -248,10 +248,12 @@ function renderHeader(data) {
         : '';
     // Hand the same deep link to the phone's share sheet (SMS, WhatsApp, …). Touch
     // devices only; no sign-in needed, since the user's own device does the sending.
+    // Same fa-share-nodes glyph as the copy-link button it stands in for: the two are
+    // never shown together, and to the user both mean simply "share this place".
     const nativeShareHtml = (placeId && canNativeShare())
         ? `<button type="button" class="popup-nativeshare" data-share-pid="${esc(placeId)}"
                    data-share-title="${esc(title)}" aria-label="Share this place">
-               <i class="fas fa-share-from-square"></i></button>`
+               <i class="fas fa-share-nodes"></i></button>`
         : '';
     // Email the same deep link to someone (place#155). Signed-in users only —
     // it sends mail in their name. Handled by a delegate in atlas.js.

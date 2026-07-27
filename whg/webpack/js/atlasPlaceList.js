@@ -514,11 +514,12 @@ const PlaceList = {
             : '';
         // Hand the link to the device share sheet (SMS, WhatsApp, …) — touch devices
         // only. On those, this replaces the copy-link button rather than crowding the
-        // row: the share sheet already offers "copy" among its targets.
+        // row: the share sheet already offers "copy" among its targets. Same glyph as
+        // that button, since the two never appear together and mean the same thing.
         const nativeShareBtn = (hit.place_id && canNativeShare())
             ? `<button type="button" class="pl-nativeshare" data-pid="${esc(hit.place_id)}"`
               + ` data-title="${title}" title="Share this place" aria-label="Share this place">`
-              + `<i class="fas fa-share-from-square"></i></button>`
+              + `<i class="fas fa-share-nodes"></i></button>`
             : '';
         // Email the same link (place#155) — signed-in users only, since it sends
         // mail in their name.
