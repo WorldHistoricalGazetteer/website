@@ -239,10 +239,19 @@ function renderHeader(data) {
             : `<div class="popup-place-id" data-bs-toggle="tooltip" data-bs-title="Source identifier">${esc(placeId)}</div>`;
     // Copy a shareable deep link (?gazetteer=&place=) to this place. Handled by
     // a document-level delegate in atlas.js (where the URL builder lives).
-    const shareHtml = placeId
+    // On touch devices the share sheet below stands in for this (it offers "copy"
+    // among its targets), so the narrow popup doesn't carry both.
+    const shareHtml = (placeId && !canNativeShare())
         ? `<button type="button" class="popup-share" data-share-pid="${esc(placeId)}"
                    data-bs-toggle="tooltip" data-bs-title="Copy a link to this place" aria-label="Copy link to this place">
                <i class="fas fa-share-nodes"></i></button>`
+        : '';
+    // Hand the same deep link to the phone's share sheet (SMS, WhatsApp, …). Touch
+    // devices only; no sign-in needed, since the user's own device does the sending.
+    const nativeShareHtml = (placeId && canNativeShare())
+        ? `<button type="button" class="popup-nativeshare" data-share-pid="${esc(placeId)}"
+                   data-share-title="${esc(title)}" aria-label="Share this place">
+               <i class="fas fa-share-from-square"></i></button>`
         : '';
     // Email the same deep link to someone (place#155). Signed-in users only —
     // it sends mail in their name. Handled by a delegate in atlas.js.
@@ -260,6 +269,7 @@ function renderHeader(data) {
             <div class="popup-title-row">
                 ${titleHtml}
                 ${shareHtml}
+                ${nativeShareHtml}
                 ${inviteHtml}
                 ${wikiHtml}
             </div>
@@ -660,6 +670,26 @@ function renderAttribution(data) {
  *  for signed-in users (click explains what's coming) and disabled with an
  *  explanatory tooltip for anonymous users. Shared with the geometry-less
  *  overlay via renderAttestControl(). */
+/* Native share sheet available *and* worth offering (place#155 follow-up).
+   `navigator.share()` opens the OS share sheet — Messages/SMS, WhatsApp, Signal,
+   email — which is what "share a pin" means on a phone. The message is sent by the
+   user's own device, so WHG never sees the recipient and sends no SMS itself.
+
+   Gated on a coarse primary pointer, not merely on API support: desktop Safari and
+   Edge implement `share`, but a desktop user clicking a share icon wants the link on
+   their clipboard, not a share sheet. So touch devices get the sheet and everything
+   else keeps the existing copy-link behaviour unchanged. Also requires a secure
+   context, which the API itself enforces. */
+export function canNativeShare() {
+    try {
+        return typeof navigator !== 'undefined' && typeof navigator.share === 'function' &&
+               typeof window !== 'undefined' && typeof window.matchMedia === 'function' &&
+               window.matchMedia('(pointer: coarse)').matches;
+    } catch (e) {
+        return false;
+    }
+}
+
 export function isLoggedIn() {
     return !!(typeof document !== 'undefined' &&
               document.querySelector('meta[name="user-id"]'));

@@ -795,6 +795,7 @@ Promise.all([
         onPlaceFocused: updatePlaceUrl,         // reflect the opened place in the URL
         copyLink: copyPlaceLink,                // row share button → clipboard
         emailLink: emailPlaceLink,              // row envelope button → invitation dialog
+        nativeShare: nativeSharePlace,          // row share-sheet button (touch devices)
     });
 
     // Copy-link delegate for the map popup's share button (the popup HTML is
@@ -804,6 +805,15 @@ Promise.all([
         if (!share) return;
         e.preventDefault();
         copyPlaceLink(share.getAttribute('data-share-pid'));
+    });
+
+    // Native share sheet from the popup (touch devices only — the button isn't
+    // rendered otherwise).
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.popup-nativeshare');
+        if (!btn) return;
+        e.preventDefault();
+        nativeSharePlace(btn.getAttribute('data-share-pid'), btn.getAttribute('data-share-title'));
     });
 
     // Same, for the popup's "email this link" button (signed-in users only — the
@@ -1786,6 +1796,28 @@ function emailPlaceLink(pid) {
     const url = `/invite/?kind=view&url=${encodeURIComponent(buildPlaceShareUrl(pid))}`;
     if (typeof window.openWHGModal === 'function') window.openWHGModal(url);
     else window.location.href = url;   // modal bundle absent — fall back to the page
+}
+
+// Hand a place's link to the device's native share sheet — the "drop a pin and
+// share it" gesture from phone map apps. SMS, WhatsApp, Signal and email all appear
+// there, and the message is sent by the user's own device: WHG neither sends an SMS
+// nor ever sees the recipient's number. Only wired up where canNativeShare() is true
+// (touch devices); desktop keeps copy-to-clipboard.
+function nativeSharePlace(pid, title) {
+    if (!pid || typeof navigator.share !== 'function') return;
+    const url = buildPlaceShareUrl(pid);
+    const name = title || 'this place';
+    navigator.share({
+        title: `${name} — World Historical Gazetteer`,
+        text: `${name} on the World Historical Gazetteer`,
+        url,
+    }).catch((err) => {
+        // AbortError just means the user dismissed the sheet — not a failure.
+        if (err && err.name === 'AbortError') return;
+        // Anything else (no compatible target, permission refused): fall back to the
+        // behaviour they'd have got on desktop rather than leaving the tap dead.
+        copyPlaceLink(pid);
+    });
 }
 
 // Lightweight transient toast (bottom-centre) for copy confirmation.

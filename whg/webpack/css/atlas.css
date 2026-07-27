@@ -963,6 +963,24 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .placelist-row:hover .pl-share { color: #8794a0; }
 .placelist-row .pl-share:hover { color: #2980b9; }
 
+/* Per-row share-sheet button — same slot as the copy-link button it replaces on
+   touch devices. */
+.placelist-row .pl-nativeshare {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    z-index: 1;
+    border: 0;
+    background: transparent;
+    color: #b6c0c8;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.78rem;
+    line-height: 1;
+}
+.placelist-row:hover .pl-nativeshare { color: #8794a0; }
+.placelist-row .pl-nativeshare:hover { color: #2980b9; }
+
 /* Per-row invite (email-link) button, immediately left of the share button
    (place#155). Rendered for signed-in users only. */
 .placelist-row .pl-invite {
@@ -1736,6 +1754,7 @@ a.pl-chip.pl-aat { cursor: pointer; }
 }
 .whg-gazetteer-popup .popup-title-row .popup-title { flex: 0 1 auto; min-width: 0; }
 .whg-gazetteer-popup .popup-title-row .popup-share,
+.whg-gazetteer-popup .popup-title-row .popup-nativeshare,
 .whg-gazetteer-popup .popup-title-row .popup-invite,
 .whg-gazetteer-popup .popup-title-row .popup-chip-wiki { flex: 0 0 auto; margin-left: 5px; }
 .whg-gazetteer-popup .popup-title {
@@ -1810,8 +1829,9 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .whg-gazetteer-popup a.popup-chip { text-decoration: none; }
 .whg-gazetteer-popup a.popup-chip-type[data-aat] { cursor: pointer; }
 .whg-gazetteer-popup a.popup-chip-type:hover { text-decoration: underline; }
-/* Popup share (copy-link) and invite (email-link) buttons. */
+/* Popup share (copy-link), native share-sheet and invite (email-link) buttons. */
 .whg-gazetteer-popup .popup-share,
+.whg-gazetteer-popup .popup-nativeshare,
 .whg-gazetteer-popup .popup-invite {
     border: 0;
     background: transparent;
@@ -1822,6 +1842,7 @@ a.pl-chip.pl-aat { cursor: pointer; }
     line-height: 1;
 }
 .whg-gazetteer-popup .popup-share:hover,
+.whg-gazetteer-popup .popup-nativeshare:hover,
 .whg-gazetteer-popup .popup-invite:hover { color: #2980b9; }
 
 .whg-gazetteer-popup .popup-body {

@@ -30,7 +30,7 @@ import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
-import { aatTooltipHtml, aatUrl, ccName, isLoggedIn } from './gazetteerInteraction.js';
+import { aatTooltipHtml, aatUrl, ccName, canNativeShare, isLoggedIn } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -246,6 +246,13 @@ const PlaceList = {
             if (share) {
                 e.stopPropagation();
                 if (this.cfg.copyLink) this.cfg.copyLink(share.dataset.pid);
+                return;
+            }
+            // The share-sheet button (touch devices, in place of copy-link).
+            const nativeShare = e.target.closest('.pl-nativeshare');
+            if (nativeShare) {
+                e.stopPropagation();
+                if (this.cfg.nativeShare) this.cfg.nativeShare(nativeShare.dataset.pid, nativeShare.dataset.title);
                 return;
             }
             // The envelope button emails that link — also not a row-open.
@@ -500,10 +507,18 @@ const PlaceList = {
             const attrs = name ? ` data-bs-toggle="tooltip" data-bs-title="${esc(name)}"` : '';
             return `<span class="pl-chip pl-cc${name ? ' pl-info' : ''}"${attrs}>${esc(c)}</span>`;
         }).join('');
-        const shareBtn = hit.place_id
+        const shareBtn = (hit.place_id && !canNativeShare())
             ? `<button type="button" class="pl-share" data-pid="${esc(hit.place_id)}"`
               + ` title="Copy a link to this place" aria-label="Copy link to this place">`
               + `<i class="fas fa-share-nodes"></i></button>`
+            : '';
+        // Hand the link to the device share sheet (SMS, WhatsApp, …) — touch devices
+        // only. On those, this replaces the copy-link button rather than crowding the
+        // row: the share sheet already offers "copy" among its targets.
+        const nativeShareBtn = (hit.place_id && canNativeShare())
+            ? `<button type="button" class="pl-nativeshare" data-pid="${esc(hit.place_id)}"`
+              + ` data-title="${title}" title="Share this place" aria-label="Share this place">`
+              + `<i class="fas fa-share-from-square"></i></button>`
             : '';
         // Email the same link (place#155) — signed-in users only, since it sends
         // mail in their name.
@@ -514,6 +529,7 @@ const PlaceList = {
             : '';
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
             + shareBtn
+            + nativeShareBtn
             + inviteBtn
             + `<div class="pl-row-title">${title}</div>`
             + variants
