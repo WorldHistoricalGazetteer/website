@@ -36,7 +36,14 @@ function initWHGModal() {
             $content.html('');
         })
         .on('show.bs.modal', function (e) {
-            loadModalContent($(e.relatedTarget));
+            // Only load when Bootstrap was triggered by a real [data-whg-modal] element.
+            // A programmatic .modal('show') (see openWHGModal) has no relatedTarget and has
+            // already loaded its content — re-entering here would re-request with an
+            // undefined URL, which jQuery resolves to the *current page*, replacing the
+            // dialog with a copy of the page behind it.
+            const $trigger = $(e.relatedTarget);
+            if (!$trigger.length || !$trigger.data('whg-modal')) return;
+            loadModalContent($trigger);
         });
 
     const $trigger = $('#orcidDeniedTrigger');
@@ -49,6 +56,7 @@ function initWHGModal() {
 
     function loadModalContent(target) {
         const url = target.data('whg-modal');
+        if (!url) return;   // never let jQuery default a missing url to the current page
         const modalSubject = target.data('subject');
         $.ajax({
             url: url,
