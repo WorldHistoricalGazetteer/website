@@ -1,3 +1,4 @@
+import html
 import logging
 import re
 import requests
@@ -47,7 +48,7 @@ def zulip_notification(notification, stream="website-notifications", topic="WHG 
         return False
 
 
-def WHGmail(request=None, context={}):
+def WHGmail(request=None, context=None):
     """
     Sends an email using the provided context.
 
@@ -76,7 +77,16 @@ def WHGmail(request=None, context={}):
 
     - reply_to (optional): The email address used in the reply-to field. Defaults to settings.DEFAULT_FROM_EDITORIAL.
         Example: context['reply_to'] = 'support@whg.com'
-    
+
+    - mirror_to_zulip (optional): Whether to post a copy of the sent email to Zulip. Defaults to True.
+        Set False when the recipient has not consented to be in our systems — an invitation to someone
+        with no WHG account (place#155), where the promise is that we do not retain their address.
+        Example: context['mirror_to_zulip'] = False
+
+    - redact_recipient (optional): Whether to keep the recipient's address out of failure logs
+        (SMTP errors often quote it). Defaults to False. Pair with mirror_to_zulip=False.
+        Example: context['redact_recipient'] = True
+
     Returns:
     --------
     - bool: True if the email was sent successfully, False otherwise.
@@ -96,7 +106,11 @@ def WHGmail(request=None, context={}):
     """
     logger.info("WHGmail function has been called.")
 
-    try:        
+    # Copy rather than mutate: the setdefault() calls below would otherwise persist
+    # into a shared mutable default and bleed one message's greeting/subject into the next.
+    context = dict(context or {})
+
+    try:
         user = context.get('user', getattr(request, 'user', None))
         
         to_email = context.get('to_email', getattr(user, 'email', None))
@@ -125,7 +139,9 @@ def WHGmail(request=None, context={}):
             r'<div\s+class=["\']footer-container["\'].*?>.*?</div>',
             flags=re.DOTALL
         )
-        text_content = strip_tags(re.sub(reducing_regex, '', html_content))
+        # strip_tags leaves entities behind, so a URL in the plain-text part would read
+        # "…?a=1&amp;b=2". Unescape after stripping so the text alternative is usable.
+        text_content = html.unescape(strip_tags(re.sub(reducing_regex, '', html_content)))
         
         email = EmailMultiAlternatives(
             subject=context.get('subject'),
@@ -134,25 +150,33 @@ def WHGmail(request=None, context={}):
             to=[to_email],
             cc=context.get('cc', []),
             bcc=context.get('bcc', []),
-            headers={'Reply-To': context.get('reply_to')}
+            headers={'Reply-To': context.get('reply_to'), **context.get('extra_headers', {})}
         )
     
         email.attach_alternative(html_content, "text/html")
         email.send(fail_silently=False)
 
-        notification = (
-            f"*Copy of email sent to:* {context.get('greeting_name')} (email: {to_email})\n"
-            f"*Subject:* {context.get('subject')}\n"
-            f"*Message:* {text_content}\n"
-        )
+        if context.get('mirror_to_zulip', True):
+            notification = (
+                f"*Copy of email sent to:* {context.get('greeting_name')} (email: {to_email})\n"
+                f"*Subject:* {context.get('subject')}\n"
+                f"*Message:* {text_content}\n"
+            )
 
-        zulip_notification(notification, topic="Email Sent")
-        
+            zulip_notification(notification, topic="Email Sent")
+
         return True
-        
+
     except Exception as e:
-        logger.error(f'WHGmail failed, error: {e}')    
-        return False    
+        if context.get('redact_recipient'):
+            # The exception text can quote the recipient address (SMTP rejections
+            # routinely do), and this path is used for people who never consented
+            # to be in our systems.
+            logger.error('WHGmail failed for a redacted recipient (template=%s): %s',
+                         context.get('template'), type(e).__name__)
+        else:
+            logger.error(f'WHGmail failed, error: {e}')
+        return False
 
 def testWHGmail(request):    
     success = WHGmail(request, {

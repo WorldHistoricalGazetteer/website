@@ -1,0 +1,41 @@
+{% extends "base_email.html" %}
+{# place#155 — "look at this" invitation. Entirely templated: the only sender-supplied
+   value is target_url, validated server-side against a WHG-origin allowlist. We do not
+   collect the recipient's name, hence the generic greeting. #}
+
+{% block greeting %}<p><b>Hello,</b></p>{% endblock %}
+
+{% block content %}
+    <p>
+        <b>{{ inviter_name }}</b> thought you would find this interesting, and has shared a link
+        with you from the <b>World Historical Gazetteer</b>:
+    </p>
+
+    <p style="margin: 1.2rem 0;">
+        <a href="{{ target_url }}"
+           style="background:#336699; color:#ffffff; padding:10px 18px; border-radius:4px;
+                  text-decoration:none; display:inline-block;">View it on WHG</a>
+    </p>
+
+    <p style="font-size:.8rem; color:#666; word-break:break-all;">{{ target_url }}</p>
+
+    <p>
+        The World Historical Gazetteer links, visualises and shares data about places
+        throughout history — helping researchers, teachers and students connect records
+        of the same place across different sources, languages and periods.
+    </p>
+
+    <p>
+        You don't need an account to follow the link. If you would like to build and publish
+        your own place data, you can
+        <a href="{{ login_url }}">create a free WHG account</a> — that page serves as both
+        sign-up and sign-in.
+    </p>
+
+    <p style="font-size:.75rem; color:#888; margin-top:1.5rem; border-top:1px solid #eee; padding-top:.8rem;">
+        {{ inviter_name }} sent you this from their WHG account. We have <b>not</b> stored your
+        email address, and you will not hear from us again unless you choose to sign up.
+        If you would rather not receive invitations like this,
+        <a href="{{ unsubscribe_url }}">tell us not to contact you</a>.
+    </p>
+{% endblock %}

@@ -191,3 +191,46 @@ class SiteSetting(models.Model):
         obj, _ = cls.objects.get_or_create(singleton_key=True)
         return obj
 
+
+
+# ── Email invitations (place#155) ────────────────────────────────────────────
+# A signed-in user can email a WHG link, or an invitation to register, to someone
+# who has no account. The recipient never consented to hear from us, so **their
+# address is never stored** — not here, not in a log line, not in the Zulip mail
+# mirror. What we keep instead is a salted HMAC of the address (see
+# ``main.invitations.invitation_email_hash``), which is enough to cap how often
+# one person can be invited and to honour "don't contact me again", but is not
+# the address itself. The hash uses a salt distinct from ``users.email_lookup_hash``
+# so these rows cannot be cross-referenced against the user table to reveal who
+# has been invited.
+
+class InvitationSendLog(models.Model):
+    """One row per invitation sent. Purged after 90 days (see
+    ``main.invitations.purge_expired_logs``) — it exists to enforce the per-sender
+    and per-recipient caps and to make abuse investigable, not as a record of
+    correspondence."""
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations_sent')
+    recipient_hash = models.CharField(max_length=64, db_index=True)
+    kind = models.CharField(max_length=8, choices=[('view', 'Share a page'), ('join', 'Invitation to join')])
+    target_url = models.TextField(blank=True, default='')
+    created = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'invitation_send_log'
+        indexes = [models.Index(fields=['sender', 'created'])]
+
+    def __str__(self):
+        return f"{self.kind} invitation from {self.sender.username} at {self.created:%Y-%m-%d %H:%M}"
+
+
+class InvitationSuppression(models.Model):
+    """"Don't contact me again" — one row per opted-out address hash. Retained
+    indefinitely, because forgetting it would mean mailing that person again."""
+    recipient_hash = models.CharField(max_length=64, unique=True)
+    created = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'invitation_suppression'
+
+    def __str__(self):
+        return f"suppressed {self.recipient_hash[:12]}… since {self.created:%Y-%m-%d}"

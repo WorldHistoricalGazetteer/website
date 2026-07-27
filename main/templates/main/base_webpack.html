@@ -368,6 +368,10 @@
                             <a class="nav-link" href="{% url 'profile-edit' %}"> Profile </a>
                         </li>
                         <li class="nav-item">
+                            {# place#155 — invite a colleague to register (no page context) #}
+                            <a class="nav-link" data-whg-modal="/invite/?kind=join" href="#">Invite a colleague</a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link"
                                href="javascript:{document.getElementById('logout').submit()}">Logout</a>
                             <form id="logout" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}</form>

@@ -95,6 +95,17 @@ function initWHGModal() {
         });
     }
 
+    // Open a modal for a URL that has no `data-whg-modal` trigger in the page — e.g.
+    // the invitation dialog launched from an Atlas map popup, whose markup is
+    // re-rendered long after initWHGModal() bound the static triggers (place#155).
+    function openWHGModal(url, subject) {
+        if (!url) return;
+        const $proxy = $('<a>').data('whg-modal', url);
+        if (subject) $proxy.data('subject', subject);
+        loadModalContent($proxy);
+    }
+    window.openWHGModal = openWHGModal;
+
     function initTurnstile() {
         if (window.turnstile) {
             $('.cf-turnstile').each(function () {

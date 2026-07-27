@@ -7,6 +7,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.core.mail import BadHeaderError
 from django.db.models import Q
 from django.db.models.functions import Lower
@@ -15,12 +16,13 @@ from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.utils.html import escape
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from django.views.generic.base import TemplateView
 
 from areas.models import Area
-from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm
+from .forms import CommentModalForm, ContactForm, AnnouncementForm, VolunteerForm, InviteForm
 
 logger = get_task_logger(__name__)
 from collection.models import Collection, CollectionGroup
@@ -1743,6 +1745,77 @@ def terms_of_use_view(request):
 
 def privacy_policy_view(request):
     return render(request, 'main/privacy_policy.html')
+
+
+# ── Email invitations (place#155) ────────────────────────────────────────────
+
+@login_required
+def invite_modal_view(request):
+    """Send someone a WHG link, or an invitation to register.
+
+    Loaded into the standard ``data-whg-modal`` dialog. GET renders the form; POST
+    sends and returns JSON (which whg-modal.js turns into the confirmation panel) or
+    re-renders the form with errors.
+
+    The recipient's address is used to send the message and then discarded — see
+    :mod:`main.invitations` for the full set of guarantees.
+    """
+    from main import invitations
+
+    kind = request.POST.get('kind') or request.GET.get('kind') or 'view'
+    if kind not in ('view', 'join'):
+        kind = 'view'
+    target_url = request.POST.get('target_url') or request.GET.get('url') or ''
+
+    def _context(form):
+        return {
+            'form': form,
+            'kind': kind,
+            'target_url': target_url,
+            'remaining': invitations.sender_remaining(request.user),
+            'daily_limit': invitations.DAILY_LIMIT,
+            'can_send': request.user.has_verified_email,
+        }
+
+    if request.method != 'POST':
+        form = InviteForm(initial={'kind': kind, 'target_url': target_url})
+        return render(request, 'main/invite_modal.html', _context(form))
+
+    form = InviteForm(request.POST)
+    if form.is_valid():
+        try:
+            remaining = invitations.send_invitation(
+                request,
+                kind=form.cleaned_data['kind'],
+                to_email=form.cleaned_data['to_email'],
+                target_url=form.cleaned_data.get('target_url'),
+            )
+            return JsonResponse({'success': True, 'remaining': remaining})
+        except (invitations.InvitationError, ValidationError) as e:
+            form.add_error(None, e.messages[0] if hasattr(e, 'messages') else str(e))
+
+    return render(request, 'main/invite_modal.html', _context(form))
+
+
+@csrf_exempt
+def invite_unsubscribe_view(request, token):
+    """"Don't contact me again", from the link (and List-Unsubscribe header) in an
+    invitation email.
+
+    The token carries only the signed *hash* of the address, so neither the email nor
+    this URL ever contains the address itself. Acting on GET means a mail-scanner
+    prefetch could suppress someone who never clicked — but that failure mode is
+    "this person receives no invitations", which is the safe direction to fail in.
+    ``csrf_exempt`` supports RFC 8058 one-click POST from mail clients.
+    """
+    from main import invitations
+
+    recipient_hash = invitations.read_unsubscribe_token(token)
+    if not recipient_hash:
+        return render(request, 'main/invite_unsubscribed.html', {'valid': False}, status=400)
+
+    invitations.suppress(recipient_hash)
+    return render(request, 'main/invite_unsubscribed.html', {'valid': True})
 
 
 class CommentCreateView(BSModalCreateView):

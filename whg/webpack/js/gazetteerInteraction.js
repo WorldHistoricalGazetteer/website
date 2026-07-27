@@ -244,6 +244,14 @@ function renderHeader(data) {
                    data-bs-toggle="tooltip" data-bs-title="Copy a link to this place" aria-label="Copy link to this place">
                <i class="fas fa-share-nodes"></i></button>`
         : '';
+    // Email the same deep link to someone (place#155). Signed-in users only —
+    // it sends mail in their name. Handled by a delegate in atlas.js.
+    const inviteHtml = (placeId && isLoggedIn())
+        ? `<button type="button" class="popup-invite" data-invite-pid="${esc(placeId)}"
+                   data-bs-toggle="tooltip" data-bs-title="Email a link to this place"
+                   aria-label="Email a link to this place">
+               <i class="fas fa-envelope"></i></button>`
+        : '';
     // Title, share button and (when present) the Wikipedia mark share one row
     // (saves vertical space); the source id sits on the line below.
     const wikiHtml = renderWikipediaBadge(data);
@@ -252,6 +260,7 @@ function renderHeader(data) {
             <div class="popup-title-row">
                 ${titleHtml}
                 ${shareHtml}
+                ${inviteHtml}
                 ${wikiHtml}
             </div>
             ${idHtml}
@@ -651,7 +660,7 @@ function renderAttribution(data) {
  *  for signed-in users (click explains what's coming) and disabled with an
  *  explanatory tooltip for anonymous users. Shared with the geometry-less
  *  overlay via renderAttestControl(). */
-function isLoggedIn() {
+export function isLoggedIn() {
     return !!(typeof document !== 'undefined' &&
               document.querySelector('meta[name="user-id"]'));
 }

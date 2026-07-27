@@ -1,0 +1,53 @@
+{% extends "base_email.html" %}
+{# place#155 — "come and join" invitation. No target URL: instead, the sign-up route
+   (which is the login page — a newcomer told to "log in" with no account will bounce,
+   so we say so explicitly) plus the public landing pages. #}
+
+{% block greeting %}<p><b>Hello,</b></p>{% endblock %}
+
+{% block content %}
+    <p>
+        <b>{{ inviter_name }}</b> has invited you to join the <b>World Historical Gazetteer</b> (WHG).
+    </p>
+
+    <p>
+        WHG links, visualises and shares data about places throughout history. It helps
+        researchers, teachers and students connect records of the same place across different
+        sources, languages and periods — and publish their own historical place data so that
+        others can find and build on it.
+    </p>
+
+    <p style="margin: 1.2rem 0;">
+        <a href="{{ login_url }}"
+           style="background:#336699; color:#ffffff; padding:10px 18px; border-radius:4px;
+                  text-decoration:none; display:inline-block;">Create your free WHG account</a>
+    </p>
+
+    <p style="font-size:.85rem; color:#555;">
+        That link goes to our <b>Login</b> page, which doubles as the sign-up page — you don't
+        need an account already.
+    </p>
+
+    <p>
+        <b>Signing up with ORCiD.</b> WHG accounts are created using an
+        <a href="https://orcid.org/">ORCiD iD</a> — a free, persistent identifier widely used by
+        researchers, which lets us keep the platform free of automated sign-ups. If you don't have
+        one, registering takes a couple of minutes and is useful well beyond WHG. You do
+        <i>not</i> need to be an academic to get one. Our sign-up page explains exactly what WHG
+        reads from your ORCiD record, and answers the common questions.
+    </p>
+
+    <p>Meanwhile, you are very welcome to explore without an account:</p>
+    <ul>
+        <li><a href="{{ home_url }}">The WHG home page</a> — what the project is and who it's for</li>
+        <li><a href="{{ atlas_url }}">Explore places</a> — search and browse the historical gazetteers we index</li>
+        <li><a href="{{ docs_url }}">Documentation</a> — guides, tutorials and technical detail</li>
+    </ul>
+
+    <p style="font-size:.75rem; color:#888; margin-top:1.5rem; border-top:1px solid #eee; padding-top:.8rem;">
+        {{ inviter_name }} sent you this from their WHG account. We have <b>not</b> stored your
+        email address, and you will not hear from us again unless you choose to sign up.
+        If you would rather not receive invitations like this,
+        <a href="{{ unsubscribe_url }}">tell us not to contact you</a>.
+    </p>
+{% endblock %}

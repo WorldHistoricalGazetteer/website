@@ -794,6 +794,7 @@ Promise.all([
         onGatewayStatus: setGatewayAvailable,   // report gateway up/down from list fetches
         onPlaceFocused: updatePlaceUrl,         // reflect the opened place in the URL
         copyLink: copyPlaceLink,                // row share button → clipboard
+        emailLink: emailPlaceLink,              // row envelope button → invitation dialog
     });
 
     // Copy-link delegate for the map popup's share button (the popup HTML is
@@ -803,6 +804,15 @@ Promise.all([
         if (!share) return;
         e.preventDefault();
         copyPlaceLink(share.getAttribute('data-share-pid'));
+    });
+
+    // Same, for the popup's "email this link" button (signed-in users only — the
+    // button isn't rendered otherwise).
+    document.addEventListener('click', (e) => {
+        const invite = e.target.closest && e.target.closest('.popup-invite');
+        if (!invite) return;
+        e.preventDefault();
+        emailPlaceLink(invite.getAttribute('data-invite-pid'));
     });
 
     // "Attest" button (map popup + geometry-less overlay). The authoring flow is
@@ -1766,6 +1776,16 @@ function copyPlaceLink(pid) {
     } else {
         fallback();
     }
+}
+
+// Email a place's shareable link to someone (place#155). Opens the invitation
+// dialog with the link pre-filled; the server re-validates it against the
+// WHG-origin allowlist, so this is convenience, not trust.
+function emailPlaceLink(pid) {
+    if (!pid) return;
+    const url = `/invite/?kind=view&url=${encodeURIComponent(buildPlaceShareUrl(pid))}`;
+    if (typeof window.openWHGModal === 'function') window.openWHGModal(url);
+    else window.location.href = url;   // modal bundle absent — fall back to the page
 }
 
 // Lightweight transient toast (bottom-centre) for copy confirmation.

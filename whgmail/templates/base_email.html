@@ -37,7 +37,7 @@
 </head>
 <body>
     <div>
-    	<p><b>Greetings, {{ greeting_name }}!</b></p>
+    	{% block greeting %}<p><b>Greetings, {{ greeting_name }}!</b></p>{% endblock %}
         {% block content %}
         {% endblock %}
         <p>Regards,</p>

@@ -17,6 +17,39 @@ class AnnouncementForm(forms.ModelForm):
         }
 
 
+class InviteForm(forms.Form):
+    """Email invitation (place#155). Deliberately minimal: one recipient address, the
+    kind of invitation, and — for a "share this page" invitation — the link being shared.
+
+    There is no message field. A sender-authored note is the whole spam-payload surface;
+    without it the message body is fixed template text, so the only sender-controlled
+    content reaching the recipient is a URL validated against a WHG-origin allowlist
+    (``main.invitations.validate_target_url``). We also don't ask for the recipient's
+    name — it would be one more piece of someone else's personal data, transient or not.
+    """
+    to_email = forms.EmailField(
+        required=True,
+        label="Their email address",
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'name@example.org',
+            'autocomplete': 'off',
+        }),
+    )
+    kind = forms.ChoiceField(
+        choices=[('view', 'Share a page'), ('join', 'Invitation to join')],
+        required=True,
+        widget=forms.HiddenInput(),
+    )
+    target_url = forms.CharField(required=False, widget=forms.HiddenInput())
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('kind') == 'view' and not (cleaned.get('target_url') or '').strip():
+            raise forms.ValidationError('There is no link to share.')
+        return cleaned
+
+
 class ContactForm(forms.Form):
     name = forms.CharField(
         widget=forms.TextInput(attrs={'size': 50}),

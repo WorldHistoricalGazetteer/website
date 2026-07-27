@@ -30,7 +30,7 @@ import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
-import { aatTooltipHtml, aatUrl, ccName } from './gazetteerInteraction.js';
+import { aatTooltipHtml, aatUrl, ccName, isLoggedIn } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -246,6 +246,13 @@ const PlaceList = {
             if (share) {
                 e.stopPropagation();
                 if (this.cfg.copyLink) this.cfg.copyLink(share.dataset.pid);
+                return;
+            }
+            // The envelope button emails that link — also not a row-open.
+            const invite = e.target.closest('.pl-invite');
+            if (invite) {
+                e.stopPropagation();
+                if (this.cfg.emailLink) this.cfg.emailLink(invite.dataset.pid);
                 return;
             }
             // A click on an AAT type-chip link opens Getty — don't also open the place.
@@ -498,8 +505,16 @@ const PlaceList = {
               + ` title="Copy a link to this place" aria-label="Copy link to this place">`
               + `<i class="fas fa-share-nodes"></i></button>`
             : '';
+        // Email the same link (place#155) — signed-in users only, since it sends
+        // mail in their name.
+        const inviteBtn = (hit.place_id && isLoggedIn())
+            ? `<button type="button" class="pl-invite" data-pid="${esc(hit.place_id)}"`
+              + ` title="Email a link to this place" aria-label="Email a link to this place">`
+              + `<i class="fas fa-envelope"></i></button>`
+            : '';
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
             + shareBtn
+            + inviteBtn
             + `<div class="pl-row-title">${title}</div>`
             + variants
             + `<div class="pl-row-meta">${meta}</div>`

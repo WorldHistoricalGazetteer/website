@@ -169,6 +169,10 @@ urlpatterns = [
                   path('licenses/data.json', licensing_views.licenses_json, name='licenses-json'),
                   path('terms_of_use/', views.terms_of_use_view, name='terms_of_use'),
                   path('privacy_policy/', views.privacy_policy_view, name='privacy_policy'),
+                  # Email invitations (place#155) — share a page / invite someone to register.
+                  path('invite/', views.invite_modal_view, name='invite-modal'),
+                  path('invite/unsubscribe/<str:token>/', views.invite_unsubscribe_view,
+                       name='invite-unsubscribe'),
                   path('success/', views.contactSuccessView, name='success'),
                   path('status/', views.statusView, name='status'),
                   path('create_link/', views.create_link, name="create-link"),
