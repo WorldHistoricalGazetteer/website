@@ -1762,6 +1762,22 @@ function gazetteerForPid(pid) {
     return (pid && pid.indexOf(':') > 0) ? pid.slice(0, pid.indexOf(':')) : null;
 }
 
+// ── Anonymous share analytics (Plausible custom event) ───────────────────────
+// Cookieless, no user id, no place id — just how a share was performed and which
+// gazetteer it came from, so we can tell whether the mobile share sheet is worth
+// keeping (place#155 follow-up: Atlas mobile traffic is currently near zero).
+// Only clipboard and share-sheet are counted here; emailed invitations already
+// leave a server-side row (InvitationSendLog), and counting them again client-side
+// would double them. Mirrors the MyD track() helper in reconciliation.js.
+function trackShare(method, pid) {
+    try {
+        if (typeof window.plausible !== 'function') return;
+        window.plausible('Atlas: share', {
+            props: { method, gazetteer: gazetteerForPid(pid) || 'unknown' },
+        });
+    } catch (e) { /* analytics must never break the map */ }
+}
+
 // A clean, shareable URL for a place: origin + path + ?gazetteer=&place=.
 function buildPlaceShareUrl(pid) {
     const url = new URL(window.location.origin + window.location.pathname);
@@ -1779,7 +1795,7 @@ function buildPlaceShareUrl(pid) {
 function copyPlaceLink(pid) {
     if (!pid) return;
     const link = buildPlaceShareUrl(pid);
-    const ok = () => showCopyToast('Link copied to clipboard');
+    const ok = () => { trackShare('copy', pid); showCopyToast('Link copied to clipboard'); };
     const fallback = () => { try { window.prompt('Copy this link:', link); } catch (e) { /* */ } };
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(link).then(ok).catch(fallback);
@@ -1811,8 +1827,9 @@ function nativeSharePlace(pid, title) {
         title: `${name} — World Historical Gazetteer`,
         text: `${name} on the World Historical Gazetteer`,
         url,
-    }).catch((err) => {
-        // AbortError just means the user dismissed the sheet — not a failure.
+    }).then(() => trackShare('sheet', pid)).catch((err) => {
+        // AbortError just means the user dismissed the sheet — not a failure, and not
+        // a share, so it isn't counted.
         if (err && err.name === 'AbortError') return;
         // Anything else (no compatible target, permission refused): fall back to the
         // behaviour they'd have got on desktop rather than leaving the tap dead.
