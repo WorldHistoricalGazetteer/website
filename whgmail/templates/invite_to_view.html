@@ -1,7 +1,9 @@
 {% extends "base_email.html" %}
-{# place#155 — "look at this" invitation. Entirely templated: the only sender-supplied
-   value is target_url, validated server-side against a WHG-origin allowlist. We do not
-   collect the recipient's name, hence the generic greeting. #}
+{% comment %}
+place#155 — "look at this" invitation. Entirely templated: the only sender-supplied
+value is target_url, validated server-side against a WHG-origin allowlist. We do not
+collect the recipient's name, hence the generic greeting.
+{% endcomment %}
 
 {% block greeting %}<p><b>Hello,</b></p>{% endblock %}
 

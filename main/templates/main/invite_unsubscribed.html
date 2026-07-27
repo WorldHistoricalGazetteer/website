@@ -1,6 +1,8 @@
 {% extends "main/base_webpack.html" %}
-{# NB: overriding {% block title %} means supplying our own <title> tags, or the text
-   bleeds into the body (place#151). #}
+{% comment %}
+NB: overriding the title block means supplying our own <title> tags, or the text
+bleeds into the body (place#151).
+{% endcomment %}
 {% block title %}<title>WHG :: Invitations</title>{% endblock %}
 
 {% block content %}

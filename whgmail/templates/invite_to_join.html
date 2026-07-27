@@ -1,7 +1,9 @@
 {% extends "base_email.html" %}
-{# place#155 — "come and join" invitation. No target URL: instead, the sign-up route
-   (which is the login page — a newcomer told to "log in" with no account will bounce,
-   so we say so explicitly) plus the public landing pages. #}
+{% comment %}
+place#155 — "come and join" invitation. No target URL: instead, the sign-up route
+(which is the login page — a newcomer told to "log in" with no account will bounce,
+so we say so explicitly) plus the public landing pages.
+{% endcomment %}
 
 {% block greeting %}<p><b>Hello,</b></p>{% endblock %}
 

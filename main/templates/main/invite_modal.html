@@ -1,6 +1,10 @@
-{# place#155 — invitation dialog, loaded via data-whg-modal. The two direct children of
-   .modal-body are what whg-modal.js toggles on a successful JSON response, so keep
-   exactly two (form content, then confirmation). #}
+{% comment %}
+place#155 — invitation dialog, loaded via data-whg-modal. The two direct children of
+.modal-body are what whg-modal.js toggles on a successful JSON response, so keep
+exactly two (form content, then confirmation).
+
+NB: {# #} is single-line only — a multi-line one renders verbatim (place#151).
+{% endcomment %}
 <form id="inviteForm" method="post" data-url="{% url 'invite-modal' %}" class="needs-validation" novalidate>
     {% csrf_token %}
     <div class="modal-header">
