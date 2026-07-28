@@ -8,6 +8,7 @@ urlpatterns = [
     # path('register/', views.register, name='register'),
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
+    path('orcid/claim/', views.orcid_claim, name='orcid_claim'),
     path('orcid-denied-modal/', views.orcid_denied_modal, name='orcid_denied_modal'),
 
     path('profile/api-token/', views.ProfileAPITokenView.as_view(), name='profile-api-token'),

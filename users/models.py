@@ -90,6 +90,12 @@ class User(AbstractUser, PermissionsMixin):
     orcid = models.URLField(max_length=255, unique=True, null=True, blank=True)
     orcid_refresh_token = EncryptedTextField(null=True, blank=True)
     orcid_token_expires_at = models.DateTimeField(null=True, blank=True)
+    # When the account became ORCiD-backed (set at ORCiD-native creation, or when a legacy account
+    # is linked via the ORCiD claim flow — see accounts/views.py::orcid_claim).
+    orcid_linked_at = models.DateTimeField(null=True, blank=True)
+    # True once the account is ORCiD-backed: password can no longer grant or claim a session for it.
+    # Native ORCiD accounts are retired at creation; legacy accounts on link.
+    legacy_login_retired = models.BooleanField(default=False)
 
     # Email can come from ORCID (opportunistically) or user input (mandatory for full functionality)
     email = EncryptedTextField(validators=[EmailValidator()], null=True, blank=True)

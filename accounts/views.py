@@ -51,47 +51,33 @@ def build_orcid_authorize_url(request):
 
 def login(request):
     if request.method == 'POST':
-        # Legacy WHG Login -> ORCiD
+        # In production ORCiD is the ONLY sign-in route — there is no public
+        # password login, so a legacy account can only be reached by signing in
+        # with ORCiD and claiming it (see orcid_claim). This closes the previous
+        # password-only path that let legacy users skip ORCiD verification.
+        if settings.ORCID_ENFORCED:
+            messages.error(request, "Please sign in with ORCiD.")
+            return redirect('accounts:login')
+
+        # Non-production (dev/local) password bypass: the ORCiD (sandbox)
+        # redirect is unreliable off production, so allow a direct password
+        # sign-in here to keep those environments usable.
         username = request.POST.get('username', '').strip()
         password = request.POST.get('password', '').strip()
-        orcid_auth_url = request.POST.get('orcid_auth_url', '')
 
-        # Check for missing fields
         if not username or not password:
             messages.error(request, "Both Username and Password are required.")
             return redirect("accounts:login")
 
-        try:
-            user = auth.authenticate(request, username=username, password=password,
-                                     backend='django.contrib.auth.backends.ModelBackend')
-            if user is not None:
-                auth.login(request, user)
-
-                # DEBUG MODE BYPASS: Skip ORCiD for local development
-                if settings.DEBUG:
-                    logger.info(f"DEBUG mode: Skipping ORCiD authorization for user {username}")
-                    messages.success(request, f"Welcome back, {user.get_full_name() or username}! (DEBUG mode - ORCiD bypassed)")
-                    return redirect('home')
-
-                # Production: Redirect to the ORCiD authorisation URL if provided
-                if orcid_auth_url:
-                    # Ensure the ORCiD URL is valid
-                    if orcid_auth_url.startswith(settings.ORCID_BASE):
-                        return redirect(orcid_auth_url)
-                    else:
-                        logger.error("Invalid ORCiD authorisation URL.")
-                        return redirect('accounts:login')
-                else:
-                    # No ORCiD URL provided, redirect to home
-                    return redirect('home')
-            else:
-                # Authentication fails
-                messages.error(request, "Invalid password.")
-                return redirect('accounts:login')
-        except User.DoesNotExist:
-            # User not found
-            messages.error(request,
-                           "<h4><i class='fas fa-triangle-exclamation'></i> Invalid WHG username.</h4><p>Please correct this and try again.</p>")
+        user = auth.authenticate(request, username=username, password=password,
+                                 backend='django.contrib.auth.backends.ModelBackend')
+        if user is not None:
+            auth.login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            logger.info(f"Non-prod password sign-in for user {username} (ORCiD not enforced)")
+            messages.success(request, f"Welcome back, {user.get_full_name() or username}!")
+            return redirect('home')
+        else:
+            messages.error(request, "Invalid username or password.")
             return redirect('accounts:login')
     else:
         # Prevent login page view if user is already authenticated
@@ -104,9 +90,79 @@ def login(request):
             'accounts/login.html',
             context={
                 "orcid_auth_url": build_orcid_authorize_url(request),
-                "debug": settings.DEBUG,
+                # Show the legacy password form only where ORCiD is not enforced.
+                "show_legacy_login": not settings.ORCID_ENFORCED,
             }
         )
+
+
+def orcid_claim(request):
+    """
+    Landing step after an ORCiD sign-in that matched no existing account. The
+    verified ORCiD identity is held in the session (``pending_orcid``); the user
+    either creates a fresh WHG account or claims (links) an existing legacy
+    account by proving ownership with their old username + password. No session
+    is granted until an ORCiD is attached to an account.
+    """
+    from accounts.orcid import apply_orcid_profile
+    from django.utils.timezone import now
+
+    profile = request.session.get('pending_orcid')
+    if not profile:
+        return redirect('accounts:login')
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'new':
+            # Create a fresh, ORCiD-native account.
+            user = User(orcid=profile['orcid_id'])
+            apply_orcid_profile(user, profile)
+            user.orcid_linked_at = now()
+            user.legacy_login_retired = True  # native ORCiD account — no password login
+            user.save()
+            request.session.pop('pending_orcid', None)
+            auth.login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            request.session["_needs_news_check"] = True
+            logger.info(f"Created new ORCiD account {user.username} ({profile['orcid_identifier']})")
+            return redirect('profile-edit')
+
+        if action == 'link':
+            username = request.POST.get('username', '').strip()
+            password = request.POST.get('password', '').strip()
+            if not username or not password:
+                messages.error(request, "Enter your existing WHG username and password to link your account.")
+                return redirect('accounts:orcid_claim')
+
+            legacy = auth.authenticate(request, username=username, password=password,
+                                       backend='django.contrib.auth.backends.ModelBackend')
+            if legacy is None:
+                messages.error(request, "Invalid WHG username or password.")
+                return redirect('accounts:orcid_claim')
+            if legacy.orcid:
+                messages.error(request, "That WHG account is already linked to an ORCiD.")
+                return redirect('accounts:orcid_claim')
+            if User.objects.filter(orcid=profile['orcid_id']).exclude(pk=legacy.pk).exists():
+                messages.error(request, "This ORCiD is already linked to another account.")
+                return redirect('accounts:orcid_claim')
+
+            apply_orcid_profile(legacy, profile)
+            legacy.orcid_linked_at = now()
+            legacy.legacy_login_retired = True
+            legacy.save()
+            request.session.pop('pending_orcid', None)
+            auth.login(request, legacy, backend='django.contrib.auth.backends.ModelBackend')
+            logger.info(f"Linked ORCiD {profile['orcid_identifier']} to legacy account {legacy.pk}")
+            messages.success(request, "Your existing WHG account is now linked to your ORCiD.")
+            return redirect('home')
+
+        return redirect('accounts:orcid_claim')
+
+    return render(request, 'accounts/orcid_claim.html', context={
+        "orcid_identifier": profile.get('orcid_identifier'),
+        "given_name": profile.get('given_name'),
+        "orcid_email": profile.get('email'),
+    })
 
 
 def logout(request):

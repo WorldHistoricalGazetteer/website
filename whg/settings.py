@@ -502,6 +502,14 @@ AUTHENTICATION_BACKENDS = (
     'accounts.orcid.OIDCBackend',
 )
 
+# Enforce ORCiD-only sign-in (no public password login) — PRODUCTION ONLY. Legacy accounts are
+# linked *after* an ORCiD sign-in via the claim flow (accounts/views.py::orcid_claim). Non-prod
+# environments keep a password bypass because the ORCiD (sandbox) redirect is unreliable off
+# production. Tied to ENV_CONTEXT so it cannot be flipped without changing the whole environment
+# identity — there is no runtime switch that could quietly re-open the unverified password path and
+# undermine data-provenance guarantees. Staff retain the is_staff-gated /admin/login/ regardless.
+ORCID_ENFORCED = (ENV_CONTEXT == 'whgazetteer-org')
+
 # Elasticsearch settings: fields used for Search and Accession on the `pub` and `whg` indexes
 STANDARD_FIELDS = [
     "names.toponym.text^3",  # Primary, flexible matching

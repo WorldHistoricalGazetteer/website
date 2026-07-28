@@ -165,27 +165,24 @@
 
             <p>
                 <strong>
-                    <i class="fas fa-exclamation-circle text-danger me-1"></i>Warning:
-                </strong> If you already have a Legacy WHG account, you must use the <b>Legacy WHG Login</b> and <b>Link ORCiD</b>
-                button
-                so that your account and existing data can be linked. You will not be able to link your old account
-                later.
+                    <i class="fas fa-info-circle text-primary me-1"></i>Already have a legacy WHG account?
+                </strong>
+                Just <b>Sign in with ORCiD</b> above. During sign-in we'll offer to link your existing
+                WHG account &mdash; and all its data &mdash; to your ORCiD iD. You only need to do this once.
             </p>
         </div>
 
         <div class="col-md-5 ps-md-4">
-            {% if debug %}
+            {% if show_legacy_login %}
             <div class="alert alert-warning mb-3" role="alert">
-                <i class="fas fa-code me-2"></i><strong>DEBUG MODE:</strong> ORCiD authorization bypassed.
-                You can login with just username and password.
+                <i class="fas fa-flask me-2"></i><strong>Non-production environment:</strong> ORCiD sign-in
+                is unreliable here, so you can sign in directly with a WHG username and password.
             </div>
-            {% endif %}
             <h4 class="text-muted">
-                <i class="fas fa-sign-in-alt me-2"></i>Legacy WHG Login
+                <i class="fas fa-sign-in-alt me-2"></i>WHG Login
             </h4>
             <form method="post" action="{% url 'accounts:login' %}">
                 {% csrf_token %}
-                <input type="hidden" name="orcid_auth_url" value="{{ orcid_auth_url }}">
                 <div class="mb-3">
                     <input
                             type="text"
@@ -218,12 +215,29 @@
                             class="btn btn-light rounded d-inline-flex align-items-center pe-4 py-2 shadow-sm my-4"
                             style="border: 1px solid #ced4da; color: #333; font-size: 1.2rem; font-weight: 500;">
                         <img src="/static/images/whg_logo.svg" alt="WHG" width="50" height="38">
-                        <i class="fas fa-link"></i>
-                        <i class="fab fa-orcid me-3" style="color: #a6ce39; font-size: 2.5rem;"></i>
-                        Link ORCiD
+                        <i class="fas fa-sign-in-alt ms-2"></i>
+                        Sign in
                     </button>
                 </div>
             </form>
+            {% else %}
+            <div class="card border-0 bg-light h-100">
+                <div class="card-body">
+                    <h5 class="text-muted">
+                        <i class="fab fa-orcid me-2" style="color: #a6ce39;"></i>One front door
+                    </h5>
+                    <p class="mb-2">
+                        Every sign-in now goes through ORCiD. This keeps your WHG contributions tied to a
+                        verified scholarly identity, protecting the provenance of the data you add.
+                    </p>
+                    <p class="mb-0">
+                        <strong>Legacy user?</strong> Sign in with ORCiD and choose
+                        <em>&ldquo;I already have a WHG account&rdquo;</em> when prompted &mdash; you'll link
+                        your old account and its data in one step.
+                    </p>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -125,6 +125,62 @@ def get_web_page(orcid_record: dict) -> str | None:
     return first.get("value")
 
 
+def build_orcid_profile(orcid_id: str, record: dict, token_json: dict) -> dict:
+    """
+    Extract the WHG-relevant fields from an ORCiD record + token into a plain,
+    session-serialisable dict. Shared by the sign-in and claim flows so account
+    creation and legacy linking apply identical data.
+    """
+    record = record or {}
+    token_json = token_json or {}
+    orcid_identifier = orcid_id.rsplit('/', 1)[-1] if "/" in orcid_id else orcid_id
+
+    person = record.get("person", {})
+    name_obj = person.get("name", {}) if person else {}
+    given_name = name_obj.get("given-names", {}).get("value") or ""
+    family_name_obj = name_obj.get("family-name")
+    family_name = family_name_obj.get("value") if family_name_obj else ""
+
+    username_parts = [given_name] if given_name else []
+    if family_name:
+        username_parts.append(family_name)
+    username_parts.append(orcid_identifier)
+    new_username = "-".join(username_parts).replace(' ', '_')
+
+    return {
+        "orcid_id": orcid_id,
+        "orcid_identifier": orcid_identifier,
+        "username": new_username,
+        "given_name": given_name,
+        "family_name": family_name,
+        "email": get_best_email(record),
+        "affiliation": get_affiliation(record) or "",
+        "web_page": get_web_page(record) or "",
+        "refresh_token": token_json.get("refresh_token"),
+        "expires_in": token_json.get("expires_in"),
+    }
+
+
+def apply_orcid_profile(user, profile: dict, *, trust_email: bool = True) -> None:
+    """
+    Apply an ORCiD profile dict onto a User instance (does NOT save). The email
+    is adopted only when the account has no verified email of its own.
+    """
+    user.orcid = profile["orcid_id"]
+    user.username = profile["username"]
+    if trust_email and not user.has_verified_email and profile.get("email"):
+        user.email = profile["email"]
+        user.email_confirmed = True  # Trust ORCiD-verified emails
+    user.given_name = profile["given_name"]
+    user.surname = profile["family_name"]
+    user.affiliation = profile["affiliation"]
+    user.web_page = profile["web_page"]
+    user.orcid_refresh_token = profile.get("refresh_token")
+    expires_in = profile.get("expires_in")
+    if expires_in is not None:
+        user.orcid_token_expires_at = now() + timedelta(seconds=expires_in)
+
+
 class OIDCBackend(BaseBackend):
 
     def authenticate(self, request, orcid_id=None, record=None, token_json=None, **kwargs):
@@ -320,17 +376,38 @@ def orcid_callback(request):
         logger.warning(f"Failed to fetch ORCID record: {e}")
         messages.warning(request, "Could not retrieve full ORCiD record; some fields may be missing.")
 
-    # --- Authenticate user in Django ---
-    user = auth.authenticate(request, orcid_id=orcid_id, record=record, token_json=token_json, backend=OIDCBackend)
-    if user:
-        auth.login(request, user)
-        if getattr(user, "_needs_news_check", False):
-            request.session["_needs_news_check"] = True
+    # --- Resolve the ORCiD identity ---
+    profile = build_orcid_profile(orcid_id, record, token_json)
+
+    # (a) An already-authenticated legacy user linking ORCiD to their own account.
+    if request.user.is_authenticated and not request.user.orcid:
+        if User.objects.filter(orcid=orcid_id).exclude(pk=request.user.pk).exists():
+            messages.error(request, "This ORCiD is already linked to another account.")
             return redirect("profile-edit")
+        apply_orcid_profile(request.user, profile)
+        request.user.orcid_linked_at = now()
+        request.user.legacy_login_retired = True
+        with transaction.atomic():
+            request.user.save()
+        messages.success(request, "Your ORCiD has been linked to your WHG account.")
+        return redirect("profile-edit")
+
+    # (b) Sign in an account that already carries this ORCiD.
+    existing = User.objects.filter(orcid=orcid_id).first()
+    if existing:
+        apply_orcid_profile(existing, profile)
+        with transaction.atomic():
+            existing.save()
+        auth.login(request, existing, backend="django.contrib.auth.backends.ModelBackend")
         return redirect("home")
 
-    logger.warning("ORCID authentication failed.")
-    return redirect("accounts:login")
+    # (c) No account carries this ORCiD yet — do NOT auto-create. Stash the
+    #     verified ORCiD identity in the session and send the user to the claim
+    #     page to either create a new account or link (claim) an existing legacy
+    #     account. This is the enforcement point: a session is only ever granted
+    #     once an ORCiD is attached to an account.
+    request.session["pending_orcid"] = profile
+    return redirect("accounts:orcid_claim")
 
 
 def revoke_orcid_token(refresh_token: str) -> bool:
