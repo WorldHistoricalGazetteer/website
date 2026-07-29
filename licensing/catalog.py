@@ -48,17 +48,38 @@ SECTIONS = [
     ("restricted", "Custom & restricted terms",
      "Bespoke terms recorded in WHG. Always consult the rights statement on the "
      "individual dataset, collection or gazetteer record."),
+    ("unspecified", "Terms not specified by the rights holder",
+     "The source publishes no licence grant either way, so neither permission "
+     "nor prohibition can be assumed. Attribution and any stated disclaimer "
+     "still apply; ask the rights holder before relying on any other use."),
 ]
 
 _SECTION_TITLES = {key: title for key, title, _ in SECTIONS}
+
+
+# Terms that forbid onward redistribution, whatever else they allow. Grouped
+# apart from "non-commercial" because the operative constraint for WHG is
+# different: we may index them but may never hand out a copy.
+_NO_REDISTRIBUTION_IDS = {
+    "custom-all-rights-reserved",
+    "custom-academic-use",
+    "custom-chgis-academic",
+    "custom-ukds-eul",
+    "custom-nativeland-dst",
+}
 
 
 def _category(lic):
     sid = lic.spdx_id
     if "public-domain" in sid or sid.startswith("CC0"):
         return "public_domain"
-    if "all-rights-reserved" in sid or "academic" in sid:
+    if sid in _NO_REDISTRIBUTION_IDS or "all-rights-reserved" in sid or "academic" in sid:
         return "restricted"
+    # Tri-state: None means no grant is evidenced either way. It must not fall
+    # through to "noncommercial" (which would assert a restriction we cannot
+    # evidence) nor to "attribution" (which would imply commercial use is fine).
+    if lic.permits_commercial is None:
+        return "unspecified"
     if not lic.permits_commercial:
         return "noncommercial"
     if lic.share_alike:
@@ -67,8 +88,12 @@ def _category(lic):
 
 
 def _no_derivatives(lic):
-    """True when the licence forbids adaptations (CC …-ND-…); None for custom
-    terms, where the answer is bespoke and not encoded in the flags."""
+    """True when the licence forbids adaptations, None where bespoke terms leave
+    it unstated. Now a stored field — the SPDX id cannot express bespoke terms —
+    but fall back to the old derivation for any row predating the backfill."""
+    value = getattr(lic, "no_derivatives", None)
+    if value is not None:
+        return value
     if lic.custom:
         return None
     return "ND" in lic.spdx_id.split("-")
@@ -108,6 +133,9 @@ def license_entry(lic):
         "deed_note": _deed_note(lic, deed_url),
         "spdx_url": lic.spdx_url,
         "custom": lic.custom,
+        # False for one named institution's terms — real vocabulary, but not a
+        # meaningful choice for a contributor's own data.
+        "contributor_selectable": lic.contributor_selectable,
         "permits_commercial": lic.permits_commercial,
         "share_alike": lic.share_alike,
         "attribution_required": lic.attribution_required,

@@ -211,7 +211,7 @@
     <div class="lic-grid">
       {% for lic in section.licenses %}
       <article class="lic-card"
-        data-commercial="{% if lic.permits_commercial %}1{% else %}0{% endif %}"
+        data-commercial="{% if lic.permits_commercial is None %}unknown{% elif lic.permits_commercial %}1{% else %}0{% endif %}"
         data-adaptations="{% if lic.no_derivatives is None %}unknown{% elif lic.no_derivatives %}0{% else %}1{% endif %}"
         data-attribution="{% if lic.attribution_required %}1{% else %}0{% endif %}"
         data-sharealike="{% if lic.share_alike %}1{% else %}0{% endif %}">
@@ -227,9 +227,13 @@
         {% if lic.notes %}<p class="lc-notes">{{ lic.notes }}</p>{% endif %}
 
         <ul class="lc-props">
+          {% if lic.permits_commercial is None %}
+          <li class="lc-prop unknown"><i class="fas fa-circle-info"></i>Commercial use: see terms</li>
+          {% else %}
           <li class="lc-prop perm {% if lic.permits_commercial %}yes{% else %}no{% endif %}">
             <i class="fas {% if lic.permits_commercial %}fa-check{% else %}fa-xmark{% endif %}"></i>Commercial use
           </li>
+          {% endif %}
           {% if lic.no_derivatives is None %}
           <li class="lc-prop unknown"><i class="fas fa-circle-info"></i>Adaptations: see terms</li>
           {% else %}
@@ -245,10 +249,18 @@
           </li>
         </ul>
 
-        {% if not lic.permits_commercial or lic.no_derivatives %}
+{% comment %}"By arrangement" is only meaningful where the licence FORBIDS the axis.
+        `permits_commercial` is tri-state: an unstated grant (None) is not a prohibition,
+        so there is nothing to offer around (place#157).{% endcomment %}
+        {% if lic.permits_commercial is False or lic.no_derivatives %}
         <p class="lc-arrange"><span class="arr-emoji">🤝</span> Contributors can offer
-          {% if not lic.permits_commercial and lic.no_derivatives %}commercial use and adaptations{% elif not lic.permits_commercial %}commercial use{% else %}adaptations{% endif %}
+          {% if lic.permits_commercial is False and lic.no_derivatives %}commercial use and adaptations{% elif lic.permits_commercial is False %}commercial use{% else %}adaptations{% endif %}
           <strong>by arrangement</strong>.</p>
+        {% endif %}
+        {% if not lic.contributor_selectable %}
+        <p class="lc-arrange"><span class="arr-emoji">🏛️</span> These are one source's own terms,
+          recorded so that source can be described accurately. They are <strong>not offered as a
+          choice</strong> for your own contributions.</p>
         {% endif %}
 
         <div class="lc-links">

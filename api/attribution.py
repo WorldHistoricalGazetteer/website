@@ -21,20 +21,9 @@ from api.reconcile_helpers import get_namespace
 _LICENSE_FIELDS = (
     'license__spdx_id', 'license__label', 'license__url',
     'license__permits_commercial', 'license__share_alike',
-    'license__attribution_required', 'license__custom',
+    'license__attribution_required', 'license__no_derivatives',
+    'license__custom',
 )
-
-
-def _no_derivatives(spdx_id, custom):
-    """True when the licence forbids adaptations (CC …-ND-…); None for custom
-    terms, where the answer is bespoke and not encoded in the flags.
-
-    Not a model field — derived, mirroring ``licensing.catalog._no_derivatives``
-    so the API and the public /licenses/ page cannot disagree.
-    """
-    if custom:
-        return None
-    return 'ND' in (spdx_id or '').split('-')
 
 
 def _license_object(row, url_override=None):
@@ -51,10 +40,14 @@ def _license_object(row, url_override=None):
         'spdx_id': spdx,
         'label': row.get('license__label') or '',
         'url': url_override or row.get('license__url') or '',
+        # `permits_commercial` and `no_derivatives` are TRI-STATE: null means the
+        # rights holder grants nothing either way (e.g. UN Geospatial data), which
+        # is not the same as a prohibition. Consumers must test for null before
+        # treating either as a boolean (place#157).
         'permits_commercial': row.get('license__permits_commercial'),
         'share_alike': row.get('license__share_alike'),
         'attribution_required': row.get('license__attribution_required'),
-        'no_derivatives': _no_derivatives(spdx, row.get('license__custom')),
+        'no_derivatives': row.get('license__no_derivatives'),
         'custom': row.get('license__custom'),
     }
 

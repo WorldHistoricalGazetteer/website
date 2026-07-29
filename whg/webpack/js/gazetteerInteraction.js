@@ -624,6 +624,10 @@ function licenceClass(a) {
         spdx.indexOf('PUBLIC') === 0 || (pc === true && ar === false)) {
         return 'lic-open';
     }
+    // `permits_commercial` is tri-state: null means the source grants nothing
+    // either way. Tested BEFORE the restrictive bucket so it reads as neither a
+    // permission nor a prohibition (place#157). Server twin: search.views._licence_pill.
+    if (pc === null || pc === undefined) return 'lic-unknown';
     // Restrictive: non-commercial, all-rights-reserved, or bespoke terms.
     if (pc === false || spdx.includes('-NC') || spdx.includes('ARR') ||
         custom === true) {

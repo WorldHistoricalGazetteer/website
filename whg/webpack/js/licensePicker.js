@@ -56,6 +56,9 @@ function esc(s) {
 // actually forbids the axis (custom licences have unknown adaptations → skip).
 function offersFor(entry) {
   return {
+    // Strictly `=== false`: where the grant is simply unstated (null) there is
+    // nothing for the contributor to offer "by arrangement" — the licence does
+    // not forbid it, so the offer would be meaningless.
     commercial: entry && entry.permits_commercial === false,
     adaptations: !!(entry && entry.no_derivatives === true),
   };
@@ -126,15 +129,23 @@ function propsHtml(e) {
   const adapt = e.no_derivatives === null
     ? `<li class="lp-prop unknown"><i class="fas fa-circle-info"></i>Adaptations: see terms</li>`
     : perm(!e.no_derivatives, 'Adaptations');
+  // `permits_commercial` is tri-state like `no_derivatives`: null means the
+  // rights holder grants nothing either way, so it must not render as a hard
+  // "✗ Commercial use" (place#157).
+  const comm = e.permits_commercial === null || e.permits_commercial === undefined
+    ? `<li class="lp-prop unknown"><i class="fas fa-circle-info"></i>Commercial use: see terms</li>`
+    : perm(e.permits_commercial, 'Commercial use');
   return `<ul class="lp-props">`
-    + perm(e.permits_commercial, 'Commercial use') + adapt
+    + comm + adapt
     + cond(e.attribution_required, 'Attribution') + cond(e.share_alike, 'ShareAlike')
     + `</ul>`;
 }
 
 function cardHtml(e, currentId) {
   const isCurrent = currentId && e.spdx_id === currentId;
-  const dataset = `data-commercial="${e.permits_commercial ? 1 : 0}" `
+  const commAttr = e.permits_commercial === null || e.permits_commercial === undefined
+    ? 'unknown' : (e.permits_commercial ? 1 : 0);
+  const dataset = `data-commercial="${commAttr}" `
     + `data-adaptations="${e.no_derivatives === null ? 'unknown' : (e.no_derivatives ? 0 : 1)}" `
     + `data-attribution="${e.attribution_required ? 1 : 0}" `
     + `data-sharealike="${e.share_alike ? 1 : 0}"`;
@@ -275,10 +286,19 @@ function finish(spdxOrNull, flags) {
 
 function renderCards(catalog, currentId) {
   const wrap = _root.querySelector('.lp-cards');
+  // Every entry stays resolvable by id (a record may already CARRY a licence
+  // that isn't offered as a choice — e.g. an authority's own institutional
+  // terms — and it must still render, not vanish)...
   _byId = {};
   (catalog.entries || []).forEach((e) => { _byId[e.spdx_id] = e; });
+  // ...but only genuinely choosable licences are OFFERED. One named
+  // institution's EULA is real vocabulary yet meaningless as a choice for a
+  // contributor's own data (place#157). Entries predating the flag default to
+  // selectable.
+  const offered = (catalog.entries || [])
+    .filter((e) => e.contributor_selectable !== false || e.spdx_id === currentId);
   const bySection = {};
-  (catalog.entries || []).forEach((e) => { (bySection[e.category] = bySection[e.category] || []).push(e); });
+  offered.forEach((e) => { (bySection[e.category] = bySection[e.category] || []).push(e); });
   wrap.innerHTML = (catalog.sections || []).map((s) => {
     const cards = (bySection[s.key] || []).map((e) => cardHtml(e, currentId)).join('');
     if (!cards) return '';

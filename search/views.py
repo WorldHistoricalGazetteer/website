@@ -152,6 +152,12 @@ def _licence_pill(row):
     elif ('CC0' in up or 'PDDL' in up or up.startswith('PUBLIC')
           or (pc is True and ar is False)):
         cls = 'lic-open'
+    # `permits_commercial` is tri-state: None means the source grants nothing
+    # either way. Tested BEFORE the open/restrictive buckets so it can never be
+    # read as a permission, and kept distinct from them so it doesn't read as a
+    # prohibition either (place#157).
+    elif pc is None:
+        cls = 'lic-unknown'
     elif pc is False or '-NC' in up or 'ARR' in up or custom is True:
         cls = 'lic-restrictive'
     else:

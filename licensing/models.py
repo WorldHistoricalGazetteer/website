@@ -20,14 +20,31 @@ class License(models.Model):
     url = models.URLField(blank=True, help_text="Canonical licence deed / terms URL.")
     spdx_uri = models.URLField(default="https://spdx.org/licenses/")
 
-    permits_commercial = models.BooleanField(default=True)
+    # Tri-state: NULL means "no grant either way is evidenced" — not "forbidden".
+    # Some sources (e.g. UN Geospatial data) publish no licence grant at all, and
+    # recording that as False would assert a restriction we cannot evidence, just
+    # as True would assert a permission we cannot evidence. Consumers must test
+    # ``is None`` before treating this as a boolean.
+    permits_commercial = models.BooleanField(default=True, null=True)
     share_alike = models.BooleanField(default=False)
     attribution_required = models.BooleanField(default=True)
+    # Whether the licence forbids adaptations (CC …-ND-…). Derivable from the
+    # SPDX id for standard licences, but bespoke terms have to state it, so it is
+    # held rather than computed. NULL = bespoke/unstated ("see terms").
+    no_derivatives = models.BooleanField(default=False, null=True)
 
     custom = models.BooleanField(
         default=False,
         help_text="True for bespoke / non-SPDX terms; "
                   "pair with rights_statement on the object.",
+    )
+    # False for terms that belong to one specific upstream source (a named
+    # institution's EULA, say). They must exist in the vocabulary so that source
+    # can be described accurately, but offering them to a WHG contributor as a
+    # choice for their OWN data would be meaningless.
+    contributor_selectable = models.BooleanField(
+        default=True,
+        help_text="Offer this licence in the contributor licence picker.",
     )
     notes = models.TextField(blank=True)
 
