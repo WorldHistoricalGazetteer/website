@@ -389,15 +389,31 @@ export default class LayerSourcesPalette {
      * Run ``fn`` once the map has settled, cancelling any earlier pending call.
      * Tiles for a new view arrive asynchronously and an empty count taken
      * mid-flight would trigger a pointless substitution.
+     *
+     * Never reads on the current frame, even when the map claims to be
+     * idle: immediately after ``moveend`` the tiles that are "loaded" are
+     * still the *previous* view's, so a count taken then describes where the
+     * user came from — which is exactly how a district-level view of Nebraska
+     * came back empty and got substituted away.
      */
     _whenSettled(fn) {
         const token = ++this._probeToken;
-        const run = () => { if (token === this._probeToken) fn(); };
-        if (heroMap.map.isMoving() || !heroMap.map.areTilesLoaded()) {
-            heroMap.map.once('idle', run);
-        } else {
-            run();
-        }
+        const map = heroMap.map;
+        let finished = false;
+        let waits = 0;
+        const attempt = () => {
+            if (finished || token !== this._probeToken) return;
+            if ((map.isMoving() || !map.areTilesLoaded()) && waits++ < 10) {
+                map.once('idle', attempt);
+                return;
+            }
+            finished = true;
+            fn();
+        };
+        map.once('idle', attempt);
+        // ...but do not wait for ever: with nothing left to render, the 'idle'
+        // subscribed above may never fire.
+        setTimeout(attempt, 1200);
     }
 
     /**
