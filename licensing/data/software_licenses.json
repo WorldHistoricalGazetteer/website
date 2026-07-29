@@ -1,0 +1,2184 @@
+{
+ "audited": "2026-07-29",
+ "revision": "8403759f",
+ "app_version": "3.2",
+ "python": {
+  "count": 175,
+  "packages": [
+   {
+    "name": "amqp",
+    "version": "5.1.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://github.com/celery/py-amqp",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "asgiref",
+    "version": "3.6.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/django/asgiref/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "async-timeout",
+    "version": "4.0.2",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/aio-libs/async-timeout",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "attrs",
+    "version": "22.2.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://www.attrs.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "beautifulsoup4",
+    "version": "4.11.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://www.crummy.com/software/BeautifulSoup/bs4/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "billiard",
+    "version": "4.2.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/celery/billiard",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "boto3",
+    "version": "1.43.49",
+    "license": "Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/boto/boto3",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "botocore",
+    "version": "1.43.49",
+    "license": "Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/boto/botocore",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "bs4",
+    "version": "0.0.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://pypi.python.org/pypi/beautifulsoup4",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "cached-property",
+    "version": "1.5.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/pydanny/cached-property",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "cachetools",
+    "version": "7.1.4",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "celery",
+    "version": "5.3.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://docs.celeryq.dev/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "celery-progress",
+    "version": "0.1.3",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/czue/celery-progress",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "certifi",
+    "version": "2026.6.17",
+    "license": "Mozilla Public License 2.0 (MPL 2.0)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/certifi/python-certifi",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "cffi",
+    "version": "2.1.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "chardet",
+    "version": "3.0.4",
+    "license": "GNU Library or Lesser General Public License (LGPL)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/chardet/chardet",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "charset-normalizer",
+    "version": "2.1.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/ousret/charset_normalizer",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "click",
+    "version": "8.4.2",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "click-default-group",
+    "version": "1.2.2",
+    "license": "Public Domain",
+    "declared": true,
+    "category": "public-domain",
+    "url": "https://github.com/sublee/click-default-group/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "click-didyoumean",
+    "version": "0.3.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "click-plugins",
+    "version": "1.1.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/click-contrib/click-plugins",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "click-repl",
+    "version": "0.2.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/untitaker/click-repl",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "colorama",
+    "version": "0.4.6",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "commonmark",
+    "version": "0.9.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/rtfd/commonmark.py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "cron-descriptor",
+    "version": "1.4.5",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/Salamek/cron-descriptor",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "cryptography",
+    "version": "49.0.0",
+    "license": "Apache-2.0 OR BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "datapackage",
+    "version": "1.15.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/frictionlessdata/datapackage-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "decorator",
+    "version": "5.1.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/micheles/decorator",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "deepdiff",
+    "version": "8.6.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "defusedxml",
+    "version": "0.7.1",
+    "license": "Python Software Foundation License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/tiran/defusedxml",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "Django",
+    "version": "4.2.30",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-bootstrap-breadcrumbs",
+    "version": "0.9.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://prymitive.github.com/bootstrap-breadcrumbs",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-bootstrap-modal-forms",
+    "version": "1.4.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/trco/django-bootstrap-modal-forms",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-celery-beat",
+    "version": "2.9.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/celery/django-celery-beat",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-cors-headers",
+    "version": "2.4.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/ottoyiu/django-cors-headers",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-datatables-view",
+    "version": "1.17.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://bitbucket.org/pigletto/django-datatables-view",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-debug-toolbar",
+    "version": "4.2.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-encrypted-model-fields",
+    "version": "0.6.5",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://gitlab.com/lansharkconsulting/django/django-encrypted-model-fields",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-extensions",
+    "version": "3.2.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://github.com/django-extensions/django-extensions",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-filter",
+    "version": "22.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/carltongibson/django-filter/tree/main",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-fontawesome",
+    "version": "1.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://www.github.com/redouane/django-fontawesome",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-geojson",
+    "version": "4.0.0",
+    "license": "LPGL, see LICENSE file.",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/makinacorpus/django-geojson",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-guardian",
+    "version": "2.3.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://github.com/django-guardian/django-guardian",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-health-check",
+    "version": "3.24.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-leaflet",
+    "version": "0.28.3",
+    "license": "LPGL, see LICENSE file.",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/makinacorpus/django-leaflet",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-maintenance-mode",
+    "version": "0.23.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-mathfilters",
+    "version": "0.4.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/dbrgn/django-mathfilters",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-multiselectfield",
+    "version": "0.1.12",
+    "license": "GNU Library or Lesser General Public License (LGPL)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/goinnn/django-multiselectfield",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-ranged-response",
+    "version": "0.2.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/wearespindle/django-ranged-fileresponse",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-redis",
+    "version": "5.4.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jazzband/django-redis",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-resized",
+    "version": "1.0.3",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/un1t/django-resized",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-shapeshifter",
+    "version": "18.9.23",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/kennethlove/django-shapeshifter",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-storages",
+    "version": "1.14.6",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-tables2",
+    "version": "2.3.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jieter/django-tables2/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-templated-mail",
+    "version": "1.1.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/sunscrapers/django-templated-mail",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-timezone-field",
+    "version": "5.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/mfogel/django-timezone-field/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-tinymce",
+    "version": "4.1.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-user-agents",
+    "version": "0.4.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/selwin/django-user_agents",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django-webpack-loader",
+    "version": "0.6.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/owais/django-webpack-loader",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "django_celery_results",
+    "version": "2.6.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/celery/django-celery-results",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "djangorestframework",
+    "version": "3.15.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://www.django-rest-framework.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "djangorestframework-datatables",
+    "version": "0.7.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/izimobil/django-rest-framework-datatables",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "djangorestframework-gis",
+    "version": "1.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/openwisp/django-rest-framework-gis",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "docutils",
+    "version": "0.19",
+    "license": "Public Domain",
+    "declared": true,
+    "category": "public-domain",
+    "url": "https://docutils.sourceforge.io/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "drf-spectacular",
+    "version": "0.28.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/tfranzel/drf-spectacular",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "edtf",
+    "version": "4.0.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/ixc/python-edtf",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "elastic-transport",
+    "version": "8.19.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/elastic/elastic-transport-python",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "elasticsearch8",
+    "version": "8.9.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/elastic/elasticsearch-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "et-xmlfile",
+    "version": "1.1.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://foss.heptapod.net/openpyxl/et_xmlfile",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "flower",
+    "version": "2.0.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/mher/flower",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "fontawesome",
+    "version": "5.10.1.post1",
+    "license": "Code: Apache License, Version 2.0, Icons: SIL OFL 1.1",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/justbuchanan/fontawesome-python",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "frictionless",
+    "version": "3.31.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/frictionlessdata/frictionless-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "frozendict",
+    "version": "2.4.7",
+    "license": "GNU Lesser General Public License v3 (LGPLv3)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/Marco-Sulla/python-frozendict",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "fsspec",
+    "version": "2024.6.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "geographiclib",
+    "version": "2.1",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://geographiclib.sourceforge.io/Python/",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "geojson",
+    "version": "3.1.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jazzband/geojson",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "geopy",
+    "version": "2.4.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/geopy/geopy",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "goodtables",
+    "version": "2.5.4",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/frictionlessdata/goodtables",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "greenlet",
+    "version": "2.0.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://greenlet.readthedocs.io/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "gunicorn",
+    "version": "23.0.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "humanize",
+    "version": "4.7.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "idna",
+    "version": "3.18",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "ijson",
+    "version": "3.3.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/ICRAR/ijson",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "inflection",
+    "version": "0.5.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jpvanhal/inflection",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "isodate",
+    "version": "0.7.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "Jinja2",
+    "version": "3.1.6",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "jmespath",
+    "version": "1.0.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jmespath/jmespath.py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "joblib",
+    "version": "1.5.3",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "josepy",
+    "version": "2.2.0",
+    "license": "Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "jsonlines",
+    "version": "3.1.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/wbolster/jsonlines",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "jsonpointer",
+    "version": "2.3",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/stefankoegl/python-json-pointer",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "jsonschema",
+    "version": "4.17.3",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "kombu",
+    "version": "5.3.7",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://kombu.readthedocs.io",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "linear-tsv",
+    "version": "1.1.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/solidsnack/tsv",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "lxml",
+    "version": "6.1.1",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://lxml.de/",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "MarkupSafe",
+    "version": "3.0.3",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "mozilla-django-oidc",
+    "version": "4.0.1",
+    "license": "Mozilla Public License 2.0 (MPL 2.0)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/mozilla/mozilla-django-oidc",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "nameparser",
+    "version": "1.1.3",
+    "license": "GNU Library or Lesser General Public License (LGPL)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://github.com/derek73/python-nameparser",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "networkx",
+    "version": "3.2.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "numpy",
+    "version": "1.26.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://numpy.org",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "oauthlib",
+    "version": "3.2.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/oauthlib/oauthlib",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "odfpy",
+    "version": "1.4.1",
+    "license": "Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/eea/odfpy",
+    "direct": true,
+    "election": {
+     "elected": "Apache-2.0",
+     "offered": "Apache-2.0 OR GPL-2.0-or-later OR LGPL-2.1-or-later",
+     "note": "WHG elects Apache-2.0."
+    }
+   },
+   {
+    "name": "openpyxl",
+    "version": "3.0.9",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://openpyxl.readthedocs.io",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "ordered-set",
+    "version": "4.1.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "orderly-set",
+    "version": "5.5.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "packaging",
+    "version": "26.2",
+    "license": "Apache-2.0 OR BSD-2-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "pandas",
+    "version": "1.4.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://pandas.pydata.org",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "parameterized",
+    "version": "0.7.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/wolever/parameterized",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "petl",
+    "version": "1.7.12",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/petl-developers/petl",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pillow",
+    "version": "12.3.0",
+    "license": "MIT-CMU",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pip",
+    "version": "26.1.2",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "pip-search",
+    "version": "0.0.12",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/victorgarric/pip_search",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "prometheus-client",
+    "version": "0.17.1",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/prometheus/client_python",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "prompt-toolkit",
+    "version": "3.0.38",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/prompt-toolkit/python-prompt-toolkit",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "psutil",
+    "version": "7.2.2",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/giampaolo/psutil",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "psycopg2-binary",
+    "version": "2.9.5",
+    "license": "GNU Library or Lesser General Public License (LGPL)",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://psycopg.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pycparser",
+    "version": "3.0",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "Pygments",
+    "version": "2.20.0",
+    "license": "BSD-2-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "PyJWT",
+    "version": "2.13.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "PyLD",
+    "version": "2.0.4",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/digitalbazaar/pyld",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pyparsing",
+    "version": "3.3.2",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "pyproj",
+    "version": "3.7.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/pyproj4/pyproj",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pyrsistent",
+    "version": "0.19.3",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/tobgu/pyrsistent/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "python-crontab",
+    "version": "3.3.0",
+    "license": "LGPLv3",
+    "declared": true,
+    "category": "copyleft-weak",
+    "url": "https://gitlab.com/doctormo/python-crontab/",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "python-dateutil",
+    "version": "2.8.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/dateutil/dateutil",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "python-dotenv",
+    "version": "1.2.2",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "python-fsutil",
+    "version": "0.17.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "python-http-client",
+    "version": "3.3.7",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/sendgrid/python-http-client",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "python-slugify",
+    "version": "7.0.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/un33k/python-slugify",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "python3-openid",
+    "version": "3.2.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://github.com/necaris/python3-openid",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "pytz",
+    "version": "2022.7",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://pythonhosted.org/pytz",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "PyYAML",
+    "version": "6.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://pyyaml.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "ratelimit",
+    "version": "2.2.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/tomasbasham/ratelimit",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "rdflib",
+    "version": "7.6.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/RDFLib/rdflib",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "rdflib-jsonld",
+    "version": "0.6.2",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/RDFLib/rdflib-jsonld",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "redis",
+    "version": "4.6.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/redis/redis-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "requests",
+    "version": "2.34.2",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "requests-oauthlib",
+    "version": "1.3.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/requests/requests-oauthlib",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "rfc3986",
+    "version": "2.0.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://rfc3986.readthedocs.io",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "rich",
+    "version": "12.6.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/willmcgugan/rich",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "s3transfer",
+    "version": "0.19.1",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/boto/s3transfer",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "scikit-learn",
+    "version": "1.7.2",
+    "license": "BSD-3-Clause",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "scipy",
+    "version": "1.15.3",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "sendgrid",
+    "version": "6.11.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/sendgrid/sendgrid-python/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "sentry-sdk",
+    "version": "2.65.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/getsentry/sentry-python",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "setuptools",
+    "version": "63.2.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/pypa/setuptools",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "shapely",
+    "version": "2.0.6",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "shellingham",
+    "version": "1.5.0.post1",
+    "license": "ISC License (ISCL)",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/sarugaku/shellingham",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "simpleeval",
+    "version": "1.0.7",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "simplejson",
+    "version": "3.18.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/simplejson/simplejson",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "six",
+    "version": "1.16.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/benjaminp/six",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "soupsieve",
+    "version": "2.8.4",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "SQLAlchemy",
+    "version": "1.4.46",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://www.sqlalchemy.org",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "sqlparse",
+    "version": "0.5.5",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "starkbank-ecdsa",
+    "version": "2.3.1",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/starkbank/ecdsa-python.git",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "statistics",
+    "version": "1.0.3.5",
+    "license": "Apache License 2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/digitalemagine/py-statistics",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "stringcase",
+    "version": "1.2.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/okunishinishi/python-stringcase",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "tableschema",
+    "version": "1.20.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/frictionlessdata/tableschema-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "tabulator",
+    "version": "1.53.5",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/frictionlessdata/tabulator-py",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "text-unidecode",
+    "version": "1.3",
+    "license": "Artistic-1.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/kmike/text-unidecode/",
+    "direct": true,
+    "election": {
+     "elected": "Artistic-1.0",
+     "offered": "Artistic-1.0 OR GPL-2.0-or-later",
+     "note": "WHG elects the Artistic Licence, so no GPL obligation arises."
+    }
+   },
+   {
+    "name": "threadpoolctl",
+    "version": "3.6.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/joblib/threadpoolctl",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "tornado",
+    "version": "6.5.7",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://www.tornadoweb.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "typer",
+    "version": "0.7.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/tiangolo/typer",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "typing_extensions",
+    "version": "4.16.0",
+    "license": "PSF-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "tzdata",
+    "version": "2026.3",
+    "license": "Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/python/tzdata",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "ua-parser",
+    "version": "0.18.0",
+    "license": "Apache Software License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/ua-parser/uap-python",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "unicodecsv",
+    "version": "0.14.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jdunck/python-unicodecsv",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "uritemplate",
+    "version": "4.2.0",
+    "license": "BSD 3-Clause OR Apache-2.0",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://uritemplate.readthedocs.org",
+    "direct": false,
+    "election": null
+   },
+   {
+    "name": "urllib3",
+    "version": "2.7.0",
+    "license": "MIT",
+    "declared": true,
+    "category": "permissive",
+    "url": "",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "user-agents",
+    "version": "2.2.0",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/selwin/python-user-agents",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "validators",
+    "version": "0.18.2",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/kvesteri/validators",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "vine",
+    "version": "5.0.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://github.com/celery/vine",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "wcwidth",
+    "version": "0.2.6",
+    "license": "MIT License",
+    "declared": true,
+    "category": "permissive",
+    "url": "https://github.com/jquast/wcwidth",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "xlrd",
+    "version": "2.0.1",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://www.python-excel.org/",
+    "direct": true,
+    "election": null
+   },
+   {
+    "name": "xlwt",
+    "version": "1.3.0",
+    "license": "BSD License",
+    "declared": true,
+    "category": "permissive",
+    "url": "http://www.python-excel.org/",
+    "direct": true,
+    "election": null
+   }
+  ]
+ },
+ "javascript": {
+  "generated": "2026-07-29",
+  "count": 45,
+  "packages": [
+   {
+    "name": "@citation-js/core",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/date",
+    "version": "0.5.1",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/date",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/name",
+    "version": "0.4.2",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/name",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-bibjson",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-bibtex",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-csl",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-doi",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-ris",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@citation-js/plugin-wikidata",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/citation-js/citation-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@hocuspocus/provider",
+    "version": "2.15.3",
+    "license": "MIT",
+    "url": "https://hocuspocus.dev",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@js-temporal/polyfill",
+    "version": "0.5.1",
+    "license": "ISC",
+    "url": "https://github.com/js-temporal/temporal-polyfill",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@larsgw/wikibase-sdk",
+    "version": "10.2.1",
+    "license": "MIT",
+    "url": "https://github.com/maxlath/wikibase-sdk",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@mapbox/geojson-area",
+    "version": "0.2.2",
+    "license": "BSD-2-Clause",
+    "url": "git@github.com:mapbox/geojson-area",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@mapbox/geojson-normalize",
+    "version": "0.0.1",
+    "license": "ISC",
+    "url": "git@github.com:mapbox/geojson-normalize",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "@mapbox/mapbox-gl-draw",
+    "version": "1.5.0",
+    "license": "ISC",
+    "url": "https://github.com/mapbox/mapbox-gl-draw",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "ajv",
+    "version": "8.20.0",
+    "license": "MIT",
+    "url": "ajv-validator/ajv",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "base64-js",
+    "version": "1.5.1",
+    "license": "MIT",
+    "url": "https://github.com/beatgammit/base64-js",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "buffer",
+    "version": "5.7.1",
+    "license": "MIT",
+    "url": "https://github.com/feross/buffer",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "citation-js",
+    "version": "0.7.18",
+    "license": "MIT",
+    "url": "https://github.com/larsgw/citation.js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "citeproc",
+    "version": "2.4.63",
+    "license": "CPAL-1.0",
+    "url": "https://github.com/juris-m/citeproc-js",
+    "direct": false,
+    "election": {
+     "elected": "CPAL-1.0",
+     "offered": "CPAL-1.0 OR AGPL-1.0",
+     "note": "WHG elects CPAL-1.0. File-level copyleft plus an attribution notice; it does not reach WHG-authored code. Reached via citation-js and compiled into the shared bundle."
+    },
+    "category": "copyleft-weak",
+    "declared": true
+   },
+   {
+    "name": "css-loader",
+    "version": "6.11.0",
+    "license": "MIT",
+    "url": "webpack-contrib/css-loader",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "driver.js",
+    "version": "1.6.0",
+    "license": "MIT",
+    "url": "https://github.com/nilbuild/driver.js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "fast-deep-equal",
+    "version": "3.1.3",
+    "license": "MIT",
+    "url": "https://github.com/epoberezkin/fast-deep-equal",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "fast-uri",
+    "version": "3.1.3",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/fastify/fast-uri",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "fetch-ponyfill",
+    "version": "7.1.0",
+    "license": "MIT",
+    "url": "https://github.com/qubyte/fetch-ponyfill",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "h3-js",
+    "version": "4.5.0",
+    "license": "Apache-2.0",
+    "url": "https://github.com/uber/h3-js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "ieee754",
+    "version": "1.2.1",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/feross/ieee754",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "jsbi",
+    "version": "4.3.2",
+    "license": "Apache-2.0",
+    "url": "GoogleChromeLabs/jsbi",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "json-schema-traverse",
+    "version": "1.0.0",
+    "license": "MIT",
+    "url": "https://github.com/epoberezkin/json-schema-traverse",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "lib0",
+    "version": "0.2.117",
+    "license": "MIT",
+    "url": "https://github.com/dmonad/lib0",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "lodash",
+    "version": "4.18.1",
+    "license": "MIT",
+    "url": "lodash/lodash",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "mammoth",
+    "version": "1.12.0",
+    "license": "BSD-2-Clause",
+    "url": "https://github.com/mwilliamson/mammoth.js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "maplibre-gl",
+    "version": "5.3.1",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/maplibre/maplibre-gl-js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "moo",
+    "version": "0.5.2",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/tjvr/moo",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "onnxruntime-web",
+    "version": "1.27.0",
+    "license": "MIT",
+    "url": "https://github.com/Microsoft/onnxruntime",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "pdfjs-dist",
+    "version": "6.1.200",
+    "license": "Apache-2.0",
+    "url": "https://github.com/mozilla/pdf.js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "proj4",
+    "version": "2.20.9",
+    "license": "MIT",
+    "url": "https://github.com/proj4js/proj4js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "raw-loader",
+    "version": "4.0.2",
+    "license": "MIT",
+    "url": "webpack-contrib/raw-loader",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "sass-loader",
+    "version": "12.6.0",
+    "license": "MIT",
+    "url": "webpack-contrib/sass-loader",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "spin.js",
+    "version": "4.1.2",
+    "license": "MIT",
+    "url": "https://github.com/fgnass/spin.js",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "sync-fetch",
+    "version": "0.4.5",
+    "license": "MIT",
+    "url": "https://github.com/larsgw/sync-fetch",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "wgs84",
+    "version": "0.0.0",
+    "license": "BSD-2-Clause",
+    "url": "git@github.com:mapbox/wgs84",
+    "direct": false,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "xlsx",
+    "version": "0.20.3",
+    "license": "Apache-2.0",
+    "url": "https://git.sheetjs.com/SheetJS/sheetjs",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "y-indexeddb",
+    "version": "9.0.12",
+    "license": "MIT",
+    "url": "https://github.com/yjs/y-indexeddb",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   },
+   {
+    "name": "yjs",
+    "version": "13.6.31",
+    "license": "MIT",
+    "url": "https://github.com/yjs/yjs",
+    "direct": true,
+    "category": "permissive",
+    "declared": true
+   }
+  ]
+ }
+}
