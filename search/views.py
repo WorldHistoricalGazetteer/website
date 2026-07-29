@@ -621,6 +621,10 @@ def atlas_boundaries(request):
         if not any((t or {}).get("identifier") == "administrative"
                    for t in (hit.get("types") or [])):
             continue
+        # No representative point means the client has nowhere to fly to and so
+        # no way to find the polygon in the tiles — the result would be inert.
+        if not hit.get("repr_point"):
+            continue
         results.append({
             "id": hit.get("place_id"),
             "place_id": hit.get("place_id"),
