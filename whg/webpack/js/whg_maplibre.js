@@ -149,6 +149,27 @@ maplibregl.Map.prototype.ensureCoverageSprites = function () {
 	}
 };
 
+// Resolve once a `setStyle` currently in flight has finished, so that
+// `addSource`/`addLayer` become legal again. MapLibre's `Style._checkLoaded`
+// throws "Style is not done loading." while `Style._loaded` is false — a window
+// that opens after every style swap. `isStyleLoaded()` is NOT a usable gate here
+// (it additionally waits for every source cache and the image atlas, which can
+// stay false for as long as tiles are streaming), so wait on `style.load`, which
+// fires exactly when mutation becomes legal. The timeout is only a safety valve.
+function whenStyleMutable(map, timeoutMs = 8000) {
+	return new Promise((resolve) => {
+		let settled = false;
+		const finish = () => {
+			if (settled) return;
+			settled = true;
+			map.off('style.load', finish);
+			resolve();
+		};
+		map.on('style.load', finish);
+		setTimeout(finish, timeoutMs);
+	});
+}
+
 // Dynamically load a gazetteer vector tileset (one not in the base whg-context
 // style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
 // so the caller (heroMap.showGazetteer) can read vector_layers + bounds. The
@@ -158,14 +179,26 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	if (!id) return null;
 	const tilejson = await fetchJSON(getTilejsonURL(id));
 	if (!this.getSource(id)) {
-		this.addSource(id, {
+		const source = {
 			type: 'vector',
 			tiles: tilejson.tiles || [],
 			minzoom: tilejson.minzoom ?? 0,
 			maxzoom: tilejson.maxzoom ?? 14,
 			attribution: tilejson.attribution || '',
 			bounds: tilejson.bounds || undefined,
-		});
+		};
+		try {
+			this.addSource(id, source);
+		} catch (e) {
+			// Selecting a gazetteer soon after a style swap (or deep-linking
+			// straight into Explore) raced the style load: showGazetteer caught
+			// the throw and returned, leaving the place list and popups working
+			// but NOT a single feature drawn on the map. Wait for the style and
+			// retry once rather than failing silently.
+			if (!/not done loading/i.test(String(e && e.message))) throw e;
+			await whenStyleMutable(this);
+			this.addSource(id, source);
+		}
 	}
 	// Place dynamic layers below the lowest label so symbols stay legible.
 	const beforeId = this.getStyle().layers.find(l => l.type === 'symbol')?.id;

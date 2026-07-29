@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>WHG Licensing — Briefing for the Office of Innovation</title>
+<style>
+  @page {
+    size: A4;
+    margin: 20mm 18mm 18mm 18mm;
+    @bottom-center {
+      content: "World Historical Gazetteer — Licensing briefing for the Office of Innovation";
+      font-size: 7.5pt; color: #8a8a8a; font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 7.5pt; color: #8a8a8a; font-family: 'Helvetica Neue', Arial, sans-serif;
+    }
+  }
+  html { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10.2pt; color: #1d1d1f; line-height: 1.45; }
+  body { margin: 0; }
+
+  h1 { font-size: 21pt; margin: 0 0 2pt 0; color: #5b2a86; letter-spacing: -0.3pt; }
+  .subtitle { font-size: 11.5pt; color: #444; margin: 0 0 6pt 0; font-weight: 500; }
+  .meta { font-size: 8.6pt; color: #777; margin: 0 0 16pt 0; border-bottom: 2px solid #5b2a86; padding-bottom: 10pt; }
+  .meta strong { color: #555; }
+
+  h2 { font-size: 13.5pt; color: #5b2a86; margin: 20pt 0 6pt 0; padding-bottom: 3pt; border-bottom: 1px solid #d9cfe4; page-break-after: avoid; }
+  h3 { font-size: 11pt; color: #333; margin: 13pt 0 4pt 0; page-break-after: avoid; }
+  p { margin: 0 0 7pt 0; }
+
+  ul, ol { margin: 0 0 8pt 0; padding-left: 18pt; }
+  li { margin: 0 0 4pt 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt 0; font-size: 8.7pt; }
+  th { background: #5b2a86; color: #fff; text-align: left; padding: 5pt 6pt; font-weight: 600; }
+  td { padding: 4.5pt 6pt; border-bottom: 0.5pt solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f4fa; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ok   { color: #1a7a3c; font-weight: 700; }
+  .warn { color: #c77700; font-weight: 700; }
+  .no   { color: #b3261e; font-weight: 700; }
+  code { font-family: 'SF Mono', 'Consolas', monospace; font-size: 8.4pt; background: #f0ecf5; padding: 0.5pt 3pt; border-radius: 2px; color: #4a2470; }
+
+  .callout { background: #f7f4fa; border-left: 3px solid #5b2a86; padding: 8pt 11pt; margin: 8pt 0; border-radius: 0 3px 3px 0; }
+  .callout.warn { background: #fdf3f2; border-left-color: #b3261e; }
+  .callout.key { background: #f1f7f2; border-left-color: #1a7a3c; }
+  .callout.ask { background: #fffaf0; border-left-color: #c77700; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout h3 { margin-top: 0; }
+
+  .tag { display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 1pt 5pt; border-radius: 3px; vertical-align: middle; }
+  .tag-hi { background: #b3261e; color: #fff; }
+  .tag-med { background: #c77700; color: #fff; }
+  .tag-low { background: #6b6b6b; color: #fff; }
+  .tag-done { background: #1a7a3c; color: #fff; }
+
+  figure { margin: 10pt 0 12pt 0; page-break-inside: avoid; }
+  figure img { width: 100%; border: 0.75pt solid #ccc; border-radius: 3px; display: block; }
+  figcaption { font-size: 8.3pt; color: #555; margin-top: 4pt; line-height: 1.35; }
+  figcaption strong { color: #5b2a86; }
+
+  .disclaimer { font-size: 8.4pt; color: #666; font-style: italic; border-top: 1px solid #ddd; margin-top: 16pt; padding-top: 8pt; }
+  .nobreak { page-break-inside: avoid; }
+  .pagebreak { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>WHG Licensing: Briefing for the Office of Innovation</h1>
+<p class="subtitle">How the World Historical Gazetteer handles rights over aggregated place data —
+current state, working evidence, and the questions on which we seek guidance</p>
+<p class="meta">
+  <strong>Prepared for:</strong> Tara Bransted, Licensing Manager, Office of Innovation, University of Pittsburgh &nbsp;·&nbsp;
+  <strong>By:</strong> Dr Stephen Gadd, Technical Director, World Historical Gazetteer &nbsp;·&nbsp;
+  <strong>Date:</strong> 29 July 2026 &nbsp;·&nbsp;
+  <strong>Status:</strong> For discussion — not legal advice
+</p>
+
+<h2>1. Summary, and what we are asking for</h2>
+<p>
+  The World Historical Gazetteer (WHG) is a Pitt-hosted platform that aggregates and links historical place data.
+  Its index currently holds <strong>50.5 million place records</strong> drawn from 26 distinct source gazetteers,
+  plus several hundred contributed datasets. Those sources arrive under <strong>at least nine different licences</strong>
+  — public domain, CC&nbsp;BY, CC&nbsp;BY-SA, ODbL, ODC-By, CC&nbsp;BY-NC and bespoke institutional terms.
+</p>
+<div class="callout key">
+  <p><strong>The position we have adopted:</strong> WHG asserts <em>no single blanket licence</em> over the aggregate.
+  Each source carries its own licence; that licence travels with the data wherever it is surfaced or leaves the platform;
+  and WHG's own curation/aggregation licence (CC&nbsp;BY-NC-4.0) is asserted as an <strong>overlay alongside</strong> each
+  source's terms, never instead of them.</p>
+  <p>Since an internal audit in June 2026 this has been substantially <strong>built and deployed</strong> — a controlled
+  licence vocabulary, per-source licence capture at ingest, a contributor-facing licence picker, and licence badges
+  surfaced throughout the public interface. §4 shows this working on the live site.</p>
+</div>
+<div class="callout ask">
+  <h3>What we would value from this meeting</h3>
+  <ol>
+    <li><strong>Confirmation (or correction) of the per-source model</strong> as the right legal posture for an
+        aggregator that is simultaneously licensee and licensor.</li>
+    <li><strong>Guidance on what Pitt/WHG could lawfully offer commercially</strong>, given that the raw source records
+        are largely not ours to sell (§6).</li>
+    <li><strong>A view on the contributor grant wording</strong> we ask uploaders to accept — this is the legally
+        load-bearing text and we would like it reviewed (§7.2).</li>
+    <li><strong>A steer on two specific third-party matters</strong>: a bespoke co-authorship condition attached to one
+        source, and whether a declared-use-case attestation is a meaningful protection (§7.1, §7.4).</li>
+  </ol>
+</div>
+
+<h2>2. Why an aggregator is a distinctive case</h2>
+<p>
+  WHG is not principally a producer of data. It is a <strong>licensee</strong> of many upstream sources and a
+  <strong>licensor</strong> to downstream users, and it cannot grant downstream what it does not hold upstream.
+  Three consequences follow, and they shape everything in §4:
+</p>
+<ul>
+  <li><strong>No honest blanket licence exists.</strong> A single site-wide licence would either over-claim (purporting to
+      license third-party data we do not own) or under-claim (imposing NC restrictions on CC&nbsp;BY material where
+      "no additional restrictions" applies). Both are wrong; only per-source terms are defensible.</li>
+  <li><strong>ShareAlike matters more than NonCommercial.</strong> Non-commercial terms simply exclude a source from a
+      commercial channel. ShareAlike (ODbL, CC&nbsp;BY-SA) is <em>copyleft</em>: where records are blended, it can
+      propagate obligations into the combined product. For an aggregator this is the more structural risk — and, as §5
+      shows, it affects a much larger share of our corpus than NC does.</li>
+  <li><strong>Facts vs. database right, with a US/UK split.</strong> A single name-to-coordinate pairing is a fact and is
+      not copyrightable. But <em>systematic</em> extraction of a substantial part of a compilation can engage the
+      <strong>UK/EU sui generis database right</strong>, which has no US equivalent. WHG/Pitt are US-based; several of our
+      upstream contributors' rights arise under UK law. One bulk API consumer can therefore be low-risk domestically yet
+      still breach an upstream contributor's rights.</li>
+</ul>
+
+<h2 class="pagebreak">3. The model we implemented</h2>
+<p>Four components, all now in production:</p>
+<ul>
+  <li><strong>One controlled licence vocabulary.</strong> A curated table of 15 licences keyed on SPDX identifiers
+      (<code>CC-BY-4.0</code>, <code>ODbL-1.0</code>, <code>CC0-1.0</code>, …), each carrying explicit
+      <em>permits-commercial</em>, <em>share-alike</em>, <em>attribution-required</em> and <em>no-derivatives</em> flags,
+      plus a <em>custom</em> flag for bespoke non-SPDX terms. One vocabulary, one renderer, used everywhere a licence is
+      named — so the surfaces cannot drift apart again.</li>
+  <li><strong>Per-source capture at ingest.</strong> Every authority gazetteer's actual upstream licence, citation,
+      rights holder and source URL is recorded in a registry at ingest, replacing an earlier hard-coded global assumption.</li>
+  <li><strong>Legality flags that gate distribution.</strong> Each source carries <code>redistributable</code> (may WHG
+      re-host and hand out copies at all?) and <code>downloadable</code> (redistributable <em>and</em> within a volume cap).
+      Where a download is withheld, a reason is recorded — <code>licence-restricted</code> or <code>volume-exceeds-cap</code>.
+      One source is currently gated out of downloads entirely on licence grounds.</li>
+  <li><strong>Structured credit.</strong> Contributor roles follow the NISO CRediT taxonomy, so bespoke acknowledgements
+      and negotiated conditions are recorded as structured, exportable metadata rather than free-text prose.</li>
+</ul>
+
+<h2>4. How this works on the live site</h2>
+
+<h3>4.1 &nbsp;Collecting terms from contributors</h3>
+<p>
+  Anyone contributing data chooses a licence from the same controlled vocabulary the platform uses internally. A public
+  reference page at <code>whgazetteer.org/licenses</code> — linked from the site's top menu — explains every licence in
+  plain language, with an interactive picker, and links each to its official deed in up to 17 languages.
+  <strong>The same catalogue code drives both this page and the in-Workbench picker</strong>, so a contributor never sees
+  two different descriptions of the same licence.
+</p>
+
+<figure>
+  <img src="licensing-briefing-shots/01-licenses-page-top.jpg" alt="The public licences page">
+  <figcaption><strong>Fig. 1 — <code>/licenses/</code>, the public licence reference.</strong> Two things to note. The first
+  callout states WHG's own overlay licence and says explicitly that it is asserted <em>in addition to — never instead of —</em>
+  each source's own terms. The second introduces <strong>"By arrangement"</strong>: a contributor may signal that although their
+  chosen licence does not itself grant commercial use or adaptation, they will consider requests case-by-case. WHG passes such
+  enquiries on; the contributor's contact details stay private. This is our current mechanism for routing a commercial enquiry
+  to a rights holder without WHG purporting to grant rights it does not hold.</figcaption>
+</figure>
+
+<figure>
+  <img src="licensing-briefing-shots/02-licenses-vocabulary.jpg" alt="Licence vocabulary grouped by openness">
+  <figcaption><strong>Fig. 2 — the vocabulary, grouped from open to restrictive.</strong> Each licence is reduced to four
+  flags a non-specialist can act on: <em>Commercial use</em>, <em>Adaptations</em>, <em>Attribution</em>, <em>ShareAlike</em>.
+  These are the same flags the platform uses to gate distribution, so what a contributor is shown and what the system
+  enforces are guaranteed to be the same thing.</figcaption>
+</figure>
+
+<figure>
+  <img src="licensing-briefing-shots/03-workbench-licence-field.jpg" alt="Licence field in the contribution flow">
+  <figcaption><strong>Fig. 3 — the licence field in the contribution flow.</strong> Licence selection sits in the first
+  section of the form, alongside title and description — before any data is entered, not buried at publication. The
+  amber chip records the optional <em>"commercial use by arrangement"</em> condition described in Fig. 1.</figcaption>
+</figure>
+
+<figure>
+  <img src="licensing-briefing-shots/04-workbench-licence-picker.jpg" alt="Guided licence picker modal">
+  <figcaption><strong>Fig. 4 — the guided picker.</strong> Contributors who do not know which licence they want answer four
+  plain questions ("Allow commercial use?", "Allow adaptations?", "Require attribution?", "Require ShareAlike?") and the
+  list filters to the licences that match. It is the same component and the same catalogue as Fig. 2.</figcaption>
+</figure>
+
+<h3 class="pagebreak">4.2 &nbsp;Surfacing terms to reusers</h3>
+<p>
+  On the reuse side, licence information is attached to the data at every level at which a user can encounter it: the
+  gazetteer list, the individual gazetteer, and the individual place record.
+</p>
+
+<figure>
+  <img src="licensing-briefing-shots/05-atlas-gazetteer-list.jpg" alt="Atlas gazetteer list with licence badges">
+  <figcaption><strong>Fig. 5 — every source gazetteer carries a colour-coded licence badge.</strong> Green for
+  attribution-only, amber for ShareAlike, red for non-commercial, grey <code>C</code> for bespoke/custom terms. A user
+  choosing which sources to search sees the licensing consequences before selecting, not after.</figcaption>
+</figure>
+
+<figure>
+  <img src="licensing-briefing-shots/06-atlas-gazetteer-details.jpg" alt="Per-gazetteer rights, citation and download panel">
+  <figcaption><strong>Fig. 6 — per-gazetteer detail (<em>Index Villaris</em>).</strong> Record count, temporal extent,
+  <strong>rights holder</strong> ("Stephen Gadd &amp; Alexis Litvine (digital edition); original 1680 work by John Adams
+  (public domain)"), a link to the source, a formatted citation with DOI, and a download button that is only offered where
+  the source's flags permit redistribution. Note that rights are expressed as a <em>chain</em> — a modern licensed digital
+  edition over a public-domain original — which a single licence field could not represent.</figcaption>
+</figure>
+
+<figure>
+  <img src="licensing-briefing-shots/07-atlas-popup-licence-tooltip.jpg" alt="Map feature popup with licence pill and tooltip">
+  <figcaption><strong>Fig. 7 — licensing at the individual record.</strong> Clicking any place on the map gives a popup
+  whose footer reads <em>SOURCE &amp; LICENCE — Index Villaris — CC-BY-SA-4.0</em>. The badge is tiered: it shows the SPDX
+  identifier at a glance, expands on hover into the full licence name plus the rights-holder statement, and links through to
+  the licence deed. A user who copies a single coordinate out of WHG can see, in two seconds, whose data it is and on what
+  terms.</figcaption>
+</figure>
+
+<h3>4.3 &nbsp;Machine-readable terms in the API — the remaining gap</h3>
+<p>
+  The intended design is that any API response spanning multiple sources should carry an <strong>aggregated statement of
+  terms at the root of the returned document</strong>, listing every source namespace present in the results with its
+  licence, so that a programmatic consumer can comply without having to look anything up. We checked this against the live
+  service while preparing this briefing. The position is partial:
+</p>
+<table>
+  <thead><tr><th style="width:40%">Surface</th><th style="width:40%">Carries source terms?</th><th style="width:20%">Status</th></tr></thead>
+  <tbody>
+    <tr><td>Interactive UI (Figs. 5–7)</td><td>Yes — full licence, flags, rights holder, deed link</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td>Single-record API responses</td><td>Yes — an <code>attribution</code> object with licence and flags</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td>Standalone resolver endpoint</td><td>Yes — callers may ask "what are the terms for these namespaces?"</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td><strong>Multi-record result sets</strong> (search, index, spatial)</td><td><strong>No</strong> — no terms block at the root, no per-result licence</td><td><span class="tag tag-hi">Gap</span></td></tr>
+    <tr><td><strong>Reconciliation responses</strong></td><td><strong>No</strong> — candidates carry id, name, type and score only</td><td><span class="tag tag-hi">Gap</span></td></tr>
+    <tr><td>The aggregated block itself</td><td>Partial — returns source name, citation and record count, but <strong>not the licence</strong></td><td><span class="tag tag-med">Gap</span></td></tr>
+  </tbody>
+</table>
+<p>
+  This matters most for <strong>reconciliation</strong>, which is arguably WHG's larger delivery channel and the one that
+  blends candidates from many differently-licensed sources into a single response. A consumer currently receives results
+  spanning several licences with no machine-readable way to tell which is which — and therefore cannot comply with
+  per-source terms even when willing to. It is a tractable fix: the per-source data already exists and is already rendered
+  in the interface; it needs wiring into the response envelopes. <strong>We are raising this as a tracked issue.</strong>
+</p>
+<div class="callout">
+  <p><strong>A data-quality note found in the same check.</strong> OpenHistoricalMap is recorded in our registry as
+  <code>CC0-1.0</code>. OpenHistoricalMap publishes under <strong>ODbL</strong>, as its sibling OpenStreetMap does (and as
+  our own registry correctly records for OSM). If that is an ingest error rather than a deliberate determination, it
+  understates an obligation on roughly 0.9&nbsp;million records, and is being corrected. We mention it because it
+  illustrates why the per-namespace licence audit (§8) is the item we treat as highest priority.</p>
+</div>
+
+<h2>5. What the corpus actually contains</h2>
+<p>
+  A recurring worry is that respecting upstream terms would gut any commercial offering. The measured composition says
+  otherwise. Record counts below are live figures from the platform registry; licences are as currently recorded, pending
+  completion of the per-namespace audit.
+</p>
+<table>
+  <thead><tr><th style="width:38%">Source (namespace)</th><th style="width:16%">Records</th><th style="width:24%">Licence</th><th style="width:22%">Commercial use</th></tr></thead>
+  <tbody>
+    <tr><td>OpenStreetMap <code>osm</code></td><td class="num">20,289,895</td><td>ODbL-1.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>GeoNames <code>gn</code></td><td class="num">13,378,039</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
+    <tr><td>Wikidata <code>wd</code></td><td class="num">11,459,393</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
+    <tr><td>Getty TGN <code>tgn</code></td><td class="num">2,991,044</td><td>ODC-By-1.0</td><td><span class="ok">✓ attribution</span></td></tr>
+    <tr><td>GB1900 <code>gb</code></td><td class="num">1,174,449</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>OpenHistoricalMap <code>ohm</code></td><td class="num">905,205</td><td>CC0-1.0 <em>(under review — see §4.3)</em></td><td><span class="ok">✓</span></td></tr>
+    <tr><td>China Historical GIS <code>chgis</code></td><td class="num">82,117</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Trismegistos <code>tm</code></td><td class="num">64,196</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>Pleiades <code>pl</code></td><td class="num">25,561</td><td>CC-BY-3.0</td><td><span class="ok">✓ attribution</span></td></tr>
+    <tr><td>Index Villaris <code>iv</code></td><td class="num">24,000</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>Ancient Parishes of England &amp; Wales <code>kain_par</code></td><td class="num">23,177</td><td>bespoke</td><td><span class="no">✗ excluded — download gated</span></td></tr>
+    <tr><td>Alcedo <code>alc</code></td><td class="num">18,223</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Ottoman NFS Gazetteer <code>ofs</code></td><td class="num">16,296</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
+    <tr><td>Cliopatria <code>clio</code></td><td class="num">15,690</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
+    <tr><td>HGIS de las Indias <code>hgis</code></td><td class="num">14,152</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>PeriodO <code>po</code></td><td class="num">9,017</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
+    <tr><td>Ottoman Gazetteer <code>og</code></td><td class="num">6,260</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Native Land <code>nl</code></td><td class="num">4,364</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Digital Gazetteer of the Song Dynasty <code>dgsd</code></td><td class="num">3,828</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>D-PLACE <code>dp</code></td><td class="num">2,599</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>GBHGIS boundary sets (4 gazetteers)</td><td class="num">2,850</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
+    <tr><td>UN Countries <code>un</code>; UK Historic Counties <code>ukhc</code></td><td class="num">339</td><td>public domain; bespoke</td><td>mixed</td></tr>
+  </tbody>
+</table>
+<div class="callout key nobreak">
+  <p><strong>The headline figure: 99.7% of the indexed corpus is commercially licensable in principle.</strong>
+  Of 50,510,694 records, <strong>28.8 m (57.0%)</strong> are attribution-only or public domain — free of any copyleft
+  obligation; <strong>21.6 m (42.7%)</strong> are commercially usable but <em>share-alike</em>; and only
+  <strong>140,660 records (0.28%)</strong> are non-commercial or bespoke-restricted.</p>
+  <p>So the commercially-consequential decision is <em>not</em> whether to exclude the NC material — that is a rounding
+  error by volume. It is <strong>whether to include the share-alike sources</strong>, which are 42.7% of the corpus and
+  are dominated by a single source (OpenStreetMap under ODbL).</p>
+</div>
+<p>
+  Two qualifications keep this honest. First, <strong>volume is not value</strong>: the excluded 0.28% is specialist,
+  hand-curated material (Chinese historical administrative units, Ottoman-era places, English parish transcripts) whose
+  scholarly value per record far exceeds a GeoNames row — and it is precisely the material a scholarly aggregator exists to
+  provide. Second, <strong>places are heavily duplicated across authorities</strong>, so a commercial consumer denied a
+  restricted source will usually still match the same place in GeoNames, Wikidata or TGN. The real loss is the tail of
+  places that exist <em>only</em> in a restricted set.
+</p>
+
+<div class="callout warn nobreak">
+  <h3>What ShareAlike would require of a commercial licensee</h3>
+  <p>Because share-alike is 42.7% of the corpus, its obligations are worth stating precisely. Both ODbL and
+  CC&nbsp;BY-SA permit commercial use, but attach copyleft:</p>
+  <ul>
+    <li><strong>CC&nbsp;BY-SA</strong> reaches <em>adaptations of the content itself</em> — any adaptation must be
+        re-licensed under the same terms.</li>
+    <li><strong>ODbL</strong> attaches to the <em>database</em>, not necessarily the end product. A licensee who builds and
+        publicly distributes a derivative database must offer that database under ODbL with alterations available — but an
+        application that merely <em>displays</em> the data is not thereby forced open (ODbL's "Produced Work" carve-out).</li>
+  </ul>
+  <p>The practical consequence for a commercial partner is that they generally <strong>cannot keep a derived
+  place-database proprietary if they distribute it</strong>, and SA terms may be incompatible with other licences in their
+  stack. By contrast <strong>CC&nbsp;BY, CC0 and ODC-By are attribution-only</strong> — the cleanest 57% for a commercial
+  consumer, and the subset we would suggest as the default commercial offering.</p>
+</div>
+
+<h2 class="pagebreak">6. What WHG could legitimately commercialise</h2>
+<p>
+  We cannot sell what we do not own. On our reading, the WHG-owned or sublicensable layers are these — and we would value
+  your view on whether the second is as defensible as we believe:
+</p>
+<ul>
+  <li><strong>The software</strong> — already released under BSD-3.</li>
+  <li><strong>The reconciliation and linkage service.</strong> This is the matching, ranking and cross-source crosswalk —
+      the intellectual work WHG genuinely creates, distinct from the underlying records. It is what a partner such as a
+      genealogy or mapping product actually wants, and it is the layer we could plausibly put behind a commercial licence
+      <em>even where we cannot license the source records themselves</em>. This is the core of our commercial thinking.</li>
+  <li><strong>Whole contributed gazetteers whose contributors granted commercial rights</strong> — enumerable from the
+      per-source flags, and now including those flagged "commercial use by arrangement" (Fig. 1), who have signalled
+      willingness to be approached.</li>
+  <li><strong>WHG's own editorial content and curation</strong> — currently CC&nbsp;BY-NC-4.0.</li>
+</ul>
+<p>
+  A dual-licence structure (free for non-commercial use, negotiated licence for commercial) is the model we have in mind,
+  built over the service layer rather than the aggregated records. We are aware of comparable arrangements in the
+  research-data sector and would welcome guidance on how Pitt would prefer such a structure to be framed.
+</p>
+
+<h2>7. Specific matters on which we seek guidance</h2>
+
+<h3>7.1 &nbsp;A bespoke co-authorship condition</h3>
+<p>
+  One source (a set of English parish transcripts from the University of Portsmouth) comes with terms asserting that
+  (a) Portsmouth holds some copyright and the files are "definitely not public domain"; (b) the depositor is content to
+  release them as CC&nbsp;BY-NC-SA; and (c) that "BY" means he <em>should be included as a co-author</em> on any
+  publication making substantial use of the data.
+</p>
+<p>
+  <strong>Our reading:</strong> (a) is broadly sound though not quite as stated — the raw facts are not copyrightable,
+  but the <em>compilation</em> is, and under UK law the <strong>sui generis database right</strong> protects exactly the
+  substantial investment described (OCR-scraping software plus extensive manual clean-up). Because that work was done by
+  university staff and students, the rights holder is most likely the <strong>institution rather than the individual</strong>,
+  so any commercial use would need institutional sign-off.
+</p>
+<p>
+  <strong>On (c) we believe the claim over-reaches.</strong> Under Creative Commons, the Attribution requirement means
+  <em>credit</em> — naming the creator, linking source and licence, noting changes. It does not confer or require
+  co-authorship. Attribution is not authorship: co-authorship follows from a substantive intellectual contribution to the
+  specific new work, or from contract — not from a licence's attribution clause. A depositor may legitimately
+  <em>negotiate</em> co-authorship as a separate bespoke condition of access, but as a bespoke term it binds only WHG and
+  cannot be passed through to downstream users the way a licence can.
+</p>
+<p>
+  <strong>Why it matters operationally:</strong> a mandatory co-authorship term is in practice <em>more</em> restrictive
+  than NC — it cannot be satisfied automatically, does not scale, and WHG cannot honour it downstream. This source is
+  consequently the one currently gated out of downloads entirely. <em>We would welcome confirmation that our reading of
+  attribution vs. authorship is correct, and guidance on how to negotiate such terms in future deposits.</em>
+</p>
+
+<h3>7.2 &nbsp;The contributor grant wording</h3>
+<p>
+  Uploaders accept a licence grant at the point of contribution. This is the most legally load-bearing text on the
+  platform: it determines what WHG may subsequently do with contributed data, and CC&nbsp;BY-4.0 in particular is
+  <strong>irrevocable</strong>, explicitly permits commercial use, and forbids the licensor from layering additional
+  restrictions on it. We would like this specific wording reviewed and signed off, and guidance on whether we should be
+  asking for a licence, a broader sublicensable grant, or both.
+</p>
+
+<h3>7.3 &nbsp;Is "non-commercial" a mechanism worth relying on?</h3>
+<p>
+  Our internal view — shared by colleagues — is that NC is a weak instrument: it is poorly defined, catches uses we would
+  want to permit (commercial academic publishers, tuition-charging universities), and does not reliably prevent the uses
+  we would want to stop. We currently apply CC&nbsp;BY-NC-4.0 as WHG's own overlay licence. <em>We would value a view on
+  whether that remains the right default for the WHG layer, or whether a different instrument would serve better.</em>
+</p>
+
+<h3>7.4 &nbsp;A declared-use-case attestation</h3>
+<p>
+  Per-source flags only become enforceable once we know what a user intends to do. Our proposal is to capture a
+  <strong>declared use case</strong> at the point of access — at download, and once at API-token issuance rather than per
+  request — <strong>defaulting to non-commercial</strong>, with commercial use as an explicit opt-in. The declaration
+  would then combine with the per-source flags: the default path receives the full set under the appropriate terms; a
+  commercial declaration is served only the commercially-licensed subset and routed to a licensing enquiry rather than a
+  flat refusal.
+</p>
+<p>
+  Our belief is that this creates an <strong>attestation record</strong> evidencing good-faith enforcement of upstream
+  terms and places compliance responsibility on the declaring user — a meaningful shield for a platform redistributing
+  third-party data — while doubling as a commercial-enquiry funnel. <em>We would value your view on whether that
+  protection is real, and on what the declaration would need to say to be worth anything.</em>
+</p>
+
+<h2>8. Remaining work, priority-ordered</h2>
+<table>
+  <thead><tr><th style="width:5%">#</th><th style="width:28%">Area</th><th style="width:49%">Change</th><th style="width:18%">Priority</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Per-namespace licence audit</td><td>Complete verification of every source's actual upstream licence and push corrections into the registry. The OpenHistoricalMap discrepancy (§4.3) shows why this ranks first: every downstream surface is only as accurate as this table.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>2</td><td>DOI registration metadata</td><td>DOIs minted for WHG datasets currently register a hard-coded <code>CC-BY-NC-4.0</code> rights statement with DataCite regardless of the dataset's actual licence. This has the longest tail of any item — DOI metadata is externally cached and hard to walk back — and should be fixed before the next minting run.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>3</td><td>Contributor grant wording</td><td>Legally load-bearing (§7.2). Decide deliberately what grant we ask for; counsel signs off on this text specifically.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>4</td><td>Reconciliation &amp; result-set API responses</td><td>Attach the aggregated per-namespace terms block at the response root, and per-result provenance (§4.3). The data exists; it needs wiring into the envelopes. Enables consumer compliance and lets WHG gate sources whose terms cannot be honoured.</td><td><span class="tag tag-hi">High</span></td></tr>
+    <tr><td>5</td><td>Aggregated attribution block</td><td>Extend it to carry the licence, not only source name, citation and record count.</td><td><span class="tag tag-med">High</span></td></tr>
+    <tr><td>6</td><td>Declared use case &amp; gating</td><td>Implement the attestation described in §7.4, subject to guidance from this meeting.</td><td><span class="tag tag-med">Med</span></td></tr>
+    <tr><td>7</td><td>Legacy static pages &amp; download artefacts</td><td>A small number of older templates, download README files and email texts still carry the pre-audit blanket licence statement. Text-only changes; to be aligned once the wording in §7.2–7.3 is settled.</td><td><span class="tag tag-low">Med</span></td></tr>
+    <tr><td>8</td><td>Licence vocabulary, per-source capture, contributor picker, UI badges</td><td>Built and in production (§3, §4).</td><td><span class="tag tag-done">Done</span></td></tr>
+  </tbody>
+</table>
+<p>
+  The sequencing principle is that the <em>wording</em> decisions (items 2, 3, 6) are legal ones and gate the technical
+  work; once settled, the single-source-of-truth architecture already in place makes every surface consistent at once.
+</p>
+
+<p class="disclaimer">
+  This document is a technical and editorial briefing prepared to inform discussion. It identifies factual positions and
+  structural logic; it is not legal advice. Statements about copyright, database right and Creative Commons interpretation
+  are offered in good faith to frame the questions, not to resolve them. Decisions on contributor grant wording, commercial
+  licensing, third-party rights, and any change to DOI metadata should be confirmed with the Office of Innovation and
+  legal counsel. Record counts and recorded licences are live figures taken from the platform on 29 July 2026, pending
+  completion of the per-namespace licence audit described in §8.
+</p>
+
+</body>
+</html>

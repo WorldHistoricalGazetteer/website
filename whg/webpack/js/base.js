@@ -6,6 +6,7 @@ import {Spinner} from './spin.js';
 import {initWHGModal} from './whg-modal.js';
 import {initBetaDiag, betaInitialScope} from './beta-diag.js';
 import {initializeCitationFormatters} from './citationFormatter';
+import {initTooltipHygiene} from './tooltipHygiene.js';
 import {base_urls} from './aliases.js';
 import '../css/base.css';
 import '../../static/css/styles.css'; // /whg/static/css/styles.css
@@ -266,6 +267,11 @@ Promise.all([
             }
         });
         $('body').tooltip(); // Initialize Bootstrap tooltips with delegation to any dynamic content
+
+        // Safety net: dismiss any shown tooltip on scroll (and drop orphans left
+        // behind by re-rendered triggers) — Bootstrap alone relies on a
+        // `mouseleave` that wheel-scrolling never fires. See tooltipHygiene.js.
+        initTooltipHygiene();
 
         // Extend popover defaults
         $.extend(true, $.fn.popover.Constructor.Default, {
