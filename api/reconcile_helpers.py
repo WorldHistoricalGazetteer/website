@@ -292,6 +292,13 @@ def make_candidate(hit, query_text, max_score, schema_space):
         "name": name,
         "score": score,
         "match": is_exact,
+        # Which source this candidate came from (place#157). A reconciliation
+        # response blends candidates from many differently-licensed gazetteers;
+        # without this the root `attribution` block would tell a consumer WHICH
+        # licences the response spans but not which candidate falls under which.
+        # Resolve against `attribution.sources[namespace]` (or, for "whg",
+        # `attribution.datasets`).
+        "namespace": get_namespace(str(src.get("place_id"))),
         "alt_names": alt_names,
         "ccodes": ccodes,
         "repr_point": repr_point(src),  # [lng, lat] or None — enables map preview + geo-disambiguation

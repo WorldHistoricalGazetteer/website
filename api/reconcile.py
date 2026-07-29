@@ -1020,7 +1020,40 @@ def process_queries(queries, batch_size=50, user=None):
         except ValueError as e:
             logger.warning("process_queries: query '%s' failed: %s", key, e)
             results[key] = {"error": str(e), "result": []}
-    return {**results, "messages": messages} if messages else results
+
+    out = {**results, "messages": messages} if messages else dict(results)
+    out["attribution"] = _attribution_for_results(results)
+    return out
+
+
+def _attribution_for_results(results):
+    """Aggregated source terms for a batch of reconciliation results (place#157).
+
+    Reconciliation is the channel where this matters most: a single response
+    blends candidates drawn from many differently-licensed gazetteers, so
+    without it a consumer cannot comply with per-source terms even when willing.
+    Each candidate carries a ``namespace`` (see ``make_candidate``) that resolves
+    against ``sources`` here — or, for legacy ``whg`` candidates, against
+    ``datasets``.
+
+    Note the reconciliation response is otherwise a map of query-key → result;
+    ``attribution`` is a non-query key alongside the existing ``messages``, and
+    clients (OpenRefine included) ignore keys they don't recognise.
+    """
+    from api.attribution import safe_attribution_block, datasets_from_place_ids
+
+    candidates = [c
+                  for r in results.values() if isinstance(r, dict)
+                  for c in (r.get("result") or [])]
+    namespaces = {c.get("namespace") for c in candidates if c.get("namespace")}
+    # "place:12345" → "12345"; only legacy WHG ids are numeric, and only those
+    # resolve to a contributing dataset.
+    whg_ids = [str(c.get("id", "")).split(":", 1)[-1]
+               for c in candidates if c.get("namespace") == WHG_NAMESPACE]
+    return safe_attribution_block(
+        namespaces=namespaces,
+        datasets=datasets_from_place_ids(whg_ids),
+    )
 
 
 def normalise_query_params(params):

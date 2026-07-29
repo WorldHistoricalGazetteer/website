@@ -35,6 +35,7 @@ from rest_framework.reverse import reverse
 from rest_framework.generics import ListAPIView
 from rest_framework.views import APIView
 from accounts.permissions import IsOwnerOrReadOnly
+from api.attribution import safe_attribution_block
 from api.serializers import (
     UserSerializer, DatasetSerializer, PlaceSerializer,
     PlaceTableSerializer, PlaceGeomSerializer, AreaSerializer,
@@ -265,6 +266,11 @@ class SpatialAPIView(generics.ListAPIView):
                 "count": qs.count(),
                 "features": serializer.data,
                 "pagesize": len(serializer.data),
+                # Aggregated source terms at the response root (place#157). Taken
+                # from the queryset rather than the serialized output so the
+                # dataset FK is read directly.
+                "attribution": safe_attribution_block(
+                    datasets=set(filtered.values_list('dataset_id', flat=True))),
             })
 
         # Handle specific error types without generic fallback
@@ -577,6 +583,14 @@ class IndexAPIView(View):
                     'pagesize': pagesize,
                     'features': union_records[:int(pagesize)] if pagesize else union_records}
 
+        # Aggregated source terms at the response root (place#157) so a consumer
+        # can comply with each contributing source's licence without a second
+        # lookup. These records come from the whg/pub indexes, so the sources are
+        # contributed datasets — keyed by the `dataset` label each feature carries.
+        result['attribution'] = safe_attribution_block(
+            datasets={(f.get('properties') or {}).get('dataset')
+                      for f in result.get('features') or []})
+
         # to client
         return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False, 'indent': 2})
 
@@ -785,7 +799,10 @@ class SearchAPIView(generics.ListAPIView):
             "parameters": params,
             "note": err_note,
             "type": "FeatureCollection",
-            "features": serializer.data
+            "features": serializer.data,
+            # Aggregated source terms at the response root (place#157).
+            "attribution": safe_attribution_block(
+                datasets=set(filtered.values_list('dataset_id', flat=True))),
         }
         return JsonResponse(result, safe=False, json_dumps_params={'ensure_ascii': False, 'indent': 2})
 

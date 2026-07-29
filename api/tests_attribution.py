@@ -1,7 +1,10 @@
 from django.test import TestCase
 
-from api.attribution import attribution_for, attribution_block, namespaces_from_ids
+from api.attribution import (
+    attribution_for, attribution_block, namespaces_from_ids, safe_attribution_block,
+)
 from api.models import GazetteerRegistryEntry
+from licensing.models import License
 
 
 class AttributionHelperTests(TestCase):
@@ -48,6 +51,53 @@ class AttributionHelperTests(TestCase):
     def test_block_has_whg_overlay(self):
         block = attribution_block(['gn'])
         self.assertIn('sources', block)
+        self.assertEqual(block['whg']['spdx_id'], 'CC-BY-NC-4.0')
+
+    # ── place#157: the aggregated block must state TERMS, not just names ──
+
+    def test_attribution_for_includes_licence_object(self):
+        """The point of the block: a consumer must be able to read the licence
+        and the two flags it has to act on, without a second lookup."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(
+            license=License.objects.get(spdx_id='CC-BY-4.0'))
+        lic = attribution_for(['gn'])['gn']['license']
+        self.assertEqual(lic['spdx_id'], 'CC-BY-4.0')
+        self.assertTrue(lic['permits_commercial'])
+        self.assertFalse(lic['share_alike'])
+        self.assertTrue(lic['attribution_required'])
+
+    def test_share_alike_flag_surfaces(self):
+        """ShareAlike is the flag with real downstream consequences, so it must
+        come through truthfully rather than defaulting to False."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(
+            license=License.objects.get(spdx_id='ODbL-1.0'))
+        lic = attribution_for(['gn'])['gn']['license']
+        self.assertTrue(lic['permits_commercial'])
+        self.assertTrue(lic['share_alike'])
+
+    def test_licence_is_none_when_unresolved(self):
+        """A source with no resolved licence must report `license: null` rather
+        than silently look permissive."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(license=None)
+        self.assertIsNone(attribution_for(['gn'])['gn']['license'])
+
+    def test_licence_url_override_wins(self):
+        """Where a source deviates from the canonical deed, its own URL wins."""
+        GazetteerRegistryEntry.objects.filter(namespace='gn').update(
+            license=License.objects.get(spdx_id='CC-BY-4.0'),
+            license_url='https://example.org/bespoke-deed')
+        self.assertEqual(
+            attribution_for(['gn'])['gn']['license']['url'],
+            'https://example.org/bespoke-deed')
+
+    def test_datasets_key_omitted_when_no_contributed_data(self):
+        block = attribution_block(namespaces=['gn'])
+        self.assertNotIn('datasets', block)
+
+    def test_safe_block_survives_failure(self):
+        """Attribution is supplementary — it must never break a result payload."""
+        block = safe_attribution_block(namespaces=object())   # not iterable of str
+        self.assertEqual(block['sources'], {})
         self.assertEqual(block['whg']['spdx_id'], 'CC-BY-NC-4.0')
 
 
