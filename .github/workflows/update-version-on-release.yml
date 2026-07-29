@@ -12,20 +12,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      # Check out main explicitly. On a release event the default ref is the
+      # tag, which leaves a detached HEAD; committing there and pushing to main
+      # only works while main happens to point at the tag. Once main has moved
+      # on, the push is rejected as a non-fast-forward.
+      - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Extract release tag and write to VERSION
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
         run: |
-          TAG_NAME="${GITHUB_REF_NAME}"
           CLEAN_TAG="${TAG_NAME#v}"  # Remove leading 'v' if present
+          if [ -z "$CLEAN_TAG" ]; then
+            echo "::error::Release tag was empty; refusing to write VERSION."
+            exit 1
+          fi
           echo "Updating VERSION to ${CLEAN_TAG}"
           echo "${CLEAN_TAG}" > VERSION
+          # Export for later steps: shell variables do not survive across steps.
+          echo "CLEAN_TAG=${CLEAN_TAG}" >> "$GITHUB_ENV"
 
       - name: Commit and push VERSION file
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add VERSION
-          git commit -m "Update VERSION to ${CLEAN_TAG}" || echo "No changes to commit"
+          if git diff --cached --quiet; then
+            echo "VERSION already reads ${CLEAN_TAG}; nothing to commit."
+            exit 0
+          fi
+          git commit -m "Update VERSION to ${CLEAN_TAG}"
           git push origin HEAD:main
