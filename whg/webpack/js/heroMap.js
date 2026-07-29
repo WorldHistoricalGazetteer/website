@@ -125,6 +125,51 @@ function filtersIntersect(layerFilter, requestedValues) {
     return true;
 }
 
+/**
+ * Merge the tile fragments of one boundary feature back into a single polygon.
+ *
+ * A polygon in a vector tileset is cut at every tile edge, and tippecanoe pads
+ * each piece with a buffer, so neighbouring fragments *overlap* by a fraction
+ * of a degree. MapLibre stencils that away for the tiled fill, but the selected
+ * region is re-published as a GeoJSON overlay, where nothing clips it: the
+ * overlap bands blend twice (the "tile overlap stripes" of place#156) and every
+ * tile-clip edge is drawn by the overlay's line layer as a rule straight across
+ * the region's interior. Unioning the fragments removes both, and — since the
+ * same geometry is handed on as the search's spatial constraint — also stops
+ * the constraint double-counting its own seams.
+ *
+ * Falls back to the raw fragments if turf is unavailable or the union fails,
+ * which is no worse than the previous behaviour.
+ *
+ * @param {Array} features — one Feature per fragment, already de-duplicated
+ * @returns {Object} FeatureCollection, ideally of a single merged Feature
+ */
+function dissolveFragments(features) {
+    const fc = { type: 'FeatureCollection', features };
+    // ``window.turf`` — turf is a CDN global (see base.js), not a bundled import,
+    // so the bare identifier is not in this module's scope.
+    const turf = window.turf;
+    if (features.length < 2 || !turf || !turf.union) return fc;
+    try {
+        let merged = features[0];
+        for (let i = 1; i < features.length; i++) {
+            merged = turf.union(merged, features[i]) || merged;
+        }
+        if (!merged || !merged.geometry) return fc;
+        return {
+            type: 'FeatureCollection',
+            features: [{
+                type: 'Feature',
+                geometry: merged.geometry,
+                properties: features[0].properties || {},
+            }],
+        };
+    } catch (e) {
+        console.warn('heroMap: boundary fragment union failed, using raw fragments', e);
+        return fc;
+    }
+}
+
 class HeroMap {
     constructor() {
         this.map = null;
@@ -140,6 +185,7 @@ class HeroMap {
         this._fillBySource = {};
         this._boundaryLayerIds = [];
         this._originalFilters = {};
+        this._originalZoomRanges = {};
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
@@ -458,10 +504,12 @@ class HeroMap {
         }
 
         this._originalFilters = {};
+        this._originalZoomRanges = {};
         for (const layerId of this._boundaryLayerIds) {
             const def = style.layers.find(l => l.id === layerId);
             this._originalFilters[layerId] = def?.filter
                 ? JSON.parse(JSON.stringify(def.filter)) : null;
+            this._originalZoomRanges[layerId] = [def?.minzoom ?? 0, def?.maxzoom ?? 24];
         }
 
         for (const layerId of this._boundaryLayerIds) {
@@ -518,9 +566,40 @@ class HeroMap {
         this.clearBoundaryHover();
     }
 
+    /**
+     * Select a boundary the user found by name rather than by clicking it.
+     *
+     * The index carries no polygon for an OSM/OHM boundary, so a search result
+     * only becomes a usable region constraint once the same feature is located
+     * in the tiles — which is what this does, emitting the same
+     * ``boundary-click`` event the map click path emits.
+     *
+     * @param {string} sourceId — boundary source-layer name (``osm``/``ohm``)
+     * @param {string} placeId — e.g. ``osm:r161648``
+     * @returns {boolean} whether the feature was present in the loaded tiles
+     */
+    selectBoundaryByPlaceId(sourceId, placeId) {
+        if (!this.map || !placeId || !this._layersBySource[sourceId]) return false;
+        let matches;
+        try {
+            matches = this.map.querySourceFeatures(sourceId, {
+                sourceLayer: sourceId,
+                filter: ['==', ['get', 'place_id'], placeId],
+            });
+        } catch (e) {
+            return false;
+        }
+        if (!matches || matches.length === 0) return false;
+        this._emitBoundarySelection(matches[0], sourceId);
+        return true;
+    }
+
     _onBoundaryClick(e, sourceId) {
         if (!e.features || e.features.length === 0) return;
-        const feature = e.features[0];
+        this._emitBoundarySelection(e.features[0], sourceId);
+    }
+
+    _emitBoundarySelection(feature, sourceId) {
         const props = feature.properties || {};
 
         this.clearBoundarySelection();
@@ -570,7 +649,7 @@ class HeroMap {
                 seen.add(key);
                 features.push({ type: 'Feature', geometry: f.geometry, properties: f.properties || {} });
             }
-            return { type: 'FeatureCollection', features };
+            return dissolveFragments(features);
         } catch (e) {
             console.warn('heroMap._collectBoundaryFragments: query failed', e);
             return null;
@@ -581,6 +660,13 @@ class HeroMap {
      * Activate boundary display for one source, narrowed to the given
      * `boundary` field values. See contextMap.showBoundaries for full
      * semantics — this is the same logic on the hero map.
+     *
+     * The style tiers its boundary linework by zoom (country lines stop at z8,
+     * every tier at z10) on the assumption that all tiers are drawn together.
+     * Here only one tier is ever visible at a time, so those ceilings just make
+     * the chosen boundaries vanish as you zoom in while their fill stays
+     * clickable (place#156). Any layer this call switches on is therefore
+     * widened to the full zoom range, and put back when it is switched off.
      *
      * @param {Object} opts
      * @param {string} opts.source — boundary source-layer name
@@ -601,6 +687,7 @@ class HeroMap {
             for (const layerId of layerIds) {
                 try {
                     this.map.setFilter(layerId, this._originalFilters[layerId] || null);
+                    this._restoreLayerZoomRange(layerId);
                     this.map.setLayoutProperty(layerId, 'visibility', 'none');
                 } catch (e) {}
             }
@@ -617,6 +704,7 @@ class HeroMap {
             if (!overlaps) {
                 try {
                     this.map.setFilter(layerId, original || null);
+                    this._restoreLayerZoomRange(layerId);
                     this.map.setLayoutProperty(layerId, 'visibility', 'none');
                 } catch (e) {}
                 continue;
@@ -627,6 +715,7 @@ class HeroMap {
                 } else {
                     this.map.setFilter(layerId, original || null);
                 }
+                this._widenLayerZoomRange(layerId);
                 this.map.setLayoutProperty(layerId, 'visibility', 'visible');
             } catch (e) {}
         }
@@ -656,11 +745,62 @@ class HeroMap {
         this._currentSource = source;
     }
 
+    /** Let an active boundary tier draw at every zoom (see showBoundaries). */
+    _widenLayerZoomRange(layerId) {
+        const original = this._originalZoomRanges[layerId];
+        if (!original) return;
+        try { this.map.setLayerZoomRange(layerId, 0, 24); } catch (e) {}
+    }
+
+    /** Put a boundary layer's styled zoom range back as the style declared it. */
+    _restoreLayerZoomRange(layerId) {
+        const original = this._originalZoomRanges[layerId];
+        if (!original) return;
+        try { this.map.setLayerZoomRange(layerId, original[0], original[1]); } catch (e) {}
+    }
+
+    /**
+     * How many distinct boundary features a source holds at the given
+     * ``boundary`` values, over the tiles currently loaded. Drives the Regions
+     * panel's readout and its auto-tier fallback — a tier that resolves to
+     * nothing is the main reason the old fixed zoom→level mapping felt
+     * unpredictable (place#156).
+     *
+     * Deliberately ``querySourceFeatures``, not ``queryRenderedFeatures``:
+     * layer filters are applied when a tile is parsed, so a count taken right
+     * after ``setFilter`` would still describe the previous tier. Querying the
+     * source with an ad-hoc filter is synchronous and answers about the data
+     * rather than about the current paint.
+     *
+     * @param {string} source — boundary source-layer name
+     * @param {string[]} boundaryValues — admin levels making up the tier
+     * @returns {number} distinct features found
+     */
+    countBoundaryFeatures(source, boundaryValues) {
+        if (!this.map || !source || !this._layersBySource[source]) return 0;
+        try {
+            const features = this.map.querySourceFeatures(source, {
+                sourceLayer: source,
+                filter: (boundaryValues && boundaryValues.length)
+                    ? ['match', ['get', 'boundary'], boundaryValues, true, false]
+                    : null,
+            });
+            const seen = new Set();
+            for (const f of features) {
+                seen.add(f.id != null ? f.id : f.properties?.place_id);
+            }
+            return seen.size;
+        } catch (e) {
+            return 0;
+        }
+    }
+
     hideBoundaries() {
         if (!this.map || this._boundaryLayerIds.length === 0) return;
         for (const layerId of this._boundaryLayerIds) {
             try {
                 this.map.setFilter(layerId, this._originalFilters[layerId] || null);
+                this._restoreLayerZoomRange(layerId);
                 this.map.setLayoutProperty(layerId, 'visibility', 'none');
             } catch (e) {}
         }

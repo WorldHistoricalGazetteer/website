@@ -2223,6 +2223,23 @@ a.pl-chip.pl-aat { cursor: pointer; }
     height: 1em;
 }
 
+/* Live readout under the boundary-level picker: how many regions the chosen
+   level actually has here, and which level was substituted when it had none
+   (place#156). Empty and normal states differ in weight, not in colour, so it
+   reads as information rather than as an error. */
+.boundary-level-status {
+    margin-top: 4px;
+    margin-bottom: 0;
+    font-style: normal;
+    color: #4a6785;
+}
+.boundary-level-status:empty {
+    display: none;
+}
+.boundary-level-status--empty {
+    color: #8a6d3b;
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Responsive
    ═══════════════════════════════════════════════════════════════════ */

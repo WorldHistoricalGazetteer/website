@@ -1967,7 +1967,12 @@ async function performAreaSearch() {
     }
 
     const results = await areaRouter.search(query, {
-        adminLevel: layerPalette ? layerPalette.getAdminLevel() : null,
+        // Deliberately unfiltered by admin level: the level picker sets what the
+        // map *draws*, and a name search that silently ignored regions at other
+        // levels would be one more way for the Areas panel to look broken
+        // (place#156). "phonetic" has no boundary equivalent — fall back to
+        // contains.
+        mode: searchMatchMode === 'phonetic' ? 'in' : searchMatchMode,
         namespace: layerPalette ? layerPalette.getNamespace() : 'osm',
     });
 
@@ -2046,22 +2051,28 @@ function highlightAreaDropdown(items) {
     });
 }
 
+/* Zoom to approach a boundary search hit at.
+   Two constraints have to hold at once: the OSM/OHM tilesets are built in
+   bands (country from z0, state from z3, district from z5, local from z7) so
+   the feature only exists above a certain zoom, and the Regions panel's
+   auto-by-zoom tier has to land on the tier that draws that level — otherwise
+   the region arrives invisible. These values satisfy both. */
+function zoomForAdminLevel(level) {
+    const n = parseInt(level, 10);
+    if (!Number.isFinite(n)) return 5;
+    if (n <= 1) return 2;
+    if (n === 2) return 3;
+    if (n <= 4) return 5;
+    if (n <= 6) return 7;
+    return 9;
+}
+
 function selectAreaResult(index) {
     const item = areaSearchResults[index];
     if (!item) return;
 
-    if (item._fromIndex && !item.geometry && item.bounds) {
-        // Zoom to bounds so user can click polygon on map
-        const [west, south, east, north] = item.bounds;
-        try {
-            heroMap.map.fitBounds([[west, south], [east, north]], {
-                padding: 40, maxZoom: 8,
-            });
-        } catch (e) { /* */ }
-        document.getElementById('atlas_search_input').value = '';
-        closeAreaDropdown();
-        return;
-    }
+    document.getElementById('atlas_search_input').value = '';
+    closeAreaDropdown();
 
     if (item.geometry) {
         addRegionSelection({
@@ -2071,14 +2082,51 @@ function selectAreaResult(index) {
             namespace: item.namespace || 'osm',
             geometry: item.geometry,
         });
-    } else if (item.bounds) {
-        // Zoom to bounds so user can click on map
-        const [west, south, east, north] = item.bounds;
-        heroMap.map.fitBounds([[west, south], [east, north]], { padding: 40, maxZoom: 8 });
+        return;
     }
 
-    document.getElementById('atlas_search_input').value = '';
-    closeAreaDropdown();
+    // Boundary hit from the index: it has a point but no polygon, so fly to it
+    // at a zoom where its tiles carry it and then pick the feature up by
+    // place_id. Previously the result could only ever recentre the map and the
+    // user had to find and click the polygon themselves (place#156).
+    if (item._fromIndex && item.place_id && item.repr_point) {
+        resolveBoundaryFromTiles(item);
+        return;
+    }
+
+    if (item.bounds) {
+        const [west, south, east, north] = item.bounds;
+        try {
+            heroMap.map.fitBounds([[west, south], [east, north]], { padding: 40, maxZoom: 8 });
+        } catch (e) { /* */ }
+    }
+}
+
+/**
+ * Fly to a boundary search hit and turn it into a region selection.
+ *
+ * The map has to be at the hit's own zoom band before its feature exists in the
+ * tiles, and the tiles then have to arrive, so this waits for the map to settle
+ * before looking. If the feature still is not there — a level the tileset drops
+ * at this zoom, say — the map is left framed on it and the user is told to
+ * click, which is the old behaviour rather than a silent failure.
+ */
+function resolveBoundaryFromTiles(item) {
+    const source = item.namespace || 'osm';
+    const zoom = zoomForAdminLevel(item.boundary);
+    // Put the level picker on the tier that draws this region, or the polygon
+    // would be neither visible nor clickable when we get there.
+    if (layerPalette) layerPalette.setActiveSource(source);
+
+    try {
+        heroMap.map.flyTo({ center: item.repr_point, zoom, duration: 900 });
+    } catch (e) {
+        return;
+    }
+    heroMap.map.once('idle', () => {
+        if (heroMap.selectBoundaryByPlaceId(source, item.place_id)) return;
+        showCopyToast(`Showing ${item.label} — click its outline to use it as an area filter.`);
+    });
 }
 
 /* ── Region selections ── */

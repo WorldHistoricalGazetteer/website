@@ -25,7 +25,7 @@ export default class AreaSearchRouter {
      * Search for regions matching the query, routing to appropriate backends.
      *
      * @param {string} query - search text (min 2 chars)
-     * @param {object} options - { adminLevel, namespace, limit, temporalStart, temporalEnd }
+     * @param {object} options - { namespace, limit, mode, temporalStart, temporalEnd }
      * @returns {Promise<Array>} merged results from all active sources
      */
     async search(query, options = {}) {
@@ -57,14 +57,19 @@ export default class AreaSearchRouter {
     }
 
     /**
-     * Query /search/boundaries/ for OSM/OHM admin regions.
+     * Query /atlas/boundaries/ for OSM/OHM admin regions.
+     *
+     * Was ``/search/boundaries/``, a path with no URL pattern behind it: every
+     * lookup 404'd, so the Areas box could never find anything (place#156).
+     *
+     * The index carries no polygon for a boundary, only a representative point,
+     * so results arrive without geometry; ``selectAreaResult`` in atlas.js
+     * finishes the job by matching ``place_id`` against the boundary tiles once
+     * the map has flown to the hit.
      */
     async _searchBoundaries(query, options, activeSources) {
         const params = new URLSearchParams({ q: query, limit: String(options.limit || 20) });
-
-        if (options.adminLevel != null && options.adminLevel !== '') {
-            params.set('boundary', String(options.adminLevel));
-        }
+        if (options.mode) params.set('mode', options.mode);
 
         // Single-namespace filter only — both active means no constraint.
         const namespaces = [];
@@ -73,21 +78,24 @@ export default class AreaSearchRouter {
         if (namespaces.length === 1) params.set('namespace', namespaces[0]);
 
         try {
-            const resp = await fetch(`/search/boundaries/?${params}`);
+            const resp = await fetch(`/atlas/boundaries/?${params}`);
             if (!resp.ok) return [];
             const data = await resp.json();
             return (data.results || []).map(r => ({
-                id: r.id || `boundary:${r.namespace}:${r.name}`,
+                id: r.place_id || `boundary:${r.namespace}:${r.name}`,
                 label: r.name,
-                sublabel: `Level ${r.boundary} · ${(r.namespace || 'osm').toUpperCase()}`
-                    + (r.ccodes && r.ccodes.length ? ` · ${r.ccodes.join(', ')}` : ''),
+                sublabel: [
+                    r.boundary != null ? `Level ${r.boundary}` : null,
+                    (r.namespace || 'osm').toUpperCase(),
+                    r.ccodes && r.ccodes.length ? r.ccodes.join(', ') : null,
+                ].filter(Boolean).join(' · '),
                 source: r.namespace || 'osm',
                 source_type: 'boundary',
-                bounds: r.bounds,
                 repr_point: r.repr_point,
+                place_id: r.place_id,
                 boundary: r.boundary,
                 namespace: r.namespace || 'osm',
-                geometry: null, // Must click polygon on map to get geometry
+                geometry: null,  // resolved from the tiles on selection
                 _fromIndex: true,
             }));
         } catch (e) {

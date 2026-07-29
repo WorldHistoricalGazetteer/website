@@ -564,6 +564,87 @@ def atlas_place(request):
     return JsonResponse(place)
 
 
+def atlas_boundaries(request):
+    """Name search over the OSM/OHM administrative boundaries behind the Atlas
+    Areas panel, so a region can be found by typing rather than only by
+    spotting its polygon on the map.
+
+    Replaces the ``/search/boundaries/`` endpoint the client had been calling,
+    which never existed — every Areas search 404'd and reported "No matching
+    areas found" (place#156).
+
+    Boundary features are picked out of the gateway's hits by their source
+    type: OSM and OHM both tag administrative areas ``boundary=administrative``,
+    which the index normalises to a type with identifier ``administrative``.
+    The index holds no polygons for these features (only a representative
+    point), so the client follows a selection up by locating the same
+    ``place_id`` in the boundary tiles.
+
+    The search response omits ``boundary``, so the surviving hits are re-read
+    through ``/api/places`` to pick up each one's admin level. It is worth the
+    extra round trip: the level is what lets the client label a result and put
+    the map on the tier the region is drawn at, instead of dropping the user at
+    a zoom where their chosen region is not rendered.
+    """
+    if not (request.user.is_authenticated and request.user.can_access_beta):
+        return JsonResponse({"error": "beta access required"}, status=403)
+
+    query = (request.GET.get("q") or "").strip()
+    if len(query) < 2:
+        return JsonResponse({"results": []})
+
+    namespace = (request.GET.get("namespace") or "").strip()
+    namespaces = [namespace] if namespace in ("osm", "ohm") else ["osm", "ohm"]
+    try:
+        limit = max(1, min(50, int(request.GET.get("limit") or 20)))
+    except (TypeError, ValueError):
+        limit = 20
+    mode = request.GET.get("mode")
+    if mode not in ("exact", "starts", "in", "fuzzy"):
+        mode = "in"
+
+    from api.crc_client import crc_search
+    # Over-fetch: the gateway cannot filter on feature type, so non-boundary
+    # places (settlements sharing the name) are dropped here and would
+    # otherwise eat into the caller's limit.
+    data = crc_search({
+        "qstr": query,
+        "mode": mode,
+        "namespaces": namespaces,
+        "size": limit * 5,
+    }, user=request.user)
+    if data is None:
+        return JsonResponse({"results": [], "gateway": False})
+
+    results = []
+    for hit in (data.get("hits") or []):
+        if not any((t or {}).get("identifier") == "administrative"
+                   for t in (hit.get("types") or [])):
+            continue
+        results.append({
+            "id": hit.get("place_id"),
+            "place_id": hit.get("place_id"),
+            "name": hit.get("title"),
+            "namespace": hit.get("namespace"),
+            "ccodes": hit.get("ccodes") or [],
+            "repr_point": hit.get("repr_point"),
+            "boundary": None,
+        })
+        if len(results) >= limit:
+            break
+
+    ids = [r["place_id"] for r in results if r["place_id"]]
+    if ids:
+        from api.crc_client import crc_places
+        detail = crc_places(ids, user=request.user) or {}
+        levels = {p.get("place_id"): p.get("boundary")
+                  for p in (detail.get("places") or [])}
+        for r in results:
+            r["boundary"] = levels.get(r["place_id"])
+
+    return JsonResponse({"results": results, "gateway": True})
+
+
 def fetchArea(request):
     aid = request.GET.get('pk')
     area = Area.objects.filter(id=aid)

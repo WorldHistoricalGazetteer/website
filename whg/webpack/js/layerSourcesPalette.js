@@ -12,34 +12,56 @@
 
 import heroMap from './heroMap';
 
-/* ── Admin tier definitions ── */
-const ADMIN_TIERS = [
-    { value: 'off', label: 'Off',          adminLevel: null },
-    { value: '0',   label: 'Continental',   adminLevel: 0 },
-    { value: '1',   label: 'Sub-Cont.',     adminLevel: 1 },
-    { value: '2',   label: 'Country',       adminLevel: 2 },
-    { value: '3',   label: 'State',         adminLevel: 3 },
-    { value: '4',   label: 'Province',      adminLevel: 4 },
-    { value: '5',   label: 'District',      adminLevel: 5 },
-    { value: '6',   label: 'County',        adminLevel: 6 },
-    { value: '7',   label: 'City',          adminLevel: 7 },
-    { value: '8',   label: 'Ward',          adminLevel: 8 },
+/* ── Boundary tier definitions ──
+ *
+ * A tier is a *group* of OSM/OHM ``admin_level`` values, not a single one, and
+ * the groups are exactly those the whg-context style already uses for its
+ * boundary line and label layers (``*-line-continental`` = 0,1; ``-country`` =
+ * 2; ``-state`` = 3,4; ``-district`` = 5,6; ``-local`` = 7..11).
+ *
+ * Single levels were the root of place#156's "unpredictable" filtering:
+ *   • the fill layer was filtered to one level while the outlines were drawn
+ *     for the whole pair, so the map showed borders that could not be clicked;
+ *   • ``admin_level`` is not comparable between countries — 3 and 5 are used by
+ *     only a handful of them (a z4 tile over western Europe carries 14 features
+ *     at level 3 against 206 at level 4), so those two settings looked broken;
+ *   • levels 9–11 carry the dense urban data in OSM and had no setting at all.
+ *
+ * ``autoFrom`` is the zoom at which the tier takes over when *Auto by zoom* is
+ * on, chosen to match the zoom range over which the style is willing to draw
+ * that tier's linework. */
+const BOUNDARY_TIERS = [
+    { value: 'off',         label: 'Off',                     levels: null,  autoFrom: null },
+    { value: 'continental', label: 'Continent / world region', levels: ['0', '1'], autoFrom: 0 },
+    { value: 'country',     label: 'Country',                  levels: ['2'], autoFrom: 2.5 },
+    { value: 'state',       label: 'State / province',         levels: ['3', '4'], autoFrom: 4 },
+    { value: 'district',    label: 'District / county',        levels: ['5', '6'], autoFrom: 6 },
+    { value: 'local',       label: 'Municipality / locality',  levels: ['7', '8', '9', '10', '11'], autoFrom: 8 },
 ];
 
-/* Zoom thresholds for auto admin-level switching.
- * Globe projection uses lower zoom numbers — Continental features
- * need to be visible at typical globe-view zooms (~2–3), not only
- * when fully zoomed out. */
-const ZOOM_THRESHOLDS = [
-    { maxZoom: 2.5,      adminLevel: 0 },
-    { maxZoom: 3.2,      adminLevel: 1 },
-    { maxZoom: 4.0,      adminLevel: 2 },
-    { maxZoom: 5.0,      adminLevel: 3 },
-    { maxZoom: 6.5,      adminLevel: 4 },
-    { maxZoom: 8,        adminLevel: 6 },
-    { maxZoom: 10,       adminLevel: 7 },
-    { maxZoom: Infinity, adminLevel: 8 },
-];
+/* Selectable tiers, coarsest first — BOUNDARY_TIERS without the Off row. */
+const SELECTABLE_TIERS = BOUNDARY_TIERS.filter(t => t.levels);
+
+function tierByValue(value) {
+    return BOUNDARY_TIERS.find(t => t.value === value) || null;
+}
+
+/** Coarsest-to-finest tier whose ``autoFrom`` the given zoom has reached. */
+function tierForZoom(zoom) {
+    let chosen = SELECTABLE_TIERS[0];
+    for (const t of SELECTABLE_TIERS) {
+        if (zoom >= t.autoFrom) chosen = t;
+    }
+    return chosen;
+}
+
+/** "4" or "3–4" or "7–11" — the admin_level values a tier covers. */
+function tierLevelRange(tier) {
+    if (!tier || !tier.levels) return '';
+    const first = tier.levels[0];
+    const last = tier.levels[tier.levels.length - 1];
+    return first === last ? first : `${first}–${last}`;
+}
 
 /* Sources that support admin-tier filtering (the Boundary Level dropdown).
    osm_misc, po, clio, nl are boundary-bearing but untiered: their
@@ -77,9 +99,11 @@ export default class LayerSourcesPalette {
         // Namespace is inferred from the selected source
         this._currentNamespace = this._inferNamespace(this._activeSource);
 
-        this._currentAdminLevel = null;
+        this._currentTier = null;      // BOUNDARY_TIERS entry, or null when off
+        this._shownSource = null;      // tile source the current tier was applied to
         this._autoAdmin = true;
         this._boundariesVisible = false;
+        this._probeToken = 0;          // cancels a superseded empty-tier probe
 
         this._init();
     }
@@ -122,8 +146,8 @@ export default class LayerSourcesPalette {
                     Click a boundary polygon to select it as a region constraint.
                 </p>
                 <select id="boundary_level_select" class="form-select form-select-sm">
-                    ${ADMIN_TIERS.map(t =>
-                        `<option value="${t.value}">${t.label}${t.adminLevel != null ? ' (' + t.adminLevel + ')' : ''}</option>`
+                    ${BOUNDARY_TIERS.map(t =>
+                        `<option value="${t.value}">${t.label}${t.levels ? ' (' + tierLevelRange(t) + ')' : ''}</option>`
                     ).join('')}
                 </select>
                 <div class="admin-auto-toggle">
@@ -132,10 +156,13 @@ export default class LayerSourcesPalette {
                         <label class="form-check-label" for="admin_auto_zoom">Auto by zoom</label>
                     </div>
                 </div>
+                <p id="boundary_level_status" class="layer-panel-help-text boundary-level-status"></p>
                 <p class="layer-panel-help-text" style="margin-top:4px;">
-                    When <em>Auto by zoom</em> is on, the boundary level adjusts
-                    automatically as you zoom in or out — showing countries at
-                    wide zoom, provinces at mid zoom, and districts when zoomed in.
+                    Each setting groups the <em>admin_level</em> values that mean the
+                    same thing across countries — they are not used consistently
+                    worldwide, so some levels are empty in some places.
+                    When <em>Auto by zoom</em> is on the level follows the zoom, and
+                    steps to the nearest level that has anything to show here.
                 </p>
             </div>`;
 
@@ -162,18 +189,22 @@ export default class LayerSourcesPalette {
                 }
 
                 if (isTiered) {
-                    // Apply the admin-tier boundary filter — auto-pick by zoom
-                    // if auto is on, otherwise reuse the current admin level.
+                    // Apply the boundary tier filter — auto-pick by zoom if auto
+                    // is on, otherwise reuse the tier the user chose. OSM and OHM
+                    // populate wildly different admin levels, so a source change
+                    // has to re-probe even when the tier is unchanged.
                     if (this._autoAdmin) {
-                        this._applyZoomAutoLevel();
-                    } else if (this._currentAdminLevel != null) {
+                        this._applyAutoTier();
+                    } else if (this._currentTier) {
                         this._updateBoundaryFilter();
                     }
                 } else {
                     // Untiered: show every feature in this source's tileset.
-                    this._currentAdminLevel = null;
+                    this._currentTier = null;
+                    this._shownSource = tileSourceFor(this._activeSource);
                     this._boundariesVisible = true;
-                    heroMap.showBoundaries({ source: tileSourceFor(this._activeSource) });
+                    this._setStatus('');
+                    heroMap.showBoundaries({ source: this._shownSource });
                 }
 
                 this._onSourcesChange();
@@ -184,13 +215,14 @@ export default class LayerSourcesPalette {
         const select = this._panel.querySelector('#boundary_level_select');
         if (select) {
             select.addEventListener('change', () => {
-                const val = select.value;
-                if (val === 'off') {
-                    this._currentAdminLevel = null;
+                const tier = tierByValue(select.value);
+                if (!tier || !tier.levels) {
+                    this._currentTier = null;
                     this._boundariesVisible = false;
                     heroMap.hideBoundaries();
+                    this._setStatus('');
                 } else {
-                    this._currentAdminLevel = parseInt(val, 10);
+                    this._currentTier = tier;
                     this._boundariesVisible = true;
                     this._updateBoundaryFilter();
                 }
@@ -207,7 +239,7 @@ export default class LayerSourcesPalette {
             autoCheck.addEventListener('change', () => {
                 this._autoAdmin = autoCheck.checked;
                 if (this._autoAdmin) {
-                    this._applyZoomAutoLevel();
+                    this._applyAutoTier();
                 }
             });
         }
@@ -232,61 +264,157 @@ export default class LayerSourcesPalette {
     /* ──────────────────────────────────────────────────────────────── */
 
     _updateBoundaryFilter() {
-        if (this._currentAdminLevel === null) {
+        if (!this._currentTier) {
+            this._shownSource = null;
             heroMap.hideBoundaries();
+            this._setStatus('');
             return;
         }
         // Only tiered sources reach this path (osm/ohm). Untiered sources
         // render via the radio change handler with no boundaryValues.
+        this._shownSource = tileSourceFor(this._activeSource);
         heroMap.showBoundaries({
-            source: tileSourceFor(this._activeSource),
-            boundaryValues: [String(this._currentAdminLevel)],
+            source: this._shownSource,
+            boundaryValues: this._currentTier.levels,
         });
+        this._syncSelect();
+        this._probeTier();
+    }
+
+    /** Reflect the active tier in the dropdown (auto changes it behind the user). */
+    _syncSelect() {
+        const select = this._panel.querySelector('#boundary_level_select');
+        if (select) select.value = this._currentTier ? this._currentTier.value : 'off';
+    }
+
+    _setStatus(text, muted = false) {
+        const el = this._panel.querySelector('#boundary_level_status');
+        if (!el) return;
+        el.textContent = text;
+        el.classList.toggle('boundary-level-status--empty', !!muted);
     }
 
     /* ──────────────────────────────────────────────────────────────── */
-    /*  Auto zoom-level switching                                      */
+    /*  Auto tier switching                                            */
     /* ──────────────────────────────────────────────────────────────── */
 
     _setupZoomAutoSwitch() {
         heroMap.init().then(() => {
-            heroMap.map.on('zoomend', () => {
+            // ``moveend`` as well as ``zoomend``: which admin levels exist is a
+            // property of *where* you are, not only how far in you are, so
+            // panning from a country that uses level 4 to one that does not has
+            // to re-pick. Both fire once per gesture, so this is not chatty.
+            const reapply = () => {
                 if (this._autoAdmin && TIERED_SOURCES.has(this._activeSource)) {
-                    this._applyZoomAutoLevel();
+                    this._applyAutoTier();
+                } else if (this._currentTier) {
+                    this._probeTier();
                 }
-            });
+            };
+            heroMap.map.on('zoomend', reapply);
+            heroMap.map.on('moveend', reapply);
         });
     }
 
-    _applyZoomAutoLevel() {
+    /**
+     * Pick and apply the tier for the current view.
+     *
+     * The zoom proposes a tier; the data decides. ``admin_level`` coverage is
+     * wildly uneven — OHM's data sits at levels 2–4 whatever the zoom, and
+     * plenty of countries skip a level entirely — so a purely zoom-driven
+     * choice regularly resolved to an empty map with nothing to explain it
+     * (place#156). If the proposed tier has nothing here, the nearest tier that
+     * does is substituted, and the panel says so.
+     *
+     * The substitution is resolved *before* the filter is touched, from the
+     * source data rather than from what is painted, so the map never flashes
+     * through an empty tier on the way to a populated one.
+     */
+    _applyAutoTier() {
         if (!heroMap.map) return;
         if (!TIERED_SOURCES.has(this._activeSource)) return;
 
-        const zoom = heroMap.map.getZoom();
-        let targetLevel = null;
-        for (const t of ZOOM_THRESHOLDS) {
-            if (zoom < t.maxZoom) {
-                targetLevel = t.adminLevel;
-                break;
+        const wanted = tierForZoom(heroMap.map.getZoom());
+        this._whenSettled(() => {
+            const source = tileSourceFor(this._activeSource);
+            const count = heroMap.countBoundaryFeatures(source, wanted.levels);
+            if (count > 0) {
+                this._showTier(wanted);
+                this._setStatus(`${count} ${count === 1 ? 'region' : 'regions'} here`);
+                return;
+            }
+            const next = this._nextNonEmptyTier(wanted, source);
+            if (next) {
+                this._showTier(next);
+                this._setStatus(
+                    `No ${wanted.label.toLowerCase()} boundaries here — showing `
+                    + `${next.label.toLowerCase()} instead `
+                    + `(${heroMap.countBoundaryFeatures(source, next.levels)})`);
+                return;
+            }
+            this._showTier(wanted);
+            this._setStatus(
+                `No boundaries here at any level in this source`, true);
+        });
+    }
+
+    /** Report how much the manually-chosen tier has to show, without changing it. */
+    _probeTier() {
+        if (!heroMap.map || !this._currentTier) return;
+        this._whenSettled(() => {
+            const tier = this._currentTier;
+            if (!tier) return;
+            const count = heroMap.countBoundaryFeatures(
+                tileSourceFor(this._activeSource), tier.levels);
+            this._setStatus(
+                count > 0
+                    ? `${count} ${count === 1 ? 'region' : 'regions'} here`
+                    : `No ${tier.label.toLowerCase()} boundaries here — try another level`,
+                count === 0);
+        });
+    }
+
+    /** Show a tier, skipping the work if it is already the one on screen. */
+    _showTier(tier) {
+        this._boundariesVisible = true;
+        const source = tileSourceFor(this._activeSource);
+        if (tier === this._currentTier && source === this._shownSource) return;
+        this._currentTier = tier;
+        this._shownSource = source;
+        heroMap.showBoundaries({ source, boundaryValues: tier.levels });
+        this._syncSelect();
+    }
+
+    /**
+     * Run ``fn`` once the map has settled, cancelling any earlier pending call.
+     * Tiles for a new view arrive asynchronously and an empty count taken
+     * mid-flight would trigger a pointless substitution.
+     */
+    _whenSettled(fn) {
+        const token = ++this._probeToken;
+        const run = () => { if (token === this._probeToken) fn(); };
+        if (heroMap.map.isMoving() || !heroMap.map.areTilesLoaded()) {
+            heroMap.map.once('idle', run);
+        } else {
+            run();
+        }
+    }
+
+    /**
+     * Nearest tier to ``tier`` that has features here — one step coarser, then
+     * one step finer, widening — or null if the source holds nothing at all at
+     * this view. Nearest-first keeps the correction small and stable instead of
+     * jumping to whichever level happens to be busiest.
+     */
+    _nextNonEmptyTier(tier, source) {
+        const i = SELECTABLE_TIERS.indexOf(tier);
+        for (let d = 1; d < SELECTABLE_TIERS.length; d++) {
+            for (const candidate of [SELECTABLE_TIERS[i - d], SELECTABLE_TIERS[i + d]]) {
+                if (!candidate) continue;
+                if (heroMap.countBoundaryFeatures(source, candidate.levels) > 0) return candidate;
             }
         }
-
-        if (targetLevel !== this._currentAdminLevel) {
-            this._currentAdminLevel = targetLevel;
-            this._boundariesVisible = targetLevel !== null;
-
-            // Update dropdown to reflect auto-selected level
-            const select = this._panel.querySelector('#boundary_level_select');
-            if (select) {
-                select.value = targetLevel !== null ? String(targetLevel) : 'off';
-            }
-
-            if (targetLevel !== null) {
-                this._updateBoundaryFilter();
-            } else {
-                heroMap.hideBoundaries();
-            }
-        }
+        return null;
     }
 
     /* ──────────────────────────────────────────────────────────────── */
@@ -339,7 +467,8 @@ export default class LayerSourcesPalette {
         this._activeSource = id;
         this._activeSources = [id];
         this._currentNamespace = id;
-        this._currentAdminLevel = null;
+        this._currentTier = null;
+        this._shownSource = null;
         this._boundariesVisible = true;
         // Tileset isn't in the base style — load it on demand via the generic
         // gazetteer-style loader.
@@ -352,9 +481,18 @@ export default class LayerSourcesPalette {
         return this._activeSources.includes(sourceId);
     }
 
-    /** Get current admin level (number or null). */
+    /** Admin levels the active tier covers, e.g. ``['3','4']``; null when off. */
+    getBoundaryLevels() {
+        return this._currentTier ? [...this._currentTier.levels] : null;
+    }
+
+    /**
+     * Representative admin level of the active tier (its finest), or null.
+     * Kept for callers that just want to know whether a tier is showing.
+     */
     getAdminLevel() {
-        return this._currentAdminLevel;
+        if (!this._currentTier) return null;
+        return parseInt(this._currentTier.levels[this._currentTier.levels.length - 1], 10);
     }
 
     /** Get current namespace (inferred from selected source). */
@@ -362,12 +500,15 @@ export default class LayerSourcesPalette {
         return this._currentNamespace;
     }
 
-    /** Reset admin level to off, re-enable auto. */
+    /** Reset the boundary tier to off, re-enable auto. */
     resetAdminLevel() {
-        this._currentAdminLevel = null;
+        this._currentTier = null;
+        this._shownSource = null;
         this._boundariesVisible = false;
         this._autoAdmin = true;
+        this._probeToken++;            // drop any probe still waiting on 'idle'
         heroMap.hideBoundaries();
+        this._setStatus('');
 
         const select = this._panel.querySelector('#boundary_level_select');
         if (select) select.value = 'off';
