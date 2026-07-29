@@ -143,11 +143,11 @@
                     {{ form.file }}
                 </div>
 
-                {# Licence: a choice from the controlled vocabulary, replacing the old blanket
-                   "Accept CC BY 4.0" checkbox (place#158). The checkbox recorded nothing per
-                   dataset — every contributor's data ended up with no licence in the system at
-                   all — and asserted one licence over work whose terms the contributor may not
-                   have been free to set. Required here, as the checkbox was. #}
+                {% comment %}Licence: a choice from the controlled vocabulary, replacing the old
+                   blanket "Accept CC BY 4.0" checkbox (place#158). The checkbox recorded nothing per
+                   dataset — every contributor's data ended up with no licence in the system at all —
+                   and asserted one licence over work whose terms the contributor may not have been
+                   free to set. Required here, as the checkbox was.{% endcomment %}
                 <div class="mb-3">
                     <label class="form-label required-field mb-1">Licence</label>
                     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -260,7 +260,7 @@
                         </a>
                         to your computer and follow its included instructions.
                     </li>
-                    <li>Choose that file in the form on the left, accept the licence (acknowledging terms, should you later publish your dataset on WHG), and
+                    <li>Choose that file in the form on the left, choose the licence under which you are willing for others to reuse your data, and
                         click "Upload". The file will be validated, and its data ingested and mapped &mdash; now you have a test dataset in your <b>private</b> workspace!
                     </li>
                     <li>Explore WHG features for managing it from its new dataset page, e.g. under the Linking tab,

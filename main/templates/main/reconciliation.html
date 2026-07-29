@@ -461,9 +461,9 @@
             <input type="text" id="cite-publisher" class="form-control form-control-sm"></div>
           <div class="col-md-8"><label class="form-label small mb-0">URL or DOI</label>
             <input type="text" id="cite-url" class="form-control form-control-sm" placeholder="https://… or 10.xxxx/…"></div>
-          {# Licence is chosen from the controlled vocabulary, not typed free-text: the value has to
-             resolve to a licensing.License row to reach Dataset.license when the set is contributed
-             (place#158), and a typo would silently mean "no licence recorded". #}
+          {% comment %}Licence is chosen from the controlled vocabulary, not typed free-text: the
+             value has to resolve to a licensing.License row to reach Dataset.license when the set is
+             contributed (place#158), and a typo would silently mean "no licence recorded".{% endcomment %}
           <div class="col-md-4"><label class="form-label small mb-0">Licence</label>
             <div class="d-flex align-items-center gap-2 flex-wrap">
               <button type="button" id="cite-license-btn" class="btn btn-sm btn-primary">Choose a licence…</button>
