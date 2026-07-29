@@ -1046,6 +1046,14 @@ def _attribution_for_results(results):
                   for r in results.values() if isinstance(r, dict)
                   for c in (r.get("result") or [])]
     namespaces = {c.get("namespace") for c in candidates if c.get("namespace")}
+    # Prefer what was SEARCHED over what was returned: a source that matched
+    # nothing on this query still has terms the consumer may need, and the
+    # gateway reports its scope even on empty result sets (place#157). Union
+    # rather than replace, so the legacy-only path — which the gateway never
+    # sees — keeps contributing its namespaces.
+    for r in results.values():
+        if isinstance(r, dict):
+            namespaces.update(r.get("namespaces_searched") or ())
     # "place:12345" → "12345"; only legacy WHG ids are numeric, and only those
     # resolve to a contributing dataset.
     whg_ids = [str(c.get("id", "")).split(":", 1)[-1]
@@ -1262,6 +1270,31 @@ def reconcile_place_es(query, user=None):
         extra["scope"] = scope_info
     if crc_meta.get("variants_used") is not None:
         extra["variants_used"] = crc_meta["variants_used"]
+
+    # Which sources were actually searched (place#157). Deriving this from the
+    # returned ids under-reports: a source can be searched, match nothing, and
+    # still be one whose terms the consumer needs — so the root attribution block
+    # is built from this, not from the candidates. The gateway echoes its own
+    # scope on every return path, including the empty ones; `[]` from the gateway
+    # means unrestricted, in which case the honest answer is the full set it
+    # holds, and falling back to whatever the hits happen to show is closer to
+    # the truth than claiming to know. Absent on an older gateway → the caller
+    # falls back to id-derivation.
+    searched = set()
+    if namespaces is None or WHG_NAMESPACE in namespaces:
+        searched.add(WHG_NAMESPACE)
+    gw_searched = crc_meta.get("namespaces_searched")
+    if gw_searched:
+        searched.update(gw_searched)
+    elif crc_namespaces:
+        # Gateway didn't echo (older build), but we know what we asked it for.
+        searched.update(crc_namespaces)
+    if crc_meta.get("namespaces"):
+        # Present-in-results, a subset of the above but authoritative when the
+        # request was unrestricted and the gateway echoed `[]` for `searched`.
+        searched.update(crc_meta["namespaces"])
+    if searched:
+        extra["namespaces_searched"] = sorted(searched)
 
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits

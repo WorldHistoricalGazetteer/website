@@ -109,3 +109,31 @@ class TriStateAndSelectableTests(TestCase):
         self.assertIs(e["contributor_selectable"], False)
         self.assertIsNone(e["permits_commercial"])
         self.assertIsNone(e["no_derivatives"])
+
+    def test_custom_licences_are_not_selectable_unless_explicitly_allowed(self):
+        """Belt and braces with the indexing side, which now defaults every
+        ``custom-*`` id it emits to non-selectable.
+
+        A ``custom-*`` id is minted to record ONE named source's bespoke terms,
+        so offering it to a contributor as a choice for their own data is
+        almost always wrong — and the mistake is invisible until someone sees
+        the wrong dropdown. Rather than flip the field default (which would
+        silently drop the three generic rows below out of the picker), fail
+        loudly here: a new custom licence must either be non-selectable or be
+        added to this allow-list deliberately.
+        """
+        GENERICALLY_SELECTABLE = {
+            # Not one institution's terms — any contributor might mean these.
+            "custom-public-domain",
+            "custom-all-rights-reserved",
+            "custom-academic-use",
+        }
+        offered = set(License.objects
+                      .filter(custom=True, contributor_selectable=True)
+                      .values_list("spdx_id", flat=True))
+        unexpected = offered - GENERICALLY_SELECTABLE
+        self.assertEqual(
+            unexpected, set(),
+            "custom licence(s) offered in the contributor picker without being "
+            f"declared generically choosable: {sorted(unexpected)}",
+        )

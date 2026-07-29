@@ -411,6 +411,18 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             meta["scope"] = data["scope"]
         if data.get("variants_used") is not None:
             meta["variants_used"] = data["variants_used"]
+        # Source namespaces echoed by the gateway (place#157). `namespaces` is the
+        # set actually present in the hits; `namespaces_searched` is the request's
+        # positive scope — echoed on EVERY return path including the empty ones,
+        # which is precisely the case deriving namespaces from result ids cannot
+        # reach (a source searched that contributed nothing still has terms the
+        # consumer should see). `[]` for `namespaces_searched` means unrestricted.
+        # Both absent on a gateway predating the change; the caller then falls
+        # back to id-derivation.
+        if data.get("namespaces") is not None:
+            meta["namespaces"] = data["namespaces"]
+        if data.get("namespaces_searched") is not None:
+            meta["namespaces_searched"] = data["namespaces_searched"]
 
     return _adapt_hits(data)
 
