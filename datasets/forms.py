@@ -116,17 +116,28 @@ class DatasetUploadForm(forms.ModelForm):
     license = forms.CharField(required=False, widget=forms.HiddenInput())
 
     def clean_license(self):
-        """Accept only ids that exist in the vocabulary. An unknown id is
-        dropped rather than raising: silently discarding a licence is what
-        place#157 was about, so this logs loudly instead of failing quietly."""
+        """Accept only ids that exist in the vocabulary AND are offered to
+        contributors. An unusable id is dropped rather than raising: silently
+        discarding a licence is what place#157 was about, so this logs loudly
+        instead of failing quietly — but refusing the whole contribution would
+        be a worse outcome than recording no licence."""
         spdx = (self.cleaned_data.get('license') or '').strip()
         if not spdx:
             return ''
         from licensing.models import License
-        if not License.objects.filter(spdx_id=spdx).exists():
+        lic = License.objects.filter(spdx_id=spdx).first()
+        if lic is None:
             logger.warning(
                 "Dataset upload sent unknown licence id %r — dropped. Seed it in "
                 "the licensing vocabulary if it is legitimate.", spdx)
+            return ''
+        # The picker never offers these, but the field is a plain POST value: a
+        # contributor must not be able to license their own data under one named
+        # institution's bespoke terms (e.g. the UK Data Service EULA).
+        if not lic.contributor_selectable:
+            logger.warning(
+                "Dataset upload sent non-selectable licence id %r — dropped. These "
+                "record one source's own terms and are not a contributor choice.", spdx)
             return ''
         return spdx
 
