@@ -81,7 +81,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
   The World Historical Gazetteer (WHG) is a Pitt-hosted platform that aggregates and links historical place data.
   Its index currently holds <strong>50.5 million place records</strong> drawn from 26 distinct source gazetteers,
   plus several hundred contributed datasets. Those sources arrive under <strong>at least nine different licences</strong>
-  — public domain, CC&nbsp;BY, CC&nbsp;BY-SA, ODbL, ODC-By and CC&nbsp;BY-NC — and for a small specialist remainder the terms are not yet recorded at all (§5).
+  — public domain, CC&nbsp;BY, CC&nbsp;BY-SA, CC&nbsp;BY-ND, ODbL, ODC-By, CC&nbsp;BY-NC and four sets of bespoke institutional terms — and one source that grants no rights at all (§5).
 </p>
 <div class="callout key">
   <p><strong>The position we have adopted:</strong> WHG asserts <em>no single blanket licence</em> over the aggregate.
@@ -227,7 +227,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
   terms.</figcaption>
 </figure>
 
-<h3>4.3 &nbsp;Machine-readable terms in the API — the remaining gap</h3>
+<h3>4.3 &nbsp;Machine-readable terms in the API</h3>
 <p>
   The design requires that any API response spanning multiple sources carry an <strong>aggregated statement of terms at
   the root of the returned document</strong>, listing every source present in the results with its licence, so a
@@ -255,25 +255,33 @@ current state, working evidence, and the questions on which we seek guidance</p>
   <em>null</em> rather than defaulting to something permissive.
 </p>
 <div class="callout warn">
-  <p><strong>Two data-quality findings from the same exercise — these, not the plumbing, are the real gap.</strong></p>
-  <p><strong>(i)</strong> OpenHistoricalMap is recorded in our registry as <code>CC0-1.0</code>. OpenHistoricalMap publishes
-  under <strong>ODbL</strong>, as its sibling OpenStreetMap does (and as our own registry correctly records for OSM). This
-  understates a share-alike obligation on roughly 0.9&nbsp;million records.</p>
-  <p><strong>(ii)</strong> Five authority gazetteers — <strong>113,578 records</strong> — have a <em>rights holder</em>
-  recorded but <strong>no licence at all</strong>: CHGIS, the Ancient Parishes of England &amp; Wales, Native Land, the
-  Digital Gazetteer of the Song Dynasty, and UK Historic Counties. For a licensing conversation this is the more serious
-  category: a non-commercial licence can be cleared or excluded deterministically, whereas <strong>unrecorded terms cannot
-  be reasoned about at all</strong>.</p>
-  <p>Both originate in the authority metadata at ingest and are being corrected there, so the fix propagates to every
-  surface. Together they are why the per-namespace licence audit (§8) is the item we rank first: the machinery is now in
-  place everywhere, and it is only ever as accurate as that table.</p>
+  <p><strong>What the same exercise found in the data — and it was not what we expected.</strong></p>
+  <p>Preparing this briefing prompted a full audit of the licence recorded against every source. Our first
+  suspicion, that OpenHistoricalMap was wrongly recorded as public domain when it should have been
+  share-alike, turned out to be <strong>wrong</strong>: OpenHistoricalMap deliberately diverged from
+  OpenStreetMap and does dedicate its data to the public domain. What had misled us was a free-text
+  description copied from the OpenStreetMap entry, since corrected.</p>
+  <p>The audit instead found something more serious. Five gazetteers were recorded with a rights holder but
+  <strong>no licence at all</strong> — their terms had been supplied by the ingestion pipeline and then
+  <em>silently discarded</em>, because the licence vocabulary did not contain the identifiers they used and
+  the import reported success anyway. And in one case the same silent failure had left an
+  <strong>affirmatively false</strong> licence standing:</p>
+  <p><strong>UN Countries.</strong> This layer was switched in July 2026 from a public-domain source
+  (Natural Earth) to <strong>UN Geospatial boundary data</strong>, which carries <em>no grant of rights
+  whatsoever</em>. Because the new licence could not be recorded, the old public-domain value survived — so
+  the platform was telling reusers that © United Nations boundary data was public domain and free for any
+  commercial use. This is the clearest illustration we can offer of why per-source terms have to be
+  <em>enforced</em> rather than merely modelled: a missing value is conspicuous, but a <em>stale</em> one is
+  not.</p>
+  <p>All six are now corrected and live, and the import will no longer fail quietly — the ingestion pipeline
+  verifies its declared terms against the platform's vocabulary and fails loudly on any mismatch.</p>
 </div>
 
 <h2>5. What the corpus actually contains</h2>
 <p>
   A recurring worry is that respecting upstream terms would gut any commercial offering. The measured composition says
-  otherwise. Record counts below are live figures from the platform registry; licences are as currently recorded, pending
-  completion of the per-namespace audit.
+  otherwise. Record counts below are live figures from the platform registry, and every licence shown has been verified
+  against its upstream source in the audit described at §4.3.
 </p>
 <table>
   <thead><tr><th style="width:38%">Source (namespace)</th><th style="width:16%">Records</th><th style="width:24%">Licence</th><th style="width:22%">Commercial use</th></tr></thead>
@@ -283,24 +291,24 @@ current state, working evidence, and the questions on which we seek guidance</p>
     <tr><td>Wikidata <code>wd</code></td><td class="num">11,459,393</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
     <tr><td>Getty TGN <code>tgn</code></td><td class="num">2,991,044</td><td>ODC-By-1.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>GB1900 <code>gb</code></td><td class="num">1,174,449</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
-    <tr><td>OpenHistoricalMap <code>ohm</code></td><td class="num">905,205</td><td>CC0-1.0 <em>(under review — see §4.3)</em></td><td><span class="ok">✓</span></td></tr>
-    <tr><td>China Historical GIS <code>chgis</code></td><td class="num">82,117</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>OpenHistoricalMap <code>ohm</code></td><td class="num">905,205</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
+    <tr><td>China Historical GIS <code>chgis</code></td><td class="num">82,117</td><td>Academic use only (Harvard/Fudan)</td><td><span class="no">✗ excluded — no redistribution</span></td></tr>
     <tr><td>Trismegistos <code>tm</code></td><td class="num">64,196</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
     <tr><td>Pleiades <code>pl</code></td><td class="num">25,561</td><td>CC-BY-3.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>Index Villaris <code>iv</code></td><td class="num">24,000</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
-    <tr><td>Ancient Parishes of England &amp; Wales <code>kain_par</code></td><td class="num">23,177</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded — download gated</span></td></tr>
+    <tr><td>Ancient Parishes of England &amp; Wales <code>kain_par</code></td><td class="num">23,177</td><td>UK Data Service EUL</td><td><span class="no">✗ excluded — download gated</span></td></tr>
     <tr><td>Alcedo <code>alc</code></td><td class="num">18,223</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>Ottoman NFS Gazetteer <code>ofs</code></td><td class="num">16,296</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>Cliopatria <code>clio</code></td><td class="num">15,690</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>HGIS de las Indias <code>hgis</code></td><td class="num">14,152</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
     <tr><td>PeriodO <code>po</code></td><td class="num">9,017</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
     <tr><td>Ottoman Gazetteer <code>og</code></td><td class="num">6,260</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
-    <tr><td>Native Land <code>nl</code></td><td class="num">4,364</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
-    <tr><td>Digital Gazetteer of the Song Dynasty <code>dgsd</code></td><td class="num">3,828</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Native Land <code>nl</code></td><td class="num">4,364</td><td>Data Sovereignty Treaty (OCAP®)</td><td><span class="no">✗ excluded — no redistribution</span></td></tr>
+    <tr><td>Digital Gazetteer of the Song Dynasty <code>dgsd</code></td><td class="num">3,828</td><td>CC-BY-ND-4.0</td><td><span class="warn">✓ but no adaptations</span></td></tr>
     <tr><td>D-PLACE <code>dp</code></td><td class="num">2,599</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>GBHGIS boundary sets (4 gazetteers)</td><td class="num">2,850</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
-    <tr><td>UN Countries <code>un</code></td><td class="num">247</td><td>public domain</td><td><span class="ok">✓</span></td></tr>
-    <tr><td>UK Historic Counties <code>ukhc</code></td><td class="num">92</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>UN Countries <code>un</code></td><td class="num">247</td><td><span class="no">no grant of rights</span></td><td><span class="no">✗ terms unspecified</span></td></tr>
+    <tr><td>UK Historic Counties <code>ukhc</code></td><td class="num">92</td><td>Historic County Borders terms</td><td><span class="ok">✓ attribution requested</span></td></tr>
   </tbody>
 </table>
 <div class="callout key nobreak">
@@ -436,7 +444,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
 <table>
   <thead><tr><th style="width:5%">#</th><th style="width:28%">Area</th><th style="width:49%">Change</th><th style="width:18%">Priority</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td>Per-namespace licence audit</td><td>Two known defects to correct at source, plus verification of the rest: OpenHistoricalMap recorded as CC0 rather than ODbL (~0.9&nbsp;m records), and five gazetteers (113,578 records) with a rights holder but <strong>no licence</strong> (§4.3). Every downstream surface is now wired, and is only as accurate as this table.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>1</td><td>Per-namespace licence audit</td><td>Complete: every source now carries verified terms, the six defective entries are corrected (§4.3), and the ingestion pipeline now fails loudly rather than silently discarding a licence it cannot resolve. Remaining: periodic re-verification as upstream sources change their terms.</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>2</td><td>DOI registration metadata</td><td>DOIs minted for WHG datasets currently register a hard-coded <code>CC-BY-NC-4.0</code> rights statement with DataCite regardless of the dataset's actual licence. This has the longest tail of any item — DOI metadata is externally cached and hard to walk back — and should be fixed before the next minting run.</td><td><span class="tag tag-hi">Highest</span></td></tr>
     <tr><td>3</td><td>Contributor grant wording</td><td>Legally load-bearing (§7.2). Decide deliberately what grant we ask for; counsel signs off on this text specifically.</td><td><span class="tag tag-hi">Highest</span></td></tr>
     <tr><td>4</td><td>Reconciliation &amp; result-set API responses</td><td>Aggregated terms block at the response root of search, index, spatial and reconciliation, plus a source tag on every reconciliation candidate (§4.3). Enables consumer compliance and lets WHG gate sources whose terms cannot be honoured.</td><td><span class="tag tag-done">Done</span></td></tr>
@@ -457,8 +465,8 @@ current state, working evidence, and the questions on which we seek guidance</p>
   structural logic; it is not legal advice. Statements about copyright, database right and Creative Commons interpretation
   are offered in good faith to frame the questions, not to resolve them. Decisions on contributor grant wording, commercial
   licensing, third-party rights, and any change to DOI metadata should be confirmed with the Office of Innovation and
-  legal counsel. Record counts and recorded licences are live figures taken from the platform on 29 July 2026, pending
-  completion of the per-namespace licence audit described in §8.
+  legal counsel. Record counts and recorded licences are live figures taken from the platform on 29 July 2026, following completion
+  of the per-namespace licence audit described in §4.3.
 </p>
 
 </body>
