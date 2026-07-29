@@ -326,15 +326,22 @@ export default class LayerSourcesPalette {
      * (place#156). If the proposed tier has nothing here, the nearest tier that
      * does is substituted, and the panel says so.
      *
-     * The substitution is resolved *before* the filter is touched, from the
-     * source data rather than from what is painted, so the map never flashes
-     * through an empty tier on the way to a populated one.
+     * While the source is already on screen the substitution is resolved
+     * *before* the filter is touched, from the source data rather than from
+     * what is painted, so the map never flashes through an empty tier on the
+     * way to a populated one. A source being switched *to* is different: a
+     * tileset with no visible layer is never fetched, so there would be
+     * nothing to count and the panel would wait for ever on a source it had
+     * not yet asked for. There, the zoom's tier goes on first and is corrected
+     * once the tiles land.
      */
     _applyAutoTier() {
         if (!heroMap.map) return;
         if (!TIERED_SOURCES.has(this._activeSource)) return;
 
         const wanted = tierForZoom(heroMap.map.getZoom());
+        const showFirst = tileSourceFor(this._activeSource) !== this._shownSource;
+        if (showFirst) this._showTier(wanted);
         this._whenSettled(() => {
             const source = tileSourceFor(this._activeSource);
             const count = heroMap.countBoundaryFeatures(source, wanted.levels);
