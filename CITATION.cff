@@ -1,0 +1,34 @@
+cff-version: 1.2.0
+message: "If you use the World Historical Gazetteer platform, please cite it as below."
+title: "World Historical Gazetteer: Web Platform & API"
+abstract: >-
+  An open-source platform for linking, visualising, and sharing data about
+  historical places. Built with Python/Django and PostgreSQL/PostGIS, WHG
+  provides researchers and institutions with tools for uploading and
+  reconciling historical place data against global authorities, collaborative
+  curation with provenance tracking, spatial-temporal visualisation, and
+  programmatic access via a REST API and a W3C-conformant Reconciliation
+  Service API.
+type: software
+authors:
+  - family-names: Gadd
+    given-names: Stephen
+    orcid: "https://orcid.org/0000-0003-3060-0181"
+    affiliation: "World Historical Gazetteer, University of Pittsburgh; Docuracy Ltd"
+  - family-names: Grossner
+    given-names: Karl
+    affiliation: "KGEO Research; World Historical Gazetteer, University of Pittsburgh"
+version: 3.2.1
+date-released: 2026-07-29
+license: BSD-3-Clause
+repository-code: "https://github.com/WorldHistoricalGazetteer/website"
+url: "https://whgazetteer.org"
+keywords:
+  - historical gazetteer
+  - linked open data
+  - reconciliation
+  - GIS
+  - digital humanities
+  - spatial history
+  - Django
+  - PostGIS

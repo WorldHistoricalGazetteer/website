@@ -1,0 +1,41 @@
+{
+  "title": "World Historical Gazetteer: Web Platform & API",
+  "description": "<p>An open-source platform for <strong>linking, visualising, and sharing data about historical places</strong>. Built with Python/Django and PostgreSQL/PostGIS, the World Historical Gazetteer (WHG) provides researchers and institutions with tools for managing spatial-temporal historical data.</p><p>Key capabilities:</p><ul><li><strong>Data integration</strong> — upload and reconcile historical place data against global authorities</li><li><strong>Collaborative curation</strong> — built-in provenance tracking and multi-user workflows</li><li><strong>Visualisation</strong> — interactive maps and timelines for spatial-temporal analysis</li><li><strong>APIs</strong> — programmatic access to the WHG index, including a W3C-conformant Reconciliation Service API</li></ul><p>This release corresponds to v3.2 (ORCID authentication, Reconciliation Service API, and PeriodO filters) with the addition of machine-readable citation metadata.</p><p>Documentation: <a href=\"https://docs.whgazetteer.org\">docs.whgazetteer.org</a></p>",
+  "upload_type": "software",
+  "version": "3.2.1",
+  "license": "bsd-3-clause",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Gadd, Stephen",
+      "affiliation": "World Historical Gazetteer, University of Pittsburgh; Docuracy Ltd",
+      "orcid": "0000-0003-3060-0181"
+    },
+    {
+      "name": "Grossner, Karl",
+      "affiliation": "KGEO Research; World Historical Gazetteer, University of Pittsburgh"
+    }
+  ],
+  "keywords": [
+    "historical gazetteer",
+    "linked open data",
+    "reconciliation",
+    "GIS",
+    "digital humanities",
+    "spatial history",
+    "Django",
+    "PostGIS"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://whgazetteer.org",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://docs.whgazetteer.org",
+      "relation": "isDocumentedBy",
+      "scheme": "url"
+    }
+  ]
+}
