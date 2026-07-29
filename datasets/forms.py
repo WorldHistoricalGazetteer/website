@@ -102,10 +102,12 @@ class DatasetUploadForm(forms.ModelForm):
         'accept': ','.join(settings.VALIDATION_ALLOWED_EXTENSIONS),
     }))
 
-    license_acceptance = forms.CharField(label='Licence Acceptance', widget=forms.CheckboxInput(attrs={
-        'class': 'form-check-input',
-        'required': 'required',
-    }))
+    # Legacy upload pages post this marker so the licence choice can be REQUIRED
+    # there — it replaces the blanket "Accept CC BY 4.0" checkbox, which was itself
+    # required, so dropping the gate entirely would weaken the flow. Map your Data
+    # contributes without the marker: refusing a whole contribution over a missing
+    # licence would be worse than recording none.
+    license_required = forms.CharField(required=False, widget=forms.HiddenInput())
 
     # The contributor's chosen licence, as an SPDX id from the controlled
     # vocabulary (place#158). Carried as a plain string because the whole
@@ -140,6 +142,14 @@ class DatasetUploadForm(forms.ModelForm):
                 "record one source's own terms and are not a contributor choice.", spdx)
             return ''
         return spdx
+
+    def clean(self):
+        cleaned = super().clean()
+        # ``clean_license`` has already blanked anything unusable, so this catches
+        # both "nothing chosen" and "chose something we had to reject".
+        if cleaned.get('license_required') and not cleaned.get('license'):
+            self.add_error('license', 'Please choose a licence for your data.')
+        return cleaned
 
     class Meta:
         model = Dataset

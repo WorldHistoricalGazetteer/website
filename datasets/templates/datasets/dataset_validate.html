@@ -143,14 +143,25 @@
                     {{ form.file }}
                 </div>
 
-                <div class="mb-3 input-group">
-                    <div class="input-group-prepend input-group-text">
-                        Accept&nbsp;<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY
-                        4.0</a>&nbsp;Licence
+                {# Licence: a choice from the controlled vocabulary, replacing the old blanket
+                   "Accept CC BY 4.0" checkbox (place#158). The checkbox recorded nothing per
+                   dataset — every contributor's data ended up with no licence in the system at
+                   all — and asserted one licence over work whose terms the contributor may not
+                   have been free to set. Required here, as the checkbox was. #}
+                <div class="mb-3">
+                    <label class="form-label required-field mb-1">Licence</label>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <button type="button" id="ds-license-btn" class="btn btn-sm btn-primary">Choose a licence…</button>
+                        <a href="#" id="ds-license-clear" class="small" hidden>clear</a>
                     </div>
-                    <div class="input-group-text">
-                        {{ form.license_acceptance }}
+                    <div id="ds-license-display" class="small mt-1"></div>
+                    <div class="form-text small">
+                        How others may reuse your data — a guided picker helps you choose, and every
+                        option is explained on the <a href="{% url 'licenses' %}" target="_blank">licences page</a>.
                     </div>
+                    {{ form.license }}
+                    {{ form.license_required }}
+                    {% if form.license.errors %}<div class="text-danger small mt-1">{{ form.license.errors.0 }}</div>{% endif %}
                 </div>
                 <!--
             <div class="inputs-optional">
@@ -300,7 +311,46 @@
             $(this).prev('.dummy-file-input').val(fileName);
         });
 
+        // Licence picker (place#158). base.bundle.js exposes the same component the
+        // Workbench editors and /licenses/ use, so this legacy jQuery page shares one
+        // vocabulary rather than carrying a divergent copy. The chosen SPDX id goes
+        // into the hidden `license` input; `license_required` tells the server to
+        // insist on one here (it replaces a required checkbox).
+        (function wireLicence() {
+            var btn = document.getElementById('ds-license-btn');
+            var input = document.getElementById('id_license');
+            if (!btn || !input) return;
+            document.getElementById('id_license_required').value = '1';
+            if (!window.wireWHGLicenseControl) {
+                // base.bundle.js is deferred; retry briefly rather than leaving a dead button.
+                return void setTimeout(wireLicence, 200);
+            }
+            window.wireWHGLicenseControl({
+                button: btn,
+                display: document.getElementById('ds-license-display'),
+                clearBtn: document.getElementById('ds-license-clear'),
+                getChoice: function () { return input.value ? {spdx: input.value} : null; },
+                setChoice: function (c) {
+                    input.value = (c && c.spdx) || '';
+                    $('#ds-license-error').remove();
+                },
+            });
+        })();
+
         $('#ds_validate_form').submit(function (event) {
+            var lic = document.getElementById('id_license');
+            // Caught client-side as well as server-side: the picker writes to a hidden
+            // input, so the browser's own required-field validation can't see it.
+            if (lic && !lic.value) {
+                event.preventDefault();
+                event.stopPropagation();
+                $('#ds-license-error').remove();
+                $('#ds-license-display').after(
+                    '<div id="ds-license-error" class="text-danger small mt-1">Please choose a licence for your data.</div>');
+                document.getElementById('ds-license-btn').scrollIntoView({block: 'center'});
+                $(this).addClass('was-validated');
+                return;
+            }
             if (this.checkValidity() === false) {
                 event.preventDefault();
                 event.stopPropagation();

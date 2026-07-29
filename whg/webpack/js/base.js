@@ -7,6 +7,7 @@ import {initWHGModal} from './whg-modal.js';
 import {initBetaDiag, betaInitialScope} from './beta-diag.js';
 import {initializeCitationFormatters} from './citationFormatter';
 import {initTooltipHygiene} from './tooltipHygiene.js';
+import {wireLicenseControl, pickLicense} from './licensePicker.js';
 import {base_urls} from './aliases.js';
 import '../css/base.css';
 import '../../static/css/styles.css'; // /whg/static/css/styles.css
@@ -272,6 +273,13 @@ Promise.all([
         // behind by re-rendered triggers) — Bootstrap alone relies on a
         // `mouseleave` that wheel-scrolling never fires. See tooltipHygiene.js.
         initTooltipHygiene();
+
+        // Expose the licence picker globally. The Workbench editors import it as a
+        // module, but legacy Django templates (the dataset upload form) have no
+        // bundle of their own and script inline against jQuery — without this they
+        // would need either a webpack entry each or a second, divergent picker.
+        window.wireWHGLicenseControl = wireLicenseControl;
+        window.pickWHGLicense = pickLicense;
 
         // Extend popover defaults
         $.extend(true, $.fn.popover.Constructor.Default, {
