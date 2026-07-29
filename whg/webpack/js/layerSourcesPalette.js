@@ -341,7 +341,7 @@ export default class LayerSourcesPalette {
             if (count > 0) {
                 this._showTier(wanted);
                 this._setStatus(`${count} ${count === 1 ? 'region' : 'regions'} here`);
-                return;
+                return true;
             }
             const next = this._nextNonEmptyTier(wanted, source);
             if (next) {
@@ -350,11 +350,12 @@ export default class LayerSourcesPalette {
                     `No ${wanted.label.toLowerCase()} boundaries here — showing `
                     + `${next.label.toLowerCase()} instead `
                     + `(${heroMap.countBoundaryFeatures(source, next.levels)})`);
-                return;
+                return true;
             }
-            this._showTier(wanted);
-            this._setStatus(
-                `No boundaries here at any level in this source`, true);
+            // Empty at every level is what a source whose tiles have not yet
+            // arrived also looks like, so ask to be called again rather than
+            // announcing a blank map that is really still loading.
+            return false;
         });
     }
 
@@ -363,14 +364,18 @@ export default class LayerSourcesPalette {
         if (!heroMap.map || !this._currentTier) return;
         this._whenSettled(() => {
             const tier = this._currentTier;
-            if (!tier) return;
-            const count = heroMap.countBoundaryFeatures(
-                tileSourceFor(this._activeSource), tier.levels);
+            if (!tier) return true;
+            const source = tileSourceFor(this._activeSource);
+            const count = heroMap.countBoundaryFeatures(source, tier.levels);
+            if (count > 0) {
+                this._setStatus(`${count} ${count === 1 ? 'region' : 'regions'} here`);
+                return true;
+            }
+            // Distinguish "this level is empty here" from "nothing has loaded".
+            if (heroMap.countBoundaryFeatures(source, null) === 0) return false;
             this._setStatus(
-                count > 0
-                    ? `${count} ${count === 1 ? 'region' : 'regions'} here`
-                    : `No ${tier.label.toLowerCase()} boundaries here — try another level`,
-                count === 0);
+                `No ${tier.label.toLowerCase()} boundaries here — try another level`, true);
+            return true;
         });
     }
 
@@ -403,12 +408,16 @@ export default class LayerSourcesPalette {
         let waits = 0;
         const attempt = () => {
             if (finished || token !== this._probeToken) return;
-            if ((map.isMoving() || !map.areTilesLoaded()) && waits++ < 10) {
+            const settled = !map.isMoving() && map.areTilesLoaded();
+            // ``fn`` returning false means it does not believe what it read
+            // either — see _applyAutoTier, where "nothing at any level" is
+            // indistinguishable from "this source's tiles have not arrived".
+            if ((!settled || fn() === false) && waits++ < 10) {
                 map.once('idle', attempt);
+                setTimeout(attempt, 400 * waits);
                 return;
             }
             finished = true;
-            fn();
         };
         map.once('idle', attempt);
         // ...but do not wait for ever: with nothing left to render, the 'idle'
