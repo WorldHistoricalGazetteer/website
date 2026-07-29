@@ -167,6 +167,8 @@ urlpatterns = [
                   path('license/', views.license_view, name='license'),
                   path('licenses/', licensing_views.licenses_view, name='licenses'),
                   path('licenses/data.json', licensing_views.licenses_json, name='licenses-json'),
+                  path('licenses/software/', licensing_views.software_licenses_view, name='software-licenses'),
+                  path('licenses/software/data.json', licensing_views.software_licenses_json, name='software-licenses-json'),
                   path('terms_of_use/', views.terms_of_use_view, name='terms_of_use'),
                   path('privacy_policy/', views.privacy_policy_view, name='privacy_policy'),
                   # Email invitations (place#155) — share a page / invite someone to register.

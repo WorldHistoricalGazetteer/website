@@ -7,7 +7,8 @@
     "build": "webpack",
     "watch": "webpack --watch",
     "analyze": "ANALYZE=1 webpack",
-    "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack"
+    "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack",
+    "audit:licenses": "node scripts/audit-js-licenses.js"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",

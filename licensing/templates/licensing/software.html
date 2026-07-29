@@ -1,0 +1,199 @@
+{% extends "main/base_webpack.html" %}
+{% block title %}<title>WHG · Third-party software licences</title>{% endblock %}
+
+{% block extra_head %}
+<style>
+  .sw-wrap { max-width: 1080px; margin: 1.5rem auto 3rem; }
+  .sw-meta { font-size: .85rem; color: #6c757d; }
+  .sw-cards { display: flex; flex-wrap: wrap; gap: .6rem; margin: .9rem 0 1.4rem; }
+  .sw-card { flex: 1 1 200px; border: 1px solid #dee2e6; border-radius: .5rem; padding: .6rem .8rem; }
+  .sw-card .n { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+  .sw-card .t { font-weight: 600; font-size: .9rem; }
+  .sw-card .b { font-size: .78rem; color: #6c757d; }
+  .sw-card.copyleft-strong { border-color: #b3261e; }
+  .sw-card.copyleft-weak   { border-color: #c77700; }
+  .sw-card.unknown         { border-color: #6c757d; }
+  table.sw { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  table.sw th { text-align: left; padding: .35rem .5rem; border-bottom: 2px solid #dee2e6; }
+  table.sw td { padding: .3rem .5rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  table.sw tr:hover td { background: #f8f9fa; }
+  .lic-tag { font-family: ui-monospace, Consolas, monospace; font-size: .78rem;
+             padding: .05rem .35rem; border-radius: .25rem; background: #f0ecf5; color: #4a2470;
+             white-space: nowrap; }
+  .lic-tag.copyleft-strong { background: #fdf3f2; color: #b3261e; }
+  .lic-tag.copyleft-weak   { background: #fff6e8; color: #8a5300; }
+  .lic-tag.unknown         { background: #eee; color: #444; }
+  .sw-ver { color: #6c757d; font-variant-numeric: tabular-nums; }
+  details.sw-more { margin-top: .8rem; }
+  details.sw-more > summary { cursor: pointer; font-weight: 600; }
+  .sw-note { background: #f7f4fa; border-left: 3px solid #5b2a86; padding: .7rem .9rem;
+             border-radius: 0 .25rem .25rem 0; margin: 1rem 0; font-size: .9rem; }
+  .sw-note.warn { background: #fff9ec; border-left-color: #c77700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sw-wrap px-3">
+
+  <h1 class="h3">Third-party software licences</h1>
+  <p class="sw-meta mb-3">
+    Audited <strong>{{ audited }}</strong>{% if app_version %} · WHG {{ app_version }}{% endif %}{% if revision %} · <code>{{ revision }}</code>{% endif %}
+    &nbsp;·&nbsp; <a href="{% url 'software-licenses-json' %}">machine-readable version</a>
+  </p>
+
+  <p>
+    The World Historical Gazetteer is built on open-source software written by others. This page lists
+    every third-party package the platform actually deploys, with the licence each is published under.
+    It is generated from the <strong>running system</strong> rather than from our source repository, so
+    it reflects what is genuinely in service on the date shown.
+  </p>
+  <p>
+    WHG's own source code is released under the
+    <a href="https://github.com/WorldHistoricalGazetteer/whg3/blob/main/LICENSE" target="_blank" rel="noopener">BSD 3-Clause Licence</a>,
+    and the data carries per-source terms described on the <a href="{% url 'licenses' %}">licences page</a>.
+    The authoritative record of any package below is that project's own repository, linked from its name.
+  </p>
+
+  <div class="sw-note">
+    <strong>Why this is generated, not written.</strong> A dependency list maintained by hand goes stale
+    quietly, and a stale licence statement is worse than a general one — a general statement is merely
+    unhelpful, whereas a stale specific one is a positive misstatement. This page is rebuilt by a single
+    command that reads the deployed environment directly; the audit date above is therefore true by
+    construction.
+  </div>
+
+  {# ── Python ──────────────────────────────────────────────────────────── #}
+  <h2 class="h5 mt-4">Server-side (Python) — {{ python_count }} packages</h2>
+  <div class="sw-cards">
+    {% for s in python_summary %}
+    <div class="sw-card {{ s.key }}">
+      <div class="n">{{ s.count }}</div>
+      <div class="t">{{ s.label }}</div>
+      <div class="b">{{ s.blurb }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3 class="h6">Chosen directly by WHG</h3>
+  <table class="sw">
+    <thead><tr><th style="width:32%">Package</th><th style="width:12%">Version</th><th>Licence</th></tr></thead>
+    <tbody>
+      {% for p in python_direct %}
+      <tr>
+        <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+        <td class="sw-ver">{{ p.version }}</td>
+        <td><span class="lic-tag {{ p.category }}">{{ p.license }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <details class="sw-more">
+    <summary>Show all {{ python_count }}, including packages brought in as dependencies of the above</summary>
+    <table class="sw mt-2">
+      <thead><tr><th style="width:32%">Package</th><th style="width:12%">Version</th><th>Licence</th></tr></thead>
+      <tbody>
+        {% for p in python_all %}
+        <tr>
+          <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+          <td class="sw-ver">{{ p.version }}</td>
+          <td><span class="lic-tag {{ p.category }}">{{ p.license }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+
+  {# ── JavaScript ──────────────────────────────────────────────────────── #}
+  <h2 class="h5 mt-5">In the browser (JavaScript) — {{ js_count }} packages</h2>
+  {% if js_missing %}
+  <div class="sw-note warn">The JavaScript half of this audit has not been generated
+    (<code>npm run audit:licenses</code>).</div>
+  {% else %}
+  <p class="sw-meta">
+    These are the packages whose code is genuinely compiled into the bundles a browser downloads —
+    established from the build's own module list, not from the dependency tree. The tree is far larger;
+    most of it is build tooling, or code that is never imported and so never ships.
+  </p>
+  <div class="sw-cards">
+    {% for s in js_summary %}
+    <div class="sw-card {{ s.key }}">
+      <div class="n">{{ s.count }}</div>
+      <div class="t">{{ s.label }}</div>
+      <div class="b">{{ s.blurb }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <h3 class="h6">Chosen directly by WHG</h3>
+  <table class="sw">
+    <thead><tr><th style="width:32%">Package</th><th style="width:12%">Version</th><th>Licence</th></tr></thead>
+    <tbody>
+      {% for p in js_direct %}
+      <tr>
+        <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+        <td class="sw-ver">{{ p.version }}</td>
+        <td><span class="lic-tag {{ p.category }}">{{ p.license }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <details class="sw-more">
+    <summary>Show all {{ js_count }} bundled packages</summary>
+    <table class="sw mt-2">
+      <thead><tr><th style="width:32%">Package</th><th style="width:12%">Version</th><th>Licence</th></tr></thead>
+      <tbody>
+        {% for p in js_all %}
+        <tr>
+          <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+          <td class="sw-ver">{{ p.version }}</td>
+          <td><span class="lic-tag {{ p.category }}">{{ p.license }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+
+  {# ── Elections ───────────────────────────────────────────────────────── #}
+  {% if elections %}
+  <h2 class="h5 mt-5">Dual-licensed packages, and which option WHG relies on</h2>
+  <p class="sw-meta">
+    Some projects offer a choice of licences. Where WHG relies on one, we record the election here
+    rather than leave it implicit — an unrecorded election invites the assumption that the more
+    restrictive option applies.
+  </p>
+  <table class="sw">
+    <thead><tr><th style="width:20%">Package</th><th style="width:22%">Offered</th><th style="width:14%">WHG relies on</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for p in elections %}
+      <tr>
+        <td>{{ p.name }}</td>
+        <td><span class="lic-tag">{{ p.election.offered }}</span></td>
+        <td><span class="lic-tag {{ p.category }}">{{ p.election.elected }}</span></td>
+        <td class="sw-meta">{{ p.election.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if needs_review %}
+  <div class="sw-note warn mt-4">
+    <strong>{{ needs_review|length }} package(s) could not be resolved automatically.</strong>
+    They are listed above as “Needs review”. Every package has a licence; these simply do not publish
+    one in a machine-readable field, and we would rather show the gap than quietly omit them or guess.
+  </div>
+  {% endif %}
+
+  <div class="sw-note mt-4">
+    <strong>Something wrong here?</strong> This audit is generated automatically and checked
+    periodically. If a package is listed under terms you believe to be incorrect, please
+    <a href="/contact/">tell us</a> and we will correct it. The full source, including the audit
+    command that produces this page, is at
+    <a href="https://github.com/WorldHistoricalGazetteer/whg3" target="_blank" rel="noopener">github.com/WorldHistoricalGazetteer/whg3</a>.
+  </div>
+
+</div>
+{% endblock %}

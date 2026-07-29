@@ -1,1 +1,0 @@
-{"version":3,"file":"ds_browse.bundle.css","mappings":"AACA,aACC,qBAAsB,CACtB,kBACD,CACA,iBACC,qBACD","sources":["webpack://whg-webpack/./whg/webpack/css/ds_browse.css"],"sourcesContent":["\n.noUi-handle {\n\theight:18px !important; \n\ttop: -4px !important;\n}\n.noUi-horizontal {\n\theight:12px !important;\n}\n"],"names":[],"sourceRoot":""}

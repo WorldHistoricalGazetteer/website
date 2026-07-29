@@ -1,0 +1,321 @@
+{
+ "generated": "2026-07-29",
+ "count": 45,
+ "packages": [
+  {
+   "name": "@citation-js/core",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/date",
+   "version": "0.5.1",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/date",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/name",
+   "version": "0.4.2",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/name",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/plugin-bibjson",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/plugin-bibtex",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/plugin-csl",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": true
+  },
+  {
+   "name": "@citation-js/plugin-doi",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/plugin-ris",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@citation-js/plugin-wikidata",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/citation-js/citation-js",
+   "direct": false
+  },
+  {
+   "name": "@hocuspocus/provider",
+   "version": "2.15.3",
+   "license": "MIT",
+   "url": "https://hocuspocus.dev",
+   "direct": true
+  },
+  {
+   "name": "@js-temporal/polyfill",
+   "version": "0.5.1",
+   "license": "ISC",
+   "url": "https://github.com/js-temporal/temporal-polyfill",
+   "direct": true
+  },
+  {
+   "name": "@larsgw/wikibase-sdk",
+   "version": "10.2.1",
+   "license": "MIT",
+   "url": "https://github.com/maxlath/wikibase-sdk",
+   "direct": false
+  },
+  {
+   "name": "@mapbox/geojson-area",
+   "version": "0.2.2",
+   "license": "BSD-2-Clause",
+   "url": "git@github.com:mapbox/geojson-area",
+   "direct": false
+  },
+  {
+   "name": "@mapbox/geojson-normalize",
+   "version": "0.0.1",
+   "license": "ISC",
+   "url": "git@github.com:mapbox/geojson-normalize",
+   "direct": false
+  },
+  {
+   "name": "@mapbox/mapbox-gl-draw",
+   "version": "1.5.0",
+   "license": "ISC",
+   "url": "https://github.com/mapbox/mapbox-gl-draw",
+   "direct": true
+  },
+  {
+   "name": "ajv",
+   "version": "8.20.0",
+   "license": "MIT",
+   "url": "ajv-validator/ajv",
+   "direct": false
+  },
+  {
+   "name": "base64-js",
+   "version": "1.5.1",
+   "license": "MIT",
+   "url": "https://github.com/beatgammit/base64-js",
+   "direct": false
+  },
+  {
+   "name": "buffer",
+   "version": "5.7.1",
+   "license": "MIT",
+   "url": "https://github.com/feross/buffer",
+   "direct": false
+  },
+  {
+   "name": "citation-js",
+   "version": "0.7.18",
+   "license": "MIT",
+   "url": "https://github.com/larsgw/citation.js",
+   "direct": true
+  },
+  {
+   "name": "citeproc",
+   "version": "2.4.63",
+   "license": "CPAL-1.0 OR AGPL-1.0",
+   "url": "https://github.com/juris-m/citeproc-js",
+   "direct": false
+  },
+  {
+   "name": "css-loader",
+   "version": "6.11.0",
+   "license": "MIT",
+   "url": "webpack-contrib/css-loader",
+   "direct": true
+  },
+  {
+   "name": "driver.js",
+   "version": "1.6.0",
+   "license": "MIT",
+   "url": "https://github.com/nilbuild/driver.js",
+   "direct": true
+  },
+  {
+   "name": "fast-deep-equal",
+   "version": "3.1.3",
+   "license": "MIT",
+   "url": "https://github.com/epoberezkin/fast-deep-equal",
+   "direct": false
+  },
+  {
+   "name": "fast-uri",
+   "version": "3.1.3",
+   "license": "BSD-3-Clause",
+   "url": "https://github.com/fastify/fast-uri",
+   "direct": false
+  },
+  {
+   "name": "fetch-ponyfill",
+   "version": "7.1.0",
+   "license": "MIT",
+   "url": "https://github.com/qubyte/fetch-ponyfill",
+   "direct": false
+  },
+  {
+   "name": "h3-js",
+   "version": "4.5.0",
+   "license": "Apache-2.0",
+   "url": "https://github.com/uber/h3-js",
+   "direct": true
+  },
+  {
+   "name": "ieee754",
+   "version": "1.2.1",
+   "license": "BSD-3-Clause",
+   "url": "https://github.com/feross/ieee754",
+   "direct": false
+  },
+  {
+   "name": "jsbi",
+   "version": "4.3.2",
+   "license": "Apache-2.0",
+   "url": "GoogleChromeLabs/jsbi",
+   "direct": false
+  },
+  {
+   "name": "json-schema-traverse",
+   "version": "1.0.0",
+   "license": "MIT",
+   "url": "https://github.com/epoberezkin/json-schema-traverse",
+   "direct": false
+  },
+  {
+   "name": "lib0",
+   "version": "0.2.117",
+   "license": "MIT",
+   "url": "https://github.com/dmonad/lib0",
+   "direct": false
+  },
+  {
+   "name": "lodash",
+   "version": "4.18.1",
+   "license": "MIT",
+   "url": "lodash/lodash",
+   "direct": true
+  },
+  {
+   "name": "mammoth",
+   "version": "1.12.0",
+   "license": "BSD-2-Clause",
+   "url": "https://github.com/mwilliamson/mammoth.js",
+   "direct": true
+  },
+  {
+   "name": "maplibre-gl",
+   "version": "5.3.1",
+   "license": "BSD-3-Clause",
+   "url": "https://github.com/maplibre/maplibre-gl-js",
+   "direct": true
+  },
+  {
+   "name": "moo",
+   "version": "0.5.2",
+   "license": "BSD-3-Clause",
+   "url": "https://github.com/tjvr/moo",
+   "direct": false
+  },
+  {
+   "name": "onnxruntime-web",
+   "version": "1.27.0",
+   "license": "MIT",
+   "url": "https://github.com/Microsoft/onnxruntime",
+   "direct": true
+  },
+  {
+   "name": "pdfjs-dist",
+   "version": "6.1.200",
+   "license": "Apache-2.0",
+   "url": "https://github.com/mozilla/pdf.js",
+   "direct": true
+  },
+  {
+   "name": "proj4",
+   "version": "2.20.9",
+   "license": "MIT",
+   "url": "https://github.com/proj4js/proj4js",
+   "direct": true
+  },
+  {
+   "name": "raw-loader",
+   "version": "4.0.2",
+   "license": "MIT",
+   "url": "webpack-contrib/raw-loader",
+   "direct": true
+  },
+  {
+   "name": "sass-loader",
+   "version": "12.6.0",
+   "license": "MIT",
+   "url": "webpack-contrib/sass-loader",
+   "direct": true
+  },
+  {
+   "name": "spin.js",
+   "version": "4.1.2",
+   "license": "MIT",
+   "url": "https://github.com/fgnass/spin.js",
+   "direct": true
+  },
+  {
+   "name": "sync-fetch",
+   "version": "0.4.5",
+   "license": "MIT",
+   "url": "https://github.com/larsgw/sync-fetch",
+   "direct": false
+  },
+  {
+   "name": "wgs84",
+   "version": "0.0.0",
+   "license": "BSD-2-Clause",
+   "url": "git@github.com:mapbox/wgs84",
+   "direct": false
+  },
+  {
+   "name": "xlsx",
+   "version": "0.20.3",
+   "license": "Apache-2.0",
+   "url": "https://git.sheetjs.com/SheetJS/sheetjs",
+   "direct": true
+  },
+  {
+   "name": "y-indexeddb",
+   "version": "9.0.12",
+   "license": "MIT",
+   "url": "https://github.com/yjs/y-indexeddb",
+   "direct": true
+  },
+  {
+   "name": "yjs",
+   "version": "13.6.31",
+   "license": "MIT",
+   "url": "https://github.com/yjs/yjs",
+   "direct": true
+  }
+ ]
+}
