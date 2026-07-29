@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/WorldHistoricalGazetteer/website/releases"><img src="https://img.shields.io/github/v/release/WorldHistoricalGazetteer/website?display_name=tag&color=success" alt="Latest Release"></a>
+  <a href="https://doi.org/10.5281/zenodo.21693494"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.21693494.svg" alt="DOI"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BSD%203--Clause-informational" alt="License: BSD 3-Clause"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.10+-informational?logo=python&logoColor=white" alt="Python 3.10+"></a>
   <a href="https://www.djangoproject.com/"><img src="https://img.shields.io/badge/Django-4.1.7-informational?logo=django&logoColor=white" alt="Django 4.1.7"></a>
@@ -36,6 +37,14 @@ Complete documentation is available at **[docs.whgazetteer.org](https://docs.whg
 - Data models and schemas
 - Developer setup instructions
 - User tutorials and best practices
+
+## 📄 How to cite
+
+Every tagged release is archived on Zenodo. Cite the **concept DOI**, which always resolves to the latest version:
+
+> Gadd, Stephen, and Karl Grossner. 2026. *World Historical Gazetteer: Web Platform & API*. Zenodo. https://doi.org/10.5281/zenodo.21693494
+
+To cite a specific release instead, take that version's DOI from the **Versions** panel of the [Zenodo record](https://doi.org/10.5281/zenodo.21693494). Machine-readable metadata is in [CITATION.cff](CITATION.cff).
 
 ## 🤝 Contributing
 
