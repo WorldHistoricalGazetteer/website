@@ -13,6 +13,8 @@ import codecs, os, tempfile, logging, json
 from chardet import detect
 from datasets.static.hashes import mimetypes_plus as mthash_plus
 
+logger = logging.getLogger(__name__)
+
 MATCHTYPES = [
     ('closeMatch', 'closeMatch'),
     ('none', 'no match'),
@@ -104,6 +106,29 @@ class DatasetUploadForm(forms.ModelForm):
         'class': 'form-check-input',
         'required': 'required',
     }))
+
+    # The contributor's chosen licence, as an SPDX id from the controlled
+    # vocabulary (place#158). Carried as a plain string because the whole
+    # metadata dict is round-tripped through Redis before the Dataset row
+    # exists; resolved to the ``License`` FK in ``validation.create_dataset``.
+    # Optional so neither upload route breaks if the picker is unreachable —
+    # an unrecorded licence is recoverable, a failed contribution is not.
+    license = forms.CharField(required=False, widget=forms.HiddenInput())
+
+    def clean_license(self):
+        """Accept only ids that exist in the vocabulary. An unknown id is
+        dropped rather than raising: silently discarding a licence is what
+        place#157 was about, so this logs loudly instead of failing quietly."""
+        spdx = (self.cleaned_data.get('license') or '').strip()
+        if not spdx:
+            return ''
+        from licensing.models import License
+        if not License.objects.filter(spdx_id=spdx).exists():
+            logger.warning(
+                "Dataset upload sent unknown licence id %r — dropped. Seed it in "
+                "the licensing vocabulary if it is legitimate.", spdx)
+            return ''
+        return spdx
 
     class Meta:
         model = Dataset

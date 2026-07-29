@@ -380,6 +380,9 @@ class DatasetValidate(CreateView, FileHandlingMixin):
                 'uri_base': form.cleaned_data.get('uri_base') or 'https://whgazetteer.org/api/db/?id=',
                 'webpage': form.cleaned_data.get('webpage'),
                 'pdf': form.cleaned_data.get('pdf'),
+                # Contributor's chosen licence, SPDX id (place#158). Resolved to
+                # the License FK when the Dataset row is created.
+                'license': form.cleaned_data.get('license') or '',
                 'owner_id': user.id,
                 'username': user.username,
                 'uploaded_filepath': uploaded_filepath,

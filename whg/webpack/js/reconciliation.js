@@ -11,6 +11,7 @@
 import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
+import { wireLicenseControl } from './licensePicker.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -1956,6 +1957,11 @@ async function contributeToWHG() {
     const addHidden = (name, value) => { const i = document.createElement('input'); i.type = 'hidden'; i.name = name; i.value = value; form.appendChild(i); };
     addHidden('csrfmiddlewaretoken', getCsrf());
     addHidden('title', truncate(project.fileName || base, 100));
+    // The licence the contributor chose in the citation builder. Server-side it is
+    // validated against the vocabulary and resolved to Dataset.license; an empty or
+    // unknown value leaves the dataset unlicensed rather than guessing (place#158).
+    const citedLicence = (project.citation && project.citation.license) || '';
+    if (citedLicence) addHidden('license', citedLicence);
     const fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.name = 'file';
     const dt = new DataTransfer(); dt.items.add(file); fileInput.files = dt.files; // programmatically attach the file
     form.appendChild(fileInput);
@@ -1991,7 +1997,9 @@ function refreshExport() {
 // Collects schema.org Dataset-style metadata + CRediT-tagged contributors and produces a formatted
 // citation, a CITATION.cff file, and schema.org JSON-LD (whose contributor Roles carry the CRediT
 // term URIs). Everything lives on project.citation so it persists with the project.
-const CITE_FIELDS = ['title', 'year', 'version', 'publisher', 'url', 'license'];
+// NB: `license` is deliberately absent — it is chosen via the controlled picker
+// (wireLicenseControl below), not typed, but still lives on project.citation.
+const CITE_FIELDS = ['title', 'year', 'version', 'publisher', 'url'];
 function citationDefaults() {
   const base = (project && project.fileName ? project.fileName : 'My dataset').replace(/\.[^.]+$/, '');
   return {
@@ -5621,6 +5629,27 @@ function init() {
 
   // Citation & provenance builder: live preview + persist on edit; add contributors; copy / download.
   CITE_FIELDS.forEach((f) => { const inp = el('cite-' + f); if (inp) inp.addEventListener('input', saveCitation); });
+  // Licence: the controlled picker shared with /licenses/ and the Workbench editors, so the value
+  // resolves to a licensing.License row and can reach Dataset.license on contribute (place#158).
+  const citeLicBtn = el('cite-license-btn');
+  if (citeLicBtn) {
+    wireLicenseControl({
+      button: citeLicBtn,
+      display: el('cite-license-display'),
+      clearBtn: el('cite-license-clear'),
+      getChoice: () => {
+        const m = citationModel();
+        return m.license ? { spdx: m.license } : null;
+      },
+      setChoice: (c) => {
+        if (!project) return;
+        project.citation = Object.assign(citationModel(), { license: (c && c.spdx) || '' });
+        const prev = el('cite-preview');
+        if (prev) prev.textContent = formatCitation(project.citation);
+        persist();
+      },
+    });
+  }
   const citeAdd = el('cite-c-add');
   if (citeAdd) citeAdd.addEventListener('click', addCiteContributor);
   const citeCName = el('cite-c-name');

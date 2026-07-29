@@ -138,11 +138,25 @@ def save_dataset(task_id):
         cleanup_paths.append(jsonld_filepath)
         cleanup_paths.append(delimited_filepath)
 
+        # The contributor's chosen licence, carried through as an SPDX id and
+        # resolved here (place#158). Left null when absent or unrecognised —
+        # "no licence recorded" is honest and recoverable, whereas guessing one
+        # would put terms on the data that nobody granted.
+        license_obj = None
+        license_spdx = (dataset_metadata.get('license') or '').strip()
+        if license_spdx:
+            from licensing.models import License
+            license_obj = License.objects.filter(spdx_id=license_spdx).first()
+            if license_obj is None:
+                logger.warning("Dataset upload: unknown licence id %r — leaving "
+                               "the dataset unlicensed", license_spdx)
+
         # Start a transaction to ensure atomicity
         with transaction.atomic():
 
             # Create Dataset object
             dataset = Dataset.objects.create(
+                license=license_obj,
                 title=dataset_metadata[
                           'title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
                 label=dataset_metadata['label'],

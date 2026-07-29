@@ -101,10 +101,9 @@ current state, working evidence, and the questions on which we seek guidance</p>
         are largely not ours to sell (§6).</li>
     <li><strong>A ruling on the legacy contributed corpus</strong>: whether a blanket "Accept CC&nbsp;BY&nbsp;4.0"
         checkbox can be relied on as a grant over 437 datasets and 186 collections, or whether we must treat them as
-        unlicensed and go back to their owners (§7.2). This is the item that most needs counsel.</li>
-    <li><strong>A steer on two recurring problems</strong>: how to handle a depositor whose conditions cannot be
-        expressed as a licence at all, and whether a declared-use-case attestation is a meaningful protection
-        (§7.1, §7.4).</li>
+        unlicensed and go back to their owners (§7.1). This is the item that most needs counsel.</li>
+    <li><strong>A view on whether a declared-use-case attestation is a meaningful protection</strong> — our
+        proposed mechanism for enforcing upstream terms at the point of access (§7.3).</li>
   </ol>
 </div>
 
@@ -159,16 +158,16 @@ current state, working evidence, and the questions on which we seek guidance</p>
   the same licence.
 </p>
 <p>
-  Two honest qualifications. First, the picker is live for <em>Place Collections</em> and <em>Gazetteer Groups</em> but
-  is <strong>not yet wired into the Workbench dataset flow</strong> — the main route for contributing place data — so
-  some new contributions still arrive without a licence. That is a straightforward piece of engineering, not a policy
-  question, and is in hand (§8, item 7).
+  One honest qualification. Until this week the picker covered the Workbench's collection editors but not
+  <em>Map your Data</em> — the route by which most new place data is contributed — where the licence was a free-text
+  box that never reached the dataset record. That is now fixed: the same picker, the same vocabulary, and the choice
+  is stored against the dataset.
 </p>
 <p>
   Second, under the <em>legacy</em> upload path a contributor accepted a single blanket grant by ticking one checkbox,
   and no licence was recorded per dataset. The per-source model described here is fully populated for the
   <strong>authority gazetteers</strong> that make up the 50.5 m indexed records (§5); extending it over the legacy
-  contributed corpus depends on what that blanket acceptance is worth, which is the question at §7.2.
+  contributed corpus depends on what that blanket acceptance is worth, which is the question at §7.1.
 </p>
 
 <figure>
@@ -363,46 +362,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
 
 <h2>7. Specific matters on which we seek guidance</h2>
 
-<h3>7.1 &nbsp;Conditions that a licence cannot express</h3>
-<p>
-  We were once offered a set of English parish transcripts on terms asserting that (a) the depositing institution held
-  some copyright and the files were "definitely not public domain"; (b) the depositor was content to release them as
-  CC&nbsp;BY-NC-SA; and (c) that "BY" meant he <em>should be included as a co-author</em> on any publication making
-  substantial use of the data. We did not take up the offer, and eventually produced our own transcript of the relevant
-  source instead — so nothing turns on this particular case. We raise it because the <em>shape</em> of the problem will
-  recur, and we would rather have a steer before it does than after.
-</p>
-<p>
-  <strong>Our reading of (a)</strong> is that it is broadly sound though not quite as stated: the raw facts are not
-  copyrightable, but the <em>compilation</em> is, and under UK law the <strong>sui generis database right</strong>
-  protects exactly the substantial investment described (OCR-scraping software plus extensive manual clean-up). Where
-  such work is done by university staff and students, the rights holder is most likely the <strong>institution rather
-  than the individual depositor</strong> — so a depositor's personal assurance may not be the permission we actually need.
-</p>
-<p>
-  <strong>On (c) we believe the claim over-reached.</strong> Under Creative Commons, the Attribution requirement means
-  <em>credit</em> — naming the creator, linking source and licence, noting changes. It does not confer or require
-  co-authorship. Attribution is not authorship: co-authorship follows from a substantive intellectual contribution to the
-  specific new work, or from contract — not from a licence's attribution clause. A depositor may legitimately
-  <em>negotiate</em> co-authorship as a separate condition of access, but as a bespoke term it binds only WHG and cannot
-  be passed through to downstream users the way a licence can.
-</p>
-<p>
-  <strong>Why this shape of condition is the difficult one.</strong> A mandatory co-authorship term is in practice
-  <em>more</em> restrictive than non-commercial: it cannot be satisfied automatically, does not scale, and
-  <strong>WHG cannot honour it downstream</strong> — we cannot auto-co-author a depositor onto a third party's product.
-  Our platform can now record and enforce bespoke terms, including gating a source out of downloads entirely where its
-  terms cannot be met; one source is currently gated on exactly that basis. But a condition that cannot be expressed to
-  the reuser at all is different in kind from one that is merely restrictive.
-</p>
-<div class="callout ask">
-  <p><em>We would welcome confirmation that our reading of attribution vs. authorship is correct, and — more usefully —
-  guidance on how to handle a prospective depositor who attaches a condition that cannot be expressed as a licence and
-  cannot be passed downstream. Is there wording Pitt would want us to use, or a point at which such an offer should be
-  referred to your office rather than declined by us?</em></p>
-</div>
-
-<h3>7.2 &nbsp;What grant do we hold over legacy contributed data?</h3>
+<h3>7.1 &nbsp;What grant do we hold over legacy contributed data?</h3>
 <p>
   Contributions now follow the per-source model described at §4.1: a contributor chooses a licence from the controlled
   vocabulary, and it is recorded against their data. <strong>The question is about everything contributed before that.</strong>
@@ -429,7 +389,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
   cleanly for permissive terms but leaves restrictive ones ambiguous about what the platform may do.
 </p>
 
-<h3>7.3 &nbsp;Is "non-commercial" a mechanism worth relying on?</h3>
+<h3>7.2 &nbsp;Is "non-commercial" a mechanism worth relying on?</h3>
 <p>
   Our internal view — shared by colleagues — is that NC is a weak instrument: it is poorly defined, catches uses we would
   want to permit (commercial academic publishers, tuition-charging universities), and does not reliably prevent the uses
@@ -437,7 +397,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
   whether that remains the right default for the WHG layer, or whether a different instrument would serve better.</em>
 </p>
 
-<h3>7.4 &nbsp;A declared-use-case attestation</h3>
+<h3>7.3 &nbsp;A declared-use-case attestation</h3>
 <p>
   Per-source flags only become enforceable once we know what a user intends to do. Our proposal is to capture a
   <strong>declared use case</strong> at the point of access — at download, and once at API-token issuance rather than per
@@ -459,12 +419,12 @@ current state, working evidence, and the questions on which we seek guidance</p>
   <tbody>
     <tr><td>1</td><td>Per-namespace licence audit</td><td>Complete: every source now carries verified terms, the six defective entries are corrected (§4.3), and the ingestion pipeline now fails loudly rather than silently discarding a licence it cannot resolve. Remaining: periodic re-verification as upstream sources change their terms.</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>2</td><td>DOI registration metadata</td><td>DOIs minted for WHG datasets currently register a hard-coded <code>CC-BY-NC-4.0</code> rights statement with DataCite regardless of the dataset's actual licence. This has the longest tail of any item — DOI metadata is externally cached and hard to walk back — and should be fixed before the next minting run.</td><td><span class="tag tag-hi">Highest</span></td></tr>
-    <tr><td>3</td><td>Legacy contributed data — grant, then backfill</td><td>One question, two halves. <strong>(a)</strong> Can the legacy blanket "Accept CC&nbsp;BY&nbsp;4.0" checkbox be relied on as a grant (§7.2)? A licensing decision, and the only item here that genuinely needs counsel. <strong>(b)</strong> Whatever the answer, record it: 437 datasets and 186 collections currently carry no licence, so our API reports no terms for contributed data while reporting full terms for the authority gazetteers. Tracked as <code>place#158</code>.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>3</td><td>Legacy contributed data — grant, then backfill</td><td>One question, two halves. <strong>(a)</strong> Can the legacy blanket "Accept CC&nbsp;BY&nbsp;4.0" checkbox be relied on as a grant (§7.1)? A licensing decision, and the only item here that genuinely needs counsel. <strong>(b)</strong> Whatever the answer, record it: 437 datasets and 186 collections currently carry no licence, so our API reports no terms for contributed data while reporting full terms for the authority gazetteers. Tracked as <code>place#158</code>.</td><td><span class="tag tag-hi">Highest</span></td></tr>
     <tr><td>4</td><td>Reconciliation &amp; result-set API responses</td><td>Aggregated terms block at the response root of search, index, spatial and reconciliation, plus a source tag on every reconciliation candidate (§4.3). Enables consumer compliance and lets WHG gate sources whose terms cannot be honoured.</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>5</td><td>Aggregated attribution block</td><td>Extended to carry the licence and its flags, not only source name, citation and record count.</td><td><span class="tag tag-done">Done</span></td></tr>
-    <tr><td>6</td><td>Declared use case &amp; gating</td><td>Implement the attestation described in §7.4, subject to guidance from this meeting.</td><td><span class="tag tag-med">Med</span></td></tr>
-    <tr><td>7</td><td>Licence capture in the Workbench dataset flow</td><td>The contributor licence picker is wired into Place Collections and Gazetteer Groups but not yet into the Workbench <em>dataset</em> flow — the main route for contributing place data. Until it is, new datasets keep arriving without a licence and any backfill of item 3 is open-ended. Purely technical, not blocked on item 3. Tracked as <code>place#158</code>.</td><td><span class="tag tag-med">High</span></td></tr>
-    <tr><td>8</td><td>Legacy static pages &amp; download artefacts</td><td>A small number of older templates, download README files and email texts still carry the pre-audit blanket licence statement. Text-only changes; to be aligned once the wording in §7.2–7.3 is settled.</td><td><span class="tag tag-low">Med</span></td></tr>
+    <tr><td>6</td><td>Declared use case &amp; gating</td><td>Implement the attestation described in §7.3, subject to guidance from this meeting.</td><td><span class="tag tag-med">Med</span></td></tr>
+    <tr><td>7</td><td>Licence capture on new contributions</td><td>The controlled picker now covers <em>Map your Data</em> and both upload routes, so newly contributed datasets record a licence; an unrecognised or absent value is stored as null rather than guessed. The legacy collection-builder still has no route to record one. <em>Datasets done; collections outstanding.</em></td><td><span class="tag tag-med">Part done</span></td></tr>
+    <tr><td>8</td><td>Legacy static pages &amp; download artefacts</td><td>A small number of older templates, download README files and email texts still carry the pre-audit blanket licence statement. Text-only changes; to be aligned once the wording in §7.1–7.2 is settled.</td><td><span class="tag tag-low">Med</span></td></tr>
     <tr><td>9</td><td>Licence vocabulary, per-source capture, contributor picker, UI badges, API terms block</td><td>Built and in production (§3, §4). The machinery is complete; what remains is data accuracy and coverage.</td><td><span class="tag tag-done">Done</span></td></tr>
   </tbody>
 </table>
