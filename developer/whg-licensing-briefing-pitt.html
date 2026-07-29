@@ -81,7 +81,7 @@ current state, working evidence, and the questions on which we seek guidance</p>
   The World Historical Gazetteer (WHG) is a Pitt-hosted platform that aggregates and links historical place data.
   Its index currently holds <strong>50.5 million place records</strong> drawn from 26 distinct source gazetteers,
   plus several hundred contributed datasets. Those sources arrive under <strong>at least nine different licences</strong>
-  — public domain, CC&nbsp;BY, CC&nbsp;BY-SA, ODbL, ODC-By, CC&nbsp;BY-NC and bespoke institutional terms.
+  — public domain, CC&nbsp;BY, CC&nbsp;BY-SA, ODbL, ODC-By and CC&nbsp;BY-NC — and for a small specialist remainder the terms are not yet recorded at all (§5).
 </p>
 <div class="callout key">
   <p><strong>The position we have adopted:</strong> WHG asserts <em>no single blanket licence</em> over the aggregate.
@@ -149,11 +149,19 @@ current state, working evidence, and the questions on which we seek guidance</p>
 
 <h3>4.1 &nbsp;Collecting terms from contributors</h3>
 <p>
-  Anyone contributing data chooses a licence from the same controlled vocabulary the platform uses internally. A public
-  reference page at <code>whgazetteer.org/licenses</code> — linked from the site's top menu — explains every licence in
-  plain language, with an interactive picker, and links each to its official deed in up to 17 languages.
-  <strong>The same catalogue code drives both this page and the in-Workbench picker</strong>, so a contributor never sees
-  two different descriptions of the same licence.
+  In the new contribution flow (the WHG <em>Workbench</em>, currently in beta and superseding the older upload path), a
+  contributor chooses a licence from the same controlled vocabulary the platform uses internally. A public reference page
+  at <code>whgazetteer.org/licenses</code> — linked from the site's top menu — explains every licence in plain language,
+  with an interactive picker, and links each to its official deed in up to 17 languages. <strong>The same catalogue code
+  drives both this page and the in-Workbench picker</strong>, so a contributor never sees two different descriptions of
+  the same licence.
+</p>
+<p>
+  To be precise about the transition: under the <em>legacy</em> upload path a contributor accepted a single blanket
+  licence via a checkbox, and no per-dataset licence was recorded. That historical material therefore still needs a
+  backfill, and the wording of that blanket acceptance is the text we ask you to review at §7.2. The per-source model
+  described here is fully populated for the <strong>authority gazetteers</strong> that make up the 50.5 m indexed records
+  (§5); extending it over the legacy contributed datasets is separate, tracked work.
 </p>
 
 <figure>
@@ -221,10 +229,10 @@ current state, working evidence, and the questions on which we seek guidance</p>
 
 <h3>4.3 &nbsp;Machine-readable terms in the API — the remaining gap</h3>
 <p>
-  The intended design is that any API response spanning multiple sources should carry an <strong>aggregated statement of
-  terms at the root of the returned document</strong>, listing every source namespace present in the results with its
-  licence, so that a programmatic consumer can comply without having to look anything up. We checked this against the live
-  service while preparing this briefing. The position is partial:
+  The design requires that any API response spanning multiple sources carry an <strong>aggregated statement of terms at
+  the root of the returned document</strong>, listing every source present in the results with its licence, so a
+  programmatic consumer can comply without having to look anything up. Checking this against the live service while
+  preparing this briefing showed it was only half-built; it has since been completed and deployed:
 </p>
 <table>
   <thead><tr><th style="width:40%">Surface</th><th style="width:40%">Carries source terms?</th><th style="width:20%">Status</th></tr></thead>
@@ -232,24 +240,33 @@ current state, working evidence, and the questions on which we seek guidance</p>
     <tr><td>Interactive UI (Figs. 5–7)</td><td>Yes — full licence, flags, rights holder, deed link</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>Single-record API responses</td><td>Yes — an <code>attribution</code> object with licence and flags</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>Standalone resolver endpoint</td><td>Yes — callers may ask "what are the terms for these namespaces?"</td><td><span class="tag tag-done">Done</span></td></tr>
-    <tr><td><strong>Multi-record result sets</strong> (search, index, spatial)</td><td><strong>No</strong> — no terms block at the root, no per-result licence</td><td><span class="tag tag-hi">Gap</span></td></tr>
-    <tr><td><strong>Reconciliation responses</strong></td><td><strong>No</strong> — candidates carry id, name, type and score only</td><td><span class="tag tag-hi">Gap</span></td></tr>
-    <tr><td>The aggregated block itself</td><td>Partial — returns source name, citation and record count, but <strong>not the licence</strong></td><td><span class="tag tag-med">Gap</span></td></tr>
+    <tr><td><strong>Multi-record result sets</strong> (search, index, spatial)</td><td>Yes — aggregated terms block at the response root</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td><strong>Reconciliation responses</strong></td><td>Yes — root terms block, plus a source tag on every candidate</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td>The aggregated block itself</td><td>Yes — now carries the licence and its flags, not only names and citations</td><td><span class="tag tag-done">Done</span></td></tr>
   </tbody>
 </table>
 <p>
-  This matters most for <strong>reconciliation</strong>, which is arguably WHG's larger delivery channel and the one that
-  blends candidates from many differently-licensed sources into a single response. A consumer currently receives results
-  spanning several licences with no machine-readable way to tell which is which — and therefore cannot comply with
-  per-source terms even when willing to. It is a tractable fix: the per-source data already exists and is already rendered
-  in the interface; it needs wiring into the response envelopes. <strong>We are raising this as a tracked issue.</strong>
+  This mattered most for <strong>reconciliation</strong>, which is arguably WHG's larger delivery channel and the one that
+  blends candidates from many differently-licensed sources into a single response. A consumer previously received results
+  spanning several licences with no machine-readable way to tell which was which — and therefore could not comply with
+  per-source terms even when willing to. Every response now states, at its root, each contributing source with its licence
+  and the two flags a reuser must act on (<em>permits commercial use</em>, <em>share-alike</em>), and each reconciliation
+  candidate is tagged with the source it came from. Where a source's licence is not recorded, the response reports
+  <em>null</em> rather than defaulting to something permissive.
 </p>
-<div class="callout">
-  <p><strong>A data-quality note found in the same check.</strong> OpenHistoricalMap is recorded in our registry as
-  <code>CC0-1.0</code>. OpenHistoricalMap publishes under <strong>ODbL</strong>, as its sibling OpenStreetMap does (and as
-  our own registry correctly records for OSM). If that is an ingest error rather than a deliberate determination, it
-  understates an obligation on roughly 0.9&nbsp;million records, and is being corrected. We mention it because it
-  illustrates why the per-namespace licence audit (§8) is the item we treat as highest priority.</p>
+<div class="callout warn">
+  <p><strong>Two data-quality findings from the same exercise — these, not the plumbing, are the real gap.</strong></p>
+  <p><strong>(i)</strong> OpenHistoricalMap is recorded in our registry as <code>CC0-1.0</code>. OpenHistoricalMap publishes
+  under <strong>ODbL</strong>, as its sibling OpenStreetMap does (and as our own registry correctly records for OSM). This
+  understates a share-alike obligation on roughly 0.9&nbsp;million records.</p>
+  <p><strong>(ii)</strong> Five authority gazetteers — <strong>113,578 records</strong> — have a <em>rights holder</em>
+  recorded but <strong>no licence at all</strong>: CHGIS, the Ancient Parishes of England &amp; Wales, Native Land, the
+  Digital Gazetteer of the Song Dynasty, and UK Historic Counties. For a licensing conversation this is the more serious
+  category: a non-commercial licence can be cleared or excluded deterministically, whereas <strong>unrecorded terms cannot
+  be reasoned about at all</strong>.</p>
+  <p>Both originate in the authority metadata at ingest and are being corrected there, so the fix propagates to every
+  surface. Together they are why the per-namespace licence audit (§8) is the item we rank first: the machinery is now in
+  place everywhere, and it is only ever as accurate as that table.</p>
 </div>
 
 <h2>5. What the corpus actually contains</h2>
@@ -267,40 +284,49 @@ current state, working evidence, and the questions on which we seek guidance</p>
     <tr><td>Getty TGN <code>tgn</code></td><td class="num">2,991,044</td><td>ODC-By-1.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>GB1900 <code>gb</code></td><td class="num">1,174,449</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
     <tr><td>OpenHistoricalMap <code>ohm</code></td><td class="num">905,205</td><td>CC0-1.0 <em>(under review — see §4.3)</em></td><td><span class="ok">✓</span></td></tr>
-    <tr><td>China Historical GIS <code>chgis</code></td><td class="num">82,117</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>China Historical GIS <code>chgis</code></td><td class="num">82,117</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>Trismegistos <code>tm</code></td><td class="num">64,196</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
     <tr><td>Pleiades <code>pl</code></td><td class="num">25,561</td><td>CC-BY-3.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>Index Villaris <code>iv</code></td><td class="num">24,000</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
-    <tr><td>Ancient Parishes of England &amp; Wales <code>kain_par</code></td><td class="num">23,177</td><td>bespoke</td><td><span class="no">✗ excluded — download gated</span></td></tr>
+    <tr><td>Ancient Parishes of England &amp; Wales <code>kain_par</code></td><td class="num">23,177</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded — download gated</span></td></tr>
     <tr><td>Alcedo <code>alc</code></td><td class="num">18,223</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>Ottoman NFS Gazetteer <code>ofs</code></td><td class="num">16,296</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>Cliopatria <code>clio</code></td><td class="num">15,690</td><td>CC-BY-4.0</td><td><span class="ok">✓ attribution</span></td></tr>
     <tr><td>HGIS de las Indias <code>hgis</code></td><td class="num">14,152</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
     <tr><td>PeriodO <code>po</code></td><td class="num">9,017</td><td>CC0-1.0</td><td><span class="ok">✓ public domain</span></td></tr>
     <tr><td>Ottoman Gazetteer <code>og</code></td><td class="num">6,260</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
-    <tr><td>Native Land <code>nl</code></td><td class="num">4,364</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
-    <tr><td>Digital Gazetteer of the Song Dynasty <code>dgsd</code></td><td class="num">3,828</td><td>bespoke</td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Native Land <code>nl</code></td><td class="num">4,364</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
+    <tr><td>Digital Gazetteer of the Song Dynasty <code>dgsd</code></td><td class="num">3,828</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>D-PLACE <code>dp</code></td><td class="num">2,599</td><td>CC-BY-NC-4.0</td><td><span class="no">✗ excluded</span></td></tr>
     <tr><td>GBHGIS boundary sets (4 gazetteers)</td><td class="num">2,850</td><td>CC-BY-SA-4.0</td><td><span class="warn">✓ but share-alike</span></td></tr>
-    <tr><td>UN Countries <code>un</code>; UK Historic Counties <code>ukhc</code></td><td class="num">339</td><td>public domain; bespoke</td><td>mixed</td></tr>
+    <tr><td>UN Countries <code>un</code></td><td class="num">247</td><td>public domain</td><td><span class="ok">✓</span></td></tr>
+    <tr><td>UK Historic Counties <code>ukhc</code></td><td class="num">92</td><td><span class="no">not recorded</span></td><td><span class="no">✗ excluded</span></td></tr>
   </tbody>
 </table>
 <div class="callout key nobreak">
-  <p><strong>The headline figure: 99.7% of the indexed corpus is commercially licensable in principle.</strong>
+  <p><strong>The headline figure: 99.7% of the indexed corpus carries a licence that permits commercial use.</strong>
   Of 50,510,694 records, <strong>28.8 m (57.0%)</strong> are attribution-only or public domain — free of any copyleft
-  obligation; <strong>21.6 m (42.7%)</strong> are commercially usable but <em>share-alike</em>; and only
-  <strong>140,660 records (0.28%)</strong> are non-commercial or bespoke-restricted.</p>
-  <p>So the commercially-consequential decision is <em>not</em> whether to exclude the NC material — that is a rounding
-  error by volume. It is <strong>whether to include the share-alike sources</strong>, which are 42.7% of the corpus and
-  are dominated by a single source (OpenStreetMap under ODbL).</p>
+  obligation; <strong>21.6 m (42.7%)</strong> are commercially usable but <em>share-alike</em>; only
+  <strong>27,082 records (0.05%)</strong> are non-commercial; and <strong>113,578 records (0.22%)</strong> have
+  <strong>no licence recorded at all</strong>.</p>
+  <p>So the commercially-consequential decision is <em>not</em> whether to exclude the non-commercial material — that is a
+  rounding error by volume. It is <strong>whether to include the share-alike sources</strong>, which are 42.7% of the
+  corpus and are dominated by a single source (OpenStreetMap under ODbL).</p>
 </div>
 <p>
-  Two qualifications keep this honest. First, <strong>volume is not value</strong>: the excluded 0.28% is specialist,
-  hand-curated material (Chinese historical administrative units, Ottoman-era places, English parish transcripts) whose
-  scholarly value per record far exceeds a GeoNames row — and it is precisely the material a scholarly aggregator exists to
-  provide. Second, <strong>places are heavily duplicated across authorities</strong>, so a commercial consumer denied a
-  restricted source will usually still match the same place in GeoNames, Wikidata or TGN. The real loss is the tail of
-  places that exist <em>only</em> in a restricted set.
+  Three qualifications keep this honest. First, <strong>the 0.22% with no recorded licence is the category that should
+  concern us most</strong>, and it is larger than the non-commercial one. A non-commercial licence is a known quantity: it
+  can be honoured, excluded, or renegotiated. An unrecorded licence cannot be reasoned about at all — we can neither offer
+  the data nor confidently refuse it. Correcting this is the first item in §8, and we would rather show it to you than
+  round it into a "bespoke terms" bucket.
+</p>
+<p>
+  Second, <strong>volume is not value</strong>: the restricted and unrecorded records are specialist, hand-curated material
+  (Chinese historical administrative units, English parish boundaries, Indigenous territories) whose scholarly value per
+  record far exceeds a GeoNames row — and it is precisely the material a scholarly aggregator exists to provide. Third,
+  <strong>places are heavily duplicated across authorities</strong>, so a commercial consumer denied a restricted source
+  will usually still match the same place in GeoNames, Wikidata or TGN. The real loss is the tail of places that exist
+  <em>only</em> in a restricted set.
 </p>
 
 <div class="callout warn nobreak">
@@ -410,14 +436,15 @@ current state, working evidence, and the questions on which we seek guidance</p>
 <table>
   <thead><tr><th style="width:5%">#</th><th style="width:28%">Area</th><th style="width:49%">Change</th><th style="width:18%">Priority</th></tr></thead>
   <tbody>
-    <tr><td>1</td><td>Per-namespace licence audit</td><td>Complete verification of every source's actual upstream licence and push corrections into the registry. The OpenHistoricalMap discrepancy (§4.3) shows why this ranks first: every downstream surface is only as accurate as this table.</td><td><span class="tag tag-hi">Highest</span></td></tr>
+    <tr><td>1</td><td>Per-namespace licence audit</td><td>Two known defects to correct at source, plus verification of the rest: OpenHistoricalMap recorded as CC0 rather than ODbL (~0.9&nbsp;m records), and five gazetteers (113,578 records) with a rights holder but <strong>no licence</strong> (§4.3). Every downstream surface is now wired, and is only as accurate as this table.</td><td><span class="tag tag-hi">Highest</span></td></tr>
     <tr><td>2</td><td>DOI registration metadata</td><td>DOIs minted for WHG datasets currently register a hard-coded <code>CC-BY-NC-4.0</code> rights statement with DataCite regardless of the dataset's actual licence. This has the longest tail of any item — DOI metadata is externally cached and hard to walk back — and should be fixed before the next minting run.</td><td><span class="tag tag-hi">Highest</span></td></tr>
     <tr><td>3</td><td>Contributor grant wording</td><td>Legally load-bearing (§7.2). Decide deliberately what grant we ask for; counsel signs off on this text specifically.</td><td><span class="tag tag-hi">Highest</span></td></tr>
-    <tr><td>4</td><td>Reconciliation &amp; result-set API responses</td><td>Attach the aggregated per-namespace terms block at the response root, and per-result provenance (§4.3). The data exists; it needs wiring into the envelopes. Enables consumer compliance and lets WHG gate sources whose terms cannot be honoured.</td><td><span class="tag tag-hi">High</span></td></tr>
-    <tr><td>5</td><td>Aggregated attribution block</td><td>Extend it to carry the licence, not only source name, citation and record count.</td><td><span class="tag tag-med">High</span></td></tr>
+    <tr><td>4</td><td>Reconciliation &amp; result-set API responses</td><td>Aggregated terms block at the response root of search, index, spatial and reconciliation, plus a source tag on every reconciliation candidate (§4.3). Enables consumer compliance and lets WHG gate sources whose terms cannot be honoured.</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td>5</td><td>Aggregated attribution block</td><td>Extended to carry the licence and its flags, not only source name, citation and record count.</td><td><span class="tag tag-done">Done</span></td></tr>
     <tr><td>6</td><td>Declared use case &amp; gating</td><td>Implement the attestation described in §7.4, subject to guidance from this meeting.</td><td><span class="tag tag-med">Med</span></td></tr>
-    <tr><td>7</td><td>Legacy static pages &amp; download artefacts</td><td>A small number of older templates, download README files and email texts still carry the pre-audit blanket licence statement. Text-only changes; to be aligned once the wording in §7.2–7.3 is settled.</td><td><span class="tag tag-low">Med</span></td></tr>
-    <tr><td>8</td><td>Licence vocabulary, per-source capture, contributor picker, UI badges</td><td>Built and in production (§3, §4).</td><td><span class="tag tag-done">Done</span></td></tr>
+    <tr><td>7</td><td>Legacy contributed datasets</td><td>Datasets uploaded through the older path carry no per-dataset licence (they were covered by a blanket acceptance checkbox). Backfill once the §7.2 wording is settled, so the per-source model covers contributed data as well as the authority gazetteers.</td><td><span class="tag tag-med">Med</span></td></tr>
+    <tr><td>8</td><td>Legacy static pages &amp; download artefacts</td><td>A small number of older templates, download README files and email texts still carry the pre-audit blanket licence statement. Text-only changes; to be aligned once the wording in §7.2–7.3 is settled.</td><td><span class="tag tag-low">Med</span></td></tr>
+    <tr><td>9</td><td>Licence vocabulary, per-source capture, contributor picker, UI badges, API terms block</td><td>Built and in production (§3, §4). The machinery is complete; what remains is data accuracy and coverage.</td><td><span class="tag tag-done">Done</span></td></tr>
   </tbody>
 </table>
 <p>
