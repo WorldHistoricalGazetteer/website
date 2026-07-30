@@ -25,6 +25,12 @@ app.conf.beat_schedule = {
         'task': 'validation.tasks.clean_tmp_files',
         'schedule': crontab(minute=0, hour='*'),  # Runs every hour
     },
+    # place#162: converge embargo auto-release (embargo_release_at past due)
+    # even though visible_to() already applies it lazily on read.
+    'release-embargoes-every-hour': {
+        'task': 'api.tasks.release_embargoes',
+        'schedule': crontab(minute=15, hour='*'),  # Runs every hour
+    },
 }
 
 # Load task modules from all registered Django app configs.

@@ -109,12 +109,13 @@ class GazetteerInventoryView(AuthenticatedAPIView):
             return False, f"missing field: {exc}"
 
         # Inventory-derived fields only. Curatorial fields (``core``,
-        # ``no_explore``, ``region_source``, ``gazetteer_type``) are
-        # admin-managed via api/admin.py::GazetteerRegistryEntryAdmin and
-        # MUST NOT be added here — ``update_or_create(defaults=…)`` would
-        # silently reset them on every push, blowing away staff curation.
-        # Re-ingest tracking fields are likewise excluded; they're owned
-        # by the admin "Re-ingest" action and the gateway poll loop.
+        # ``no_explore``, ``region_source``, ``gazetteer_type``,
+        # ``embargo_release_at``) are admin-managed via
+        # api/admin.py::GazetteerRegistryEntryAdmin and MUST NOT be added
+        # here — ``update_or_create(defaults=…)`` would silently reset them
+        # on every push, blowing away staff curation. Re-ingest tracking
+        # fields are likewise excluded; they're owned by the admin
+        # "Re-ingest" action and the gateway poll loop.
         defaults = {
             "name": str(entry.get("name") or entry_id),
             "description": entry.get("description"),
@@ -129,6 +130,18 @@ class GazetteerInventoryView(AuthenticatedAPIView):
         owner_user_id = entry.get("owner_user_id")
         if owner_user_id is not None:
             defaults["owner_id"] = owner_user_id
+
+        # Embargo push-safety (place#162): ``status`` is otherwise
+        # push-managed (set unconditionally above), but a re-ingest of an
+        # already-embargoed authority must NOT silently un-embargo it — drop
+        # "status" from defaults so ``update_or_create`` leaves the existing
+        # DB value untouched whenever it's currently 'embargoed'. Admin is
+        # the only way back to 'published' from 'embargoed' (or the
+        # release_embargoes job, once embargo_release_at has passed).
+        if (GazetteerRegistryEntry.objects
+                .filter(id=entry_id, status='embargoed')
+                .exists()):
+            defaults.pop("status", None)
 
         # Attribution / licence / rights (citations design Phase 4). All
         # optional — only fields actually present in the payload are written,

@@ -223,7 +223,19 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 				id: `${baseId}_heat`, type: 'heatmap', source: id, 'source-layer': sourceLayer,
 				maxzoom: HEAT_MAXZOOM,
 				// Defensive: coverage carries no Point geometry anyway (place#140).
-				filter: ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'coverage']]],
+				// ``!has label`` is NOT defensive — label anchors are Point features
+				// with no ``coverage``, so without this clause the pole-of-
+				// inaccessibility point emitted for each polygon (place#159) would
+				// be counted as point data. On a polygon-only gazetteer such as
+				// ``po`` (7,080 polygons, no points) that would manufacture a
+				// density field out of nothing but label anchors. Landed ahead of
+				// the labels channel so the tileset can never ship into a renderer
+				// that lacks the guard. See indexing developer/plan-tileset-architecture.md §3.2.
+				filter: ['all',
+					['==', ['geometry-type'], 'Point'],
+					['!', ['has', 'coverage']],
+					['!', ['has', 'label']],
+				],
 				paint: {
 					// Weight by the cluster's pre-computed sqrt(point_count) so big
 					// clusters don't saturate; un-clustered singletons weigh 1.
@@ -264,7 +276,13 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 			this.addLayer({
 				id: `${baseId}_circle`, type: 'circle', source: id, 'source-layer': sourceLayer,
 				minzoom: POINT_MINZOOM,   // raw points only once zoomed in (place#133)
-				filter: ['==', ['geometry-type'], 'Point'],
+				// Label anchors are not places to plot — they carry the same
+				// ``place_id`` as their polygon and would draw a second, duplicate
+				// marker inside every shape. See the ``_heat`` note above.
+				filter: ['all',
+					['==', ['geometry-type'], 'Point'],
+					['!', ['has', 'label']],
+				],
 				paint: {
 					'circle-radius': 4, 'circle-color': '#e04040',
 					'circle-stroke-color': '#fff', 'circle-stroke-width': 1,
