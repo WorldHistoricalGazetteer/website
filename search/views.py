@@ -271,7 +271,8 @@ class AtlasPageView(TemplateView):
         REGION_SOURCE_ORDER = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl']
         region_source_rows = (
             GazetteerRegistryEntry.objects
-            .filter(region_source=True, status='published')
+            .filter(region_source=True)
+            .visible_to(self.request.user)
             .values('id', 'name', 'description')
         )
         ordered = sorted(
@@ -333,6 +334,7 @@ class AtlasPageView(TemplateView):
         gazetteer_inventory = list(
             GazetteerRegistryEntry.objects
             .filter(entry_class='authority')
+            .visible_to(self.request.user)
             .order_by('name')
             .values(
                 'id', 'name', 'description', 'namespace', 'core',
@@ -475,6 +477,7 @@ def atlas_registry_coverage(request):
     from api.models import GazetteerRegistryEntry
     rows = (GazetteerRegistryEntry.objects
             .filter(entry_class='authority')
+            .visible_to(request.user)
             .values('namespace', 'temporal_extent', 'h3_coverage_coarse'))
     temporal = {}
     h3 = {}

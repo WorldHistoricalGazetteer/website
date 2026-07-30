@@ -154,6 +154,35 @@ class ContributorAttestation(models.Model):
         return f"{self.user_id}: {self.place_a} <{self.relation_type}> {self.place_b}"
 
 
+class GazetteerRegistryEntryQuerySet(models.QuerySet):
+    """Adds the authority-visibility gate for embargoed rows (place#162)."""
+
+    def visible_to(self, user):
+        """Authority rows visible to ``user`` in registry-discovery surfaces
+        (``/api/sources/``, the Gazetteers/Regions offcanvas, Atlas layer
+        picker, coverage endpoints).
+
+        ``published`` rows are always visible. ``embargoed`` rows are
+        visible to ``can_access_beta`` staff regardless of release date, and
+        to everyone once ``embargo_release_at`` has passed — a lazy
+        auto-release; ``release_embargoes`` (management command / Celery
+        Beat task) durably flips ``status`` to ``published`` once past that
+        point so the DB converges even if nothing reads it in the interim.
+        Other statuses (draft/submitted/rejected/pending) are untouched here
+        — those gate the separate WHG-dataset contributor workflow.
+        """
+        beta = bool(
+            user and getattr(user, 'is_authenticated', False)
+            and getattr(user, 'can_access_beta', False)
+        )
+        visible = models.Q(status='published') | models.Q(
+            status='embargoed', embargo_release_at__lte=timezone.now(),
+        )
+        if beta:
+            visible |= models.Q(status='embargoed')
+        return self.filter(visible)
+
+
 class GazetteerRegistryEntry(models.Model):
     """Per-gazetteer / per-WHG-dataset registry row pushed by the ingest
     pipeline's Batch 11 ``processing/push_gazetteer_inventory.py``.
@@ -176,6 +205,7 @@ class GazetteerRegistryEntry(models.Model):
         ("submitted", "submitted"),
         ("rejected",  "rejected"),
         ("pending",   "pending"),
+        ("embargoed", "embargoed"),
         ("published", "published"),
     ]
     GAZETTEER_TYPE_CHOICES = [
@@ -213,6 +243,19 @@ class GazetteerRegistryEntry(models.Model):
     status = models.CharField(
         max_length=12, choices=STATUS_CHOICES, default="published",
         db_index=True,
+        help_text=(
+            "Authorities only (place#162): set to 'embargoed' to hold a "
+            "fully-indexed gazetteer back from anonymous/non-BETA discovery "
+            "while it stays usable by can_access_beta staff in the live "
+            "Atlas BETA UI — see GazetteerRegistryEntry.objects.visible_to(). "
+            "This is a whg3/Django-level visibility gate ONLY: it does not "
+            "and cannot restrict direct access to the CRC ES gateway "
+            "(/api/search, /api/reconcile), which has no per-namespace "
+            "access control of its own. Where that distinction matters, use "
+            "the indexing repo's disposable staging ES instead. A push from "
+            "the ingest pipeline never sets 'embargoed' itself and never "
+            "overwrites it once set — see GazetteerInventoryView._upsert_one."
+        ),
     )
 
     # Either the literal string "global" (for global-coverage authorities)
@@ -304,6 +347,14 @@ class GazetteerRegistryEntry(models.Model):
     # offcanvas (the boundary-namespace toggle in the Atlas page). Drives
     # ``available_sources`` in ``search.views.AtlasPageView``.
     region_source = models.BooleanField(default=False, db_index=True)
+    # Embargo auto-release (place#162). Only meaningful when
+    # ``status == 'embargoed'``. Null = embargoed indefinitely, lifted only
+    # by manual admin action. Set = auto-publish once this passes, applied
+    # lazily by ``visible_to()`` and converged durably by the
+    # ``release_embargoes`` management command / Celery Beat task, so the
+    # row's ``status`` itself flips to ``published`` even if nothing reads
+    # it in the interim.
+    embargo_release_at = models.DateTimeField(null=True, blank=True)
     gazetteer_type = models.CharField(
         max_length=16,
         choices=GAZETTEER_TYPE_CHOICES,
@@ -326,9 +377,28 @@ class GazetteerRegistryEntry(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = GazetteerRegistryEntryQuerySet.as_manager()
+
     @property
     def is_global(self) -> bool:
         return self.h3_coverage == "global"
 
     def __str__(self):
         return f"{self.id} ({self.entry_class})"
+
+    @classmethod
+    def release_due_embargoes(cls) -> int:
+        """Durably converge ``embargo_release_at`` (place#162): flip any
+        ``embargoed`` row whose release time has passed to ``published``.
+
+        ``visible_to()`` already treats such rows as visible lazily, so this
+        is a convergence step, not the only enforcement — it exists so the
+        DB itself reflects the release (e.g. for admin list views/exports
+        that don't go through ``visible_to()``). Called by the
+        ``release_embargoes`` management command and its Celery Beat
+        schedule (``whg/celery.py``). Returns the number of rows released.
+        """
+        return cls.objects.filter(
+            status='embargoed', embargo_release_at__isnull=False,
+            embargo_release_at__lte=timezone.now(),
+        ).update(status='published')

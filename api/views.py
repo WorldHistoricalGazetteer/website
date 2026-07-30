@@ -1746,14 +1746,21 @@ class SourceGazetteersView(APIView):
     sub-namespaces are not selectable sources). Replaces the hard-coded
     namespace list in the reconciliation UI so the source pickers reflect
     exactly what is indexed (e.g. ``ukhc`` — UK Historic Counties).
+
+    ``authentication_classes`` includes ``SessionAuthentication`` (rather
+    than none) so a signed-in staff/BETA session is recognised here too —
+    otherwise ``request.user`` would always resolve to ``AnonymousUser`` and
+    an embargoed authority (place#162) could never surface for BETA users via
+    this endpoint even while they're logged in.
     """
-    authentication_classes = []
+    authentication_classes = [SessionAuthentication]
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
         from api.models import GazetteerRegistryEntry
         qs = (GazetteerRegistryEntry.objects
-              .filter(entry_class='authority', status='published')
+              .filter(entry_class='authority')
+              .visible_to(request.user)
               .order_by('-core', '-record_count', 'name'))
         sources = [{
             'namespace': e.namespace,

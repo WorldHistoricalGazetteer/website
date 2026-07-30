@@ -33,14 +33,33 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
     The "Re-ingest" admin action and the per-row button POST to the Pitt
     CRC gateway via ``api/reingest.py`` to enqueue a fresh-source-data
     ingestion. Status, job id, and finish time are tracked per row.
+
+    Embargo (place#162): set ``status`` to "embargoed" to hold a fully
+    ingested/indexed authority back from anonymous/non-BETA discovery while
+    it stays visible to ``can_access_beta`` staff in the live Atlas BETA UI
+    — e.g. reviewing a dataset while licensing permission is still being
+    sought. Optionally set ``embargo_release_at`` to have it auto-publish
+    once that time passes (checked lazily wherever the registry is read, and
+    converged durably by the ``release_embargoes`` management command /
+    Celery Beat task); leave it blank to require a manual status change back
+    to "published". A re-ingest push never un-embargoes a row (see
+    ``_upsert_one``).
+
+    IMPORTANT — this is a whg3/Django-level visibility gate ONLY. The CRC ES
+    gateway (indexing repo) has no per-namespace access control, so hiding a
+    row here does not stop someone who already knows the namespace from
+    querying its gateway endpoints (``/api/search``, ``/api/reconcile``)
+    directly. Where that harder guarantee matters, use the indexing repo's
+    disposable staging ES instead of this embargo.
     """
 
     change_list_template = "admin/api/gazetteerregistryentry/change_list.html"
 
     list_display = (
         'id', 'name', 'namespace', 'core', 'region_source', 'no_explore',
-        'gazetteer_type', 'status', 'record_count', 'downloadable',
-        'reingest_status', 'reingest_finished_at', 'reingest_button',
+        'gazetteer_type', 'status', 'embargo_release_at', 'record_count',
+        'downloadable', 'reingest_status', 'reingest_finished_at',
+        'reingest_button',
     )
     list_filter = (
         'core', 'region_source', 'no_explore', 'gazetteer_type',
@@ -51,7 +70,7 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
     search_fields = ('id', 'name', 'namespace')
     readonly_fields = (
         'id', 'name', 'description', 'namespace', 'entry_class', 'owner',
-        'record_count', 'status', 'h3_coverage', 'temporal_extent',
+        'record_count', 'h3_coverage', 'temporal_extent',
         'is_global', 'updated_at',
         'redistributable', 'downloadable', 'download_blocked_reason',
         'reingest_status', 'reingest_started_at', 'reingest_finished_at',
@@ -60,6 +79,23 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Curatorial (editable)", {
             'fields': ('core', 'region_source', 'no_explore', 'gazetteer_type'),
+        }),
+        ("Embargo (place#162)", {
+            'description': (
+                "Set status to \"embargoed\" to hold this authority back "
+                "from anonymous/non-BETA discovery (/api/sources/, Regions "
+                "offcanvas, Atlas layer picker, downloads) while it stays "
+                "usable by BETA/staff users in the live Atlas BETA UI. "
+                "embargo_release_at optionally auto-publishes it once that "
+                "time passes; leave blank to require a manual status change "
+                "back to \"published\". A routine re-ingest push never "
+                "un-embargoes a row. This gate is whg3/Django-level only — "
+                "it does NOT restrict direct access to the CRC ES gateway "
+                "(/api/search, /api/reconcile), which has no per-namespace "
+                "access control; use the indexing repo's disposable staging "
+                "ES where a harder guarantee is required."
+            ),
+            'fields': ('status', 'embargo_release_at'),
         }),
         ("Attribution / licence / rights", {
             'description': (
@@ -95,7 +131,7 @@ class GazetteerRegistryEntryAdmin(admin.ModelAdmin):
         ("Inventory (managed by ingestion pipeline)", {
             'fields': (
                 'id', 'name', 'description', 'namespace', 'entry_class',
-                'owner', 'record_count', 'status', 'h3_coverage',
+                'owner', 'record_count', 'h3_coverage',
                 'temporal_extent', 'is_global', 'updated_at',
             ),
         }),
