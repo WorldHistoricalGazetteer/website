@@ -96,6 +96,13 @@
       </div>
       <p class="small text-muted">Auto-attached: the page you came from, your browser, your role, and a
         diagnostic session id — no need to fill those in.</p>
+      <p class="small text-muted">Filed as
+        {% if user.github_username %}<strong>@{{ user.github_username }}</strong> on GitHub, so we can
+        mention you there if we need to ask a follow-up question. Change it in your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a>.
+        {% else %}<strong>{{ user.name|default:user.username }}</strong>. Add a GitHub username to your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a> and we can mention
+        you on the issue instead, so GitHub notifies you of follow-up questions.{% endif %}</p>
       <button type="submit" class="btn btn-success"><i class="fas fa-paper-plane me-1"></i>Send report</button>
     </form>
   {% endif %}

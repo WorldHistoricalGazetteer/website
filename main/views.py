@@ -701,11 +701,23 @@ def suggestions_review(request):
 # Testers file problems via this on-site form; it persists a BetaSnag and — when GITHUB_SNAG_TOKEN is
 # configured — also opens a GitHub issue in the planning repo, carrying the diagnostics session id so
 # the report ties to the tester's GlitchTip errors. Beta-gated (testers hold WHG/ORCiD accounts).
+def _reporter_credit(user):
+    """How a beta reporter is named on the public GitHub issue.
+
+    Beta testers can record a GitHub handle on their Profile; when they have, the report
+    is credited to ``@handle`` rather than their name — so a follow-up question mentions
+    them and GitHub notifies them (subject to their notification settings). Falls back to
+    the account name for the majority who have no GitHub account.
+    """
+    handle = (getattr(user, 'github_username', '') or '').strip()
+    return f'@{handle}' if handle else (getattr(user, 'name', '') or user.username)
+
+
 def _snag_github_body(snag, user, role):
     def block(label, val):
         return f'\n**{label}**\n{val.strip()}\n' if (val or '').strip() else ''
     return (
-        f'**Reported by:** {getattr(user, "name", "") or user.username} ({role}) · '
+        f'**Reported by:** {_reporter_credit(user)} ({role}) · '
         f'**session:** `{snag.session_id or "—"}`\n'
         f'**Page:** {snag.page_url or "—"}\n'
         f'**Severity:** {snag.severity or "—"} · **Feature:** {snag.feature or "—"}\n'
@@ -723,7 +735,7 @@ def _suggestion_github_body(snag, user, role):
     def block(label, val):
         return f'\n**{label}**\n{val.strip()}\n' if (val or '').strip() else ''
     return (
-        f'**Suggested by:** {getattr(user, "name", "") or user.username} ({role})\n'
+        f'**Suggested by:** {_reporter_credit(user)} ({role})\n'
         f'**Feature:** {snag.feature or "—"}\n'
         + block('Suggestion', snag.what)
         + '\n---\n_Filed via the WHG on-site beta suggestion form._')

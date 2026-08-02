@@ -6,7 +6,7 @@ from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.signing import Signer, BadSignature
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.utils.html import format_html
 from django.views import View
 from django.views.decorators.http import require_POST
@@ -435,6 +435,8 @@ def profile_download(request):
         'affiliation': getattr(user, 'affiliation', ''),
         'web_page': getattr(user, 'web_page', ''),
         'news_permitted': getattr(user, 'news_permitted', False),
+        'preferred_language': getattr(user, 'preferred_language', ''),
+        'github_username': getattr(user, 'github_username', ''),
     }
     response = JsonResponse(data)
     response['Content-Disposition'] = 'attachment; filename="user_data.json"'
@@ -449,6 +451,32 @@ def profile_news_toggle(request):
     user.news_permitted = news_permitted
     user.save()
     return JsonResponse({'status': 'success', 'news_permitted': news_permitted})
+
+
+@login_required
+@require_POST
+def profile_github_set(request):
+    """Persist the signed-in beta tester's GitHub handle (or clear it with an empty value).
+
+    Beta reports filed from the on-site forms are credited to ``@handle`` instead of the
+    reporter's name when this is set, so we can @-mention them for follow-up questions on
+    the public issue — GitHub then notifies them, if their notification settings allow.
+    Offered to beta testers only; nobody else has reports to file.
+    """
+    if not request.user.can_access_beta:
+        raise Http404()
+    from django.core.exceptions import ValidationError
+    from users.models import normalise_github_username, github_username_validator
+
+    handle = normalise_github_username(request.POST.get('github_username'))
+    if handle:
+        try:
+            github_username_validator(handle)
+        except ValidationError as e:
+            return JsonResponse({'status': 'error', 'message': e.messages[0]}, status=400)
+    request.user.github_username = handle
+    request.user.save(update_fields=['github_username'])
+    return JsonResponse({'status': 'success', 'github_username': handle})
 
 
 @login_required

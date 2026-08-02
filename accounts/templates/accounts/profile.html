@@ -266,6 +266,25 @@
           {# options populated by profile.js from the shared language list #}
         </select>
       </div>
+
+      {% if user.can_access_beta %}
+      {# Beta testers only: the handle is used to credit — and follow up on — beta reports. #}
+      <div class="mt-3">
+        <label for="github-username" class="form-check-label fw-semibold mb-1 d-block">
+          GitHub username <span class="badge bg-secondary align-middle">beta</span>
+          <i class="fas fa-info-circle text-muted smaller" data-bs-toggle="tooltip"
+             title="Optional. When set, the beta snags and suggestions you file are credited to your GitHub handle instead of your name, and we can mention you on the issue if we need to ask a follow-up question — GitHub will notify you if your notification settings allow it."></i>
+        </label>
+        <div class="input-group input-group-sm" style="max-width: 320px;">
+          <span class="input-group-text">@</span>
+          <input type="text" id="github-username" class="form-control" autocomplete="off"
+                 spellcheck="false" placeholder="your-github-handle" maxlength="39"
+                 value="{{ user.github_username }}">
+          <button class="btn btn-outline-secondary" type="button" id="github-username-save">Save</button>
+        </div>
+        <div id="github-username-feedback" class="small mt-1"></div>
+      </div>
+      {% endif %}
     </section>
 
     <hr>
@@ -379,6 +398,7 @@
   window.profileConfig = {
     apiTokenUrl: "{% url 'accounts:profile-api-token' %}",
     newsToggleUrl: "{% url 'accounts:profile-news-toggle' %}",
+    githubUrl: "{% url 'accounts:profile-github' %}",
     csrfToken: "{{ csrf_token }}",
     domain: "{{ request.get_host }}",
   };

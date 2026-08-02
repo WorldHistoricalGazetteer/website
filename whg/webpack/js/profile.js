@@ -3,7 +3,7 @@
 import {initClipboard} from './utilities'
 import languages, {getPreferredLanguage, setPreferredLanguage} from './languages.js';
 
-const {apiTokenUrl, newsToggleUrl, csrfToken, domain} = window.profileConfig;
+const {apiTokenUrl, newsToggleUrl, githubUrl, csrfToken, domain} = window.profileConfig;
 const tokenSection = document.getElementById('api-token-section');
 const tokenCode = document.getElementById('api-token');
 
@@ -164,5 +164,48 @@ if (langSelect) {
     });
     langSelect.addEventListener('change', function () {
         setPreferredLanguage(langSelect.value);
+    });
+}
+
+
+// GitHub handle (beta testers only — the field is rendered for them alone).
+// Saving it means their beta snags and suggestions are filed under @handle
+// instead of their name, so a follow-up question on the public issue can
+// mention them and GitHub notifies them.
+const ghInput = document.getElementById('github-username');
+const ghSave = document.getElementById('github-username-save');
+const ghFeedback = document.getElementById('github-username-feedback');
+if (ghInput && ghSave) {
+    const feedback = (message, ok) => {
+        ghFeedback.textContent = message;
+        ghFeedback.className = 'small mt-1 ' + (ok ? 'text-success' : 'text-danger');
+    };
+
+    const save = () => {
+        const formData = new FormData();
+        formData.append('github_username', ghInput.value);
+        formData.append('csrfmiddlewaretoken', csrfToken);
+        ghSave.disabled = true;
+        fetch(githubUrl, {
+            method: 'POST',
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            body: formData,
+        })
+            .then(r => r.json().then(data => ({ok: r.ok, data})))
+            .then(({ok, data}) => {
+                if (!ok) return feedback(data.message || 'Could not save that username.', false);
+                // The server normalises what was pasted (an @handle, or a profile URL).
+                ghInput.value = data.github_username;
+                feedback(data.github_username
+                    ? `Saved — beta reports will be filed as @${data.github_username}.`
+                    : 'Cleared — beta reports will be filed under your name.', true);
+            })
+            .catch(() => feedback('Could not save that username.', false))
+            .finally(() => { ghSave.disabled = false; });
+    };
+
+    ghSave.addEventListener('click', save);
+    ghInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); save(); }
     });
 }

@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import re
 
 from django.db import models
 from django.contrib.auth.models import AbstractUser, PermissionsMixin
@@ -37,6 +38,30 @@ def email_lookup_hash(email):
     if not norm:
         return None
     return hmac.new(settings.SECRET_KEY.encode("utf-8"), norm.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+#: GitHub's own rule: 1–39 characters, alphanumerics or single hyphens, not
+#: starting or ending with a hyphen.
+github_username_validator = RegexValidator(
+    r"^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$",
+    "Enter a GitHub username: letters, digits and single hyphens, up to 39 characters.",
+)
+
+
+def normalise_github_username(value):
+    """Reduce whatever the user pasted to a bare GitHub handle.
+
+    Accepts ``octocat``, ``@octocat``, ``github.com/octocat`` and full profile
+    URLs (with or without scheme, trailing slash or query). Returns '' for empty
+    input; anything that isn't a valid handle is returned as-is, for the field
+    validator to reject with a message.
+    """
+    handle = (value or "").strip()
+    if not handle:
+        return ""
+    handle = re.sub(r"^(?:https?://)?(?:www\.)?github\.com/", "", handle, flags=re.I)
+    handle = handle.lstrip("@").split("/")[0].split("?")[0].strip()
+    return handle
 
 
 class UserManager(BaseUserManager):
@@ -123,6 +148,14 @@ class User(AbstractUser, PermissionsMixin):
     # "as recorded"). Mirrors the client-side ``whg_lang`` localStorage so
     # signed-in users keep their choice across machines and sessions.
     preferred_language = models.CharField(max_length=8, blank=True, default="")
+
+    # GitHub handle, offered to beta testers only (see ``can_access_beta``). When set, beta
+    # snag and suggestion reports are filed under ``@handle`` instead of the reporter's name,
+    # so a follow-up question on the public issue can @-mention them and GitHub notifies them.
+    # Optional by design: the on-site forms stay usable without a GitHub account.
+    github_username = models.CharField(
+        max_length=39, blank=True, default="", validators=[github_username_validator]
+    )
 
     # Legacy fields - keep for migration period
     must_reset_password = models.BooleanField(default=False)

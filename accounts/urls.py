@@ -15,6 +15,7 @@ urlpatterns = [
 
     path('profile/news-toggle/', views.profile_news_toggle, name='profile-news-toggle'),
     path('profile/language/', views.profile_language_set, name='profile-language'),
+    path('profile/github/', views.profile_github_set, name='profile-github'),
     path('profile/download/', views.profile_download, name='profile-download'),
     path('profile/delete/', views.profile_delete, name='profile-delete'),
 
