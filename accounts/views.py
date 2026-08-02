@@ -453,6 +453,27 @@ def profile_news_toggle(request):
     return JsonResponse({'status': 'success', 'news_permitted': news_permitted})
 
 
+def _github_user_missing(handle):
+    """True only when GitHub positively reports no such user.
+
+    A mistyped handle would silently @-mention an unrelated GitHub account on a public
+    issue, so the handle is checked before it is stored. Any doubt — network error, rate
+    limit, anything but a clean 404 — resolves to False: we would rather store an
+    unverified handle than refuse a correct one because GitHub was unreachable.
+    """
+    import requests
+    headers = {'Accept': 'application/vnd.github+json'}
+    token = getattr(settings, 'GITHUB_SNAG_TOKEN', '')
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+    try:
+        return requests.get(f'https://api.github.com/users/{handle}',
+                            headers=headers, timeout=5).status_code == 404
+    except Exception as e:  # noqa: BLE001
+        logger.warning('GitHub handle check failed for %s: %s', handle, e)
+        return False
+
+
 @login_required
 @require_POST
 def profile_github_set(request):
@@ -474,6 +495,12 @@ def profile_github_set(request):
             github_username_validator(handle)
         except ValidationError as e:
             return JsonResponse({'status': 'error', 'message': e.messages[0]}, status=400)
+        if _github_user_missing(handle):
+            return JsonResponse(
+                {'status': 'error',
+                 'message': f'GitHub has no user “{handle}”. Check the spelling — a mistyped handle '
+                            f'would mention someone else on your reports.'},
+                status=400)
     request.user.github_username = handle
     request.user.save(update_fields=['github_username'])
     return JsonResponse({'status': 'success', 'github_username': handle})
