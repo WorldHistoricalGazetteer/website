@@ -1,13 +1,21 @@
-#whgModal, #whgModal .modal-dialog, #whgModal .modal-content {
-	overflow: visible;
-    overflow-y: auto;
-}
-
 #whgModal {
     z-index: 9999999; /* Above any spinners */
     user-select: none;
-    height: fit-content;
+}
+
+/* Long content (the help pages and the Teaching essay run to well over a
+   thousand pixels) scrolls inside the body: the dialog itself must never grow
+   taller than the viewport, or the header — and with it the close button — sits
+   off-screen and there is no backdrop left to click on a laptop-height display
+   (place#167). Bootstrap's .modal-dialog-scrollable does exactly this, but only
+   while the .modal keeps its default full height, which the `height: fit-content`
+   that used to live here prevented. */
+#whgModal .modal-content {
     max-height: 100%;
+}
+
+#whgModal .modal-body {
+    overflow-y: auto;
 }
 
 /* Style for modal header */
