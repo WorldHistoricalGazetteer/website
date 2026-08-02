@@ -16,6 +16,18 @@
 
 #whgModal .modal-body {
     overflow-y: auto;
+    min-height: 0;
+}
+
+/* The Django-rendered dialogs (contact, invitation) wrap header/body/footer in a
+   <form>, which would otherwise be a single unshrinkable flex child of
+   .modal-content: the body could not scroll and the footer — with it the Send
+   button — was clipped out of the dialog. Let the form be the flex column. */
+#whgModal .modal-content > form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    max-height: 100%;
 }
 
 /* Style for modal header */
