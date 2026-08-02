@@ -21,6 +21,26 @@ import '../css/typeTreeWidget.css';
 
 const TREE_URL = '/types/tree/';
 
+/**
+ * Turn a rejected jqXHR (or a thrown Error) into a one-line description.
+ * jQuery rejects with the jqXHR object, which stringifies to "[object Object]" —
+ * useless in a GlitchTip report from a beta tester whose tree failed to load.
+ */
+function describeError(url, err) {
+    if (err && typeof err.status !== 'undefined') {
+        return `${url} — ${err.status ? 'HTTP ' + err.status : 'no response'}` +
+            `${err.statusText ? ' (' + err.statusText + ')' : ''}`;
+    }
+    return `${url} — ${(err && err.message) || err}`;
+}
+
+/** Surface a client-side failure in GlitchTip, when the SDK is loaded. */
+function reportError(message) {
+    if (window.Sentry && typeof window.Sentry.captureException === 'function') {
+        window.Sentry.captureException(new Error(message));
+    }
+}
+
 /** GeoNames feature-class labels shown as badge tooltips. */
 const FCLASS_LABELS = {
     A: 'Administrative divisions',
@@ -116,7 +136,9 @@ export default class TypeTreeWidget {
             // Initialise Bootstrap tooltips on all badges rendered so far
             this._initTooltips(this.$el);
         } catch (err) {
-            console.error('TypeTreeWidget: failed to load root nodes', err);
+            const detail = describeError(TREE_URL, err);
+            console.error('TypeTreeWidget: failed to load root nodes — ' + detail);
+            reportError('TypeTreeWidget root load failed: ' + detail);
             this.$el.html(
                 '<div class="tt-error">Could not load place types.</div>'
             );
@@ -379,7 +401,9 @@ export default class TypeTreeWidget {
                 // Initialise Bootstrap tooltips on newly loaded children
                 this._initTooltips($children);
             } catch (err) {
-                console.error('TypeTreeWidget: load failed for', aatId, err);
+                const detail = describeError(TREE_URL + aatId + '/', err);
+                console.error('TypeTreeWidget: load failed for ' + aatId + ' — ' + detail);
+                reportError('TypeTreeWidget branch load failed: ' + detail);
             }
             $icon.removeClass('fa-spinner fa-spin');
         }

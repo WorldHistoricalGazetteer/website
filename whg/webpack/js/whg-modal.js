@@ -6,7 +6,7 @@ function initWHGModal() {
     // Create the basic modal structure
     $('body').append(`
 	  <div class="modal fade" id="whgModal" tabindex="-1" role="dialog" aria-labelledby="whgModalLabel" aria-hidden="true">
-	    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+	    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" role="document">
 	      <div class="modal-content">
 	      </div>
 	    </div>
@@ -18,6 +18,14 @@ function initWHGModal() {
         .attr('data-bs-target', '#whgModal')
         .attr('href', '#')
         .addClass('text-decoration-none');
+
+    // A click anywhere inside a trigger (including on an <a href="#"> nested in a
+    // <span data-whg-modal>) must not also perform its own navigation: Bootstrap
+    // only calls preventDefault() when the element carrying data-bs-toggle is
+    // itself an <a>, which is not the case for the many span-wrapped triggers.
+    $(document).on('click', '[data-whg-modal]', function (e) {
+        e.preventDefault();
+    });
 
     $('#whgModal')
         .on('hidden.bs.modal', function (e) {
@@ -54,29 +62,83 @@ function initWHGModal() {
         }, 1000);
     }
 
+    const MODAL_HEADER = `
+        <div class="modal-header">
+            <h5 class="modal-title">
+                <img alt="WHG" height="38" src="/static/images/whg_logo.svg" width="50">
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+    `;
+
+    /**
+     * Some modal sources (the /media/help/*.html and /media/resources/*.html files)
+     * are whole HTML documents, complete with <html>/<body> wrappers and long-dead
+     * inline scripts, rather than fragments. Injecting those with jQuery's .html()
+     * takes its script-executing path and leaves the outcome at the mercy of each
+     * engine's fragment parser. Parse such responses out-of-document instead and
+     * keep only the body markup; genuine fragments (e.g. the Django-rendered
+     * contact form, whose inline scripts are live) are passed through untouched.
+     */
+    function extractFragment(html) {
+        if (typeof html !== 'string' || !/<html[\s>]|<body[\s>]/i.test(html)) return html;
+        try {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            if (!doc || !doc.body) return html;
+            doc.body.querySelectorAll('script').forEach(s => s.remove());
+            return doc.body.innerHTML;
+        } catch (err) {
+            return html;
+        }
+    }
+
+    // Bootstrap's data-api opens the dialog the moment the trigger is clicked, so
+    // it must never be left blank while the content is in flight: an empty dialog
+    // with no header reads as a broken page that has locked the screen, with no
+    // obvious way out (place#167). Render the shell — including its working close
+    // button — first, then swap in the content.
+    function renderShell(bodyHTML) {
+        $('#whgModal .modal-content').html(
+            MODAL_HEADER + '<div class="modal-body">' + bodyHTML + '</div>'
+        );
+    }
+
+    function showLoading() {
+        renderShell(`
+            <div class="text-center text-muted py-4">
+                <div class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></div>
+                Loading&hellip;
+            </div>
+        `);
+    }
+
+    function showLoadError(url, detail) {
+        renderShell(`
+            <p class="mb-2">Sorry, this content could not be loaded.</p>
+            <p class="small text-muted mb-3">${detail}</p>
+            <a class="btn btn-sm btn-outline-secondary" href="${url}" target="_blank" rel="noopener">
+                Open it in a new tab
+            </a>
+        `);
+    }
+
     function loadModalContent(target) {
         const url = target.data('whg-modal');
         if (!url) return;   // never let jQuery default a missing url to the current page
         const modalSubject = target.data('subject');
+        showLoading();
         $.ajax({
             url: url,
             method: 'GET',
             success: function (data) {
                 // Load the fetched HTML content into the modal
                 var $content = $('#whgModal .modal-content');
-                $content.html(data);
+                $content.html(extractFragment(data));
 
                 if ($content.find('.modal-header').length === 0) {
                     $content
                         .wrapInner('<div class="modal-body"></div>')
-                        .prepend(`
-						<div class="modal-header">
-						    <h5 class="modal-title">
-								<img alt="WHG" height="38" src="/static/images/whg_logo.svg" width="50">
-						    </h5>
-						    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-						</div>		
-					`);
+                        .prepend(MODAL_HEADER);
                 }
 
                 if (modalSubject) {
@@ -98,7 +160,17 @@ function initWHGModal() {
                 $('#whgModal').modal('show');
             },
             error: function (xhr, status, error) {
-                alert('Sorry, there was an error loading the content.');
+                const detail = url + ' — ' +
+                    (xhr && xhr.status ? 'HTTP ' + xhr.status : 'no response') +
+                    (status ? ' (' + status + ')' : '');
+                showLoadError(url, detail);
+                $('#whgModal').modal('show');
+                // Record the failure: a beta report of "the dialog came up empty" is
+                // only diagnosable if the status that caused it reaches GlitchTip.
+                console.error('whg-modal: failed to load ' + detail, error || '');
+                if (window.Sentry && typeof window.Sentry.captureException === 'function') {
+                    window.Sentry.captureException(new Error('whg-modal load failed: ' + detail));
+                }
             }
         });
     }
