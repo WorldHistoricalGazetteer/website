@@ -82,14 +82,43 @@ export function spatialSignal(km, halfLifeKm = 25.0) {
 	return 1.0 / (1.0 + km / halfLifeKm);
 }
 
-/** Interval-overlap (Jaccard) over [start,end] year ranges. Undated → 0. */
+/** Interval-overlap (Jaccard) over [start,end] year ranges, either bound
+ *  possibly null = UNBOUNDED (an open-start boundary such as ukhc, or an
+ *  ongoing one such as un). Either side wholly undated → 0.
+ *
+ *  An unknown bound adopts the other record's on that side, so it neither adds
+ *  nor removes span: [null,1974] vs [1889,1974] → 1.0 (nothing distinguishes
+ *  them), vs [1200,1250] → ~0.06 (what is known barely coincides). Where
+ *  neither record bounds a side, both are anchored to the same year and that
+ *  side contributes nothing to intersection or union.
+ *
+ *  ⚠️ Must stay identical to `temporal_overlap` in indexing's
+ *  clustering/calibrate_params.py — the browser scores as that calibrated
+ *  (place#169). */
 export function temporalOverlap(a, b) {
 	if (!a || !b || a.length < 2 || b.length < 2) return 0.0;
-	const lo = Math.max(a[0], b[0]);
-	const hi = Math.min(a[1], b[1]);
+	const a0 = a[0] ?? null, a1 = a[1] ?? null;
+	const b0 = b[0] ?? null, b1 = b[1] ?? null;
+	if ((a0 === null && a1 === null) || (b0 === null && b1 === null)) return 0.0;
+
+	let sA = a0 !== null ? a0 : b0;
+	let sB = b0 !== null ? b0 : a0;
+	let eA = a1 !== null ? a1 : b1;
+	let eB = b1 !== null ? b1 : a1;
+
+	if (sA === null || sB === null) {          // neither record has a start
+		if (eA === null || eB === null) return 0.0;   // nothing bounded either side
+		sA = sB = Math.min(eA, eB);
+	}
+	if (eA === null || eB === null) {          // neither record has an end
+		eA = eB = Math.max(sA, sB);
+	}
+
+	const lo = Math.max(sA, sB);
+	const hi = Math.min(eA, eB);
 	if (hi < lo) return 0.0;
 	const inter = hi - lo;
-	const union = Math.max(a[1], b[1]) - Math.min(a[0], b[0]);
+	const union = Math.max(eA, eB) - Math.min(sA, sB);
 	if (union <= 0) return 1.0; // both the same single year
 	return inter / union;
 }

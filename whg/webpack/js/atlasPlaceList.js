@@ -59,7 +59,9 @@ function formatRange(tr) {
     const [s, e] = tr;
     if (s == null && e == null) return '';
     if (s === e) return formatYear(s);
-    return `${formatYear(s)}–${formatYear(e)}`; // en-dash
+    // Null = unbounded (open-start or ongoing), shown as an ellipsis — see the
+    // twin in atlas.js (place#169).
+    return `${s == null ? '…' : formatYear(s)}–${e == null ? '…' : formatYear(e)}`; // en-dash
 }
 
 // Geometry a hit can be fitted to: full geometries if present, else its

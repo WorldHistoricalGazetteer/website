@@ -198,7 +198,12 @@ function formatRange(tr) {
     const [s, e] = tr;
     if (s == null && e == null) return '';
     if (s === e) return formatYear(s);
-    return `${formatYear(s)}–${formatYear(e)}`; // en-dash
+    // A null bound is unbounded, not zero: an open-start boundary (ukhc, kain_par)
+    // or an ongoing one (un). Show the open side as an ellipsis rather than
+    // printing a bound its source never claimed (place#169).
+    const from = s == null ? '…' : formatYear(s);
+    const to = e == null ? '…' : formatYear(e);
+    return `${from}–${to}`; // en-dash
 }
 // The cluster's overall attested span: earliest start → latest end across the
 // members that carry a temporal_range. Null when none are dated.
