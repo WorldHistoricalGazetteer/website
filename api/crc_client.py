@@ -131,7 +131,8 @@ def crc_search(options: dict, user=None) -> dict | None:
 
     ``options`` is the Atlas search payload (atlas.js ``gatherToponymOptions``):
     ``qstr``, ``types`` (AAT ids), ``bounds`` (GeoJSON), ``start`` / ``end`` /
-    ``undated``, ``exact``, ``countries``, ``namespaces``, ``size``.
+    ``temporal_mode`` / ``undated``, ``exact``, ``countries``, ``namespaces``,
+    ``size``.
 
     Always opts into the clustering fuel (include_hard_links /
     include_clustering_fields / include_embeddings) and full geometry so the
@@ -223,6 +224,13 @@ def crc_search(options: dict, user=None) -> dict | None:
             body["end_year"] = int(end)
         if options.get("undated"):
             body["undated"] = True
+        # Which of the four temporal bounds the window is tested against
+        # (place#164/#169): "possibly" admits anything the source's bounds do not
+        # rule out, "definitely" requires an attested core. The gateway rejects
+        # anything else with a 422, so only pass a recognised value on.
+        mode = options.get("temporal_mode")
+        if mode in ("possibly", "definitely"):
+            body["temporal_mode"] = mode
 
     try:
         url = f"{_gateway_url()}/api/search"

@@ -172,12 +172,12 @@
                     <button type="button" class="btn active" data-temporal-mode="off"
                             data-bs-toggle="tooltip"
                             title="No date filter — include places from any period">Off</button>
-                    <button type="button" class="btn" data-temporal-mode="range"
+                    <button type="button" class="btn" data-temporal-mode="possibly"
                             data-bs-toggle="tooltip"
-                            title="Filter to places attested within the selected year range (undated places are excluded — use +Undated to keep them)">Date Range</button>
-                    <button type="button" class="btn" data-temporal-mode="undated"
+                            title="Show places that COULD have existed in the selected years — anything its sources do not rule out. Many sources record a place as it was at one moment and say nothing about when it began, so they are possible, not certain, at earlier dates. Places with no recorded dates are kept, since nothing rules them out either.">Possibly</button>
+                    <button type="button" class="btn" data-temporal-mode="definitely"
                             data-bs-toggle="tooltip"
-                            title="Apply the date range, but also keep places that have no recorded date (which the date range would otherwise exclude)">+Undated</button>
+                            title="Show only places ATTESTED to have existed throughout the selected years. Stricter: a place whose sources merely allow it to have been there is excluded, as is a place with no recorded dates.">Definitely</button>
                 </div>
                 <div class="temporal-year-labels">
                     <span id="temporal_from_label">800</span>

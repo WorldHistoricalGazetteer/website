@@ -36,7 +36,12 @@ let enteringPortal = false;
 let typeTree = null;
 let layerPalette = null;
 let areaRouter = null;
-let temporalMode = 'off';       // 'off' | 'range' | 'undated'
+// 'off' | 'possibly' | 'definitely' — the two readings the four-bound temporal
+// encoding supports (place#164/#169). A source that records places as they were
+// at one moment (OSM's dump, Index Villaris in 1680) constrains one side of each
+// bound only, so it is *possibly* alive at earlier dates and *definitely* alive
+// only where a core is attested. Replaces the old range + '+Undated' hatch.
+let temporalMode = 'off';
 let searchMode = 'areas';       // 'areas' | 'toponyms'
 let searchMatchMode = 'in';   // main Places search match type: exact | starts | in (contains) | phonetic
 let useViewport = false;       // viewport-constraint toggle (non-globe only)
@@ -257,16 +262,25 @@ function updateTemporalLabels() {
     if (toLabel) toLabel.textContent = temporalTo;
 }
 
-// Client-side mirror of the gateway temporal filter — interval overlap on the
-// hit's `temporal_range` ([start,end] or null=undated); undated hits pass only
-// in +Undated mode. Lets the range control live-refilter the LOADED results
-// instantly, ahead of the debounced authoritative server re-search.
+// Client-side mirror of the gateway temporal filter, so the range control can
+// re-filter the LOADED results instantly, ahead of the debounced authoritative
+// re-search. It must test the same bounds the server does for the active mode:
+//   possibly   the envelope   `temporal_range` — the widest the bounds allow
+//   definitely the core       `temporal_core`  — attested alive throughout
+// A hit with no dates at all is unbounded, so it can never be ruled out of a
+// *possibly* window, and can never satisfy a *definitely* one.
 function temporalHitPasses(h) {
     if (temporalMode === 'off') return true;
-    const tr = h.temporal_range;
-    if (!Array.isArray(tr) || tr.length !== 2) return temporalMode === 'undated';
-    const s = tr[0] == null ? -Infinity : tr[0];
-    const e = tr[1] == null ? Infinity : tr[1];
+    const definite = temporalMode === 'definitely';
+    // `temporal_core` arrives from the gateway alongside `temporal_range`. Until
+    // the gateway carrying it is restarted, fall back to the envelope: the preview
+    // is then more permissive than the server for a moment, which the authoritative
+    // re-query corrects — the reverse (hiding hits the server keeps) would read as
+    // results flickering away.
+    const span = definite ? (h.temporal_core || h.temporal_range) : h.temporal_range;
+    if (!Array.isArray(span) || span.length !== 2) return !definite;
+    const s = span[0] == null ? -Infinity : span[0];
+    const e = span[1] == null ? Infinity : span[1];
     return s <= temporalTo && e >= temporalFrom;
 }
 
@@ -283,7 +297,7 @@ const debouncedTemporalResearch = debounce(() => {
 function temporalFilterLabel() {
     if (temporalMode === 'off') return '';
     const range = `${formatYear(temporalFrom)}–${formatYear(temporalTo)}`;
-    return temporalMode === 'undated' ? `${range} + undated` : range;
+    return `${range} (${temporalMode})`;
 }
 function updatePlaceListTemporal() {
     PlaceList.setTemporalFilter(temporalFilterLabel());
@@ -2708,7 +2722,11 @@ function gatherToponymOptions(qstr) {
         temporal: temporalMode !== 'off',
         start: temporalFrom,
         end: temporalTo,
-        undated: temporalMode === 'undated',
+        temporal_mode: temporalMode === 'off' ? undefined : temporalMode,
+        // A place with no temporal information at all is unbounded, so it cannot be
+        // ruled out of a *possibly* window — and cannot satisfy a *definitely* one.
+        // That is what the old "+Undated" toggle was groping towards.
+        undated: temporalMode === 'possibly',
         // Match type chosen in the search-type dropdown. Default "in" (contains)
         // via the gateway n-gram index; "phonetic" is the opt-in sounds-like
         // similarity search (slower). (The Place List overrides mode itself.)
