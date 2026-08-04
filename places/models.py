@@ -414,8 +414,11 @@ class LegacyUnionRecord(models.Model):
     clusters came from the old pipeline rather than from the browser clusterer,
     and so resolving to their captured membership rather than to a live query.
 
-    Scale (measured on prod, 2026-08-04): 2,134,062 rows, of which only 23,710
-    unite more than one record — 98.9% are singletons. Largest holds 153.
+    Scale (measured on prod, 2026-08-04): the ES index holds 2,134,062 documents,
+    but it is a parent/join structure — 2,101,316 parents carrying a `whg_id` and
+    32,746 child docs that carry none. Only the parents are union records, so that
+    is the row count here. Of those, just 23,709 unite more than one place: 98.87%
+    are singletons, and the largest holds 153.
 
     Invariants
     ----------

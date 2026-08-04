@@ -53,7 +53,7 @@ class Command(BaseCommand):
         dry_run = opts['dry_run']
 
         try:
-            total = es.count(index=idx)['count']
+            total = es.count(index=idx, query={'exists': {'field': 'whg_id'}})['count']
         except Exception as e:
             raise CommandError(f"Cannot reach Elasticsearch index '{idx}': {e}")
 
@@ -63,10 +63,15 @@ class Command(BaseCommand):
             + (" — DRY RUN, nothing will be written" if dry_run else "")
         )
 
+        # The `whg` index is a parent/join structure: PARENT docs carry `whg_id`
+        # and `children`, CHILD docs are the member place records and carry no
+        # whg_id of their own. Only parents are union records, so scan those —
+        # otherwise a third of what comes back is the child side, which has no
+        # identifier to freeze.
         cursor = scan(
             es,
             index=idx,
-            query={'query': {'match_all': {}}},
+            query={'query': {'exists': {'field': 'whg_id'}}},
             _source=['whg_id', 'place_id', 'children'],
             size=batch_size,
             preserve_order=False,
@@ -80,9 +85,12 @@ class Command(BaseCommand):
             whg_id = src.get('whg_id')
             place_id = src.get('place_id')
             if whg_id is None or place_id is None:
-                # A union record without an id or a head place cannot be resolved
-                # later; count it so the discrepancy is visible rather than silent.
+                # Should not occur now the scan filters to parents, so treat any
+                # occurrence as a genuine anomaly worth surfacing.
                 skipped += 1
+                logger.warning(
+                    "Union record lacking whg_id or place_id: _id=%s", doc.get('_id'),
+                )
                 continue
 
             ids = [int(place_id)] + [int(c) for c in (src.get('children') or [])]
@@ -113,7 +121,8 @@ class Command(BaseCommand):
         ))
         if skipped:
             self.stdout.write(self.style.WARNING(
-                f"Skipped {skipped:,} record(s) lacking whg_id or place_id."
+                f"ANOMALY: skipped {skipped:,} record(s) lacking whg_id or place_id "
+                f"despite matching the parent filter — see the log."
             ))
         self.stdout.write(
             f"{'Would have written' if dry_run else 'Wrote'} {written:,} rows to "
