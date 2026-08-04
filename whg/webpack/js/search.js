@@ -881,6 +881,12 @@ function renderResults(data, fromStorage = false) {
         })
         .on('click', '.portal-link', function (event) {
             event.preventDefault();
+            // NB (place#170): this deliberately still prefers whg_id. Switching to the pid
+            // form would NOT be a like-for-like canonicalisation — /places/<whg_id>/portal/
+            // renders the ES union cluster (findPortalPlaces = place_id + children), while
+            // /places/portal/<pid>/ renders the Postgres CloseMatch neighbours, which is
+            // generally a narrower set. Changing it is a product decision, not a URL fix,
+            // and it waits on Blocker 1.
             const id = $(this).data('whg-id') || $(this).data('pid');
             const path = $(this).data('whg-id') ? 'portal/' : 'detail';
             window.location.href = `/places/${id}/${path}`;

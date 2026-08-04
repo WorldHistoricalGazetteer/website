@@ -13,6 +13,13 @@
 
 {% block extra_head %}
   <link href="{% static 'webpack/portal.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+  {% comment %}
+    place#170: absolute, and built from places.id — the portal has four URL forms and without
+    this they read as four distinct pages. Consumed by search engines and API clients.
+  {% endcomment %}
+  {% if canonical_url %}
+    <link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{{ canonical_url }}"/>
+  {% endif %}
 {% endblock %}
 
 {% block title %}
@@ -25,9 +32,13 @@
     <div class="row">
       <!-- Left column with the main content -->
       <div id="textContent" class="col-md-6 mb-3 mb-md-0 ps-md-0 pe-md-1">
-        <button id="permalinkButton" class="btn btn-primary btn-sm float-end" data-bs-toggle="tooltip"
-                title="Copy permalink to clipboard"><i class="fas fa-share-nodes"></i> Permalink
-        </button>
+        {% comment %}
+          place#170: the Permalink button was removed. It endorsed a portal URL as permanent,
+          but the portal itself retires when Atlas launches, and a frozen-membership URL has no
+          successor in the locus model to redirect to — so every clip minted an orphan. Sharing
+          still works via the address bar; what has gone is the promise, which we could not keep.
+          A durable share affordance returns in Atlas, where it can mint a locus.
+        {% endcomment %}
         <h5 class="more-or-less">{{ portal_headword }}</h5>
 
         <div id="gloss"><!-- Populated dynamically from context in JavaScript --></div>

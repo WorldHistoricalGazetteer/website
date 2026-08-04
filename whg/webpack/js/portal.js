@@ -481,28 +481,9 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
             $(this).closest('.source-box').tooltip('hide');
         });
 
-        new ClipboardJS('#permalinkButton', {
-            text: function () {
-                return window.location.href;
-            }
-        })
-            .on('success', function (e) {
-                e.clearSelection();
-                const tooltip = bootstrap.Tooltip.getInstance(e.trigger);
-                tooltip.setContent({
-                    '.tooltip-inner': 'Permalink copied to clipboard successfully!'
-                });
-                console.log('tooltip', tooltip);
-                setTimeout(function () { // Hide the tooltip after 2 seconds
-                    tooltip.hide();
-                    tooltip.setContent({
-                        '.tooltip-inner': tooltip._config.title
-                    }) // Restore original text
-                }, 2000);
-            })
-            .on('error', function (e) {
-                console.error('Failed to copy:', e.trigger);
-            });
+        // place#170: the #permalinkButton ClipboardJS handler was removed with the button.
+        // The page still declares <link rel="canonical">, which is now for consumers and
+        // search engines rather than for a copy affordance.
 
         new ClipboardJS('.clip-coordinates', {
             text: function (trigger) {

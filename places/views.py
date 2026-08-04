@@ -118,6 +118,18 @@ class PlacePortalView(TemplateView):
             self._portal_matches = Place.objects.get(id=pid).matches
             if len(self._portal_matches) == 1:
                 return redirect(f'/places/{pid}/detail')
+
+        # place#170: the argument-less /places/portal/ route reads place_ids from the visitor's
+        # session, so its URL means something different for every visitor — copied out of the
+        # address bar it resolves to the reader's own places, or 404s. Redirect to the explicit
+        # multi-pid form so what is on screen has a URL that travels.
+        if not any(kwargs.get(k) for k in ('pid', 'whg_id', 'encoded_ids')):
+            session_ids = self.request.session.get('current_result', {}).get('place_ids', [])
+            if session_ids:
+                joined = ','.join(str(int(i)) for i in session_ids)
+                return redirect(
+                    reverse('places:place-portal-multipid', args=[joined])
+                )
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, *args, **kwargs):
@@ -153,6 +165,35 @@ class PlacePortalView(TemplateView):
         if not place_ids:
             messages.error(self.request, "Place IDs are required to view this page")
             raise Http404("Place IDs are required")
+
+        # place#170: declare an explicit canonical built from places.id — the identifier our
+        # contributor documentation actually promises is permanent — rather than leaving the
+        # portal's four URL forms to be treated as four distinct pages. The Permalink button
+        # that used to clip window.location.href has been removed (see place_portal.html), so
+        # this is now for consumers and search engines, not for a copy affordance.
+        #
+        # The whg_id route canonicalises to the multi-pid form rather than to /places/portal/
+        # <pid>/: the latter renders Place.matches (Postgres CloseMatch neighbours), which is a
+        # DIFFERENT and generally narrower set than the ES union cluster this page is showing.
+        # The multi-pid form carries the exact place_ids on screen, so it denotes what this page
+        # is actually showing, using only places.id.
+        #
+        # Such a URL is a frozen snapshot: it will not pick up records linked to the cluster
+        # later. That is the wanted behaviour here, and it keeps the canonical resting on
+        # places.id rather than on the reindex-unstable whg_id.
+        if pid:
+            context['canonical_url'] = reverse('places:place-portal-pid', args=[pid])
+        elif encoded_ids:
+            context['canonical_url'] = reverse('places:place-portal-multipid', args=[encoded_ids])
+        else:
+            joined = ','.join(str(i) for i in place_ids)
+            # Guard against a pathologically large cluster producing an unusable URL; better to
+            # declare no canonical at all than one that gets truncated. Largest cluster in the
+            # union index is 152 children (~1,070 chars), so this does not fire in practice.
+            if len(joined) <= 1500:
+                context['canonical_url'] = reverse(
+                    'places:place-portal-multipid', args=[joined],
+                )
 
         context.update(self._get_portal_data(place_ids, me))
         return context
