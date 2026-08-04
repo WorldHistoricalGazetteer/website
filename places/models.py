@@ -420,6 +420,23 @@ class LegacyUnionRecord(models.Model):
     is the row count here. Of those, just 23,709 unite more than one place: 98.87%
     are singletons, and the largest holds 153.
 
+    Known artifacts of the legacy data, faithfully preserved
+    --------------------------------------------------------
+    The source index is not clean, and this table reproduces what it said rather
+    than an improved version of it — the point is to record what an identifier
+    already in the wild was understood to mean.
+
+    * **`children` contains duplicates.** One parent lists 152 entries that are a
+      repeating cycle of just 17 distinct ids. Members are de-duplicated on
+      capture (order preserved), so the widest row here holds 19, not 153.
+    * **Some `children` are whg_ids, not place ids** — 2,356 entries across 1,817
+      rows fall above the `places.id` ceiling of 8,364,940. They can never resolve
+      to a Place, and `findPortalPlaces` already drops them silently. They are
+      kept so this table reproduces the legacy portal exactly; their captured
+      title is `''`, which is how they are recognisable.
+    * **2,718 members (0.13%) have a blank title**, either untitled or already
+      deleted from `places` before capture.
+
     Invariants
     ----------
     * ``place_ids`` and ``titles`` are POSITIONALLY ALIGNED and always the same
