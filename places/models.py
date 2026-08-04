@@ -6,6 +6,7 @@ from django.contrib.gis.geos import GeometryCollection
 User = get_user_model()
 from django.contrib.gis.db import models as geomodels
 from django.contrib.gis.db.models import Extent
+from django.contrib.postgres import indexes as django_postgres_indexes
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import JSONField, Q
 from django.db import models
@@ -389,3 +390,67 @@ class CloseMatch(models.Model):
             models.Index(fields=['task']),
             models.Index(fields=['created_by']),
         ]
+
+
+class LegacyUnionRecord(models.Model):
+    """
+    Frozen snapshot of the legacy Elasticsearch `whg` union index (place#170).
+
+    Each row records what one `whg_id` meant at capture time: the Postgres place
+    ids it united, and their titles at that moment.
+
+    Why this exists
+    ---------------
+    `whg_id` was minted at index time (``maxID + 1``) and lived only in
+    Elasticsearch. It is nonetheless in public circulation — carried by Wikidata
+    property P13061, and dispensed for years by the portal's Permalink button
+    (retired 2026-08-04) — so we are obliged to keep resolving it indefinitely.
+    Once the legacy index is retired the mapping is unrecoverable at any price,
+    so it is captured here first.
+
+    The upcoming `/entity/locus:<PID>` endpoint reads this table: a request for a
+    legacy `1[0-9]{7}` identifier that has no registry entry yet consults this
+    snapshot and mints a *frozen* locus — one carrying no recipe, because these
+    clusters came from the old pipeline rather than from the browser clusterer,
+    and so resolving to their captured membership rather than to a live query.
+
+    Scale (measured on prod, 2026-08-04): 2,134,062 rows, of which only 23,710
+    unite more than one record — 98.9% are singletons. Largest holds 153.
+
+    Invariants
+    ----------
+    * ``place_ids`` and ``titles`` are POSITIONALLY ALIGNED and always the same
+      length. Use :attr:`members` rather than indexing them separately.
+    * Append-only. Rows are never edited or deleted: each is a permanent record
+      of what an identifier already in the wild was understood to mean.
+    """
+
+    whg_id = models.BigIntegerField(primary_key=True)
+
+    # Postgres places.id values united under this whg_id: the ES doc's own
+    # `place_id` first, then its `children`.
+    place_ids = ArrayField(models.BigIntegerField(), default=list)
+
+    # Titles as they stood at capture, aligned with `place_ids`. Denormalised
+    # deliberately: if a Place row is later deleted, the id alone leaves a frozen
+    # locus with nothing to show, whereas the captured title still lets it name
+    # what used to be there.
+    titles = ArrayField(models.TextField(blank=True), default=list)
+
+    captured = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = 'legacy_union_records'
+        indexes = [
+            # Reverse lookup: which legacy identifiers referenced this place?
+            django_postgres_indexes.GinIndex(fields=['place_ids']),
+        ]
+
+    def __str__(self):
+        return f'whg_id {self.whg_id} ({len(self.place_ids)} record(s))'
+
+    @property
+    def members(self):
+        """[(place_id, title), ...] — the aligned pairs, safe against drift."""
+        return list(zip(self.place_ids, self.titles))
