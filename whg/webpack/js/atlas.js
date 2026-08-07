@@ -2593,9 +2593,34 @@ function renderClusters() {
     const aatLabels = {};
     ((gatewayData.facets && gatewayData.facets.aat_types) || []).forEach(f => { aatLabels[f.aat_id] = f.label; });
 
+    // Result count. The gateway caps `hits` at the requested page size, so the
+    // rendered count alone makes a temporal mode look inert: "Berlin" is 395
+    // matches unfiltered and 355 in *possibly* mode, and both render 100 places
+    // — the mode switch appears to do nothing until you reach *definitely* (1).
+    // The response's `total` is what actually moves, so show it as a denominator
+    // whenever the page is capped (place#169).
+    //
+    // "matches", not "places": a toponym search is a fuzzy/n-gram candidate
+    // retrieval, so `total` counts the records the query admitted rather than
+    // asserting that many places are really called this — the same reason the
+    // Place List shows "of Y" only when browsing (place#127).
+    //
+    // The denominator is only shown while the loaded page is intact: when the
+    // client-side mirror has just dropped hits for a moved slider, `total` still
+    // describes the PREVIOUS query until the debounced re-query lands, and
+    // pairing the two would read as a count that disagrees with itself.
+    const returned = (gatewayData.hits || []).length;
+    const total = Number.isFinite(gatewayData.total) ? gatewayData.total : null;
+    const capped = total != null && hits.length === returned && total > hits.length;
     const countEl = document.getElementById('atlas_results_count');
-    countEl.textContent = `${hits.length} place${hits.length !== 1 ? 's' : ''} · `
-        + `${clusters.length} cluster${clusters.length !== 1 ? 's' : ''}`;
+    countEl.textContent = (capped
+        ? `${hits.length} of ${total.toLocaleString()} matches`
+        : `${hits.length} place${hits.length !== 1 ? 's' : ''}`)
+        + ` · ${clusters.length} cluster${clusters.length !== 1 ? 's' : ''}`;
+    countEl.title = capped
+        ? `${total.toLocaleString()} records match this search and its filters; `
+          + `the ${hits.length} best-scoring are shown and clustered.`
+        : '';
 
     clusters.forEach((cluster, ci) => {
         const members = cluster.members;
