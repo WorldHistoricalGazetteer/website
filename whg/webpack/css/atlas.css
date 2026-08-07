@@ -73,11 +73,19 @@
 }
 
 /* ── Gateway-unavailable banner ─────────────────────────────────────────
-   Prominent top-centre notice shown when the CRC gateway (Pitt VM / search
-   service) is unreachable, so the limited functionality is obvious. */
+   Prominent notice shown when the CRC gateway (Pitt VM / search service) is
+   unreachable, so the limited functionality is obvious.
+
+   Anchored to the BOTTOM edge, not the top. Top-centre put it squarely over the
+   search bar and its search button: the moment the banner appeared, clicks
+   meant to run a search hit the banner instead and silently did nothing, so a
+   momentary blip read as a permanently broken search until you noticed the
+   dismiss cross. The bottom edge is clear between the basemap control (left)
+   and the attribution (right), and a notice about a service being unavailable
+   has no business covering the control you'd use to retry. */
 .atlas-gateway-banner {
     position: absolute;
-    top: 12px;
+    bottom: 12px;
     left: 50%;
     transform: translateX(-50%);
     z-index: 1200;                 /* above map + floating controls */

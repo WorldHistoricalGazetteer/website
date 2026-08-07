@@ -121,6 +121,16 @@ def crc_places(ids: list, user=None) -> dict | None:
 
 
 def crc_search(options: dict, user=None) -> dict | None:
+    """Fail-safe wrapper over :func:`crc_search_status` — the response, or None.
+
+    Keeps the "any failure is None" contract every caller but the Atlas view
+    relies on. Use ``crc_search_status`` when the *kind* of failure matters.
+    """
+    data, _failure = crc_search_status(options, user=user)
+    return data
+
+
+def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None]:
     """Call the CRC gateway ``POST /api/search`` and return the FULL response.
 
     Unlike ``crc_reconcile_search`` (which adapts hits for the reconciliation
@@ -136,11 +146,30 @@ def crc_search(options: dict, user=None) -> dict | None:
 
     Always opts into the clustering fuel (include_hard_links /
     include_clustering_fields / include_embeddings) and full geometry so the
-    map can plot results. Returns ``None`` when the gateway is unconfigured or
-    the call fails; the caller decides how to surface that.
+    map can plot results.
+
+    Returns ``(response, failure)``. ``failure`` is None on success and
+    otherwise names *why* nothing came back, because the two reasons deserve
+    different words to the user:
+
+    ``"unreachable"``
+        Connection refused / DNS / the VM is down. Search really is offline.
+    ``"timeout"``
+        The gateway answered too slowly. It is **up**; this one query was slow.
+        Search latency is genuinely variable (median ~1.9 s, occasional
+        multi-second spikes against a 10 s ``CRC_GATEWAY_TIMEOUT``), so telling
+        the user the service is "offline" is both wrong and sticky — the Atlas
+        banner then stays up over a service that is answering fine.
+    ``"disabled"``
+        Gateway unconfigured, or the user isn't eligible.
+
+    A read timeout is retried **once**: the retry usually returns in about the
+    median, so most would-be failures become a merely-slow search. Connection
+    errors are not retried — a refused connection will be refused again, and
+    retrying only doubles the wait before the user is told.
     """
     if not _is_enabled(user):
-        return None
+        return None, "disabled"
 
     # Search mode: an explicit, valid `mode` wins (e.g. the Place List sends
     # "in" for substring/"contains" matching); otherwise fall back to the
@@ -232,20 +261,31 @@ def crc_search(options: dict, user=None) -> dict | None:
         if mode in ("possibly", "definitely"):
             body["temporal_mode"] = mode
 
-    try:
-        url = f"{_gateway_url()}/api/search"
-        logger.info("CRC gateway POST %s  q=%r", url, body.get("query"))
-        resp = requests.post(url, json=body, headers=_headers(), timeout=_timeout())
-        if 200 <= resp.status_code < 300:
-            return resp.json()
-        logger.warning("CRC gateway POST /api/search %s: %s",
-                       resp.status_code, resp.text[:200])
-        return None
-    except (requests.Timeout, requests.ConnectionError) as exc:
-        logger.warning("CRC gateway /api/search network error: %s", exc)
-    except Exception as exc:  # pragma: no cover — defensive
-        logger.warning("CRC gateway /api/search unexpected: %s", exc)
-    return None
+    url = f"{_gateway_url()}/api/search"
+    # attempt 0, then one retry reserved for a read timeout (see docstring).
+    for attempt in (0, 1):
+        try:
+            logger.info("CRC gateway POST %s  q=%r%s", url, body.get("query"),
+                        "  (retry)" if attempt else "")
+            resp = requests.post(url, json=body, headers=_headers(), timeout=_timeout())
+            if 200 <= resp.status_code < 300:
+                return resp.json(), None
+            logger.warning("CRC gateway POST /api/search %s: %s",
+                           resp.status_code, resp.text[:200])
+            return None, "error"
+        except requests.Timeout as exc:
+            logger.warning("CRC gateway /api/search timed out (attempt %d): %s",
+                           attempt + 1, exc)
+            if attempt == 0:
+                continue
+            return None, "timeout"
+        except requests.ConnectionError as exc:
+            logger.warning("CRC gateway /api/search unreachable: %s", exc)
+            return None, "unreachable"
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("CRC gateway /api/search unexpected: %s", exc)
+            return None, "error"
+    return None, "timeout"  # pragma: no cover — loop always returns
 
 
 def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None,

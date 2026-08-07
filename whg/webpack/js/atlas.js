@@ -2570,7 +2570,15 @@ function renderClusters() {
     const $resultsDiv = $('#atlas_search_results');
     $resultsDiv.empty();
 
-    document.getElementById('atlas_no_results').style.display = hits.length === 0 ? 'block' : 'none';
+    // Empty-state wording depends on WHY it's empty. A search the gateway was
+    // too slow to answer is not "no results — modify your search": nothing is
+    // wrong with the query and re-running it usually works, so say that instead
+    // of sending the user off to change terms that were fine.
+    const noResEl = document.getElementById('atlas_no_results');
+    noResEl.style.display = hits.length === 0 ? 'block' : 'none';
+    noResEl.textContent = (hits.length === 0 && gatewayData.timeout)
+        ? 'That search took too long to come back. The service is running — please try again.'
+        : 'No results — please modify your search terms or filters.';
     const controls = document.getElementById('atlas_cluster_controls');
     if (controls) controls.style.display = hits.length ? '' : 'none';
     const weightControls = document.getElementById('atlas_weight_controls');
@@ -2783,6 +2791,8 @@ function renderToponymResults(data) {
 
     const noResultsEl = document.getElementById('atlas_no_results');
     noResultsEl.style.display = results.length === 0 ? 'block' : 'none';
+    // Reset the wording — renderClusters may have left the timeout message here.
+    noResultsEl.textContent = 'No results — please modify your search terms or filters.';
 
     results.forEach((feature, index) => {
         let r = feature.properties;

@@ -524,14 +524,19 @@ def atlas_search(request):
     except (ValueError, TypeError):
         options = {}
 
-    from api.crc_client import crc_search
-    data = crc_search(options, user=request.user)
+    from api.crc_client import crc_search_status
+    data, failure = crc_search_status(options, user=request.user)
     if data is None:
-        # Gateway unconfigured / unreachable — empty but well-formed so the
-        # client renders "no results" rather than erroring.
+        # Empty but well-formed so the client renders a message rather than
+        # erroring. A read timeout is NOT reported as gateway-down: the service
+        # is up and merely slow for this query, and claiming otherwise raises a
+        # sticky "search is offline" banner over a working search (the retry in
+        # crc_search_status has already had a second go by this point).
+        timed_out = failure == "timeout"
         return JsonResponse({
             "hits": [], "total": 0, "edges": [],
-            "clustering_params": None, "toponym_stoplist": [], "gateway": False,
+            "clustering_params": None, "toponym_stoplist": [],
+            "gateway": timed_out, "timeout": timed_out,
         })
     data["gateway"] = True
     return JsonResponse(data)
