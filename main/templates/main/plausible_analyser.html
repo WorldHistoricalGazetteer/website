@@ -172,15 +172,22 @@
 
       <!-- Country extremes -->
       <div class="col-lg-5">
-        <h6 class="small text-uppercase text-muted mb-2">Least-covered countries</h6>
+        <h6 class="small text-uppercase text-muted mb-2">Sparsest large countries
+          <span class="text-muted text-lowercase fw-normal" title="Countries over 100,000 km², ranked by contributed records per 100,000 km². Ranking on raw counts would just list micro-territories.">(per 100,000 km²)</span></h6>
         <table class="table table-sm mb-3 an-cov-tbl">
           <tbody>
-          {% for c in coverage.thin_countries %}
+          {% for c in coverage.sparse_countries %}
             <tr><td>{{ c.name }} <span class="text-muted small">· {{ c.region }}</span></td>
-                <td class="text-end an-bd-num">{% if c.records %}{{ c.records|intcomma }}{% else %}<span class="text-danger">none</span>{% endif %}</td></tr>
+                <td class="text-end an-bd-num">{{ c.density }}</td>
+                <td class="text-end an-bd-num text-muted">{% if c.records %}{{ c.records|intcomma }}{% else %}<span class="text-danger">none</span>{% endif %}</td></tr>
           {% endfor %}
           </tbody>
         </table>
+        {% if coverage.no_data_count %}
+        <p class="small text-muted" title="{{ coverage.no_data_countries|join:', ' }}">
+          <i class="fas fa-circle-exclamation me-1"></i>{{ coverage.no_data_count }} countries and territories
+          have no contributed records at all (hover for the list).</p>
+        {% endif %}
         <h6 class="small text-uppercase text-muted mb-2">Best-covered countries</h6>
         <table class="table table-sm mb-0 an-cov-tbl">
           <tbody>

@@ -1180,6 +1180,14 @@ def _contributed_coverage():
                  WHERE {contributed}
             """)
             total_records, no_country, datasets_with_places = cur.fetchone()
+            # Land area per country, so "thin" can mean thin *for its size* — a raw
+            # bottom-N is all micro-territories and says nothing about where to direct
+            # effort. ~0.4s over the 208 country polygons.
+            cur.execute("""
+                SELECT iso, (ST_Area(mpoly::geography) / 1e6)::int
+                  FROM countries WHERE mpoly IS NOT NULL
+            """)
+            areas = {iso: km2 for iso, km2 in cur.fetchall() if iso}
 
         recs, dsets = {}, {}
         for label, code, n in pairs:
@@ -1229,14 +1237,23 @@ def _contributed_coverage():
         for r in regions:
             r['pct'] = round(100 * r['records'] / max_region, 1)
 
-        # Countries with nothing at all, then the sparsest — the outreach shortlist.
+        # The outreach shortlist: countries big enough for the comparison to mean
+        # something (≥ LARGE_KM2), ranked by records per 100,000 km². Ranking on raw
+        # counts instead would just list micro-territories.
+        LARGE_KM2 = 100_000
+        sparse = []
+        for code, km2 in areas.items():
+            if km2 < LARGE_KM2 or code not in country_region:
+                continue
+            n = recs.get(code, 0)
+            sparse.append({'code': code, 'name': names.get(code) or code,
+                           'records': n, 'datasets': len(dsets.get(code, ())),
+                           'region': country_region.get(code, '—'), 'km2': km2,
+                           'density': round(100_000 * n / km2, 1)})
+        sparse.sort(key=lambda r: (r['density'], r['name']))
+
         covered = set(recs)
-        thin = [{'code': c, 'name': names.get(c) or c, 'records': 0, 'datasets': 0,
-                 'region': country_region.get(c, '—')}
-                for c in sorted(country_region, key=lambda c: names.get(c) or c)
-                if c not in covered]
-        thin += sorted((r for r in by_country if r['records'] > 0),
-                       key=lambda r: (r['records'], r['name']))
+        no_data = sorted((names.get(c) or c) for c in country_region if c not in covered)
         data = {
             'datasets': Dataset.objects.filter(
                 public=True, core=False, authority=False).count(),
@@ -1251,7 +1268,9 @@ def _contributed_coverage():
             'country_colors': colors,
             'regions': regions,
             'top_countries': by_country[:12],
-            'thin_countries': thin[:15],
+            'sparse_countries': sparse[:15],
+            'no_data_countries': no_data,
+            'no_data_count': len(no_data),
             'scale_max': max(recs.values()) if recs else 0,
         }
         cache.set(_COVERAGE_CACHE_KEY, data, 1800)
