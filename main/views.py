@@ -1141,12 +1141,18 @@ _COVERAGE_CACHE_KEY = 'analytics:contributed_coverage:v1'
 
 def _contributed_coverage():
     """Geographic coverage of *contributed* datasets — public, non-core, non-authority —
-    for the Analytics page, so we can see where community data is thin (place#173).
+    for the Analytics page, so we can see where community data is thin.
 
-    Counted straight from Postgres (``places.ccodes`` × ``datasets``), NOT from the
-    gazetteer registry's ``h3_coverage``: every ``whg:*`` registry row currently carries
-    an identical copy of the whole-namespace H3 union (631,841 cells apiece), so the
-    registry cannot distinguish one contributed dataset's footprint from another's.
+    INTERIM: this reads Postgres, which is the narrower source. The index carries
+    country codes for 97.15% of 51.2M places (place#173) against 72.1% of the
+    contributed places here, so these figures understate real coverage by more than a
+    quarter. place#179 tracks moving the panel onto an ES aggregation and adding
+    temporal-gap reporting; retire this helper then.
+
+    Not derived from the gazetteer registry's ``h3_coverage``, despite it looking like
+    the natural source: every ``whg:*`` registry row currently carries an identical copy
+    of the whole-namespace H3 union (631,841 cells apiece), so the registry cannot
+    distinguish one contributed dataset's footprint from another's.
 
     Returns a dict for the template, or None on any error. Cached for 30 minutes — the
     figures move only when a dataset is published, and the page is re-rendered on every
