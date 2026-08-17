@@ -23,7 +23,11 @@ Assignment rules:
     single best-covering country is used.
   * `--tolerance-km` additionally accepts the nearest country within N km for
     non-areal geometry that matched nothing — for coastal and island places that
-    fall just outside a coarse country outline. Off by default.
+    fall just outside a coarse country outline. Off by default; **5 is the
+    measured sweet spot**. In a 3,000-place sample it recovered 416 of 732
+    unmatched Pleiades places (Venice, Copenhagen, Tyre, the Bosphorus — all
+    plainly right) while claiming just 2 of 854 GEBCO seamounts, so open water
+    stays countryless. 10km starts pulling in ocean features for little gain.
 
 Only ever FILLS EMPTIES: a place that already has `ccodes` is never touched, so
 curated attributions cannot be overwritten. Every change is appended to a JSONL
@@ -92,7 +96,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--tolerance-km', type=float, default=0.0,
             help="Also accept the nearest country within this many km for "
-                 "non-areal geometry that matched none (default 0 = off).",
+                 "non-areal geometry that matched none (default 0 = off; 5 "
+                 "recovers coastal places without claiming ocean features).",
         )
         parser.add_argument(
             '--batch-size', type=int, default=2000,
