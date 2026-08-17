@@ -26,9 +26,20 @@
   .an-bar-label { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: .15rem; }
   .an-drop { color: #b45309; font-size: .8rem; }
   .an-dseg { display: flex; align-items: center; gap: .35rem; font-size: .8rem; }
-  #an-map { height: 400px; width: 100%; }
+  #an-map, #an-cov-map { height: 400px; width: 100%; }
+  /* coverage: colour ramp legend */
+  .an-ramp { height: 10px; width: 160px; border-radius: 3px;
+    background: linear-gradient(90deg, #dcfce7, #14532d); border: 1px solid #dee2e6; }
+  .an-swatch { width: 14px; height: 10px; border-radius: 2px; display: inline-block;
+    background: #eef1f5; border: 1px solid #dee2e6; }
+  .an-cov-tbl td, .an-cov-tbl th { padding: .2rem .4rem; font-size: .85rem; }
+  .an-cov-tbl td.an-bd-cell { min-width: 9rem; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css"/>
+{# Loaded here (not beside the first map) so BOTH choropleths on this page can init,
+   whatever order their sections appear in. #}
+<script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -103,6 +114,100 @@
     </div>
   </div>
 
+  <!-- Contributed-data coverage: where community datasets do (and don't) reach -->
+  <div class="card mb-4"><div class="card-body">
+    <h6 class="card-title"><i class="fas fa-map-location-dot me-1 text-secondary"></i>Contributed-data coverage
+      <span class="text-muted small fw-normal">— where community data is thin</span></h6>
+    {% if coverage %}
+    <p class="text-muted small">Public datasets contributed by WHG users (excluding core reference and
+      authority datasets), counted by the countries their records are attributed to. Describes the
+      corpus, so it does <em>not</em> change with the period selector above.</p>
+
+    <div class="row g-2 mb-3">
+      <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+        <div class="h4 mb-0">{{ coverage.datasets|intcomma }}</div>
+        <div class="small text-muted">Contributed datasets<br>(public)</div></div></div></div>
+      <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+        <div class="h4 mb-0">{{ coverage.records|intcomma }}</div>
+        <div class="small text-muted">Contributed<br>place records</div></div></div></div>
+      <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+        <div class="h4 mb-0">{{ coverage.countries }}<span class="text-muted small">/{{ coverage.countries_total }}</span></div>
+        <div class="small text-muted">Countries with<br>any coverage</div></div></div></div>
+      <div class="col"><div class="card text-center h-100"><div class="card-body py-2">
+        <div class="h4 mb-0">{{ coverage.no_country_pct }}%</div>
+        <div class="small text-muted">Records with no<br>country attribution</div></div></div></div>
+    </div>
+
+    <div id="an-cov-map"></div>
+    <div id="an-cov-map-fallback" class="text-muted small d-none mt-2">
+      Map couldn't load (offline?). The tables below have the same data.</div>
+    <div class="d-flex align-items-center gap-3 small text-muted mt-2 flex-wrap">
+      <span class="d-inline-flex align-items-center gap-2">1 record <span class="an-ramp"></span>
+        {{ coverage.scale_max|intcomma }} records <span class="text-muted">(log scale)</span></span>
+      <span class="d-inline-flex align-items-center gap-1"><span class="an-swatch"></span> no contributed data</span>
+    </div>
+
+    <div class="row g-3 mt-1">
+      <!-- Region rollup, thinnest first -->
+      <div class="col-lg-7">
+        <h6 class="small text-uppercase text-muted mb-2">By world region — thinnest first</h6>
+        <table class="table table-sm mb-0 an-bd an-cov-tbl">
+          <thead><tr><th>Region</th><th class="text-end">Records</th>
+            <th class="text-end">Datasets</th><th class="text-end">Countries</th></tr></thead>
+          <tbody>
+          {% for r in coverage.regions %}
+            <tr>
+              <td class="an-bd-cell">
+                <div class="an-bd-bar" style="width: {{ r.pct }}%;"></div>
+                <span class="an-bd-txt"{% if r.empty %} title="No contributed data: {{ r.empty|join:', ' }}"{% endif %}>{{ r.label }}</span>
+              </td>
+              <td class="text-end an-bd-num">{{ r.records|intcomma }}</td>
+              <td class="text-end an-bd-num">{{ r.datasets }}</td>
+              <td class="text-end an-bd-num">{{ r.countries }}<span class="text-muted">/{{ r.countries_total }}</span></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Country extremes -->
+      <div class="col-lg-5">
+        <h6 class="small text-uppercase text-muted mb-2">Least-covered countries</h6>
+        <table class="table table-sm mb-3 an-cov-tbl">
+          <tbody>
+          {% for c in coverage.thin_countries %}
+            <tr><td>{{ c.name }} <span class="text-muted small">· {{ c.region }}</span></td>
+                <td class="text-end an-bd-num">{% if c.records %}{{ c.records|intcomma }}{% else %}<span class="text-danger">none</span>{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        <h6 class="small text-uppercase text-muted mb-2">Best-covered countries</h6>
+        <table class="table table-sm mb-0 an-cov-tbl">
+          <tbody>
+          {% for c in coverage.top_countries %}
+            <tr><td>{{ c.name }} <span class="text-muted small">· {{ c.datasets }} dataset{{ c.datasets|pluralize }}</span></td>
+                <td class="text-end an-bd-num">{{ c.records|intcomma }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="small text-muted mt-3 mb-0">
+      Counted from each record's country attribution in the WHG database, not from the gazetteer
+      registry: registry <code>h3_coverage</code> is per-authority only — every <code>whg:*</code> row
+      currently holds the same whole-namespace footprint. {{ coverage.no_country|intcomma }} records
+      ({{ coverage.no_country_pct }}%) carry no country and are absent from the map and tables; a record
+      attributed to several countries counts once in each. Regions are UN M49 sub-regions.
+    </p>
+    {{ coverage.country_records|json_script:"an-cov-data" }}
+    {{ coverage.country_colors|json_script:"an-cov-colors" }}
+    {% else %}
+    <p class="text-muted small mb-0">Coverage figures unavailable — see the server log for the
+      aggregation error.</p>
+    {% endif %}
+  </div></div>
+
   <!-- Visitors over time -->
   <div class="card mb-4"><div class="card-body">
     <h6 class="card-title"><i class="fas fa-chart-area me-1 text-secondary"></i>Visitors over time
@@ -131,38 +236,6 @@
   </div></div>
   {{ country_map|json_script:"an-map-data" }}
   {{ country_colors|json_script:"an-map-colors" }}
-  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
-  <script>
-  (function () {
-    var el = document.getElementById('an-map');
-    var data = {}, colors = {};
-    try { data = JSON.parse(document.getElementById('an-map-data').textContent); } catch (e) {}
-    try { colors = JSON.parse(document.getElementById('an-map-colors').textContent); } catch (e) {}
-    function fail() { var f = document.getElementById('an-map-fallback'); if (f) f.classList.remove('d-none'); }
-    if (!el || typeof jsVectorMap === 'undefined') { fail(); return; }
-    try {
-      // Colour each region directly with our server-computed hex (log-scaled). jsVectorMap's own
-      // series scale was unreliable, so we set fills after init via the region API (+ DOM fallback).
-      var map = new jsVectorMap({
-        selector: '#an-map', map: 'world', zoomButtons: true,
-        regionStyle: { initial: { fill: '#eef1f5', stroke: '#ffffff', strokeWidth: 0.4 } },
-        onRegionTooltipShow: function (event, tooltip, code) {
-          try { tooltip.text(tooltip.text() + ': ' + (data[code] || 0) + ' visitors', true); } catch (e) {}
-        }
-      });
-      function paint() {
-        Object.keys(colors).forEach(function (code) {
-          var p = el.querySelector('svg [data-code="' + code + '"]');
-          if (p) p.setAttribute('fill', colors[code]);
-        });
-      }
-      paint();
-      setTimeout(paint, 300);   // re-apply once the map has fully rendered
-      el.addEventListener('mouseout', function () { setTimeout(paint, 0); });  // survive hover reverts
-    } catch (e) { fail(); }
-  })();
-  </script>
 
   <!-- Breakdown tables + donuts -->
   <div class="row g-3 mb-4">
@@ -242,5 +315,45 @@
 
   <p class="small text-muted">Via the Plausible Stats API (aggregate + breakdown), independent of Plausible
     goals. Event taxonomy: <code>developer/analytics-map-your-data.md</code>.</p>
+
+  <script>
+  // Both choropleths on this page: colour each region directly with the server-computed hex
+  // (log-scaled). jsVectorMap's own series scale was unreliable, so fills are set after init
+  // via the DOM. Runs at the end of the page so every map container already exists.
+  (function () {
+    function build(mapId, dataId, colorsId, fallbackId, unit) {
+      var el = document.getElementById(mapId);
+      var fb = document.getElementById(fallbackId);
+      function fail() { if (fb) fb.classList.remove('d-none'); }
+      if (!el) { return; }
+      var data = {}, colors = {};
+      try { data = JSON.parse(document.getElementById(dataId).textContent); } catch (e) {}
+      try { colors = JSON.parse(document.getElementById(colorsId).textContent); } catch (e) {}
+      if (typeof jsVectorMap === 'undefined') { fail(); return; }
+      try {
+        new jsVectorMap({
+          selector: '#' + mapId, map: 'world', zoomButtons: true,
+          regionStyle: { initial: { fill: '#eef1f5', stroke: '#ffffff', strokeWidth: 0.4 } },
+          onRegionTooltipShow: function (event, tooltip, code) {
+            try {
+              tooltip.text(tooltip.text() + ': ' + (data[code] || 0).toLocaleString() + ' ' + unit, true);
+            } catch (e) {}
+          }
+        });
+        function paint() {
+          Object.keys(colors).forEach(function (code) {
+            var p = el.querySelector('svg [data-code="' + code + '"]');
+            if (p) p.setAttribute('fill', colors[code]);
+          });
+        }
+        paint();
+        setTimeout(paint, 300);   // re-apply once the map has fully rendered
+        el.addEventListener('mouseout', function () { setTimeout(paint, 0); });  // survive hover reverts
+      } catch (e) { fail(); }
+    }
+    build('an-cov-map', 'an-cov-data', 'an-cov-colors', 'an-cov-map-fallback', 'contributed records');
+    build('an-map', 'an-map-data', 'an-map-colors', 'an-map-fallback', 'visitors');
+  })();
+  </script>
 </div>
 {% endblock %}

@@ -1096,6 +1096,171 @@ def _country_names():
     return _COUNTRY_NAMES
 
 
+_M49 = None
+
+
+def _m49_country_regions():
+    """({ISO2: region label}, [(region label, [ISO2, …]), …]) from the repo's UN M49
+    hierarchy (``regions/data/m49_regions.json``, the same file ``import_m49`` loads).
+
+    Used to roll contributed-place counts up to the 22 M49 sub-regions, which — unlike
+    the ``areas`` app's *predefined* study areas — partition the world cleanly: every
+    country has exactly one parent region, so nothing is double-counted. Parsed once,
+    cached; ({}, []) on any failure (the coverage panel then just omits the rollup)."""
+    global _M49
+    if _M49 is not None:
+        return _M49
+    _M49 = ({}, [])
+    try:
+        import os
+        path = os.path.join(settings.BASE_DIR, 'regions', 'data', 'm49_regions.json')
+        with open(path, encoding='utf-8') as fh:
+            nodes = json.load(fh)
+        by_region = {}
+        for node in nodes.values():
+            if node.get('level') != 'country' or not node.get('iso_alpha2'):
+                continue
+            parents = node.get('parents') or []
+            parent = nodes.get(parents[0]) if parents else None
+            # Antarctica hangs directly off "World" — label it with its own name.
+            if not parent or parent.get('level') == 'global':
+                label = (node.get('labels') or {}).get('en') or node['m49']
+            else:
+                label = (parent.get('labels') or {}).get('en') or parent['m49']
+            for code in node['iso_alpha2']:
+                by_region.setdefault(label, []).append(code)
+        country_region = {c: label for label, codes in by_region.items() for c in codes}
+        _M49 = (country_region, sorted(by_region.items()))
+    except Exception as e:  # noqa: BLE001 — the rollup is a nicety, never fatal
+        logger.warning('M49 region parse failed: %s', e)
+    return _M49
+
+
+_COVERAGE_CACHE_KEY = 'analytics:contributed_coverage:v1'
+
+
+def _contributed_coverage():
+    """Geographic coverage of *contributed* datasets — public, non-core, non-authority —
+    for the Analytics page, so we can see where community data is thin (place#173).
+
+    Counted straight from Postgres (``places.ccodes`` × ``datasets``), NOT from the
+    gazetteer registry's ``h3_coverage``: every ``whg:*`` registry row currently carries
+    an identical copy of the whole-namespace H3 union (631,841 cells apiece), so the
+    registry cannot distinguish one contributed dataset's footprint from another's.
+
+    Returns a dict for the template, or None on any error. Cached for 30 minutes — the
+    figures move only when a dataset is published, and the page is re-rendered on every
+    period switch."""
+    from django.core.cache import cache
+    cached = cache.get(_COVERAGE_CACHE_KEY)
+    if cached is not None:
+        return cached
+
+    from django.db import connection
+    import math
+    try:
+        contributed = 'd.public AND d.core IS NOT TRUE AND d.authority IS NOT TRUE'
+        with connection.cursor() as cur:
+            # (dataset, country) record counts — ~1,800 rows, so the rollups below are
+            # done in Python rather than as repeated DISTINCT aggregates in the DB.
+            cur.execute(f"""
+                SELECT x.dataset, x.cc, count(*)::int
+                  FROM (SELECT p.dataset, unnest(p.ccodes) AS cc
+                          FROM places p JOIN datasets d ON p.dataset = d.label
+                         WHERE {contributed}) x
+                 GROUP BY 1, 2
+            """)
+            pairs = cur.fetchall()
+            cur.execute(f"""
+                SELECT count(*)::int,
+                       count(*) FILTER (
+                           WHERE p.ccodes IS NULL OR cardinality(p.ccodes) = 0)::int,
+                       count(DISTINCT p.dataset)::int
+                  FROM places p JOIN datasets d ON p.dataset = d.label
+                 WHERE {contributed}
+            """)
+            total_records, no_country, datasets_with_places = cur.fetchone()
+
+        recs, dsets = {}, {}
+        for label, code, n in pairs:
+            code = (code or '').strip().upper()
+            if len(code) != 2:
+                continue
+            recs[code] = recs.get(code, 0) + n
+            dsets.setdefault(code, set()).add(label)
+
+        names = _country_names()
+        country_region, region_members = _m49_country_regions()
+
+        by_country = [{'code': c, 'name': names.get(c) or c, 'records': n,
+                       'datasets': len(dsets.get(c, ())),
+                       'region': country_region.get(c, '—')}
+                      for c, n in recs.items()]
+        by_country.sort(key=lambda r: (-r['records'], r['name']))
+
+        # Log-scaled green fills (distinct from the blue visitor choropleth); countries
+        # with no contributed records keep the map's default grey, so gaps read as gaps.
+        def _green(t):  # 0→pale, 1→deep, over #dcfce7 … #14532d
+            t = max(0.0, min(1.0, t))
+            r = round(220 + (20 - 220) * t)
+            g = round(252 + (83 - 252) * t)
+            b = round(231 + (45 - 231) * t)
+            return f'#{r:02x}{g:02x}{b:02x}'
+        logs = {c: math.log10(n + 1) for c, n in recs.items() if n > 0}
+        maxlog = max(logs.values()) if logs else 1
+        colors = {c: _green(lv / maxlog) for c, lv in logs.items()}
+
+        regions = []
+        for label, codes in region_members:
+            members = [c for c in codes if recs.get(c)]
+            regions.append({
+                'label': label,
+                # A place tagged with several countries counts once per country, so a
+                # region total can exceed its distinct-place count — a rounding-level
+                # effect here (only 866 of ~413k contributed places carry >1 country).
+                'records': sum(recs.get(c, 0) for c in codes),
+                'datasets': len({d for c in members for d in dsets.get(c, ())}),
+                'countries': len(members),
+                'countries_total': len(codes),
+                'empty': sorted((names.get(c) or c) for c in codes if not recs.get(c)),
+            })
+        regions.sort(key=lambda r: r['records'])
+        max_region = max([r['records'] for r in regions] or [0]) or 1
+        for r in regions:
+            r['pct'] = round(100 * r['records'] / max_region, 1)
+
+        # Countries with nothing at all, then the sparsest — the outreach shortlist.
+        covered = set(recs)
+        thin = [{'code': c, 'name': names.get(c) or c, 'records': 0, 'datasets': 0,
+                 'region': country_region.get(c, '—')}
+                for c in sorted(country_region, key=lambda c: names.get(c) or c)
+                if c not in covered]
+        thin += sorted((r for r in by_country if r['records'] > 0),
+                       key=lambda r: (r['records'], r['name']))
+        data = {
+            'datasets': Dataset.objects.filter(
+                public=True, core=False, authority=False).count(),
+            'datasets_with_places': datasets_with_places,
+            'records': total_records,
+            'no_country': no_country,
+            'no_country_pct': round(100 * no_country / total_records, 1) if total_records else 0,
+            'countries': len(covered),
+            'countries_total': len(country_region) or len(covered),
+            'by_country': by_country,
+            'country_records': recs,
+            'country_colors': colors,
+            'regions': regions,
+            'top_countries': by_country[:12],
+            'thin_countries': thin[:15],
+            'scale_max': max(recs.values()) if recs else 0,
+        }
+        cache.set(_COVERAGE_CACHE_KEY, data, 1800)
+        return data
+    except Exception as e:  # noqa: BLE001 — never let coverage break the analytics page
+        logger.warning('Contributed-coverage aggregation failed: %s', e)
+        return None
+
+
 def _svg_area(series, w=820, h=190, pad=26):
     """Build SVG polyline/polygon point strings for a visitors-over-time area chart.
     series = [(label, value), …]. Returns None if empty."""
@@ -1296,6 +1461,10 @@ def plausible_analyser_view(request):
     except Exception:  # noqa: BLE001 — never let the registry break the analytics page
         pass
 
+    # Geographic coverage of contributed datasets — period-independent (it describes the
+    # corpus, not the traffic), so it is computed once and cached.
+    coverage = _contributed_coverage()
+
     sections = [
         {'title': 'Top pages', 'icon': 'fa-file-lines', 'pv': True, 'rows': pages},
         {'title': 'Top sources', 'icon': 'fa-arrow-right-to-bracket', 'rows': merge('source', 'source', 8)},
@@ -1336,6 +1505,7 @@ def plausible_analyser_view(request):
         'topline': topline, 'per_site': per_site, 'chart': chart,
         'sections': sections, 'donuts': donuts,
         'country_map': country_map, 'country_colors': country_colors,
+        'coverage': coverage,
         'funnel': funnel, 'others': others, 'base_v': base_v,
         'error': errors[0] if errors else None,
         'plausible_url': f"{getattr(settings, 'PLAUSIBLE_BASE_URL', '')}/{PLAUSIBLE_MAIN}",
