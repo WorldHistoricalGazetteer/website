@@ -1192,7 +1192,9 @@ def _contributed_coverage():
         recs, dsets = {}, {}
         for label, code, n in pairs:
             code = (code or '').strip().upper()
-            if len(code) != 2:
+            # Contributed data holds a little junk in ccodes (e.g. a literal '""'),
+            # which would otherwise reach the map as an unusable region key.
+            if len(code) != 2 or not code.isalpha():
                 continue
             recs[code] = recs.get(code, 0) + n
             dsets.setdefault(code, set()).add(label)

@@ -349,13 +349,17 @@ can init, whatever order their sections appear in.{% endcomment %}
         });
         function paint() {
           Object.keys(colors).forEach(function (code) {
+            // Skip anything that isn't a plain ISO-2 key: a stray code would make the
+            // selector invalid, and one throw here would leave the whole map unpainted.
+            if (!/^[A-Za-z]{2}$/.test(code)) return;
             var p = el.querySelector('svg [data-code="' + code + '"]');
             if (p) p.setAttribute('fill', colors[code]);
           });
         }
-        paint();
-        setTimeout(paint, 300);   // re-apply once the map has fully rendered
-        el.addEventListener('mouseout', function () { setTimeout(paint, 0); });  // survive hover reverts
+        function repaint() { try { paint(); } catch (e) {} }  // never blame the map for a bad key
+        repaint();
+        setTimeout(repaint, 300);   // re-apply once the map has fully rendered
+        el.addEventListener('mouseout', function () { setTimeout(repaint, 0); });  // survive hover reverts
       } catch (e) { fail(); }
     }
     build('an-cov-map', 'an-cov-data', 'an-cov-colors', 'an-cov-map-fallback', 'contributed records');
