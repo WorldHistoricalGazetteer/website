@@ -175,6 +175,8 @@ can init, whatever order their sections appear in.{% endcomment %}
         <h6 class="small text-uppercase text-muted mb-2">Sparsest large countries
           <span class="text-muted text-lowercase fw-normal" title="Countries over 100,000 km², ranked by contributed records per 100,000 km². Ranking on raw counts would just list micro-territories.">(per 100,000 km²)</span></h6>
         <table class="table table-sm mb-3 an-cov-tbl">
+          <thead><tr><th>Country</th><th class="text-end">Per 100k km²</th>
+            <th class="text-end">Records</th></tr></thead>
           <tbody>
           {% for c in coverage.sparse_countries %}
             <tr><td>{{ c.name }} <span class="text-muted small">· {{ c.region }}</span></td>
@@ -190,6 +192,7 @@ can init, whatever order their sections appear in.{% endcomment %}
         {% endif %}
         <h6 class="small text-uppercase text-muted mb-2">Best-covered countries</h6>
         <table class="table table-sm mb-0 an-cov-tbl">
+          <thead><tr><th>Country</th><th class="text-end">Records</th></tr></thead>
           <tbody>
           {% for c in coverage.top_countries %}
             <tr><td>{{ c.name }} <span class="text-muted small">· {{ c.datasets }} dataset{{ c.datasets|pluralize }}</span></td>
