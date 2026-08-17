@@ -36,8 +36,8 @@
   .an-cov-tbl td.an-bd-cell { min-width: 9rem; }
 </style>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/css/jsvectormap.min.css"/>
-{# Loaded here (not beside the first map) so BOTH choropleths on this page can init,
-   whatever order their sections appear in. #}
+{% comment %}Loaded here (not beside the first map) so BOTH choropleths on this page
+can init, whatever order their sections appear in.{% endcomment %}
 <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/js/jsvectormap.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsvectormap@1.5.3/dist/maps/world.js"></script>
 {% endblock %}
