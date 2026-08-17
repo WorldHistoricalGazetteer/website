@@ -17,10 +17,11 @@ Assignment rules:
   * Point / line geometry — every country polygon it falls inside. Anything in
     open water (GEBCO soundings, shipwrecks) matches nothing and is left alone,
     which is the correct answer rather than a failure.
-  * Areal geometry — countries covering at least `--min-share` of the place's
-    area, so a border-straddling polygon gets both its countries but a sliver of
-    overlap from an imprecise boundary does not. If nothing clears the bar, the
-    single best-covering country is used.
+  * Areal geometry — countries where the overlap is at least `--min-share` of
+    the place's area *or* of the country's, so a border-straddling polygon gets
+    both its countries, "(British Empire)" gets the United Kingdom as well as
+    Canada, and a sliver of overlap from an imprecise boundary gets neither. If
+    nothing clears the bar, the single best-covering country is used.
   * `--tolerance-km` additionally accepts the nearest country within N km for
     non-areal geometry that matched nothing — for coastal and island places that
     fall just outside a coarse country outline. Off by default; **5 is the
@@ -57,25 +58,42 @@ from places.models import Place, PlaceGeom
 
 logger = logging.getLogger(__name__)
 
-# One place's geometry, collected across its place_geom rows and repaired if
-# areal — a self-intersecting upload would otherwise abort the batch when PostGIS
-# tried to intersect it. ST_MakeValid alone is not enough: it can hand back a
-# collection with leftover lines and points, which GEOSIntersects then chokes on,
-# so keep only the polygonal parts. A handful of shapes defeat even that (see
-# `_match`, which isolates them rather than losing the batch).
+# One place's geometry, collected across its place_geom rows, then repaired ONLY
+# if it needs it. Three hard-won rules live in this CTE:
+#
+#   * Repair nothing that is already valid. Running ST_MakeValid over a valid
+#     collection can hand back a self-intersecting one — that is what segfaulted
+#     the GEOS backend on "(British Empire)" (122 geometry rows, 384k points,
+#     every part valid), taking the whole cluster down with it.
+#   * When repair IS needed, fix each part and dissolve the overlaps
+#     (ST_UnaryUnion) rather than calling ST_MakeValid on the collected whole,
+#     which leaves overlapping components in place. Keep only the polygonal
+#     parts, since MakeValid also emits stray lines and points.
+#   * Never hand anything still invalid to a GEOS overlay predicate. Whatever
+#     survives both repairs degrades to the centre of its bounding box — pure
+#     coordinate arithmetic, so it cannot crash, and a point still lands in the
+#     right country.
 _GEOM_CTE = """
     WITH t AS (
-        SELECT g.place_id AS id, ST_Collect(g.geom) AS geom
+        SELECT g.place_id AS id,
+               ST_Collect(CASE WHEN ST_IsValid(g.geom) THEN g.geom
+                               ELSE ST_MakeValid(g.geom) END) AS geom
           FROM place_geom g
          WHERE g.place_id = ANY(%(ids)s)
            AND g.geom IS NOT NULL AND NOT ST_IsEmpty(g.geom)
          GROUP BY g.place_id
-    ), tv AS (
+    ), tr AS (
         SELECT id,
-               CASE WHEN ST_Dimension(geom) = 2
-                    THEN ST_CollectionExtract(ST_MakeValid(geom), 3)
+               CASE WHEN ST_IsValid(geom) THEN geom
+                    WHEN ST_Dimension(geom) = 2
+                         THEN ST_CollectionExtract(ST_UnaryUnion(geom), 3)
                     ELSE geom END AS geom
           FROM t
+    ), tv AS (
+        SELECT id,
+               CASE WHEN ST_IsValid(geom) THEN geom
+                    ELSE ST_PointOnSurface(ST_Envelope(geom)) END AS geom
+          FROM tr
     )
 """
 
@@ -107,6 +125,11 @@ class Command(BaseCommand):
         parser.add_argument(
             '--batch-size', type=int, default=2000,
             help="Places per spatial query (default 2000).",
+        )
+        parser.add_argument(
+            '--statement-timeout', type=int, default=300, metavar='SECONDS',
+            help="Abandon any single spatial query that runs longer (default 300). "
+                 "The batch is then retried a place at a time.",
         )
         parser.add_argument(
             '--limit', type=int, default=None,
@@ -151,6 +174,12 @@ class Command(BaseCommand):
             )
             os.makedirs(os.path.dirname(log_path), exist_ok=True)
             self.stdout.write(f"Change log: {log_path}")
+
+        # A single 400,000-point empire polygon can otherwise sit on a connection
+        # for a very long time. On timeout the batch is caught below and retried
+        # place by place, so only the offender is lost.
+        with connection.cursor() as cur:
+            cur.execute("SET statement_timeout = %s", [opts['statement_timeout'] * 1000])
 
         seen = assigned = multi = by_tolerance = unmatched = 0
         codes_seen = {}
@@ -270,8 +299,9 @@ class Command(BaseCommand):
         if contested:
             shares = {}
             try:
-                for pid, iso, share in self._shares(contested):
-                    shares.setdefault(pid, []).append((iso, share or 0.0))
+                for pid, iso, of_place, of_country in self._shares(contested):
+                    shares.setdefault(pid, []).append(
+                        (iso, max(of_place or 0.0, of_country or 0.0)))
             except DatabaseError as e:
                 # Keep every intersecting country rather than dropping the batch;
                 # over-attribution beats losing the places entirely.
@@ -294,12 +324,21 @@ class Command(BaseCommand):
             return cur.fetchall()
 
     def _shares(self, ids):
-        """[(place id, ISO2, fraction of the place's area that country covers), …]."""
+        """[(place id, ISO2, share of the place, share of the country), …].
+
+        Both fractions matter. Judging by the place alone credits only the giants
+        when the place is something like "(British Empire)" — the United Kingdom
+        is a rounding error against that area, yet it is obviously one of its
+        countries. Judging by the country alone credits every micro-state a large
+        polygon happens to grip. A border sliver is small against *both*, which is
+        exactly what we want to drop."""
         with connection.cursor() as cur:
             cur.execute(_GEOM_CTE + """
                 SELECT tv.id, c.iso,
                        ST_Area(ST_Intersection(c.mpoly, tv.geom))
-                         / NULLIF(ST_Area(tv.geom), 0)
+                         / NULLIF(ST_Area(tv.geom), 0),
+                       ST_Area(ST_Intersection(c.mpoly, tv.geom))
+                         / NULLIF(ST_Area(c.mpoly), 0)
                   FROM tv JOIN countries c ON ST_Intersects(c.mpoly, tv.geom)
             """, {'ids': ids})
             return cur.fetchall()
