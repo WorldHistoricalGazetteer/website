@@ -115,6 +115,13 @@ class Command(BaseCommand):
                  "genuinely multinational and keeps them all (default 12).",
         )
         parser.add_argument(
+            '--max-share-parts', type=int, default=20, metavar='N',
+            help="Skip the overlap test for places built from more than N "
+                 "geometry rows (default 20). Those cost the most to test and "
+                 "are the least likely to be border slivers — a 20-piece polygon "
+                 "set is a deliberate multi-country shape.",
+        )
+        parser.add_argument(
             '--tolerance-km', type=float, default=0.0,
             help="Also accept the nearest country within this many km for "
                  "non-areal geometry that matched none (default 0 = off; 5 "
@@ -146,6 +153,7 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         self.min_share = opts['min_share']
         self.max_share_countries = opts['max_share_countries']
+        self.max_share_parts = opts['max_share_parts']
         tolerance_m = opts['tolerance_km'] * 1000.0
         batch_size = opts['batch_size']
         limit = opts['limit']
@@ -281,17 +289,21 @@ class Command(BaseCommand):
                     self.broken.append(pid)
                     logger.warning("Unusable geometry on place %s — skipped", pid)
 
-        hits, areal = {}, set()
-        for pid, dim, iso in rows:
+        hits, areal, parts = {}, set(), {}
+        for pid, dim, iso, nparts in rows:
             hits.setdefault(pid, []).append(iso)
+            parts[pid] = max(parts.get(pid, 0), nparts)
             if dim == 2:
                 areal.add(pid)
 
         # Only areal places matching several countries need the overlap test —
-        # and a place matching a great many is multinational by nature, not the
-        # victim of a border sliver, so it keeps the lot.
+        # and a place matching a great many, or built from a great many pieces,
+        # is multinational by nature rather than the victim of a border sliver,
+        # so it keeps the lot. Those are also the ones that cost the most to
+        # test, which is why the guards pay for themselves twice.
         contested = sorted(pid for pid in areal
-                           if 1 < len(hits[pid]) <= self.max_share_countries)
+                           if 1 < len(hits[pid]) <= self.max_share_countries
+                           and parts.get(pid, 1) <= self.max_share_parts)
         if contested:
             shares = {}
             try:
@@ -311,12 +323,15 @@ class Command(BaseCommand):
         return {pid: sorted(set(codes)) for pid, codes in hits.items()}
 
     def _intersect(self, ids):
-        """[(place id, dimension, ISO2), …] — one row per country a place meets,
-        de-duplicated across its parts."""
+        """[(place id, dimension, ISO2, geometry-row count), …] — one row per
+        country a place meets, de-duplicated across its parts."""
         with connection.cursor() as cur:
             cur.execute(_PARTS_CTE + """
-                SELECT parts.id, max(ST_Dimension(parts.geom)), c.iso
-                  FROM parts JOIN countries c ON ST_Intersects(c.mpoly, parts.geom)
+                , sizes AS (SELECT id, count(*) AS n FROM parts GROUP BY id)
+                SELECT parts.id, max(ST_Dimension(parts.geom)), c.iso, max(sizes.n)
+                  FROM parts
+                  JOIN countries c ON ST_Intersects(c.mpoly, parts.geom)
+                  JOIN sizes ON sizes.id = parts.id
                  GROUP BY parts.id, c.iso
             """, {'ids': ids})
             return cur.fetchall()
