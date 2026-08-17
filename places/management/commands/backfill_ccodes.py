@@ -50,7 +50,7 @@ from datetime import datetime, timezone
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection, transaction
+from django.db import DatabaseError, connection, transaction
 from django.db.models import Exists, OuterRef, Q
 
 from places.models import Place, PlaceGeom
@@ -58,8 +58,11 @@ from places.models import Place, PlaceGeom
 logger = logging.getLogger(__name__)
 
 # One place's geometry, collected across its place_geom rows and repaired if
-# areal — a self-intersecting upload would otherwise abort the whole batch when
-# PostGIS tried to intersect it.
+# areal — a self-intersecting upload would otherwise abort the batch when PostGIS
+# tried to intersect it. ST_MakeValid alone is not enough: it can hand back a
+# collection with leftover lines and points, which GEOSIntersects then chokes on,
+# so keep only the polygonal parts. A handful of shapes defeat even that (see
+# `_match`, which isolates them rather than losing the batch).
 _GEOM_CTE = """
     WITH t AS (
         SELECT g.place_id AS id, ST_Collect(g.geom) AS geom
@@ -69,7 +72,9 @@ _GEOM_CTE = """
          GROUP BY g.place_id
     ), tv AS (
         SELECT id,
-               CASE WHEN ST_Dimension(geom) = 2 THEN ST_MakeValid(geom) ELSE geom END AS geom
+               CASE WHEN ST_Dimension(geom) = 2
+                    THEN ST_CollectionExtract(ST_MakeValid(geom), 3)
+                    ELSE geom END AS geom
           FROM t
     )
 """
@@ -149,6 +154,7 @@ class Command(BaseCommand):
 
         seen = assigned = multi = by_tolerance = unmatched = 0
         codes_seen = {}
+        self.broken = []
         log = open(log_path, 'a', encoding='utf-8') if log_path else None
         try:
             for ids in self._batches(targets, batch_size, limit):
@@ -157,7 +163,11 @@ class Command(BaseCommand):
                 if tolerance_m:
                     missing = [i for i in ids if i not in found]
                     if missing:
-                        near = self._match_nearest(missing, tolerance_m)
+                        try:
+                            near = self._match_nearest(missing, tolerance_m)
+                        except DatabaseError as e:
+                            logger.warning("Tolerance pass failed (%s); skipped", e)
+                            near = {}
                         by_tolerance += len(near)
                         found.update(near)
 
@@ -188,6 +198,13 @@ class Command(BaseCommand):
                 "  Unmatched places are usually genuinely countryless — open ocean "
                 "(bathymetry, wrecks) or outside the countries table's coverage."
             )
+        if self.broken:
+            self.stdout.write(self.style.WARNING(
+                f"  {len(self.broken):,} place(s) have geometry PostGIS could not "
+                f"compare even after repair, and were skipped: "
+                f"{', '.join(str(i) for i in self.broken[:20])}"
+                + (" …" if len(self.broken) > 20 else "")
+            ))
         if top:
             self.stdout.write("  Most-assigned: " + ", ".join(
                 f"{code} {n:,}" for code, n in top))
@@ -225,12 +242,20 @@ class Command(BaseCommand):
 
     def _match(self, ids, min_share):
         """{place id: [ISO2, …]} for places whose geometry falls in a country."""
-        with connection.cursor() as cur:
-            cur.execute(_GEOM_CTE + """
-                SELECT tv.id, ST_Dimension(tv.geom), c.iso
-                  FROM tv JOIN countries c ON ST_Intersects(c.mpoly, tv.geom)
-            """, {'ids': ids})
-            rows = cur.fetchall()
+        try:
+            rows = self._intersect(ids)
+        except DatabaseError as e:
+            # A geometry PostGIS cannot even compare (typically "side location
+            # conflict"). Re-run the batch one place at a time so the offender is
+            # skipped alone instead of costing us the other 1,999.
+            logger.warning("Batch intersect failed (%s); isolating places", e)
+            rows = []
+            for pid in ids:
+                try:
+                    rows.extend(self._intersect([pid]))
+                except DatabaseError:
+                    self.broken.append(pid)
+                    logger.warning("Unusable geometry on place %s — skipped", pid)
 
         hits, areal = {}, set()
         for pid, dim, iso in rows:
@@ -243,16 +268,14 @@ class Command(BaseCommand):
         # everywhere else.
         contested = sorted(pid for pid in areal if len(hits[pid]) > 1)
         if contested:
-            with connection.cursor() as cur:
-                cur.execute(_GEOM_CTE + """
-                    SELECT tv.id, c.iso,
-                           ST_Area(ST_Intersection(c.mpoly, tv.geom))
-                             / NULLIF(ST_Area(tv.geom), 0)
-                      FROM tv JOIN countries c ON ST_Intersects(c.mpoly, tv.geom)
-                """, {'ids': contested})
-                shares = {}
-                for pid, iso, share in cur.fetchall():
+            shares = {}
+            try:
+                for pid, iso, share in self._shares(contested):
                     shares.setdefault(pid, []).append((iso, share or 0.0))
+            except DatabaseError as e:
+                # Keep every intersecting country rather than dropping the batch;
+                # over-attribution beats losing the places entirely.
+                logger.warning("Overlap test failed (%s); keeping all matches", e)
             for pid, pairs in shares.items():
                 kept = [iso for iso, share in pairs if share >= min_share]
                 if not kept:  # everything is a sliver — keep the best of them
@@ -261,21 +284,41 @@ class Command(BaseCommand):
 
         return {pid: sorted(set(codes)) for pid, codes in hits.items()}
 
+    def _intersect(self, ids):
+        """[(place id, dimension, ISO2), …] for every country each place meets."""
+        with connection.cursor() as cur:
+            cur.execute(_GEOM_CTE + """
+                SELECT tv.id, ST_Dimension(tv.geom), c.iso
+                  FROM tv JOIN countries c ON ST_Intersects(c.mpoly, tv.geom)
+            """, {'ids': ids})
+            return cur.fetchall()
+
+    def _shares(self, ids):
+        """[(place id, ISO2, fraction of the place's area that country covers), …]."""
+        with connection.cursor() as cur:
+            cur.execute(_GEOM_CTE + """
+                SELECT tv.id, c.iso,
+                       ST_Area(ST_Intersection(c.mpoly, tv.geom))
+                         / NULLIF(ST_Area(tv.geom), 0)
+                  FROM tv JOIN countries c ON ST_Intersects(c.mpoly, tv.geom)
+            """, {'ids': ids})
+            return cur.fetchall()
+
     def _match_nearest(self, ids, tolerance_m):
         """{place id: [ISO2]} for non-areal geometry just outside a country —
         coastal and island places lost to a coarse country outline."""
         with connection.cursor() as cur:
             cur.execute(_GEOM_CTE + """
-                SELECT tv.id, n.iso
-                  FROM tv
+                SELECT p.id, n.iso
+                  FROM (SELECT id, geom FROM tv WHERE ST_Dimension(geom) < 2) p
                   CROSS JOIN LATERAL (
                       SELECT c.iso,
-                             ST_Distance(c.mpoly::geography, tv.geom::geography) AS dist
+                             ST_Distance(c.mpoly::geography, p.geom::geography) AS dist
                         FROM countries c
-                       ORDER BY c.mpoly <-> tv.geom
+                       ORDER BY c.mpoly <-> p.geom
                        LIMIT 1
                   ) n
-                 WHERE ST_Dimension(tv.geom) < 2 AND n.dist <= %(tol)s
+                 WHERE n.dist <= %(tol)s
             """, {'ids': ids, 'tol': tolerance_m})
             return {pid: [iso] for pid, iso in cur.fetchall()}
 
