@@ -762,6 +762,11 @@ def _adapt_hits(data: dict) -> list[dict]:
                 # Forward the gateway's authority/Wikipedia links so make_candidate can surface
                 # Wikipedia enrichment for Wikidata-backed candidates (previously dropped here).
                 "links": hit.get("links", []) or [],
+                # The place's own AAT types, so a client can enrich with what the record IS
+                # rather than the protocol's entity type ("Place"). Dropped here previously,
+                # which left every gateway candidate typeless. See place#184.
+                "types": hit.get("types", []) or [],
+                "aat_ids": hit.get("aat_ids", []) or [],
                 # Mark as CRC-sourced so make_candidate can optionally tag it
                 "_crc_source": True,
             },

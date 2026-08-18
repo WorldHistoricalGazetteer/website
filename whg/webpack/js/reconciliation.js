@@ -1664,6 +1664,26 @@ function certaintyFor(match) {
   return score >= 70 ? 'less-certain' : 'uncertain';
 }
 
+// The reader's Wikipedia edition for a match: their chosen interface language, else English, else
+// whatever the place has. `whg_lang` is the same preference that drives map labels (place#… language
+// preference), so an export follows the language the user has been reading the site in.
+function preferredWikipedia(match) {
+  const arts = (match && match.cand && match.cand.wikipedia) || [];
+  if (!arts.length) return '';
+  let lang = 'en';
+  try { lang = (localStorage.getItem('whg_lang') || 'en').split('-')[0].toLowerCase(); } catch (_) { /* default */ }
+  const pick = arts.find((w) => (w.lang || '').toLowerCase() === lang)
+    || arts.find((w) => (w.lang || '').toLowerCase() === 'en')
+    || arts[0];
+  return (pick && pick.url) || '';
+}
+// The AAT types the MATCHED record carries (`place_types` from /reconcile) — what the place is, as
+// opposed to the OpenRefine entity type, which is "Place" for everything.
+function matchPlaceTypes(match) {
+  const t = (match && match.cand && match.cand.place_types) || [];
+  return t.filter((x) => x && (x.identifier || x.label));
+}
+
 function currentExportOptions() {
   const fmtEl = document.querySelector('input[name="recon-exp-fmt"]:checked');
   return {
@@ -1772,16 +1792,22 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_lat = mc ? +mc.lat.toFixed(6) : '';
       aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || []).join('; ')) || '';
       aug.whg_match_description = (f && f.cand && f.cand.description) || '';
-      aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
+      // The place's own AAT types. This used to read `cand.type`, which is the OpenRefine entity
+      // type — so every row said "Place" whatever it was.
+      aug.whg_match_types = matchPlaceTypes(f).map((t) => t.label || t.identifier).join('; ');
     }
     if (wikiHeader) {
-      // Wikipedia article URL(s) from Wikidata sitelinks surfaced by /reconcile, across resolved
-      // matches. Blank unless the row was reconciled to a Wikidata (wd) record.
-      aug[wikiHeader] = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
+      // ONE article per match, in the reader's own language where the place has it. A Wikidata
+      // record carries a sitelink for every language edition it appears in — Reykjavík has 80-odd —
+      // and dumping them all made the column unreadable and unusable. Blank unless the row was
+      // reconciled to a record carrying sitelinks (in practice, a Wikidata one).
+      aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents });
   }
-  return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
+  // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
+  // the Wikipedia link were asked for, and it is handed only this object.
+  return { origHeaders: project.columns.map((c) => c.name), augHeaders, records, opts };
 }
 
 // Minimal GeoJSON-geometry → WKT (Point / LineString / Polygon) for the LP-TSV geowkt column.
@@ -1854,6 +1880,7 @@ function serializeLPTSV(data) {
 // Build the LPF FeatureCollection OBJECT (used both for serialisation and for in-browser validation).
 function buildLPF(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name'), countryIdx = colIndexByRole('country');
+  const opts = data.opts || {};
   const features = data.records.map((rec, i) => {
     const title = nameIdx >= 0 ? String(rec.orig[nameIdx] || '') : '';
     const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
@@ -1867,6 +1894,19 @@ function buildLPF(data) {
     const names = [];
     if (title) names.push({ toponym: title });
     rowVariants(rec.row).forEach((v) => { if (v && v !== title) names.push({ toponym: v }); });
+    // Enrichment: the matched record's own toponyms. Opt-in (the Enrich box), and each carries a
+    // citation naming the record it came from, so a reader can tell the contributor's names from the
+    // gazetteer's. Previously these reached the CSV and were dropped from the LPF entirely (place#184).
+    if (opts.enrich && rec.match && rec.match.first) {
+      const seen = new Set(names.map((n) => n.toponym.toLowerCase()));
+      const src = barePlaceId(rec.match.first.id);
+      ((rec.match.first.cand && rec.match.first.cand.alt_names) || []).forEach((v) => {
+        const t = String(v || '').trim();
+        if (!t || seen.has(t.toLowerCase())) return;
+        seen.add(t.toLowerCase());
+        names.push({ toponym: t, citations: [{ label: `WHG reconciliation match ${src}`, '@id': src }] });
+      });
+    }
     const feat = {
       '@id': atId,
       type: 'Feature',
@@ -1877,7 +1917,17 @@ function buildLPF(data) {
     // rows without their own type fall back to the global Scope → "What" AAT selection.
     const rt = rowTypesFor(rec.row);
     if (rt.length) feat.types = rt.map((t) => ({ identifier: t.id, label: t.text }));  // LPF place types (needed to contribute)
-    else { const st = (scopeTypes().selected) || []; if (st.length) feat.types = st.map((t) => ({ identifier: t.id, label: t.text })); }
+    else {
+      const st = (scopeTypes().selected) || [];
+      if (st.length) feat.types = st.map((t) => ({ identifier: t.id, label: t.text }));
+      // Enrichment: fall back to the AAT types the MATCHED record carries. A row typed by neither the
+      // user nor the dataset scope would otherwise export untyped — and place type is one of the
+      // fields WHG's ingest requires, so this is often what makes an export contributable.
+      else if (opts.enrich) {
+        const mt = matchPlaceTypes(rec.match && rec.match.first);
+        if (mt.length) feat.types = mt.map((t) => ({ identifier: t.identifier, label: t.label }));
+      }
+    }
     // Temporality: per-row parsed dates, else the global Scope → "When" year range (Scope period(s)
     // below). Build only the bounds that exist — an empty {in: undefined} fails LPF validation.
     const timespanFrom = (a, b) => {
@@ -1894,6 +1944,19 @@ function buildLPF(data) {
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
+    else if (opts.enrich && rec.match && rec.match.first && _candCoord[rec.match.first.id]) {
+      // Enrichment: the matched record's location, for a row that brought no coordinates of its own.
+      // It is the gazetteer's point, not the contributor's, so it is cited as such and marked
+      // less-certain — this is a located-by-match, not a surveyed position (place#184).
+      const mc = _candCoord[rec.match.first.id];
+      const src = barePlaceId(rec.match.first.id);
+      feat.geometry = {
+        type: 'Point',
+        coordinates: [+mc.lon.toFixed(6), +mc.lat.toFixed(6)],
+        certainty: 'less-certain',
+        citations: [{ label: `WHG reconciliation match ${src}`, '@id': src }],
+      };
+    }
     // Each accepted/auto-confirmed match becomes a closeMatch link, carrying WHG's reconciliation
     // confidence under the SAME name the CSV/JSON exports use, so the score is findable by one name in
     // every format. `whg_match_score` is not an LPF term, but the schema puts no additionalProperties
@@ -1918,17 +1981,27 @@ function buildLPF(data) {
         return rel;
       });
     }
-    if (rec.match) feat.links = rec.match.list.map((x) => {
-      // `certainty` is LPF's own confidence vocabulary. The spec offers it on relations but not on
-      // links, which is a gap — a link is an assertion ("this place closeMatches that one") and a
-      // reconciliation has a confidence in it. WHG's schema copy admits it on links (to be proposed
-      // upstream); consumers that don't know the field ignore it, and the numeric score is carried
-      // alongside for those that want the raw value. See place#184.
-      const link = { type: 'closeMatch', identifier: barePlaceId(x.id), certainty: certaintyFor(x) };
-      const score = Number(x.score);
-      if (Number.isFinite(score)) link.whg_match_score = score;
-      return link;
-    });
+    const links = [];
+    if (rec.match) {
+      rec.match.list.forEach((x) => {
+        // `certainty` is LPF's own confidence vocabulary. The spec offers it on relations but not on
+        // links, which is a gap — a link is an assertion ("this place closeMatches that one") and a
+        // reconciliation has a confidence in it. WHG's schema copy admits it on links (proposed
+        // upstream as LinkedPasts/linked-places-format#52); consumers that don't know the field
+        // ignore it, and the numeric score is carried alongside for those that want the raw value.
+        const link = { type: 'closeMatch', identifier: barePlaceId(x.id), certainty: certaintyFor(x) };
+        const score = Number(x.score);
+        if (Number.isFinite(score)) link.whg_match_score = score;
+        links.push(link);
+      });
+      // The Wikipedia article as LPF's own `primaryTopicOf` — the term the spec documents for exactly
+      // this. Opt-in with the Wikipedia box, and previously it only ever reached the CSV (place#184).
+      if (opts.wikipedia) {
+        [...new Set(rec.match.list.map(preferredWikipedia).filter(Boolean))]
+          .forEach((url) => links.push({ type: 'primaryTopicOf', identifier: url }));
+      }
+    }
+    if (links.length) feat.links = links;
     return feat;
   });
   const fc = {
