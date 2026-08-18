@@ -1,0 +1,90 @@
+<style>
+  .suggest-wrap { max-width: 680px; margin: 1.75rem auto; }
+    .suggest-wrap label { font-weight: 600; font-size: .9rem; margin-bottom: .15rem; }
+    .suggest-wrap .form-text { margin-top: 0; }
+  /* In the draggable panel the panel header already names the form. */
+  .whg-beta-report .beta-form-heading { display: none; }
+  .whg-beta-report .snag-wrap, .whg-beta-report .suggest-wrap { margin: .5rem auto; }
+</style>
+{% load static %}
+{% comment %}
+  The beta suggestion form itself, without the page chrome. Rendered standalone at
+  /beta/suggestion/ and injected into the draggable in-page panel
+  (beta-diag.js) when ?embed=1 — the panel keeps the tester on the page they are reporting about, so
+  neither their view of it nor any unsaved work is lost. See place#181.
+{% endcomment %}
+<div class="suggest-wrap px-3">
+  <div class="d-flex align-items-center gap-2 mb-1 beta-form-heading">
+    <h1 class="h4 mb-0">Suggest an improvement</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+  </div>
+
+  {% if submitted %}
+    <div class="alert alert-success">
+      <p class="mb-1"><strong>Thank you — your suggestion was logged.</strong></p>
+      {% if github_url %}
+        <p class="mb-0">It's now on the tracker: <a href="{{ github_url }}" target="_blank" rel="noopener">{{ github_url }}</a></p>
+      {% else %}
+        <p class="mb-0">The team has been notified. (It's saved even though it wasn't auto-posted to the tracker.)</p>
+      {% endif %}
+    </div>
+    <p><a href="javascript:window.close()" class="btn btn-sm btn-outline-secondary">Close</a>
+       <a href="{% url 'beta-suggestion' %}" class="btn btn-sm btn-outline-primary">Suggest another</a></p>
+  {% else %}
+    <p class="text-muted">Got an idea for how WHG could work better? Tell us what you'd like to see —
+      this goes straight to our planning tracker as a suggestion. (For something that's broken, use
+      <a href="{% url 'beta-snag' %}">Report a snag</a> instead so we can capture the diagnostics.)</p>
+    {% if error %}<div class="alert alert-danger py-2">{{ error }}</div>{% endif %}
+
+    <form method="post" action="{% url 'beta-suggestion' %}" id="suggest-form">
+      {% csrf_token %}
+      <input type="hidden" name="page_url" id="suggest-page" value="{{ page }}">
+
+      <div class="mb-3">
+        <label for="suggest-title">Short title</label>
+        <input class="form-control" name="title" id="suggest-title" maxlength="300" required
+               value="{{ form.title|default:'' }}" placeholder="e.g. Let me sort the place list by date">
+      </div>
+      <div class="mb-3">
+        <label for="suggest-feature">Feature area <span class="text-muted fw-normal">(optional)</span></label>
+        <select class="form-select" name="feature" id="suggest-feature">
+          <option value="">— choose —</option>
+          <option>Atlas / Explore</option>
+          <option>Gazetteers</option>
+          <option>Record correction editor</option>
+          <option>Geometry drawing</option>
+          <option>Community suggestions</option>
+          <option>Dataset check-out</option>
+          <option>Place Collection editor</option>
+          <option>Itinerary editor</option>
+          <option>Gazetteer Group editor</option>
+          <option>Map your Data (reconciliation)</option>
+          <option>Collaboration &amp; sharing</option>
+          <option>Add places from text (NER)</option>
+          <option>Navigation / access / other</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label for="suggest-what">Your suggestion</label>
+        <textarea class="form-control" name="what" id="suggest-what" rows="5"
+                  placeholder="What would you like to see, and why would it help?">{{ form.what|default:'' }}</textarea>
+      </div>
+      <p class="small text-muted">Filed as
+        {% if user.github_username %}<strong>@{{ user.github_username }}</strong> on GitHub, so we can
+        mention you there if we need to ask a follow-up question. Change it in your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a>.
+        {% else %}<strong>{{ user.name|default:user.username }}</strong>. Add a GitHub username to your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a> and we can mention
+        you on the issue instead, so GitHub notifies you of follow-up questions.{% endif %}</p>
+      <button type="submit" class="btn btn-success"><i class="fas fa-lightbulb me-1"></i>Send suggestion</button>
+    </form>
+  {% endif %}
+</div>
+
+<script type="text/javascript">
+(function () {
+  // If no ?page= was passed, fall back to the referrer (the page the tester came from).
+  var page = document.getElementById('suggest-page');
+  if (page && !page.value) page.value = document.referrer || '';
+})();
+</script>

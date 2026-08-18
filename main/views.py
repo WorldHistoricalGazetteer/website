@@ -772,6 +772,18 @@ def _file_snag_to_github(snag, user):
     return ''
 
 
+def _beta_form_response(request, name, ctx):
+    """Render a beta report form either as a full page or as the bare fragment.
+
+    The fragment is what the in-page panel injects (``?embed=1``): a tester who hits a
+    problem should not have to leave the screen they hit it on — navigating away loses
+    both the view they were describing and any unsaved work behind it (place#181).
+    """
+    embed = (request.GET.get('embed') or request.POST.get('embed') or '') in ('1', 'true', 'yes')
+    template = f'main/_{name}_form.html' if embed else f'main/{name}.html'
+    return render(request, template, ctx)
+
+
 @login_required
 def beta_snag(request):
     if not request.user.can_access_beta:
@@ -781,9 +793,9 @@ def beta_snag(request):
         d = request.POST
         title = (d.get('title') or '').strip()
         if not title:
-            return render(request, 'main/beta_snag.html',
-                          {'error': 'Please give the problem a short title.', 'form': d,
-                           'page': d.get('page_url', '')})
+            return _beta_form_response(request, 'beta_snag',
+                                       {'error': 'Please give the problem a short title.', 'form': d,
+                                        'page': d.get('page_url', '')})
         snag = BetaSnag.objects.create(
             reporter=request.user, title=title[:300],
             what=(d.get('what') or '')[:8000], expected=(d.get('expected') or '')[:8000],
@@ -794,9 +806,9 @@ def beta_snag(request):
         if gh_url:
             snag.github_url = gh_url
             snag.save(update_fields=['github_url'])
-        return render(request, 'main/beta_snag.html', {'submitted': snag, 'github_url': gh_url})
-    return render(request, 'main/beta_snag.html',
-                  {'page': request.GET.get('page', ''), 'session': request.GET.get('session', '')})
+        return _beta_form_response(request, 'beta_snag', {'submitted': snag, 'github_url': gh_url})
+    return _beta_form_response(request, 'beta_snag',
+                                {'page': request.GET.get('page', ''), 'session': request.GET.get('session', '')})
 
 
 @login_required
@@ -812,8 +824,8 @@ def beta_suggestion(request):
         d = request.POST
         title = (d.get('title') or '').strip()
         if not title:
-            return render(request, 'main/beta_suggestion.html',
-                          {'error': 'Please give your suggestion a short title.', 'form': d})
+            return _beta_form_response(request, 'beta_suggestion',
+                                       {'error': 'Please give your suggestion a short title.', 'form': d})
         suggestion = BetaSnag.objects.create(
             kind='suggestion', reporter=request.user, title=title[:300],
             what=(d.get('what') or '')[:8000], feature=(d.get('feature') or '')[:80],
@@ -822,8 +834,8 @@ def beta_suggestion(request):
         if gh_url:
             suggestion.github_url = gh_url
             suggestion.save(update_fields=['github_url'])
-        return render(request, 'main/beta_suggestion.html', {'submitted': suggestion, 'github_url': gh_url})
-    return render(request, 'main/beta_suggestion.html', {'page': request.GET.get('page', '')})
+        return _beta_form_response(request, 'beta_suggestion', {'submitted': suggestion, 'github_url': gh_url})
+    return _beta_form_response(request, 'beta_suggestion', {'page': request.GET.get('page', '')})
 
 
 @login_required
