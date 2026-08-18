@@ -1223,7 +1223,13 @@ def reconcile_place_es(query, user=None):
     # `whg`-only query as well: the gateway serves that namespace, so a scoped WHG query is answered
     # from the accessioned corpus with the scope actually enforced, rather than from the whole legacy
     # index with the scope quietly ignored. See the gateway-side handoff (place#144).
-    contained_in = bool((query.get("raw") or {}).get("contained_in"))
+    # Any SPATIAL constraint, not just containment: the legacy index can filter on neither, so a
+    # drawn area or a per-row `lat`/`lng`/`radius` circle leaked unfiltered legacy hits into an
+    # otherwise-scoped result — a 20km circle around Devon returned a Newport in Virginia.
+    raw_q = query.get("raw") or {}
+    spatially_scoped = bool(raw_q.get("contained_in")
+                            or query.get("bounds")
+                            or all(k in raw_q for k in ("lat", "lng", "radius")))
     # The gateway indexes WHG's own accessioned datasets too, under the same
     # `whg:<dataset_id>:<src_id>` identifiers this service mints, so `whg` is passed
     # THROUGH to it rather than withheld: withholding made those records unreachable
@@ -1232,7 +1238,7 @@ def reconcile_place_es(query, user=None):
     # dedupes across them by place key rather than by raw id. See place#183.
     crc_namespaces = namespaces  # None ⇒ don't filter on the gateway side
     gateway_in_play = namespaces is None or bool(namespaces)
-    suppress_legacy = contained_in and gateway_in_play
+    suppress_legacy = spatially_scoped and gateway_in_play
 
     # 1. Legacy ES search — skip when the caller excluded "whg", or when an unenforceable containment
     #    scope is active and the gateway will serve the (properly scoped) results.
@@ -1240,7 +1246,7 @@ def reconcile_place_es(query, user=None):
     if (namespaces is None or WHG_NAMESPACE in namespaces) and not suppress_legacy:
         legacy_hits = es_search(query=query)
     elif suppress_legacy:
-        logger.info("reconcile: suppressing legacy hits — contained_in scope is enforced gateway-side only")
+        logger.info("reconcile: suppressing legacy hits — spatial scope is enforced gateway-side only")
 
     # 2. CRC gateway search (fail-safe: returns [] on error)
     #    Compute the CRC-specific namespace set (everything except "whg").
@@ -1260,7 +1266,7 @@ def reconcile_place_es(query, user=None):
     # hits (they can't honour it), so returning a bare empty list would look like "no matches". Report
     # it as an unapplied scope instead, so the client explains the empty result rather than implying
     # the data is at fault.
-    if scope_info is None and crc_meta.get("error") and (contained_in or query.get("bounds")):
+    if scope_info is None and crc_meta.get("error") and spatially_scoped:
         scope_info = {
             "requested": True,
             "applied": False,

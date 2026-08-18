@@ -3782,6 +3782,77 @@ function updateProgress(done, total) {
   el('recon-progress-text').textContent = `${done.toLocaleString()} / ${total.toLocaleString()} rows (${pct}%)`;
 }
 
+// ── Spatial constraints (place#184) ─────────────────────────────────────────
+// Two filters, both enforced by the gateway rather than used as ranking hints. The row-coordinate
+// circle answers "my table already says where this is" — the strongest disambiguator a dataset can
+// carry, and previously ignored entirely. The containment knobs expose what the chain has always
+// sent as fixed values: `fuzzy` tests membership against an H3 grid (fast, tolerant) and
+// `intersects` accepts any overlap, which is why a confirmed county did not strictly bound results.
+function spatialSettings() {
+  const d = { nearby: false, radiusKm: 25, containment: 'fuzzy', relation: 'intersects' };
+  const s = (project && project.spatial) || {};
+  return {
+    nearby: s.nearby != null ? !!s.nearby : d.nearby,
+    radiusKm: Number.isFinite(+s.radiusKm) && +s.radiusKm > 0 ? +s.radiusKm : d.radiusKm,
+    containment: s.containment === 'exact' ? 'exact' : d.containment,
+    relation: s.relation === 'within' ? 'within' : d.relation,
+  };
+}
+// Great-circle distance in km — for the client-side radius check below.
+function haversineKm(a, b) {
+  const R = 6371, toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+  const s1 = Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s1)));
+}
+
+// Reflect the saved spatial settings, and offer the coordinate circle only when the dataset has
+// coordinates to filter by — an unusable checkbox is worse than none.
+function refreshSpatialControls() {
+  const sp = spatialSettings();
+  const wrap = el('recon-nearby-wrap');
+  const has = hasCoordRole();
+  if (wrap) wrap.classList.toggle('d-none', !has);
+  const cb = el('recon-nearby'); if (cb) cb.checked = has && sp.nearby;
+  const rad = el('recon-nearby-radius'); if (rad) { rad.value = sp.radiusKm; rad.disabled = !(has && sp.nearby); }
+  const con = el('recon-containment'); if (con) con.value = sp.containment;
+  const rel = el('recon-relation'); if (rel) rel.value = sp.relation;
+  const note = el('recon-spatial-note');
+  if (note) {
+    const bits = [];
+    if (has && sp.nearby) bits.push(`matches must lie within ${sp.radiusKm} km of each row`);
+    if (sp.relation === 'within') bits.push('a place must lie WHOLLY inside its container — historic boundaries rarely nest, so this can return nothing');
+    note.textContent = bits.join(' · ');
+  }
+}
+// Save a spatial setting. Existing matches were found under the OLD constraint, so they are left
+// alone and flagged stale — the same treatment a Sources change gets — rather than silently
+// discarded or, worse, silently kept as if they still met the filter.
+function setSpatialSetting(patch) {
+  if (!project) return;
+  project.spatial = Object.assign({}, spatialSettings(), patch);
+  persist();
+  refreshSpatialControls();
+  if (project.matches && Object.keys(project.matches).length) {
+    reconStaleNote = 'Spatial constraints changed — re-reconcile a column to apply them to its matches.';
+    renderColSwitcher();
+  }
+}
+function wireSpatialControls() {
+  const cb = el('recon-nearby');
+  if (cb) cb.addEventListener('change', () => setSpatialSetting({ nearby: cb.checked }));
+  const rad = el('recon-nearby-radius');
+  if (rad) rad.addEventListener('change', () => {
+    const km = parseFloat(rad.value);
+    setSpatialSetting({ radiusKm: Number.isFinite(km) && km > 0 ? km : 25 });
+  });
+  const con = el('recon-containment');
+  if (con) con.addEventListener('change', () => setSpatialSetting({ containment: con.value }));
+  const rel = el('recon-relation');
+  if (rel) rel.addEventListener('change', () => setSpatialSetting({ relation: rel.value }));
+}
+
 function getThreshold() {
   const box = el('recon-threshold');
   const n = box ? parseInt(box.value, 10) : NaN;
@@ -5365,6 +5436,7 @@ function refreshReconSection() {
   el('recon-recon').classList.remove('d-none'); // header always visible once a dataset is loaded
   const thr = el('recon-threshold');
   if (thr && project && project.autoThreshold != null) thr.value = project.autoThreshold;
+  refreshSpatialControls();
   if (hasName && project.matches && Object.keys(project.matches).length) {
     const built = buildUniqueQueries();
     if (built) renderResults(built);
@@ -5649,9 +5721,11 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
     const slice = units.slice(b, b + RECON_BATCH);
     const queries = {};
     const nsf = getNsFilter(colIndex); // this column's own source gazetteers
+    const sp = spatialSettings();      // coordinate circle + containment strictness
     slice.forEach((u, j) => {
       const key = u.repKey, v = u.v, row = key.slice(key.indexOf(':') + 1);
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
+      const rowCoord = (sp.nearby && hasCoordRole()) ? rowCoordValue(Number(row)) : null;
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
@@ -5684,7 +5758,12 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       for (let a = ancestorCols.length - 1; a >= 0 && !pids.length; a--) {
         pids = resolvedPlaceIds(ancestorCols[a], row).map(barePlaceId);
       }
-      if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'intersects'; }
+      if (pids.length) { q.contained_in = pids; q.containment = sp.containment; q.relation = sp.relation; }
+      // The row's own coordinate as a circular filter. The service converts lat/lng/radius into a
+      // bounding polygon and filters on it — so a row that says where it is can no longer match a
+      // same-named place on another continent. Sent alongside containment; where both apply the
+      // service honours the container, so the radius is also enforced locally on the results.
+      if (sp.nearby && rowCoord) { q.lat = +rowCoord.lat.toFixed(6); q.lng = +rowCoord.lon.toFixed(6); q.radius = sp.radiusKm; }
       applyGlobalScopeToQuery(q, parentCol < 0, !!v.country, colIndex); // scope: dataset-wide, or this column's own types
       queries['q' + j] = q;
     });
@@ -5705,7 +5784,22 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
         const sent = perRow ? rowVariants(u.repKey.slice(u.repKey.indexOf(':') + 1)).length : 0;
         if (sent > qd.variants_used.length) lastVariantsDropped += sent - qd.variants_used.length;
       }
-      const result = applyNsToCandidates(qd.result || [], colIndex);
+      let result = applyNsToCandidates(qd.result || [], colIndex);
+      // Enforce the radius here as well as on the service. Where a row has BOTH a confirmed
+      // container and a coordinate the service honours the container and ignores the circle, so
+      // without this the radius would silently not apply to exactly the rows that have the most
+      // context. Candidates with no known position are KEPT — a place without coordinates cannot be
+      // shown to be out of range, and dropping it would lose a valid match to a data gap.
+      if (sp.nearby && hasCoordRole()) {
+        const rc = rowCoordValue(Number(u.repKey.slice(u.repKey.indexOf(':') + 1)));
+        if (rc) {
+          result = result.filter((c) => {
+            const p = c && c.repr_point;
+            if (!Array.isArray(p) || p.length < 2) return true;
+            return haversineKm({ lat: rc.lat, lon: rc.lon }, { lat: p[1], lon: p[0] }) <= sp.radiusKm;
+          });
+        }
+      }
       const at = new Date().toISOString();
       // Fan the single reconciliation to every row sharing this value+containment (admin merge).
       u.memberKeys.forEach((mk) => {
@@ -5843,6 +5937,8 @@ function init() {
     if (built && project.matches && Object.keys(project.matches).length) renderResults(built);
     updateReconButton(); // threshold changes which rows auto-confirm → which stage is current
   });
+
+  wireSpatialControls();
 
   const showIgn = el('recon-show-ignored');
   if (showIgn) showIgn.addEventListener('change', () => { if (!project) return; project.showIgnored = showIgn.checked; persist(); renderPreview(); });

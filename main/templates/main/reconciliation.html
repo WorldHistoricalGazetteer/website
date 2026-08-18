@@ -287,6 +287,33 @@
         <span class="text-muted">(auto-detected — override if wrong)</span>
       </label>
     </div>
+    {% comment %}
+      Spatial constraints (place#184). The row-coordinate circle is only offered when the dataset
+      HAS coordinates — wireSpatialControls() unhides it. Containment defaults are the tolerant
+      pair the chain has always used; `within` + `exact` are offered because a user reconciling
+      against modern boundaries may want them, with the historic-boundary caveat spelled out.
+    {% endcomment %}
+    <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-spatial-bar">
+      <label class="mb-0 d-none" id="recon-nearby-wrap">
+        <input type="checkbox" id="recon-nearby">
+        Use my coordinates <span class="text-muted">— only match places within</span>
+        <input type="number" id="recon-nearby-radius" class="form-control form-control-sm d-inline-block"
+               style="width:72px" min="1" max="20000" step="1" value="25">
+        <span class="text-muted">km of each row's own position</span>
+      </label>
+      <label class="mb-0 d-flex align-items-center gap-1" id="recon-containment-wrap">
+        <span class="text-muted">Containment</span>
+        <select id="recon-containment" class="form-select form-select-sm py-0" style="width:auto">
+          <option value="fuzzy" selected>fuzzy (H3 grid — fast, tolerant)</option>
+          <option value="exact">exact (polygon geometry)</option>
+        </select>
+        <select id="recon-relation" class="form-select form-select-sm py-0" style="width:auto">
+          <option value="intersects" selected>intersects (any overlap)</option>
+          <option value="within">within (wholly inside)</option>
+        </select>
+      </label>
+      <span class="text-muted" id="recon-spatial-note"></span>
+    </div>
     <p class="text-muted small mb-2">
       <i class="fas fa-circle-info me-1"></i><strong>Place names</strong> are reconciled <strong>individually</strong>
       — identical names are <em>not</em> merged, so each row can be matched to a different place.
