@@ -275,6 +275,58 @@
                     {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
+                           aria-expanded="false">Data</a>
+                        {% comment %}
+                          The published galleries lead this menu (place#178). They are what a
+                          visitor came for, and they used to sit BELOW the signed-in user's own
+                          dashboard links — so the most interesting thing here was the least
+                          visible, under a heading called merely "Data".
+                        {% endcomment %}
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li>
+                                <a class="dropdown-item fw-semibold"
+                                   href="{% url 'datasets:dataset-gallery-type' gallery_type='datasets' %}">
+                                    Published Datasets</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item fw-semibold"
+                                   href="{% url 'datasets:dataset-gallery-type' gallery_type='collections' %}">
+                                    Published Collections</a>
+                            </li>
+                            {% is_whg_admin as user_is_whg_admin %}
+                            {% if user_is_whg_admin or user.is_authenticated %}
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            {% endif %}
+                            <li>
+                                {% if user_is_whg_admin %}
+                                <a class="dropdown-item" href="{% url 'dashboard-admin' %}">Admin Dashboard</a>
+                                {% endif %}
+                                {% if user.is_authenticated %}
+                                <a class="dropdown-item" href="{% url 'dashboard-user' %}">My Data</a>
+                                {% endif %}
+                    </li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
+                    </li>
+                    <li>
+                        <hr class="dropdown-divider">
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{% url 'submit-dataset' %}">Suggest a Source</a>
+                    </li>
+                </ul>
+                </li>
+                    <!-- about -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                            aria-expanded="false">
                             About </a>
                         <ul class="dropdown-menu dropdown-menu-end">
@@ -319,50 +371,6 @@
                             </li>
                         </ul>
                     </li>
-                    <!-- about -->
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
-                           aria-expanded="false">Data</a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li>
-                                {% is_whg_admin as user_is_whg_admin %}
-                                {% if user_is_whg_admin %}
-                                <a class="dropdown-item" href="{% url 'dashboard-admin' %}">Admin Dashboard</a>
-                                {% endif %}
-                                {% if user.is_authenticated %}
-                                <a class="dropdown-item" href="{% url 'dashboard-user' %}">My Data</a>
-                            <li>
-                                <hr class="dropdown-divider">
-                            </li>
-                            {% endif %}
-                    </li>
-                    <li>
-                        <a class="dropdown-item"
-                           href="{% url 'datasets:dataset-gallery-type' gallery_type='datasets' %}">
-                            Published Datasets</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item"
-                           href="{% url 'datasets:dataset-gallery-type' gallery_type='collections' %}">
-                            Published Collections</a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'submit-dataset' %}">Suggest a Source</a>
-                    </li>
-                </ul>
-                </li>
                 <li class="nav-item">
                     <a class="nav-link" data-bs-toggle="tooltip"
                        data-bs-title="<strong>Documentation</strong><br>Our Vision and mission, together with detailed guides, tutorials, and technical information. Includes instructions on datasets, place collections, system setup, and more.<br><i>Opens in a new tab.</i>"
