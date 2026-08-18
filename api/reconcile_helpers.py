@@ -106,7 +106,9 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
     """Map WHG place ids to Postgres ``Place`` pks, in any form this service has
     emitted: ``whg:<dataset_id>:<src_id>``, ``whg:<place_pk>``, or a bare numeric
     ``<place_pk>``. Ids that resolve to nothing — and gateway ids (``gn:…``) — are
-    absent from the result.
+    absent from the result. The indexing side disambiguates a duplicate src_id by
+    appending the place key (``whg:20:20155:91040``); such an id resolves to exactly
+    that place, while the bare ``whg:20:20155`` resolves to the lowest-pk sibling.
 
     Batched by dataset: one query per dataset named, not one per id. ``Place`` is
     keyed on the dataset LABEL (``to_field='label'``), so the dataset leaf is
@@ -128,6 +130,11 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
         else:
             # src_id may itself contain colons — only the dataset leaf is delimited.
             by_dataset.setdefault(int(parts[1]), {})[":".join(parts[2:])] = raw_id
+            # The indexing side disambiguates a duplicate src_id by appending the
+            # place key (`whg:20:20155:91040`), so also look up the id without that
+            # trailing key. Registered second, so an exact src_id match always wins.
+            if len(parts) >= 4 and parts[-1].isdigit():
+                by_dataset[int(parts[1])].setdefault(":".join(parts[2:-1]), raw_id)
 
     for ds_pk, wanted in by_dataset.items():
         # src_id is the contributor's identifier and is NOT guaranteed unique within a
@@ -140,8 +147,14 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
                            .order_by('src_id', 'id')
                            .values_list('id', 'src_id')):
             raw_id = wanted.get(src_id)
-            if raw_id is not None and raw_id not in resolved:
-                resolved[raw_id] = pk
+            if raw_id is None or raw_id in resolved:
+                continue
+            # A trailing place key names WHICH sibling is meant; honour it rather
+            # than collapsing every duplicate onto the lowest pk.
+            tail = str(raw_id).split(":")[-1]
+            if str(raw_id).count(":") >= 3 and tail.isdigit() and int(tail) != pk:
+                continue
+            resolved[raw_id] = pk
     return resolved
 
 
