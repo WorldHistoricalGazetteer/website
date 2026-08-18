@@ -106,7 +106,9 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
     """Map WHG place ids to Postgres ``Place`` pks, in any form this service has
     emitted: ``whg:<dataset_id>:<src_id>``, ``whg:<place_pk>``, or a bare numeric
     ``<place_pk>``. Ids that resolve to nothing — and gateway ids (``gn:…``) — are
-    absent from the result.
+    absent from the result. The indexing side disambiguates a duplicate src_id by
+    appending the place key (``whg:20:20155:91040``); such an id resolves to exactly
+    that place, while the bare ``whg:20:20155`` resolves to the lowest-pk sibling.
 
     Batched by dataset: one query per dataset named, not one per id. ``Place`` is
     keyed on the dataset LABEL (``to_field='label'``), so the dataset leaf is
@@ -114,6 +116,9 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
     """
     from places.models import Place
 
+    # {dataset_pk: {src_id: [(raw_id, exact_place_pk_or_None), …]}} — a src_id can be
+    # wanted by more than one raw id (the bare form and a disambiguated one), so this
+    # has to be a multimap, not a plain dict.
     resolved, by_dataset = {}, {}
     for raw_id in raw_ids:
         raw = str(raw_id or "").strip()
@@ -125,23 +130,39 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
             continue
         if len(parts) == 2:
             resolved[raw_id] = int(parts[1])
-        else:
-            # src_id may itself contain colons — only the dataset leaf is delimited.
-            by_dataset.setdefault(int(parts[1]), {})[":".join(parts[2:])] = raw_id
+            continue
+        ds = by_dataset.setdefault(int(parts[1]), {})
+        # src_id may itself contain colons — only the dataset leaf is delimited.
+        ds.setdefault(":".join(parts[2:]), []).append((raw_id, None))
+        # The indexing side disambiguates a duplicate src_id by appending the place
+        # key (`whg:20:20155:91040`). Register that reading too; the literal src_id
+        # above is tried first, so a src_id that genuinely ends in `:<digits>` wins.
+        if len(parts) >= 4 and parts[-1].isdigit():
+            ds.setdefault(":".join(parts[2:-1]), []).append((raw_id, int(parts[-1])))
 
     for ds_pk, wanted in by_dataset.items():
-        # src_id is the contributor's identifier and is NOT guaranteed unique within a
-        # dataset — 4,298 legacy places across 11 datasets share one with a sibling
-        # (0.16% of the table, all of them apparent duplicate records). Resolve to the
-        # LOWEST pk so an ambiguous id always dereferences to the same place rather
-        # than varying with row order. See place#172.
+        pks_by_src = {}
         for pk, src_id in (Place.objects
                            .filter(dataset__id=ds_pk, src_id__in=list(wanted))
                            .order_by('src_id', 'id')
                            .values_list('id', 'src_id')):
-            raw_id = wanted.get(src_id)
-            if raw_id is not None and raw_id not in resolved:
-                resolved[raw_id] = pk
+            pks_by_src.setdefault(src_id, []).append(pk)
+
+        # Pass 1 — the id names a src_id and nothing more. src_id is the
+        # contributor's identifier and is NOT unique within a dataset (4,298 legacy
+        # places across 11 datasets share one with a sibling, 0.16% of the table),
+        # so resolve to the LOWEST pk: an ambiguous id then always dereferences to
+        # the same place rather than varying with row order. See place#172.
+        for src_id, entries in wanted.items():
+            for raw_id, exact_pk in entries:
+                if exact_pk is None and raw_id not in resolved and pks_by_src.get(src_id):
+                    resolved[raw_id] = pks_by_src[src_id][0]
+        # Pass 2 — a trailing place key names WHICH sibling is meant.
+        for src_id, entries in wanted.items():
+            for raw_id, exact_pk in entries:
+                if exact_pk is not None and raw_id not in resolved \
+                        and exact_pk in pks_by_src.get(src_id, ()):
+                    resolved[raw_id] = exact_pk
     return resolved
 
 
