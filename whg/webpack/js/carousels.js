@@ -67,11 +67,17 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
 	    // One control for the whole set — the galleries advance in step, so a pause
 	    // per gallery would be a lie. Added to the first heading only.
 	    if (gallery === galleries[0]) {
+	        // Bootstrap tooltip, not the native one: `title` alone gives the OS tooltip,
+	        // which looks foreign here and ignores the site's styling and dismissal
+	        // handling. base.js delegates tooltips from <body> for
+	        // [data-bs-toggle="tooltip"], reading `data-bs-title`, so a button built
+	        // this late still gets one without being initialised by hand.
 	        heading.append(
 	            `<button type="button" id="carousel-pause-toggle" class="btn btn-sm float-end me-1"
 	                     style="height: 22px; font-size: 0.8rem; padding: 0 0.5rem;"
 	                     aria-pressed="${paused}"
-	                     title="${paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own'}">
+	                     data-bs-toggle="tooltip"
+	                     data-bs-title="${paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own'}">
 	               <i class="fas ${paused ? 'fa-play' : 'fa-pause'}" aria-hidden="true"></i>
 	               <span class="visually-hidden">${paused ? 'Play slideshow' : 'Pause slideshow'}</span>
 	             </button>`);
@@ -188,8 +194,11 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
                 carousels.first().carousel('next');
             }
         }
+        // Hide the tip that is on screen before relabelling it, or it sits there
+        // describing the state the button has just left.
+        try { window.bootstrap?.Tooltip?.getInstance(this)?.hide(); } catch (e) { /* ignore */ }
         $(this).attr('aria-pressed', String(paused))
-               .attr('title', paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own')
+               .attr('data-bs-title', paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own')
                .find('i').attr('class', `fas ${paused ? 'fa-play' : 'fa-pause'}`);
         $(this).find('.visually-hidden').text(paused ? 'Play slideshow' : 'Pause slideshow');
     });
