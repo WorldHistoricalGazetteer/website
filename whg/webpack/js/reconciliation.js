@@ -3649,7 +3649,15 @@ function applyGlobalScopeToQuery(q, isRoot, hasRowCountry, colIndex) {
     // but match under `intersects` — historic county borders don't nest exactly inside the modern
     // national polygon. With scope now a HARD filter (place#144), `within` silently discarded valid
     // matches. See issue #143.
-    if (r.mode === 'whg' && r.place && r.place.id) { q.contained_in = [barePlaceId(r.place.id)]; q.containment = 'fuzzy'; q.relation = 'intersects'; }
+    if (r.mode === 'whg' && r.place && r.place.id) {
+      // Same containment strictness the user chose for the chain — a dataset-wide region is the same
+      // kind of constraint as a parent column's, and having one obey the knobs while the other
+      // ignored them would be indefensible.
+      const sp = spatialSettings();
+      q.contained_in = [barePlaceId(r.place.id)];
+      q.containment = sp.containment;
+      q.relation = sp.relation;
+    }
     else if (r.mode === 'draw' && r.geometry) { q.bounds = r.geometry; }
   }
 }
