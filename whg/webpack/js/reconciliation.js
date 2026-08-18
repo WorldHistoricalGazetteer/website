@@ -3893,6 +3893,12 @@ function isAutoConfirmed(top, threshold, cands) {
   if (cands && cands.length > 1) {
     const t = cands[0];
     for (let i = 1; i < cands.length && Number(cands[i].score) >= Number(t.score); i++) {
+      // An INEXACT name is no rival to an exact one, however the scores tie. Searching
+      // "Sherborne" turns up "Sherborne railway station" at the same 100 — relevance
+      // scoring cannot separate them — and treating that as ambiguity blocked the
+      // auto-confirm of a plainly exact match. A second EXACT candidate still counts:
+      // two different places both actually called Sherborne IS ambiguous. See place#184.
+      if (!!t.match && !cands[i].match) continue;
       if (cands[i].name !== t.name || (cands[i].description || '') !== (t.description || '')) return false;
     }
   }
