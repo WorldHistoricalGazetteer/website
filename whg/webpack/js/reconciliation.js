@@ -1870,7 +1870,17 @@ function buildLPF(data) {
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
     if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
-    if (rec.match) feat.links = rec.match.list.map((x) => ({ type: 'closeMatch', identifier: x.id }));
+    // Each accepted/auto-confirmed match becomes a closeMatch link, carrying WHG's reconciliation
+    // confidence under the SAME name the CSV/JSON exports use, so the score is findable by one name in
+    // every format. `whg_match_score` is not an LPF term, but the schema puts no additionalProperties
+    // bar on a link and WHG's ingest reads only type/identifier, so it rides along as an annotation
+    // for whoever opens the file rather than changing how it is understood. See place#183.
+    if (rec.match) feat.links = rec.match.list.map((x) => {
+      const link = { type: 'closeMatch', identifier: x.id };
+      const score = Number(x.score);
+      if (Number.isFinite(score)) link.whg_match_score = score;
+      return link;
+    });
     return feat;
   });
   const fc = {
