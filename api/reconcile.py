@@ -1395,6 +1395,15 @@ def reconcile_place_es(query, user=None):
         candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
         results.append(candidate)
 
+    # Break score ties in favour of an EXACT name match. Relevance scoring cannot
+    # separate "Sherborne" from "Sherborne railway station" when both contain the
+    # query term — they normalise to the same 100 — and which of them landed on top
+    # was arbitrary, decided by whatever survived filtering. A user searching
+    # "Sherborne" means the place, and a consumer reading result[0] (OpenRefine's
+    # auto-match does exactly that) should get it. Only the tie is reordered: a
+    # genuinely better-scoring candidate keeps its place. See place#184.
+    results.sort(key=lambda c: (-float(c.get("score") or 0), not c.get("match")))
+
     return {
         "result": results,
         **extra,
