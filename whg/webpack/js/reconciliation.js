@@ -1919,7 +1919,12 @@ function buildLPF(data) {
       });
     }
     if (rec.match) feat.links = rec.match.list.map((x) => {
-      const link = { type: 'closeMatch', identifier: barePlaceId(x.id) };
+      // `certainty` is LPF's own confidence vocabulary. The spec offers it on relations but not on
+      // links, which is a gap — a link is an assertion ("this place closeMatches that one") and a
+      // reconciliation has a confidence in it. WHG's schema copy admits it on links (to be proposed
+      // upstream); consumers that don't know the field ignore it, and the numeric score is carried
+      // alongside for those that want the raw value. See place#184.
+      const link = { type: 'closeMatch', identifier: barePlaceId(x.id), certainty: certaintyFor(x) };
       const score = Number(x.score);
       if (Number.isFinite(score)) link.whg_match_score = score;
       return link;
