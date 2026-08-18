@@ -122,11 +122,17 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
     var currentCarousel = 0;
     let delay = 10000;
     let mouseover = false;
-    if (startCarousels) carousels.first().carousel({
-        interval: delay,
-        ride: 'carousel',
-        keyboard: false, // Ignore keyboard
-    }).on('slide.bs.carousel', function() {
+    // `ride: 'carousel'` tells Bootstrap to start cycling the moment it initialises, so
+    // pausing immediately afterwards was a race we could not win: a transition already
+    // in flight finishes by restoring the cycling it captured before we intervened, and
+    // the carousel would set off a moment after a page that opened showing PLAY. When
+    // the standing preference is paused we therefore never ask it to ride in the first
+    // place. See place#177.
+    if (startCarousels) carousels.first().carousel(
+        paused
+            ? { interval: delay, keyboard: false }
+            : { interval: delay, ride: 'carousel', keyboard: false }
+    ).on('slide.bs.carousel', function() {
         if (!mouseover && !paused) {
             timer = setTimeout(function() {
 				currentCarousel += 1;
@@ -141,6 +147,11 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
 	});
 
     carousels.on('slid.bs.carousel', function() {
+        // Bootstrap restarts cycling by itself in two places we do not control: at the
+        // end of a slide it believed was cycling, and on mouseleave of the carousel
+        // (`_maybeEnableCycle`, because `ride` is set). Neither knows about the user's
+        // pause, so re-assert it whenever a slide completes.
+        if (paused && startCarousels) { clearTimeout(timer); carousels.first().carousel('pause'); }
         $('.carousel-container .border').removeClass('highlight-carousel');
         fetchDataForHorse($(this).find('.carousel-item.active'), whg_map);
     }).trigger('slid.bs.carousel'); // Load first map
@@ -152,10 +163,6 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
         if (startCarousels && !paused) carousels.first().carousel('cycle');
         mouseover = false;
     });
-    // Start paused if that is the standing preference — before any movement happens,
-    // rather than letting it lurch once and then stop.
-    if (paused && startCarousels) carousels.first().carousel('pause');
-
     $('#carousel-pause-toggle').on('click', function() {
         paused = !paused;
         storeCarouselPaused(paused);
@@ -164,12 +171,21 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
             if (paused) {
                 carousels.first().carousel('pause');
             } else {
-                // Move a slide AT ONCE, then resume cycling. `cycle()` alone waits a
-                // full interval — ten seconds here — so pressing play appeared to do
-                // nothing at all, and was reported as a broken button (place#177).
-                // Pausing is self-evidently instant; resuming has to be too.
+                // Re-initialise WITH `ride` before resuming. A carousel started in the
+                // paused state has no ride configured, and Bootstrap's own resume after
+                // a hover (`_maybeEnableCycle`) returns early without it — so cycling
+                // would have died the first time the pointer crossed the gallery.
+                // Dispose + re-init is the public way to change that; poking the
+                // instance's private config is not.
+                carousels.first().carousel('dispose').carousel({
+                    interval: delay,
+                    ride: 'carousel',
+                    keyboard: false,
+                });
+                // And move a slide AT ONCE: `cycle()` waits a full interval — ten
+                // seconds here — so pressing play looked like nothing had happened,
+                // which is how it came to be reported as a broken button.
                 carousels.first().carousel('next');
-                carousels.first().carousel('cycle');
             }
         }
         $(this).attr('aria-pressed', String(paused))
