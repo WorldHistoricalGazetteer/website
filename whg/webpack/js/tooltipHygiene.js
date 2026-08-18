@@ -75,3 +75,36 @@ export function initTooltipHygiene() {
     // geometry changes without any pointer event.
     window.addEventListener('resize', () => { if (maybeShown) maybeShown = dismissTooltips(); }, { passive: true });
 }
+
+/** Change a tooltip's text after its trigger has been hovered at least once.
+ *
+ *  Setting `data-bs-title` is not enough on its own, and the reason is not
+ *  obvious. base.js configures ONE delegated tooltip on <body> whose `title` is
+ *  a callback reading that attribute at show time — but delegation builds a
+ *  separate Tooltip instance per element on first hover, and Bootstrap's
+ *  `_getDelegateConfig()` omits any config value equal to the shared Default,
+ *  which is exactly where our callback lives. The per-element config therefore
+ *  falls back to the `data-bs-title` data attribute, captured once as a plain
+ *  string, and `getOrCreateInstance` reuses that instance for the life of the
+ *  element. A toggle button relabelled on click keeps announcing the state the
+ *  user has just left.
+ *
+ *  Disposing the instance is what actually works: it takes down any tip on
+ *  screen and lets the next hover build a fresh one from the current attribute.
+ */
+export function setTooltipText(el, text) {
+    const node = (el && el.jquery) ? el[0] : el;
+    if (!node) return;
+    node.setAttribute('data-bs-title', text);
+    // Bootstrap writes this one itself when a trigger uses a plain `title`;
+    // keep it in step for anything that reads it.
+    if (node.hasAttribute('data-bs-original-title')) {
+        node.setAttribute('data-bs-original-title', text);
+    }
+    const Tip = (window.bootstrap && window.bootstrap.Tooltip) ||
+        (window.jQuery && window.jQuery.fn.tooltip && window.jQuery.fn.tooltip.Constructor);
+    try {
+        const inst = Tip && Tip.getInstance(node);
+        if (inst) inst.dispose();
+    } catch (e) { /* never yet hovered, or already disposed */ }
+}

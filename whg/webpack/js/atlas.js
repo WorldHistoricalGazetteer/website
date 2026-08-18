@@ -1591,8 +1591,9 @@ function applyTilesetGating(mode) {
         const newTitle = disabled
             ? 'This gazetteer is not available in Explore mode'
             : ttEl.dataset.bsTitleOriginal;
-        // base.js uses a delegated tooltip whose title() reads data-bs-title at
-        // show time, so updating the attribute is what actually changes the text.
+        // The attribute alone is not enough: once an element has been hovered,
+        // Bootstrap holds its own instance whose title is a frozen string (see
+        // tooltipHygiene.setTooltipText), hence the setContent call below.
         ttEl.setAttribute('data-bs-title', newTitle);
         ttEl.setAttribute('data-bs-original-title', newTitle);
         try {

@@ -1,6 +1,7 @@
 // whg_maplibre.js
 
 import Layerset from './layerset';
+import { setTooltipText } from './tooltipHygiene';
 import { attributionString } from './utilities';
 import languages, {getPreferredLanguage, setPreferredLanguage} from './languages.js';
 
@@ -787,7 +788,10 @@ class CustomTerrainControl {
 
         const enablingTerrain = !button.classList.contains('maplibregl-ctrl-terrain-enabled');
         button.classList.toggle('maplibregl-ctrl-terrain-enabled', enablingTerrain);
-        button.setAttribute('data-bs-title', enablingTerrain ? 'Disable terrain' : 'Enable terrain');
+        // Via the helper: Bootstrap freezes a tooltip's text on the element's own
+        // instance at first hover, so setting the attribute alone leaves the label
+        // one toggle behind. See tooltipHygiene.setTooltipText.
+        setTooltipText(button, enablingTerrain ? 'Disable terrain' : 'Enable terrain');
 
         const hillshadeCheckbox = document.getElementById('hillshadeCheckbox');
         if (hillshadeCheckbox) {
