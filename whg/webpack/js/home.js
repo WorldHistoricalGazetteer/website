@@ -17,7 +17,12 @@ let area_objs = [];
 
 function waitMapLoad() {
 	return new Promise((resolve) => {
-		whg_map.on('load', () => {
+		// `load` fires ONCE. Attach after it has already fired — which happens whenever
+		// the style comes from cache — and this promise never settles, so the carousels
+		// are never built and the home page silently shows an empty globe. Seen on dev
+		// with a warm cache; the race is timing-dependent, so prod has been getting away
+		// with it rather than being immune. See place#177.
+		const onMapReady = () => {
 			console.log('Map loaded.');
 
 			const style = whg_map.getStyle();
@@ -32,7 +37,8 @@ function waitMapLoad() {
 			.after($('#carousel-outer-container'));
 
 			resolve();
-		});
+		};
+		if (whg_map.loaded()) onMapReady(); else whg_map.on('load', onMapReady);
 	});
 }
 

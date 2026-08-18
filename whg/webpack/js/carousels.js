@@ -2,9 +2,34 @@
 
 import { fetchDataForHorse } from './carousel-mapdata';
 
+// Motion preference for the home-page carousels (place#177). Continuous automatic
+// movement is not a cosmetic detail: a beta tester reported it causing motion
+// sickness after a while, and there was no way to stop it short of leaving the page.
+//
+// The choice is REMEMBERED. Someone who finds the movement unpleasant finds it
+// unpleasant on every visit, and making them hunt for the button each time would
+// answer the complaint in form only. And an unset preference follows the OS: a
+// visitor who has asked their system to reduce motion has already told us.
+const CAROUSEL_PAUSE_KEY = 'whg-carousel-paused';
+
+function prefersReducedMotion() {
+	try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+}
+function carouselPaused() {
+	try {
+		const stored = localStorage.getItem(CAROUSEL_PAUSE_KEY);
+		if (stored !== null) return stored === '1';
+	} catch (e) { /* private mode — fall through to the OS preference */ }
+	return prefersReducedMotion();
+}
+function storeCarouselPaused(paused) {
+	try { localStorage.setItem(CAROUSEL_PAUSE_KEY, paused ? '1' : '0'); } catch (e) { /* ignore */ }
+}
+
 export function initialiseCarousels(galleries, carouselMetadata, startCarousels, whg_map) {
 
 	var timer;
+	let paused = carouselPaused();
 	const v3 = galleries.length == 1;
 	
 	galleries.forEach(gallery => {
@@ -39,6 +64,18 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
 	                                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
 	                                    <span class="visually-hidden">Next</span>
 	                                </button>`);
+	    // One control for the whole set — the galleries advance in step, so a pause
+	    // per gallery would be a lie. Added to the first heading only.
+	    if (gallery === galleries[0]) {
+	        heading.append(
+	            `<button type="button" id="carousel-pause-toggle" class="btn btn-sm float-end me-1"
+	                     style="height: 22px; font-size: 0.8rem; padding: 0 0.5rem;"
+	                     aria-pressed="${paused}"
+	                     title="${paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own'}">
+	               <i class="fas ${paused ? 'fa-play' : 'fa-pause'}" aria-hidden="true"></i>
+	               <span class="visually-hidden">${paused ? 'Play slideshow' : 'Pause slideshow'}</span>
+	             </button>`);
+	    }
 	    heading.append(galleryLink);
 	    border.append(heading);
 	    carousel.append(carouselInner);
@@ -90,7 +127,7 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
         ride: 'carousel',
         keyboard: false, // Ignore keyboard
     }).on('slide.bs.carousel', function() {
-        if (!mouseover) {
+        if (!mouseover && !paused) {
             timer = setTimeout(function() {
 				currentCarousel += 1;
 				currentCarousel = currentCarousel % carouselCount;
@@ -112,12 +149,27 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
         clearTimeout(timer);
         mouseover = true;
     }).on('mouseleave', function() {
-        if (startCarousels) carousels.first().carousel('cycle');
+        if (startCarousels && !paused) carousels.first().carousel('cycle');
         mouseover = false;
     });
+    // Start paused if that is the standing preference — before any movement happens,
+    // rather than letting it lurch once and then stop.
+    if (paused && startCarousels) carousels.first().carousel('pause');
+
+    $('#carousel-pause-toggle').on('click', function() {
+        paused = !paused;
+        storeCarouselPaused(paused);
+        clearTimeout(timer);
+        if (startCarousels) carousels.first().carousel(paused ? 'pause' : 'cycle');
+        $(this).attr('aria-pressed', String(paused))
+               .attr('title', paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own')
+               .find('i').attr('class', `fas ${paused ? 'fa-play' : 'fa-pause'}`);
+        $(this).find('.visually-hidden').text(paused ? 'Play slideshow' : 'Pause slideshow');
+    });
+
     // Cycling restarts on button click unless carousel is paused, even though mouse has not left container
     $('.carousel-control-next').on('click', function() {
-        if (startCarousels) carousels.first().carousel('pause');
+        if (startCarousels) carousels.first().carousel('pause');   // stepping by hand never resumes cycling
         $($(this).data('bs-target')).carousel('next');
     });
     $('.carousel-control-prev').on('click', function() {
