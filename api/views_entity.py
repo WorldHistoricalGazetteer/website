@@ -21,7 +21,7 @@ from api.download_file import (
     FileCache, stream_live, stream_from_file,
     build_streaming_download_response,
 )
-from api.reconcile_helpers import is_crc_place_id
+from api.reconcile_helpers import is_crc_place_id, resolve_legacy_place_pk
 from api.schemas import entity_schema, TYPE_MAP
 
 logger = logging.getLogger('reconciliation')
@@ -128,7 +128,11 @@ def _legacy_place_to_lpf(serialized: dict, request=None) -> dict:
     ``@id``, top-level ``names``/``types``/``links``/``when``, and a standard
     GeoJSON ``geometry``.
     """
-    place_id = serialized.get("id", "")
+    # The namespaced identifier — `whg:<dataset_id>:<src_id>`, the dataset that
+    # contributed the record then that dataset's own id for it. Falls back to the
+    # primary key where a serialization omits either leaf.
+    ds_id, src_id = serialized.get("dataset_id"), str(serialized.get("src_id") or "").strip()
+    place_id = f"whg:{ds_id}:{src_id}" if ds_id and src_id else f"whg:{serialized.get('id', '')}"
 
     # Build @id as a dereferenceable URI
     if request is not None:
@@ -249,6 +253,20 @@ class CustomSwaggerUIView(TemplateView):
     template_name = "swagger_ui.html"
 
 
+def _place_lookup_id(obj_type, raw_id):
+    """Postgres pk for a WHG place identifier, for the ORM lookups below.
+
+    Place ids are namespaced — ``whg:<dataset_id>:<src_id>`` — while the ORM keys
+    on the primary key; ids emitted before namespacing (``whg:<pk>``, or a bare
+    number) resolve too, so links already held keep working. Non-place types and
+    unresolvable ids pass through untouched, to 404 as they did before.
+    """
+    if obj_type != "place":
+        return raw_id
+    pk = resolve_legacy_place_pk(raw_id)
+    return pk if pk is not None else raw_id
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 @entity_schema('detail')
 class EntityDetailView(AuthenticatedAPIView):
@@ -277,7 +295,7 @@ class EntityDetailView(AuthenticatedAPIView):
         # Use the appropriate queryset function, defaulting to all objects
         qs_fn = config.get("detail_queryset") or config.get("preview_queryset") or (
             lambda user: config["model"].objects)
-        obj = get_object_or_404(qs_fn(request.user), pk=id)
+        obj = get_object_or_404(qs_fn(request.user), pk=_place_lookup_id(obj_type, id))
 
         # Special case: periods redirect to PeriodO website
         if obj_type == "period":
@@ -353,7 +371,7 @@ class EntityFeatureView(AuthenticatedAPIView):
 
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
         qs = queryset_fn(request.user)
-        obj = get_object_or_404(qs, pk=obj_id)
+        obj = get_object_or_404(qs, pk=_place_lookup_id(obj_type, obj_id))
 
         # Datasets may be flagged non-downloadable (very large bulk/authority
         # datasets to be obtained upstream). Block every export path.
@@ -414,7 +432,7 @@ class EntityPreviewView(AuthenticatedAPIView):
 
         queryset_fn = config.get("preview_queryset", lambda user: config["model"].objects)
         qs = queryset_fn(request.user)
-        obj = get_object_or_404(qs, pk=id)
+        obj = get_object_or_404(qs, pk=_place_lookup_id(obj_type, id))
 
         serializer_class = config["preview_serializer"]
         serializer = serializer_class(obj, context={"request": request})

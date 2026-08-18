@@ -32,8 +32,10 @@ def get_namespace(place_id: str) -> str:
     """
     Extract the namespace from a place identifier.
 
-    - Legacy numeric IDs (e.g. ``"12345"``) → ``"whg"``
+    - WHG places (e.g. ``"whg:1234:19799"``, ``"whg:90687"``) → ``"whg"``
     - Namespaced CRC IDs (e.g. ``"gn:745044"``) → ``"gn"``
+    - Bare numeric IDs (e.g. ``"12345"``) → ``"whg"`` (the pre-namespacing form,
+      still accepted on input)
     """
     place_id = str(place_id)
     if place_id.isdigit():
@@ -41,6 +43,111 @@ def get_namespace(place_id: str) -> str:
     if ":" in place_id:
         return place_id.split(":", 1)[0].lower()
     return WHG_NAMESPACE
+
+
+# ── WHG place identifiers ────────────────────────────────────────────────────
+# Every place this service returns carries its gazetteer namespace, so an id says
+# where it came from without a lookup: ``gn:745044``, ``wd:Q90`` from the gateway,
+# and ``whg:<dataset_id>:<src_id>`` for a WHG-contributed place — the dataset that
+# contributed it, then that dataset's OWN id for the record. The dataset leaf
+# matches the ``whg:<dataset_id>`` form the indexing and attestation APIs already
+# use for datasets (see api/views_indexing.py).
+#
+# `src_id` is the contributor's identifier and survives re-ingestion, which the
+# Postgres primary key does not; where a dataset row or src_id is missing we fall
+# back to the two-part ``whg:<place_pk>``. Both WHG forms — and the bare numeric
+# ids emitted before namespacing — resolve through resolve_legacy_place_pk(), so
+# identifiers already held by API consumers keep working.
+
+_DS_LABEL_PK_CACHE_KEY = 'recon:dataset_label_pk_map:v1'
+
+
+def dataset_pk_for_label(label) -> int | None:
+    """Primary key of the dataset with this label, or None.
+
+    The ES documents carry the dataset LABEL; the identifier carries the numeric
+    id (stable across a rename). Cached for 10 minutes — the map only changes
+    when a dataset is created or renamed, and this runs once per candidate.
+    """
+    if not label:
+        return None
+    from django.core.cache import cache
+    from datasets.models import Dataset
+
+    mapping = cache.get(_DS_LABEL_PK_CACHE_KEY)
+    if mapping is None:
+        mapping = {lbl: pk for pk, lbl in Dataset.objects.values_list('id', 'label') if lbl}
+        cache.set(_DS_LABEL_PK_CACHE_KEY, mapping, 600)
+    pk = mapping.get(str(label))
+    if pk is None:
+        # A dataset created since the map was cached: check once, and refresh.
+        pk = Dataset.objects.filter(label=str(label)).values_list('id', flat=True).first()
+        if pk is not None:
+            cache.delete(_DS_LABEL_PK_CACHE_KEY)
+    return pk
+
+
+def whg_place_id(src: dict) -> str:
+    """The namespaced identifier for one ES hit's ``_source``.
+
+    Gateway hits arrive already namespaced and are passed through unchanged.
+    """
+    place_id = str(src.get("place_id") or "").strip()
+    if not place_id.isdigit():
+        return place_id                      # gn:745044, wd:Q90, … — already namespaced
+    ds_pk = dataset_pk_for_label(src.get("dataset"))
+    src_id = str(src.get("src_id") or "").strip()
+    if ds_pk and src_id:
+        return f"{WHG_NAMESPACE}:{ds_pk}:{src_id}"
+    return f"{WHG_NAMESPACE}:{place_id}"     # dataset unresolved — namespaced by pk
+
+
+def resolve_legacy_place_pks(raw_ids) -> dict:
+    """Map WHG place ids to Postgres ``Place`` pks, in any form this service has
+    emitted: ``whg:<dataset_id>:<src_id>``, ``whg:<place_pk>``, or a bare numeric
+    ``<place_pk>``. Ids that resolve to nothing — and gateway ids (``gn:…``) — are
+    absent from the result.
+
+    Batched by dataset: one query per dataset named, not one per id. ``Place`` is
+    keyed on the dataset LABEL (``to_field='label'``), so the dataset leaf is
+    matched by traversing the relation rather than by the raw column.
+    """
+    from places.models import Place
+
+    resolved, by_dataset = {}, {}
+    for raw_id in raw_ids:
+        raw = str(raw_id or "").strip()
+        if raw.isdigit():
+            resolved[raw_id] = int(raw)
+            continue
+        parts = raw.split(":")
+        if len(parts) < 2 or parts[0].lower() != WHG_NAMESPACE or not parts[1].isdigit():
+            continue
+        if len(parts) == 2:
+            resolved[raw_id] = int(parts[1])
+        else:
+            # src_id may itself contain colons — only the dataset leaf is delimited.
+            by_dataset.setdefault(int(parts[1]), {})[":".join(parts[2:])] = raw_id
+
+    for ds_pk, wanted in by_dataset.items():
+        # src_id is the contributor's identifier and is NOT guaranteed unique within a
+        # dataset — 4,298 legacy places across 11 datasets share one with a sibling
+        # (0.16% of the table, all of them apparent duplicate records). Resolve to the
+        # LOWEST pk so an ambiguous id always dereferences to the same place rather
+        # than varying with row order. See place#172.
+        for pk, src_id in (Place.objects
+                           .filter(dataset__id=ds_pk, src_id__in=list(wanted))
+                           .order_by('src_id', 'id')
+                           .values_list('id', 'src_id')):
+            raw_id = wanted.get(src_id)
+            if raw_id is not None and raw_id not in resolved:
+                resolved[raw_id] = pk
+    return resolved
+
+
+def resolve_legacy_place_pk(raw_id) -> int | None:
+    """Postgres ``Place`` pk for a single WHG place id — see resolve_legacy_place_pks()."""
+    return resolve_legacy_place_pks([raw_id]).get(raw_id)
 
 
 def parse_namespaces(namespaces_param) -> set[str] | None:
@@ -98,9 +205,12 @@ def parse_delimited_param(value, upper=False) -> list[str] | None:
 def is_crc_place_id(raw_id: str) -> bool:
     """
     Return True if raw_id is a CRC-namespaced place identifier (e.g. ``gn:745044``).
-    Legacy IDs are plain integers (e.g. ``12345``).
+
+    WHG's own places are ``whg:<dataset_id>:<src_id>`` (or, from before
+    namespacing, a plain integer) and live in the local index/DB, not the gateway.
     """
-    return not raw_id.isdigit()
+    raw = str(raw_id or "")
+    return not raw.isdigit() and not raw.lower().startswith(WHG_NAMESPACE + ":")
 
 # Property ID to required serializer fields mapping
 PROPERTY_FIELD_MAP = {
@@ -288,7 +398,9 @@ def make_candidate(hit, query_text, max_score, schema_space):
         has_geom = any((g.get("location") or {}).get("type") in ("Polygon", "MultiPolygon")
                        for g in src.get("geoms", []))
     return {
-        "id": "place:" + str(src.get("place_id")),  # or hit.get("whg_id") or hit["_id"]),
+        # `place:` is the OpenRefine entity-type prefix (the protocol's opaque id);
+        # what follows is the gazetteer identifier we surface and export.
+        "id": "place:" + whg_place_id(src),
         "name": name,
         "score": score,
         "match": is_exact,
@@ -298,7 +410,7 @@ def make_candidate(hit, query_text, max_score, schema_space):
         # licences the response spans but not which candidate falls under which.
         # Resolve against `attribution.sources[namespace]` (or, for "whg",
         # `attribution.datasets`).
-        "namespace": get_namespace(str(src.get("place_id"))),
+        "namespace": get_namespace(whg_place_id(src)),
         "alt_names": alt_names,
         "ccodes": ccodes,
         "repr_point": repr_point(src),  # [lng, lat] or None — enables map preview + geo-disambiguation

@@ -40,7 +40,8 @@ from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
 from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
-    parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE
+    parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE, \
+    resolve_legacy_place_pks
 from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema, \
     authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
@@ -216,15 +217,22 @@ class ReconciliationView(APIView):
             rows = {}
 
             if entity_type == "place":
-                # Partition into legacy (numeric) and CRC (namespaced) IDs
-                legacy_ids = [raw_id for raw_id in ids if not is_crc_place_id(raw_id)]
+                # Partition into WHG ids (local DB) and CRC ids (gateway)
+                whg_ids = [raw_id for raw_id in ids if not is_crc_place_id(raw_id)]
                 crc_ids = [raw_id for raw_id in ids if is_crc_place_id(raw_id)]
 
-                # Legacy places — fetch from Django ORM
-                if legacy_ids:
-                    qs = place_feature_queryset(request.user).filter(id__in=legacy_ids)
-                    for obj in qs:
-                        rows[f"place:{obj.id}"] = format_extend_row(obj, properties, request=request)
+                # WHG places — fetch from Django ORM. Rows are keyed by the id the
+                # CALLER sent (OpenRefine matches the response against its own ids),
+                # which may be any form we have emitted: whg:<dataset_id>:<src_id>,
+                # whg:<pk>, or a bare numeric pk.
+                if whg_ids:
+                    pk_by_raw = resolve_legacy_place_pks(whg_ids)
+                    qs = place_feature_queryset(request.user).filter(id__in=set(pk_by_raw.values()))
+                    obj_by_pk = {obj.id: obj for obj in qs}
+                    for raw, pk in pk_by_raw.items():
+                        obj = obj_by_pk.get(pk)
+                        if obj:
+                            rows[f"place:{raw}"] = format_extend_row(obj, properties, request=request)
 
                 # CRC places — forward to CRC gateway /api/extend
                 if crc_ids:
@@ -1054,8 +1062,8 @@ def _attribution_for_results(results):
     for r in results.values():
         if isinstance(r, dict):
             namespaces.update(r.get("namespaces_searched") or ())
-    # "place:12345" → "12345"; only legacy WHG ids are numeric, and only those
-    # resolve to a contributing dataset.
+    # "place:whg:1234:19799" → "whg:1234:19799"; only WHG places resolve to a
+    # contributing dataset, and their identifier now names it directly.
     whg_ids = [str(c.get("id", "")).split(":", 1)[-1]
                for c in candidates if c.get("namespace") == WHG_NAMESPACE]
     return safe_attribution_block(

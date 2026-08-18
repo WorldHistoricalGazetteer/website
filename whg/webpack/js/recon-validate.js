@@ -6,8 +6,13 @@
 
 import Ajv from 'ajv';
 
-const SCHEMA_URL = '/static/lpf_v2.0.jsonld';
-const CSL_URL = '/static/csl-citation.json'; // lpf_v2.0.jsonld $refs this for name citations
+// Both schemas are versioned by deploy, like the bundles: without the cache-buster a browser holding
+// yesterday's copy validates against yesterday's rules, and a schema fix (e.g. widening the accepted
+// link namespaces) silently fails to reach the people it was written for.
+const ASSET_V = (document.querySelector('meta[name="asset-version"]') || {}).content || '';
+const V = ASSET_V ? `?v=${encodeURIComponent(ASSET_V)}` : '';
+const SCHEMA_URL = `/static/lpf_v2.0.jsonld${V}`;
+const CSL_URL = `/static/csl-citation.json${V}`; // lpf_v2.0.jsonld $refs this for name citations
 let _validate = null;
 
 async function getJson(url, required) {
