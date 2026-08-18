@@ -3796,11 +3796,21 @@ function updateProgress(done, total) {
 // carry, and previously ignored entirely. The containment knobs expose what the chain has always
 // sent as fixed values: `fuzzy` tests membership against an H3 grid (fast, tolerant) and
 // `intersects` accepts any overlap, which is why a confirmed county did not strictly bound results.
+// The row-coordinate circle is DISABLED pending a gateway fix. A `bounds` polygon
+// query — which is what lat/lng/radius becomes server-side — can hang a gateway
+// worker indefinitely: on 2026-08-18 three such queries in a row left a worker
+// spinning at 2GB RSS, took the supervisor with it, and orphaned a process still
+// holding port 9200, which stopped production reconciliation AND search (Django
+// reaches the legacy indexes through the same gateway). Until that is diagnosed
+// and fixed, the control is hidden and no circle is sent. Flip this back to true
+// once the gateway can be trusted with a bounds query. See place#184.
+const NEARBY_FILTER_ENABLED = false;
+
 function spatialSettings() {
   const d = { nearby: false, radiusKm: 25, containment: 'fuzzy', relation: 'intersects' };
   const s = (project && project.spatial) || {};
   return {
-    nearby: s.nearby != null ? !!s.nearby : d.nearby,
+    nearby: NEARBY_FILTER_ENABLED && (s.nearby != null ? !!s.nearby : d.nearby),
     radiusKm: Number.isFinite(+s.radiusKm) && +s.radiusKm > 0 ? +s.radiusKm : d.radiusKm,
     containment: s.containment === 'exact' ? 'exact' : d.containment,
     relation: s.relation === 'within' ? 'within' : d.relation,
@@ -3820,7 +3830,7 @@ function haversineKm(a, b) {
 function refreshSpatialControls() {
   const sp = spatialSettings();
   const wrap = el('recon-nearby-wrap');
-  const has = hasCoordRole();
+  const has = hasCoordRole() && NEARBY_FILTER_ENABLED;
   if (wrap) wrap.classList.toggle('d-none', !has);
   const cb = el('recon-nearby'); if (cb) cb.checked = has && sp.nearby;
   const rad = el('recon-nearby-radius'); if (rad) { rad.value = sp.radiusKm; rad.disabled = !(has && sp.nearby); }
@@ -5740,7 +5750,13 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
     slice.forEach((u, j) => {
       const key = u.repKey, v = u.v, row = key.slice(key.indexOf(':') + 1);
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
-      const rowCoord = (sp.nearby && hasCoordRole()) ? rowCoordValue(Number(row)) : null;
+      // The row's coordinate describes the PLACE, not the county or region containing it, so the
+      // circle belongs only to the name column. Applied to a container column it asks for a county
+      // whose record sits within 10km of a town inside it — which is usually false (Devon's point is
+      // ~30km from Exeter's), so the container silently failed to match and containment could then
+      // not be applied at all. See place#184.
+      const rowCoord = (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name'))
+        ? rowCoordValue(Number(row)) : null;
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
@@ -5805,7 +5821,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // without this the radius would silently not apply to exactly the rows that have the most
       // context. Candidates with no known position are KEPT — a place without coordinates cannot be
       // shown to be out of range, and dropping it would lose a valid match to a data gap.
-      if (sp.nearby && hasCoordRole()) {
+      if (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name')) {
         const rc = rowCoordValue(Number(u.repKey.slice(u.repKey.indexOf(':') + 1)));
         if (rc) {
           result = result.filter((c) => {
