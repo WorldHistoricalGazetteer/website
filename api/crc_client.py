@@ -386,10 +386,20 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             types = [t.strip() for t in types.split(",") if t.strip()]
         body["types"] = types
 
-    # Spatial bounds
-    bounds = normalised_query.get("bounds")
-    if bounds:
-        body["bounds"] = bounds
+    # Spatial: a RADIAL filter goes to the gateway as lat/lng/radius so it can be
+    # resolved as an H3 disc — a terms match on the covers already in the index.
+    # Converting it to a polygon here (which normalise_query_params does, for the
+    # legacy path's benefit) would send it back through Shapely union + polyfill +
+    # prepared-geometry for no gain. See place#184.
+    lat, lng, radius = (raw.get("lat"), raw.get("lng"), raw.get("radius"))
+    if lat is not None and lng is not None and radius:
+        body["lat"] = float(lat)
+        body["lng"] = float(lng)
+        body["radius"] = float(radius)
+    else:
+        bounds = normalised_query.get("bounds")
+        if bounds:
+            body["bounds"] = bounds
 
     # Spatial containment by reference place_ids, with optional mode + relation.
     contained_in = raw.get("contained_in")

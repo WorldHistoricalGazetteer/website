@@ -3796,15 +3796,12 @@ function updateProgress(done, total) {
 // carry, and previously ignored entirely. The containment knobs expose what the chain has always
 // sent as fixed values: `fuzzy` tests membership against an H3 grid (fast, tolerant) and
 // `intersects` accepts any overlap, which is why a confirmed county did not strictly bound results.
-// The row-coordinate circle is DISABLED pending a gateway fix. A `bounds` polygon
-// query — which is what lat/lng/radius becomes server-side — can hang a gateway
-// worker indefinitely: on 2026-08-18 three such queries in a row left a worker
-// spinning at 2GB RSS, took the supervisor with it, and orphaned a process still
-// holding port 9200, which stopped production reconciliation AND search (Django
-// reaches the legacy indexes through the same gateway). Until that is diagnosed
-// and fixed, the control is hidden and no circle is sent. Flip this back to true
-// once the gateway can be trusted with a bounds query. See place#184.
-const NEARBY_FILTER_ENABLED = false;
+// The row-coordinate circle now reaches the gateway as lat/lng/radius and is
+// resolved there as an H3 disc — a terms match on the covers already in the index —
+// instead of becoming a polygon put through Shapely union, polyfill and prepared
+// geometry. That polygon path is the one twice implicated in a wedged worker
+// (2026-08-18), and a radial filter never needed it. See place#184.
+const NEARBY_FILTER_ENABLED = true;
 
 function spatialSettings() {
   const d = { nearby: false, radiusKm: 25, containment: 'fuzzy', relation: 'intersects' };
