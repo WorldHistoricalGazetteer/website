@@ -3456,7 +3456,7 @@ function scopeActive() {
   const s = getScope(); if (!s) return false;
   const r = s.region || {};
   const hasRegion = (r.mode === 'ccodes' && r.ccodes && r.ccodes.length) || (r.mode === 'whg' && r.place) || (r.mode === 'draw' && r.geometry);
-  const hasTypes = s.types && s.types.selected && s.types.selected.length;
+  const hasTypes = (s.types && s.types.selected && s.types.selected.length) || colsWithOwnTypes().length;
   const hasPeriods = s.periods && s.periods.length;
   return !!(hasRegion || s.start != null || s.end != null || hasTypes || hasPeriods);
 }
@@ -3477,6 +3477,8 @@ function scopeSummary() {
   const sel = (s.types && s.types.selected) || [];
   if (sel.length === 1) bits.push(truncateText(sel[0].text, 16));
   else if (sel.length > 1) bits.push(sel.length + ' types');
+  const perLevel = colsWithOwnTypes().length;
+  if (perLevel) bits.push(`types by level (${perLevel})`);
   return bits.join(' · ');
 }
 // Plain (un-escaped, un-truncated-to-HTML) truncation helper for building label strings.
@@ -3487,13 +3489,17 @@ function truncateText(v, max) { const r = String(v == null ? '' : v); return r.l
 // child columns are already spatially scoped by their parent's confirmed places (`contained_in`) and a
 // dataset-wide region would either duplicate or fight that. Never overrides a per-row country hint or
 // an existing containment. `isRoot` = this column has no parent; `hasRowCountry` = the row set q.countries.
-function applyGlobalScopeToQuery(q, isRoot, hasRowCountry) {
+function applyGlobalScopeToQuery(q, isRoot, hasRowCountry, colIndex) {
   const s = getScope(); if (!s) return;
   const r = s.region || {};
   // Country codes — a dataset-wide default; a per-row country hint always wins.
   if (!hasRowCountry && !q.countries && r.mode === 'ccodes' && r.ccodes && r.ccodes.length) q.countries = r.ccodes.slice();
   // AAT place types (already expanded to descendants). Both back-ends filter on types.identifier.
-  if (!q.types && s.types && s.types.ids && s.types.ids.length) q.types = s.types.ids.slice();
+  // This column's own types win over the dataset-wide selection, so a County column can look for
+  // administrative units while the Place column looks for settlements (place#184).
+  const own = getColTypes(colIndex);
+  const typeIds = own ? own.ids : ((s.types && s.types.ids) || []);
+  if (!q.types && typeIds.length) q.types = typeIds.slice();
   // Temporal window. Legacy WHG ES needs `temporal` + `start`/`end`; the CRC gateway reads `start`/`end`.
   if (s.start != null || s.end != null) {
     q.temporal = true;
@@ -4159,6 +4165,28 @@ function getNsFilter(col) {
   }
   return { mode: 'all', namespaces: [] };
 }
+// Per-column AAT place types. A hierarchy reconciles County → Parish → Place, and those levels want
+// DIFFERENT types: scoping the whole dataset to "settlements" makes the county column unmatchable, and
+// switching the one dataset-wide type mid-chain reset every column's work (place#184). A column with no
+// types of its own falls back to the dataset-wide Scope → What selection.
+function getColTypes(col) {
+  const c = project && col != null && project.colConfig && project.colConfig[col];
+  const t = c && c.types;
+  return (t && t.ids && t.ids.length) ? t : null;
+}
+function colTypeSelection(col) {
+  const c = project && col != null && project.colConfig && project.colConfig[col];
+  return ((c && c.types && c.types.selected) || []).map((t) => ({ id: t.id, text: t.text }));
+}
+// Which columns carry their own types — for the Scope button summary and the reset decision.
+function colsWithOwnTypes() {
+  if (!project || !project.colConfig) return [];
+  return Object.keys(project.colConfig)
+    .filter((k) => getColTypes(Number(k)))
+    .map(Number)
+    .filter((c) => reconChain().indexOf(c) >= 0);
+}
+
 // The Sources picker (and the Re-reconcile button) configure the FOCUSED column — the one shown in
 // the review/results panes (selected via a switcher pill, defaulting to the current stage). This lets
 // you revisit a confirmed column, change its sources, and re-reconcile it.
@@ -4397,6 +4425,61 @@ function showScopeRegionMode(mode) {
     .forEach(([m, id]) => { const p = el(id); if (p) p.classList.toggle('d-none', m !== mode); });
   if (mode === 'draw') initScopeMap();
 }
+// ── Scope → What: which level the picked types apply to (place#184) ──────────
+// One tree widget, several targets: the dataset default plus every column in the reconciliation
+// chain. The active target's selection is held in the widget; the others live in this draft until
+// Apply. Without it there was a single dataset-wide type, so a chain could only ever be scoped to
+// one kind of place — and changing it reset every column that had already been reconciled.
+let _scopeTypeTarget = 'default';
+let _scopeTypeDraft = { default: [], cols: {} };
+
+function seedScopeTypeDraft() {
+  const s = project ? (project.scope || defaultScope()) : defaultScope();
+  _scopeTypeDraft = { default: ((s.types && s.types.selected) || []).map((t) => ({ id: t.id, text: t.text })), cols: {} };
+  reconChain().forEach((c) => { _scopeTypeDraft.cols[c] = colTypeSelection(c); });
+  _scopeTypeTarget = 'default';
+}
+function scopeTypeDraftFor(target) {
+  return target === 'default' ? _scopeTypeDraft.default : (_scopeTypeDraft.cols[target] || []);
+}
+// Move the widget's current selection into whichever target is active — called before switching
+// targets and before Apply, so an edit is never lost to a click on another pill.
+function stashActiveScopeTypes() {
+  const sel = scopeAat.getSelection();
+  if (_scopeTypeTarget === 'default') _scopeTypeDraft.default = sel;
+  else _scopeTypeDraft.cols[_scopeTypeTarget] = sel;
+}
+function renderScopeTypeTargets() {
+  const box = el('recon-scope-aat-targets');
+  const hint = el('recon-scope-aat-target-hint');
+  if (!box) return;
+  const chain = reconChain();
+  // With a single column there is no "level" to distinguish — the dataset default IS that column.
+  if (chain.length < 2) { box.classList.add('d-none'); if (hint) hint.classList.add('d-none'); return; }
+  box.classList.remove('d-none');
+  const targets = [{ key: 'default', label: 'All levels' }]
+    .concat(chain.map((c) => ({ key: String(c), label: truncateText(project.columns[c].name, 18) })));
+  box.innerHTML = '<span class="small text-muted me-1">Types for:</span>' + targets.map((t) => {
+    const active = String(_scopeTypeTarget) === t.key;
+    const n = scopeTypeDraftFor(t.key === 'default' ? 'default' : Number(t.key)).length;
+    const badge = n ? `<span class="badge bg-secondary ms-1">${n}</span>` : '';
+    return `<button type="button" class="btn btn-sm ${active ? 'btn-secondary' : 'btn-outline-secondary'} me-1 mb-1" data-scope-type-target="${esc(t.key)}">${esc(t.label)}${badge}</button>`;
+  }).join('');
+  box.querySelectorAll('[data-scope-type-target]').forEach((b) => b.addEventListener('click', () => {
+    stashActiveScopeTypes();
+    const key = b.dataset.scopeTypeTarget;
+    _scopeTypeTarget = key === 'default' ? 'default' : Number(key);
+    scopeAat.reset(scopeTypeDraftFor(_scopeTypeTarget));
+    renderScopeTypeTargets();
+  }));
+  if (hint) {
+    hint.classList.remove('d-none');
+    hint.textContent = _scopeTypeTarget === 'default'
+      ? 'Applies to every column that has no types of its own — a column you set separately keeps its own.'
+      : `Applies to the “${project.columns[_scopeTypeTarget].name}” column only. Changing it re-runs that column and the ones below it, leaving the rest as they are.`;
+  }
+}
+
 function populateScopeModal() {
   const s = project ? (project.scope || defaultScope()) : defaultScope();
   const r = s.region || { mode: 'none' };
@@ -4425,7 +4508,9 @@ function populateScopeModal() {
   renderScopePeriods();
   loadPeriodSuggestions();
   // AAT place types — reset the picker to the saved selection.
-  scopeAat.reset((s.types && s.types.selected) || []);
+  seedScopeTypeDraft();
+  scopeAat.reset(scopeTypeDraftFor('default'));
+  renderScopeTypeTargets();
   showScopeRegionMode(r.mode || 'none');
 }
 function renderScopeWhgSelected() {
@@ -4828,16 +4913,32 @@ async function applyScope() {
   scope.undated = !!(el('recon-scope-undated') || {}).checked;
   // PeriodO scope period(s) — dataset-level canonical period(s).
   scope.periods = _scopePeriods.map((p) => Object.assign({}, p));
-  // AAT types: keep the picked concepts for display, expand to descendant ids for the query.
-  const selected = scopeAat.getSelection();
-  let ids = [];
-  if (selected.length) {
+  // AAT types: keep the picked concepts for display, expand to descendant ids for the query. Each
+  // target (the dataset default and any per-column selection) expands separately — expansion is what
+  // the query actually filters on, since types.identifier is an exact match.
+  stashActiveScopeTypes();
+  const expand = async (selected) => {
+    if (!selected.length) return [];
     try {
       const data = await fetchJson(`/types/expand/?ids=${encodeURIComponent(selected.map((t) => t.id).join(','))}`);
-      ids = (data && data.ids) || [];
-    } catch (err) { console.error('[recon] type expansion failed; using selected ids only', err); ids = selected.map((t) => t.id); }
+      return (data && data.ids) || [];
+    } catch (err) { console.error('[recon] type expansion failed; using selected ids only', err); return selected.map((t) => t.id); }
+  };
+  const selected = _scopeTypeDraft.default;
+  scope.types = { selected, ids: await expand(selected) };
+
+  // Per-column types: which columns changed decides what gets re-reconciled.
+  const changedCols = [];
+  project.colConfig = project.colConfig || {};
+  for (const col of reconChain()) {
+    const sel = (_scopeTypeDraft.cols[col] || []);
+    const beforeSel = JSON.stringify(colTypeSelection(col));
+    if (beforeSel === JSON.stringify(sel)) continue;
+    const cfg = project.colConfig[col] = project.colConfig[col] || {};
+    if (sel.length) cfg.types = { selected: sel, ids: await expand(sel) };
+    else delete cfg.types;
+    changedCols.push(col);
   }
-  scope.types = { selected, ids };
 
   const before = JSON.stringify(project.scope || defaultScope());
   const after = JSON.stringify(scope);
@@ -4845,6 +4946,22 @@ async function applyScope() {
   if (before !== after && invalidateAllMatches()) {
     reconStaleNote = 'Scope changed — reconciliation was reset; reconcile the columns again with the new scope.';
     setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Scope changed — reconcile again to apply it.</span>');
+  } else if (changedCols.length) {
+    // Only the levels whose types changed are re-run (and whatever sits below them, whose containment
+    // came from those matches). The whole point of per-level types is that setting the Place column's
+    // type doesn't throw away the counties you already confirmed (place#184).
+    const chain = reconChain();
+    const earliest = changedCols.reduce((a, c) => Math.min(a, chain.indexOf(c)), chain.length);
+    changedCols.forEach((c) => {
+      const k = String(c) + ':';
+      if (project.matches) for (const key in project.matches) { if (key.startsWith(k)) delete project.matches[key]; }
+      if (project.decisions) for (const key in project.decisions) { if (key.startsWith(k)) delete project.decisions[key]; }
+      invalidateDownstream(c);
+    });
+    if (earliest < chain.length) reconActiveIdx = earliest;
+    const names = changedCols.map((c) => project.columns[c].name).join(', ');
+    reconStaleNote = `Place types changed for ${names} — reconcile that column again (levels above it keep their matches).`;
+    setReconSummary(`<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Place types changed for <strong>${esc(names)}</strong> — reconcile again to apply them.</span>`);
   }
   persist();
   updateScopeLabel();
@@ -5436,7 +5553,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
         pids = resolvedPlaceIds(ancestorCols[a], row).map(barePlaceId);
       }
       if (pids.length) { q.contained_in = pids; q.containment = 'fuzzy'; q.relation = 'intersects'; }
-      applyGlobalScopeToQuery(q, parentCol < 0, !!v.country); // dataset-wide scope (country/date/type/region)
+      applyGlobalScopeToQuery(q, parentCol < 0, !!v.country, colIndex); // scope: dataset-wide, or this column's own types
       queries['q' + j] = q;
     });
     let data;
