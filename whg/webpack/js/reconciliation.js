@@ -1749,7 +1749,7 @@ async function buildExportRecords(opts, onProgress) {
       const mc = f && (_candCoord[f.id] || null);
       aug.whg_match_lon = mc ? +mc.lon.toFixed(6) : '';
       aug.whg_match_lat = mc ? +mc.lat.toFixed(6) : '';
-      aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || [])).join('; ') || '';
+      aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || []).join('; ')) || '';
       aug.whg_match_description = (f && f.cand && f.cand.description) || '';
       aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
     }
