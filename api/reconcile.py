@@ -41,7 +41,7 @@ from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE, \
-    resolve_legacy_place_pk
+    resolve_legacy_place_pks
 from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema, \
     authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
@@ -226,8 +226,7 @@ class ReconciliationView(APIView):
                 # which may be any form we have emitted: whg:<dataset_id>:<src_id>,
                 # whg:<pk>, or a bare numeric pk.
                 if whg_ids:
-                    pk_by_raw = {raw: resolve_legacy_place_pk(raw) for raw in whg_ids}
-                    pk_by_raw = {raw: pk for raw, pk in pk_by_raw.items() if pk}
+                    pk_by_raw = resolve_legacy_place_pks(whg_ids)
                     qs = place_feature_queryset(request.user).filter(id__in=set(pk_by_raw.values()))
                     obj_by_pk = {obj.id: obj for obj in qs}
                     for raw, pk in pk_by_raw.items():

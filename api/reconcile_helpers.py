@@ -102,27 +102,46 @@ def whg_place_id(src: dict) -> str:
     return f"{WHG_NAMESPACE}:{place_id}"     # dataset unresolved — namespaced by pk
 
 
-def resolve_legacy_place_pk(raw_id) -> int | None:
-    """Postgres ``Place`` pk for a WHG place id in any form this service has emitted:
-    ``whg:<dataset_id>:<src_id>``, ``whg:<place_pk>``, or a bare numeric ``<place_pk>``.
+def resolve_legacy_place_pks(raw_ids) -> dict:
+    """Map WHG place ids to Postgres ``Place`` pks, in any form this service has
+    emitted: ``whg:<dataset_id>:<src_id>``, ``whg:<place_pk>``, or a bare numeric
+    ``<place_pk>``. Ids that resolve to nothing — and gateway ids (``gn:…``) — are
+    absent from the result.
 
-    Returns None for gateway ids (``gn:…``) and for ids that resolve to nothing.
+    Batched by dataset: one query per dataset named, not one per id. ``Place`` is
+    keyed on the dataset LABEL (``to_field='label'``), so the dataset leaf is
+    matched by traversing the relation rather than by the raw column.
     """
-    raw = str(raw_id or "").strip()
-    if raw.isdigit():
-        return int(raw)
-    parts = raw.split(":")
-    if not parts or parts[0].lower() != WHG_NAMESPACE:
-        return None
-    if len(parts) == 2 and parts[1].isdigit():
-        return int(parts[1])
-    if len(parts) >= 3 and parts[1].isdigit():
-        from places.models import Place
-        # src_id may itself contain colons — only the dataset leaf is delimited.
-        src_id = ":".join(parts[2:])
-        return (Place.objects.filter(dataset_id=int(parts[1]), src_id=src_id)
-                .values_list('id', flat=True).first())
-    return None
+    from places.models import Place
+
+    resolved, by_dataset = {}, {}
+    for raw_id in raw_ids:
+        raw = str(raw_id or "").strip()
+        if raw.isdigit():
+            resolved[raw_id] = int(raw)
+            continue
+        parts = raw.split(":")
+        if len(parts) < 2 or parts[0].lower() != WHG_NAMESPACE or not parts[1].isdigit():
+            continue
+        if len(parts) == 2:
+            resolved[raw_id] = int(parts[1])
+        else:
+            # src_id may itself contain colons — only the dataset leaf is delimited.
+            by_dataset.setdefault(int(parts[1]), {})[":".join(parts[2:])] = raw_id
+
+    for ds_pk, wanted in by_dataset.items():
+        for pk, src_id in (Place.objects
+                           .filter(dataset__id=ds_pk, src_id__in=list(wanted))
+                           .values_list('id', 'src_id')):
+            raw_id = wanted.get(src_id)
+            if raw_id is not None:
+                resolved[raw_id] = pk
+    return resolved
+
+
+def resolve_legacy_place_pk(raw_id) -> int | None:
+    """Postgres ``Place`` pk for a single WHG place id — see resolve_legacy_place_pks()."""
+    return resolve_legacy_place_pks([raw_id]).get(raw_id)
 
 
 def parse_namespaces(namespaces_param) -> set[str] | None:
