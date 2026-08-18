@@ -11,4 +11,13 @@
 
 {% block content %}
 {% include "main/_beta_snag_form.html" %}
+<script type="text/javascript">
+  // Standalone page: no panel to hide and no opener to close, so Close returns the
+  // reporter to whatever they were looking at (place#187).
+  document.querySelectorAll('[data-beta-close]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (document.referrer) { window.location.href = document.referrer; } else { history.back(); }
+    });
+  });
+</script>
 {% endblock %}

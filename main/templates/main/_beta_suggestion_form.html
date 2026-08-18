@@ -29,7 +29,13 @@
         <p class="mb-0">The team has been notified. (It's saved even though it wasn't auto-posted to the tracker.)</p>
       {% endif %}
     </div>
-    <p><a href="javascript:window.close()" class="btn btn-sm btn-outline-secondary">Close</a>
+    {% comment %}
+      Close has to work in BOTH homes. In the draggable panel beta-diag.js binds
+      data-beta-close and hides the panel; on the standalone page window.close()
+      only ever worked for a script-opened tab and silently did nothing otherwise,
+      so fall back to going back to whatever the reporter was looking at. See place#187.
+    {% endcomment %}
+    <p><button type="button" data-beta-close class="btn btn-sm btn-outline-secondary">Close</button>
        <a href="{% url 'beta-suggestion' %}" class="btn btn-sm btn-outline-primary">Suggest another</a></p>
   {% else %}
     <p class="text-muted">Got an idea for how WHG could work better? Tell us what you'd like to see —

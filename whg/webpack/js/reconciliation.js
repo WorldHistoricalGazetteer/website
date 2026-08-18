@@ -1723,7 +1723,7 @@ async function buildExportRecords(opts, onProgress) {
 
   const augHeaders = [];
   if (opts.match) {
-    augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
+    augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source', 'whg_match_note');
     // Parent containment matches — id, title AND score, so the confidence in the container travels
     // with it exactly as it does for the primary match (place#184).
     adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`, `${colSlug(c)}_whg_score`));
@@ -1780,6 +1780,9 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_title = match ? match.list.map((x) => x.title).join('; ') : '';
       aug.whg_match_score = match ? match.list.map((x) => x.score).join('; ') : '';
       aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
+      // The reviewer's rationale for this row (place#180) — recorded even where
+      // nothing matched, since "why I could not match this" is worth keeping too.
+      aug.whg_match_note = info ? noteFor(info.key) : '';
       // Parent-column (containment) matches: explicit accepts, else the auto-confirmed top.
       adminCols.forEach((c) => {
         const a = (parents.find((p) => p.col === c) || {}).match || null;
@@ -1805,7 +1808,8 @@ async function buildExportRecords(opts, onProgress) {
       // reconciled to a record carrying sitelinks (in practice, a Wikidata one).
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
-    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents });
+    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents,
+                   note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
   // the Wikipedia link were asked for, and it is handed only this object.
@@ -1994,6 +1998,9 @@ function buildLPF(data) {
         const link = { type: 'closeMatch', identifier: barePlaceId(x.id), certainty: certaintyFor(x) };
         const score = Number(x.score);
         if (Number.isFinite(score)) link.whg_match_score = score;
+        // The reviewer's own words about this identification. `certainty` says how
+        // sure; this says why — the part no vocabulary can carry (place#180).
+        if (rec.note) link.whg_match_note = rec.note;
         links.push(link);
       });
       // The Wikipedia article as LPF's own `primaryTopicOf` — the term the spec documents for exactly
@@ -2138,10 +2145,39 @@ function citationDefaults() {
 function citationModel() { return Object.assign(citationDefaults(), (project && project.citation) || {}); }
 function citeContributors() { return (project && project.citation && Array.isArray(project.citation.contributors)) ? project.citation.contributors : []; }
 
+// Seed the contributor row from the signed-in user's own profile — name, ORCiD,
+// affiliation, and "Data curation", which is what reconciling somebody's table
+// actually is. Only when the dataset has NO contributors yet and the row is
+// untouched: this fills the form, it does not add anyone. The user still presses
+// Add, can edit every field first, and never has a contributor appear in their
+// citation without asking. See place#186.
+let _citeSeeded = false;
+function seedContributorFromProfile() {
+  if (_citeSeeded || !project) return;
+  const nameEl = el('cite-c-name');
+  if (!nameEl || nameEl.value.trim() || citeContributors().length) return;
+  const meta = (n) => (document.querySelector(`meta[name="${n}"]`) || {}).content || '';
+  const name = meta('user-name').trim();
+  if (!name) return;                       // signed out, or no name on the profile
+  _citeSeeded = true;
+  nameEl.value = name;
+  // ORCiD is stored as a URL; the field asks for the identifier.
+  const orcid = meta('user-orcid').trim().replace(/^https?:\/\/(www\.)?orcid\.org\//i, '');
+  const setIf = (id, val) => { const x = el(id); if (x && !x.value.trim() && val) x.value = val; };
+  setIf('cite-c-orcid', orcid);
+  setIf('cite-c-affil', meta('user-affiliation').trim());
+  const role = el('cite-c-role');
+  if (role && !role.value) {
+    const opt = [...role.options].find((o) => o.value === 'data-curation');
+    if (opt) role.value = opt.value;
+  }
+}
+
 function renderCitation() {
   if (!project) return;
   const m = citationModel();
   CITE_FIELDS.forEach((f) => { const inp = el('cite-' + f); if (inp && document.activeElement !== inp) inp.value = m[f] || ''; });
+  seedContributorFromProfile();
   renderCiteContributors();
   const prev = el('cite-preview'); if (prev) prev.textContent = formatCitation(currentCitation());
 }
@@ -3520,6 +3556,24 @@ function setDecision(key, dec) {
   return keys.length;
 }
 
+// ── Decision rationale (place#180) ───────────────────────────────────────────
+// A free-text note explaining WHY a match was chosen, or what remains uncertain
+// about it. Kept beside the decisions rather than inside them: a note is just as
+// worth recording for a row that auto-confirmed (nothing was decided by hand) or
+// for one left as "no match", and burying it in the decision object would tie its
+// life to a status that can change. Fanned out to merged sibling rows exactly as a
+// decision is, since they share one review.
+function noteFor(key) { return (project && project.notes && project.notes[key]) || ''; }
+function setNote(key, text) {
+  if (!project) return;
+  project.notes = project.notes || {};
+  const ci = key.indexOf(':');
+  const keys = mergeGroupKeys(Number(key.slice(0, ci)), key.slice(ci + 1));
+  const val = String(text || '').trim().slice(0, 2000);
+  keys.forEach((k) => { if (val) project.notes[k] = val; else delete project.notes[k]; });
+  persist();
+}
+
 // ── Stage state machine (iterative, review-gated reconciliation) ─────────────
 // A column is reconciled only after the column above it in the chain has been reviewed & confirmed,
 // so each child inherits containment from confirmed parents. State is DERIVED from matches/decisions
@@ -4332,6 +4386,14 @@ function renderReviewCard() {
               Skip all remaining (${pend.toLocaleString()})</button>` : ''; })()}
        <button type="button" class="btn btn-sm btn-primary${reviewMeta.filter((r) => needsReview(r.key)).length > 1 ? '' : ' ms-auto'}" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
      </div>
+     <div class="recon-review-note mt-2">
+       <label class="small text-muted" for="recon-review-note-input">
+         <i class="fas fa-pen-to-square me-1"></i>Why this decision? <span class="text-muted">(optional — reasoning, or what you are unsure about; travels with the match into your exports)</span>
+       </label>
+       <input type="text" id="recon-review-note-input" class="form-control form-control-sm"
+              maxlength="2000" placeholder="e.g. chose the parish, not the village of the same name — parish register context"
+              value="${esc(noteFor(meta.key))}">
+     </div>
      <div class="recon-geom-tools d-flex flex-wrap align-items-center gap-1 mt-2 small">
        <span class="text-muted me-1"><i class="fas fa-location-dot"></i> Location:</span>
        <button type="button" class="btn btn-sm btn-outline-primary" data-geom="clone" title="Copy the selected match's coordinates into your dataset (point, line, or polygon)">Use match location</button>
@@ -4352,7 +4414,21 @@ function renderReviewCard() {
     li.addEventListener('mouseenter', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(ci); });
     li.addEventListener('mouseleave', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(null); });
   });
-  card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => reviewAction(b.dataset.act)));
+  const noteInput = card.querySelector('#recon-review-note-input');
+  if (noteInput) {
+    // Save on the way out (blur) and on Enter — not per keystroke, which would
+    // persist the project on every letter typed.
+    const save = () => setNote(meta.key, noteInput.value);
+    noteInput.addEventListener('blur', save);
+    noteInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); save(); noteInput.blur(); }
+      e.stopPropagation();   // the review pane has single-key shortcuts (x/s/n/u)
+    });
+  }
+  card.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', () => {
+    if (noteInput) setNote(meta.key, noteInput.value);   // don't lose an unsaved note
+    reviewAction(b.dataset.act);
+  }));
   card.querySelectorAll('[data-geom]').forEach((b) => b.addEventListener('click', () => geomAction(b.dataset.geom, meta.key)));
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
 }
