@@ -3,7 +3,8 @@
     .suggest-wrap label { font-weight: 600; font-size: .9rem; margin-bottom: .15rem; }
     .suggest-wrap .form-text { margin-top: 0; }
   /* In the draggable panel the panel header already names the form. */
-  .whg-beta-report .beta-form-heading { display: none; }
+  /* Bootstrap's d-flex is !important, so this must be too. */
+  .whg-beta-report .beta-form-heading { display: none !important; }
   .whg-beta-report .snag-wrap, .whg-beta-report .suggest-wrap { margin: .5rem auto; }
 </style>
 {% load static %}
