@@ -37,6 +37,10 @@ from datasets.models import Dataset
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
 from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
+from concurrent.futures import ThreadPoolExecutor
+
+from django.db import connection as db_connection
+
 from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
@@ -1021,14 +1025,46 @@ def process_queries(queries, batch_size=50, user=None):
         messages.append(f"Batch size limit exceeded; processing first {batch_size} queries.")
         logger.info("process_queries: batch limit exceeded, truncated to %d", batch_size)
 
-    results = {}
-    for key, params in queries.items():
+    # Run the queries CONCURRENTLY, one thread each. Each query is its own round trip
+    # to the Pitt gateway, so a serial loop spent nearly all of its time waiting: a
+    # 25-query batch (the Workbench's size) measured 6.9s under fuzzy containment and
+    # 13.4s under exact/within, almost none of it computation. The work is I/O-bound,
+    # so threads are the right tool even though this is a sync view.
+    #
+    # Deliberately unbounded — a thread per query, capped only by the batch limit
+    # above. That means up to `batch_size` simultaneous gateway calls per request.
+    #
+    # Each worker MUST close its DB connection: a query resolves dataset labels and
+    # place keys through the ORM, and a thread that opens a connection and exits
+    # without closing it leaks that connection until the pool times it out.
+    def _run(item):
+        key, params = item
         try:
             query = normalise_query_params(params)
-            results[key] = reconcile_place_es(query, user=user)
+            return key, reconcile_place_es(query, user=user), None
         except ValueError as e:
-            logger.warning("process_queries: query '%s' failed: %s", key, e)
-            results[key] = {"error": str(e), "result": []}
+            return key, None, e
+        finally:
+            db_connection.close()
+
+    results = {}
+    if queries:
+        # Resolve the lazy user once, on this thread, so N workers don't each trigger
+        # the same authentication lookup.
+        getattr(user, "is_authenticated", False)
+        with ThreadPoolExecutor(max_workers=len(queries),
+                                thread_name_prefix="recon") as pool:
+            done = list(pool.map(_run, list(queries.items())))
+        # Reassemble in the caller's original order — a client matches results to
+        # queries by key, but a stable order keeps responses diffable and logs sane.
+        by_key = {key: (res, err) for key, res, err in done}
+        for key in queries:
+            res, err = by_key[key]
+            if err is not None:
+                logger.warning("process_queries: query '%s' failed: %s", key, err)
+                results[key] = {"error": str(err), "result": []}
+            else:
+                results[key] = res
 
     out = {**results, "messages": messages} if messages else dict(results)
     out["attribution"] = _attribution_for_results(results)
