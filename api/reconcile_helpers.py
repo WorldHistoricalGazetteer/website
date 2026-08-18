@@ -376,6 +376,42 @@ def geoms_to_geojson(src):
     return {"type": "FeatureCollection", "features": features} if features else None
 
 
+def place_types(src) -> list:
+    """The AAT place types the RECORD carries — what it is (a settlement, a county), as
+    distinct from the ``type`` field below, which the OpenRefine protocol reserves for the
+    reconciled entity type and which is always "Place".
+
+    Without this a client enriching from WHG could only report "Place" for every match, and
+    an LPF export built from a reconciliation had no types to carry — the one field WHG's
+    own ingest requires for a contribution. See place#184.
+
+    Legacy index docs carry ``types: [{identifier, label, sourceLabel}]`` with a bare numeric
+    AAT id; the gateway carries ``aat_ids``. Both are normalised to ``aat:<id>``.
+    """
+    out, seen = [], set()
+
+    def add(identifier, label):
+        identifier = str(identifier or "").strip()
+        if identifier.isdigit():
+            identifier = f"aat:{identifier}"
+        if not identifier and not label:
+            return
+        if identifier and identifier in seen:
+            return
+        if identifier:
+            seen.add(identifier)
+        out.append({"identifier": identifier, "label": label or ""})
+
+    for t in (src.get("types") or []):
+        if isinstance(t, dict):
+            add(t.get("identifier") or t.get("id"), t.get("label") or t.get("sourceLabel"))
+        elif t:
+            add("", str(t))
+    for aat_id in (src.get("aat_ids") or []):
+        add(aat_id, "")
+    return out
+
+
 def wikipedia_links(links):
     """Extract Wikipedia article links from a place's ``links`` list.
 
@@ -484,6 +520,9 @@ def make_candidate(hit, query_text, max_score, schema_space):
         # Wikipedia article links (from Wikidata sitelinks in the index) — empty unless the place
         # carries them. Additive: lets the Workbench enrich Wikidata-backed matches with Wikipedia.
         "wikipedia": wikipedia_links(src.get("links")),
+        # What the place IS (AAT). `type` below is the OpenRefine entity type and is always
+        # "Place"; a client wanting to enrich with real place types needs these instead.
+        "place_types": place_types(src),
         "type": [
             {
                 "id": schema_space + "#Place",
