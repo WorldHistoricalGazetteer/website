@@ -1805,7 +1805,9 @@ async function buildExportRecords(opts, onProgress) {
     }
     records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents });
   }
-  return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
+  // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
+  // the Wikipedia link were asked for, and it is handed only this object.
+  return { origHeaders: project.columns.map((c) => c.name), augHeaders, records, opts };
 }
 
 // Minimal GeoJSON-geometry → WKT (Point / LineString / Polygon) for the LP-TSV geowkt column.
@@ -1878,6 +1880,7 @@ function serializeLPTSV(data) {
 // Build the LPF FeatureCollection OBJECT (used both for serialisation and for in-browser validation).
 function buildLPF(data) {
   const idIdx = colIndexByRole('id'), nameIdx = colIndexByRole('name'), countryIdx = colIndexByRole('country');
+  const opts = data.opts || {};
   const features = data.records.map((rec, i) => {
     const title = nameIdx >= 0 ? String(rec.orig[nameIdx] || '') : '';
     const cc = countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? [String(rec.orig[countryIdx]).toUpperCase()] : [];
