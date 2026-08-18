@@ -41,7 +41,7 @@ from .querysets import place_feature_queryset, period_public_queryset
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE, \
-    resolve_legacy_place_pks
+    resolve_legacy_place_pks, whg_identity_keys
 from .schemas import reconcile_schema, propose_properties_schema, suggest_entity_schema, suggest_property_schema, \
     authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
@@ -752,10 +752,11 @@ class SuggestEntityView(AuthenticatedAPIView):
                     place_candidates.append(candidate)
 
             # --- 2b. CRC gateway search (new places/toponyms indexes) ---
-            crc_namespaces = None
-            if namespaces is not None:
-                crc_namespaces = namespaces - {WHG_NAMESPACE}
-            if namespaces is None or crc_namespaces:
+            # `whg` goes to the gateway too — it indexes WHG's accessioned datasets
+            # under the same identifiers (place#183). Duplicates across the two paths
+            # are removed below.
+            crc_namespaces = namespaces
+            if namespaces is None or namespaces:
                 crc_mode = "starts" if exact else "fuzzy"
                 crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user,
                                               namespaces=crc_namespaces, ccodes=ccodes,
@@ -1218,14 +1219,19 @@ def reconcile_place_es(query, user=None):
     # legacy `build_es_query` has no containment field to filter on — so unfiltered legacy hits would
     # leak places OUTSIDE the region and get re-ranked into the results (making scope look like mere
     # weighting). When the gateway path is also serving this query (which DOES enforce containment), we
-    # therefore drop the unverifiable legacy hits so the scope is respected. Only when the caller has
-    # explicitly restricted to legacy WHG (`namespaces == {"whg"}`, no gateway path) do we keep them,
-    # since suppressing would otherwise return nothing. See the gateway-side handoff (place#144).
+    # therefore drop the unverifiable legacy hits so the scope is respected. This now applies to a
+    # `whg`-only query as well: the gateway serves that namespace, so a scoped WHG query is answered
+    # from the accessioned corpus with the scope actually enforced, rather than from the whole legacy
+    # index with the scope quietly ignored. See the gateway-side handoff (place#144).
     contained_in = bool((query.get("raw") or {}).get("contained_in"))
-    crc_namespaces = None  # None ⇒ don't filter on the gateway side
-    if namespaces is not None:
-        crc_namespaces = namespaces - {WHG_NAMESPACE}
-    gateway_in_play = namespaces is None or bool(crc_namespaces)
+    # The gateway indexes WHG's own accessioned datasets too, under the same
+    # `whg:<dataset_id>:<src_id>` identifiers this service mints, so `whg` is passed
+    # THROUGH to it rather than withheld: withholding made those records unreachable
+    # here, and left a source we hold at Pitt searchable everywhere except WHG's own
+    # reconciliation. Both paths can now return the same place, so the merge below
+    # dedupes across them by place key rather than by raw id. See place#183.
+    crc_namespaces = namespaces  # None ⇒ don't filter on the gateway side
+    gateway_in_play = namespaces is None or bool(namespaces)
     suppress_legacy = contained_in and gateway_in_play
 
     # 1. Legacy ES search — skip when the caller excluded "whg", or when an unenforceable containment
@@ -1310,13 +1316,14 @@ def reconcile_place_es(query, user=None):
     if not all_hits:
         return {"result": [], "geojson": None, **extra}
 
-    # 4. Deduplicate by place_id (prefer legacy hits)
+    # 4. Deduplicate (legacy first, so the local record with its full name apparatus wins).
+    #    Keys come from whg_identity_keys, which reduces a WHG place to its place key
+    #    whichever path returned it — the two paths name it differently otherwise.
     seen_ids = set()
     deduped = []
-    for hit in all_hits:
-        pid = str(hit.get("_source", {}).get("place_id", hit.get("_id", "")))
-        if pid not in seen_ids:
-            seen_ids.add(pid)
+    for hit, key in zip(all_hits, whg_identity_keys(all_hits)):
+        if key not in seen_ids:
+            seen_ids.add(key)
             deduped.append(hit)
 
     # 5. Re-sort by score descending
