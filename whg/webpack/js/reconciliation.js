@@ -1651,6 +1651,19 @@ function rowCoordValue(i) {
   return null;
 }
 
+// LPF expresses confidence as `certainty` on a relation — an enum, not a number. A match a person
+// confirmed is `certain` whatever it scored; an auto-confirmed one is only as good as its score, and
+// the user's own auto-confirm threshold is the bar they set for "good enough". The numeric score
+// travels alongside as `whg_match_score` for anything that wants the raw value. See place#184.
+function certaintyFor(match) {
+  if (!match) return 'uncertain';
+  if (match.accepted) return 'certain';
+  const score = Number(match.score);
+  if (!Number.isFinite(score)) return 'less-certain';
+  if (score >= getThreshold()) return 'certain';
+  return score >= 70 ? 'less-certain' : 'uncertain';
+}
+
 function currentExportOptions() {
   const fmtEl = document.querySelector('input[name="recon-exp-fmt"]:checked');
   return {
@@ -1691,7 +1704,9 @@ async function buildExportRecords(opts, onProgress) {
   const augHeaders = [];
   if (opts.match) {
     augHeaders.push('whg_match_id', 'whg_match_title', 'whg_match_score', 'whg_match_source');
-    adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`)); // parent containment matches
+    // Parent containment matches — id, title AND score, so the confidence in the container travels
+    // with it exactly as it does for the primary match (place#184).
+    adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`, `${colSlug(c)}_whg_score`));
   }
   if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types');
   // Wikipedia link — a separate, explicit opt-in column, populated ONLY from Wikidata (wd) matches.
@@ -1725,6 +1740,11 @@ async function buildExportRecords(opts, onProgress) {
       whenStart = (d && d.startISO) || '';
       whenEnd = (d && d.endISO) || '';
     }
+    // Containers (County, Parish, …) resolved for this row. Computed regardless of the CSV/JSON
+    // toggles because LPF carries them as relations, not as columns.
+    const parents = adminCols
+      .map((c) => ({ col: c, name: project.columns[c].name, match: resolvedMatchList(c + ':' + i)[0] || null }))
+      .filter((p) => p.match);
     if (opts.match || opts.enrich || opts.wikipedia) {
       const list = info ? resolvedMatchList(info.key) : [];
       if (list.length) {
@@ -1739,9 +1759,10 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
       // Parent-column (containment) matches: explicit accepts, else the auto-confirmed top.
       adminCols.forEach((c) => {
-        const a = resolvedMatchList(c + ':' + i)[0];
+        const a = (parents.find((p) => p.col === c) || {}).match || null;
         aug[`${colSlug(c)}_whg_id`] = (a && barePlaceId(a.id)) || '';
         aug[`${colSlug(c)}_whg_title`] = (a && a.title) || '';
+        aug[`${colSlug(c)}_whg_score`] = (a && a.score != null) ? a.score : '';
       });
     }
     if (opts.enrich) {
@@ -1758,7 +1779,7 @@ async function buildExportRecords(opts, onProgress) {
       // matches. Blank unless the row was reconciled to a Wikidata (wd) record.
       aug[wikiHeader] = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
     }
-    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match });
+    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents });
   }
   return { origHeaders: project.columns.map((c) => c.name), augHeaders, records };
 }
@@ -1819,7 +1840,10 @@ function serializeLPTSV(data) {
       lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
       geowkt: (rec.geom && !isPoint) ? geojsonToWKT(rec.geom) : '',
       matches: rec.match ? rec.match.list.map((x) => barePlaceId(x.id)).join(';') : '',
-      parent_name: countyIdx >= 0 ? rec.orig[countyIdx] : '',
+      // Prefer the CONFIRMED container's title over the raw cell — it's the same place, spelled the
+      // way the gazetteer spells it, which is what a consumer can match on (place#184).
+      parent_name: (rec.parents && rec.parents.length && (rec.parents[0].match.title || '')) ||
+        (countyIdx >= 0 ? rec.orig[countyIdx] : ''),
       description: rec.match ? 'closeMatch: ' + rec.match.list.map((x) => `${x.title} (${x.source})`).join('; ') : '',
     };
     lines.push(cols.map((c) => cell(row[c])).join('\t'));
@@ -1875,6 +1899,25 @@ function buildLPF(data) {
     // every format. `whg_match_score` is not an LPF term, but the schema puts no additionalProperties
     // bar on a link and WHG's ingest reads only type/identifier, so it rides along as an annotation
     // for whoever opens the file rather than changing how it is understood. See place#183.
+    // Containment: the county/parish a row was reconciled within is data, not just a spreadsheet
+    // column, so it travels as an LPF relation. `gvp:broaderPartitive` is the Getty term for
+    // "is part of", which is what a container column asserts. `certainty` is LPF's own confidence
+    // vocabulary; the numeric score rides alongside for anything that wants the raw value. WHG's
+    // ingest stores relations (validation/create_dataset.py), so a contributed dataset keeps its
+    // hierarchy instead of losing it at the door. See place#184.
+    if (rec.parents && rec.parents.length) {
+      feat.relations = rec.parents.map((p) => {
+        const rel = {
+          relationType: 'gvp:broaderPartitive',
+          relationTo: barePlaceId(p.match.id),
+          label: p.match.title || p.name,
+          certainty: certaintyFor(p.match),
+        };
+        const score = Number(p.match.score);
+        if (Number.isFinite(score)) rel.whg_match_score = score;
+        return rel;
+      });
+    }
     if (rec.match) feat.links = rec.match.list.map((x) => {
       const link = { type: 'closeMatch', identifier: barePlaceId(x.id) };
       const score = Number(x.score);
@@ -3734,9 +3777,9 @@ function resolvedMatchList(key) {
   const m = (project.matches && project.matches[key]) || null;
   const cands = (m && m.candidates) || [];
   const dec = project.decisions && project.decisions[key];
-  if (dec) return acceptedList(dec).map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null }));
+  if (dec) return acceptedList(dec).map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null, accepted: true }));
   if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) {
-    return [{ id: m.top.id, title: m.top.name, score: m.top.score, source: nsName(m.top.id), cand: m.top }];
+    return [{ id: m.top.id, title: m.top.name, score: m.top.score, source: nsName(m.top.id), cand: m.top, accepted: false }];
   }
   return [];
 }
