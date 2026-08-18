@@ -416,12 +416,19 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     try:
         url = f"{_gateway_url()}/api/reconcile"
         logger.info("CRC gateway POST %s", url)
-        resp = requests.post(
-            url,
-            json=body,
-            headers=_headers(),
-            timeout=_timeout(),
-        )
+        try:
+            resp = requests.post(url, json=body, headers=_headers(), timeout=_timeout())
+        except requests.ConnectionError as first:
+            # Retry ONCE on a dropped connection. A gateway worker that dies mid-flight
+            # (2026-08-18: GEOS segfaults under concurrent containment) drops every
+            # request it was holding, and the fail-safe below turns that into an empty
+            # result — so the row records "no match" and the user is told nothing. The
+            # supervisor has already replaced the worker by the time we get here, so a
+            # single retry lands on a live one. Safe to repeat: a reconcile search is a
+            # read. NOT retried on timeout — that request may still be running, and
+            # repeating it would double the load that caused it.
+            logger.warning("CRC gateway connection dropped (%s) — retrying once", first)
+            resp = requests.post(url, json=body, headers=_headers(), timeout=_timeout())
         logger.info("CRC gateway /api/reconcile response: %s", resp.status_code)
         resp.raise_for_status()
         data = resp.json()
