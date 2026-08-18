@@ -160,7 +160,18 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
         paused = !paused;
         storeCarouselPaused(paused);
         clearTimeout(timer);
-        if (startCarousels) carousels.first().carousel(paused ? 'pause' : 'cycle');
+        if (startCarousels) {
+            if (paused) {
+                carousels.first().carousel('pause');
+            } else {
+                // Move a slide AT ONCE, then resume cycling. `cycle()` alone waits a
+                // full interval — ten seconds here — so pressing play appeared to do
+                // nothing at all, and was reported as a broken button (place#177).
+                // Pausing is self-evidently instant; resuming has to be too.
+                carousels.first().carousel('next');
+                carousels.first().carousel('cycle');
+            }
+        }
         $(this).attr('aria-pressed', String(paused))
                .attr('title', paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own')
                .find('i').attr('class', `fas ${paused ? 'fa-play' : 'fa-pause'}`);
