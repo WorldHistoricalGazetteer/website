@@ -5740,7 +5740,13 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
     slice.forEach((u, j) => {
       const key = u.repKey, v = u.v, row = key.slice(key.indexOf(':') + 1);
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
-      const rowCoord = (sp.nearby && hasCoordRole()) ? rowCoordValue(Number(row)) : null;
+      // The row's coordinate describes the PLACE, not the county or region containing it, so the
+      // circle belongs only to the name column. Applied to a container column it asks for a county
+      // whose record sits within 10km of a town inside it — which is usually false (Devon's point is
+      // ~30km from Exeter's), so the container silently failed to match and containment could then
+      // not be applied at all. See place#184.
+      const rowCoord = (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name'))
+        ? rowCoordValue(Number(row)) : null;
       if (v.country) q.countries = [v.country];
       if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
@@ -5805,7 +5811,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // without this the radius would silently not apply to exactly the rows that have the most
       // context. Candidates with no known position are KEPT — a place without coordinates cannot be
       // shown to be out of range, and dropping it would lose a valid match to a data gap.
-      if (sp.nearby && hasCoordRole()) {
+      if (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name')) {
         const rc = rowCoordValue(Number(u.repKey.slice(u.repKey.indexOf(':') + 1)));
         if (rc) {
           result = result.filter((c) => {
