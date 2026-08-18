@@ -1676,8 +1676,6 @@ function uniqueHeader(base, taken) {
 async function buildExportRecords(opts, onProgress) {
   const nameCol = colIndexByRole('name');
   const built = buildUniqueQueries(nameCol); // export the NAME column's match as the primary whg_match_*
-  const decisions = project.decisions || {};
-  const matches = project.matches || {};
   // Parent columns reconciled ahead of the name (County, Parish, …) get their own match columns.
   const adminCols = reconChain().filter((c) => c !== nameCol);
   const colSlug = (i) => String(project.columns[i].name).trim().replace(/\W+/g, '_').toLowerCase().replace(/^_|_$/g, '') || ('col' + i);
@@ -1701,10 +1699,10 @@ async function buildExportRecords(opts, onProgress) {
   const wikiHeader = opts.wikipedia ? uniqueHeader('wikipedia', project.columns.map((c) => c.name).concat(augHeaders)) : null;
   if (wikiHeader) augHeaders.push(wikiHeader);
 
-  // Pre-fetch coordinates for accepted matches when enriching (reuses the review-pane cache).
+  // Pre-fetch coordinates for resolved matches when enriching (reuses the review-pane cache).
   if (opts.enrich) {
     const ids = [];
-    if (built) built.map.forEach((v, key) => { acceptedList(decisions[key]).forEach((a) => { if (a.place_id && !(a.place_id in _candCoord)) ids.push(a.place_id); }); });
+    if (built) built.map.forEach((v, key) => { resolvedMatchList(key).forEach((x) => { if (x.id && !(x.id in _candCoord)) ids.push(x.id); }); });
     for (let k = 0; k < ids.length; k++) { await fetchCandidateCoord(ids[k]); if (onProgress) onProgress(`enriching ${k + 1} / ${ids.length}…`); }
   }
 
@@ -1728,11 +1726,9 @@ async function buildExportRecords(opts, onProgress) {
       whenEnd = (d && d.endISO) || '';
     }
     if (opts.match || opts.enrich || opts.wikipedia) {
-      const dec = info && decisions[info.key];
-      const accepted = acceptedList(dec);
-      if (accepted.length) {
-        const cands = (matches[info.key] && matches[info.key].candidates) || [];
-        match = { list: accepted.map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null })) };
+      const list = info ? resolvedMatchList(info.key) : [];
+      if (list.length) {
+        match = { list };
         match.first = match.list[0];
       }
     }
@@ -1741,14 +1737,11 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_title = match ? match.list.map((x) => x.title).join('; ') : '';
       aug.whg_match_score = match ? match.list.map((x) => x.score).join('; ') : '';
       aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
-      // Parent-column (containment) matches: accepted, else the auto-confirmed top.
+      // Parent-column (containment) matches: explicit accepts, else the auto-confirmed top.
       adminCols.forEach((c) => {
-        const key = c + ':' + i;
-        const a = acceptedList(decisions[key])[0];
-        let id = a && a.place_id, title = a && a.label;
-        if (!id) { const m = matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) { id = m.top.id; title = m.top.name; } }
-        aug[`${colSlug(c)}_whg_id`] = id || '';
-        aug[`${colSlug(c)}_whg_title`] = title || '';
+        const a = resolvedMatchList(c + ':' + i)[0];
+        aug[`${colSlug(c)}_whg_id`] = (a && a.id) || '';
+        aug[`${colSlug(c)}_whg_title`] = (a && a.title) || '';
       });
     }
     if (opts.enrich) {
@@ -1761,7 +1754,7 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_types = (f && f.cand && (f.cand.type || []).map((t) => (t && (t.name || t.id)) || t).join('; ')) || '';
     }
     if (wikiHeader) {
-      // Wikipedia article URL(s) from Wikidata sitelinks surfaced by /reconcile, across accepted
+      // Wikipedia article URL(s) from Wikidata sitelinks surfaced by /reconcile, across resolved
       // matches. Blank unless the row was reconciled to a Wikidata (wd) record.
       aug[wikiHeader] = match ? [...new Set(match.list.flatMap((x) => (x.cand && x.cand.wikipedia || []).map((w) => w.url)))].join('; ') : '';
     }
@@ -1986,9 +1979,11 @@ function refreshExport() {
   ['recon-exp-match', 'recon-exp-enrich', 'recon-exp-wikipedia'].forEach((id) => { const box = el(id); if (box) box.disabled = !hasMatches; });
   const sum = el('recon-pane-sum-export');
   if (sum) {
-    let accepted = 0;
-    if (project.decisions) Object.values(project.decisions).forEach((d) => { if (d.status === 'accepted') accepted += 1; });
-    sum.textContent = hasMatches ? `${accepted.toLocaleString()} confirmed match${accepted === 1 ? '' : 'es'}` : 'augmented columns ready';
+    // Count what the export will actually carry — explicit accepts AND auto-confirmed rows. Counting
+    // decisions alone reported "0 confirmed matches" for a fully auto-matched dataset (place#183).
+    let confirmed = 0;
+    Object.keys(project.matches || {}).forEach((key) => { if (resolvedMatchList(key).length) confirmed += 1; });
+    sum.textContent = hasMatches ? `${confirmed.toLocaleString()} confirmed match${confirmed === 1 ? '' : 'es'}` : 'augmented columns ready';
   }
   renderCitation();
 }
@@ -3710,6 +3705,22 @@ function acceptedCandidate(key) {
   const dec = project.decisions && project.decisions[key];
   if (dec) { const a = acceptedList(dec)[0]; return a ? (m.candidates && m.candidates[a.ci]) || null : null; }
   return (m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) ? m.top : null;
+}
+
+// The matches RESOLVED for a key, in the shape the exporters want: explicit accepts, else the
+// auto-confirmed top candidate. Auto-confirmed rows never enter review, so nothing is ever written
+// to `decisions` for them — reading decisions alone dropped every auto-match from the exported
+// CSV/JSON/LP-TSV/LPF (place#183). An explicit decision always wins, so a rejected/skipped/no-match
+// row resolves to nothing even when its top candidate would otherwise auto-confirm.
+function resolvedMatchList(key) {
+  const m = (project.matches && project.matches[key]) || null;
+  const cands = (m && m.candidates) || [];
+  const dec = project.decisions && project.decisions[key];
+  if (dec) return acceptedList(dec).map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null }));
+  if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) {
+    return [{ id: m.top.id, title: m.top.name, score: m.top.score, source: nsName(m.top.id), cand: m.top }];
+  }
+  return [];
 }
 
 function renderResultsTable(built) {
