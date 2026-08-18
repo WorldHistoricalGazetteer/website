@@ -130,11 +130,17 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
             by_dataset.setdefault(int(parts[1]), {})[":".join(parts[2:])] = raw_id
 
     for ds_pk, wanted in by_dataset.items():
+        # src_id is the contributor's identifier and is NOT guaranteed unique within a
+        # dataset — 4,298 legacy places across 11 datasets share one with a sibling
+        # (0.16% of the table, all of them apparent duplicate records). Resolve to the
+        # LOWEST pk so an ambiguous id always dereferences to the same place rather
+        # than varying with row order. See place#172.
         for pk, src_id in (Place.objects
                            .filter(dataset__id=ds_pk, src_id__in=list(wanted))
+                           .order_by('src_id', 'id')
                            .values_list('id', 'src_id')):
             raw_id = wanted.get(src_id)
-            if raw_id is not None:
+            if raw_id is not None and raw_id not in resolved:
                 resolved[raw_id] = pk
     return resolved
 
