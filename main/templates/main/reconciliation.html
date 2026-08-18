@@ -394,9 +394,14 @@
           <label class="d-block small"><input type="checkbox" id="recon-exp-match" checked>
             Confirmed WHG match <span class="text-muted">(id, title, score, source)</span></label>
           <label class="d-block small"><input type="checkbox" id="recon-exp-enrich">
-            Enrich from WHG <span class="text-muted">(matched coordinates, variant names, description, type — fetches from WHG)</span></label>
+            Enrich from WHG <span class="text-muted">(matched coordinates, variant names, place types — fetches from WHG)</span></label>
           <label class="d-block small"><input type="checkbox" id="recon-exp-wikipedia">
             Wikipedia link <span class="text-muted">(a <code>wikipedia</code> column)</span></label>
+          <p class="small text-muted mb-0 mt-1"><i class="fas fa-circle-info me-1"></i>In a Linked Places
+            export these fill the record itself, not just columns: the matched location becomes the
+            geometry where your row has none, variant names and place types are added, and the Wikipedia
+            article travels as a <code>primaryTopicOf</code> link. Anything taken from the matched record
+            is cited to it, so your own data stays distinguishable.</p>
           <p class="small text-muted mb-0 mt-1"><i class="fas fa-circle-info me-1"></i>Taken from the
             <strong>place-name</strong> column's match only — the lowest level, <em>not</em> higher containment
             levels (County, Parish, …) — and only when that match is a <strong>Wikidata (<code>wd</code>)</strong>

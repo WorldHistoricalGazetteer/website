@@ -1728,7 +1728,10 @@ async function buildExportRecords(opts, onProgress) {
     // with it exactly as it does for the primary match (place#184).
     adminCols.forEach((c) => augHeaders.push(`${colSlug(c)}_whg_id`, `${colSlug(c)}_whg_title`, `${colSlug(c)}_whg_score`));
   }
-  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_description', 'whg_match_types');
+  // No `whg_match_description`: /reconcile builds a candidate's `description` synthetically, as
+  // "Country: GB", to disambiguate candidates in the review cards. Exported under that name it read
+  // as the matched place's description while only ever restating the country column (place#184).
+  if (opts.enrich) augHeaders.push('whg_match_lon', 'whg_match_lat', 'whg_match_variants', 'whg_match_types');
   // Wikipedia link — a separate, explicit opt-in column, populated ONLY from Wikidata (wd) matches.
   // Its header is made unique so it can never collide with an existing column (or another aug column).
   const wikiHeader = opts.wikipedia ? uniqueHeader('wikipedia', project.columns.map((c) => c.name).concat(augHeaders)) : null;
@@ -1791,7 +1794,6 @@ async function buildExportRecords(opts, onProgress) {
       aug.whg_match_lon = mc ? +mc.lon.toFixed(6) : '';
       aug.whg_match_lat = mc ? +mc.lat.toFixed(6) : '';
       aug.whg_match_variants = (f && f.cand && (f.cand.alt_names || []).join('; ')) || '';
-      aug.whg_match_description = (f && f.cand && f.cand.description) || '';
       // The place's own AAT types. This used to read `cand.type`, which is the OpenRefine entity
       // type — so every row said "Place" whatever it was.
       aug.whg_match_types = matchPlaceTypes(f).map((t) => t.label || t.identifier).join('; ');
