@@ -85,21 +85,139 @@ function patchFetch(diag, session) {
   window.fetch = wrapped;
 }
 
-// ── snag report ────────────────────────────────────────────────────────────────
-// Open the on-site snag form (account-free for testers) in a new tab, passing the page being tested so
-// the tester keeps their place. The form reads the session id from window.WHGDiag itself.
-function wireSnagReport() {
-  const link = document.getElementById('wb-report-snag');
-  if (!link) return;
-  link.addEventListener('click', function (e) {
+// ── snag / suggestion report ───────────────────────────────────────────────────
+// The form opens in a DRAGGABLE PANEL over the page being reported, not in a new tab: a tester
+// describing a problem needs to keep looking at it, and navigating away also risks whatever unsaved
+// work sits behind (a Workbench project mid-reconciliation, a half-drawn geometry). The panel has no
+// backdrop and can be dragged aside, so the screen under discussion stays visible and usable, and it
+// is only hidden — never destroyed — on close, so a half-typed report survives being put down and
+// picked up again. See place#181.
+const REPORT_PANEL_ID = 'whg-beta-report-panel';
+let reportPanels = {};   // url → panel element, so each form keeps its own typed state
+
+function panelChrome(title) {
+  const wrap = document.createElement('div');
+  wrap.className = 'whg-beta-report';
+  wrap.style.cssText = 'position:fixed;z-index:20000;top:6vh;right:3vw;width:min(680px,94vw);' +
+    'max-height:88vh;display:flex;flex-direction:column;background:#fff;color:#212529;' +
+    'border:1px solid rgba(0,0,0,.2);border-radius:.5rem;box-shadow:0 1rem 3rem rgba(0,0,0,.35);';
+  wrap.innerHTML =
+    '<div class="whg-beta-report-hdr" style="display:flex;align-items:center;gap:.5rem;padding:.5rem .75rem;' +
+    'border-bottom:1px solid rgba(0,0,0,.15);cursor:move;user-select:none;background:#f8f9fa;' +
+    'border-radius:.5rem .5rem 0 0;">' +
+    '<i class="fas fa-grip-lines text-muted"></i>' +
+    `<strong style="flex:1 1 auto;font-size:.95rem;">${title}</strong>` +
+    '<span class="text-muted small me-2" style="font-size:.75rem;">drag to move</span>' +
+    '<button type="button" class="btn-close" aria-label="Close"></button></div>' +
+    '<div class="whg-beta-report-body" style="overflow:auto;padding:.25rem .25rem 1rem;"></div>';
+  return wrap;
+}
+
+// Drag by the header. Pointer events (not mouse) so a trackpad, touch screen or pen all work, and
+// capture so a fast drag that leaves the header doesn't strand the panel mid-move.
+function makeDraggable(panel) {
+  const hdr = panel.querySelector('.whg-beta-report-hdr');
+  let startX = 0, startY = 0, originX = 0, originY = 0, dragging = false;
+  hdr.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('.btn-close')) return;
+    const r = panel.getBoundingClientRect();
+    panel.style.left = r.left + 'px'; panel.style.top = r.top + 'px';
+    panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    dragging = true; startX = e.clientX; startY = e.clientY; originX = r.left; originY = r.top;
+    hdr.setPointerCapture(e.pointerId);
+  });
+  hdr.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    // Keep a strip of the header on screen, so the panel can always be grabbed again.
+    const maxX = window.innerWidth - 60, maxY = window.innerHeight - 40;
+    panel.style.left = Math.min(maxX, Math.max(0 - panel.offsetWidth + 60, originX + (e.clientX - startX))) + 'px';
+    panel.style.top = Math.min(maxY, Math.max(0, originY + (e.clientY - startY))) + 'px';
+  });
+  const end = (e) => { if (dragging) { dragging = false; try { hdr.releasePointerCapture(e.pointerId); } catch (_) {} } };
+  hdr.addEventListener('pointerup', end);
+  hdr.addEventListener('pointercancel', end);
+}
+
+// Submit inside the panel and swap in whatever comes back (the confirmation, or the form again with
+// an error). Nothing navigates, so the page being reported on is never disturbed.
+function wireReportForm(panel, url) {
+  const body = panel.querySelector('.whg-beta-report-body');
+  const form = body.querySelector('form');
+  if (!form) return;
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const base = link.getAttribute('href') || '/beta/snag/';
-    // Pass the page AND the session id: the form opens in a NEW tab (own sessionStorage), so it can't
-    // read this tab's session id otherwise.
-    const sid = (window.WHGDiag && window.WHGDiag.session) || '';
-    const url = base + (base.indexOf('?') > -1 ? '&' : '?') +
-      'page=' + encodeURIComponent(location.href) + '&session=' + encodeURIComponent(sid);
-    window.open(url, '_blank', 'noopener');
+    const btn = form.querySelector('button[type="submit"]');
+    const label = btn ? btn.innerHTML : '';
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Sending…'; }
+    try {
+      const fd = new FormData(form);
+      fd.set('embed', '1');
+      const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
+      body.innerHTML = await res.text();
+      // The confirmation offers "Report another": re-fetch a blank form into the same panel.
+      body.querySelectorAll('a[href*="/beta/"]').forEach((a) => a.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        body.innerHTML = await (await fetch(embedUrl(a.getAttribute('href')), { credentials: 'same-origin' })).text();
+        prefillReportForm(body);
+        wireReportForm(panel, url);
+      }));
+    } catch (err) {
+      console.error('[beta] report submit failed', err);
+      if (btn) { btn.disabled = false; btn.innerHTML = label; }
+      const warn = document.createElement('div');
+      warn.className = 'alert alert-danger py-2 mx-3';
+      warn.textContent = 'Could not send the report — check your connection and try again.';
+      form.prepend(warn);
+    }
+  });
+}
+
+// The hidden diagnostic fields the standalone page fills from the URL. In the panel we are ON the page
+// being reported, so they can be read directly — no round trip through query parameters.
+function prefillReportForm(body) {
+  const set = (sel, val) => { const f = body.querySelector(sel); if (f && !f.value) f.value = val; };
+  set('input[name="page_url"]', location.href);
+  set('input[name="user_agent"]', (navigator.userAgent || '').slice(0, 300));
+  set('input[name="session_id"]', (window.WHGDiag && window.WHGDiag.session) || '');
+}
+
+function embedUrl(href) {
+  const base = href || '/beta/snag/';
+  return base + (base.indexOf('?') > -1 ? '&' : '?') + 'embed=1&page=' + encodeURIComponent(location.href);
+}
+
+async function openReportPanel(href, title) {
+  const url = href || '/beta/snag/';
+  const existing = reportPanels[url];
+  if (existing) { existing.style.display = 'flex'; return; }
+  const panel = panelChrome(title);
+  panel.id = REPORT_PANEL_ID + '-' + url.replace(/\W+/g, '');
+  document.body.appendChild(panel);
+  reportPanels[url] = panel;
+  makeDraggable(panel);
+  panel.querySelector('.btn-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  const body = panel.querySelector('.whg-beta-report-body');
+  body.innerHTML = '<p class="text-muted small p-3 mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Loading…</p>';
+  try {
+    const res = await fetch(embedUrl(url), { credentials: 'same-origin' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    body.innerHTML = await res.text();
+    prefillReportForm(body);
+    wireReportForm(panel, url);
+  } catch (err) {
+    console.error('[beta] report form failed to load', err);
+    // Never strand the tester: fall back to the standalone page rather than an empty panel.
+    body.innerHTML = `<p class="p-3 mb-0">Couldn't open the form here. <a href="${embedUrl(url).replace('embed=1&', '')}" target="_blank" rel="noopener">Open it in a new tab</a>.</p>`;
+  }
+}
+
+function wireSnagReport() {
+  document.querySelectorAll('a[href^="/beta/snag/"], a[href^="/beta/suggestion/"], #wb-report-snag').forEach((link) => {
+    link.addEventListener('click', function (e) {
+      e.preventDefault();
+      const href = link.getAttribute('href') || '/beta/snag/';
+      openReportPanel(href, /suggestion/.test(href) ? 'Suggest an improvement' : 'Report a snag');
+    });
   });
 }
 

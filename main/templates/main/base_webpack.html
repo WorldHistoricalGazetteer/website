@@ -15,8 +15,11 @@
     <meta property="og:type" content="website">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    {# The per-deploy cache-buster the bundle URLs carry, exposed for scripts that fetch other
-       deploy-versioned static assets (e.g. the LPF schema in recon-validate.js). #}
+    {% comment %}
+      The per-deploy cache-buster the bundle URLs carry, exposed for scripts that fetch
+      other deploy-versioned static assets (e.g. the LPF schema in recon-validate.js).
+      NB {# #} does not span lines — a multi-line one renders into the page.
+    {% endcomment %}
     <meta name="asset-version" content="{{ asset_version }}">
     <meta name="glitchtip-dsn" content="{{ GLITCHTIP_DSN }}">
     {% if user.is_authenticated %}

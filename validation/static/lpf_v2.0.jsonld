@@ -549,38 +549,46 @@
             }
         },
         "links": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "enum": [
-                            "closeMatch",
-                            "exactMatch",
-                            "primaryTopicOf",
-                            "subjectOf",
-                            "seeAlso"
-                        ]
-                    },
-                    "identifier": {
-                        "type": "string",
-                        "anyOf": [
-                            {
-                                "$ref": "#/definitions/patterns/definitions/validURL"
+                "type": "array",
+                "comment": "WHG addition: link items accept the shared optionalProperties (certainty, when, citations), exactly as relation items already do. A link IS an assertion \u2014 this place closeMatches that one \u2014 and LPF gives it no way to say how sure the asserter is, so a reconciliation's confidence had nowhere to go. To be proposed upstream to LinkedPasts. See WorldHistoricalGazetteer/place#184.",
+                "items": {
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/optionalProperties"
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "closeMatch",
+                                        "exactMatch",
+                                        "primaryTopicOf",
+                                        "subjectOf",
+                                        "seeAlso"
+                                    ]
+                                },
+                                "identifier": {
+                                    "type": "string",
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/definitions/patterns/definitions/validURL"
+                                        },
+                                        {
+                                            "$ref": "#/definitions/patterns/definitions/namespaceTermNarrow"
+                                        }
+                                    ]
+                                }
                             },
-                            {
-                                "$ref": "#/definitions/patterns/definitions/namespaceTermNarrow"
-                            }
-                        ]
-                    }
-                },
-                "required": [
-                    "type",
-                    "identifier"
-                ]
-            }
-        },
+                            "required": [
+                                "type",
+                                "identifier"
+                            ]
+                        }
+                    ]
+                }
+            },
         "relations": {
             "type": "array",
             "items": {

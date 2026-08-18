@@ -163,7 +163,51 @@ def resolve_legacy_place_pks(raw_ids) -> dict:
                 if exact_pk is not None and raw_id not in resolved \
                         and exact_pk in pks_by_src.get(src_id, ()):
                     resolved[raw_id] = exact_pk
+
+        # Pass 3 — the leaf is a PLACE KEY, not a src_id. The gateway minted
+        # `whg:<dataset_id>:<place_pk>` before the src_id cutover, and those ids are
+        # published: they sit in the deployed vector tiles and in every Atlas link
+        # made until the re-mint. Resolving them costs one more query, and only when
+        # a numeric leaf matched no src_id in that dataset.
+        unresolved_pks = {int(src_id): entries
+                          for src_id, entries in wanted.items()
+                          if src_id.isdigit() and not pks_by_src.get(src_id)
+                          and any(raw not in resolved for raw, _ in entries)}
+        if unresolved_pks:
+            for pk in (Place.objects
+                       .filter(dataset__id=ds_pk, id__in=list(unresolved_pks))
+                       .values_list('id', flat=True)):
+                for raw_id, exact_pk in unresolved_pks[pk]:
+                    if exact_pk is None and raw_id not in resolved:
+                        resolved[raw_id] = pk
     return resolved
+
+
+def whg_identity_keys(hits) -> list:
+    """One dedupe key per ES-style hit, putting both search paths in ONE identity space.
+
+    A WHG place can arrive twice in a single query — from the legacy index, whose docs
+    are keyed by the Postgres place key, and from the gateway, whose docs are keyed
+    ``whg:<dataset_id>:<src_id>``. Keyed on their raw ids those are two different
+    strings, so the same place would be offered to the user twice. WHG hits therefore
+    key on the place key (already present on a legacy doc, resolved for a gateway id,
+    in one batched query); every other gazetteer keys on its own id, which is
+    authoritative and needs no lookup.
+    """
+    keys, to_resolve = [], {}
+    for i, hit in enumerate(hits):
+        raw = str((hit.get("_source") or {}).get("place_id", hit.get("_id", "")) or "")
+        keys.append(f"pk:{raw}" if raw.isdigit() else raw)
+        if not raw.isdigit() and get_namespace(raw) == WHG_NAMESPACE:
+            to_resolve.setdefault(raw, []).append(i)
+    if to_resolve:
+        resolved = resolve_legacy_place_pks(list(to_resolve))
+        for raw, positions in to_resolve.items():
+            pk = resolved.get(raw)
+            if pk:
+                for i in positions:
+                    keys[i] = f"pk:{pk}"   # unresolvable ids keep their own id as key
+    return keys
 
 
 def resolve_legacy_place_pk(raw_id) -> int | None:

@@ -691,12 +691,19 @@
           <!-- What (place types) — Getty AAT concept picker -->
           <fieldset class="recon-scope-panel mb-3">
             <legend class="recon-scope-panel-legend"><i class="fas fa-shapes me-1 text-secondary"></i>What <span class="text-muted fw-normal small">(place types)</span></legend>
+            {% comment %}
+              Per-level targets (place#184): a chain reconciles County → Parish → Place, and those
+              levels want DIFFERENT types — switching one dataset-wide type from admin to settlement
+              used to reset the whole reconciliation. Populated by renderScopeTypeTargets().
+            {% endcomment %}
+            <div id="recon-scope-aat-targets" class="recon-scope-aat-targets d-none mb-2"></div>
             <div id="recon-scope-aat-selected" class="recon-scope-aat-selected mb-2"></div>
             <details id="recon-scope-aat-browse" class="recon-scope-aat-browse">
               <summary class="small text-muted">Search or browse Getty AAT place types</summary>
               <div id="recon-scope-aat-tree" class="recon-scope-aat-tree mt-1"></div>
             </details>
             <div class="form-text small">Scopes to the selected Getty AAT place types <em>and everything beneath them</em>. Leave empty to allow any type.</div>
+            <div id="recon-scope-aat-target-hint" class="form-text small text-muted d-none"></div>
             <div class="form-text small text-muted">Place types from the Getty <a href="https://www.getty.edu/research/tools/vocabularies/aat/" target="_blank" rel="noopener">Art &amp; Architecture Thesaurus (AAT)®</a>, © J.&nbsp;Paul Getty Trust, made available under the ODC Attribution License.</div>
           </fieldset>
 

@@ -1,0 +1,119 @@
+<style>
+  .snag-wrap { max-width: 680px; margin: 1.75rem auto; }
+    .snag-wrap label { font-weight: 600; font-size: .9rem; margin-bottom: .15rem; }
+    .snag-wrap .form-text { margin-top: 0; }
+  /* In the draggable panel the panel header already names the form. */
+  /* Bootstrap's d-flex is !important, so this must be too. */
+  .whg-beta-report .beta-form-heading { display: none !important; }
+  .whg-beta-report .snag-wrap, .whg-beta-report .suggest-wrap { margin: .5rem auto; }
+</style>
+{% load static %}
+{% comment %}
+  The beta snag form itself, without the page chrome. Rendered standalone at
+  /beta/snag/ and injected into the draggable in-page panel
+  (beta-diag.js) when ?embed=1 — the panel keeps the tester on the page they are reporting about, so
+  neither their view of it nor any unsaved work is lost. See place#181.
+{% endcomment %}
+<div class="snag-wrap px-3">
+  <div class="d-flex align-items-center gap-2 mb-1 beta-form-heading">
+    <h1 class="h4 mb-0">Report a snag</h1>
+    <span class="badge bg-warning text-dark">beta</span>
+  </div>
+
+  {% if submitted %}
+    <div class="alert alert-success">
+      <p class="mb-1"><strong>Thank you — your report was logged.</strong></p>
+      {% if github_url %}
+        <p class="mb-1">It's now on the tracker: <a href="{{ github_url }}" target="_blank" rel="noopener">{{ github_url }}</a></p>
+      {% else %}
+        <p class="mb-1">The team has been notified. (It's saved even though it wasn't auto-posted to the tracker.)</p>
+      {% endif %}
+      <p class="mb-0 small text-muted">Reference session: <code>{{ submitted.session_id|default:"—" }}</code></p>
+    </div>
+    <p><a href="javascript:window.close()" class="btn btn-sm btn-outline-secondary">Close</a>
+       <a href="{% url 'beta-snag' %}" class="btn btn-sm btn-outline-primary">Report another</a></p>
+  {% else %}
+    <p class="text-muted">Found a bug or rough edge while testing? Tell us what happened. We attach your
+      page, browser, and a diagnostic session id automatically, so we can trace the cause.</p>
+    {% if error %}<div class="alert alert-danger py-2">{{ error }}</div>{% endif %}
+
+    <form method="post" action="{% url 'beta-snag' %}" id="snag-form">
+      {% csrf_token %}
+      <input type="hidden" name="session_id" id="snag-session" value="{{ session }}">
+      <input type="hidden" name="user_agent" id="snag-ua">
+      <input type="hidden" name="page_url" id="snag-page" value="{{ page }}">
+
+      <div class="mb-3">
+        <label for="snag-title">Short title</label>
+        <input class="form-control" name="title" id="snag-title" maxlength="300" required
+               value="{{ form.title|default:'' }}" placeholder="e.g. Geometry didn't save after drawing a polygon">
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-12 col-sm-7">
+          <label for="snag-feature">Feature area</label>
+          <select class="form-select" name="feature" id="snag-feature">
+            <option value="">— choose —</option>
+            <option>Record correction editor</option>
+            <option>Geometry drawing</option>
+            <option>Community suggestions</option>
+            <option>Dataset check-out</option>
+            <option>Place Collection editor</option>
+            <option>Itinerary editor</option>
+            <option>Gazetteer Group editor</option>
+            <option>Edit published… hub</option>
+            <option>Map your Data (reconciliation)</option>
+            <option>Collaboration &amp; sharing</option>
+            <option>Add places from text (NER)</option>
+            <option>Navigation / access / other</option>
+          </select>
+        </div>
+        <div class="col-12 col-sm-5">
+          <label for="snag-severity">Severity</label>
+          <select class="form-select" name="severity" id="snag-severity">
+            <option value="">— choose —</option>
+            <option value="blocker">Blocker — can't proceed</option>
+            <option value="major">Major — feature broken</option>
+            <option value="minor">Minor — works, but wrong</option>
+            <option value="cosmetic">Cosmetic — looks off</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label for="snag-what">What happened?</label>
+        <textarea class="form-control" name="what" id="snag-what" rows="3"
+                  placeholder="What did you see?">{{ form.what|default:'' }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label for="snag-expected">What did you expect?</label>
+        <textarea class="form-control" name="expected" id="snag-expected" rows="2">{{ form.expected|default:'' }}</textarea>
+      </div>
+      <div class="mb-3">
+        <label for="snag-steps">Steps to reproduce <span class="text-muted fw-normal">(optional)</span></label>
+        <textarea class="form-control" name="steps" id="snag-steps" rows="3"
+                  placeholder="1. … 2. … 3. …">{{ form.steps|default:'' }}</textarea>
+      </div>
+      <p class="small text-muted">Auto-attached: the page you came from, your browser, your role, and a
+        diagnostic session id — no need to fill those in.</p>
+      <p class="small text-muted">Filed as
+        {% if user.github_username %}<strong>@{{ user.github_username }}</strong> on GitHub, so we can
+        mention you there if we need to ask a follow-up question. Change it in your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a>.
+        {% else %}<strong>{{ user.name|default:user.username }}</strong>. Add a GitHub username to your
+        <a href="{% url 'profile-edit' %}" target="_blank" rel="noopener">Profile</a> and we can mention
+        you on the issue instead, so GitHub notifies you of follow-up questions.{% endif %}</p>
+      <button type="submit" class="btn btn-success"><i class="fas fa-paper-plane me-1"></i>Send report</button>
+    </form>
+  {% endif %}
+</div>
+
+<script type="text/javascript">
+(function () {
+  var s = document.getElementById('snag-session'), ua = document.getElementById('snag-ua'),
+      page = document.getElementById('snag-page');
+  if (ua) ua.value = (navigator.userAgent || '').slice(0, 300);
+  // session id comes from the URL (passed by the opener). Fall back to this tab's own if present.
+  if (s && !s.value) s.value = (window.WHGDiag && window.WHGDiag.session) || (function () { try { return sessionStorage.getItem('whg-beta-session') || ''; } catch (_) { return ''; } }());
+  // If no ?page= was passed, fall back to the referrer (the page the tester was testing).
+  if (page && !page.value) page.value = document.referrer || '';
+})();
+</script>
