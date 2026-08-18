@@ -30,7 +30,13 @@
       {% endif %}
       <p class="mb-0 small text-muted">Reference session: <code>{{ submitted.session_id|default:"—" }}</code></p>
     </div>
-    <p><a href="javascript:window.close()" class="btn btn-sm btn-outline-secondary">Close</a>
+    {% comment %}
+      Close has to work in BOTH homes. In the draggable panel beta-diag.js binds
+      data-beta-close and hides the panel; on the standalone page window.close()
+      only ever worked for a script-opened tab and silently did nothing otherwise,
+      so fall back to going back to whatever the reporter was looking at. See place#187.
+    {% endcomment %}
+    <p><button type="button" data-beta-close class="btn btn-sm btn-outline-secondary">Close</button>
        <a href="{% url 'beta-snag' %}" class="btn btn-sm btn-outline-primary">Report another</a></p>
   {% else %}
     <p class="text-muted">Found a bug or rough edge while testing? Tell us what happened. We attach your
@@ -50,7 +56,7 @@
       </div>
       <div class="row g-2 mb-3">
         <div class="col-12 col-sm-7">
-          <label for="snag-feature">Feature area</label>
+          <label for="snag-feature">Feature area <span class="text-muted fw-normal">(optional)</span></label>
           <select class="form-select" name="feature" id="snag-feature">
             <option value="">— choose —</option>
             <option>Record correction editor</option>
@@ -68,7 +74,7 @@
           </select>
         </div>
         <div class="col-12 col-sm-5">
-          <label for="snag-severity">Severity</label>
+          <label for="snag-severity">Severity <span class="text-muted fw-normal">(optional)</span></label>
           <select class="form-select" name="severity" id="snag-severity">
             <option value="">— choose —</option>
             <option value="blocker">Blocker — can't proceed</option>
@@ -79,12 +85,12 @@
         </div>
       </div>
       <div class="mb-3">
-        <label for="snag-what">What happened?</label>
+        <label for="snag-what">What happened? <span class="text-muted fw-normal">(optional, but the most useful box here)</span></label>
         <textarea class="form-control" name="what" id="snag-what" rows="3"
                   placeholder="What did you see?">{{ form.what|default:'' }}</textarea>
       </div>
       <div class="mb-3">
-        <label for="snag-expected">What did you expect?</label>
+        <label for="snag-expected">What did you expect? <span class="text-muted fw-normal">(optional — skip it when the title says it)</span></label>
         <textarea class="form-control" name="expected" id="snag-expected" rows="2">{{ form.expected|default:'' }}</textarea>
       </div>
       <div class="mb-3">

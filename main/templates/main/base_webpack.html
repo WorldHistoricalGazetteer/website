@@ -35,6 +35,14 @@
     <meta name="user-id" content="user_{{ user.id }}">
     {% endif %}
     {# Beta-tester diagnostics (plan-beta-diagnostics): drives beta-diag.js. Only "1" for the beta cohort. #}
+    {% comment %}
+      The signed-in user's own citation details, for prefilling the first contributor
+      of a dataset they are describing (place#186). Their own data, shown back to
+      them; nothing here is exposed about anyone else.
+    {% endcomment %}
+    <meta name="user-name" content="{{ user.name|default:'' }}">
+    <meta name="user-orcid" content="{{ user.orcid|default:'' }}">
+    <meta name="user-affiliation" content="{{ user.affiliation|default:'' }}">
     <meta name="beta-user" content="{% if user.can_access_beta %}1{% else %}0{% endif %}">
     <meta name="user-role" content="{% if user.is_staff %}staff{% elif user.can_access_beta %}beta{% endif %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>

@@ -140,8 +140,20 @@ function makeDraggable(panel) {
 
 // Submit inside the panel and swap in whatever comes back (the confirmation, or the form again with
 // an error). Nothing navigates, so the page being reported on is never disturbed.
+// The confirmation and the form both carry a Close control. In the panel it must
+// hide the panel — it used to be an <a href="javascript:window.close()">, which did
+// nothing at all here (there is no window to close) and nothing on the standalone
+// page either unless the tab had been opened by script. See place#187.
+function wireReportClose(panel) {
+  panel.querySelectorAll('[data-beta-close]').forEach((b) => b.addEventListener('click', (e) => {
+    e.preventDefault();
+    panel.style.display = 'none';
+  }));
+}
+
 function wireReportForm(panel, url) {
   const body = panel.querySelector('.whg-beta-report-body');
+  wireReportClose(panel);
   const form = body.querySelector('form');
   if (!form) return;
   form.addEventListener('submit', async (e) => {
@@ -154,12 +166,13 @@ function wireReportForm(panel, url) {
       fd.set('embed', '1');
       const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
       body.innerHTML = await res.text();
+      wireReportClose(panel);   // the confirmation carries its own Close
       // The confirmation offers "Report another": re-fetch a blank form into the same panel.
       body.querySelectorAll('a[href*="/beta/"]').forEach((a) => a.addEventListener('click', async (ev) => {
         ev.preventDefault();
         body.innerHTML = await (await fetch(embedUrl(a.getAttribute('href')), { credentials: 'same-origin' })).text();
         prefillReportForm(body);
-        wireReportForm(panel, url);
+        wireReportForm(panel, url);   // rebinds submit AND close
       }));
     } catch (err) {
       console.error('[beta] report submit failed', err);
