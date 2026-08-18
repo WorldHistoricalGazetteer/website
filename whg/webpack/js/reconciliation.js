@@ -3332,7 +3332,13 @@ let reconActiveIdx = -1; // which chain position the review/results panes focus;
 function activeReconCol() {
   const chain = reconChain();
   if (!chain.length) return -1;
-  if (reconActiveIdx >= 0 && reconActiveIdx < chain.length) return chain[reconActiveIdx]; // explicit focus
+  // Explicit focus, UNLESS that column has since been locked (an upstream column was invalidated, so
+  // this one has no containment yet). A locked column can't be acted on — its switcher pill is
+  // disabled — so focusing it would aim Sources and Re-reconcile at a target the user can neither
+  // configure nor move away from. See place#184.
+  if (reconActiveIdx >= 0 && reconActiveIdx < chain.length && columnState(reconActiveIdx) !== 'locked') {
+    return chain[reconActiveIdx];
+  }
   const p = currentStagePos(); // default: the column you'd act on next, else the last
   return chain[p < chain.length ? p : chain.length - 1];
 }
@@ -4998,15 +5004,18 @@ async function applyScope() {
     // Only the levels whose types changed are re-run (and whatever sits below them, whose containment
     // came from those matches). The whole point of per-level types is that setting the Place column's
     // type doesn't throw away the counties you already confirmed (place#184).
-    const chain = reconChain();
-    const earliest = changedCols.reduce((a, c) => Math.min(a, chain.indexOf(c)), chain.length);
     changedCols.forEach((c) => {
       const k = String(c) + ':';
       if (project.matches) for (const key in project.matches) { if (key.startsWith(k)) delete project.matches[key]; }
       if (project.decisions) for (const key in project.decisions) { if (key.startsWith(k)) delete project.decisions[key]; }
       invalidateDownstream(c);
     });
-    if (earliest < chain.length) reconActiveIdx = earliest;
+    // DERIVE the focus rather than pinning it to the changed column: clearing a column's matches can
+    // LOCK the ones below it (their containment is gone), and a locked column can't be acted on — its
+    // switcher pill is disabled, so pinning the focus there left the Sources and Re-reconcile controls
+    // aimed at a column the user could neither configure nor move away from. Deriving lands on the
+    // column you'd act on next, which is the one being asked to reconcile again.
+    reconActiveIdx = -1;
     const names = changedCols.map((c) => project.columns[c].name).join(', ');
     reconStaleNote = `Place types changed for ${names} — reconcile that column again (levels above it keep their matches).`;
     setReconSummary(`<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Place types changed for <strong>${esc(names)}</strong> — reconcile again to apply them.</span>`);
