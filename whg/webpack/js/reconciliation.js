@@ -3837,6 +3837,13 @@ function setSpatialSetting(patch) {
   if (project.matches && Object.keys(project.matches).length) {
     reconStaleNote = 'Spatial constraints changed — re-reconcile a column to apply them to its matches.';
     renderColSwitcher();
+    // The switcher is hidden for a single-column set, so the note would have nowhere to appear —
+    // and a filter that silently doesn't apply to the matches on screen is exactly the confusion
+    // this feature exists to remove.
+    if (reconChain().length <= 1) {
+      setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>' +
+        'Spatial constraints changed — reconcile again to apply them.</span>');
+    }
   }
 }
 function wireSpatialControls() {
