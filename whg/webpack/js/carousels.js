@@ -1,6 +1,7 @@
 // /whg/webpack/js/carousels.js
 
 import { fetchDataForHorse } from './carousel-mapdata';
+import { setTooltipText } from './tooltipHygiene';
 
 // Motion preference for the home-page carousels (place#177). Continuous automatic
 // movement is not a cosmetic detail: a beta tester reported it causing motion
@@ -194,11 +195,11 @@ export function initialiseCarousels(galleries, carouselMetadata, startCarousels,
                 carousels.first().carousel('next');
             }
         }
-        // Hide the tip that is on screen before relabelling it, or it sits there
-        // describing the state the button has just left.
-        try { window.bootstrap?.Tooltip?.getInstance(this)?.hide(); } catch (e) { /* ignore */ }
+        // Relabel through the helper: Bootstrap freezes the tooltip text on the
+        // element's own instance the first time it is hovered, so setting the
+        // attribute alone would leave the tip describing the state just left.
+        setTooltipText(this, paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own');
         $(this).attr('aria-pressed', String(paused))
-               .attr('data-bs-title', paused ? 'Resume the automatic slideshow' : 'Stop the slideshow moving on its own')
                .find('i').attr('class', `fas ${paused ? 'fa-play' : 'fa-pause'}`);
         $(this).find('.visually-hidden').text(paused ? 'Play slideshow' : 'Pause slideshow');
     });
