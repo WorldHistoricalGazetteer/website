@@ -1733,14 +1733,14 @@ async function buildExportRecords(opts, onProgress) {
       }
     }
     if (opts.match) {
-      aug.whg_match_id = match ? match.list.map((x) => x.id).join('; ') : '';
+      aug.whg_match_id = match ? match.list.map((x) => barePlaceId(x.id)).join('; ') : '';
       aug.whg_match_title = match ? match.list.map((x) => x.title).join('; ') : '';
       aug.whg_match_score = match ? match.list.map((x) => x.score).join('; ') : '';
       aug.whg_match_source = match ? [...new Set(match.list.map((x) => x.source))].join('; ') : '';
       // Parent-column (containment) matches: explicit accepts, else the auto-confirmed top.
       adminCols.forEach((c) => {
         const a = resolvedMatchList(c + ':' + i)[0];
-        aug[`${colSlug(c)}_whg_id`] = (a && a.id) || '';
+        aug[`${colSlug(c)}_whg_id`] = (a && barePlaceId(a.id)) || '';
         aug[`${colSlug(c)}_whg_title`] = (a && a.title) || '';
       });
     }
@@ -1818,7 +1818,7 @@ function serializeLPTSV(data) {
       start: rec.whenStart, end: rec.whenEnd,
       lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
       geowkt: (rec.geom && !isPoint) ? geojsonToWKT(rec.geom) : '',
-      matches: rec.match ? rec.match.list.map((x) => x.id).join(';') : '',
+      matches: rec.match ? rec.match.list.map((x) => barePlaceId(x.id)).join(';') : '',
       parent_name: countyIdx >= 0 ? rec.orig[countyIdx] : '',
       description: rec.match ? 'closeMatch: ' + rec.match.list.map((x) => `${x.title} (${x.source})`).join('; ') : '',
     };
@@ -1876,7 +1876,7 @@ function buildLPF(data) {
     // bar on a link and WHG's ingest reads only type/identifier, so it rides along as an annotation
     // for whoever opens the file rather than changing how it is understood. See place#183.
     if (rec.match) feat.links = rec.match.list.map((x) => {
-      const link = { type: 'closeMatch', identifier: x.id };
+      const link = { type: 'closeMatch', identifier: barePlaceId(x.id) };
       const score = Number(x.score);
       if (Number.isFinite(score)) link.whg_match_score = score;
       return link;
@@ -3302,11 +3302,13 @@ function resolvedPlaceIds(colIndex, rowIdx) {
   if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) return [m.top.id];
   return [];
 }
-// The /reconcile containment resolver expects a BARE gazetteer id (e.g. `ukhc:CMB`, `wd:Q23306`,
-// `5297709`), but our candidate ids carry a `place:` prefix. Passing the prefixed form fails to resolve
-// the container, so the service silently returns UN-contained results (a Parish query "within" a county
-// then matches same-named parishes in *other* counties). Strip the prefix before sending `contained_in`.
-// Keep the prefixed id everywhere else (it is the identifier we surface and export). See place#111.
+// Candidate ids arrive as `place:<gazetteer id>` — `place:` is the OpenRefine entity-type prefix, and
+// what follows is the gazetteer identifier proper (`wd:Q23306`, `gn:2028461`, `whg:<dataset>:<src_id>`).
+// Strip it for anything that speaks gazetteer ids rather than OpenRefine ids: the /reconcile containment
+// resolver (the prefixed form fails to resolve the container, and the service then silently returns
+// UN-contained results — a Parish query "within" a county matching same-named parishes in *other*
+// counties, see place#111) and everything we EXPORT, since `place:…` is not a registered LPF namespace
+// and would fail schema validation. Keep the prefixed form for /entity/<id>/api, which parses it.
 function barePlaceId(id) { return typeof id === 'string' && id.startsWith('place:') ? id.slice(6) : id; }
 
 // ── Parent context ("Wrexham, in Denbighshire") ───────────────────────────────

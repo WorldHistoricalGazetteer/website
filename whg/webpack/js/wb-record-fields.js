@@ -199,6 +199,10 @@ export function renderRecordFields(container, rec, opts = {}) {
   }
   renderCoord();
 
+  // /reconcile ids carry the OpenRefine entity-type prefix (`place:gn:2028461`); a link identifier
+  // wants the gazetteer id alone, which is also the only form LPF's namespace pattern accepts.
+  const bareId = (id) => (typeof id === 'string' && id.startsWith('place:') ? id.slice(6) : id);
+
   async function reReconcile() {
     const box = $('.wb-rf-recon-results');
     const q = (rec.title || (rec.names[0] && rec.names[0].toponym) || '').trim();
@@ -216,11 +220,12 @@ export function renderRecordFields(container, rec, opts = {}) {
     if (!results.length) { box.innerHTML = '<span class="text-muted small">No matches found.</span>'; return; }
     box.innerHTML = '<div class="small text-muted mb-1">Click a match to add it as a link:</div>' + results.map((c, i) =>
       `<button type="button" class="btn btn-sm btn-outline-secondary text-start d-block w-100 mb-1 wb-recon-hit" data-i="${i}">
-         ${esc(truncate(c.name, 48))} <span class="text-muted small ms-1">${esc(c.id)}</span>
+         ${esc(truncate(c.name, 48))} <span class="text-muted small ms-1">${esc(bareId(c.id))}</span>
          ${c.description ? `<span class="text-muted small ms-1">${esc(truncate(c.description, 30))}</span>` : ''}</button>`).join('');
     box.querySelectorAll('.wb-recon-hit').forEach((b) => b.addEventListener('click', () => {
       const c = results[+b.dataset.i];
-      if (!rec.links.some((l) => l.identifier === c.id)) { rec.links.push({ type: 'closeMatch', identifier: c.id }); linksEd.render(); onChange(); }
+      const cid = bareId(c.id);
+      if (!rec.links.some((l) => l.identifier === cid)) { rec.links.push({ type: 'closeMatch', identifier: cid }); linksEd.render(); onChange(); }
       if (c.repr_point && rec.geometry_editable !== false && (!rec.geometry || !rec.geometry.type)) {
         rec.geometry = { type: 'Point', coordinates: [c.repr_point[0], c.repr_point[1]] };
         refreshGeomSummary(); if (geomMod) geomMod.setOverride(rec.geometry); onChange();

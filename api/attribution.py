@@ -200,18 +200,34 @@ def namespaces_from_ids(ids):
 
 
 def datasets_from_place_ids(place_ids):
-    """Map legacy WHG (numeric) place ids to the labels of the datasets that
-    contributed them, so ``whg``-namespace results can be attributed to a real
-    source rather than only to the WHG overlay. One query; non-numeric ids
-    (namespaced gateway ids) are ignored."""
+    """Map WHG place ids to the labels of the datasets that contributed them, so
+    ``whg``-namespace results can be attributed to a real source rather than only
+    to the WHG overlay. Gateway ids (``gn:…``) are ignored.
+
+    ``whg:<dataset_id>:<src_id>`` names its dataset outright, so those need no
+    place lookup at all; ``whg:<place_pk>`` and the bare numeric form predate
+    namespacing and are still resolved through Place. Two queries at most."""
+    from datasets.models import Dataset
     from places.models import Place
 
-    pks = {int(p) for p in place_ids if str(p).isdigit()}
-    if not pks:
-        return set()
-    return {label for label in (Place.objects.filter(pk__in=pks)
-                                .values_list('dataset__label', flat=True))
-            if label}
+    dataset_pks, place_pks = set(), set()
+    for raw in place_ids:
+        parts = str(raw).split(':')
+        if len(parts) >= 3 and parts[0].lower() == 'whg' and parts[1].isdigit():
+            dataset_pks.add(int(parts[1]))
+        elif len(parts) == 2 and parts[0].lower() == 'whg' and parts[1].isdigit():
+            place_pks.add(int(parts[1]))
+        elif str(raw).isdigit():
+            place_pks.add(int(raw))
+
+    labels = set()
+    if dataset_pks:
+        labels |= {label for label in (Dataset.objects.filter(pk__in=dataset_pks)
+                                       .values_list('label', flat=True)) if label}
+    if place_pks:
+        labels |= {label for label in (Place.objects.filter(pk__in=place_pks)
+                                       .values_list('dataset__label', flat=True)) if label}
+    return labels
 
 
 def safe_attribution_block(namespaces=None, datasets=None):

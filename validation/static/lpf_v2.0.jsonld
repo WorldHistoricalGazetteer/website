@@ -46,8 +46,9 @@
                     "pattern": "^\\w+:[^\\s]+$"
                 },
                 "namespaceTermNarrow": {
+                    "comment": "WHG addition: `whg` (whg:<dataset_id>:<src_id>, the form the reconciliation service emits for WHG-contributed places), plus the `osm`, `ohm` and `po` gazetteers WHG indexes and reconciles against. Without these, links to matches WHG itself returns cannot validate. To be proposed upstream to LinkedPasts.",
                     "type": "string",
-                    "pattern": "^(bnf|cerl|dbp|gn|gnd|gov|indias|loc|pl|tgn|viaf|wd|wp):[^\\s]+$"
+                    "pattern": "^(bnf|cerl|dbp|gn|gnd|gov|indias|loc|ohm|osm|pl|po|tgn|viaf|wd|whg|wp):[^\\s]+$"
                 },
                 "validURL": {
                     "type": "string",
