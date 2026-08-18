@@ -39,6 +39,7 @@ from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthenticati
 from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
 from concurrent.futures import ThreadPoolExecutor
 
+from django.conf import settings
 from django.db import connection as db_connection
 
 from .querysets import place_feature_queryset, period_public_queryset
@@ -1013,6 +1014,11 @@ def parse_request_payload(request):
         raise ValueError(f"Unsupported Content-Type: {content_type}")
 
 
+# Concurrent gateway calls per reconcile request. Override with RECON_FANOUT in
+# settings if the gateway ever gets more cores to play with.
+RECON_FANOUT = max(1, int(getattr(settings, "RECON_FANOUT", 8)))
+
+
 def process_queries(queries, batch_size=50, user=None):
     """
     Enforce batch limit, normalise each query, and return a dict of results.
@@ -1031,8 +1037,13 @@ def process_queries(queries, batch_size=50, user=None):
     # 13.4s under exact/within, almost none of it computation. The work is I/O-bound,
     # so threads are the right tool even though this is a sync view.
     #
-    # Deliberately unbounded — a thread per query, capped only by the batch limit
-    # above. That means up to `batch_size` simultaneous gateway calls per request.
+    # Bounded at RECON_FANOUT. Measured on the live gateway, a cap of 8 is not a
+    # compromise but the optimum: a 25-query batch ran fastest at 8 threads under
+    # exact/within (5.46s, against 6.36s with a thread per query) and gained nothing
+    # past ~16 under fuzzy. Beyond that it is pure contention — two gateway workers
+    # already peak at 776% CPU of the 800% that host has, and Elasticsearch shares
+    # those same cores, so an unbounded batch also slows the search serving everyone
+    # else.
     #
     # Each worker MUST close its DB connection: a query resolves dataset labels and
     # place keys through the ORM, and a thread that opens a connection and exits
@@ -1052,7 +1063,7 @@ def process_queries(queries, batch_size=50, user=None):
         # Resolve the lazy user once, on this thread, so N workers don't each trigger
         # the same authentication lookup.
         getattr(user, "is_authenticated", False)
-        with ThreadPoolExecutor(max_workers=len(queries),
+        with ThreadPoolExecutor(max_workers=min(len(queries), RECON_FANOUT),
                                 thread_name_prefix="recon") as pool:
             done = list(pool.map(_run, list(queries.items())))
         # Reassemble in the caller's original order — a client matches results to
