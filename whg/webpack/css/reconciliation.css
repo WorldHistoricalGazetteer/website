@@ -355,6 +355,11 @@
 .recon-results-wrap { max-height: 440px; overflow-y: auto; }
 .recon-results tbody td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
 
+/* Flag an auto-confirmed match for review by clicking its badge (place#202). */
+.recon-flag-toggle { cursor: pointer; display: inline-block; border-radius: 4px; }
+.recon-flag-toggle:hover .badge, .recon-flag-toggle:focus-visible .badge { filter: brightness(1.12); text-decoration: underline; }
+.recon-flag-toggle:focus-visible { outline: 2px solid rgba(194, 65, 12, .5); outline-offset: 1px; }
+
 /* --- Candidate review (Phase 4) --- */
 #recon-review-card { border-radius: 6px; }
 #recon-review-card:focus { outline: 2px solid rgba(194, 65, 12, 0.35); outline-offset: 3px; }
