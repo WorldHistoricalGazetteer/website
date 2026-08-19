@@ -3434,21 +3434,75 @@ function rowVariants(rowIdx) {
     .split(/[;|]/).forEach((s) => { const t = s.trim(); if (t) out.push(t); }));
   return [...new Set(out)];
 }
-// The variants actually SENT with a reconcile query. Normalised here exactly as the gateway would do
-// it — blanks dropped, case-insensitive duplicates of each other and of the primary toponym removed,
-// capped at MAX_QUERY_VARIANTS — so the gateway has nothing left to discard and `variants` stays
-// positionally aligned with the `variant_vectors` we compute in-browser. See place#144.
-const MAX_QUERY_VARIANTS = 10;
-function queryVariants(rowIdx, primary) {
-  const seen = new Set([normName(primary)]);
+// Name forms DERIVED from the value itself, for the shapes historical sources habitually use and a
+// literal query cannot match (place#188, reported by Justin Colson):
+//
+//   "Melford, Long"              an index inverted to sort by head-word     → "Long Melford"
+//   "Stow, or Stow-on-the-Wold"  an alternative offered inline              → both names
+//   "Newton with Scales"         hyphenation differs between gazetteers     → "Newton-with-Scales"
+//
+// Measured against the index: "Melford, Long" and "Walden, Saffron" return NOTHING, while their
+// inverted forms return the town each time. These are query aids only — they are never written back
+// into the data, and never exported as alt_names, because they are our guesses and not what the
+// source recorded.
+//
+// Deliberately conservative. Inversion needs exactly one comma and a tail of at most two words, so
+// "Melford, Long, Suffolk" is left alone. A junk inversion ("Newcastle, Northumberland" →
+// "Northumberland Newcastle") is self-limiting: it is not a place name, so it matches nothing.
+const NAME_CONNECTIVES = /\b(?:on|upon|under|with|in|by|next|cum|super|sub|juxta|le|la|de|du|des)\b/i;
+function derivedNameVariants(primary) {
+  const s = String(primary == null ? '' : primary).trim().replace(/\s+/g, ' ');
+  if (!s) return [];
   const out = [];
-  rowVariants(rowIdx).forEach((v) => {
-    const n = normName(v);
-    if (!n || seen.has(n) || out.length >= MAX_QUERY_VARIANTS) return;
-    seen.add(n); out.push(v);
+  const seen = new Set([normName(s)]);
+  const push = (v) => {
+    const t = String(v).trim().replace(/\s+/g, ' ');
+    const n = normName(t);
+    if (t && !seen.has(n)) { seen.add(n); out.push(t); }
+  };
+  const parts = s.split(',');
+  if (parts.length === 2) {
+    const head = parts[0].trim(), tail = parts[1].trim();
+    const alt = tail.match(/^(?:or|alias|otherwise|aka)\s+(.+)$/i);
+    // "X, or Y" names TWO places-worth of name: both sides are real, so try both.
+    if (alt && head) { push(alt[1]); push(head); }
+    else if (head && tail && tail.split(' ').length <= 2) push(tail + ' ' + head);
+  }
+  // Hyphenation: offer each form the other way round. Only for forms with no comma left in them —
+  // de-hyphenating the raw "Stow, or Stow-on-the-Wold" would send the punctuation back as a query.
+  out.slice().concat(s.indexOf(',') > -1 ? [] : [s]).forEach((form) => {
+    if (form.indexOf(',') > -1) return;
+    if (form.indexOf('-') > -1) push(form.replace(/\s*-\s*/g, ' '));
+    else if (NAME_CONNECTIVES.test(form)) push(form.replace(/ /g, '-'));
   });
   return out;
 }
+
+// The variants actually SENT with a reconcile query: the ones the user tagged as alt_names first, then
+// the derived forms above filling any slots left. Normalised here exactly as the gateway would do it —
+// blanks dropped, case-insensitive duplicates of each other and of the primary toponym removed, capped
+// at MAX_QUERY_VARIANTS — so the gateway has nothing left to discard and `variants` stays positionally
+// aligned with the `variant_vectors` we compute in-browser. See place#144.
+// `userDropped` counts only the user's OWN variants that didn't make it, which is what the "not
+// queried" note reports; derived forms losing out to the cap are our business, not theirs.
+const MAX_QUERY_VARIANTS = 10;
+function queryVariantForms(rowIdx, primary) {
+  const seen = new Set([normName(primary)]);
+  const forms = [];
+  let userDropped = 0;
+  rowVariants(rowIdx).forEach((v) => {
+    const n = normName(v);
+    if (!n || seen.has(n) || forms.length >= MAX_QUERY_VARIANTS) { userDropped += 1; return; }
+    seen.add(n); forms.push(v);
+  });
+  derivedNameVariants(primary).forEach((v) => {
+    const n = normName(v);
+    if (!n || seen.has(n) || forms.length >= MAX_QUERY_VARIANTS) return;
+    seen.add(n); forms.push(v);
+  });
+  return { forms, userDropped };
+}
+function queryVariants(rowIdx, primary) { return queryVariantForms(rowIdx, primary).forms; }
 
 // ── Multi-column (iterative, containment-chained) reconciliation ─────────────
 // The spatial hierarchy is expressed per-column: a container column has role 'contains' with a
@@ -5939,9 +5993,17 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // Gateway scope/variant reporting (place#144). Scope is dataset-wide, so the first one we see
       // in a run describes the whole run. `undefined` means an older gateway — leave lastScope null.
       if (qd.scope && !lastScope) lastScope = qd.scope;
-      if (Array.isArray(qd.variants_used)) {
-        const sent = perRow ? rowVariants(u.repKey.slice(u.repKey.indexOf(':') + 1)).length : 0;
-        if (sent > qd.variants_used.length) lastVariantsDropped += sent - qd.variants_used.length;
+      // Variants not queried. The user's own dropped alt_names are known here (we do the dedupe and the
+      // capping), so they are counted client-side; comparing a raw alt_names count against
+      // `variants_used` would now under-report, since that list also carries the derived forms
+      // (place#188). Anything the gateway discarded on top of ours is added to the same total.
+      if (perRow) {
+        const vf = queryVariantForms(u.repKey.slice(u.repKey.indexOf(':') + 1), u.v.query);
+        let dropped = vf.userDropped;
+        if (Array.isArray(qd.variants_used) && vf.forms.length > qd.variants_used.length) {
+          dropped += vf.forms.length - qd.variants_used.length;
+        }
+        lastVariantsDropped += dropped;
       }
       let result = applyNsToCandidates(qd.result || [], colIndex);
       // Enforce the radius here as well as on the service. Where a row has BOTH a confirmed
