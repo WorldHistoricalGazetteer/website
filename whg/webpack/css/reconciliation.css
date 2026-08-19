@@ -228,15 +228,39 @@
 
 /* --- Data browser (virtualised preview) --- */
 .recon-preview-scroll { max-height: 60vh; overflow: auto; border: 1px solid #dee2e6; border-radius: .25rem; }
-.recon-preview { font-size: .8rem; table-layout: fixed; min-width: 100%; margin-bottom: 0; }
-.recon-preview th {
+/* border-collapse:separate is required for a reliable sticky header: with Bootstrap's collapsed
+   borders the body cells' shared borders are painted ABOVE the header, so rows appear to scroll
+   THROUGH the frozen top row (place#193). Separate borders mean each cell paints its own, and the
+   grid lines below are drawn per-cell (right + bottom) so nothing is doubled. */
+.recon-preview { font-size: .8rem; table-layout: fixed; min-width: 100%; margin-bottom: 0;
+  border-collapse: separate; border-spacing: 0; }
+/* Both selectors below carry a descendant element beyond the class ON PURPOSE. Bootstrap paints cells
+   with `.table > :not(caption) > * > * { background-color: var(--bs-table-bg) }` — transparent — which
+   ties with a bare `.recon-preview th` and wins on source order, so the header background silently never
+   applied and the body showed straight through it. `.recon-map` only ever worked because it happens to
+   qualify its cells as `thead th`. */
+.recon-preview thead th, .recon-preview tbody td {
+  border: 0;
+  border-right: 1px solid #dee2e6;
+  border-bottom: 1px solid #dee2e6;
+  background-color: #fff;                  /* opaque: nothing may show through the sticky header */
+}
+.recon-preview thead th:last-child, .recon-preview tbody td:last-child { border-right: 0; }
+.recon-preview thead th {
   position: sticky;
   top: 0;
-  z-index: 3;
-  background: #f8f9fa;
+  /* above the teammate-cursor label (z-index 3), which would otherwise ride over the frozen row */
+  z-index: 4;
+  background-color: #f8f9fa;
   white-space: nowrap;
 }
-.recon-preview td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
+.recon-preview-th-name { display: inline-block; max-width: calc(100% - 1.2rem); overflow: hidden;
+  text-overflow: ellipsis; vertical-align: bottom; }
+/* The per-column transform wand: quiet until the header is hovered, so it doesn't clutter a wide table. */
+.recon-preview thead th .recon-preview-tf { float: right; color: #adb5bd; line-height: 1.2; text-decoration: none; }
+.recon-preview thead th:hover .recon-preview-tf { color: #c2410c; }
+.recon-preview thead th .recon-preview-tf:focus-visible { color: #c2410c; }
+.recon-preview tbody td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-sizing: border-box; }
 /* Virtualisation spacers stand in for the off-screen rows above/below the rendered window. */
 .recon-vspacer td { padding: 0 !important; border: 0 !important; }
 /* Edit mode: cells are click-to-edit. */

@@ -89,9 +89,9 @@ function patchFetch(diag, session) {
 // The form opens in a DRAGGABLE PANEL over the page being reported, not in a new tab: a tester
 // describing a problem needs to keep looking at it, and navigating away also risks whatever unsaved
 // work sits behind (a Workbench project mid-reconciliation, a half-drawn geometry). The panel has no
-// backdrop and can be dragged aside, so the screen under discussion stays visible and usable, and it
-// is only hidden — never destroyed — on close, so a half-typed report survives being put down and
-// picked up again. See place#181.
+// backdrop and can be dragged aside, so the screen under discussion stays visible and usable, and a
+// half-typed report is only hidden — never destroyed — on close, so it survives being put down and
+// picked up again. See place#181 (and place#192 for what happens to a SUBMITTED one).
 const REPORT_PANEL_ID = 'whg-beta-report-panel';
 let reportPanels = {};   // url → panel element, so each form keeps its own typed state
 
@@ -144,10 +144,23 @@ function makeDraggable(panel) {
 // hide the panel — it used to be an <a href="javascript:window.close()">, which did
 // nothing at all here (there is no window to close) and nothing on the standalone
 // page either unless the tab had been opened by script. See place#187.
+// Closing a panel that is still showing a half-typed FORM only hides it, so the draft survives being
+// put down and picked up again. Closing one that is showing a SUBMISSION CONFIRMATION discards it
+// instead — otherwise the next report opens on the previous "thank you" message with no way back to a
+// blank form (place#192). `data-report-spent` marks the panel as showing a confirmation.
+function closeReportPanel(panel) {
+  if (panel.dataset.reportSpent === '1') {
+    delete reportPanels[panel.dataset.reportUrl];
+    panel.remove();
+    return;
+  }
+  panel.style.display = 'none';
+}
+
 function wireReportClose(panel) {
   panel.querySelectorAll('[data-beta-close]').forEach((b) => b.addEventListener('click', (e) => {
     e.preventDefault();
-    panel.style.display = 'none';
+    closeReportPanel(panel);
   }));
 }
 
@@ -166,11 +179,14 @@ function wireReportForm(panel, url) {
       fd.set('embed', '1');
       const res = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' });
       body.innerHTML = await res.text();
+      // A confirmation is not worth preserving across a close; a re-rendered form (validation error) is.
+      panel.dataset.reportSpent = body.querySelector('form') ? '' : '1';
       wireReportClose(panel);   // the confirmation carries its own Close
       // The confirmation offers "Report another": re-fetch a blank form into the same panel.
       body.querySelectorAll('a[href*="/beta/"]').forEach((a) => a.addEventListener('click', async (ev) => {
         ev.preventDefault();
         body.innerHTML = await (await fetch(embedUrl(a.getAttribute('href')), { credentials: 'same-origin' })).text();
+        panel.dataset.reportSpent = '';   // a blank form again — worth keeping if they close mid-typing
         prefillReportForm(body);
         wireReportForm(panel, url);   // rebinds submit AND close
       }));
@@ -205,10 +221,11 @@ async function openReportPanel(href, title) {
   if (existing) { existing.style.display = 'flex'; return; }
   const panel = panelChrome(title);
   panel.id = REPORT_PANEL_ID + '-' + url.replace(/\W+/g, '');
+  panel.dataset.reportUrl = url;
   document.body.appendChild(panel);
   reportPanels[url] = panel;
   makeDraggable(panel);
-  panel.querySelector('.btn-close').addEventListener('click', () => { panel.style.display = 'none'; });
+  panel.querySelector('.btn-close').addEventListener('click', () => closeReportPanel(panel));
   const body = panel.querySelector('.whg-beta-report-body');
   body.innerHTML = '<p class="text-muted small p-3 mb-0"><i class="fas fa-spinner fa-spin me-1"></i>Loading…</p>';
   try {
