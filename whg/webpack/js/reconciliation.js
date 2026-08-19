@@ -890,6 +890,9 @@ function openTransformModal(col) {
   const ci = el('recon-tf-case'); if (ci) ci.checked = false;
   const sd = el('recon-tf-splitdelim'); if (sd) sd.value = ',';
   const sr = el('recon-tf-splitrev'); if (sr) sr.checked = false;
+  const nc = el('recon-tf-newcol'); if (nc) nc.checked = false;
+  const nn = el('recon-tf-newcolname');
+  if (nn) { nn.value = ''; nn.placeholder = truncate(project.columns[col].name, 28) + ' (transformed)'; nn.classList.add('d-none'); }
   renderTransformPreview();
   renderSplitPreview();
   if (box) box.querySelectorAll('.recon-tf-common').forEach((b) => b.addEventListener('click', () => {
@@ -936,13 +939,35 @@ function renderTransformPreview() {
     }
   }
   const rows = samples.map(([o, nv]) => `<div class="recon-tf-prevrow"><span class="recon-tf-before">${esc(truncate(String(o == null ? '' : o), 34))}</span> <i class="fas fa-arrow-right text-muted mx-1"></i> <span class="recon-tf-after">${esc(truncate(String(nv == null ? '' : nv), 34))}</span></div>`).join('');
-  box.innerHTML = changed
+  // Writing to a new column is worth doing even when every value comes through unchanged (the point may
+  // be to keep a copy), so Apply stays enabled there — unlike an in-place edit that would be a no-op.
+  const toNew = !!((el('recon-tf-newcol') || {}).checked);
+  box.innerHTML = (changed
     ? `<div class="small text-muted mb-1"><strong>${changed.toLocaleString()}</strong> of ${project.rows.length.toLocaleString()} cells will change:</div>${rows}`
-    : '<span class="text-muted small">No cells would change.</span>';
-  if (applyBtn) applyBtn.disabled = !changed;
+    : '<span class="text-muted small">No cells would change.</span>')
+    + (toNew ? '<div class="small text-muted mt-1"><i class="fas fa-arrow-turn-down me-1"></i>written to a new column; this one is left as it is.</div>' : '');
+  if (applyBtn) applyBtn.disabled = !changed && !toNew;
+}
+// Write the transform's output to a NEW column, leaving the source untouched — OpenRefine's "add column
+// based on this column" (place#194). The new column starts as 'other' (ignored): it is the user's job to
+// give it a role, and adding one silently to the reconciliation chain would invalidate existing matches.
+function applyTransformToNewColumn() {
+  const col = _transformCol; const fn = _pendingTransform.fn;
+  const snap = columnSnapshot();
+  const typed = ((el('recon-tf-newcolname') || {}).value || '').trim();
+  const name = uniqueHeader(typed || `${project.columns[col].name} (transformed)`, project.columns.map((c) => c.name));
+  const at = project.columns.length;
+  project.columns.push({ name, role: 'other' });
+  project.rows.forEach((r) => { r[at] = fn(r[col]); });
+  project.showIgnored = true; // …or the new column would be created out of sight
+  pushUndo({ type: 'columns', label: `${_pendingTransform.label} → “${truncate(name, 20)}”`, snapshot: snap });
+  persist(); rerenderData();
+  flashSaved(`${_pendingTransform.label} written to new column “${truncate(name, 24)}”`);
 }
 function applyTransform() {
   if (!_pendingTransform || _transformCol < 0 || !project) return;
+  const newCol = el('recon-tf-newcol');
+  if (newCol && newCol.checked) return applyTransformToNewColumn();
   const col = _transformCol; const fn = _pendingTransform.fn;
   const before = project.rows.map((r) => r[col]);
   let changed = 0;
@@ -1062,7 +1087,7 @@ function previewColWidth(ci) {
   let maxLen = String(project.columns[ci].name || '').length;
   const n = Math.min(project.rows.length, 200);
   for (let i = 0; i < n; i++) { const v = project.rows[i][ci]; if (v != null) { const L = String(v).length; if (L > maxLen) maxLen = L; } }
-  return Math.max(70, Math.min(320, maxLen * 7 + 22));
+  return Math.max(88, Math.min(320, maxLen * 7 + 40)); // +40 leaves room for the header's transform wand
 }
 function renderPreview() {
   if (!project) return;
@@ -1076,8 +1101,16 @@ function renderPreview() {
     if (!cg) { cg = document.createElement('colgroup'); table.insertBefore(cg, table.firstChild); }
     cg.innerHTML = _previewColW.map((w) => `<col style="width:${w}px">`).join('');
   }
+  // Each header carries the same column-transform affordance as the mapping table above. Testers were
+  // finding only "Edit cells" and concluding the OpenRefine-style tools had been dropped — they were
+  // there all along, behind one small wand icon in a table most people scroll straight past (place#194).
   el('recon-preview-head').innerHTML = '<tr>' + _previewVisCols.map((i) =>
-    `<th title="${esc(project.columns[i].name)}">${truncate(project.columns[i].name, 40)}</th>`).join('') + '</tr>';
+    `<th title="${esc(project.columns[i].name)}"><span class="recon-preview-th-name">${truncate(project.columns[i].name, 40)}</span>` +
+    `<button type="button" class="btn btn-link p-0 recon-preview-tf" data-col="${i}"
+       title="Clean or transform this column — trim, case, accents, find &amp; replace (regex), split into containment columns"
+       aria-label="Transform column ${esc(project.columns[i].name)}"><i class="fas fa-wand-magic-sparkles"></i></button></th>`).join('') + '</tr>';
+  el('recon-preview-head').querySelectorAll('.recon-preview-tf').forEach((b) =>
+    b.addEventListener('click', (e) => { e.stopPropagation(); openTransformModal(Number(b.dataset.col)); }));
   buildPreviewView();
   const scroll = el('recon-preview-scroll');
   if (scroll) scroll.classList.toggle('recon-editing', _previewEdit);
@@ -4336,6 +4369,7 @@ function wikiLinkHtml(wiki) {
 function renderReviewCard() {
   const card = el('recon-review-card');
   if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
+  const all = !!(el('recon-review-all') && el('recon-review-all').checked); // reviewing auto-confirmed too?
   const meta = reviewMeta[reviewPos];
   const m = project.matches[meta.key];
   const dec = project.decisions && project.decisions[meta.key];
@@ -4380,10 +4414,20 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="skip">Skip <kbd>s</kbd></button>
        <button type="button" class="btn btn-sm btn-outline-warning" data-act="nomatch">No match <kbd>n</kbd></button>
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="undo">Undo <kbd>u</kbd></button>
-       ${(() => { const pend = reviewMeta.filter((r) => needsReview(r.key)).length; return pend > 1
-         ? `<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-act="skipall"
-              title="Mark every remaining unreviewed value in this column as skipped, so you can move on to the next column">
-              Skip all remaining (${pend.toLocaleString()})</button>` : ''; })()}
+       ${(() => {
+         const pend = reviewMeta.filter((r) => needsReview(r.key)).length;
+         if (pend <= 1) return '';
+         // In "review all" mode the queue is every reviewable value (743, say) but only the ones that
+         // did NOT auto-confirm are unreviewed — and only those may be skipped: writing 'skipped' over
+         // an auto-confirmed match would DOWNGRADE it, silently discarding a good match the reviewer
+         // never asked to lose. So the count stays the pending count; what changes with the toggle is
+         // the wording, which used to leave "(5)" unexplained beside a queue of 743 (place#195).
+         const auto = all ? reviewMeta.length - pend : 0;
+         return `<button type="button" class="btn btn-sm btn-outline-secondary ms-auto" data-act="skipall"
+              title="Mark every unreviewed value in this column as skipped, so you can move on to the next column.${
+                auto ? ` The ${auto.toLocaleString()} auto-confirmed match${auto === 1 ? '' : 'es'} in this queue are kept as they are.` : ''}">
+              Skip all unreviewed (${pend.toLocaleString()}${auto ? ` of ${reviewMeta.length.toLocaleString()}` : ''})</button>`;
+       })()}
        <button type="button" class="btn btn-sm btn-primary${reviewMeta.filter((r) => needsReview(r.key)).length > 1 ? '' : ' ms-auto'}" data-act="next">Next <i class="fas fa-arrow-right"></i></button>
      </div>
      <div class="recon-review-note mt-2">
@@ -5690,8 +5734,13 @@ async function reconcileStage() {
   stopRequested = false;
   await reconcilePass(chain[pos], pos > 0 ? chain[pos - 1] : -1, getCsrf(), pos, chain.length);
   toggleRunning(false);
-  reconActiveIdx = pos; // review/results panes follow the column we just ran…
-  if (currentStagePos() > pos) reconActiveIdx = Math.min(currentStagePos(), chain.length - 1); // …unless it auto-confirmed → advance focus to the next stage
+  // The review/results panes stay on the column we just ran, EVEN IF every value auto-confirmed. Focus
+  // used to jump straight to the next stage in that case (so the Sources picker pointed at the column
+  // you'd run next), but that whisked a fully auto-confirmed column out of sight before its matches
+  // could be looked at — the reviewer had to notice, and click back to, its switcher pill. The
+  // Reconcile button targets currentStagePos(), not this, so the next column is still one click away
+  // whichever column has focus. See place#190.
+  reconActiveIdx = pos;
   const built = buildUniqueQueries();
   if (built) renderResults(built);
   renderColSwitcher();
@@ -6242,6 +6291,13 @@ function init() {
   ['recon-tf-regex', 'recon-tf-case'].forEach((id) => { const e = el(id); if (e) e.addEventListener('change', onFindReplaceInput); });
   const tfApply = el('recon-transform-apply');
   if (tfApply) tfApply.addEventListener('click', applyTransform);
+  // "put the result in a new column" — reveals the name box and re-renders the preview (place#194).
+  const tfNew = el('recon-tf-newcol');
+  if (tfNew) tfNew.addEventListener('change', () => {
+    const nn = el('recon-tf-newcolname');
+    if (nn) { nn.classList.toggle('d-none', !tfNew.checked); if (tfNew.checked) nn.focus(); }
+    renderTransformPreview();
+  });
   // Split-into-containment-columns controls (in the same transform modal).
   const sdEl = el('recon-tf-splitdelim'); if (sdEl) sdEl.addEventListener('input', renderSplitPreview);
   const srEl = el('recon-tf-splitrev'); if (srEl) srEl.addEventListener('change', renderSplitPreview);

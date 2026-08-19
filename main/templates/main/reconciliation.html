@@ -220,7 +220,9 @@
       </div>
     </div>
     <div id="recon-preview-scroll" class="recon-preview-scroll">
-      <table class="table table-sm table-bordered recon-preview mb-0">
+      {% comment %}Grid lines come from .recon-preview (separate borders, place#193) — not table-bordered,
+         whose collapsed borders are painted over the frozen header as the body scrolls.{% endcomment %}
+      <table class="table table-sm recon-preview mb-0">
         <thead id="recon-preview-head"></thead>
         <tbody id="recon-preview-body"></tbody>
       </table>
@@ -782,8 +784,9 @@
         </div>
         <div class="modal-body">
           <p class="small text-muted mb-2">
-            Clean this column's values <em>in place</em>. The preview shows exactly what will change —
-            nothing is applied until you click Apply. A reconciled column is re-queued after a change.
+            Clean this column's values in place, or write the result to a new column. The preview shows
+            exactly what will change — nothing is applied until you click Apply. A reconciled column is
+            re-queued after a change.
           </p>
           <div class="mb-2">
             <div class="small text-muted mb-1">Common transforms</div>
@@ -800,6 +803,16 @@
             </div>
           </div>
           <div id="recon-transform-preview" class="recon-transform-preview"></div>
+
+          {% comment %}Write the result to a NEW column instead of overwriting the source (place#194) —
+             the OpenRefine "add column based on this column" move, e.g. a regex pulling a county out
+             of a combined field while the original stays intact.{% endcomment %}
+          <div class="d-flex align-items-center gap-2 flex-wrap mt-2">
+            <label class="small mb-0"><input type="checkbox" id="recon-tf-newcol"> put the result in a
+              <strong>new column</strong> <span class="text-muted">(keep the original)</span></label>
+            <input type="text" id="recon-tf-newcolname" class="form-control form-control-sm d-none"
+                   style="max-width:200px" maxlength="120" placeholder="new column name" autocomplete="off">
+          </div>
 
           <div class="mb-1 pt-2 mt-2 border-top">
             <div class="small text-muted mb-1">Split into containment levels
