@@ -4653,8 +4653,11 @@ function renderReviewCard() {
         the top match scores ${esc(String(m.top.score))} but its name doesn’t resemble your value, and a score only ranks
         what the search found. Accept it if it is right.</div>` : '';
   const flagged = isFlagged(meta.key)
-    ? `<div class="small mt-1"><i class="fas fa-flag text-primary me-1"></i>You flagged this auto-confirmed match for review.
-        <button type="button" class="btn btn-sm btn-link p-0 align-baseline" data-act="unflag">keep it as auto-confirmed</button></div>` : '';
+    ? `<div class="small mt-1"><i class="fas fa-flag text-primary me-1"></i>${auto
+        ? 'You flagged this auto-confirmed match for review.'
+        : 'You flagged this row for review — search below for a name the gazetteers might hold.'}
+        <button type="button" class="btn btn-sm btn-link p-0 align-baseline" data-act="unflag">${
+          auto ? 'keep it as auto-confirmed' : 'remove the flag'}</button></div>` : '';
   card.innerHTML =
     `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
        <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
