@@ -606,8 +606,19 @@ def team_members(request, tid):
     user = _find_user(data.get('identifier'))
     if not user:
         return _invite_prospective_member(request, data.get('identifier'))
+    # You cannot add yourself (place#203). Not merely pointless: the owner is already a member, so
+    # this fell through to the role update below and OVERWROTE their own `owner` row with the
+    # dropdown's default of `editor` — after which `role_for()` no longer returns owner and they
+    # could not manage the team at all. An owner locked themselves out by inviting themselves.
+    if user == request.user:
+        return _err('You are already a member of this team — you cannot add yourself.')
     m, created = TeamMember.objects.get_or_create(team=team, user=user, defaults={'role': role})
     if not created:
+        # Never demote an owner through the add-a-member route. The self-add above is the way this
+        # was actually reached, but a team with a second owner must not be able to lose one either;
+        # ownership changes belong in a deliberate transfer, not in the invite box.
+        if m.role == ROLE_OWNER:
+            return _err('That person is the owner of this team; their role cannot be changed here.')
         m.role = role
         m.save(update_fields=['role'])
     # Notify the added member by email (issue #143). A properly-signed-up user has a verified email; if

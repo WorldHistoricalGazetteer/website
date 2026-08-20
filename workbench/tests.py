@@ -9,7 +9,8 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from .merge import merge_snapshots
-from .models import Team, TeamMember, WorkbenchProject, ProjectSnapshot, ROLE_VIEWER, ROLE_EDITOR
+from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
+                     ROLE_VIEWER, ROLE_EDITOR, ROLE_OWNER)
 
 User = get_user_model()
 
@@ -268,6 +269,39 @@ class ApiTests(TestCase):
                                  data=json.dumps({'text': 'Rome and Venice'}),
                                  content_type='application/json')
             self.assertEqual(r.status_code, 503)
+
+    def test_cannot_add_yourself_and_keep_owner_role(self):
+        """place#203 — self-add used to overwrite the owner's own role with the default
+        'editor', locking them out of managing the team they created."""
+        team = Team.objects.create(owner=self.owner, title='T', slug='t-self')
+        TeamMember.objects.create(team=team, user=self.owner, role=ROLE_OWNER)
+        url = reverse('workbench:team-members', args=[team.id])
+        for identifier in ('alice', self.owner.email):
+            r = self.client.post(url, data=json.dumps({'identifier': identifier, 'role': ROLE_EDITOR}),
+                                 content_type='application/json')
+            self.assertEqual(r.status_code, 400, r.content)
+            self.assertIn('cannot add yourself', r.json()['error'])
+            self.assertEqual(team.role_for(self.owner), ROLE_OWNER)
+
+    def test_add_member_cannot_demote_an_owner(self):
+        team = Team.objects.create(owner=self.owner, title='T', slug='t-own')
+        TeamMember.objects.create(team=team, user=self.owner, role=ROLE_OWNER)
+        TeamMember.objects.create(team=team, user=self.other, role=ROLE_OWNER)  # co-owner
+        r = self.client.post(reverse('workbench:team-members', args=[team.id]),
+                             data=json.dumps({'identifier': 'bob', 'role': ROLE_VIEWER}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 400, r.content)
+        self.assertEqual(team.role_for(self.other), ROLE_OWNER)
+
+    def test_existing_member_role_can_still_be_changed(self):
+        team = Team.objects.create(owner=self.owner, title='T', slug='t-chg')
+        TeamMember.objects.create(team=team, user=self.owner, role=ROLE_OWNER)
+        TeamMember.objects.create(team=team, user=self.other, role=ROLE_EDITOR)
+        r = self.client.post(reverse('workbench:team-members', args=[team.id]),
+                             data=json.dumps({'identifier': 'bob', 'role': ROLE_VIEWER}),
+                             content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(team.role_for(self.other), ROLE_VIEWER)
 
     def test_non_owner_cannot_invite(self):
         team = Team.objects.create(owner=self.owner, title='T', slug='t2')

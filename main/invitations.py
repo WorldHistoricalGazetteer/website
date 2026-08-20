@@ -244,6 +244,13 @@ def send_invitation(request, kind, to_email, target_url=None):
     if not recipient_hash:
         raise InvitationError('Please supply an email address.')
 
+    # Not to yourself (place#203). Reached from the team invite box as well as the share modal:
+    # an owner typing their own address gets "we've emailed them an invitation to create an
+    # account" about an account they are signed in to. It also spends their daily quota.
+    from users.models import User
+    if User.objects.by_email(to_email) == user:
+        raise InvitationError('That is your own email address — invitations are for other people.')
+
     if sender_remaining(user) <= 0:
         raise InvitationError(
             f'You have reached the limit of {DAILY_LIMIT} invitations in 24 hours. '
