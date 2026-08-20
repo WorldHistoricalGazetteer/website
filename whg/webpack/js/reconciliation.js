@@ -3442,6 +3442,7 @@ function rowVariants(rowIdx) {
 //   "Newton with Scales"         hyphenation differs between gazetteers     → "Newton-with-Scales"
 //   "Broxbourn (St. Augustine)"  a dedication qualifying the name           → "Broxbourn"
 //   "Bondgate, with Aismunderby" two townships under one heading            → both names
+//   "Bury St. Edmunds, Suffolk"  a county qualifying the name               → "Bury St. Edmunds"
 //
 // Measured against the index: "Melford, Long" and "Walden, Saffron" return NOTHING, while their
 // inverted forms return the town each time. These are query aids only — they are never written back
@@ -3451,6 +3452,9 @@ function rowVariants(rowIdx) {
 // Deliberately conservative. Inversion needs exactly one comma and a tail of at most two words, so
 // "Melford, Long, Suffolk" is left alone. A junk inversion ("Newcastle, Northumberland" →
 // "Northumberland Newcastle") is self-limiting: it is not a place name, so it matches nothing.
+// The head-word rule (place#205) is bounded the other way round — by the HEAD, which must be two
+// words or more, because a bare junk head is NOT self-limiting: it is a real toponym elsewhere and
+// its exact matches displace the answer. See the rule itself for the measurements.
 const NAME_CONNECTIVES = /\b(?:on|upon|under|with|in|by|next|cum|super|sub|juxta|le|la|de|du|des)\b/i;
 const ALT_CONNECTIVE = /^(?:or|alias|otherwise|aka)\s+(.+)$/i;   // "X, or Y"   — one place, two names
 const CONJ_CONNECTIVE = /^(?:with|and|cum)\s+(.+)$/i;            // "X, with Y" — two conjoined names
@@ -3494,6 +3498,29 @@ function derivedNameVariants(primary) {
     // goes first, but the second name is real too and belongs in the query set (place#200).
     else if (conj) { push(head); push(conj[1]); }
     else if (tail.split(' ').length <= 2) push(tail + ' ' + head);
+  });
+  // The bare head of a comma form. "Bury St. Edmunds, Suffolk" is a place qualified by its county, and
+  // no gazetteer carries the qualifier in the name, so the literal value lands in an unrelated
+  // phonetic neighbourhood: measured on prod against `gn`, that row returns *Urochishche Shybyndysor*
+  // and a Florida radio station at score 100 (confidence 25), while "Bury St. Edmunds" alone returns
+  // the town at 99. Inversion above does not rescue it — "Suffolk Bury St. Edmunds" gives a result set
+  // byte-identical to sending no variant at all (place#205).
+  //
+  // ONLY for a head of two words or more. A single-word head is a common toponym in its own right and
+  // its exact matches outrank the answer we already had: "Melford, Long" + "Melford" surfaces Melford
+  // (Canada) at confidence 90 and LOSES Long Melford at 88.8, and "Kingston, Surrey" + "Kingston"
+  // turns obvious junk at 25 into four arbitrary Kingstons at 90. That is the worse failure — #198's
+  // resemblance guard passes on a head-word, since it is contained in the primary, so a confident
+  // wrong place would auto-confirm where an empty list would not. Single-word heads therefore stay
+  // out, and "Yorks, West Riding" is left to place#204, which fixes it at the data end by giving the
+  // county the variants it lacks.
+  bases.forEach((b) => {
+    const parts = b.split(',');
+    if (parts.length < 2) return;
+    // Count words on the de-hyphenated head, so "Ashby-de-la-Zouch, Leics" qualifies. Hyphens join
+    // words; they don't make a name less distinctive, which is the property the rule is testing for.
+    const head = parts[0].trim();
+    if (head.replace(/-/g, ' ').split(' ').filter(Boolean).length >= 2) push(head);
   });
   // The same alternation without a comma — "Glandford Brigg or Bridge". Both sides must look like a
   // name (at most four words) so a descriptive phrase isn't chopped into nonsense.
