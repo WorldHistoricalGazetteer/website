@@ -4678,8 +4678,9 @@ function confidenceChipHTML(cand) {
   const band = conf >= 90 ? ['exact', 'text-success']
     : conf >= MIN_AUTO_CONFIDENCE ? ['near', 'text-body-secondary']
     : ['unverified', 'text-warning-emphasis'];
-  return `<span class="recon-cand-conf ${band[1]}" title="Match quality ${Math.round(conf)}/100 — how well this name
-    actually fits what you asked for, independent of the other candidates. The score beside it is only a ranking.">${band[0]}</span>`;
+  const tip = `Match quality ${Math.round(conf)}/100 — how well this name actually fits what you asked for, `
+    + 'independent of the other candidates. The score beside it is only a ranking.';
+  return `<span class="recon-cand-conf ${band[1]}" title="${esc(tip)}">${band[0]}</span>`;
 }
 
 function renderReviewCard() {
