@@ -3760,8 +3760,15 @@ function colPendingReview(col) { let n = 0; colKeys(col).forEach((k) => { if (ne
 function columnState(pos) {
   const chain = reconChain();
   const col = chain[pos];
-  if (!colHasMatches(col)) return (pos === 0 || columnState(pos - 1) === 'confirmed') ? 'ready' : 'locked';
-  return colPendingReview(col) > 0 ? 'review' : 'confirmed';
+  const openable = () => ((pos === 0 || columnState(pos - 1) === 'confirmed') ? 'ready' : 'locked');
+  if (!colHasMatches(col)) return openable();
+  if (colPendingReview(col) > 0) return 'review';
+  // Everything it HAS is decided — but rows can be left unsearched by a cancelled run, or by a
+  // protected re-run (place#207) which clears only the undecided rows. Those want reconciling, not
+  // reviewing, so the column goes back to 'ready' rather than passing as confirmed and quietly
+  // handing the user on to the next column with a third of this one never searched.
+  if (hasUnreconciled(col)) return openable();
+  return 'confirmed';
 }
 // First chain position that's actionable (ready or in review); === chain.length when all confirmed.
 function currentStagePos() {
@@ -6269,13 +6276,31 @@ function refreshReconSection() {
   updateReconButton();
 }
 
-// Value-bearing units in a column that have no match yet — i.e. rows still to reconcile (e.g. after a
-// Cancel, which keeps what was fetched and leaves the rest unqueried). Merged admin values count once.
+// Value-bearing rows in a column that have no match yet — still to reconcile (e.g. after a Cancel,
+// which keeps what was fetched and leaves the rest unqueried, or a protected re-run). Counted directly
+// off the rows rather than via buildUniqueQueries: columnState asks this on every render, and building
+// (and discarding) a Map of every row to answer it is a per-keystroke cost on a large dataset.
 function unreconciledUnits(col) {
   if (col == null || col < 0 || !project) return 0;
-  const built = buildUniqueQueries(col); if (!built) return 0;
-  let n = 0; built.map.forEach((v, key) => { if (!project.matches[key]) n += 1; });
+  const matches = project.matches || {};
+  let n = 0;
+  for (let i = 0; i < project.rows.length; i++) {
+    const v = project.rows[i][col];
+    if (v == null || String(v).trim() === '') continue;
+    if (!matches[col + ':' + i]) n += 1;
+  }
   return n;
+}
+// The same question as a short-circuiting boolean — for the callers that only need "any left?".
+function hasUnreconciled(col) {
+  if (col == null || col < 0 || !project) return false;
+  const matches = project.matches || {};
+  for (let i = 0; i < project.rows.length; i++) {
+    const v = project.rows[i][col];
+    if (v == null || String(v).trim() === '') continue;
+    if (!matches[col + ':' + i]) return true;
+  }
+  return false;
 }
 // Show a "Continue reconciling (N)" button when the focused column is PARTIALLY reconciled — some
 // matches present, some rows still unqueried — so a cancelled run can be resumed without the
@@ -6351,8 +6376,10 @@ function updateReconButton() {
   }
   const pos = currentStagePos();
   if (pos >= chain.length) {
-    // Decided everywhere — unless rows are still unsearched (a protected re-run, or a cancelled one),
-    // in which case the button finishes those rather than declaring victory over them. See place#207.
+    // Decided everywhere. columnState sends a column with unsearched rows back to 'ready', so this is
+    // normally the end of the road — but a column can also be LOCKED with rows outstanding (its parent
+    // was invalidated), and currentStagePos skips locked columns. Offer to finish those rather than
+    // declaring victory over rows that were never searched. See place#207.
     const rem = chain.find((c) => unreconciledUnits(c) > 0);
     if (rem != null) {
       const n = unreconciledUnits(rem);
