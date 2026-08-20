@@ -2531,7 +2531,7 @@ async function updateFullMap() {
     if (!c) continue;
     const key = nameCol + ':' + i;
     const acc = acceptedList(decisions[key])[0]
-      || (matches[key] && matches[key].top && isAutoConfirmed(matches[key].top, getThreshold(), matches[key].candidates) ? { label: matches[key].top.name, score: matches[key].top.score } : null);
+      || (autoConfirmed(key) ? { label: matches[key].top.name, score: matches[key].top.score } : null);
     const cell = (idx) => (idx >= 0 ? String(project.rows[i][idx] == null ? '' : project.rows[i][idx]) : '');
     feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [+c.lon.toFixed(6), +c.lat.toFixed(6)] }, properties: {
       title: cell(nameCol), admin: cell(countyIdx), date: cell(dateIdx),
@@ -3440,6 +3440,8 @@ function rowVariants(rowIdx) {
 //   "Melford, Long"              an index inverted to sort by head-word     → "Long Melford"
 //   "Stow, or Stow-on-the-Wold"  an alternative offered inline              → both names
 //   "Newton with Scales"         hyphenation differs between gazetteers     → "Newton-with-Scales"
+//   "Broxbourn (St. Augustine)"  a dedication qualifying the name           → "Broxbourn"
+//   "Bondgate, with Aismunderby" two townships under one heading            → both names
 //
 // Measured against the index: "Melford, Long" and "Walden, Saffron" return NOTHING, while their
 // inverted forms return the town each time. These are query aids only — they are never written back
@@ -3450,28 +3452,62 @@ function rowVariants(rowIdx) {
 // "Melford, Long, Suffolk" is left alone. A junk inversion ("Newcastle, Northumberland" →
 // "Northumberland Newcastle") is self-limiting: it is not a place name, so it matches nothing.
 const NAME_CONNECTIVES = /\b(?:on|upon|under|with|in|by|next|cum|super|sub|juxta|le|la|de|du|des)\b/i;
+const ALT_CONNECTIVE = /^(?:or|alias|otherwise|aka)\s+(.+)$/i;   // "X, or Y"   — one place, two names
+const CONJ_CONNECTIVE = /^(?:with|and|cum)\s+(.+)$/i;            // "X, with Y" — two conjoined names
 function derivedNameVariants(primary) {
   const s = String(primary == null ? '' : primary).trim().replace(/\s+/g, ' ');
   if (!s) return [];
   const out = [];
   const seen = new Set([normName(s)]);
   const push = (v) => {
-    const t = String(v).trim().replace(/\s+/g, ' ');
+    const t = String(v).trim().replace(/\s+/g, ' ').replace(/^[,;\s]+|[,;\s]+$/g, '');
     const n = normName(t);
     if (t && !seen.has(n)) { seen.add(n); out.push(t); }
   };
-  const parts = s.split(',');
-  if (parts.length === 2) {
-    const head = parts[0].trim(), tail = parts[1].trim();
-    const alt = tail.match(/^(?:or|alias|otherwise|aka)\s+(.+)$/i);
-    // "X, or Y" names TWO places-worth of name: both sides are real, so try both.
-    if (alt && head) { push(alt[1]); push(head); }
-    else if (head && tail && tail.split(' ').length <= 2) push(tail + ' ' + head);
+  // Parenthetical qualifiers. Registers and church listings qualify a name with a dedication or a
+  // disambiguator — "Broxbourn (St. Augustine)". No gazetteer indexes the bracketed form, so the
+  // literal value matches nothing and the row came back empty every time (place#199). Query the name
+  // without its bracket, and the two run together (some gazetteers spell the dedication inline).
+  // NEVER the bracketed part on its own: "(St. Mary and St. Sexburgh)" would match churches the world
+  // over, which is exactly the false auto-match reported in place#198.
+  const bases = [s];
+  const par = s.match(/^([^()]*)\(([^()]*)\)([^()]*)$/);
+  if (par) {
+    const outside = (par[1] + ' ' + par[3]).replace(/\s+/g, ' ').replace(/\s+,/g, ',').replace(/^[,;\s]+|[,;\s]+$/g, '');
+    const inside = par[2].trim();
+    if (outside) {
+      push(outside);
+      if (inside) push(outside + ' ' + inside);
+      bases.push(outside);
+    }
   }
-  // Hyphenation: offer each form the other way round. Only for forms with no comma left in them —
-  // de-hyphenating the raw "Stow, or Stow-on-the-Wold" would send the punctuation back as a query.
-  out.slice().concat(s.indexOf(',') > -1 ? [] : [s]).forEach((form) => {
-    if (form.indexOf(',') > -1) return;
+  // Comma forms, applied to the value and to its de-bracketed form alike.
+  bases.forEach((b) => {
+    const parts = b.split(',');
+    if (parts.length !== 2) return;
+    const head = parts[0].trim(), tail = parts[1].trim();
+    if (!head || !tail) return;
+    const alt = tail.match(ALT_CONNECTIVE), conj = tail.match(CONJ_CONNECTIVE);
+    // "X, or Y" names TWO places-worth of name: both sides are real, so try both.
+    if (alt) { push(alt[1]); push(head); }
+    // "X, with Y" conjoins two townships under one heading — the head is the place proper, so it
+    // goes first, but the second name is real too and belongs in the query set (place#200).
+    else if (conj) { push(head); push(conj[1]); }
+    else if (tail.split(' ').length <= 2) push(tail + ' ' + head);
+  });
+  // The same alternation without a comma — "Glandford Brigg or Bridge". Both sides must look like a
+  // name (at most four words) so a descriptive phrase isn't chopped into nonsense.
+  bases.forEach((b) => {
+    if (b.indexOf(',') > -1) return;
+    const m = b.match(/^(.*?)\s+(?:or|alias|otherwise)\s+(.*)$/i);
+    if (!m) return;
+    const a = m[1].trim(), c = m[2].trim();
+    if (a && c && a.split(' ').length <= 4 && c.split(' ').length <= 4) { push(a); push(c); }
+  });
+  // Hyphenation: offer each form the other way round. Only for forms with no comma or bracket left in
+  // them — de-hyphenating the raw "Stow, or Stow-on-the-Wold" would send the punctuation back as a query.
+  out.slice().concat(bases).forEach((form) => {
+    if (form.indexOf(',') > -1 || form.indexOf('(') > -1) return;
     if (form.indexOf('-') > -1) push(form.replace(/\s*-\s*/g, ' '));
     else if (NAME_CONNECTIVES.test(form)) push(form.replace(/ /g, '-'));
   });
@@ -3551,7 +3587,7 @@ function resolvedPlaceIds(colIndex, rowIdx) {
   const acc = acceptedList(project.decisions && project.decisions[key]);
   if (acc.length) return acc.map((a) => a.place_id).filter(Boolean);
   const m = project.matches && project.matches[key];
-  if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) return [m.top.id];
+  if (autoConfirmed(key)) return [m.top.id];
   return [];
 }
 // Candidate ids arrive as `place:<gazetteer id>` — `place:` is the OpenRefine entity-type prefix, and
@@ -3583,7 +3619,7 @@ function parentContext(colIndex, rowIdx) {
     const m = (project.matches || {})[k];
     let matched = null;
     if (acc.length) matched = acc[0].label;
-    else if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) matched = m.top.name;
+    else if (autoConfirmed(k)) matched = m.top.name;
     if (raw || matched) out.push({ colName: project.columns[c].name, value: raw, matched });
   }
   return out;
@@ -3639,8 +3675,26 @@ function setDecision(key, dec) {
   keys.forEach((k) => {
     if (dec) project.decisions[k] = clone(dec); // clone: siblings must not alias one object
     else delete project.decisions[k];
+    if (dec && project.flags) delete project.flags[k]; // decided — the "look again" flag is spent
   });
   return keys.length;
+}
+
+// ── Flagging an auto-confirmed match for review (place#202) ──────────────────
+// Scanning the results table is the fastest way to spot a bad auto-match, but the only way to revisit
+// one used to be "review all", which drops the whole column into the queue. A flag puts THIS row in
+// the review queue and leaves everything else alone. It is a request to look again, not a decision:
+// the match stays auto-confirmed (and stays in exports) until the reviewer actually decides. Fanned
+// out to merged sibling rows exactly as a decision is, since they share one review.
+function isFlagged(key) { return !!(project && project.flags && project.flags[key]); }
+function toggleFlag(key) {
+  if (!project) return false;
+  project.flags = project.flags || {};
+  const ci = key.indexOf(':');
+  const on = !isFlagged(key);
+  mergeGroupKeys(Number(key.slice(0, ci)), key.slice(ci + 1))
+    .forEach((k) => { if (on) project.flags[k] = true; else delete project.flags[k]; });
+  return on;
 }
 
 // ── Decision rationale (place#180) ───────────────────────────────────────────
@@ -4021,13 +4075,93 @@ function getThreshold() {
   const n = box ? parseInt(box.value, 10) : NaN;
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : 90;
 }
+// ── Does the winning candidate even resemble the value? (place#198) ──────────
+// Scores are RELATIVE: the service normalises by the best candidate in the pool it retrieved, so
+// something always comes back at ~100 however poor that pool is. A score is therefore a ranking, not
+// evidence of similarity — which is how "Minster-in-Sheppy (St. Mary and St. Sexburgh)" came to be
+// auto-confirmed against "ST JAMES'S", and "Glandford Brigg or Bridge" against "Gilbertine Order".
+// So auto-confirm additionally requires the matched name to LOOK like one of the forms we queried.
+// This only ever withholds an auto-confirm: the candidate is still offered, in review, where the
+// person decides. Nothing is discarded and no score is altered.
+const AUTO_NAME_SIM = 0.45;
+// Comparison form: accents folded, punctuation to spaces, lower-cased. "St. Mary's" ≡ "st marys".
+// Letters of every script are kept, so two Cyrillic or two Chinese names still compare properly.
+function simNorm(str) {
+  return String(str == null ? '' : str)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+// Names written in different scripts cannot be compared letter by letter: an endonym and its exonym
+// share nothing (Київ / Kyiv scores zero however right the match is). We can't judge those, so the
+// guard stands aside rather than withholding a good match.
+function comparableScripts(a, b) {
+  const latin = (x) => /\p{Script=Latin}/u.test(String(x || ''));
+  return latin(a) === latin(b);
+}
+function simBigrams(str) {
+  const out = new Set();
+  for (let i = 0; i < str.length - 1; i++) out.add(str.slice(i, i + 2));
+  return out;
+}
+// Sørensen–Dice over character bigrams, lifted to 1 when one name's words are wholly contained in the
+// other's ("Long Melford" vs "Long Melford railway station"): a qualified form of the same name is a
+// resemblance the bigram measure under-reports on long qualifiers.
+function nameSimilarity(a, b) {
+  const x = simNorm(a), y = simNorm(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const xt = x.split(' '), yt = y.split(' ');
+  const short = xt.length <= yt.length ? xt : yt, long = new Set(xt.length <= yt.length ? yt : xt);
+  if (short.every((t) => long.has(t))) return 1;
+  const A = simBigrams(x), B = simBigrams(y);
+  if (!A.size || !B.size) return 0;
+  let common = 0;
+  A.forEach((g) => { if (B.has(g)) common += 1; });
+  return (2 * common) / (A.size + B.size);
+}
+// Every name form this key was queried with: the cell value, the user's own alt_names, and the forms
+// we derived from the value. A match on any of them is a real resemblance.
+function queryFormsForKey(key) {
+  const ci = key.indexOf(':');
+  const col = Number(key.slice(0, ci)), row = Number(key.slice(ci + 1));
+  if (!project || !project.rows[row]) return [];
+  const primary = cellVal(row, col);
+  if (!primary) return [];
+  return [primary].concat(queryVariantForms(row, primary).forms);
+}
+const _simCache = new Map();
+function candidateResembles(key, cand) {
+  if (!cand) return false;
+  if (cand.match) return true; // the service matched the name exactly — nothing to second-guess
+  const forms = queryFormsForKey(key);
+  if (!forms.length) return true; // no value to compare against; don't invent a reason to withhold
+  // Keyed by every form we would compare, not just the value: two rows can share a place name and
+  // carry different alt_names, and they must not share a verdict.
+  const ck = forms.map(normName).join('\u0001') + '\u0000' + (cand.id || '') + '\u0000' + normName(cand.name || '');
+  if (_simCache.has(ck)) return _simCache.get(ck);
+  const names = [cand.name].concat((cand.alt_names || []).slice(0, 20));
+  let best = 0, judged = false;
+  for (let i = 0; i < forms.length && best < AUTO_NAME_SIM; i++) {
+    for (let j = 0; j < names.length && best < AUTO_NAME_SIM; j++) {
+      if (!comparableScripts(forms[i], names[j])) continue;
+      judged = true;
+      best = Math.max(best, nameSimilarity(forms[i], names[j]));
+    }
+  }
+  const ok = !judged || best >= AUTO_NAME_SIM;
+  _simCache.set(ck, ok);
+  return ok;
+}
+
 // Auto-confirm a top candidate when the name matched exactly, or its score clears the threshold —
-// UNLESS another DISTINCT candidate ties the top score. An exact tie between different places (e.g.
-// "Devon" in GB vs AU, both 100) is genuinely ambiguous and belongs in review, not an auto-guess.
+// UNLESS the name doesn't resemble the value at all (above), or another DISTINCT candidate ties the
+// top score. An exact tie between different places (e.g. "Devon" in GB vs AU, both 100) is genuinely
+// ambiguous and belongs in review, not an auto-guess.
 // Same-place duplicates from multiple sources (identical name + description) are NOT ambiguous.
-function isAutoConfirmed(top, threshold, cands) {
+function isAutoConfirmed(top, threshold, cands, key) {
   if (!top) return false;
   if (!(top.match || Number(top.score) >= threshold)) return false;
+  if (key && !candidateResembles(key, top)) return false;
   if (cands && cands.length > 1) {
     const t = cands[0];
     for (let i = 1; i < cands.length && Number(cands[i].score) >= Number(t.score); i++) {
@@ -4043,6 +4177,13 @@ function isAutoConfirmed(top, threshold, cands) {
   return true;
 }
 
+// Is the match for this key auto-confirmed? (the form every caller wants — the guard above needs the
+// key to know what was asked for, so callers should not hand-roll the argument list.)
+function autoConfirmed(key) {
+  const m = project && project.matches && project.matches[key];
+  return !!(m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates, key));
+}
+
 // ── Candidate review (Phase 4) ───────────────────────────────────────────────
 let reviewMeta = []; // [{key, rows, name, country}] — one per reviewable row
 let reviewPos = 0;
@@ -4051,6 +4192,7 @@ let _lastDecisionKey = null; // the row most recently decided — so Undo revert
 const REVIEW_BADGE = {
   accepted: '<span class="badge bg-success">accepted ✓</span>',
   auto: '<span class="badge bg-success">auto ✓</span>',
+  flagged: '<span class="badge bg-primary">flagged <i class="fas fa-flag"></i></span>',
   candidate: '<span class="badge bg-info text-dark">candidate</span>',
   rejected: '<span class="badge bg-dark">rejected</span>',
   skipped: '<span class="badge bg-secondary">skipped</span>',
@@ -4062,7 +4204,8 @@ function effectiveStatus(key) {
   const dec = project.decisions && project.decisions[key];
   if (dec) return dec.status;
   const m = project.matches && project.matches[key];
-  if (m && m.top) return isAutoConfirmed(m.top, getThreshold(), m.candidates) ? 'auto' : 'candidate';
+  if (isFlagged(key)) return 'flagged';
+  if (m && m.top) return autoConfirmed(key) ? 'auto' : 'candidate';
   return 'none';
 }
 // Accepted candidates for a key as an array [{ci, place_id, label, score}]. A place may closeMatch
@@ -4077,7 +4220,7 @@ function acceptedList(dec) {
 function selectedCis(key) {
   const dec = project.decisions && project.decisions[key];
   const cis = acceptedList(dec).map((a) => a.ci);
-  if (!dec) { const m = project.matches && project.matches[key]; if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) cis.push(0); }
+  if (!dec && autoConfirmed(key)) cis.push(0);
   return cis;
 }
 // Highlight the list row for candidate `ci` (called when its marker is hovered on the map).
@@ -4091,7 +4234,7 @@ function acceptedCandidate(key) {
   if (!m) return null;
   const dec = project.decisions && project.decisions[key];
   if (dec) { const a = acceptedList(dec)[0]; return a ? (m.candidates && m.candidates[a.ci]) || null : null; }
-  return (m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) ? m.top : null;
+  return autoConfirmed(key) ? m.top : null;
 }
 
 // The matches RESOLVED for a key, in the shape the exporters want: explicit accepts, else the
@@ -4104,7 +4247,7 @@ function resolvedMatchList(key) {
   const cands = (m && m.candidates) || [];
   const dec = project.decisions && project.decisions[key];
   if (dec) return acceptedList(dec).map((a) => ({ id: a.place_id, title: a.label, score: a.score, source: nsName(a.place_id), cand: cands[a.ci] || null, accepted: true }));
-  if (m && m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates)) {
+  if (autoConfirmed(key)) {
     return [{ id: m.top.id, title: m.top.name, score: m.top.score, source: nsName(m.top.id), cand: m.top, accepted: false }];
   }
   return [];
@@ -4117,7 +4260,7 @@ function renderResultsTable(built) {
   built.map.forEach((v, key) => {
     const m = matches[key];
     if (!m) { pending += 1; return; }
-    if (m.top) { matched += 1; rowsMatched += v.rows.length; if (isAutoConfirmed(m.top, threshold, m.candidates)) auto += 1; }
+    if (m.top) { matched += 1; rowsMatched += v.rows.length; if (isAutoConfirmed(m.top, threshold, m.candidates, key)) auto += 1; }
     else nomatch += 1;
     if (project.decisions && project.decisions[key] && project.decisions[key].status === 'accepted') accepted += 1;
   });
@@ -4136,7 +4279,12 @@ function renderResultsTable(built) {
       `<span class="text-warning"><strong>${nomatch.toLocaleString()}</strong> no match</span> · ` +
       `<span class="text-muted"><strong>${pending.toLocaleString()}</strong> pending</span> — ` +
       `across <strong>${built.map.size.toLocaleString()}</strong> rows, ` +
-      `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.`);
+      `covering <strong>${rowsMatched.toLocaleString()}</strong> of ${project.total.toLocaleString()} rows.` +
+      // The flag affordance is invisible until you know it's there, and the people who most need it
+      // are the ones scanning a table full of wrong auto-matches (place#202).
+      ((auto || nomatch) ? ` <span class="text-muted"><i class="fas fa-flag me-1"></i>Click a row’s status badge to send it
+        to review — a wrong <span class="badge bg-success">auto ✓</span>, or a
+        <span class="badge bg-warning text-dark">no match</span> you want to search for by hand.</span>` : ''));
   }
 
   // Build the full ordered row-info list once; the table is virtualised (only the visible window is
@@ -4144,8 +4292,6 @@ function renderResultsTable(built) {
   _resultRows = [];
   for (let i = 0; i < project.rows.length; i++) { const info = keyForRow(built, i); if (info && rowPasses(i, built)) _resultRows.push(info); }
   el('recon-results-wrap').classList.remove('d-none');
-  el('recon-results-note').textContent = _resultRows.length
-    ? `${_resultRows.length.toLocaleString()}${filtersActive() ? ' filtered' : ''} rows — scroll to load more (off-screen rows are evicted).` : (filtersActive() ? 'No rows match the current filters.' : '');
   renderResultsWindow(true);
   updatePaneSummaries();
 }
@@ -4154,12 +4300,36 @@ function renderResultsTable(built) {
 let _resultRows = [];        // full ordered list of row infos {name, country, key}
 let RESULT_ROW_H = 34;       // px per row; self-calibrated from the first render
 
+// How many rows the table holds, and whether there are more than fit on screen. The old wording
+// ("scroll to load more — off-screen rows are evicted") promised an action that doesn't exist and
+// described our virtualisation rather than anything the reader does; it was shown even when every
+// row was already visible. See place#196.
+function setResultsNote(total, shown) {
+  const box = el('recon-results-note');
+  if (!box) return;
+  const filtered = filtersActive() ? ' filtered' : '';
+  box.textContent = total
+    ? `${total.toLocaleString()}${filtered} row${total === 1 ? '' : 's'}${shown < total ? ' — scroll the table for the rest' : ''}.`
+    : (filtersActive() ? 'No rows match the current filters.' : '');
+}
+
 function resultRowHtml(info) {
   const m = (project.matches || {})[info.key];
   let status, top = '', score = '';
   if (!m) status = '<span class="badge bg-secondary">pending</span>';
   else {
-    status = REVIEW_BADGE[effectiveStatus(info.key)] || '';
+    const st = effectiveStatus(info.key);
+    status = REVIEW_BADGE[st] || '';
+    // Clicking an auto-confirmed badge sends that row to review, and clicking again takes it back
+    // out — the quickest route from "that one is obviously wrong" to actually fixing it (place#202).
+    const FLAG_TITLE = {
+      auto: 'Wrong? Click to send this match to review',
+      none: 'Nothing matched — click to send this row to review and search for it by hand',
+      flagged: 'Flagged for review — click to unflag',
+    };
+    if (FLAG_TITLE[st]) {
+      status = `<span class="recon-flag-toggle" role="button" tabindex="0" data-flag="${esc(info.key)}" title="${FLAG_TITLE[st]}">${status}</span>`;
+    }
     const show = acceptedCandidate(info.key) || m.top;
     if (show) { top = `${truncate(show.name, 50)} <span class="text-muted small">${truncate(show.description || '', 30)}</span>`; score = show.score; }
   }
@@ -4177,6 +4347,7 @@ function renderResultsWindow(calibrate) {
   const first = Math.max(0, Math.floor(wrap.scrollTop / RESULT_ROW_H) - buffer);
   const count = Math.ceil(viewH / RESULT_ROW_H) + buffer * 2;
   const last = Math.min(total, first + count);
+  setResultsNote(total, last - first);
   const spacer = (h) => (h > 0 ? `<tr aria-hidden="true"><td colspan="4" style="height:${h}px;padding:0;border:0"></td></tr>` : '');
   const rows = [];
   for (let i = first; i < last; i++) rows.push(resultRowHtml(_resultRows[i]));
@@ -4200,8 +4371,8 @@ function filtersActive() {
   return !!(_filters.status.size || _filters.score.size || _filters.coord !== 'any' || _filters.date !== 'any' || _filters.colVals.size || _filters.text);
 }
 function resetFilters() { _filters = { status: new Set(), score: new Set(), coord: 'any', date: 'any', col: -1, colVals: new Set(), text: '' }; }
-const STATUS_LABELS = { accepted: 'accepted', auto: 'auto-confirmed', candidate: 'needs review', rejected: 'rejected', skipped: 'skipped', nomatch: 'no match', none: 'no match' };
-const STATUS_ORDER = ['candidate', 'auto', 'accepted', 'nomatch', 'none', 'skipped', 'rejected'];
+const STATUS_LABELS = { accepted: 'accepted', auto: 'auto-confirmed', flagged: 'flagged for review', candidate: 'needs review', rejected: 'rejected', skipped: 'skipped', nomatch: 'no match', none: 'no match' };
+const STATUS_ORDER = ['candidate', 'flagged', 'auto', 'accepted', 'nomatch', 'none', 'skipped', 'rejected'];
 const SCORE_LABELS = { 100: '100 (exact)', 90: '90–99', 80: '80–89', lt80: 'below 80', nomatch: 'no match' };
 const SCORE_ORDER = ['100', '90', '80', 'lt80', 'nomatch'];
 function scoreBand(key) {
@@ -4345,14 +4516,16 @@ function renderColSwitcher() {
   });
 }
 
-// Reviewable rows (those with ≥1 candidate).
+// Rows the review pane can show. Rows with NO candidates are included: they need no decision (see
+// needsReview), but they are precisely the ones a reviewer wants to open and search by hand — a
+// queue that excluded them left "no match" as a dead end (place#201).
 function reviewableKeys(built) {
   const arr = [];
   const merged = mergesValues(built.colIndex); // admin column → one review per distinct value
   const seen = merged ? new Map() : null;      // mergeSig → index into arr
   built.map.forEach((v, key) => {
     const m = project.matches[key];
-    if (!(m && m.top && rowPasses(rowKeyIndex(key), built))) return;
+    if (!(m && rowPasses(rowKeyIndex(key), built))) return;
     const entry = { key, rows: v.rows.length, name: v.query, country: v.country };
     if (!merged) { arr.push(entry); return; }
     const sig = mergeSig(built.colIndex, rowKeyIndex(key));
@@ -4366,8 +4539,15 @@ function reviewableKeys(built) {
   return arr;
 }
 function needsReview(key) {
+  if (project.decisions && project.decisions[key]) return false;
   const m = project.matches[key];
-  return !(project.decisions && project.decisions[key]) && m && m.top && !isAutoConfirmed(m.top, getThreshold(), m.candidates);
+  if (!m) return false;
+  // A row the reviewer flagged in the results table joins the queue whatever its status — that IS the
+  // point of the flag: to come back to a wrong auto-match, or to a row that matched nothing and wants
+  // a hand search, without turning on "review all" (place#202). Unflagged rows with no candidates
+  // need no decision, or every column would be permanently un-confirmable.
+  if (isFlagged(key)) return true;
+  return !!(m.top && !autoConfirmed(key));
 }
 function refreshReview() {
   const sec = el('recon-review');
@@ -4427,7 +4607,7 @@ function renderReviewCard() {
   const meta = reviewMeta[reviewPos];
   const m = project.matches[meta.key];
   const dec = project.decisions && project.decisions[meta.key];
-  const auto = m.top && isAutoConfirmed(m.top, getThreshold(), m.candidates);
+  const auto = autoConfirmed(meta.key);
   // Multi-select: a set of accepted candidate indices (auto-confirm previews candidate 0).
   const acceptedCis = new Set(acceptedList(dec).map((a) => a.ci));
   if (!dec && auto) acceptedCis.add(0);
@@ -4438,6 +4618,7 @@ function renderReviewCard() {
        <span class="recon-cand-body">
          <span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
     (c.match ? '<span class="badge bg-success ms-1">exact</span>' : '') +
+    (c.found_by ? `<span class="badge bg-secondary ms-1" title="Found by your search for “${esc(c.found_by)}” — not returned by the reconciliation run">searched</span>` : '') +
     `<span class="recon-cand-ns ms-1">${esc(nsName(c.id))}</span>` +
     `<span class="text-muted small ms-1">${truncate(c.description || '', 36)}</span>` +
     (c.alt_names && c.alt_names.length
@@ -4450,6 +4631,33 @@ function renderReviewCard() {
   const loadMore = !m.top ? ''
     : m.exhausted ? '<div class="small text-muted mt-1">all candidates shown.</div>'
     : `<div class="mt-1"><button type="button" class="btn btn-sm btn-link p-0 recon-loadmore" data-act="more">load more candidates</button></div>`;
+  // Search the gazetteers by hand — for the rows where the reviewer can see WHY nothing matched
+  // (place#201). Prefilled with the value so it's a quick edit rather than retyping.
+  const manualSearch =
+    `<div class="recon-review-search mt-2">
+       <div class="input-group input-group-sm">
+         <span class="input-group-text"><i class="fas fa-magnifying-glass"></i></span>
+         <input type="text" id="recon-review-search-q" class="form-control" value="${esc(meta.name)}"
+                placeholder="search the gazetteers for another name…"
+                aria-label="Search the gazetteers for another name">
+         <button type="button" class="btn btn-outline-secondary" data-act="search">Search</button>
+       </div>
+       <div id="recon-review-search-note" class="small mt-1"><span class="text-muted">Not what you expected? Search for a
+         spelling you know — results are added to the list above, and your dataset-wide scope filters are not applied.</span></div>
+     </div>`;
+  // Why a match scoring above the threshold is nonetheless sitting in review (place#198). Scores are
+  // relative to the pool the service retrieved, so a poor pool still yields a ~100; saying so beats
+  // leaving the reviewer to wonder whether the threshold is broken.
+  const withheld = (!auto && !dec && m.top && Number(m.top.score) >= getThreshold() && !candidateResembles(meta.key, m.top))
+    ? `<div class="small text-warning-emphasis mt-1"><i class="fas fa-circle-exclamation me-1"></i>Not auto-confirmed:
+        the top match scores ${esc(String(m.top.score))} but its name doesn’t resemble your value, and a score only ranks
+        what the search found. Accept it if it is right.</div>` : '';
+  const flagged = isFlagged(meta.key)
+    ? `<div class="small mt-1"><i class="fas fa-flag text-primary me-1"></i>${auto
+        ? 'You flagged this auto-confirmed match for review.'
+        : 'You flagged this row for review — search below for a name the gazetteers might hold.'}
+        <button type="button" class="btn btn-sm btn-link p-0 align-baseline" data-act="unflag">${
+          auto ? 'keep it as auto-confirmed' : 'remove the flag'}</button></div>` : '';
   card.innerHTML =
     `<div class="recon-review-head d-flex justify-content-between align-items-start flex-wrap gap-2">
        <div><span class="fw-bold">${truncate(meta.name, 60)}</span>${meta.country ? ` <span class="text-muted">(${esc(meta.country)})</span>` : ''}
@@ -4460,8 +4668,11 @@ function renderReviewCard() {
             <i class="fas fa-object-group me-1"></i>applies to all ${meta.rows.toLocaleString()} rows</span>` : ''}</div>
        <div>${REVIEW_BADGE[effectiveStatus(meta.key)] || ''}</div>
      </div>
+     ${flagged}
      <ol class="recon-cand-list">${list || '<li class="text-muted">No candidates were returned for this name.</li>'}</ol>
+     ${withheld}
      ${loadMore}
+     ${manualSearch}
      <div class="recon-review-actions d-flex flex-wrap align-items-center gap-2 mt-2">
        <button type="button" class="btn btn-sm btn-outline-secondary" data-act="prev" title="Back (←)"><i class="fas fa-arrow-left"></i></button>
        <button type="button" class="btn btn-sm btn-outline-danger" data-act="reject">Reject <kbd>x</kbd></button>
@@ -4512,6 +4723,13 @@ function renderReviewCard() {
     li.addEventListener('mouseenter', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(ci); });
     li.addEventListener('mouseleave', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(null); });
   });
+  const searchInput = card.querySelector('#recon-review-search-q');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); manualSearchCandidates(); }
+      e.stopPropagation();   // x/s/n/u are review shortcuts — not while typing a name
+    });
+  }
   const noteInput = card.querySelector('#recon-review-note-input');
   if (noteInput) {
     // Save on the way out (blur) and on Enter — not per keystroke, which would
@@ -5518,6 +5736,12 @@ function reviewAction(act) {
   if (act === 'next') return advance(1);
   if (act === 'prev') return advance(-1);
   if (act === 'more') return loadMoreCandidates();
+  if (act === 'search') return manualSearchCandidates();
+  if (act === 'unflag') {
+    const mk = reviewMeta[reviewPos];
+    if (mk) { toggleFlag(mk.key); persist(); const b = buildUniqueQueries(); if (b) { renderResultsTable(b); renderFilters(); } refreshReview(); }
+    return;
+  }
   if (act === 'skipall') return skipAllRemaining();
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   if (act === 'undo') {
@@ -5566,6 +5790,77 @@ function skipAllRemaining() {
   renderColSwitcher(); updateReconButton(); refreshReview();
   flashSaved(`Skipped ${n.toLocaleString()} unreviewed value${n === 1 ? '' : 's'} — the next column can now be reconciled.`);
 }
+// Toggle the review flag on a row from the results table (place#202).
+function flagForReview(key) {
+  if (!project) return;
+  const on = toggleFlag(key);
+  persist();
+  const built = buildUniqueQueries();
+  if (built) { renderResultsTable(built); renderFilters(); }
+  refreshReview();
+  // Deliberately no pane switch: flagging is a marking pass down the results table, and hopping to
+  // the review pane on the first click would break the run of them.
+  flashSaved(on
+    ? `Flagged “${truncate(keyLabel(key), 30)}” for review — it is now in the review queue below.`
+    : `Unflagged “${truncate(keyLabel(key), 30)}” — left as auto-confirmed.`);
+}
+
+// Write a candidate list to a key AND every row merged with it. Merged rows share one review and one
+// decision, and a decision stores candidate INDICES — so a list that grew for one of them must grow
+// for all, or an accepted index would point at a different place after a reload (the fanned-out rows
+// share one array in memory, but not once the project has been serialised and read back).
+function setMatchCandidates(key, candidates, top, exhausted) {
+  const ci = key.indexOf(':');
+  mergeGroupKeys(Number(key.slice(0, ci)), key.slice(ci + 1)).forEach((k) => {
+    const mm = project.matches[k];
+    if (!mm) return;
+    mm.candidates = clone(candidates);
+    mm.top = top === undefined ? (mm.candidates[0] || null) : (top || null);
+    if (exhausted !== undefined) mm.exhausted = exhausted;
+  });
+}
+
+// Search the gazetteers by hand from the review card (place#201). When a row comes back with nothing
+// useful the reviewer can usually see why — a spelling the source never used, a name the register
+// abbreviated — and typing the name they know is far quicker than editing the data and reconciling
+// the whole column again. Results are APPENDED to the candidate list (scores from a different query
+// are not comparable with the reconciliation's, so they don't get to re-rank it) and are accepted
+// with the same click as any other candidate. The dataset-wide scope is deliberately NOT applied:
+// this is the escape hatch for when the automatic query was too narrow.
+async function manualSearchCandidates() {
+  const meta = reviewMeta[reviewPos]; if (!meta) return;
+  const input = el('recon-review-search-q');
+  const q = input ? input.value.trim() : '';
+  const setNote = (html) => { const n = el('recon-review-search-note'); if (n) n.innerHTML = html; };
+  if (!q) { setNote('<span class="text-muted">Type a place name to search for.</span>'); return; }
+  setNote('<i class="fas fa-spinner fa-spin me-1"></i>searching…');
+  try {
+    const revCol = activeReconCol();
+    const nsf = getNsFilter(revCol);
+    const query = { q0: { query: q, type: 'place', limit: 10 } };
+    if (nsf.mode === 'only' && nsf.namespaces.length) query.q0.namespaces = nsf.namespaces;
+    const data = await postReconcile(query, getCsrf());
+    const found = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
+    const m = project.matches[meta.key];
+    const have = new Set((m.candidates || []).map((c) => c && c.id));
+    const fresh = found.filter((c) => c && !have.has(c.id)).map((c) => Object.assign({}, c, { found_by: q }));
+    if (!fresh.length) {
+      setNote(found.length
+        ? `<span class="text-muted">Every result for “${esc(q)}” is already listed above.</span>`
+        : `<span class="text-muted">Nothing found for “${esc(q)}”.</span>`);
+      return;
+    }
+    setMatchCandidates(meta.key, (m.candidates || []).concat(fresh), m.top);
+    await persist();
+    renderReviewCard();
+    const box = el('recon-review-search-q'); if (box) box.value = q;
+    setNote(`<span class="text-success">Added ${fresh.length} result${fresh.length === 1 ? '' : 's'} for “${esc(q)}” — click one to accept it.</span>`);
+  } catch (err) {
+    console.error('[recon] manual search failed', err);
+    setNote(`<span class="text-danger">Search failed: ${esc(err.message)}</span>`);
+  }
+}
+
 // Fetch a larger batch of candidates for the current name (re-query with a higher limit).
 async function loadMoreCandidates() {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
@@ -5581,9 +5876,8 @@ async function loadMoreCandidates() {
     if (nsf.mode === 'only' && nsf.namespaces.length) q.q0.namespaces = nsf.namespaces;
     const data = await postReconcile(q, getCsrf());
     const result = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
-    m.candidates = result;
-    m.top = result[0] || null;
-    m.exhausted = result.length < want; // fewer than asked → no more to fetch
+    // fewer than asked → no more to fetch
+    setMatchCandidates(meta.key, result, result[0] || null, result.length < want);
     await persist();
     renderReviewCard();
   } catch (err) {
@@ -6296,6 +6590,22 @@ function init() {
     if (p.classList.contains('recon-collapsed')) openPane(btn.dataset.pane);
     else p.classList.add('recon-collapsed');
   }));
+
+  // Flagging a match from the results table (place#202). The table is virtualised — its rows are
+  // re-rendered on every scroll — so the handler is delegated to the tbody, which is not.
+  const resultsBody = el('recon-results-body');
+  if (resultsBody) {
+    const flagHit = (e) => {
+      const t = e.target.closest ? e.target.closest('[data-flag]') : null;
+      return t ? t.dataset.flag : null;
+    };
+    resultsBody.addEventListener('click', (e) => { const k = flagHit(e); if (k) { e.preventDefault(); flagForReview(k); } });
+    resultsBody.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const k = flagHit(e); if (!k) return;
+      e.preventDefault(); flagForReview(k);
+    });
+  }
 
   // Phase 4 — candidate review: keyboard-first + the "review all" toggle.
   document.addEventListener('keydown', reviewKeydown);
