@@ -4194,18 +4194,21 @@ function candidateResembles(key, cand) {
 // ── Absolute match quality from the gateway (place#206) ──────────────────────
 // `score` is normalised against the best candidate in the response, so the top one reads ~100 whether
 // the match is perfect or the best of a bad lot — the defect behind place#198. `confidence` is
-// absolute and comparable between queries. Measured bands (indexing@3471ecb):
+// absolute and comparable between queries. measured against the live
+// gateway, 2026-08-20:
 //
-//   ~100  exactly spelled       (a variant's exact match: 90)
-//   37–46 lexically near        ("Broxbourn" → Broxbourne)
-//   ~26   phonetic-only         correct but with no lexical evidence — unverified, not wrong
-//   ~25   noise
+//   100        exactly spelled                   (a variant's exact match: 90)
+//   87–91      a derived head-word match         ("Bury St. Edmunds, Suffolk", place#205)
+//   32         lexically near                    ("Broxbourn (St. Augustine)" → Broxbourne)
+//   22–26      noise, and phonetic-only matches  correct or not, no lexical evidence either way
 //
-// The floor sits in the gap between phonetic-only and lexically-near. Auto-confirm therefore needs
-// evidence in the spelling; a phonetic-only match is offered in review instead. That is a deliberate
-// tightening for cross-script matching, where the lexical guard below stands aside and such a match
-// used to auto-confirm unchecked.
-const MIN_AUTO_CONFIDENCE = 35;
+// 30 is the gateway's own recommended line ("< ~30 means phonetic-only, unverified — not wrong") and
+// sits in the observed gap between 25.7 and 32.1. The margin is narrow on the near-miss side, so this
+// wants re-checking if the gateway's scoring moves. Auto-confirm therefore needs evidence in the
+// SPELLING; a phonetic-only match is offered in review instead. That is a deliberate tightening for
+// cross-script matching, where the lexical guard below stands aside and such a match used to
+// auto-confirm unchecked.
+const MIN_AUTO_CONFIDENCE = 30;
 function candConfidence(cand) {
   const c = cand ? Number(cand.confidence) : NaN;
   return Number.isFinite(c) ? c : null;   // null = not measured (legacy path, or a non-fuzzy mode)
