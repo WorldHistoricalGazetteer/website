@@ -1356,7 +1356,7 @@ function resetUI() {
   el('recon-review-map').classList.add('d-none');
   el('recon-fullmap-pane').classList.add('d-none');
   el('recon-export').classList.add('d-none');
-  lastScope = null; lastVariantsDropped = 0; // drop any gateway scope report from the previous dataset
+  lastScope = null; lastVariantsDropped = 0; lastDerivedForms = new Set(); // drop the previous dataset's gateway report
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
     'recon-scope-notice', 'recon-review-card', 'recon-review-progress'].forEach((id) => {
@@ -3949,6 +3949,7 @@ function setReconSummary(html) { el('recon-recon-summary').innerHTML = html; }
 // never as applied:false.
 let lastScope = null;          // scope object from the most recent run (dataset-wide, so one per run)
 let lastVariantsDropped = 0;   // name variants we sent that the gateway didn't query (cap/dedupe)
+let lastDerivedForms = new Set(); // name forms the GATEWAY derived for itself (place#199/#206)
 function scopeFailed() { return !!(lastScope && lastScope.applied === false); }
 function idList(ids, max) {
   const a = (ids || []).slice(0, max || 4).map((s) => esc(String(s)));
@@ -3957,7 +3958,7 @@ function idList(ids, max) {
 }
 function renderScopeNotice() {
   const box = el('recon-scope-notice'); if (!box) return;
-  if (!lastScope) { box.innerHTML = lastVariantsDropped ? variantNoteHTML() : ''; return; }
+  if (!lastScope) { box.innerHTML = (lastVariantsDropped ? variantNoteHTML() : '') + derivedFormsHTML(); return; }
   const s = lastScope;
   const parts = [];
   if (s.applied === false) {
@@ -3990,11 +3991,21 @@ function renderScopeNotice() {
     }
   }
   if (lastVariantsDropped) parts.push(variantNoteHTML());
+  parts.push(derivedFormsHTML());
   box.innerHTML = parts.join('');
 }
 function variantNoteHTML() {
   return `<div class="text-muted"><i class="fas fa-circle-info me-1"></i>${lastVariantsDropped.toLocaleString()}
     name variant${lastVariantsDropped === 1 ? ' was' : 's were'} not queried (duplicates removed, max 10 per row).</div>`;
+}
+function derivedFormsHTML() {
+  if (!lastDerivedForms.size) return '';
+  const forms = [...lastDerivedForms];
+  const shown = forms.slice(0, 6).map((f) => `<code>${esc(f)}</code>`).join(', ');
+  const more = forms.length - 6;
+  return `<div class="text-muted"><i class="fas fa-wand-magic-sparkles me-1"></i>WHG also searched for
+    ${shown}${more > 0 ? ` and ${more.toLocaleString()} more form${more === 1 ? '' : 's'}` : ''},
+    derived from your values. Your data is unchanged.</div>`;
 }
 function toggleRunning(on) {
   running = on;
@@ -4180,15 +4191,44 @@ function candidateResembles(key, cand) {
   return ok;
 }
 
+// ── Absolute match quality from the gateway (place#206) ──────────────────────
+// `score` is normalised against the best candidate in the response, so the top one reads ~100 whether
+// the match is perfect or the best of a bad lot — the defect behind place#198. `confidence` is
+// absolute and comparable between queries. Measured bands (indexing@3471ecb):
+//
+//   ~100  exactly spelled       (a variant's exact match: 90)
+//   37–46 lexically near        ("Broxbourn" → Broxbourne)
+//   ~26   phonetic-only         correct but with no lexical evidence — unverified, not wrong
+//   ~25   noise
+//
+// The floor sits in the gap between phonetic-only and lexically-near. Auto-confirm therefore needs
+// evidence in the spelling; a phonetic-only match is offered in review instead. That is a deliberate
+// tightening for cross-script matching, where the lexical guard below stands aside and such a match
+// used to auto-confirm unchecked.
+const MIN_AUTO_CONFIDENCE = 35;
+function candConfidence(cand) {
+  const c = cand ? Number(cand.confidence) : NaN;
+  return Number.isFinite(c) ? c : null;   // null = not measured (legacy path, or a non-fuzzy mode)
+}
+// Why auto-confirm was withheld from a top candidate that otherwise clears the threshold, or null.
+// Candidates reconciled BEFORE this shipped carry no confidence, so they keep falling back to the
+// lexical heuristic and a saved project's matches don't change verdict when it is reopened.
+function autoWithheldReason(key, cand) {
+  if (!cand) return null;
+  const conf = candConfidence(cand);
+  if (conf !== null) return conf < MIN_AUTO_CONFIDENCE ? 'confidence' : null;
+  return candidateResembles(key, cand) ? null : 'resemblance';
+}
+
 // Auto-confirm a top candidate when the name matched exactly, or its score clears the threshold —
-// UNLESS the name doesn't resemble the value at all (above), or another DISTINCT candidate ties the
+// UNLESS the match is too poor in absolute terms (above), or another DISTINCT candidate ties the
 // top score. An exact tie between different places (e.g. "Devon" in GB vs AU, both 100) is genuinely
 // ambiguous and belongs in review, not an auto-guess.
 // Same-place duplicates from multiple sources (identical name + description) are NOT ambiguous.
 function isAutoConfirmed(top, threshold, cands, key) {
   if (!top) return false;
   if (!(top.match || Number(top.score) >= threshold)) return false;
-  if (key && !candidateResembles(key, top)) return false;
+  if (autoWithheldReason(key, top)) return false;
   if (cands && cands.length > 1) {
     const t = cands[0];
     for (let i = 1; i < cands.length && Number(cands[i].score) >= Number(t.score); i++) {
@@ -4627,6 +4667,18 @@ function wikiLinkHtml(wiki) {
   return `<a class="recon-cand-wiki" href="${esc(pick.url)}" target="_blank" rel="noopener noreferrer" title="${esc(title)}">` +
     `<i class="fab fa-wikipedia-w"></i> Wikipedia${more}</a>`;
 }
+// The absolute quality of a candidate, beside its (relative) score. Shown only when the service
+// measured it — an absent chip means "not measured", never "poor". See place#206.
+function confidenceChipHTML(cand) {
+  const conf = candConfidence(cand);
+  if (conf === null) return '';
+  const band = conf >= 90 ? ['exact', 'text-success']
+    : conf >= MIN_AUTO_CONFIDENCE ? ['near', 'text-body-secondary']
+    : ['unverified', 'text-warning-emphasis'];
+  return `<span class="recon-cand-conf ${band[1]}" title="Match quality ${Math.round(conf)}/100 — how well this name
+    actually fits what you asked for, independent of the other candidates. The score beside it is only a ranking.">${band[0]}</span>`;
+}
+
 function renderReviewCard() {
   const card = el('recon-review-card');
   if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
@@ -4653,7 +4705,7 @@ function renderReviewCard() {
       : '') +
     wikiLinkHtml(c.wikipedia) +
     `</span>
-       <span class="recon-cand-score">${c.score}</span>
+       <span class="recon-cand-score">${c.score}${confidenceChipHTML(c)}</span>
      </li>`).join('');
   const loadMore = !m.top ? ''
     : m.exhausted ? '<div class="small text-muted mt-1">all candidates shown.</div>'
@@ -4675,10 +4727,15 @@ function renderReviewCard() {
   // Why a match scoring above the threshold is nonetheless sitting in review (place#198). Scores are
   // relative to the pool the service retrieved, so a poor pool still yields a ~100; saying so beats
   // leaving the reviewer to wonder whether the threshold is broken.
-  const withheld = (!auto && !dec && m.top && Number(m.top.score) >= getThreshold() && !candidateResembles(meta.key, m.top))
+  const why = (!auto && !dec && m.top && Number(m.top.score) >= getThreshold())
+    ? autoWithheldReason(meta.key, m.top) : null;
+  const withheld = why
     ? `<div class="small text-warning-emphasis mt-1"><i class="fas fa-circle-exclamation me-1"></i>Not auto-confirmed:
-        the top match scores ${esc(String(m.top.score))} but its name doesn’t resemble your value, and a score only ranks
-        what the search found. Accept it if it is right.</div>` : '';
+        the top match scores ${esc(String(m.top.score))}, but ${why === 'confidence'
+          ? `its measured quality is only ${Math.round(candConfidence(m.top))}/100 — it may sound like your value without
+             being spelled like it`
+          : 'its name doesn’t resemble your value'}, and a score only ranks what the search found.
+        Accept it if it is right.</div>` : '';
   const flagged = isFlagged(meta.key)
     ? `<div class="small mt-1"><i class="fas fa-flag text-primary me-1"></i>${auto
         ? 'You flagged this auto-confirmed match for review.'
@@ -6101,7 +6158,7 @@ async function reconcileStage() {
   if (pos >= chain.length) { setReconSummary('<span class="text-success"><i class="fas fa-check me-1"></i>All columns reconciled &amp; confirmed.</span>'); return; }
   if (columnState(pos) === 'review') { setReconSummary('<span class="text-warning">Confirm this column’s matches (Step 4) before reconciling the next.</span>'); return; }
   reconStaleNote = ''; // a fresh run clears any "parent changed" notice
-  lastScope = null; lastVariantsDropped = 0; renderScopeNotice(); // and any previous scope report
+  lastScope = null; lastVariantsDropped = 0; lastDerivedForms = new Set(); renderScopeNotice(); // and any previous scope report
   project.matches = project.matches || {};
   trackOnce('MyD: reconcile', { columns: String(chain.length) });
   toggleRunning(true);
@@ -6314,6 +6371,10 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // Gateway scope/variant reporting (place#144). Scope is dataset-wide, so the first one we see
       // in a run describes the whole run. `undefined` means an older gateway — leave lastScope null.
       if (qd.scope && !lastScope) lastScope = qd.scope;
+      // Forms the gateway derived ITSELF — de-bracketing "Broxbourn (St. Augustine)" and the like
+      // (place#199). Worth telling the user: it explains a match their value could not have made on
+      // its own, and it is not the same thing as the variants they supplied.
+      if (Array.isArray(qd.derived_forms)) qd.derived_forms.forEach((f) => { if (f) lastDerivedForms.add(f); });
       // Variants not queried. The user's own dropped alt_names are known here (we do the dedupe and the
       // capping), so they are counted client-side; comparing a raw alt_names count against
       // `variants_used` would now under-report, since that list also carries the derived forms

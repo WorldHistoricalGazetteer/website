@@ -486,6 +486,12 @@ def repr_point(src):
 
 def make_candidate(hit, query_text, max_score, schema_space):
     src = hit["_source"]
+    # Absolute match quality from the gateway (place#206). `score` below is normalised against the
+    # best candidate in THIS response, so the top one is always ~100 and a score cannot tell a good
+    # match from the best of a bad lot — which is how wrong matches auto-confirmed in place#198.
+    # Absent for legacy-path candidates and outside fuzzy/phonetic; omitted entirely rather than
+    # zeroed, so a consumer can distinguish "not measured" from "measured badly".
+    confidence = hit.get("_confidence")
     name = get_canonical_name(src, hit["_id"])
     alt_names = get_alternative_names(src, name)
     score = normalize_score(hit["_score"], max_score)
@@ -498,7 +504,7 @@ def make_candidate(hit, query_text, max_score, schema_space):
     if has_geom is None:
         has_geom = any((g.get("location") or {}).get("type") in ("Polygon", "MultiPolygon")
                        for g in src.get("geoms", []))
-    return {
+    out = {
         # `place:` is the OpenRefine entity-type prefix (the protocol's opaque id);
         # what follows is the gazetteer identifier we surface and export.
         "id": "place:" + whg_place_id(src),
@@ -530,6 +536,9 @@ def make_candidate(hit, query_text, max_score, schema_space):
             }
         ]
     }
+    if confidence is not None:
+        out["confidence"] = confidence
+    return out
 
 
 def build_es_query(params, size=100):

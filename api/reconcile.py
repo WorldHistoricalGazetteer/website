@@ -1337,6 +1337,11 @@ def reconcile_place_es(query, user=None):
         extra["scope"] = scope_info
     if crc_meta.get("variants_used") is not None:
         extra["variants_used"] = crc_meta["variants_used"]
+    # Forms the gateway derived for itself (de-bracketing a "Broxbourn (St. Augustine)", place#199).
+    # Reported separately from `variants_used` so a client can tell what it asked for from what was
+    # done on its behalf. See place#206.
+    if crc_meta.get("derived_forms") is not None:
+        extra["derived_forms"] = crc_meta["derived_forms"]
 
     # Which sources were actually searched (place#157). Deriving this from the
     # returned ids under-reports: a source can be searched, match nothing, and

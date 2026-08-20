@@ -476,6 +476,11 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             meta["scope"] = data["scope"]
         if data.get("variants_used") is not None:
             meta["variants_used"] = data["variants_used"]
+        # Name forms the gateway derived ITSELF (de-bracketing, place#199), as opposed to the ones
+        # we asked for in `variants`. Deliberately distinct from `variants_used` so a caller can see
+        # what was tried on its behalf without confusing it with what it requested.
+        if data.get("derived_forms") is not None:
+            meta["derived_forms"] = data["derived_forms"]
         # Source namespaces echoed by the gateway (place#157). `namespaces` is the
         # set actually present in the hits; `namespaces_searched` is the request's
         # positive scope — echoed on EVERY return path including the empty ones,
@@ -766,6 +771,13 @@ def _adapt_hits(data: dict) -> list[dict]:
         adapted.append({
             "_id": f"crc_{place_id}",
             "_score": score,
+            # The gateway's ABSOLUTE match quality (0-100), distinct from `_score`, which is
+            # relative to the best candidate in this response and so is ~100 whether the match is
+            # perfect or garbage. Kept out of `_source` deliberately: it describes this QUERY's fit,
+            # not a property of the place. None on gateways predating it, and null outside
+            # fuzzy/phonetic modes — never defaulted to 0, which a consumer would read as
+            # "measured, and terrible". See place#206.
+            "_confidence": hit.get("confidence"),
             "_source": {
                 "place_id": place_id,  # Namespaced, e.g. "gn:745044"
                 "title": title,
