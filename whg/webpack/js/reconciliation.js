@@ -3769,6 +3769,44 @@ function currentStagePos() {
   for (let p = 0; p < chain.length; p++) { const s = columnState(p); if (s === 'ready' || s === 'review') return p; }
   return chain.length;
 }
+// ── Protecting reviewed rows from a re-run (place#207) ───────────────────────
+// Re-running reconciliation — after changing Sources, the dataset scope, or a parent decision — used to
+// clear the column wholesale, and the cost fell entirely on the work that is hardest to redo: the rows
+// a human had actually ruled on. With this on (the default) a decided row keeps its match, its decision
+// and its note, and is not queried again; only the undecided rows are searched afresh. Off, a re-run
+// starts the column over exactly as it always did.
+//
+// It protects a row from being RE-SEARCHED, not from being invalidated by a change to the data
+// underneath it: editing the cell, transforming the column or re-drawing the hierarchy still clears the
+// match, because the value it was matched against no longer exists.
+function keepReviewed() { return !(project && project.keepReviewed === false); }
+// A human has RULED on a row when they accepted a candidate, rejected the lot, or declared no match.
+// 'skipped' is explicitly "come back to this" — a re-run is exactly what such a row wants — and an
+// auto-confirmed row was never looked at, so neither is protected.
+const PROTECTED_STATUSES = { accepted: 1, rejected: 1, nomatch: 1 };
+function isProtected(key) {
+  if (!keepReviewed()) return false;
+  const d = project && project.decisions && project.decisions[key];
+  return !!(d && PROTECTED_STATUSES[d.status]);
+}
+// How many of a column's reconciled rows a re-run would preserve (0 when protection is off).
+function protectedCount(col) { let n = 0; colKeys(col).forEach((k) => { if (isProtected(k)) n += 1; }); return n; }
+// Clear a column's reconciliation so it can be run again, honouring the toggle. Returns {cleared, kept}
+// — cleared rows have no match, and reconcilePass queries exactly the rows with no match, so a
+// protected re-run is simply a partial one.
+function clearColumnRecon(col, dropGeom) {
+  const pre = String(col) + ':';
+  let cleared = 0, kept = 0;
+  if (project.matches) for (const k in project.matches) {
+    if (!k.startsWith(pre)) continue;
+    if (isProtected(k)) { kept += 1; continue; }
+    delete project.matches[k]; cleared += 1;
+  }
+  if (project.decisions) for (const k in project.decisions) { if (k.startsWith(pre) && !isProtected(k)) delete project.decisions[k]; }
+  if (dropGeom && project.geom) for (const k in project.geom) { if (k.startsWith(pre) && !isProtected(k)) delete project.geom[k]; }
+  return { cleared, kept };
+}
+
 // Changing a confirmed parent's decision makes already-reconciled child columns stale (their
 // containment used the old parent ids). Clear those children's matches/decisions/geom so they
 // re-lock and must be reconciled again with the corrected containment. Returns true if anything was
@@ -3780,10 +3818,7 @@ function invalidateDownstream(col) {
   if (pos < 0 || pos >= chain.length - 1) return false;
   let changed = false;
   for (let p = pos + 1; p < chain.length; p++) {
-    const c = String(chain[p]);
-    if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) { delete project.matches[k]; changed = true; } }
-    if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
-    if (project.geom) for (const k in project.geom) { if (k.slice(0, k.indexOf(':')) === c) delete project.geom[k]; }
+    if (clearColumnRecon(chain[p], true).cleared) changed = true;
   }
   return changed;
 }
@@ -3835,64 +3870,195 @@ function scopeSummary() {
 // Plain (un-escaped, un-truncated-to-HTML) truncation helper for building label strings.
 function truncateText(v, max) { const r = String(v == null ? '' : v); return r.length > max ? r.slice(0, max - 1) + '…' : r; }
 
-// Mutate a per-row reconcile query `q` with the dataset-wide scope. Attribute filters (country, date,
-// feature class) apply to every column; the spatial *region* applies only to the ROOT column, because
-// child columns are already spatially scoped by their parent's confirmed places (`contained_in`) and a
-// dataset-wide region would either duplicate or fight that. Never overrides a per-row country hint or
-// an existing containment. `isRoot` = this column has no parent; `hasRowCountry` = the row set q.countries.
-function applyGlobalScopeToQuery(q, isRoot, hasRowCountry, colIndex) {
-  const s = getScope(); if (!s) return;
-  const r = s.region || {};
-  // Country codes — a dataset-wide default; a per-row country hint always wins.
-  if (!hasRowCountry && !q.countries && r.mode === 'ccodes' && r.ccodes && r.ccodes.length) q.countries = r.ccodes.slice();
+// ── Query constraints, as separable parts (place#208) ─────────────────────────
+// Every filter a reconcile query can carry, built ONCE per row and expressed as a list of parts the
+// caller composes. The reconciliation run applies all of them; the review card's hand search applies
+// the same list minus whatever the reviewer has unticked. Two callers, one definition — so what the
+// hand search does is always what the run did, less what you relaxed, and the two cannot drift.
+//
+// Each part is { id, label, title, apply(q), filter?(candidates) }. Order matters: `within` must be
+// built before `region`, because the dataset-wide region is a FLOOR — it applies only where nothing
+// tighter (a confirmed parent, a drawn area) already scopes the query.
+function queryConstraints(colIndex, row, rowCountry) {
+  const parts = [];
+  if (!project) return parts;
+  const chain = reconChain();
+  const pos = chain.indexOf(colIndex);
+  const rowIdx = Number(row);
+  const sp = spatialSettings();
+  const s = getScope();
+  const r = (s && s.region) || { mode: 'none' };
+
+  // Country. A per-row country column always wins over the dataset-wide codes — it is the more
+  // specific statement about THIS row.
+  const cc = rowCountry
+    ? [String(rowCountry).toUpperCase()]
+    : ((r.mode === 'ccodes' && r.ccodes && r.ccodes.length) ? r.ccodes.slice() : []);
+  if (cc.length) {
+    parts.push({
+      id: 'country',
+      label: `country ${cc.slice(0, 3).join(', ')}${cc.length > 3 ? '…' : ''}`,
+      title: `${rowCountry ? 'This row’s country column' : 'Dataset scope'}: only places in `
+        + cc.map((c) => `${c}${isKnownCcode(c) ? ` (${ccodeName(c)})` : ''}`).join(', '),
+      apply: (q) => { if (!q.countries) q.countries = cc.slice(); },
+    });
+  }
+
+  // Source gazetteers, when this column is restricted to some ("prioritise" only re-ranks, so it is
+  // not a constraint and there is nothing to relax).
+  const nsf = getNsFilter(colIndex);
+  if (nsf.mode === 'only' && nsf.namespaces.length) {
+    const names = nsf.namespaces.map(nsLabel);
+    parts.push({
+      id: 'sources',
+      label: `sources: ${names.slice(0, 2).join(', ')}${names.length > 2 ? ` +${names.length - 2}` : ''}`,
+      title: `Only these source gazetteers: ${names.join(', ')}`,
+      apply: (q) => { if (!q.namespaces) q.namespaces = nsf.namespaces.slice(); },
+    });
+  }
+
+  // Containment: the confirmed place(s) of the NEAREST resolved ancestor — the direct parent if it
+  // matched, else its parent, and so on up the chain. See reconcilePass for why this walks upwards
+  // and why the relation is `intersects` rather than `within`.
+  let pids = [], ancName = '', ancCol = -1;
+  for (let a = pos - 1; a >= 0 && !pids.length; a--) {
+    pids = resolvedPlaceIds(chain[a], rowIdx).map(barePlaceId);
+    if (pids.length) {
+      ancCol = chain[a];
+      const k = ancCol + ':' + rowIdx;
+      const acc = acceptedList(project.decisions && project.decisions[k]);
+      const mm = (project.matches || {})[k];
+      ancName = acc.length ? acc[0].label : ((mm && mm.top && mm.top.name) || String(project.rows[rowIdx][ancCol] || ''));
+    }
+  }
+  if (pids.length) {
+    parts.push({
+      id: 'within',
+      label: `within ${truncateText(ancName, 18)}`,
+      title: `Only places inside the confirmed ${project.columns[ancCol].name} “${ancName}” `
+        + `(${sp.containment}, ${sp.relation})`,
+      apply: (q) => { q.contained_in = pids.slice(); q.containment = sp.containment; q.relation = sp.relation; },
+    });
+  }
+
+  // The row's own coordinate as a circular filter — the place-name column only. A row's coordinate
+  // describes the PLACE, not the county containing it, so applied to a container column it asks for a
+  // county whose record sits within 25 km of a town inside it, which is usually false. See place#184.
+  // The gateway resolves lat/lng/radius as an H3 disc; `filter` re-applies it here because where a row
+  // has BOTH a container and a coordinate the gateway honours the container and ignores the circle.
+  const rowCoord = (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name'))
+    ? rowCoordValue(rowIdx) : null;
+  if (rowCoord) {
+    parts.push({
+      id: 'nearby',
+      label: `within ${sp.radiusKm} km`,
+      title: `Only places within ${sp.radiusKm} km of this row’s own coordinates`,
+      apply: (q) => { q.lat = +rowCoord.lat.toFixed(6); q.lng = +rowCoord.lon.toFixed(6); q.radius = sp.radiusKm; },
+      // Candidates with no known position are KEPT — a place without coordinates cannot be shown to
+      // be out of range, and dropping it would lose a valid match to a data gap.
+      filter: (cands) => cands.filter((c) => {
+        const pt = c && c.repr_point;
+        if (!Array.isArray(pt) || pt.length < 2) return true;
+        return haversineKm({ lat: rowCoord.lat, lon: rowCoord.lon }, { lat: pt[1], lon: pt[0] }) <= sp.radiusKm;
+      }),
+    });
+  }
+
+  // Dataset-wide region, as a floor. A child column is normally scoped by its parent's confirmed
+  // place(s) (`contained_in`, tighter than the dataset region), so we don't override that. BUT when a
+  // parent was skipped or found no match the child inherits NO containment — and without this it would
+  // fall through to a GLOBAL search, returning (and auto-confirming) places on the wrong continent
+  // despite the dataset scope. `intersects`, not `within`: measured, UKHC historic Welsh counties
+  // return ZERO hits as `within` wd:Q25 (Wales) — historic borders don't nest inside modern ones, and
+  // with scope a HARD filter (place#144) `within` silently discards valid matches. See issue #143.
+  if (r.mode === 'whg' && r.place && r.place.id) {
+    parts.push({
+      id: 'region',
+      label: `in ${truncateText(r.place.title || 'region', 18)}`,
+      title: `Dataset scope: only places inside “${r.place.title || r.place.id}” — applied only where no `
+        + 'confirmed parent already narrows the search',
+      apply: (q) => {
+        if (q.contained_in || q.bounds) return;
+        // Same containment strictness the user chose for the chain — a dataset-wide region is the same
+        // kind of constraint as a parent column's, and having one obey the knobs while the other
+        // ignored them would be indefensible.
+        q.contained_in = [barePlaceId(r.place.id)];
+        q.containment = sp.containment;
+        q.relation = sp.relation;
+      },
+    });
+  } else if (r.mode === 'draw' && r.geometry) {
+    parts.push({
+      id: 'region',
+      label: 'in drawn area',
+      title: 'Dataset scope: only places inside the area you drew — applied only where no confirmed '
+        + 'parent already narrows the search',
+      apply: (q) => { if (!q.contained_in && !q.bounds) q.bounds = r.geometry; },
+    });
+  }
+
+  // Temporal window. Legacy WHG ES needs `temporal` + `start`/`end`; the CRC gateway reads `start`/`end`.
+  if (s && (s.start != null || s.end != null)) {
+    parts.push({
+      id: 'when',
+      label: fmtSpan(s.start, s.end),
+      title: `Dataset scope: only places attested ${fmtSpan(s.start, s.end)}`
+        + (s.undated ? ' (undated places included)' : ''),
+      apply: (q) => {
+        q.temporal = true;
+        if (s.start != null) q.start = s.start;
+        if (s.end != null) q.end = s.end;
+        if (s.undated) q.undated = true;
+      },
+    });
+  }
+
   // AAT place types (already expanded to descendants). Both back-ends filter on types.identifier.
   // This column's own types win over the dataset-wide selection, so a County column can look for
   // administrative units while the Place column looks for settlements (place#184).
   const own = getColTypes(colIndex);
-  const typeIds = own ? own.ids : ((s.types && s.types.ids) || []);
-  if (!q.types && typeIds.length) q.types = typeIds.slice();
-  // Temporal window. Legacy WHG ES needs `temporal` + `start`/`end`; the CRC gateway reads `start`/`end`.
-  if (s.start != null || s.end != null) {
-    q.temporal = true;
-    if (s.start != null) q.start = s.start;
-    if (s.end != null) q.end = s.end;
-    if (s.undated) q.undated = true;
+  const typeIds = own ? own.ids : ((s && s.types && s.types.ids) || []);
+  const typeSel = (own ? own.selected : ((s && s.types && s.types.selected) || [])) || [];
+  if (typeIds.length) {
+    const names = typeSel.map((t) => t.text).filter(Boolean);
+    parts.push({
+      id: 'types',
+      label: names.length
+        ? `type: ${names.slice(0, 2).join(', ')}${names.length > 2 ? ` +${names.length - 2}` : ''}`
+        : `${typeIds.length} place types`,
+      title: names.length
+        ? `Only places of type: ${names.join(', ')} (and their narrower types)`
+        : 'Only places of the selected AAT types',
+      apply: (q) => { if (!q.types) q.types = typeIds.slice(); },
+    });
   }
-  // Spatial region — applied whenever the query has NO parent containment, on ANY column, not just the
-  // root. A child column is normally scoped by its parent's confirmed place(s) (`contained_in`, tighter
-  // than the dataset region), so we don't override that. BUT when a parent was skipped or found no
-  // match, the child inherits NO containment — and without this it would fall through to a GLOBAL
-  // search, returning (and auto-confirming) places on the wrong continent despite the dataset scope.
-  // So the region is a FLOOR: parent containment if present, else the dataset region. See issue #143.
-  if (!q.contained_in && !q.bounds) {
-    // `intersects`, not `within`: the dataset-wide scope is a coarse "restrict to this area" filter,
-    // and an AREA candidate is rarely strictly inside its container once boundaries differ even
-    // slightly. Measured: UKHC historic Welsh counties return ZERO hits as `within` wd:Q25 (Wales)
-    // but match under `intersects` — historic county borders don't nest exactly inside the modern
-    // national polygon. With scope now a HARD filter (place#144), `within` silently discarded valid
-    // matches. See issue #143.
-    if (r.mode === 'whg' && r.place && r.place.id) {
-      // Same containment strictness the user chose for the chain — a dataset-wide region is the same
-      // kind of constraint as a parent column's, and having one obey the knobs while the other
-      // ignored them would be indefensible.
-      const sp = spatialSettings();
-      q.contained_in = [barePlaceId(r.place.id)];
-      q.containment = sp.containment;
-      q.relation = sp.relation;
-    }
-    else if (r.mode === 'draw' && r.geometry) { q.bounds = r.geometry; }
-  }
+
+  return parts;
+}
+// Compose the parts onto a query, in list order (see above — `within` before `region`).
+function applyConstraints(q, parts) { parts.forEach((p) => p.apply(q)); return q; }
+// Re-apply, client-side, those constraints the service can't be relied on to enforce (see `nearby`).
+function filterByConstraints(candidates, parts) {
+  let out = candidates;
+  parts.forEach((p) => { if (p.filter) out = p.filter(out); });
+  return out;
 }
 
 // Changing the scope invalidates ALL existing matches (every query was run under the old scope). Wipe
 // matches/decisions/geometry across every column so the whole dataset is reconciled again — mirrors the
-// hierarchy-change reset. Returns true if anything was cleared.
+// hierarchy-change reset — except for rows the reviewer has ruled on, which survive unless they have
+// turned protection off (place#207). Returns {cleared, kept}.
 function invalidateAllMatches() {
-  if (!project) return false;
-  const had = (project.matches && Object.keys(project.matches).length) || (project.decisions && Object.keys(project.decisions).length);
-  project.matches = {}; project.decisions = {}; project.geom = {};
-  reconActiveIdx = -1;
-  return !!had;
+  if (!project) return { cleared: 0, kept: 0 };
+  let cleared = 0, kept = 0;
+  if (project.matches) for (const k in project.matches) {
+    if (isProtected(k)) { kept += 1; continue; }
+    delete project.matches[k]; cleared += 1;
+  }
+  if (project.decisions) for (const k in project.decisions) { if (!isProtected(k)) delete project.decisions[k]; }
+  if (project.geom) for (const k in project.geom) { if (!isProtected(k)) delete project.geom[k]; }
+  if (cleared) reconActiveIdx = -1;
+  return { cleared, kept };
 }
 
 // Every row is reconciled INDIVIDUALLY — no de-duplication by name (users have already disambiguated,
@@ -4683,6 +4849,33 @@ function confidenceChipHTML(cand) {
   return `<span class="recon-cand-conf ${band[1]}" title="${esc(tip)}">${band[0]}</span>`;
 }
 
+// Constraints the reviewer has relaxed for the hand search, by part id. Session state, not project
+// state: it belongs to how you are working through the queue right now, and a reviewer who relaxes
+// containment for one stubborn row usually wants it relaxed for the next few too — so it persists
+// across cards, but not across reloads. See place#208.
+const _manualRelaxed = new Set();
+function reviewColOf(key) { return Number(key.slice(0, key.indexOf(':'))); }
+function activeConstraints(parts) { return parts.filter((c) => !_manualRelaxed.has(c.id)); }
+// The constraint chips under the hand-search box: ticked = applied, unticked = relaxed.
+function searchConstraintsHTML(parts) {
+  if (!parts.length) {
+    return '<div class="recon-search-cx small mt-1 text-muted">'
+      + '<i class="fas fa-globe me-1"></i>Nothing narrows this row — the search is worldwide, across every source.</div>';
+  }
+  const on = activeConstraints(parts).length;
+  const chips = parts.map((c) => {
+    const applied = !_manualRelaxed.has(c.id);
+    return `<label class="recon-cx${applied ? '' : ' recon-cx--off'}" title="${esc(c.title)}">`
+      + `<input type="checkbox" class="recon-cx-cb" data-cx="${esc(c.id)}"${applied ? ' checked' : ''}> ${esc(c.label)}</label>`;
+  }).join('');
+  const all = on
+    ? '<button type="button" class="btn btn-sm btn-link p-0 ms-1" data-cx-all="relax">relax all</button>'
+    : '<button type="button" class="btn btn-sm btn-link p-0 ms-1" data-cx-all="apply">re-apply all</button>';
+  return `<div class="recon-search-cx small mt-1"><span class="text-muted me-1" `
+    + `title="The same limits the reconciliation run put on this row. Untick one to widen the search.">Search limited to:</span>`
+    + `${chips}${all}</div>`;
+}
+
 function renderReviewCard() {
   const card = el('recon-review-card');
   if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
@@ -4715,7 +4908,11 @@ function renderReviewCard() {
     : m.exhausted ? '<div class="small text-muted mt-1">all candidates shown.</div>'
     : `<div class="mt-1"><button type="button" class="btn btn-sm btn-link p-0 recon-loadmore" data-act="more">load more candidates</button></div>`;
   // Search the gazetteers by hand — for the rows where the reviewer can see WHY nothing matched
-  // (place#201). Prefilled with the value so it's a quick edit rather than retyping.
+  // (place#201). Prefilled with the value so it's a quick edit rather than retyping. It searches under
+  // the SAME constraints the run used for this row, each shown as a chip that can be unticked to relax
+  // it (place#208) — an unconstrained search of 47M places is rarely what the reviewer wants, but the
+  // one constraint that is in their way usually is.
+  const cxParts = queryConstraints(reviewColOf(meta.key), meta.key.slice(meta.key.indexOf(':') + 1), meta.country);
   const manualSearch =
     `<div class="recon-review-search mt-2">
        <div class="input-group input-group-sm">
@@ -4725,8 +4922,9 @@ function renderReviewCard() {
                 aria-label="Search the gazetteers for another name">
          <button type="button" class="btn btn-outline-secondary" data-act="search">Search</button>
        </div>
+       ${searchConstraintsHTML(cxParts)}
        <div id="recon-review-search-note" class="small mt-1"><span class="text-muted">Not what you expected? Search for a
-         spelling you know — results are added to the list above, and your dataset-wide scope filters are not applied.</span></div>
+         spelling you know — results are added to the list above.</span></div>
      </div>`;
   // Why a match scoring above the threshold is nonetheless sitting in review (place#198). Scores are
   // relative to the pool the service retrieved, so a poor pool still yields a ~100; saying so beats
@@ -4811,6 +5009,26 @@ function renderReviewCard() {
     li.addEventListener('mouseenter', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(ci); });
     li.addEventListener('mouseleave', () => { if (ReconMap && ReconMap.setMarkerHover) ReconMap.setMarkerHover(null); });
   });
+  // Toggling a chip repaints the card — carry the half-typed search term across the repaint, or
+  // unticking a constraint would silently throw away the spelling the reviewer had just entered.
+  const repaintKeepingQuery = () => {
+    const box = el('recon-review-search-q');
+    const typed = box ? box.value : null;
+    renderReviewCard();
+    const again = el('recon-review-search-q');
+    if (again && typed != null) again.value = typed;
+  };
+  card.querySelectorAll('.recon-cx-cb').forEach((cb) => cb.addEventListener('change', () => {
+    if (cb.checked) _manualRelaxed.delete(cb.dataset.cx); else _manualRelaxed.add(cb.dataset.cx);
+    repaintKeepingQuery();
+  }));
+  const relaxAll = card.querySelector('[data-cx-all]');
+  if (relaxAll) relaxAll.addEventListener('click', () => {
+    const ids = cxParts.map((c) => c.id);
+    if (relaxAll.dataset.cxAll === 'relax') ids.forEach((id) => _manualRelaxed.add(id));
+    else ids.forEach((id) => _manualRelaxed.delete(id));
+    repaintKeepingQuery();
+  });
   const searchInput = card.querySelector('#recon-review-search-q');
   if (searchInput) {
     searchInput.addEventListener('keydown', (e) => {
@@ -4856,7 +5074,8 @@ async function loadSources() {
   return _sources || [];
 }
 function nsFromId(id) { const p = String(id || '').split(':'); return p.length >= 3 ? p[1] : 'whg'; }
-function nsName(id) { const ns = nsFromId(id); return (_sourcesByNs[ns] && _sourcesByNs[ns].name) || NS_NAMES[ns] || ns.toUpperCase(); }
+function nsLabel(ns) { return (_sourcesByNs[ns] && _sourcesByNs[ns].name) || NS_NAMES[ns] || String(ns).toUpperCase(); }
+function nsName(id) { return nsLabel(nsFromId(id)); }
 
 // ── Source-gazetteer (namespace) picker: prioritise / restrict, persisted ─────
 // Per-column source filter. Each chain column can restrict/prioritise its own source gazetteers
@@ -5651,17 +5870,18 @@ async function applyScope() {
   const before = JSON.stringify(project.scope || defaultScope());
   const after = JSON.stringify(scope);
   project.scope = scope;
-  if (before !== after && invalidateAllMatches()) {
-    reconStaleNote = 'Scope changed — reconciliation was reset; reconcile the columns again with the new scope.';
-    setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Scope changed — reconcile again to apply it.</span>');
+  const inv = (before !== after) ? invalidateAllMatches() : { cleared: 0, kept: 0 };
+  if (inv.cleared || inv.kept) {
+    const keptNote = inv.kept ? ` The ${inv.kept.toLocaleString()} row${inv.kept === 1 ? '' : 's'} you had already reviewed ${inv.kept === 1 ? 'keeps its match' : 'keep their matches'}.` : '';
+    reconStaleNote = `Scope changed — reconciliation was reset; reconcile the columns again with the new scope.${keptNote}`;
+    setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Scope changed — reconcile again to apply it.'
+      + esc(keptNote) + '</span>');
   } else if (changedCols.length) {
     // Only the levels whose types changed are re-run (and whatever sits below them, whose containment
     // came from those matches). The whole point of per-level types is that setting the Place column's
     // type doesn't throw away the counties you already confirmed (place#184).
     changedCols.forEach((c) => {
-      const k = String(c) + ':';
-      if (project.matches) for (const key in project.matches) { if (key.startsWith(k)) delete project.matches[key]; }
-      if (project.decisions) for (const key in project.decisions) { if (key.startsWith(k)) delete project.decisions[key]; }
+      clearColumnRecon(c, false);
       invalidateDownstream(c);
     });
     // DERIVE the focus rather than pinning it to the changed column: clearing a column's matches can
@@ -5913,8 +6133,13 @@ function setMatchCandidates(key, candidates, top, exhausted) {
 // abbreviated — and typing the name they know is far quicker than editing the data and reconciling
 // the whole column again. Results are APPENDED to the candidate list (scores from a different query
 // are not comparable with the reconciliation's, so they don't get to re-rank it) and are accepted
-// with the same click as any other candidate. The dataset-wide scope is deliberately NOT applied:
-// this is the escape hatch for when the automatic query was too narrow.
+// with the same click as any other candidate.
+//
+// It searches under the SAME constraints the run applied to this row, minus any the reviewer has
+// unticked (place#208). It used to send none of them, on the reasoning that this is the escape hatch
+// for a query that was too narrow — but that made every hand search worldwide, so a reviewer looking
+// for a Lincolnshire parish had to sift Briggs on three continents. Relaxing the one constraint that
+// is actually in the way is the escape hatch; discarding all of them was not.
 async function manualSearchCandidates() {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   const input = el('recon-review-search-q');
@@ -5923,19 +6148,21 @@ async function manualSearchCandidates() {
   if (!q) { setNote('<span class="text-muted">Type a place name to search for.</span>'); return; }
   setNote('<i class="fas fa-spinner fa-spin me-1"></i>searching…');
   try {
-    const revCol = activeReconCol();
-    const nsf = getNsFilter(revCol);
-    const query = { q0: { query: q, type: 'place', limit: 10 } };
-    if (nsf.mode === 'only' && nsf.namespaces.length) query.q0.namespaces = nsf.namespaces;
+    const revCol = reviewColOf(meta.key);
+    const parts = activeConstraints(queryConstraints(revCol, meta.key.slice(meta.key.indexOf(':') + 1), meta.country));
+    const query = { q0: applyConstraints({ query: q, type: 'place', limit: 10 }, parts) };
     const data = await postReconcile(query, getCsrf());
-    const found = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
+    const found = filterByConstraints(applyNsToCandidates((data.q0 && data.q0.result) || [], revCol), parts);
     const m = project.matches[meta.key];
     const have = new Set((m.candidates || []).map((c) => c && c.id));
     const fresh = found.filter((c) => c && !have.has(c.id)).map((c) => Object.assign({}, c, { found_by: q }));
     if (!fresh.length) {
+      const relaxHint = parts.length
+        ? ' Untick a constraint above to widen the search.'
+        : '';
       setNote(found.length
         ? `<span class="text-muted">Every result for “${esc(q)}” is already listed above.</span>`
-        : `<span class="text-muted">Nothing found for “${esc(q)}”.</span>`);
+        : `<span class="text-muted">Nothing found for “${esc(q)}”.${relaxHint}</span>`);
       return;
     }
     setMatchCandidates(meta.key, (m.candidates || []).concat(fresh), m.top);
@@ -5949,7 +6176,9 @@ async function manualSearchCandidates() {
   }
 }
 
-// Fetch a larger batch of candidates for the current name (re-query with a higher limit).
+// Fetch a larger batch of candidates for the current name (re-query with a higher limit). This one
+// REPLACES the candidate list, so it must reproduce the run's query exactly — the full constraint set,
+// never the reviewer's relaxed subset, which belongs to the hand search alone (place#208).
 async function loadMoreCandidates() {
   const meta = reviewMeta[reviewPos]; if (!meta) return;
   const m = project.matches[meta.key];
@@ -5957,15 +6186,18 @@ async function loadMoreCandidates() {
   const btn = el('recon-review-card').querySelector('.recon-loadmore');
   if (btn) { btn.textContent = 'loading…'; btn.disabled = true; }
   try {
-    const revCol = activeReconCol();
-    const nsf = getNsFilter(revCol);
-    const q = { q0: { query: meta.name, type: 'place', limit: want } };
-    if (meta.country) q.q0.countries = [meta.country];
-    if (nsf.mode === 'only' && nsf.namespaces.length) q.q0.namespaces = nsf.namespaces;
+    const revCol = reviewColOf(meta.key);
+    const row = meta.key.slice(meta.key.indexOf(':') + 1);
+    const parts = queryConstraints(revCol, row, meta.country);
+    const q = { q0: applyConstraints({ query: meta.name, type: 'place', limit: want }, parts) };
+    const vars = revCol === colIndexByRole('name') ? queryVariants(row, meta.name) : [];
+    if (vars.length) q.q0.variants = vars;
     const data = await postReconcile(q, getCsrf());
-    const result = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
-    // fewer than asked → no more to fetch
-    setMatchCandidates(meta.key, result, result[0] || null, result.length < want);
+    const raw = applyNsToCandidates((data.q0 && data.q0.result) || [], revCol);
+    const result = filterByConstraints(raw, parts);
+    // fewer RETURNED than asked → no more to fetch. Measured before the client-side filter, or a
+    // radius that trimmed the batch would read as "all candidates shown".
+    setMatchCandidates(meta.key, result, result[0] || null, raw.length < want);
     await persist();
     renderReviewCard();
   } catch (err) {
@@ -6020,6 +6252,7 @@ function refreshReconSection() {
   el('recon-recon').classList.remove('d-none'); // header always visible once a dataset is loaded
   const thr = el('recon-threshold');
   if (thr && project && project.autoThreshold != null) thr.value = project.autoThreshold;
+  const keep = el('recon-keep-reviewed'); if (keep) keep.checked = keepReviewed();
   refreshSpatialControls();
   if (hasName && project.matches && Object.keys(project.matches).length) {
     const built = buildUniqueQueries();
@@ -6056,8 +6289,10 @@ function updateContinueButton() {
   if (show) b.innerHTML = `<i class="fas fa-play me-1"></i>Continue reconciling (${rem.toLocaleString()})`;
 }
 // Reconcile only the not-yet-matched rows of the focused column (reconcilePass skips rows that already
-// have matches), keeping existing matches. The resume companion to Cancel.
-async function continueReconcile() {
+// have matches), keeping existing matches. The resume companion to Cancel — and the runner for a
+// protected re-run, which is the same thing: some rows have matches, the rest need searching.
+// `keptNote` (place#207) is reported when the run finishes, since the run itself clears stale notices.
+async function continueReconcile(keptNote) {
   if (running || !project) return;
   const chain = reconChain();
   const col = activeReconCol();
@@ -6068,6 +6303,12 @@ async function continueReconcile() {
   toggleRunning(true); openPane('recon-recon'); stopRequested = false;
   await reconcilePass(col, pos > 0 ? chain[pos - 1] : -1, getCsrf(), pos, chain.length);
   toggleRunning(false);
+  if (keptNote && !stopRequested) {
+    reconStaleNote = keptNote;
+    // The column switcher carries stale notes, but it is hidden for a single-column set — so say it
+    // in the summary too, or the one-column user (the common case) never learns what was preserved.
+    if (chain.length <= 1) setReconSummary(`<span class="text-success"><i class="fas fa-shield-halved me-1"></i>${esc(keptNote)}</span>`);
+  }
   reconActiveIdx = pos;
   const built = buildUniqueQueries(); if (built) renderResults(built);
   renderColSwitcher(); updateReconButton(); refreshReview();
@@ -6110,6 +6351,17 @@ function updateReconButton() {
   }
   const pos = currentStagePos();
   if (pos >= chain.length) {
+    // Decided everywhere — unless rows are still unsearched (a protected re-run, or a cancelled one),
+    // in which case the button finishes those rather than declaring victory over them. See place#207.
+    const rem = chain.find((c) => unreconciledUnits(c) > 0);
+    if (rem != null) {
+      const n = unreconciledUnits(rem);
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fas fa-wand-magic-sparkles me-1"></i>Reconcile the remaining ${n.toLocaleString()} in ${truncate(project.columns[rem].name, 18)}`;
+      if (help) help.innerHTML = `Every reviewed row is confirmed. <strong>${n.toLocaleString()}</strong> value(s) in `
+        + `<strong>${truncate(project.columns[rem].name, 18)}</strong> have not been searched yet — reconcile those to finish the column.`;
+      return;
+    }
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-check me-1"></i>All columns confirmed';
     if (help) help.innerHTML = 'Every column in the chain has been reconciled and confirmed. Review any column via its pill above, or continue to the map/export.';
@@ -6144,11 +6396,19 @@ function updateReconButton() {
 function updateRerunButton(chain) {
   const rr = el('recon-rerun'); if (!rr) return;
   const focus = activeReconCol();
-  const show = chain.length > 1 && focus >= 0 && colHasMatches(focus) && !running;
+  // Offered for a single-column project too: with reviewed rows protected (place#207), running the
+  // column again is no longer the destructive act it was, and changing Sources and re-running is
+  // exactly as reasonable on one column as on five.
+  const show = focus >= 0 && colHasMatches(focus) && !running;
   rr.classList.toggle('d-none', !show);
   if (show) {
     const lbl = el('recon-rerun-label');
     if (lbl) lbl.textContent = `Re-reconcile ${truncate(project.columns[focus].name, 18)}`;
+    const kept = protectedCount(focus);
+    rr.title = kept
+      ? `Search this column again — the ${kept.toLocaleString()} row(s) you have reviewed keep their matches `
+        + '(untick “Keep reviewed rows” to start over). Downstream columns are reset.'
+      : "Clear this column's matches and reconcile it again (e.g. after changing its Sources). Downstream columns are reset.";
   }
 }
 
@@ -6159,7 +6419,13 @@ async function reconcileStage() {
   const chain = reconChain();
   if (!chain.length) { setReconSummary('<span class="text-warning">Map a “Place name” column first (Step 2).</span>'); return; }
   const pos = currentStagePos();
-  if (pos >= chain.length) { setReconSummary('<span class="text-success"><i class="fas fa-check me-1"></i>All columns reconciled &amp; confirmed.</span>'); return; }
+  if (pos >= chain.length) {
+    // Every column is decided — but a protected re-run (place#207) or a cancelled run can leave rows
+    // that were never searched, and refusing to finish them would strand the user with no way back.
+    const rem = chain.find((c) => unreconciledUnits(c) > 0);
+    if (rem != null) { reconActiveIdx = chain.indexOf(rem); await continueReconcile(); return; }
+    setReconSummary('<span class="text-success"><i class="fas fa-check me-1"></i>All columns reconciled &amp; confirmed.</span>'); return;
+  }
   if (columnState(pos) === 'review') { setReconSummary('<span class="text-warning">Confirm this column’s matches (Step 4) before reconciling the next.</span>'); return; }
   reconStaleNote = ''; // a fresh run clears any "parent changed" notice
   lastScope = null; lastVariantsDropped = 0; lastDerivedForms = new Set(); renderScopeNotice(); // and any previous scope report
@@ -6194,18 +6460,34 @@ async function reconcileStage() {
 
 // Re-reconcile an already-reconciled column (typically after changing its Sources): clear its
 // matches + decisions, invalidate & re-lock downstream columns (their containment is now stale),
-// then run it again as the current stage.
+// then run it again as the current stage. With "keep reviewed rows" on (the default) the rows the
+// reviewer has ruled on survive and are not searched again, so this becomes a partial run over the
+// rest — see place#207.
 async function reReconcileColumn(col) {
   if (running || !project) return;
   const chain = reconChain();
   if (chain.indexOf(col) < 0) return;
-  const c = String(col);
-  if (project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === c) delete project.matches[k]; }
-  if (project.decisions) for (const k in project.decisions) { if (k.slice(0, k.indexOf(':')) === c) delete project.decisions[k]; }
+  const { cleared, kept } = clearColumnRecon(col, false);
   invalidateDownstream(col);
   reconStaleNote = '';
   reconActiveIdx = chain.indexOf(col); // focus the column we're about to re-run
   await persist();
+  const colName = truncateText(project.columns[col].name, 24); // plain: escaped where it meets HTML
+  if (!cleared && kept) {
+    // Nothing to do: every value in the column has been reviewed, and protection is on. Say so —
+    // silently doing nothing on a button press reads as a broken button.
+    setReconSummary(`<span class="text-warning"><i class="fas fa-shield-halved me-1"></i>Every value in `
+      + `<strong>${esc(colName)}</strong> has been reviewed, so there is nothing to search again. `
+      + `Untick <strong>Keep reviewed rows</strong> above to start the column over.</span>`);
+    renderColSwitcher(); updateReconButton(); refreshReview();
+    return;
+  }
+  if (kept) {
+    // The protected rows still hold matches, so this is a partial run over the rest.
+    await continueReconcile(`Kept the ${kept.toLocaleString()} reviewed row${kept === 1 ? '' : 's'} in `
+      + `${colName}; searched the other ${cleared.toLocaleString()} again.`);
+    return;
+  }
   await reconcileStage(); // col is now the earliest non-confirmed column → this runs it
 }
 
@@ -6241,8 +6523,6 @@ async function tourReconcileAll() {
 async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   const built = buildUniqueQueries(colIndex);
   if (!built || !built.map.size) return;
-  // Ancestor columns coarsest→finest above this one, for containment fallback (parent, grandparent, …).
-  const ancestorCols = reconChain().slice(0, Math.max(0, passNo)); // chain[0..passNo-1]
   reconActiveIdx = passNo; // show this column's progress/results while it runs
   renderColSwitcher();
   rtSetActivity({ type: 'reconciling', column: project.columns[colIndex] && project.columns[colIndex].name }); // tell teammates (advisory lock)
@@ -6309,20 +6589,13 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
   for (let b = 0; b < units.length && !stopRequested; b += RECON_BATCH) {
     const slice = units.slice(b, b + RECON_BATCH);
     const queries = {};
-    const nsf = getNsFilter(colIndex); // this column's own source gazetteers
-    const sp = spatialSettings();      // coordinate circle + containment strictness
     slice.forEach((u, j) => {
       const key = u.repKey, v = u.v, row = key.slice(key.indexOf(':') + 1);
       const q = { query: v.query, type: 'place', limit: RECON_CAND_LIMIT };
-      // The row's coordinate describes the PLACE, not the county or region containing it, so the
-      // circle belongs only to the name column. Applied to a container column it asks for a county
-      // whose record sits within 10km of a town inside it — which is usually false (Devon's point is
-      // ~30km from Exeter's), so the container silently failed to match and containment could then
-      // not be applied at all. See place#184.
-      const rowCoord = (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name'))
-        ? rowCoordValue(Number(row)) : null;
-      if (v.country) q.countries = [v.country];
-      if (nsf.mode === 'only' && nsf.namespaces.length) q.namespaces = nsf.namespaces; // restrict sources
+      // Every filter this row carries — country, sources, containment, the coordinate circle, and the
+      // dataset-wide scope — in one list, shared with the review card's hand search (place#208). Kept
+      // on the unit so the results loop below can re-apply the client-side half of it.
+      u.parts = queryConstraints(colIndex, row, v.country);
       if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
       // Name variants (alt_names): alternative spellings tried alongside the primary toponym — only for
       // the place-name column (variants of a container's own value aren't a modelled concept). Their
@@ -6338,28 +6611,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
           }
         }
       }
-      // Containment: scope this column's query within the confirmed places of the NEAREST resolved
-      // ancestor — the direct parent if it matched, else its parent (grandparent), and so on up the
-      // chain. Only when NO ancestor resolved for this row does it fall through to the dataset-wide
-      // scope below. This keeps precision when an intermediate level (e.g. a parish) was skipped or
-      // unmatched but a coarser one (its county) was confirmed — without it, such a row would widen all
-      // the way to the whole dataset. "within any of them" (an ancestor may closeMatch several records).
-      // `intersects`, not `within`: administrative polygons from DIFFERENT gazetteers almost never nest
-      // exactly — a Kain parish boundary is not strictly inside a UKHC county, any more than a UKHC
-      // county is strictly inside the modern Wales polygon (measured: zero hits under `within`). Since
-      // the gateway enforces containment as a hard filter (place#144), `within` discards valid children
-      // over sub-kilometre boundary disagreement. See issue #143.
-      let pids = [];
-      for (let a = ancestorCols.length - 1; a >= 0 && !pids.length; a--) {
-        pids = resolvedPlaceIds(ancestorCols[a], row).map(barePlaceId);
-      }
-      if (pids.length) { q.contained_in = pids; q.containment = sp.containment; q.relation = sp.relation; }
-      // The row's own coordinate as a circular filter. The service converts lat/lng/radius into a
-      // bounding polygon and filters on it — so a row that says where it is can no longer match a
-      // same-named place on another continent. Sent alongside containment; where both apply the
-      // service honours the container, so the radius is also enforced locally on the results.
-      if (sp.nearby && rowCoord) { q.lat = +rowCoord.lat.toFixed(6); q.lng = +rowCoord.lon.toFixed(6); q.radius = sp.radiusKm; }
-      applyGlobalScopeToQuery(q, parentCol < 0, !!v.country, colIndex); // scope: dataset-wide, or this column's own types
+      applyConstraints(q, u.parts);
       queries['q' + j] = q;
     });
     let data;
@@ -6391,22 +6643,9 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
         }
         lastVariantsDropped += dropped;
       }
-      let result = applyNsToCandidates(qd.result || [], colIndex);
-      // Enforce the radius here as well as on the service. Where a row has BOTH a confirmed
-      // container and a coordinate the service honours the container and ignores the circle, so
-      // without this the radius would silently not apply to exactly the rows that have the most
-      // context. Candidates with no known position are KEPT — a place without coordinates cannot be
-      // shown to be out of range, and dropping it would lose a valid match to a data gap.
-      if (sp.nearby && hasCoordRole() && colIndex === colIndexByRole('name')) {
-        const rc = rowCoordValue(Number(u.repKey.slice(u.repKey.indexOf(':') + 1)));
-        if (rc) {
-          result = result.filter((c) => {
-            const p = c && c.repr_point;
-            if (!Array.isArray(p) || p.length < 2) return true;
-            return haversineKm({ lat: rc.lat, lon: rc.lon }, { lat: p[1], lon: p[0] }) <= sp.radiusKm;
-          });
-        }
-      }
+      // Enforce, client-side, the constraints the service can't be relied on to apply — the radius,
+      // which it drops in favour of the container wherever a row has both (place#184/#208).
+      const result = filterByConstraints(applyNsToCandidates(qd.result || [], colIndex), u.parts || []);
       const at = new Date().toISOString();
       // Fan the single reconciliation to every row sharing this value+containment (admin merge).
       u.memberKeys.forEach((mk) => {
@@ -6527,12 +6766,20 @@ function init() {
   const rerun = el('recon-rerun');
   if (rerun) rerun.addEventListener('click', () => reReconcileColumn(activeReconCol()));
   const cont = el('recon-continue');
-  if (cont) cont.addEventListener('click', continueReconcile);
+  if (cont) cont.addEventListener('click', () => continueReconcile()); // not the click event as a note
   const stop = el('recon-stop');
   if (stop) stop.addEventListener('click', () => {
     stopRequested = true;
     stop.disabled = true; stop.innerHTML = '<i class="fas fa-hourglass-half me-1"></i>Finishing current batch…';
     flashSaved('Stopping — matches so far are kept; run again to continue.');
+  });
+
+  const keep = el('recon-keep-reviewed');
+  if (keep) keep.addEventListener('change', () => {
+    if (!project) return;
+    project.keepReviewed = keep.checked;
+    persist();
+    updateReconButton(); // the Re-reconcile tooltip says how many rows would survive
   });
 
   const thr = el('recon-threshold');

@@ -652,3 +652,16 @@ body.recon-viewer #recon-viewer-badge { cursor: help; }
   color: #8a8a8a; font-style: italic; }
 .recon-chat-compose { display: flex; gap: .4rem; padding: .5rem .8rem; border-top: 1px solid #eee; }
 .recon-chat-compose input { flex: 1; }
+
+/* --- Hand-search constraint chips (place#208) --- */
+/* The same limits the run put on the row, each one relaxable. A relaxed chip stays legible rather
+   than fading away: it is still telling you which constraint you have switched OFF. */
+.recon-search-cx { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem; }
+.recon-cx {
+  display: inline-flex; align-items: center; gap: .3rem; margin: 0;
+  border: 1px solid #b6d4fe; border-radius: 999px; padding: .05rem .5rem .05rem .35rem;
+  background: #e7f1ff; color: #0a58ca; cursor: pointer; font-size: .78rem; white-space: nowrap;
+}
+.recon-cx:hover { filter: brightness(.97); }
+.recon-cx input { margin: 0; cursor: pointer; }
+.recon-cx--off { background: #f1f3f5; color: #6c757d; border-color: #dee2e6; text-decoration: line-through; }

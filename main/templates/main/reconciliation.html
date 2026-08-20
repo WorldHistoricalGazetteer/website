@@ -281,6 +281,19 @@
       <span class="text-muted">or the name matches exactly — so review can focus on the rest.</span>
     </div>
 
+    {% comment %}
+      Protect reviewed rows from a re-run (place#207). On by default: a row someone has ruled on keeps
+      its match through a Re-reconcile, a Scope change, or a parent decision, and is not searched again.
+      It does NOT protect a row whose VALUE changed (a cell edit or column transform still clears it —
+      the value it was matched against no longer exists).
+    {% endcomment %}
+    <div class="d-flex align-items-center gap-2 small mb-2" id="recon-keep-wrap">
+      <label class="mb-0"><input type="checkbox" id="recon-keep-reviewed" checked>
+        Keep reviewed rows <span class="text-muted">— rows you have accepted, rejected or marked
+        “no match” keep their decision when you reconcile again, and are not searched a second time.
+        Untick to start every row over.</span></label>
+    </div>
+
     <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-phonetic-bar">
       <label class="mb-0"><input type="checkbox" id="recon-phonetic">
         Phonetic matching <span class="text-muted">(Symphonym embeddings, computed in-browser — ranks candidates by how the name sounds; off by default)</span></label>
