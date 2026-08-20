@@ -3779,24 +3779,35 @@ function currentStagePos() {
 // ── Protecting reviewed rows from a re-run (place#207) ───────────────────────
 // Re-running reconciliation — after changing Sources, the dataset scope, or a parent decision — used to
 // clear the column wholesale, and the cost fell entirely on the work that is hardest to redo: the rows
-// a human had actually ruled on. With this on (the default) a decided row keeps its match, its decision
-// and its note, and is not queried again; only the undecided rows are searched afresh. Off, a re-run
-// starts the column over exactly as it always did.
+// a human had actually ruled on. A protected row keeps its match, its decision and its note, and is not
+// queried again; only the rest are searched afresh.
+//
+// WHICH rows are protected is per decision status, because the answer differs by status and only the
+// user knows it (place#207, Justin Colson): an ACCEPTED row is finished work, but "rejected" and
+// "no match" are the rows you re-run *for* — you changed the Sources or the scope precisely to find
+// what they missed. So `accepted` is kept by default and the other three are not, and each is its own
+// tick box. Ticking `rejected`/`no match` means "I have ruled these out for good, don't ask again".
 //
 // It protects a row from being RE-SEARCHED, not from being invalidated by a change to the data
 // underneath it: editing the cell, transforming the column or re-drawing the hierarchy still clears the
 // match, because the value it was matched against no longer exists.
-function keepReviewed() { return !(project && project.keepReviewed === false); }
-// A human has RULED on a row when they accepted a candidate, rejected the lot, or declared no match.
-// 'skipped' is explicitly "come back to this" — a re-run is exactly what such a row wants — and an
-// auto-confirmed row was never looked at, so neither is protected.
-const PROTECTED_STATUSES = { accepted: 1, rejected: 1, nomatch: 1 };
-function isProtected(key) {
-  if (!keepReviewed()) return false;
-  const d = project && project.decisions && project.decisions[key];
-  return !!(d && PROTECTED_STATUSES[d.status]);
+// The tick boxes themselves live in the template beside the auto-confirm threshold; these are their
+// ids (= decision statuses) and their defaults.
+const KEEP_DEFAULTS = { accepted: true, rejected: false, nomatch: false, skipped: false };
+// The effective per-status settings. Migrates the boolean this shipped with on 2026-08-20: `false` meant
+// "protect nothing", anything else meant the original accepted+rejected+nomatch set.
+function keepStatuses() {
+  const st = project && project.keepStatuses;
+  if (st) return Object.assign({}, KEEP_DEFAULTS, st);
+  if (project && project.keepReviewed === false) return { accepted: false, rejected: false, nomatch: false, skipped: false };
+  if (project && project.keepReviewed === true) return { accepted: true, rejected: true, nomatch: true, skipped: false };
+  return Object.assign({}, KEEP_DEFAULTS);
 }
-// How many of a column's reconciled rows a re-run would preserve (0 when protection is off).
+function isProtected(key) {
+  const d = project && project.decisions && project.decisions[key];
+  return !!(d && keepStatuses()[d.status]);
+}
+// How many of a column's reconciled rows a re-run would preserve (0 when nothing is protected).
 function protectedCount(col) { let n = 0; colKeys(col).forEach((k) => { if (isProtected(k)) n += 1; }); return n; }
 // Clear a column's reconciliation so it can be run again, honouring the toggle. Returns {cleared, kept}
 // — cleared rows have no match, and reconcilePass queries exactly the rows with no match, so a
@@ -5879,7 +5890,7 @@ async function applyScope() {
   project.scope = scope;
   const inv = (before !== after) ? invalidateAllMatches() : { cleared: 0, kept: 0 };
   if (inv.cleared || inv.kept) {
-    const keptNote = inv.kept ? ` The ${inv.kept.toLocaleString()} row${inv.kept === 1 ? '' : 's'} you had already reviewed ${inv.kept === 1 ? 'keeps its match' : 'keep their matches'}.` : '';
+    const keptNote = inv.kept ? ` The ${inv.kept.toLocaleString()} row${inv.kept === 1 ? '' : 's'} protected by “Keep on re-run” ${inv.kept === 1 ? 'keeps its match' : 'keep their matches'}.` : '';
     reconStaleNote = `Scope changed — reconciliation was reset; reconcile the columns again with the new scope.${keptNote}`;
     setReconSummary('<span class="text-warning"><i class="fas fa-triangle-exclamation me-1"></i>Scope changed — reconcile again to apply it.'
       + esc(keptNote) + '</span>');
@@ -6259,7 +6270,8 @@ function refreshReconSection() {
   el('recon-recon').classList.remove('d-none'); // header always visible once a dataset is loaded
   const thr = el('recon-threshold');
   if (thr && project && project.autoThreshold != null) thr.value = project.autoThreshold;
-  const keep = el('recon-keep-reviewed'); if (keep) keep.checked = keepReviewed();
+  const st = keepStatuses();
+  document.querySelectorAll('.recon-keep-cb').forEach((cb) => { cb.checked = !!st[cb.dataset.status]; });
   refreshSpatialControls();
   if (hasName && project.matches && Object.keys(project.matches).length) {
     const built = buildUniqueQueries();
@@ -6433,8 +6445,8 @@ function updateRerunButton(chain) {
     if (lbl) lbl.textContent = `Re-reconcile ${truncate(project.columns[focus].name, 18)}`;
     const kept = protectedCount(focus);
     rr.title = kept
-      ? `Search this column again — the ${kept.toLocaleString()} row(s) you have reviewed keep their matches `
-        + '(untick “Keep reviewed rows” to start over). Downstream columns are reset.'
+      ? `Search this column again — the ${kept.toLocaleString()} row(s) protected by “Keep on re-run” keep `
+        + 'their matches and are not searched. Downstream columns are reset.'
       : "Clear this column's matches and reconcile it again (e.g. after changing its Sources). Downstream columns are reset.";
   }
 }
@@ -6504,14 +6516,14 @@ async function reReconcileColumn(col) {
     // Nothing to do: every value in the column has been reviewed, and protection is on. Say so —
     // silently doing nothing on a button press reads as a broken button.
     setReconSummary(`<span class="text-warning"><i class="fas fa-shield-halved me-1"></i>Every value in `
-      + `<strong>${esc(colName)}</strong> has been reviewed, so there is nothing to search again. `
-      + `Untick <strong>Keep reviewed rows</strong> above to start the column over.</span>`);
+      + `<strong>${esc(colName)}</strong> is protected by <strong>Keep on re-run</strong>, so there is `
+      + 'nothing left to search. Untick a status above to search those rows again.</span>');
     renderColSwitcher(); updateReconButton(); refreshReview();
     return;
   }
   if (kept) {
     // The protected rows still hold matches, so this is a partial run over the rest.
-    await continueReconcile(`Kept the ${kept.toLocaleString()} reviewed row${kept === 1 ? '' : 's'} in `
+    await continueReconcile(`Kept ${kept.toLocaleString()} protected row${kept === 1 ? '' : 's'} in `
       + `${colName}; searched the other ${cleared.toLocaleString()} again.`);
     return;
   }
@@ -6801,13 +6813,13 @@ function init() {
     flashSaved('Stopping — matches so far are kept; run again to continue.');
   });
 
-  const keep = el('recon-keep-reviewed');
-  if (keep) keep.addEventListener('change', () => {
+  document.querySelectorAll('.recon-keep-cb').forEach((cb) => cb.addEventListener('change', () => {
     if (!project) return;
-    project.keepReviewed = keep.checked;
+    project.keepStatuses = Object.assign(keepStatuses(), { [cb.dataset.status]: cb.checked });
+    delete project.keepReviewed; // superseded by the per-status set
     persist();
     updateReconButton(); // the Re-reconcile tooltip says how many rows would survive
-  });
+  }));
 
   const thr = el('recon-threshold');
   if (thr) thr.addEventListener('input', () => {

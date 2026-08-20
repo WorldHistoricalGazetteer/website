@@ -282,16 +282,24 @@
     </div>
 
     {% comment %}
-      Protect reviewed rows from a re-run (place#207). On by default: a row someone has ruled on keeps
-      its match through a Re-reconcile, a Scope change, or a parent decision, and is not searched again.
-      It does NOT protect a row whose VALUE changed (a cell edit or column transform still clears it —
-      the value it was matched against no longer exists).
+      Protect reviewed rows from a re-run (place#207), per decision status. Only `accepted` is on by
+      default: "rejected" and "no match" are the rows a re-run is FOR — you changed the Sources or the
+      scope precisely to find what they missed — so keeping them would defeat the re-run (Justin Colson).
+      None of this protects a row whose VALUE changed: a cell edit or column transform still clears it,
+      because the value it was matched against no longer exists.
     {% endcomment %}
-    <div class="d-flex align-items-center gap-2 small mb-2" id="recon-keep-wrap">
-      <label class="mb-0"><input type="checkbox" id="recon-keep-reviewed" checked>
-        Keep reviewed rows <span class="text-muted">— rows you have accepted, rejected or marked
-        “no match” keep their decision when you reconcile again, and are not searched a second time.
-        Untick to start every row over.</span></label>
+    <div class="d-flex align-items-center flex-wrap gap-2 small mb-2" id="recon-keep-wrap">
+      <span class="text-muted"><i class="fas fa-shield-halved me-1"></i>Keep on re-run:</span>
+      <label class="mb-0" title="Rows where you chose a match. On by default — this is the work a re-run would otherwise discard.">
+        <input type="checkbox" class="recon-keep-cb" data-status="accepted" checked> accepted</label>
+      <label class="mb-0" title="Rows where you rejected every candidate. Off by default: these are usually the rows you are re-running to fix.">
+        <input type="checkbox" class="recon-keep-cb" data-status="rejected"> rejected</label>
+      <label class="mb-0" title="Rows you marked as having no match in WHG. Off by default: these are usually the rows you are re-running to fix.">
+        <input type="checkbox" class="recon-keep-cb" data-status="nomatch"> no match</label>
+      <label class="mb-0" title="Rows you skipped. Off by default — a skip means “come back to this”, which is what a re-run does.">
+        <input type="checkbox" class="recon-keep-cb" data-status="skipped"> skipped</label>
+      <span class="text-muted">— ticked rows keep their decision when you reconcile again and are not
+        searched a second time; unticked ones are searched afresh.</span>
     </div>
 
     <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-phonetic-bar">
