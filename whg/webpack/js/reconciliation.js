@@ -222,6 +222,150 @@ function guessDelimiter(sample) {
   const firstLine = sample.split('\n')[0] || '';
   return (firstLine.match(/\t/g) || []).length > (firstLine.match(/,/g) || []).length ? '\t' : ',';
 }
+// ── GeoJSON geometry on import (place#210) ──────────────────────────────────
+// A GeoJSON (or LPF) FeatureCollection keeps its coordinates in `geometry`, OUTSIDE `properties` — so
+// flattening the properties alone silently threw the geocoding away. A point geometry becomes real
+// longitude/latitude columns, which is the form the coordinate panel, the maps, the distance
+// constraint and every export already speak. A geometry with extent (line, polygon) has no single
+// point that honestly stands for it, so it is preserved verbatim as WKT in an ignored column rather
+// than reduced to a centroid the data never claimed.
+function featureGeometry(rec) {
+  if (!rec || typeof rec !== 'object') return null;
+  const g = rec.geometry || rec.geom || null;
+  return (g && typeof g === 'object' && g.type) ? g : null;
+}
+function isLonLat(c) {
+  return Array.isArray(c) && Number.isFinite(+c[0]) && Number.isFinite(+c[1]) &&
+    Math.abs(+c[0]) <= 180 && Math.abs(+c[1]) <= 90;
+}
+// The one point a geometry stands for, or null when it has extent (or is ambiguously multi-part).
+function geometryPoint(g) {
+  if (!g) return null;
+  if (g.type === 'Point') return isLonLat(g.coordinates) ? { lon: +g.coordinates[0], lat: +g.coordinates[1] } : null;
+  if (g.type === 'MultiPoint' && Array.isArray(g.coordinates) && g.coordinates.length === 1) {
+    return isLonLat(g.coordinates[0]) ? { lon: +g.coordinates[0][0], lat: +g.coordinates[0][1] } : null;
+  }
+  if (g.type === 'GeometryCollection' && Array.isArray(g.geometries)) {
+    const pts = g.geometries.filter((m) => m && (m.type === 'Point' || m.type === 'MultiPoint'));
+    if (pts.length === 1) return geometryPoint(pts[0]);
+  }
+  return null;
+}
+function num6(n) { return String(+(+n).toFixed(6)); }
+
+// ── Representative point for a geometry with extent (place#210) ──────────────
+// A line or a polygon has no coordinate that IS the place, so one is derived on request only — never
+// silently, and never in place of a point the file actually stated. A line gives its midpoint measured
+// along its length; a polygon gives a point guaranteed to lie ON the polygon (PostGIS's
+// ST_PointOnSurface rule): the area centroid where that falls inside, otherwise the middle of the
+// widest interior span of the horizontal line through it — so a crescent or a ring is not represented
+// by a point in the sea. Planar maths in degrees: ample for a match hint, and what the reconciler and
+// the map both want.
+function ringSignedArea(ring) {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  return a / 2;
+}
+function ringCentroid(ring) {
+  let a = 0, x = 0, y = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    a += f; x += (ring[j][0] + ring[i][0]) * f; y += (ring[j][1] + ring[i][1]) * f;
+  }
+  a /= 2;
+  if (a) return { lon: x / (6 * a), lat: y / (6 * a) };
+  // Degenerate (zero-area) ring — fall back to the middle of its bounding box.
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  ring.forEach((c) => { x0 = Math.min(x0, c[0]); x1 = Math.max(x1, c[0]); y0 = Math.min(y0, c[1]); y1 = Math.max(y1, c[1]); });
+  return Number.isFinite(x0) ? { lon: (x0 + x1) / 2, lat: (y0 + y1) / 2 } : null;
+}
+function inRing(ring, lon, lat) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (((yi > lat) !== (yj > lat)) && (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+function inPolygon(poly, lon, lat) {
+  if (!poly.length || !inRing(poly[0], lon, lat)) return false;
+  for (let h = 1; h < poly.length; h++) if (inRing(poly[h], lon, lat)) return false; // in a hole
+  return true;
+}
+function pointOnSurface(poly) {
+  if (!Array.isArray(poly) || !Array.isArray(poly[0]) || poly[0].length < 3) return null;
+  const c = ringCentroid(poly[0]);
+  if (!c) return null;
+  if (inPolygon(poly, c.lon, c.lat)) return c;
+  const lat = c.lat, xs = [];
+  poly.forEach((ring) => {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const yi = ring[i][1], yj = ring[j][1];
+      if ((yi > lat) !== (yj > lat)) xs.push((ring[j][0] - ring[i][0]) * (lat - yi) / (yj - yi) + ring[i][0]);
+    }
+  });
+  xs.sort((a, b) => a - b);
+  let best = null, bestWidth = -1;
+  for (let i = 0; i + 1 < xs.length; i++) {
+    const mid = (xs[i] + xs[i + 1]) / 2, width = xs[i + 1] - xs[i];
+    if (width > bestWidth && inPolygon(poly, mid, lat)) { bestWidth = width; best = mid; }
+  }
+  return best == null ? c : { lon: best, lat };
+}
+function lineMidpoint(coords) {
+  if (!Array.isArray(coords) || !coords.length) return null;
+  const segs = []; let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const d = Math.hypot(coords[i][0] - coords[i - 1][0], coords[i][1] - coords[i - 1][1]);
+    segs.push(d); total += d;
+  }
+  if (!total) return { lon: +coords[0][0], lat: +coords[0][1] };
+  let acc = 0;
+  for (let i = 0; i < segs.length; i++) {
+    if (acc + segs[i] >= total / 2) {
+      const t = segs[i] ? (total / 2 - acc) / segs[i] : 0;
+      return { lon: coords[i][0] + (coords[i + 1][0] - coords[i][0]) * t,
+               lat: coords[i][1] + (coords[i + 1][1] - coords[i][1]) * t };
+    }
+    acc += segs[i];
+  }
+  const last = coords[coords.length - 1];
+  return { lon: +last[0], lat: +last[1] };
+}
+function representativePoint(g) {
+  if (!g) return null;
+  let p = geometryPoint(g);
+  if (!p) {
+    switch (g.type) {
+      case 'MultiPoint': {
+        const cs = (g.coordinates || []).filter(isLonLat);
+        if (cs.length) p = { lon: cs.reduce((a, c) => a + +c[0], 0) / cs.length, lat: cs.reduce((a, c) => a + +c[1], 0) / cs.length };
+        break;
+      }
+      case 'LineString': p = lineMidpoint(g.coordinates); break;
+      case 'MultiLineString': {
+        const lines = (g.coordinates || []).filter((l) => Array.isArray(l) && l.length);
+        const longest = lines.sort((a, b) => b.length - a.length)[0];
+        p = longest ? lineMidpoint(longest) : null;
+        break;
+      }
+      case 'Polygon': p = pointOnSurface(g.coordinates); break;
+      case 'MultiPolygon': {
+        const polys = (g.coordinates || []).filter((x) => Array.isArray(x) && Array.isArray(x[0]));
+        const biggest = polys.sort((a, b) => Math.abs(ringSignedArea(b[0])) - Math.abs(ringSignedArea(a[0])))[0];
+        p = biggest ? pointOnSurface(biggest) : null;
+        break;
+      }
+      case 'GeometryCollection': {
+        for (const m of (g.geometries || [])) { p = representativePoint(m); if (p) break; }
+        break;
+      }
+      default: p = null;
+    }
+  }
+  return (p && isLonLat([p.lon, p.lat])) ? p : null;
+}
+
 function fromJSON(data) {
   const records = Array.isArray(data) ? data : (Array.isArray(data.features) ? data.features : null);
   if (!records || !records.length) throw new Error('Expected a non-empty JSON array of records.');
@@ -238,7 +382,57 @@ function fromJSON(data) {
     const v = r ? r[c] : '';
     return v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
   }));
-  return { columns, rows, total: rows.length };
+  const { roles, note, repPoints, repCols } = addGeometryColumns(records, columns, rows);
+  return { columns, rows, total: rows.length, roles, note, repPoints, repCols };
+}
+
+// Append longitude/latitude (points) and geometry_wkt (everything else) columns for a feature array,
+// mutating `columns`/`rows` in step. Returns the roles to force on the new columns and a note for the
+// import summary — silence is what made this a bug report, so the user is always told what happened.
+function addGeometryColumns(records, columns, rows) {
+  const geoms = records.map(featureGeometry);
+  if (!geoms.some(Boolean)) return { roles: {}, note: '', repPoints: null, repCols: null };
+  const pts = geoms.map(geometryPoint);
+  const shapes = geoms.map((g, i) => (g && !pts[i]) ? geojsonToWKT(g) : '');
+  const nPts = pts.filter(Boolean).length;
+  const nShapes = shapes.filter(Boolean).length;
+  const roles = {}; const notes = []; let repCols = null;
+  // Don't create a SECOND pair of coordinate roles when the properties already carry their own — a
+  // role is singular (colIndexByRole takes the first), and two claimants is worse than one. The
+  // geometry still lands in a column; it just isn't the one that's mapped.
+  const propHasLatLon = columns.some((c) => detectRole(c) === 'lat') && columns.some((c) => detectRole(c) === 'lon');
+  if (nPts) {
+    const lonName = uniqueHeader('longitude', columns);
+    const latName = uniqueHeader('latitude', columns.concat([lonName]));
+    columns.push(lonName, latName);
+    rows.forEach((r, i) => r.push(pts[i] ? num6(pts[i].lon) : '', pts[i] ? num6(pts[i].lat) : ''));
+    roles[lonName] = propHasLatLon ? 'other' : 'lon';
+    roles[latName] = propHasLatLon ? 'other' : 'lat';
+    repCols = { lon: lonName, lat: latName }; // where a derived point would go, if one is asked for
+    notes.push(`kept the point coordinates of <strong>${nPts.toLocaleString()}</strong> feature${nPts === 1 ? '' : 's'} ` +
+      `as <code>${esc(lonName)}</code> / <code>${esc(latName)}</code>` +
+      (propHasLatLon ? ' (left unmapped — this file already has latitude/longitude columns of its own)' : ''));
+  }
+  let repPoints = null;
+  if (nShapes) {
+    const wktName = uniqueHeader('geometry_wkt', columns);
+    columns.push(wktName);
+    rows.forEach((r, i) => r.push(shapes[i]));
+    roles[wktName] = 'other'; // WKT with extent isn't a coordinate the reconciler can use
+    notes.push(`<strong>${nShapes.toLocaleString()}</strong> feature${nShapes === 1 ? '' : 's'} ` +
+      `${nShapes === 1 ? 'has a line or polygon' : 'have lines or polygons'}: kept in full as WKT in ` +
+      `<code>${esc(wktName)}</code>`);
+    // A representative point for each of them, computed now but NOT written anywhere: it is an
+    // inference, so it is offered as a one-click action beside the table rather than applied silently.
+    repPoints = geoms.map((g, i) => {
+      if (!shapes[i]) return null;
+      const rp = representativePoint(g);
+      return rp ? [rp.lon, rp.lat] : null;
+    });
+    if (!repPoints.some(Boolean)) repPoints = null;
+  }
+  // repCols is null when the file is lines/polygons only: applying the offer creates the pair then.
+  return { roles, repPoints, repCols, note: notes.length ? 'Geometry: ' + notes.join('; ') + '.' : '' };
 }
 function fromDelimited(text) {
   const delimiter = guessDelimiter(text.slice(0, 4096));
@@ -608,6 +802,9 @@ async function insertIsoDateColumns() {
 // ALL of that from an old→new index map so nothing drifts.
 let _dragCol = -1;
 function rerenderData() {
+  bumpRowFilters(); // values (or columns) may have changed under the row filters — recompile them
+  renderRowFilterNotice();
+  renderGeomNotice();
   renderMapping(); renderPreview(); renderTypePrompt(); renderCoords(); renderDates();
   refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); refreshExport(); updatePaneSummaries();
 }
@@ -616,11 +813,14 @@ function columnSnapshot() {
     columns: project.columns.map((c) => Object.assign({}, c)),
     rows: project.rows.map((r) => r.slice()),
     matches: project.matches, decisions: project.decisions, geom: project.geom, colConfig: project.colConfig,
+    rowFilters: clone(rowFilters()),
   };
 }
 function restoreColumnSnapshot(s) {
   project.columns = s.columns; project.rows = s.rows;
   project.matches = s.matches; project.decisions = s.decisions; project.geom = s.geom; project.colConfig = s.colConfig;
+  project.rowFilters = s.rowFilters || [];
+  bumpRowFilters();
   reconActiveIdx = -1; normalizeChain();
 }
 // mapping[newIdx] = oldIdx. Columns absent from mapping are deleted.
@@ -640,6 +840,10 @@ function remapColumns(mapping) {
   project.decisions = remapKeyed(project.decisions);
   project.geom = remapKeyed(project.geom);
   if (project.colConfig) { const nc = {}; for (const k in project.colConfig) { if (inv[k] != null) nc[inv[k]] = project.colConfig[k]; } project.colConfig = nc; }
+  project.rowFilters = rowFilters()
+    .filter((f) => inv[f.col] != null)   // a filter on a deleted column goes with it
+    .map((f) => Object.assign({}, f, { col: inv[f.col] }));
+  bumpRowFilters();
   reconActiveIdx = -1; normalizeChain();
 }
 function moveColumn(from, to) {
@@ -683,6 +887,12 @@ function applyOpInverse(op) {
     const cur = columnSnapshot();
     restoreColumnSnapshot(op.snapshot);
     return { type: 'columns', snapshot: cur, label: op.label };
+  }
+  if (op.type === 'rowfilters') { // the reconcile-a-subset filters (place#209)
+    const cur = clone(rowFilters());
+    project.rowFilters = op.filters;
+    bumpRowFilters();
+    return { type: 'rowfilters', filters: cur, label: op.label };
   }
   return null;
 }
@@ -753,7 +963,8 @@ function renderMapping() {
     `<tr class="recon-map-row${c.role === 'other' ? ' recon-map-ignored' : ''}" data-col="${i}">
        <td class="recon-map-handle" draggable="true" title="Drag to reorder"><i class="fas fa-grip-vertical"></i></td>
        <td class="recon-map-col">${truncate(c.name, 50)}
-         <button type="button" class="btn btn-sm btn-link p-0 ms-1 recon-transform-btn" data-col="${i}" title="Clean / transform this column's values"><i class="fas fa-wand-magic-sparkles"></i></button>
+         <button type="button" class="btn btn-sm btn-link p-0 ms-1 recon-transform-btn" data-col="${i}" title="Clean / transform this column's values, or reconcile only some rows"><i class="fas fa-wand-magic-sparkles"></i></button>
+         ${rowFilterFor(i) ? `<i class="fas fa-filter recon-rowfilter-flag ms-1" title="${esc(`Row filter: ${project.columns[i].name} ${ROW_FILTER_LABELS[rowFilterFor(i).op]}${opNeedsValue(rowFilterFor(i).op) ? ' “' + rowFilterFor(i).value + '”' : ''}`)}"></i>` : ''}
        </td>
        <td>${roleSelectHTML(i, c)}</td>
        <td class="text-muted">${truncate(firstSample(i), 60)}</td>
@@ -895,6 +1106,7 @@ function openTransformModal(col) {
   if (nn) { nn.value = ''; nn.placeholder = truncate(project.columns[col].name, 28) + ' (transformed)'; nn.classList.add('d-none'); }
   renderTransformPreview();
   renderSplitPreview();
+  openRowFilterInModal(col);
   if (box) box.querySelectorAll('.recon-tf-common').forEach((b) => b.addEventListener('click', () => {
     const t = CELL_TRANSFORMS.find((x) => x.id === b.dataset.id);
     box.querySelectorAll('.recon-tf-common').forEach((x) => x.classList.remove('active', 'btn-primary'));
@@ -974,9 +1186,12 @@ function applyTransform() {
   project.rows.forEach((r) => { const nv = fn(r[col]); if (String(r[col] == null ? '' : r[col]) !== String(nv == null ? '' : nv)) { r[col] = nv; changed += 1; } });
   if (!changed) return;
   pushUndo({ type: 'cells', col, before, label: `${_pendingTransform.label} · ${project.columns[col].name}` });
-  // Transforming a reconciled column invalidates its matches (they were run on the old values).
-  if (colHasMatches(col)) {
-    colKeys(col).forEach((k) => { delete project.matches[k]; if (project.decisions) delete project.decisions[k]; if (project.geom) delete project.geom[k]; });
+  // Transforming a reconciled column invalidates its matches (they were run on the old values). This
+  // ignores the row filter: the transform rewrote every row's value, excluded ones included, so every
+  // match for the column is now against a value that no longer exists (place#209).
+  const stale = allColKeys(col);
+  if (stale.length) {
+    stale.forEach((k) => { delete project.matches[k]; if (project.decisions) delete project.decisions[k]; if (project.geom) delete project.geom[k]; });
     invalidateDownstream(col);
     reconStaleNote = 'Column values changed — reconcile the affected column(s) again.';
     reconActiveIdx = -1;
@@ -1052,6 +1267,271 @@ function applySplit() {
   flashSaved(`Split “${truncate(src, 24)}” into ${N} containment columns`);
 }
 
+// ── What the importer did with the geometry (place#210) ─────────────────────
+// Said out loud beside the table, because silently dropping GeoJSON geometry is what made this a bug
+// report. Where the file carried lines or polygons it also offers the derived representative point —
+// an inference, so it is one click away rather than applied behind the user's back.
+function pendingRepPoints() {
+  if (!project || !Array.isArray(project.repPoints)) return 0;
+  const cols = project.repPointCols || null;
+  const lonIdx = cols ? project.columns.findIndex((c) => c.name === cols.lon) : -1;
+  let n = 0;
+  for (let i = 0; i < project.repPoints.length; i++) {
+    if (!project.repPoints[i] || !project.rows[i]) continue;
+    // Only rows still WITHOUT a coordinate are on offer — an exact point from the file always wins,
+    // and a point already derived (or typed) is not offered again.
+    if (lonIdx >= 0 && String(project.rows[i][lonIdx] == null ? '' : project.rows[i][lonIdx]).trim() !== '') continue;
+    n += 1;
+  }
+  return n;
+}
+function renderGeomNotice() {
+  const box = el('recon-geom-notice'); if (!box || !project) return;
+  const pending = pendingRepPoints();
+  if (!project.importNote && !pending) { box.innerHTML = ''; box.classList.add('d-none'); return; }
+  box.classList.remove('d-none');
+  const offer = pending
+    ? ` <button type="button" class="btn btn-sm btn-outline-primary py-0" id="recon-rep-points">
+         <i class="fas fa-location-crosshairs me-1"></i>Use a representative point for ${pending.toLocaleString()} of them</button>
+       <span class="text-muted">— the midpoint of a line, or a point on the surface of a polygon. The full geometry is kept either way.</span>`
+    : '';
+  box.innerHTML = `<div class="alert alert-light border py-2 px-3 mb-0 d-flex align-items-center flex-wrap gap-2">
+      <span><i class="fas fa-draw-polygon me-1"></i>${project.importNote || ''}</span>${offer}</div>`;
+  const b = el('recon-rep-points'); if (b) b.addEventListener('click', applyRepPoints);
+}
+// Write the derived points into the longitude/latitude columns, creating the pair if the file was
+// lines/polygons only. Never overwrites a coordinate that is already there. Undoable like any other
+// column op — and re-offered afterwards, since the offer is derived from what's still blank.
+function applyRepPoints() {
+  if (!project || !Array.isArray(project.repPoints)) return;
+  const snap = columnSnapshot();
+  const names = project.repPointCols || {};
+  let lonIdx = project.columns.findIndex((c) => c.name === names.lon);
+  let latIdx = project.columns.findIndex((c) => c.name === names.lat);
+  if (lonIdx < 0 || latIdx < 0) {
+    const taken = project.columns.map((c) => c.name);
+    const lonName = uniqueHeader('longitude', taken);
+    const latName = uniqueHeader('latitude', taken.concat([lonName]));
+    // Same rule as the importer: don't put a second claimant on a singular role (place#210).
+    const free = colIndexByRole('lat') < 0 && colIndexByRole('lon') < 0;
+    lonIdx = project.columns.length; project.columns.push({ name: lonName, role: free ? 'lon' : 'other' });
+    latIdx = project.columns.length; project.columns.push({ name: latName, role: free ? 'lat' : 'other' });
+    project.rows.forEach((r) => { r[lonIdx] = ''; r[latIdx] = ''; });
+    project.repPointCols = { lon: lonName, lat: latName };
+    if (!free) project.showIgnored = true; // …or the new columns would be created out of sight
+  }
+  let n = 0;
+  project.repPoints.forEach((p, i) => {
+    const row = project.rows[i];
+    if (!p || !row) return;
+    if (String(row[lonIdx] == null ? '' : row[lonIdx]).trim() !== '') return;
+    row[lonIdx] = num6(p[0]); row[latIdx] = num6(p[1]); n += 1;
+  });
+  if (!n) return;
+  pushUndo({ type: 'columns', label: 'representative points from geometry', snapshot: snap });
+  persist(); rerenderData();
+  flashSaved(`Derived a representative point for ${n.toLocaleString()} feature${n === 1 ? '' : 's'}`);
+}
+
+// ── Row filters — reconcile only a subset of the rows (place#209) ────────────────────────────────
+// "I only want to re-reconcile a subset of the data file I've imported." A filter is a condition on ONE
+// column (at most one per column; several columns AND together) that narrows what reconciliation looks
+// at. It is a lens, not an edit: excluded rows keep their values, keep any match they already have, and
+// still export — they are simply not searched, not counted towards a column being confirmed, and not
+// put in the review queue. So a filter can be tightened, loosened or dropped at any point without
+// costing the user a single row of work. It lives beside the transforms, behind the same wand icon,
+// because that is where it was asked for.
+const ROW_FILTER_OPS = [
+  ['contains', 'contains'],
+  ['notcontains', 'does not contain'],
+  ['equals', 'is exactly'],
+  ['notequals', 'is not'],
+  ['regex', 'matches regex'],
+  ['blank', 'is blank'],
+  ['notblank', 'is not blank'],
+];
+const ROW_FILTER_LABELS = Object.fromEntries(ROW_FILTER_OPS);
+function opNeedsValue(op) { return op !== 'blank' && op !== 'notblank'; }
+function rowFilters() { return (project && Array.isArray(project.rowFilters)) ? project.rowFilters : []; }
+function rowFilterFor(col) { return rowFilters().find((f) => f.col === col) || null; }
+function rowFiltersActive() { return rowFilterFns().length > 0; }
+
+// Compile one filter to a predicate over a cell value. A regex that won't compile matches nothing
+// rather than throwing mid-render — the modal refuses to save one, so this is belt and braces.
+function rowFilterTest(f) {
+  const raw = String(f.value == null ? '' : f.value);
+  const cs = !!f.caseSensitive;
+  const str = (v) => String(v == null ? '' : v);
+  const norm = (v) => (cs ? str(v) : str(v).toLowerCase());
+  const needle = cs ? raw : raw.toLowerCase();
+  switch (f.op) {
+    case 'blank': return (v) => str(v).trim() === '';
+    case 'notblank': return (v) => str(v).trim() !== '';
+    case 'regex': {
+      let re; try { re = new RegExp(raw, cs ? '' : 'i'); } catch (_) { return () => false; }
+      return (v) => re.test(str(v));
+    }
+    case 'equals': return (v) => norm(v).trim() === needle.trim();
+    case 'notequals': return (v) => norm(v).trim() !== needle.trim();
+    case 'notcontains': return (v) => norm(v).indexOf(needle) < 0;
+    default: return (v) => norm(v).indexOf(needle) >= 0; // contains
+  }
+}
+// Compiled predicates, rebuilt only when the filter set actually changes — rowIncluded() is called per
+// row inside render loops, so compiling (and regex-constructing) on every call would be a real cost on
+// a large dataset. Every mutator bumps the version; renderAll/rerenderData bump it too, so a project
+// swapped underneath us (import, resume, undo) can't leave a stale predicate behind.
+let _rfVersion = 0, _rfCachedAt = -1, _rfFns = [];
+function bumpRowFilters() { _rfVersion += 1; }
+function rowFilterFns() {
+  if (_rfCachedAt !== _rfVersion) {
+    _rfCachedAt = _rfVersion;
+    _rfFns = rowFilters()
+      .filter((f) => f && f.col >= 0 && project && project.columns[f.col])
+      .map((f) => ({ col: f.col, test: rowFilterTest(f) }));
+  }
+  return _rfFns;
+}
+// Is this row in the working subset? Everything that SEARCHES rows asks this; nothing that stores or
+// exports them does.
+function rowIncluded(i) {
+  const fns = rowFilterFns();
+  for (let k = 0; k < fns.length; k++) if (!fns[k].test(project.rows[i][fns[k].col])) return false;
+  return true;
+}
+function keyIncluded(key) { return rowIncluded(Number(key.slice(key.indexOf(':') + 1))); }
+function includedRowCount() {
+  if (!project) return 0;
+  if (!rowFilterFns().length) return project.rows.length;
+  let n = 0;
+  for (let i = 0; i < project.rows.length; i++) if (rowIncluded(i)) n += 1;
+  return n;
+}
+// How many rows a candidate filter would leave, combined with the filters on the OTHER columns — what
+// the modal previews before you commit to it. `cand` may be null (= "this column unfiltered").
+function rowFilterHypothetical(col, cand) {
+  if (!project) return 0;
+  const others = rowFilters().filter((f) => f.col !== col && f.col >= 0 && project.columns[f.col])
+    .map((f) => ({ col: f.col, test: rowFilterTest(f) }));
+  const mine = cand ? { col, test: rowFilterTest(cand) } : null;
+  const fns = mine ? others.concat([mine]) : others;
+  let n = 0;
+  outer: for (let i = 0; i < project.rows.length; i++) {
+    for (let k = 0; k < fns.length; k++) if (!fns[k].test(project.rows[i][fns[k].col])) continue outer;
+    n += 1;
+  }
+  return n;
+}
+function setRowFilter(f) {
+  if (!project) return;
+  const before = clone(rowFilters());
+  project.rowFilters = rowFilters().filter((x) => x.col !== f.col).concat([f]);
+  bumpRowFilters();
+  pushUndo({ type: 'rowfilters', filters: before, label: `filter “${truncate(project.columns[f.col].name, 20)}”` });
+  persist(); rerenderData();
+  flashSaved(`Reconciling ${includedRowCount().toLocaleString()} of ${project.rows.length.toLocaleString()} rows`);
+}
+function clearRowFilter(col) {
+  if (!project || !rowFilterFor(col)) return;
+  const before = clone(rowFilters());
+  project.rowFilters = rowFilters().filter((x) => x.col !== col);
+  bumpRowFilters();
+  pushUndo({ type: 'rowfilters', filters: before, label: `clear filter on “${truncate(project.columns[col].name, 20)}”` });
+  persist(); rerenderData();
+  flashSaved(rowFiltersActive() ? `Reconciling ${includedRowCount().toLocaleString()} of ${project.rows.length.toLocaleString()} rows` : 'Filter cleared — all rows');
+}
+function clearAllRowFilters() {
+  if (!project || !rowFilters().length) return;
+  const before = clone(rowFilters());
+  project.rowFilters = [];
+  bumpRowFilters();
+  pushUndo({ type: 'rowfilters', filters: before, label: 'clear row filters' });
+  persist(); rerenderData();
+  flashSaved('Filters cleared — reconciling all rows');
+}
+function rowFilterChipHTML(f) {
+  const name = esc(truncate(project.columns[f.col].name, 20));
+  const val = opNeedsValue(f.op) ? ` <strong>${esc(truncate(String(f.value), 24))}</strong>` : '';
+  return `<span class="recon-rowfilter-chip"><i class="fas fa-filter me-1"></i>${name} ${esc(ROW_FILTER_LABELS[f.op] || f.op)}${val}` +
+    `<button type="button" class="btn btn-link p-0 ms-1 recon-rowfilter-x" data-col="${f.col}" title="Remove this filter" aria-label="Remove this filter">&times;</button></span>`;
+}
+// One notice, painted into every pane that needs to explain a short row count (roles, reconcile).
+// Without it a filtered run just looks like rows going missing.
+function renderRowFilterNotice() {
+  const boxes = ['recon-rowfilter-notice', 'recon-rowfilter-notice-recon'].map(el).filter(Boolean);
+  if (!boxes.length || !project) return;
+  const fs = rowFilters().filter((f) => f.col >= 0 && project.columns[f.col]);
+  if (!fs.length) { boxes.forEach((b) => { b.innerHTML = ''; b.classList.add('d-none'); }); return; }
+  const inc = includedRowCount(), tot = project.rows.length;
+  const html = `<div class="recon-rowfilter alert alert-info py-2 px-3 mb-0 d-flex align-items-center flex-wrap gap-2">
+      <span><i class="fas fa-filter me-1"></i>Reconciling <strong>${inc.toLocaleString()}</strong> of
+      ${tot.toLocaleString()} rows.</span>
+      ${fs.map(rowFilterChipHTML).join(' ')}
+      <button type="button" class="btn btn-sm btn-outline-secondary py-0 recon-rowfilter-clearall">Clear all</button>
+      <span class="text-muted small">The other rows keep their data and any match they already have — they are just not searched.</span>
+    </div>`;
+  boxes.forEach((b) => {
+    b.classList.remove('d-none');
+    b.innerHTML = html;
+    b.querySelectorAll('.recon-rowfilter-x').forEach((x) => x.addEventListener('click', () => clearRowFilter(Number(x.dataset.col))));
+    const ca = b.querySelector('.recon-rowfilter-clearall'); if (ca) ca.addEventListener('click', clearAllRowFilters);
+  });
+}
+
+// ── Row-filter controls inside the transform modal ───────────────────────────
+function rowFilterDraft() {
+  const op = ((el('recon-tf-filterop') || {}).value) || 'contains';
+  const value = ((el('recon-tf-filterval') || {}).value) || '';
+  const caseSensitive = !!((el('recon-tf-filtercase') || {}).checked);
+  if (opNeedsValue(op) && !value) return null;
+  return { col: _transformCol, op, value: opNeedsValue(op) ? value : '', caseSensitive };
+}
+function renderRowFilterControls() {
+  const sel = el('recon-tf-filterop'); if (!sel || _transformCol < 0 || !project) return;
+  const cur = rowFilterFor(_transformCol);
+  const draft = rowFilterDraft();
+  const valInput = el('recon-tf-filterval');
+  if (valInput) valInput.classList.toggle('d-none', !opNeedsValue(sel.value));
+  const clr = el('recon-tf-filterclear'); if (clr) clr.disabled = !cur;
+  const btn = el('recon-tf-filterbtn');
+  const box = el('recon-tf-filterpreview');
+  if (!draft) {
+    if (btn) btn.disabled = true;
+    if (box) {
+      box.innerHTML = cur
+        ? `Currently reconciling <strong>${includedRowCount().toLocaleString()}</strong> of ${project.rows.length.toLocaleString()} rows.`
+        : 'All rows are reconciled. Set a condition to work on a subset.';
+    }
+    return;
+  }
+  if (draft.op === 'regex') {
+    try { new RegExp(draft.value); }
+    catch (err) {
+      if (btn) btn.disabled = true;
+      if (box) box.innerHTML = `<span class="text-danger">Invalid regex: ${esc(err.message)}</span>`;
+      return;
+    }
+  }
+  const n = rowFilterHypothetical(_transformCol, draft);
+  const tot = project.rows.length;
+  if (btn) btn.disabled = n === 0;
+  if (box) {
+    box.innerHTML = n === 0
+      ? '<span class="text-danger">No rows match — reconciliation would have nothing to do.</span>'
+      : `<strong>${n.toLocaleString()}</strong> of ${tot.toLocaleString()} rows would be reconciled` +
+        (rowFilters().some((f) => f.col !== _transformCol) ? ' <span class="text-muted">(combined with the filters on other columns)</span>' : '') + '.';
+  }
+}
+function openRowFilterInModal(col) {
+  const sel = el('recon-tf-filterop'); if (!sel) return;
+  sel.innerHTML = ROW_FILTER_OPS.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+  const cur = rowFilterFor(col);
+  sel.value = cur ? cur.op : 'contains';
+  const vi = el('recon-tf-filterval'); if (vi) vi.value = cur ? String(cur.value || '') : '';
+  const ci = el('recon-tf-filtercase'); if (ci) ci.checked = !!(cur && cur.caseSensitive);
+  renderRowFilterControls();
+}
+
 // ── Data browser (virtualised, filterable, editable) ─────────────────────────────────────────────
 // The whole dataset is already in memory (project.rows), so this is DOM virtualisation, not fetching:
 // only the visible window of rows lives in the DOM; off-screen rows are evicted and re-rendered on
@@ -1106,6 +1586,7 @@ function renderPreview() {
   // there all along, behind one small wand icon in a table most people scroll straight past (place#194).
   el('recon-preview-head').innerHTML = '<tr>' + _previewVisCols.map((i) =>
     `<th title="${esc(project.columns[i].name)}"><span class="recon-preview-th-name">${truncate(project.columns[i].name, 40)}</span>` +
+    (rowFilterFor(i) ? '<i class="fas fa-filter recon-rowfilter-flag ms-1" title="This column carries a row filter — only matching rows are reconciled"></i>' : '') +
     `<button type="button" class="btn btn-link p-0 recon-preview-tf" data-col="${i}"
        title="Clean or transform this column — trim, case, accents, find &amp; replace (regex), split into containment columns"
        aria-label="Transform column ${esc(project.columns[i].name)}"><i class="fas fa-wand-magic-sparkles"></i></button></th>`).join('') + '</tr>';
@@ -1137,6 +1618,7 @@ function paintPreviewWindow() {
   const vh = scroll.clientHeight || 420;
   const first = Math.max(0, Math.floor(scroll.scrollTop / rowH) - PREVIEW_OVERSCAN);
   const last = Math.min(total, first + Math.ceil(vh / rowH) + PREVIEW_OVERSCAN * 2);
+  const filtered = rowFiltersActive();
   const parts = [`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${first * rowH}px"></td></tr>`];
   for (let vi = first; vi < last; vi++) {
     const ri = view ? view[vi] : vi;
@@ -1157,7 +1639,10 @@ function paintPreviewWindow() {
         tds += `<td data-ci="${ci}" title="${esc(raw)}">${truncate(raw, 60)}</td>`;
       }
     }
-    parts.push(`<tr data-ri="${ri}">${tds}</tr>`);
+    // Rows outside the row filter stay visible and editable — they're just not being reconciled, and
+    // saying so here is what stops the short match count reading as lost rows (place#209).
+    const excl = filtered && !rowIncluded(ri);
+    parts.push(`<tr data-ri="${ri}"${excl ? ' class="recon-row-excluded" title="Not being reconciled (row filter)"' : ''}>${tds}</tr>`);
   }
   parts.push(`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${Math.max(0, (total - last) * rowH)}px"></td></tr>`);
   body.innerHTML = parts.join('');
@@ -1167,7 +1652,8 @@ function updatePreviewCount() {
   const c = el('recon-preview-count'); if (!c || !project) return;
   const total = project.rows.length;
   const shown = _previewView ? _previewView.length : total;
-  c.textContent = _previewFilter ? `${shown.toLocaleString()} of ${total.toLocaleString()} rows` : `${total.toLocaleString()} row${total === 1 ? '' : 's'}`;
+  c.textContent = (_previewFilter ? `${shown.toLocaleString()} of ${total.toLocaleString()} rows` : `${total.toLocaleString()} row${total === 1 ? '' : 's'}`) +
+    (rowFiltersActive() ? ` · ${includedRowCount().toLocaleString()} being reconciled` : '');
 }
 
 // ── Data-browser edit mode ────────────────────────────────────────────────────────────────────────
@@ -1287,6 +1773,9 @@ function renderAll() {
     `<strong>${truncate(project.fileName, 60)}</strong> — <strong>${project.total.toLocaleString()}</strong> ` +
     `row${project.total === 1 ? '' : 's'} · <strong>${project.columns.length}</strong> ` +
     `column${project.columns.length === 1 ? '' : 's'}${delimNote} · imported ${fmtTime(project.importedAt)}.`;
+  bumpRowFilters(); // a different project (import, resume, restore) → recompile the row filters
+  renderRowFilterNotice();
+  renderGeomNotice();
   renderMapping();
   renderCoords();
   renderDates();
@@ -1344,6 +1833,7 @@ function showResume() {
 
 function resetUI() {
   project = null;
+  bumpRowFilters(); // drop the compiled row filters with the project they belonged to
   stopRequested = true;
   reviewMeta = []; reviewPos = 0;
   document.querySelectorAll('.recon-pane').forEach((p) => p.classList.remove('recon-collapsed')); // expand import again
@@ -1358,6 +1848,7 @@ function resetUI() {
   el('recon-export').classList.add('d-none');
   lastScope = null; lastVariantsDropped = 0; lastDerivedForms = new Set(); // drop the previous dataset's gateway report
   ['recon-map-body', 'recon-preview-head', 'recon-preview-body', 'recon-summary', 'recon-saved',
+    'recon-geom-notice', 'recon-rowfilter-notice', 'recon-rowfilter-notice-recon',
     'recon-coords', 'recon-dates', 'recon-results-body', 'recon-recon-summary', 'recon-progress-text',
     'recon-scope-notice', 'recon-review-card', 'recon-review-progress'].forEach((id) => {
     const n = el(id); if (n) n.innerHTML = '';
@@ -1400,10 +1891,16 @@ async function finishImport(parsed, fileName, format) {
     id: CURRENT,
     fileName,
     importedAt: new Date().toISOString(),
-    columns: initChain(parsed.columns.map((name) => ({ name, role: detectRole(name) }))),
+    // `parsed.roles` lets an importer FORCE a role the header alone can't imply — the geometry columns
+    // a GeoJSON import synthesises (place#210) know what they are; a name-sniff would mis-read them.
+    columns: initChain(parsed.columns.map((name) => ({ name, role: (parsed.roles && parsed.roles[name]) || detectRole(name) }))),
     rows: parsed.rows,
     total: parsed.total,
     delimiter: parsed.delimiter || null,
+    importNote: parsed.note || '',
+    // Points derived from lines/polygons — held, unapplied, until the user asks for them (place#210).
+    repPoints: parsed.repPoints || null,
+    repPointCols: parsed.repCols || null,
   };
   el('recon-resume').classList.add('d-none'); // fresh import, not a resume
   _tracked.clear(); // new dataset → let the once-per-dataset funnel events fire again
@@ -1457,7 +1954,7 @@ function handleFile(file) {
         console.log(`[recon] restored .whgproj: ${project.total} rows`);
         return;
       }
-      const isJSON = /\.json$/i.test(file.name) || text.trim().startsWith('[') || text.trim().startsWith('{');
+      const isJSON = /\.(json|geojson)$/i.test(file.name) || text.trim().startsWith('[') || text.trim().startsWith('{');
       const parsed = isJSON ? fromJSON(JSON.parse(text)) : fromDelimited(text);
       await finishImport(parsed, file.name, isJSON ? 'json' : 'csv');
     } catch (err) { importError(file.name, err); }
@@ -3691,8 +4188,11 @@ function mergeGroupKeys(colIndex, rowIdx) {
   const mine = mergeSig(colIndex, rowIdx);
   if (mine == null) return [self];
   const out = [];
-  for (let r = 0; r < project.rows.length; r++) if (mergeSig(colIndex, r) === mine) out.push(colIndex + ':' + r);
-  return out.length ? out : [self];
+  // Only rows in the working subset share the review: an excluded row wasn't searched, so writing it a
+  // decision would leave a decision with no match behind it (place#209).
+  for (let r = 0; r < project.rows.length; r++) if (rowIncluded(r) && mergeSig(colIndex, r) === mine) out.push(colIndex + ':' + r);
+  if (!out.length) return [self];
+  return out.indexOf(self) >= 0 ? out : out.concat([self]);
 }
 // Write (or clear) a decision for a key AND every row merged with it, so one confirmation propagates.
 function setDecision(key, dec) {
@@ -3750,11 +4250,17 @@ function setNote(key, text) {
 //   ready     — parent confirmed (or top of chain); reconcile can run here
 //   review    — reconciled, but rows still need decisions
 //   confirmed — every sub-threshold row decided (auto-confirmed rows count automatically)
-function colKeys(col) {
+// EVERY key a column has a match for, filter or no filter — for the operations that act on the data
+// itself (a transform changes an excluded row's value just the same, so its match must go too).
+function allColKeys(col) {
   const out = [];
   if (project && project.matches) for (const k in project.matches) { if (k.slice(0, k.indexOf(':')) === String(col)) out.push(k); }
   return out;
 }
+// The keys the WORKFLOW sees. Rows outside the row filter are skipped: their matches are kept but take
+// no part in whether the column still needs reviewing, so a filtered column can reach 'confirmed'
+// (place#209).
+function colKeys(col) { return allColKeys(col).filter(keyIncluded); }
 function colHasMatches(col) { return colKeys(col).length > 0; }
 function colPendingReview(col) { let n = 0; colKeys(col).forEach((k) => { if (needsReview(k)) n += 1; }); return n; }
 function columnState(pos) {
@@ -3815,13 +4321,16 @@ function protectedCount(col) { let n = 0; colKeys(col).forEach((k) => { if (isPr
 function clearColumnRecon(col, dropGeom) {
   const pre = String(col) + ':';
   let cleared = 0, kept = 0;
+  // A row outside the row filter is untouched by a re-run — it wasn't going to be searched again, so
+  // clearing it would destroy work with nothing to replace it (place#209).
+  const survives = (k) => isProtected(k) || !keyIncluded(k);
   if (project.matches) for (const k in project.matches) {
     if (!k.startsWith(pre)) continue;
-    if (isProtected(k)) { kept += 1; continue; }
+    if (survives(k)) { if (isProtected(k)) kept += 1; continue; }
     delete project.matches[k]; cleared += 1;
   }
-  if (project.decisions) for (const k in project.decisions) { if (k.startsWith(pre) && !isProtected(k)) delete project.decisions[k]; }
-  if (dropGeom && project.geom) for (const k in project.geom) { if (k.startsWith(pre) && !isProtected(k)) delete project.geom[k]; }
+  if (project.decisions) for (const k in project.decisions) { if (k.startsWith(pre) && !survives(k)) delete project.decisions[k]; }
+  if (dropGeom && project.geom) for (const k in project.geom) { if (k.startsWith(pre) && !survives(k)) delete project.geom[k]; }
   return { cleared, kept };
 }
 
@@ -4069,12 +4578,13 @@ function filterByConstraints(candidates, parts) {
 function invalidateAllMatches() {
   if (!project) return { cleared: 0, kept: 0 };
   let cleared = 0, kept = 0;
+  const survives = (k) => isProtected(k) || !keyIncluded(k); // filtered-out rows are left as they are
   if (project.matches) for (const k in project.matches) {
-    if (isProtected(k)) { kept += 1; continue; }
+    if (survives(k)) { if (isProtected(k)) kept += 1; continue; }
     delete project.matches[k]; cleared += 1;
   }
-  if (project.decisions) for (const k in project.decisions) { if (!isProtected(k)) delete project.decisions[k]; }
-  if (project.geom) for (const k in project.geom) { if (!isProtected(k)) delete project.geom[k]; }
+  if (project.decisions) for (const k in project.decisions) { if (!survives(k)) delete project.decisions[k]; }
+  if (project.geom) for (const k in project.geom) { if (!survives(k)) delete project.geom[k]; }
   if (cleared) reconActiveIdx = -1;
   return { cleared, kept };
 }
@@ -4090,6 +4600,7 @@ function buildUniqueQueries(colIndex) {
   project.rows.forEach((r, i) => {
     const val = String(r[colIndex] == null ? '' : r[colIndex]).trim();
     if (!val) return;
+    if (!rowIncluded(i)) return; // outside the row filter — not searched, not reviewed (place#209)
     const country = (countryIdx >= 0 && isCcode(r[countryIdx])) ? String(r[countryIdx]).trim().toUpperCase() : '';
     map.set(colIndex + ':' + i, { query: val, country, rows: [i] });
   });
@@ -6299,6 +6810,7 @@ function unreconciledUnits(col) {
   for (let i = 0; i < project.rows.length; i++) {
     const v = project.rows[i][col];
     if (v == null || String(v).trim() === '') continue;
+    if (!rowIncluded(i)) continue;
     if (!matches[col + ':' + i]) n += 1;
   }
   return n;
@@ -6310,6 +6822,7 @@ function hasUnreconciled(col) {
   for (let i = 0; i < project.rows.length; i++) {
     const v = project.rows[i][col];
     if (v == null || String(v).trim() === '') continue;
+    if (!rowIncluded(i)) continue;
     if (!matches[col + ':' + i]) return true;
   }
   return false;
@@ -7052,6 +7565,14 @@ function init() {
   const sdEl = el('recon-tf-splitdelim'); if (sdEl) sdEl.addEventListener('input', renderSplitPreview);
   const srEl = el('recon-tf-splitrev'); if (srEl) srEl.addEventListener('change', renderSplitPreview);
   const splitBtn = el('recon-tf-splitbtn'); if (splitBtn) splitBtn.addEventListener('click', applySplit);
+  // Row-filter controls (same modal) — live count of what a condition would leave, then Apply/Clear.
+  const rfVal = el('recon-tf-filterval'); if (rfVal) rfVal.addEventListener('input', renderRowFilterControls);
+  const rfOp = el('recon-tf-filterop'); if (rfOp) rfOp.addEventListener('change', renderRowFilterControls);
+  const rfCase = el('recon-tf-filtercase'); if (rfCase) rfCase.addEventListener('change', renderRowFilterControls);
+  const rfBtn = el('recon-tf-filterbtn');
+  if (rfBtn) rfBtn.addEventListener('click', () => { const d = rowFilterDraft(); if (d) setRowFilter(d); });
+  const rfClear = el('recon-tf-filterclear');
+  if (rfClear) rfClear.addEventListener('click', () => clearRowFilter(_transformCol));
   const scopeApply = el('recon-scope-apply');
   if (scopeApply) scopeApply.addEventListener('click', applyScope);
   const scopeClear = el('recon-scope-clear');

@@ -115,6 +115,14 @@
 .recon-tf-prevrow { font-size: .82rem; padding: .05rem 0; }
 .recon-tf-before { color: #a33; text-decoration: line-through; text-decoration-color: #d8b0b0; }
 .recon-tf-after { color: #178a3a; }
+/* Row filters — "reconcile only a subset" (place#209) */
+.recon-rowfilter-flag { color: #0d6efd; font-size: .78rem; }
+.recon-rowfilter-chip { border: 1px solid #b6d4fe; background: #fff; border-radius: 12px;
+  padding: .05rem .5rem; font-size: .78rem; color: #37414b; line-height: 1.5; white-space: nowrap; }
+.recon-rowfilter-chip .recon-rowfilter-x { color: #6c757d; font-size: .95rem; line-height: 1; text-decoration: none; }
+.recon-rowfilter-chip .recon-rowfilter-x:hover { color: #b02a37; }
+.recon-preview-body tr.recon-row-excluded td { opacity: .42; font-style: italic; }
+
 .recon-transform-btn { color: #8a94a0; }
 .recon-transform-btn:hover { color: #0d6efd; }
 

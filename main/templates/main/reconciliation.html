@@ -81,16 +81,17 @@
     </div>
     <div class="recon-pane-body">
       <p class="text-muted small mb-2">
-        CSV, TSV, JSON or Excel (<code>.xlsx</code>) — or a saved <code>.whgproj</code> backup. Parsed
-        locally and saved in your browser (IndexedDB) so it survives a reload. Nothing leaves your browser.
+        CSV, TSV, JSON, GeoJSON or Excel (<code>.xlsx</code>) — or a saved <code>.whgproj</code> backup.
+        Parsed locally and saved in your browser (IndexedDB) so it survives a reload. Nothing leaves your
+        browser. Point geometries in a GeoJSON file arrive as longitude / latitude columns.
       </p>
       <div id="recon-dropzone" class="recon-dropzone" tabindex="0"
            role="button" aria-label="Choose or drop a data file">
         <input id="recon-file" type="file" class="d-none"
-               accept=".csv,.tsv,.txt,.json,.whgproj,.xlsx,.xls,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"/>
+               accept=".csv,.tsv,.txt,.json,.geojson,.whgproj,.xlsx,.xls,text/csv,text/tab-separated-values,application/json,application/geo+json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"/>
         <i class="fas fa-file-import recon-dropzone-icon"></i>
         <div class="recon-dropzone-text"><strong>Choose a file</strong> or drag it here</div>
-        <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON / Excel, or a <code>.whgproj</code> backup — never leaves your browser</div>
+        <div class="recon-dropzone-hint text-muted small">CSV / TSV / JSON / GeoJSON / Excel, or a <code>.whgproj</code> backup — never leaves your browser</div>
       </div>
 
       <!-- Import from a shared Google Sheet URL (fetched as CSV via a same-origin proxy). -->
@@ -194,6 +195,12 @@
       </table>
     </div>
 
+    <!-- What the importer did with GeoJSON geometry, + the representative-point offer (place#210) -->
+    <div id="recon-geom-notice" class="small mt-2 d-none"></div>
+
+    <!-- Active row filters ("reconcile only a subset", place#209) — populated by JS -->
+    <div id="recon-rowfilter-notice" class="small mt-2 d-none"></div>
+
     <!-- Identifier-column notice (duplicate-value warning + "generate UUIDs") — populated by JS -->
     <div id="recon-id-notice" class="small mt-2"></div>
 
@@ -273,6 +280,9 @@
       <code>/reconcile</code> service — just the name, never your full rows. Best matches appear below;
       per-candidate review comes in the next phase.
     </p>
+
+    <!-- Active row filters ("reconcile only a subset", place#209) — populated by JS -->
+    <div id="recon-rowfilter-notice-recon" class="small mb-2 d-none"></div>
 
     <div class="d-flex align-items-center gap-2 small mb-2 recon-autoconf" id="recon-autoconf">
       <label for="recon-threshold" class="text-muted mb-0">Auto-confirm when score ≥</label>
@@ -833,6 +843,25 @@
               <strong>new column</strong> <span class="text-muted">(keep the original)</span></label>
             <input type="text" id="recon-tf-newcolname" class="form-control form-control-sm d-none"
                    style="max-width:200px" maxlength="120" placeholder="new column name" autocomplete="off">
+          </div>
+
+          {% comment %}Reconcile only a subset of the rows (place#209) — a condition on THIS column,
+             ANDed with any set on other columns. A lens, not an edit: excluded rows keep their values
+             and any match they already have, and still export; they are simply not searched.{% endcomment %}
+          <div class="mb-1 pt-2 mt-2 border-top">
+            <div class="small text-muted mb-1">Reconcile only some rows
+              <i class="fas fa-question-circle" data-bs-toggle="tooltip"
+                 title="Narrow reconciliation to the rows matching a condition on this column, instead of trimming the file before you import it. Filters on several columns combine (all must match). Excluded rows keep their data and any match they already have — they are just not searched, not reviewed, and not counted towards the column being confirmed. Remove the filter at any time to bring them back."></i>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="small text-muted">this column</span>
+              <select id="recon-tf-filterop" class="form-select form-select-sm" style="width:auto"></select>
+              <input type="text" id="recon-tf-filterval" class="form-control form-control-sm" style="max-width:170px" placeholder="value" autocomplete="off">
+              <label class="small mb-0"><input type="checkbox" id="recon-tf-filtercase"> case-sensitive</label>
+              <button type="button" id="recon-tf-filterbtn" class="btn btn-sm btn-outline-primary" data-bs-dismiss="modal" disabled>Apply filter</button>
+              <button type="button" id="recon-tf-filterclear" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal" disabled>Clear</button>
+            </div>
+            <div id="recon-tf-filterpreview" class="small text-muted mt-1"></div>
           </div>
 
           <div class="mb-1 pt-2 mt-2 border-top">
