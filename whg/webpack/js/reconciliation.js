@@ -66,6 +66,7 @@ const ROLES = [
   ['lat', 'Latitude'],
   ['lon', 'Longitude'],
   ['coords', 'Coordinates / grid ref'],
+  ['geowkt', 'Geometry (WKT)'],
   ['date', 'Date / year'],
   ['id', 'Identifier'],
   ['other', 'Other (ignore)'],
@@ -82,6 +83,9 @@ const ROLE_HINTS = [
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
   ['lon', /^(lon|lng|long|longitude|x)$/i],
+  // Before the coordinate hint, and deliberately narrow: only names that can ONLY mean a WKT geometry.
+  // A column called "geometry" holding "51.5, -0.1" is still a coordinate column, so it isn't claimed.
+  ['geowkt', /^(wkt|geo_?wkt|geom_?wkt|geometry_?wkt|the_geom|geom_?text)$/i],
   ['coords', /coord|geometry|geom|wkt|gridref|grid.?ref|osgb|national.?grid|easting|northing/i],
   ['date', /^(date|year|start|end|from|to|period|century)$/i],
   ['id', /^(id|uid|key|identifier|wikidata|qid|geonames|gn.?id)$/i],
@@ -418,10 +422,10 @@ function addGeometryColumns(records, columns, rows) {
     const wktName = uniqueHeader('geometry_wkt', columns);
     columns.push(wktName);
     rows.forEach((r, i) => r.push(shapes[i]));
-    roles[wktName] = 'other'; // WKT with extent isn't a coordinate the reconciler can use
+    roles[wktName] = 'geowkt'; // not a coordinate the reconciler can use, but the place's real geometry
     notes.push(`<strong>${nShapes.toLocaleString()}</strong> feature${nShapes === 1 ? '' : 's'} ` +
       `${nShapes === 1 ? 'has a line or polygon' : 'have lines or polygons'}: kept in full as WKT in ` +
-      `<code>${esc(wktName)}</code>`);
+      `<code>${esc(wktName)}</code>, and exported as that place's geometry`);
     // A representative point for each of them, computed now but NOT written anywhere: it is an
     // inference, so it is offered as a one-click action beside the table rather than applied silently.
     repPoints = geoms.map((g, i) => {
@@ -2245,6 +2249,7 @@ async function buildExportRecords(opts, onProgress) {
   // Load the coord parser whenever a coordinate column exists — even if the WGS84 columns aren't
   // requested — so LPF/LP-TSV geometry and geometry-override centroids can be computed.
   const dateIdx = colIndexByRole('date');
+  const geowktIdx = colIndexByRole('geowkt'); // the dataset's own geometry, exported verbatim (place#210)
   // Coordinates (for LPF geometry + map) and parsed dates (for LPF `when`) are always derived from the
   // column roles — users materialise them as columns in Step 2 (the coordinate/date panels) if they want
   // them in a CSV/JSON export, so they are no longer per-export toggles.
@@ -2281,10 +2286,18 @@ async function buildExportRecords(opts, onProgress) {
     let whenStart = '', whenEnd = '', match = null;
     const info = built && keyForRow(built, i);
 
-    // A geometry override (cloned from a match or drawn on the map) wins over the dataset coordinate.
+    // Geometry, in order of authority: an override the user cloned from a match or drew on the map;
+    // else the dataset's own WKT column — a line or polygon that arrived in a GeoJSON import goes back
+    // out as the place's geometry rather than being flattened to the point derived from it.
     const ov = (project.geom && info && project.geom[info.key]) || null;
-    const geom = ov ? ov.geometry : null;
-    const coord = geom ? firstLngLat(geom) : (hasCoordRole() ? rowCoordValue(i) : null);
+    const rawWkt = (!ov && geowktIdx >= 0) ? String(project.rows[i][geowktIdx] == null ? '' : project.rows[i][geowktIdx]).trim() : '';
+    const wktGeom = rawWkt ? wktToGeoJSON(rawWkt) : null;
+    const geom = ov ? ov.geometry : wktGeom;
+    // lon/lat still come from the coordinate columns: the first vertex of a polygon is a corner, not a
+    // position for the place. A WKT POINT is the one geometry that IS a coordinate.
+    const coord = ov ? firstLngLat(ov.geometry)
+      : (hasCoordRole() ? rowCoordValue(i)
+        : ((wktGeom && wktGeom.type === 'Point') ? firstLngLat(wktGeom) : null));
 
     // Parsed ISO start/end for the LPF `when` (always, when a date column exists).
     if (dateIdx >= 0) {
@@ -2338,7 +2351,7 @@ async function buildExportRecords(opts, onProgress) {
       // reconciled to a record carrying sitelinks (in practice, a Wikidata one).
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
-    records.push({ row: i, orig, aug, coord, geom, whenStart, whenEnd, match, parents,
+    records.push({ row: i, orig, aug, coord, geom, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd, match, parents,
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -2362,6 +2375,44 @@ function geojsonToWKT(g) {
     default: return '';
   }
 }
+
+// The inverse of geojsonToWKT — so a geometry that arrived as WKT (a GeoJSON import's lines and
+// polygons, or a column the user pasted one into) can go back out as real LPF geometry. Returns null
+// for anything it can't parse: a malformed value must cost that row its geometry, never the export.
+function wktGroups(t) { // contents of each TOP-LEVEL (...) group, so nesting survives
+  const out = []; let depth = 0, start = -1;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (c === '(') { if (depth === 0) start = i + 1; depth += 1; }
+    else if (c === ')') { depth -= 1; if (depth === 0 && start >= 0) { out.push(t.slice(start, i)); start = -1; } }
+  }
+  return depth === 0 ? out : [];
+}
+function wktToGeoJSON(wkt) {
+  const s = String(wkt == null ? '' : wkt).trim().replace(/^SRID=\d+\s*;\s*/i, '');
+  const m = s.match(/^([A-Za-z]+)\s*(?:ZM|Z|M)?\s*\(([\s\S]*)\)$/);
+  if (!m) return null;
+  const type = m[1].toUpperCase(), body = m[2];
+  const pos = (t) => {
+    const p = t.trim().split(/[\s,]+/).map(Number);
+    return (p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1])) ? [p[0], p[1]] : null;
+  };
+  const line = (t) => { const out = t.split(',').map(pos); return out.length && out.every(Boolean) ? out : null; };
+  const rings = (t) => { const g = wktGroups(t).map(line); return g.length && g.every(Boolean) ? g : null; };
+  const ok = (c) => (c ? { type: WKT_TYPES[type], coordinates: c } : null);
+  switch (type) {
+    case 'POINT': return ok(pos(body));
+    case 'LINESTRING': return ok(line(body));
+    case 'POLYGON': return ok(rings(body));
+    // MULTIPOINT is written both ways: "1 2, 3 4" and "(1 2), (3 4)".
+    case 'MULTIPOINT': return ok(body.indexOf('(') >= 0 ? (() => { const g = wktGroups(body).map(pos); return g.length && g.every(Boolean) ? g : null; })() : line(body));
+    case 'MULTILINESTRING': return ok(rings(body));
+    case 'MULTIPOLYGON': { const g = wktGroups(body).map(rings); return ok(g.length && g.every(Boolean) ? g : null); }
+    default: return null;
+  }
+}
+const WKT_TYPES = { POINT: 'Point', LINESTRING: 'LineString', POLYGON: 'Polygon',
+  MULTIPOINT: 'MultiPoint', MULTILINESTRING: 'MultiLineString', MULTIPOLYGON: 'MultiPolygon' };
 
 function csvCell(v) {
   const s = String(v == null ? '' : v);
@@ -2400,7 +2451,9 @@ function serializeLPTSV(data) {
       ccodes: countryIdx >= 0 && isCcode(rec.orig[countryIdx]) ? String(rec.orig[countryIdx]).toUpperCase() : '',
       start: rec.whenStart, end: rec.whenEnd,
       lon: rec.coord ? +rec.coord.lon.toFixed(6) : '', lat: rec.coord ? +rec.coord.lat.toFixed(6) : '',
-      geowkt: (rec.geom && !isPoint) ? geojsonToWKT(rec.geom) : '',
+      // The dataset's own WKT verbatim where there is one — a round-trip through GeoJSON would round
+      // its coordinates for no reason. Overrides (drawn/cloned) have no source string, so serialise.
+      geowkt: isPoint ? '' : (rec.geowkt || geojsonToWKT(rec.geom)),
       matches: rec.match ? rec.match.list.map((x) => barePlaceId(x.id)).join(';') : '',
       // Prefer the CONFIRMED container's title over the raw cell — it's the same place, spelled the
       // way the gazetteer spells it, which is what a consumer can match on (place#184).
