@@ -5055,7 +5055,13 @@ function renderResultsTable(built) {
   // Build the full ordered row-info list once; the table is virtualised (only the visible window is
   // in the DOM), so it copes with very large datasets — off-screen rows are evicted on scroll.
   _resultRows = [];
-  for (let i = 0; i < project.rows.length; i++) { const info = keyForRow(built, i); if (info && rowPasses(i, built)) _resultRows.push(info); }
+  // `built.map` is the authority on which rows this pass covers — it already excludes blanks AND rows
+  // outside the row filter (place#209), so a filtered-out row can't show up here as "pending" for a
+  // query that was never going to be sent.
+  for (let i = 0; i < project.rows.length; i++) {
+    const info = keyForRow(built, i);
+    if (info && built.map.has(info.key) && rowPasses(i, built)) _resultRows.push(info);
+  }
   el('recon-results-wrap').classList.remove('d-none');
   renderResultsWindow(true);
   updatePaneSummaries();
