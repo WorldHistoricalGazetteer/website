@@ -234,7 +234,12 @@
         });
 
         // Determine the initial tab to load
-        var activeTab = sessionStorage.getItem('activeTab');
+        // A ?section= in the URL wins over the remembered tab, so a link like
+        // /dashboard_admin/?section=tools opens on the right one.
+        var requested = '{{ section|escapejs }}';
+        var activeTab = requested && $('#adminTabs a[href="#' + requested + '"]').length
+                        ? requested
+                        : sessionStorage.getItem('activeTab');
         if (activeTab) {
             $('#adminTabs a[href="#' + activeTab + '"]').tab('show');
         } else {
