@@ -726,6 +726,34 @@ class NerPerRowTests(TestCase):
         names = [p['name'] for p in r.json()['results'][0]['places']]
         self.assertEqual(names, ['Honyngforde'])
 
+    def test_a_lower_case_word_is_not_a_place_even_when_it_matches(self):
+        """"place", in "a place called Gaynes", matches an Index Villaris settlement genuinely called
+        Place — in the right county, so scope does not save us. Matching is not evidence that the word
+        was being used as a name; capitalisation in the source is."""
+        from unittest.mock import patch
+        text = 'title to a place called Gaynes'
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('place', 'Gaynes')]
+        hit = {'id': 'place:iv:IV1680', 'title': 'Place', 'score': 100, 'ccodes': ['GB'],
+               'lng': 0.63, 'lat': 51.78, 'ambiguous': False}
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate',
+                      return_value={'place': hit, 'Gaynes': hit}):
+            r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
+        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['Gaynes'])
+
+    def test_capitalisation_is_ignored_when_the_source_has_none(self):
+        """An all-lower-case transcription would otherwise lose every name in it."""
+        from unittest.mock import patch
+        ents = [{'name': 'stifford', 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}]
+        hit = {'id': 'place:gn:1', 'title': 'Stifford', 'score': 100, 'ccodes': ['GB'],
+               'lng': 0.3, 'lat': 51.5, 'ambiguous': False}
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={'stifford': hit}):
+            r = self._post({'rows': [{'key': 'a', 'text': 'common of pasture at stifford',
+                                      'contained_in': ['ukhc:ESE']}]})
+        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['stifford'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',

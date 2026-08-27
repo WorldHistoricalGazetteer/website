@@ -1132,9 +1132,19 @@ def _ner_row_places(text, user, scope, fallback):
                 outside.add(n)
 
     places = []
+    # Only trust capitalisation as a signal if the source actually uses it; an all-lower-case
+    # transcription would otherwise lose every name it contains.
+    cased = any(ch.isupper() for ch in text)
     for nm, count in mentions.items():
         m = matches.get(nm)
         hits = extraction.find_all(text, nm)
+        # A toponym in a catalogue entry is CAPITALISED, and this holds whether or not the gazetteer
+        # matched it. Without the rule the common noun "place", in "title to a place called…", matches
+        # an Index Villaris settlement genuinely called Place, inside the right county, and arrives as
+        # a located result that looks entirely credible. Matching is not evidence that the word was
+        # being used as a name.
+        if cased and hits and not any(text[h:h + 1].isupper() for h in hits):
+            continue
         # Everything below applies ONLY to names the gazetteer did not vouch for. A match is evidence;
         # without one, the name has to earn its place in the output.
         if not m:
@@ -1152,11 +1162,9 @@ def _ner_row_places(text, user, scope, fallback):
             # stay silent. Filtering on the source text costs nothing and covers long rows too.
             if not hits:
                 continue
-            # (b) Present, but never capitalised ⇒ a common noun, not a toponym. This is what separates
-            # "chain", "conspiracy" and "pearls" from Honyngforde, Laybroke and Medesyde — the genuine
-            # minor places the gazetteer lacks, which this must not throw away.
-            if not any(text[h:h + 1].isupper() for h in hits):
-                continue
+            # (Capitalisation is checked above, for matched and unmatched alike — it is what separates
+            # "chain", "conspiracy" and "pearls" from Honyngforde, Laybroke and Medesyde, the genuine
+            # minor places the gazetteer lacks and this must not throw away.)
         # Keep only what the model or the gazetteer vouches for: a capitalised span that matched
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
