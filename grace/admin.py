@@ -13,6 +13,8 @@ Two conventions to preserve:
   the resolved accessor, and contact search matches email by HMAC rather than
   by scanning (the column is encrypted and unqueryable).
 """
+import datetime
+
 from django.contrib import admin, messages
 from django.utils import timezone
 from django.utils.html import format_html
@@ -454,7 +456,7 @@ class StaleFilter(admin.SimpleListFilter):
     def queryset(self, request, queryset):
         if self.value() == "stale":
             return queryset.filter(stage__is_open=True,
-                                   next_follow_up__lt=timezone.localdate())
+                                   next_follow_up__lt=datetime.date.today())
         if self.value() == "open":
             return queryset.filter(stage__is_open=True)
         if self.value() == "closed":

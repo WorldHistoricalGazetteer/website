@@ -4,6 +4,7 @@ from django.conf import settings
 import django.contrib.postgres.fields
 from django.db import migrations, models
 import django.db.models.deletion
+import datetime
 import django.utils.timezone
 import encrypted_model_fields.fields
 
@@ -175,7 +176,7 @@ class Migration(migrations.Migration):
                 ('updated_at', models.DateTimeField(auto_now=True)),
                 ('next_follow_up', models.DateField(blank=True, help_text='Required while the conversation stage is open. This is the staleness alarm: without it, a stalled conversation is invisible because nothing changes.', null=True)),
                 ('subject', models.CharField(blank=True, max_length=255)),
-                ('opened_on', models.DateField(default=django.utils.timezone.localdate)),
+                ('opened_on', models.DateField(default=datetime.date.today)),
                 ('closed_on', models.DateField(blank=True, null=True)),
                 ('notes', models.TextField(blank=True)),
                 ('added_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to=settings.AUTH_USER_MODEL)),
@@ -554,7 +555,7 @@ class Migration(migrations.Migration):
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('occurred_on', models.DateField(default=django.utils.timezone.localdate)),
+                ('occurred_on', models.DateField(default=datetime.date.today)),
                 ('summary', models.TextField()),
                 ('added_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='+', to=settings.AUTH_USER_MODEL)),
                 ('channel', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, related_name='interactions', to='grace.interactionchannel')),

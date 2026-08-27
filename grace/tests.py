@@ -6,6 +6,7 @@ machinery. A field that quietly holds a second copy of an address, or an
 erasure that takes the engagement history with it, is not the kind of bug that
 shows up in a screenshot.
 """
+import datetime
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -111,7 +112,7 @@ class ErasureTests(TestCase):
                                                     subject="Rights enquiry")
         Interaction.objects.create(
             engagement=self.engagement, contact=self.contact,
-            occurred_on=timezone.localdate(), summary="Asked about licensing",
+            occurred_on=datetime.date.today(), summary="Asked about licensing",
         )
 
     def test_identity_is_removed(self):
@@ -159,7 +160,7 @@ class RetentionAndNoticeTests(TestCase):
             created_at=timezone.now() - timedelta(days=365 * 4))
         engagement = Engagement.objects.create(contact=c)
         Interaction.objects.create(engagement=engagement, contact=c,
-                                   occurred_on=timezone.localdate(),
+                                   occurred_on=datetime.date.today(),
                                    summary="Spoke last week")
         self.assertNotIn(c, Contact.objects.needing_retention_review())
 
@@ -260,13 +261,13 @@ class EngagementRuleTests(TestCase):
     def test_a_stalled_conversation_is_detected(self):
         e = Engagement.objects.create(
             contact=self.contact, stage=self.open_stage,
-            next_follow_up=timezone.localdate() - timedelta(days=1))
+            next_follow_up=datetime.date.today() - timedelta(days=1))
         self.assertTrue(e.is_stale)
 
     def test_a_conversation_in_hand_is_not_stale(self):
         e = Engagement.objects.create(
             contact=self.contact, stage=self.open_stage,
-            next_follow_up=timezone.localdate() + timedelta(days=7))
+            next_follow_up=datetime.date.today() + timedelta(days=7))
         self.assertFalse(e.is_stale)
 
     def test_interaction_defaults_to_the_engagements_contact(self):
@@ -278,7 +279,7 @@ class EngagementRuleTests(TestCase):
         todo = ActionItemStatus.objects.create(label="To do", is_open=True)
         done = ActionItemStatus.objects.create(label="Done", is_open=False)
         e = Engagement.objects.create(contact=self.contact)
-        yesterday = timezone.localdate() - timedelta(days=1)
+        yesterday = datetime.date.today() - timedelta(days=1)
         self.assertTrue(ActionItem.objects.create(
             engagement=e, description="Chase", status=todo,
             due_date=yesterday).is_overdue)
@@ -369,8 +370,9 @@ class SuggestFormTests(TestCase):
         self.assertEqual(SourceSuggestion.objects.count(), 0)
 
     def test_a_signed_in_user_gets_no_honeypot_and_is_linked(self):
-        user = User.objects.create_user(username="submitter", name="S",
-                                        email="s@example.org", password="pw")
+        user = User.objects.create_user(
+            username="submitter", email="s@example.org", password="pw",
+            given_name="Sub", surname="Mitter", name="Sub Mitter")
         self.client.force_login(user)
         self.client.post(reverse("grace:suggest"), {"title": "A source"})
         suggestion = SourceSuggestion.objects.get()

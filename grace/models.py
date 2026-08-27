@@ -22,6 +22,8 @@ The registers are Catalogue · Engagement · Pipeline, plus Content. Django's
 admin groups models by app, so each model's ``verbose_name_plural`` is prefixed
 with its register to keep the admin index legible.
 """
+import datetime
+
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
@@ -693,7 +695,10 @@ class Engagement(TimeStampedModel):
         related_name="engagements",
     )
     subject = models.CharField(max_length=255, blank=True)
-    opened_on = models.DateField(default=timezone.localdate)
+    # date.today(), not timezone.localdate(): this project runs with
+    # USE_TZ unset (so False), which makes timezone.now() naive, and
+    # localdate() rejects a naive datetime.
+    opened_on = models.DateField(default=datetime.date.today)
     closed_on = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 
@@ -731,7 +736,7 @@ class Engagement(TimeStampedModel):
         """Open, and its follow-up date has passed."""
         return bool(
             self.is_open and self.next_follow_up
-            and self.next_follow_up < timezone.localdate()
+            and self.next_follow_up < datetime.date.today()
         )
 
 
@@ -770,7 +775,7 @@ class ActionItem(TimeStampedModel):
     def is_overdue(self):
         return bool(
             self.status and self.status.is_open and self.due_date
-            and self.due_date < timezone.localdate()
+            and self.due_date < datetime.date.today()
         )
 
 
@@ -793,7 +798,7 @@ class Interaction(TimeStampedModel):
         InteractionChannel, on_delete=models.PROTECT, null=True, blank=True,
         related_name="interactions",
     )
-    occurred_on = models.DateField(default=timezone.localdate)
+    occurred_on = models.DateField(default=datetime.date.today)
     summary = models.TextField()
 
     class Meta:
