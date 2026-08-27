@@ -1142,6 +1142,14 @@ def _ner_row_places(text, user, scope, fallback):
             # "obligation", "a bond" — it falls back on the prompt's own vocabulary and returns
             # "towns, villages, parishes, counties, rivers, mountains, seas" as though they were
             # findings. Nothing invented can be a mention of anything.
+            #
+            # Padding short rows with non-place words to stop this was tried and MEASURED to be worse.
+            # Over six real place-less subject lines: unpadded, five echoed; a neutral clause cut that
+            # to two but the model began extracting from the padding ("remainder of this entry", "not
+            # transcribed"); filler words still echoed five AND contaminated rows that had been
+            # correct, returning Colchester followed by seven copies of "Manors". The model has no
+            # notion of an empty answer, so more text gives it more to mine rather than a reason to
+            # stay silent. Filtering on the source text costs nothing and covers long rows too.
             if not hits:
                 continue
             # (b) Present, but never capitalised ⇒ a common noun, not a toponym. This is what separates
