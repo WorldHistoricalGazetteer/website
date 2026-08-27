@@ -733,7 +733,10 @@ class NerPerRowTests(TestCase):
                                 [{'name': 'Duxford', 'count': 1, 'context': 'c',
                                   'verbatim': True, 'label': 'LLM'}]]), \
                 patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
-            r = self._post({'rows': [{'key': 'a', 'text': 'x'}, {'key': 'b', 'text': 'y'}]})
+            # the second row's text must really contain the name — an unmatched name that is not in
+            # the source is treated as invented, which is the point of the test above.
+            r = self._post({'rows': [{'key': 'a', 'text': 'x'},
+                                     {'key': 'b', 'text': 'lands in Duxford'}]})
         out = r.json()['results']
         self.assertTrue(out[0]['failed'])
         self.assertEqual([p['name'] for p in out[1]['places']], ['Duxford'])
