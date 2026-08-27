@@ -767,6 +767,24 @@ class NerPerRowTests(TestCase):
             r = self._post({'rows': [{'key': 'a', 'text': '在杭州的土地，值 2,300 兩'}]})
         self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['杭州'])
 
+    def test_a_matched_name_absent_from_the_row_is_still_invented(self):
+        """"place" is nowhere in a subject line about a chain of pearls, yet it matches an Index
+        Villaris settlement genuinely called Place — and reached the map as a located result, because
+        the invented-name rule had applied only to unmatched names. A per-row extraction is worth
+        having because each mention is traceable to its row; a name with no anchor in the text has no
+        context to show and nothing to check it against."""
+        from unittest.mock import patch
+        text = 'respecting a chain of 2,300 pearls bought at Colchester'
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('place', 'Colchester')]
+        hit = {'id': 'place:iv:IV1680', 'title': 'Place', 'score': 100, 'ccodes': ['GB'],
+               'lng': 0.63, 'lat': 51.78, 'ambiguous': False}
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate',
+                      return_value={'place': hit, 'Colchester': dict(hit, title='Colchester')}):
+            r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
+        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['Colchester'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',
