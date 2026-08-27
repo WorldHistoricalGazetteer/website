@@ -755,18 +755,17 @@ class NerPerRowTests(TestCase):
             r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
         self.assertTrue(r.json()['results'][0]['no_places_found'])
 
-    def test_capitalisation_is_ignored_when_the_source_has_none(self):
-        """The one exception: a name the GAZETTEER matched, in a source that uses no capitals at all,
-        where casing carries no information and the match is the only signal there is."""
+    def test_an_uncased_script_is_exempt_from_the_capitalisation_test(self):
+        """Chinese, Arabic, Hebrew and Devanagari have no capitals, so requiring one would reject
+        every name written in them. Not a hypothetical for a world gazetteer — the test keys on the
+        NAME's script, not on whether the surrounding text happens to contain a capital."""
         from unittest.mock import patch
-        ents = [{'name': 'stifford', 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}]
-        hit = {'id': 'place:gn:1', 'title': 'Stifford', 'score': 100, 'ccodes': ['GB'],
-               'lng': 0.3, 'lat': 51.5, 'ambiguous': False}
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('杭州', '2,300')]
         with patch('workbench.extraction.extract_places', return_value=ents), \
-                patch('workbench.views._ner_reconcile_disambiguate', return_value={'stifford': hit}):
-            r = self._post({'rows': [{'key': 'a', 'text': 'common of pasture at stifford',
-                                      'contained_in': ['ukhc:ESE']}]})
-        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['stifford'])
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': '在杭州的土地，值 2,300 兩'}]})
+        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['杭州'])
 
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch

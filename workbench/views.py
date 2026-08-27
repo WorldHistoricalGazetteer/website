@@ -1132,24 +1132,24 @@ def _ner_row_places(text, user, scope, fallback):
                 outside.add(n)
 
     places = []
-    # Whether the source uses capitals at all. NB a row with no capitals is far more often a line with
-    # no proper nouns in it — "allegation of conspiracy to defraud the plaintiff, respecting a chain of
-    # 2,300 pearls" — than a lower-cased transcription. Treating the two alike disabled the test below
-    # on exactly the rows where everything the model returns is junk, and let nine common nouns through
-    # on that one line alone. So this only ever rescues a name the GAZETTEER matched.
-    cased = any(ch.isupper() for ch in text)
     for nm, count in mentions.items():
         m = matches.get(nm)
         hits = extraction.find_all(text, nm)
-        # A toponym in a catalogue entry is CAPITALISED, and this holds whether or not the gazetteer
-        # matched it. Without the rule the common noun "place", in "title to a place called…", matches
-        # an Index Villaris settlement genuinely called Place, inside the right county, and arrives as
-        # a located result that looks entirely credible. Matching is evidence that a place of that name
-        # exists, not that the word was being used as a name.
+        # Nothing without a letter in it is a name in any script: "800", "2,300".
+        if not any(ch.isalpha() for ch in nm):
+            continue
+        # In a script that HAS capitals, a toponym is capitalised — whether or not the gazetteer
+        # matched it. Without this the common noun "place", in "title to a place called…", matches an
+        # Index Villaris settlement genuinely called Place, inside the right county, and arrives as a
+        # located result that looks entirely credible. Matching is evidence that a place of that name
+        # exists, not that the word was being used as a name here.
         #
-        # The single exception: a matched name in a source that uses no capitals anywhere, where casing
-        # carries no information and the match is the only signal there is.
-        if hits and not any(text[h:h + 1].isupper() for h in hits) and not (m and not cased):
+        # The test is skipped for names written in a script with no case at all — Chinese, Arabic,
+        # Hebrew, Devanagari — where it would otherwise reject every name there is. That is not a
+        # hypothetical for a world gazetteer, and it is the reason this keys on the NAME's script
+        # rather than on whether the surrounding text happens to contain a capital.
+        name_is_cased = any(ch.isupper() or ch.islower() for ch in nm)
+        if name_is_cased and hits and not any(text[h:h + 1].isupper() for h in hits):
             continue
         # Everything below applies ONLY to names the gazetteer did not vouch for. A match is evidence;
         # without one, the name has to earn its place in the output.
