@@ -77,9 +77,15 @@ LLM_SYSTEM = "You extract place names. Reply with JSON only."
 #     {"places": [{"name": "Great Easton", "role": "residence"}]} and the model returned Great Easton
 #     — or, on other records, Norwich and Kent — instead of reading the text. Hence "..." as the only
 #     example value.
-#   * Extra instruction sends it into a repetition loop. Adding "list EVERY place, in the order they
-#     appear" dropped recall to 15/33 and cost 8 s/record, because the reply degenerates into the
-#     same name repeated until num_predict truncates the JSON.
+#   * Extra instruction sends it into a repetition loop, in which the reply degenerates into the same
+#     name over and over until num_predict truncates the JSON. This is not a matter of degree: adding
+#     "list EVERY place, in the order they appear" dropped recall to 15/33, and merely EXTENDING THE
+#     NOUN LIST by three words — "rivers, mountains and seas" — halved it to 12/33 and quadrupled the
+#     cost, with four of ten records unparseable. Re-benchmark before touching a single word.
+#
+# The noun list is therefore settlement-and-administrative by necessity rather than by choice, and it
+# is the one measured weakness: on a travel narrative the model returned 6 of 9 toponyms but missed
+# the sea and the mountain pass. It still beat spaCy there 6-2, and tied it on modern news prose.
 #
 # Roles are deliberately NOT asked for. The 0.5B can produce them, but the extra tokens are what tips
 # it into that loop (a role-bearing variant failed to parse on every single record). place#211's own
