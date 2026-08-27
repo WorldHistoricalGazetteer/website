@@ -279,6 +279,12 @@ services:
       # Unload after idle so the model's RSS is not held permanently next to prod on a box that is
       # already swapping; reloading from page cache costs about a second.
       - OLLAMA_KEEP_ALIVE={{ OLLAMA_KEEP_ALIVE }}
+      # Ollama's default context (4096 for qwen3:0.6b) is what actually fills this container: under a
+      # sustained per-row run it sat at 1.91 GiB of anonymous memory against a 2 GiB cap, one
+      # allocation from an OOM kill. WHG's extraction prompts are 150-300 tokens, so the rest was
+      # allocated and never used. Raising the cap would have taken headroom from a host with 3.6 GB
+      # free; sizing the context to the work costs nothing.
+      - OLLAMA_CONTEXT_LENGTH={{ OLLAMA_CONTEXT_LENGTH }}
       # Ollama probes for a GPU via Vulkan, and CUDA_VISIBLE_DEVICES alone does not stop it. Confirm
       # `library=cpu` in the container log after any image bump.
       - OLLAMA_VULKAN=false
