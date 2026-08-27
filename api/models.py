@@ -38,14 +38,22 @@ class UserAPIProfile(models.Model):
     total_count = models.IntegerField(default=0)
     daily_limit = models.IntegerField(default=5000)
 
-    def increment_usage(self):
+    def increment_usage(self, n=1):
+        """Charge `n` units against today's allowance. `n` because a caller may spend the quota in
+        units larger than one request — Map-your-Data's per-row extraction charges a row at a time
+        (place#211), which is what the limit is actually protecting."""
         today = timezone.now().date()
         if self.daily_reset != today:
             self.daily_reset = today
             self.daily_count = 0
-        self.daily_count += 1
-        self.total_count += 1
+        self.daily_count += n
+        self.total_count += n
         self.save()
+
+    def remaining_today(self):
+        """Units left in today's allowance, accounting for a reset that has not been written yet."""
+        used = 0 if self.daily_reset != timezone.now().date() else self.daily_count
+        return max(0, self.daily_limit - used)
 
     def __str__(self):
         return f"{self.user} API profile"
