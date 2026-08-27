@@ -41,7 +41,12 @@ class GraceAdminSite(admin.AdminSite):
 
     def each_context(self, request):
         context = super().each_context(request)
+        # "View site" should lead back to the staff dashboard, which is where
+        # someone administering GRACE actually came from.
         context["site_url"] = "/dashboard_admin/"
+        # Read by templates/admin/base_site.html to swap in GRACE's branding and
+        # stylesheet. The default admin never sees it, so /admin/ is untouched.
+        context["is_grace_admin"] = True
         return context
 
     def index(self, request, extra_context=None):

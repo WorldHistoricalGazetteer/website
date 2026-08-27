@@ -1,0 +1,154 @@
+/* GRACE admin theme.
+ *
+ * Loaded on every page of the GRACE admin site (and only there — see
+ * templates/admin/base_site.html, which includes it behind `is_grace_admin`).
+ *
+ * The point is that the CHANGELISTS get themed, not just the landing page.
+ * That is where an editor actually spends the day, and a purple index sitting
+ * in front of Django's teal changelists looks worse than leaving it alone.
+ *
+ * Django 4.1's admin is built on CSS custom properties declared on :root, with
+ * a `prefers-color-scheme: dark` block in dark_mode.css. Overriding those
+ * variables retints every screen — buttons, filters, selected rows, object
+ * tools — without touching a single Django rule. Everything below the variable
+ * blocks is small structural polish on top.
+ *
+ * Keep it that way. If you find yourself overriding Django's selectors in bulk,
+ * you are fighting the framework and the next upgrade will break it.
+ */
+
+:root {
+  /* GRACE purple. --secondary is the header; --primary the breadcrumb bar,
+     buttons and focus rings. */
+  --grace-deep:   #4a2470;
+  --grace-mid:    #6b3fa0;
+  --grace-tint:   #f4f0f9;
+  --grace-line:   #e0d7ec;
+
+  --primary:      var(--grace-mid);
+  --secondary:    var(--grace-deep);
+  --accent:       #ffd166;
+  --primary-fg:   #fff;
+
+  --header-color:          rgba(255, 255, 255, 0.72);
+  --header-branding-color: #fff;
+  --header-bg:             var(--grace-deep);
+  --header-link-color:     #fff;
+
+  --breadcrumbs-fg:      rgba(255, 255, 255, 0.75);
+  --breadcrumbs-link-fg: #fff;
+  --breadcrumbs-bg:      var(--grace-mid);
+
+  --link-fg:          #5b2a86;
+  --link-hover-color: #34145a;
+  --link-selected-fg: #6b3fa0;
+
+  --button-bg:               var(--grace-mid);
+  --button-hover-bg:         #593389;
+  --default-button-bg:       var(--grace-deep);
+  --default-button-hover-bg: #351a52;
+
+  --selected-row: #fdf6e3;   /* Django's default here is a hard yellow. */
+  --darkened-bg:  #faf8fc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --grace-deep: #2a1440;
+    --grace-mid:  #5c3690;
+    --grace-tint: #1e1826;
+    --grace-line: #3a2f47;
+
+    --primary:   var(--grace-mid);
+    --secondary: var(--grace-deep);
+
+    --header-bg: var(--grace-deep);
+
+    --link-fg:          #c9a9ee;
+    --link-hover-color: #e0ccf7;
+    --link-selected-fg: #c9a9ee;
+
+    --button-bg:         var(--grace-mid);
+    --button-hover-bg:   #6d43a8;
+    --default-button-bg: #45277a;
+
+    --selected-row: #33244a;
+    --darkened-bg:  #1a1520;
+  }
+}
+
+/* ---- Header ------------------------------------------------------------ */
+
+#header {
+  padding: 12px 40px;
+  align-items: center;
+}
+
+#branding h1 { margin: 0; font-weight: 400; }
+
+#branding .grace-wordmark {
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #fff;
+}
+
+/* The acronym, expanded. It is the clearest statement of what the system
+   holds, so it belongs in the furniture rather than buried in a doc. */
+#branding .grace-expansion {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: rgba(255, 255, 255, 0.72);
+  margin-top: 1px;
+}
+#branding .grace-expansion b { font-weight: 700; color: var(--accent); }
+
+#branding a:hover { text-decoration: none; }
+
+/* ---- Breadcrumbs ------------------------------------------------------- */
+
+div.breadcrumbs {
+  padding: 9px 40px;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+
+/* ---- Changelists ------------------------------------------------------- */
+
+#changelist .actions { border-radius: 4px; }
+
+#changelist-filter h2,
+.module h2,
+.module caption {
+  letter-spacing: 0.3px;
+  text-transform: none;   /* Django shouts these; GRACE has long labels. */
+  font-size: 12px;
+}
+
+#changelist table thead th {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+}
+
+/* Django's "0 of N selected" strip and the row hover: soften both. */
+#changelist tbody tr:hover > * { background: var(--grace-tint); }
+
+/* Long verbose names ("Catalogue: contacts") wrap badly in the filter column. */
+#changelist-filter li { line-height: 1.35; }
+
+/* ---- Forms ------------------------------------------------------------- */
+
+.submit-row { border-radius: 4px; }
+
+fieldset.module h2 { background: var(--grace-mid); }
+
+/* The read-through panel on a tracked gazetteer, and other readonly blocks. */
+.form-row .readonly { color: var(--body-quiet-color); }
+
+/* ---- Object tools ------------------------------------------------------ */
+
+.object-tools a:link,
+.object-tools a:visited { background: var(--grace-mid); }
+.object-tools a:focus,
+.object-tools a:hover { background: var(--grace-deep); }

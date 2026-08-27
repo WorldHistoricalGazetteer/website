@@ -1,0 +1,36 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% comment %}
+  Project-level override of Django's admin/base_site.html.
+
+  It applies to BOTH admin sites, so the `is_grace_admin` branch is the only
+  thing that differs — the else branch is byte-for-byte Django's default, so
+  /admin/ is untouched. `is_grace_admin` is set by GraceAdminSite.each_context.
+
+  This is the only hook Django gives for per-site chrome: AdminSite exposes
+  index_template but nothing for the base, and the alternative (setting
+  change_list_template and change_form_template on every ModelAdmin) is far
+  more to keep in step.
+{% endcomment %}
+
+{% block extrastyle %}{{ block.super }}
+  {% if is_grace_admin %}<link rel="stylesheet" href="{% static 'grace/admin.css' %}">{% endif %}
+{% endblock %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+{% if is_grace_admin %}
+  <h1 id="site-name">
+    <a href="{% url 'grace_admin:index' %}">
+      <span class="grace-wordmark">GRACE</span>
+      <span class="grace-expansion"><b>G</b>azetteer <b>R</b>egister <b>A</b>nd <b>C</b>ontact <b>E</b>ngagement</span>
+    </a>
+  </h1>
+{% else %}
+  <h1 id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></h1>
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

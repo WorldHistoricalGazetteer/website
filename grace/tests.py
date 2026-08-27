@@ -589,3 +589,37 @@ class GraceAdminSiteTests(TestCase):
         body = self.client.get("/grace/admin/").content.decode()
         self.assertIn("Content: types", body)
         self.assertIn("Content: statuses", body)
+
+
+class GraceAdminThemeTests(TestCase):
+    """The theme must reach the changelists, not just the landing page."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="themer", email="themer@example.org", password="pw",
+            given_name="The", surname="Mer", name="The Mer")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+
+    def test_the_stylesheet_is_on_a_changelist_too(self):
+        """The point of the base_site override — /grace/admin/grace/contact/
+        was still stock Django until it loaded."""
+        body = self.client.get("/grace/admin/grace/contact/").content.decode()
+        self.assertIn("grace/admin.css", body)
+
+    def test_the_acronym_is_spelled_out_in_the_header(self):
+        body = self.client.get("/grace/admin/").content.decode()
+        for word in ("Gazetteer", "Register", "Contact", "Engagement"):
+            self.assertIn(word, body)
+
+    def test_the_default_admin_is_left_alone(self):
+        """base_site.html is shared, so /admin/ must be untouched."""
+        body = self.client.get("/admin/").content.decode()
+        self.assertNotIn("grace/admin.css", body)
+        self.assertIn("Django administration", body)
+
+    def test_the_browser_title_has_no_leading_pipe(self):
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertNotIn("<title>| ", body)
