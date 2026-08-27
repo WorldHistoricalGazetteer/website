@@ -2036,8 +2036,8 @@ async function importGoogleSheet() {
 }
 
 // ── Place-name extraction from text (NER) ────────────────────────────────────────────────────────
-// Get plain text from the textarea or an uploaded .txt/.md/.html file, send it to WHG's server-side
-// spaCy service (the one MyD step that leaves the browser — the UI says so), and turn the detected
+// Get plain text from the textarea or an uploaded .txt/.md/.html file, send it to the language model
+// on WHG's own server (the one MyD step that leaves the browser — the UI says so), and turn the detected
 // place names into a small table (name · mentions · context) that becomes the project. Binary formats
 // (.docx, .pdf) and Google Docs are a planned fast-follow.
 async function nerReadFile(file) {

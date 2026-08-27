@@ -26,7 +26,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
-from . import doctypes
+from . import doctypes, extraction
 from .merge import merge_snapshots
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot, RecordSuggestion,
                      ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES,
@@ -771,21 +771,22 @@ def gdoc_proxy(request):
     return JsonResponse({'text': r.text, 'name': f'gdoc-{doc_id[:8]}.txt'})
 
 
-# ── Place-name extraction proxy (Map-your-Data NER) ────────────────────────────
+# ── Place-name extraction (Map-your-Data) ──────────────────────────────────────
 # NB: unlike the rest of Map-your-Data (which stays in the browser), this deliberately sends the
-# pasted / extracted text to WHG's on-host spaCy service for named-entity recognition. The UI warns
-# the user. The text is forwarded, not stored. Beta-gated.
+# pasted / extracted text to WHG's on-host language model for place-name extraction. The UI warns the
+# user. The text is passed on, not stored. Beta-gated. See workbench/extraction.py for the model, the
+# prompt and why both are what they are.
 NER_MAX_CHARS = 200_000
 
-# Gazetteer-assisted recall + collocational disambiguation (prototype). spaCy is trained on modern
-# news and misses historical / archaic / non-English toponyms, and can't choose between same-named
-# places. So we (1) also pull capitalised n-gram candidates the model didn't tag, (2) reconcile every
-# mention against WHG's own place index (reusing the /reconcile matcher), and (3) DISAMBIGUATE by
-# geographic mode-seeking — a document's places cluster, so we find the region where the most distinct
-# names have a candidate and resolve each name to its nearest candidate there. This uses pure geometry
-# (the indexed repr_point), NOT country codes, which are patchy in the index. The chosen match (id +
-# coordinates) is returned so the browser can seed a preliminary, located reconciliation. Best-effort:
-# if the gateway is slow/unavailable we silently return the spaCy-only result.
+# Gazetteer-assisted recall + collocational disambiguation (prototype). The extractor misses some
+# historical / archaic / non-English toponyms, and cannot choose between same-named places. So we
+# (1) also pull capitalised n-gram candidates it didn't return, (2) reconcile every mention against
+# WHG's own place index (reusing the /reconcile matcher), and (3) DISAMBIGUATE by geographic
+# mode-seeking — a document's places cluster, so we find the region where the most distinct names have
+# a candidate and resolve each name to its nearest candidate there. This uses pure geometry (the
+# indexed repr_point), NOT country codes, which are patchy in the index. The chosen match (id +
+# coordinates) is returned so the browser can seed a preliminary, located reconciliation.
+# Best-effort: if the gateway is slow/unavailable we silently return the extractor's own result.
 _NER_CAND_RE = re.compile(
     r"\b[A-Z][\wÀ-ÿ’'\-]+"
     r"(?:\s+(?:of|the|de|la|le|du|des|upon|on|el|al|von|van)\s+[A-Z][\wÀ-ÿ’'\-]+"
@@ -809,7 +810,7 @@ def _ner_context(text, name, width=140):
 
 
 def _ner_candidates(text, already):
-    """Capitalised spans NOT already tagged by spaCy → {name: frequency}."""
+    """Capitalised spans the extractor did not return → {name: frequency}."""
     seen = {(n or '').lower() for n in already}
     counts = {}
     for m in _NER_CAND_RE.finditer(text):
@@ -874,7 +875,7 @@ def _ner_reconcile_disambiguate(mentions, user):
         from api.reconcile import process_queries
         res = process_queries({f'q{i}': {'query': n} for i, n in enumerate(names)},
                               batch_size=NER_RECON_MAX, user=user)
-    except Exception as e:  # gateway down / import issue → degrade to spaCy-only
+    except Exception as e:  # gateway down / import issue → degrade to extractor-only
         logger.warning('NER gazetteer reconcile failed: %s', e)
         return {}
 
@@ -937,29 +938,19 @@ def ner_extract(request):
     text = body.get('text') or ''
     if not text.strip():
         return _err('There’s no text to analyse.')
-    text = text[:NER_MAX_CHARS]                      # the service caps too; bound the request here
-    base = (getattr(settings, 'NER_URL', '') or '').rstrip('/')
-    if not base:
-        return _err('Place-name extraction isn’t available right now.', 503)
-    # Engine choice (place#211): 'spacy' (default, ~3 ms/record) or 'llm' (qwen2.5:0.5b on the shared
-    # ollama container — far better recall on historical registers, ~1 s/record of CPU). The service
-    # falls back to spaCy by itself if the LLM is unconfigured, busy or erroring, so an unknown value
-    # here is harmless.
-    engine = (body.get('engine') or '').strip().lower() or None
-    timeout = 300 if engine == 'llm' else 60
-    payload = {'text': text}
-    if engine:
-        payload['engine'] = engine
+    truncated = len(text) > NER_MAX_CHARS
+    text = text[:NER_MAX_CHARS]
     try:
-        r = requests.post(base + '/extract', json=payload, timeout=timeout)
-    except requests.RequestException:
+        ents = extraction.extract_places(text)
+    except extraction.ExtractionUnavailable:
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
-    if r.status_code != 200:
+    except Exception:                                # noqa: BLE001 — a model fault is not the user's
+        logger.exception('place-name extraction failed')
         return _err('The place-name extractor returned an error — please try again.', 502)
-    data = r.json()
-    ents = data.get('entities') or []
+    data = {'entities': ents, 'text_chars': len(text), 'truncated': truncated,
+            'model': getattr(settings, 'OLLAMA_MODEL', '')}
 
-    # Union of spaCy names + capitalised candidates → reconcile + geo-disambiguate (best-effort).
+    # Union of extracted names + capitalised candidates → reconcile + geo-disambiguate (best-effort).
     mentions = {}
     for e in ents:
         nm = (e.get('name') or '').strip()
@@ -970,12 +961,12 @@ def ner_extract(request):
     matches = _ner_reconcile_disambiguate(mentions, request.user)
 
     have = {(e.get('name') or '').lower() for e in ents}
-    for e in ents:                                   # attach a preliminary match to spaCy entities
+    for e in ents:                                   # attach a preliminary match to extracted names
         m = matches.get((e.get('name') or '').strip())
         if m:
             e['match'] = m
     added = 0
-    for nm, m in matches.items():                    # add gazetteer-confirmed names spaCy missed
+    for nm, m in matches.items():                    # add gazetteer-confirmed names the model missed
         if nm.lower() in have:
             continue
         have.add(nm.lower())

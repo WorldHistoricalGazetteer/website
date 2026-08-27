@@ -112,7 +112,7 @@
                   placeholder="Paste text here — e.g. a paragraph, article, or document extract…"></textarea>
         <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
           <button type="button" id="recon-ner-btn" class="btn btn-sm btn-outline-primary"
-                  title="Place names are detected on WHG's server with spaCy (a natural-language model), then cross-checked against WHG's own gazetteer — this catches names the model misses and locates them, using the other places in your text to choose between same-named places (e.g. which ‘Springfield’). The matches are a starting point; review to confirm. A future option will let you use your own AI (LLM) key for higher-accuracy extraction, kept on your device.">
+                  title="Place names are read by a small language model running on WHG's own server — your text is not sent to any third party — then cross-checked against WHG's gazetteer, which locates them and uses the other places in your text to choose between same-named places (e.g. which ‘Springfield’). Extraction takes a few seconds. The matches are a starting point; review to confirm."
             <i class="fas fa-location-dot me-1"></i>Extract place names</button>
           <button type="button" id="recon-ner-paste" class="btn btn-sm btn-outline-secondary"><i class="fas fa-paste me-1"></i>Paste from clipboard</button>
           <label class="btn btn-sm btn-outline-secondary mb-0"><i class="fas fa-file-lines me-1"></i>Upload a file
