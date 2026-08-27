@@ -13,12 +13,12 @@ TWO ENGINES:
          Chelmsford ORG, Little Burstead and Plymouth PERSON, and the common noun "cloth" PERSON
          (place#211). Kept as the default and as the fallback when the LLM is unavailable.
 
-  llm    qwen2.5:0.5b on the shared ./ollama container. ~400x slower, but on ten real TNA REQ 2
-         descriptions it recalls 27 of 33 hand-labelled place names at 1.3 s/record, and it splits
-         the "<Person> of <Place>" residence formula that spaCy swallows whole. Nothing larger beat
-         it: qwen3:0.6b and qwen2.5:1.5b both scored 25/33 at 2-3x the cost, llama3.2:1b 20/33 at
-         16x. Its extra false positives are cheap because the caller reconciles inside a container
-         polygon, which discards them.
+  llm    qwen3:0.6b on the shared ./ollama container. ~700x slower, but on ten real TNA REQ 2
+         descriptions it recalls 27 of 33 hand-labelled place names at 2.2 s/record, and it splits
+         the "<Person> of <Place>" residence formula that spaCy swallows whole. It also reads
+         registers spaCy cannot: 8/9 toponyms in a travel narrative against spaCy's 2/9. Its extra
+         false positives are almost all personal names, which are cheap because the caller
+         reconciles inside a container polygon and no place in the county is called John Fever.
 
 Contract:
   GET  /health          → {"status":"ok","model":"...","engines":{...}}
@@ -52,10 +52,14 @@ nlp.max_length = MAX_CHARS + 1000
 # One instance per host, in the production compose stack, shared with dev over the `whg-llm` bridge —
 # so `ollama` resolves identically from both. Empty OLLAMA_URL simply disables the engine.
 OLLAMA_URL = (os.environ.get("OLLAMA_URL") or "").rstrip("/")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen3:0.6b")
 OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "120"))
 OLLAMA_NUM_THREAD = int(os.environ.get("OLLAMA_NUM_THREAD", "4"))
 DEFAULT_ENGINE = os.environ.get("NER_ENGINE", "spacy")
+# qwen3 is a reasoning model and will spend its whole token budget thinking about a list of place
+# names if allowed to. Ollama accepts `think` on models that cannot think anyway, so this is sent
+# unconditionally; set OLLAMA_THINK=true only for a model whose reasoning you actually want.
+OLLAMA_THINK = (os.environ.get("OLLAMA_THINK", "false") or "false").strip().lower() == "true"
 
 # The 0.5B model degrades sharply on long inputs, and each chunk costs ~1 s of eight-thread CPU, so
 # bound both the chunk size and the number of chunks. Per-row extraction (place#211) sends a few
@@ -69,32 +73,30 @@ _llm_gate = threading.Semaphore(int(os.environ.get("NER_LLM_CONCURRENCY", "2")))
 
 LLM_SYSTEM = "You extract place names. Reply with JSON only."
 
-# Benchmarked over ten real TNA REQ 2 descriptions (33 hand-labelled place names), qwen2.5:0.5b at
-# 1.3 s/record: this wording recalls 27/33 with no malformed replies. TERSENESS IS THE WHOLE TRICK,
-# and two failure modes are worth remembering before anyone "improves" it:
+# Benchmarked on ten REAL TNA REQ 2 descriptions (33 hand-labelled place names) plus three
+# off-register texts, at 2.2 s/record: 27/33 on REQ 2, 8/9 on a travel narrative thick with Ottoman
+# toponyms, no malformed replies. Two rules hold whatever model is configured:
 #
-#   * A worked example gets COPIED. An earlier version ended with
+#   * A worked example gets COPIED, not followed. An early version ended with
 #     {"places": [{"name": "Great Easton", "role": "residence"}]} and the model returned Great Easton
 #     — or, on other records, Norwich and Kent — instead of reading the text. Hence "..." as the only
 #     example value.
-#   * Extra instruction sends it into a repetition loop, in which the reply degenerates into the same
-#     name over and over until num_predict truncates the JSON. This is not a matter of degree: adding
-#     "list EVERY place, in the order they appear" dropped recall to 15/33, and merely EXTENDING THE
-#     NOUN LIST by three words — "rivers, mountains and seas" — halved it to 12/33 and quadrupled the
-#     cost, with four of ten records unparseable. Re-benchmark before touching a single word.
+#   * Length is dangerous. Too much instruction sends a small model into a repetition loop in which
+#     the reply degenerates into one name over and over until num_predict truncates the JSON.
+#     "list EVERY place, in the order they appear" costs recall on every model tested.
 #
-# The noun list is therefore settlement-and-administrative by necessity rather than by choice, and it
-# is the one measured weakness: on a travel narrative the model returned 6 of 9 toponyms but missed
-# the sea and the mountain pass. It still beat spaCy there 6-2, and tied it on modern news prose.
+# The noun list including rivers, mountains and seas is EXACTLY what the model has to be big enough
+# to carry, and it is why this service runs qwen3:0.6b rather than the smaller qwen2.5:0.5b that
+# scores identically on REQ 2. On qwen2.5:0.5b these three extra nouns trigger the loop above and
+# halve recall to 12/33; on qwen3:0.6b they cost nothing on REQ 2 and lift the travel narrative from
+# 6/9 to 8/9. Upsizing within the older family does NOT substitute: qwen2.5:1.5b takes the longer
+# prompt no better (23/33) at 2.5x the cost, and still misses the sea and the mountain pass.
 #
-# Roles are deliberately NOT asked for. The 0.5B can produce them, but the extra tokens are what tips
-# it into that loop (a role-bearing variant failed to parse on every single record). place#211's own
-# argument makes them unnecessary anyway: run extraction per text COLUMN and the column name gives
-# the role for free — Plaintiffs = residence, Subject = the disputed property.
+# Re-benchmark before changing a single word, and re-benchmark the prompt whenever the model changes.
 LLM_PROMPT = """%s
 
-Which place names appear in the text above? Include towns, villages, parishes, manors and counties.
-Exclude people's names. Answer as JSON: {"places": ["..."]}
+Which place names appear in the text above? Include towns, villages, parishes, manors, counties,
+rivers, mountains and seas. Exclude people's names. Answer as JSON: {"places": ["..."]}
 """
 
 app = FastAPI(title="WHG NER", version="1.1")
@@ -146,6 +148,23 @@ def _snippet(text: str, start: int, length: int) -> str:
     return ("…" if a > 0 else "") + snip + ("…" if b < len(text) else "")
 
 
+def _split_compound(name: str, text: str):
+    """Split "Kingsbridge, Devon" into its parts.
+
+    qwen3 sometimes returns a place together with its container as a single span, which reconciles
+    as neither — on one REQ 2 record it cost all three of the record's place names. Split only when
+    every part occurs in the source text in its own right, so a name that merely contains a comma
+    survives intact.
+    """
+    if "," not in name:
+        return [name]
+    parts = [p.strip(" .;:") for p in name.split(",")]
+    parts = [p for p in parts if len(p) >= 2]
+    if len(parts) < 2 or not all(_find_all(text, p) for p in parts):
+        return [name]
+    return parts
+
+
 def _llm_chunks(text: str):
     """Split on blank lines / sentence ends so a place name is never cut in half."""
     if len(text) <= LLM_CHUNK_CHARS:
@@ -173,7 +192,8 @@ def _llm_call(chunk: str):
             "system": LLM_SYSTEM,
             "prompt": LLM_PROMPT % chunk,
             "stream": False,
-            "format": "json",          # constrained decoding — the 0.5B will not emit valid JSON otherwise
+            "think": OLLAMA_THINK,
+            "format": "json",          # constrained decoding — a model this size will not emit valid JSON otherwise
             "options": {
                 "temperature": 0,      # extraction, not composition: never sample
                 "num_predict": 512,
@@ -231,15 +251,15 @@ def _extract_llm(text: str):
     chunks = _llm_chunks(text)
     for chunk in chunks:
         for item in _llm_call(chunk):
-            name = item["name"]
-            if not name or len(name) > 120:
-                continue
-            key = name.lower()
-            rec = agg.get(key)
-            if rec is None:
-                agg[key] = {"name": name, "role": item.get("role") or ""}
-            elif not rec.get("role"):
-                rec["role"] = item.get("role") or ""
+            for name in _split_compound(item["name"], text):
+                if not name or len(name) > 120:
+                    continue
+                key = name.lower()
+                rec = agg.get(key)
+                if rec is None:
+                    agg[key] = {"name": name, "role": item.get("role") or ""}
+                elif not rec.get("role"):
+                    rec["role"] = item.get("role") or ""
 
     entities = []
     for rec in agg.values():
