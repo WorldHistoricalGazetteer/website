@@ -1135,6 +1135,14 @@ def _ner_row_places(text, user, scope, fallback):
     for nm, count in mentions.items():
         m = matches.get(nm)
         hits = extraction.find_all(text, nm)
+        # Not in this row's text at all ⇒ the model invented it, and an invented name is not a mention
+        # of anything HERE, whether or not some gazetteer holds a place by that name. That last part is
+        # the point: "place" is absent from a subject line about a chain of pearls, yet matches an Index
+        # Villaris settlement genuinely called Place, and reached the map as a located result. A per-row
+        # extraction earns its value by being traceable to its row — a name with no anchor in the text
+        # has no context to show and nothing for a reader to check it against.
+        if not hits:
+            continue
         # Nothing without a letter in it is a name in any script: "800", "2,300".
         if not any(ch.isalpha() for ch in nm):
             continue
@@ -1151,26 +1159,16 @@ def _ner_row_places(text, user, scope, fallback):
         name_is_cased = any(ch.isupper() or ch.islower() for ch in nm)
         if name_is_cased and hits and not any(text[h:h + 1].isupper() for h in hits):
             continue
-        # Everything below applies ONLY to names the gazetteer did not vouch for. A match is evidence;
-        # without one, the name has to earn its place in the output.
-        if not m:
-            # (a) Not in the source at all ⇒ the model invented it. On a row with no place in it —
-            # "obligation", "a bond" — it falls back on the prompt's own vocabulary and returns
-            # "towns, villages, parishes, counties, rivers, mountains, seas" as though they were
-            # findings. Nothing invented can be a mention of anything.
-            #
-            # Padding short rows with non-place words to stop this was tried and MEASURED to be worse.
-            # Over six real place-less subject lines: unpadded, five echoed; a neutral clause cut that
-            # to two but the model began extracting from the padding ("remainder of this entry", "not
-            # transcribed"); filler words still echoed five AND contaminated rows that had been
-            # correct, returning Colchester followed by seven copies of "Manors". The model has no
-            # notion of an empty answer, so more text gives it more to mine rather than a reason to
-            # stay silent. Filtering on the source text costs nothing and covers long rows too.
-            if not hits:
-                continue
-            # (Capitalisation is checked above, for matched and unmatched alike — it is what separates
-            # "chain", "conspiracy" and "pearls" from Honyngforde, Laybroke and Medesyde, the genuine
-            # minor places the gazetteer lacks and this must not throw away.)
+        # On a row naming no place — "obligation", "a bond" — the model falls back on the prompt's own
+        # vocabulary and returns "towns, villages, parishes, counties, rivers, mountains, seas" as
+        # findings. The anchor rule above already discards every one of those: none is in the row.
+        #
+        # Padding such rows with words that cannot be place names was tried and MEASURED to be worse.
+        # Over six real place-less subject lines: unpadded, five echoed; a neutral clause cut that to
+        # two but the model began extracting from the padding ("remainder of this entry", "not
+        # transcribed"); filler words still echoed five AND contaminated rows that had been correct,
+        # returning Colchester followed by seven copies of "Manors". The model has no notion of an
+        # empty answer, so more text gives it more to mine rather than a reason to stay silent.
         # Keep only what the model or the gazetteer vouches for: a capitalised span that matched
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
