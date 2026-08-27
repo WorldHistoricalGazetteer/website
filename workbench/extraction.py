@@ -80,14 +80,28 @@ def _clean(surface):
 
 
 def find_all(text, name):
-    """Case-insensitive whole-word occurrences of `name`; returns start offsets."""
+    """Case-insensitive occurrences of `name`; returns start offsets.
+
+    Whole-word by default. Word boundaries are a property of scripts that separate words with spaces,
+    though: in 在杭州的土地 the character before 杭州 is itself a letter, so the boundary never matches
+    and a perfectly real place name looks absent — which downstream is read as the model having
+    invented it. So for a name written without case (Chinese, Japanese, Korean and the other
+    unspaced scripts) fall back to a plain substring search.
+    """
     if not name:
         return []
     try:
         pat = re.compile(r'(?<!\w)' + re.escape(name) + r'(?!\w)', re.IGNORECASE)
     except re.error:
         return []
-    return [m.start() for m in pat.finditer(text)]
+    hits = [m.start() for m in pat.finditer(text)]
+    if hits or any(ch.isupper() or ch.islower() for ch in name):
+        return hits
+    out, i = [], text.find(name)
+    while i >= 0:
+        out.append(i)
+        i = text.find(name, i + 1)
+    return out
 
 
 def snippet(text, start, length):
