@@ -1051,6 +1051,25 @@ def ner_extract(request):
 NER_ROWS_MAX = 10        # rows per request; ~40 s of model time, and the client loops
 NER_ROW_CHARS = 4000     # per-row text cap — a catalogue description, not a chapter
 
+# Common nouns and titles that are never a toponym standing alone. The model returns them ("Hospital",
+# "Cathedral", "Master") because the surrounding phrase is place-like, and unlike the capitalised-span
+# candidates they bypassed _NER_CAND_STOP entirely. Dropped ONLY when nothing in the gazetteer vouches
+# for them, so a real place called Mill or Chapel survives on its own evidence.
+#
+# NB a rule keyed on the residence formula — suppressing the HEAD of "<Name> of <Place>", the mirror of
+# the tail rule that recovers Stifford — was written, measured and REJECTED. Over twelve REQ 2 records
+# it would have removed 3 noise spans and one real one: "St Mary Magdalen" is an `of`-head in "Hospital
+# of St Mary Magdalen of Holloway", and it matches. Measured against 101 emitted places the residual
+# personal-name noise is 2, against 5 unmatched names that are genuine places the gazetteer lacks, so
+# there is nothing there worth trading a real place for.
+_NER_APPELLATIVES = {
+    'hospital', 'cathedral', 'priory', 'abbey', 'manor', 'parish', 'castle', 'church', 'chapel',
+    'college', 'rectory', 'vicarage', 'parsonage', 'messuage', 'tenement', 'close', 'croft', 'mill',
+    'court', 'master', 'earl', 'bishop', 'abbot', 'prior', 'dean', 'sheriff', 'bailiff', 'yeoman',
+    'esquire', 'knight', 'gentleman', 'husbandman', 'widow', 'clerk', 'merchant', 'defendant',
+    'plaintiff', 'inhabitants', 'tenants', 'lands', 'goods',
+}
+
 
 def _ner_scope(value, limit=NER_SCOPE_MAX):
     """A caller's `contained_in` → a clean list of bare place ids."""
@@ -1101,6 +1120,8 @@ def _ner_row_places(text, user, scope, fallback):
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
             continue
+        if not m and nm.strip().lower() in _NER_APPELLATIVES:
+            continue                       # a bare common noun the gazetteer does not vouch for
         hits = extraction.find_all(text, nm)
         places.append({
             'name': nm,

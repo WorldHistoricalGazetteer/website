@@ -676,6 +676,23 @@ class NerPerRowTests(TestCase):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertIsNone(r.json()['remaining_today'])
 
+    def test_bare_appellatives_are_dropped_only_when_unvouched(self):
+        """The model returns "Hospital" and "Cathedral" because the surrounding phrase is place-like.
+        A common noun the gazetteer cannot vouch for is noise; one it CAN vouch for is a real place
+        that happens to be called Mill, and must survive."""
+        from unittest.mock import patch
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('Hospital', 'Mill', 'Holloway')]
+        match = {'id': 'place:x:1', 'title': 'Mill', 'score': 100, 'ccodes': [], 'lng': 0, 'lat': 0,
+                 'ambiguous': False}
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={'Mill': match}):
+            r = self._post({'rows': [{'key': 'a', 'text': 'the Hospital and the Mill at Holloway'}]})
+        names = [p['name'] for p in r.json()['results'][0]['places']]
+        self.assertNotIn('Hospital', names)     # common noun, nothing vouches for it
+        self.assertIn('Mill', names)            # same shape, but the gazetteer knows it
+        self.assertIn('Holloway', names)        # unmatched, but not a common noun — kept and flagged
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',

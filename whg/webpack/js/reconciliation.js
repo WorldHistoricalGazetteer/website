@@ -1295,6 +1295,32 @@ function datasetScopeContainers() {
   return (r.mode === 'whg' && r.place && r.place.id) ? [barePlaceId(r.place.id)] : [];
 }
 
+// A column worth offering as prose: mostly-textual, several words per cell. Keeps identifiers, codes
+// and dates out of the "also read" list without asking the user to filter them by eye.
+function looksLikeProse(colIdx) {
+  if (!project) return false;
+  let sampled = 0, wordy = 0;
+  for (let r = 0; r < project.rows.length && sampled < 25; r++) {
+    const v = String(project.rows[r][colIdx] == null ? '' : project.rows[r][colIdx]).trim();
+    if (!v) continue;
+    sampled += 1;
+    if (v.split(/\s+/).length >= 5) wordy += 1;
+  }
+  return sampled > 0 && wordy / sampled >= 0.6;
+}
+
+// A run's partial results, kept in the project so closing the tab does not throw away an hour of model
+// time. Deliberately NOT a server-side job: Map your Data's promise is that the dataset stays in the
+// browser, and parking 22,000 rows on the server to be worked through would break that for the sake of
+// a progress bar. Batching from here sends ten rows' text at a time and keeps none of it.
+function pendingExtraction() {
+  const p = project && project.nerRun;
+  if (!p || !p.results) return null;
+  const count = Object.keys(p.results).length;
+  return count ? { ...p, count } : null;
+}
+function clearPendingExtraction() { if (project) { delete project.nerRun; persist(); } }
+
 // Columns that could scope a row: ANY column with resolved matches, plus any declared container.
 // Deliberately not restricted to the containment chain. The table this is for — a catalogue whose
 // places are still locked inside its prose — has no place-name column at all until the extraction has
@@ -1338,13 +1364,30 @@ function renderExtractPanel() {
   }
 
   const scopable = conts.some((c) => c.resolved);
+  // Other columns of prose worth reading in the same pass. In a catalogue the FIELD a name came from
+  // is its historical role — a place in Plaintiffs is where someone lived, the same place in Subject
+  // is the property in dispute — so reading them together, each mention tagged with its column, is
+  // what makes the output analysable. Reading N columns costs N times the model time; the estimate
+  // below follows the ticks.
+  const extras = project.columns.map((c, i) => ({ i, c }))
+    .filter(({ i, c }) => i !== _transformCol && c.role === 'other' && looksLikeProse(i))
+    .map(({ i, c }) => `<label class="small mb-0 me-2"><input type="checkbox" class="recon-tf-extract-also"
+      value="${i}"> ${esc(truncate(c.name, 22))}</label>`).join('');
+  const resume = pendingExtraction();
   const opts = ['<option value="-1">— none (search the whole world) —</option>'].concat(
     conts.map((c) => `<option value="${c.idx}"${c.resolved ? '' : ' disabled'}>${esc(truncate(c.name, 28))}` +
       ` — ${c.resolved.toLocaleString()} of ${rows.toLocaleString()} rows resolved${c.resolved ? '' : ' (reconcile it first)'}</option>`)).join('');
   box.innerHTML = `
     <div class="mb-1">Read place names out of <strong>${esc(truncate(srcName, 28))}</strong> for all
       <strong>${rows.toLocaleString()}</strong> rows, and build a new table with one row per place
-      mentioned. Roughly <strong>${mins} minute${mins === 1 ? '' : 's'}</strong>; you can stop at any point.</div>
+      mentioned. Roughly <strong id="recon-tf-extract-mins">${mins}</strong> minute${mins === 1 ? '' : 's'};
+      you can stop at any point, and picking up where you left off does not re-read what is done.</div>
+    ${resume ? `<div class="alert alert-info py-1 px-2 mb-1"><i class="fas fa-clock-rotate-left me-1"></i>
+      An earlier run read <strong>${resume.count.toLocaleString()}</strong> of
+      ${rows.toLocaleString()} rows. Running again continues from there.
+      <button type="button" class="btn btn-sm btn-link py-0 align-baseline" id="recon-tf-extract-forget">start over</button></div>` : ''}
+    ${extras ? `<div class="mb-1">Also read <span class="text-muted">(each mention records which column
+      it came from)</span>: ${extras}</div>` : ''}
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <label class="small mb-0">Search each row within
         <select id="recon-tf-extract-scope" class="form-select form-select-sm d-inline-block ms-1"
@@ -1360,6 +1403,13 @@ function renderExtractPanel() {
       of its columns — take a Backup first if you want to keep this exact state.</div>`;
   const run = el('recon-tf-extract-btn');
   if (run) run.addEventListener('click', runColumnExtraction);
+  const forget = el('recon-tf-extract-forget');
+  if (forget) forget.addEventListener('click', () => { clearPendingExtraction(); renderExtractPanel(); });
+  box.querySelectorAll('.recon-tf-extract-also').forEach((cb) => cb.addEventListener('change', () => {
+    const n = 1 + box.querySelectorAll('.recon-tf-extract-also:checked').length;
+    const m = el('recon-tf-extract-mins');
+    if (m) m.textContent = String(Math.max(1, Math.round((rows * 3 * n) / 60)));
+  }));
   const stop = el('recon-tf-extract-stop');
   if (stop) stop.addEventListener('click', () => { if (_nerRun) _nerRun.cancel = true; });
 }
@@ -1368,73 +1418,97 @@ function extractProgress(html) { const p = el('recon-tf-extract-progress'); if (
 
 async function runColumnExtraction() {
   if (!project || _transformCol < 0 || _nerRun) return;
-  const srcCol = _transformCol;
   const idIdx = colIndexByRole('id');
   if (idIdx < 0) return;
+  const box = el('recon-tf-extract-body');
+  const cols = [_transformCol].concat(
+    [...box.querySelectorAll('.recon-tf-extract-also:checked')].map((cb) => Number(cb.value)));
   const scopeSel = el('recon-tf-extract-scope');
   const scopeCol = scopeSel ? Number(scopeSel.value) : -1;
   const fallback = scopeCol >= 0 ? datasetScopeContainers() : [];
+
+  // Resume only a run over the same columns and the same scope; anything else is a different question
+  // and its half-finished answers would be misleading.
+  const signature = JSON.stringify({ cols, scopeCol });
+  const prev = pendingExtraction();
+  const done = (prev && prev.signature === signature) ? { ...prev.results } : {};
+  if (!prev || prev.signature !== signature) clearPendingExtraction();
+  project.nerRun = { signature, cols, scopeCol, results: done };
 
   _nerRun = { cancel: false };
   const runBtn = el('recon-tf-extract-btn'); if (runBtn) runBtn.disabled = true;
   const stopBtn = el('recon-tf-extract-stop'); if (stopBtn) stopBtn.classList.remove('d-none');
 
+  // One unit of work per (row x column). The key carries the column so the server's reply maps back
+  // to the right cell, and so the exploded rows can say which field each mention came from.
   const pending = [];
-  for (let r = 0; r < project.rows.length; r++) {
-    const text = String(project.rows[r][srcCol] == null ? '' : project.rows[r][srcCol]).trim();
-    pending.push({
-      key: String(project.rows[r][idIdx] == null ? '' : project.rows[r][idIdx]),
-      row: r,
-      text,
-      contained_in: scopeCol >= 0 ? resolvedPlaceIds(scopeCol, r).map(barePlaceId) : [],
-    });
-  }
+  cols.forEach((col) => {
+    for (let r = 0; r < project.rows.length; r++) {
+      const unit = `${r}::${col}`;
+      if (done[unit]) continue;                    // already read by an earlier run
+      pending.push({
+        unit,
+        key: String(project.rows[r][idIdx] == null ? '' : project.rows[r][idIdx]),
+        row: r,
+        col,
+        text: String(project.rows[r][col] == null ? '' : project.rows[r][col]).trim(),
+        contained_in: scopeCol >= 0 ? resolvedPlaceIds(scopeCol, r).map(barePlaceId) : [],
+      });
+    }
+  });
+  const already = Object.keys(done).length;
+  const total = already + pending.length;
+  let read = already, failed = 0, stopped = false;
 
-  const byRow = new Map();
-  let done = 0, failed = 0;
   try {
     for (let i = 0; i < pending.length; i += NER_ROW_BATCH) {
-      if (_nerRun.cancel) break;
+      if (_nerRun.cancel) { stopped = true; break; }
       const batch = pending.slice(i, i + NER_ROW_BATCH);
-      extractProgress(`<i class="fas fa-spinner fa-spin me-1"></i>Reading row ${(i + 1).toLocaleString()}` +
-        ` of ${pending.length.toLocaleString()}…`);
+      const colName = truncate(project.columns[batch[0].col].name, 18);
+      extractProgress(`<i class="fas fa-spinner fa-spin me-1"></i>Reading ${(read + 1).toLocaleString()}` +
+        ` of ${total.toLocaleString()}${cols.length > 1 ? ` · ${esc(colName)}` : ''}…`);
       const res = await Sync.nerRows(batch.map(({ key, text, contained_in }) => ({ key, text, contained_in })), fallback);
       if (res.status === 429) {
         extractProgress(`<span class="text-warning">${esc((res.data && res.data.error) || 'Daily extraction limit reached.')}` +
-          ` Stopped after ${done.toLocaleString()} row${done === 1 ? '' : 's'} — what was read so far is kept.</span>`);
-        break;
+          ` Stopped after ${read.toLocaleString()} — what was read is kept, and running again resumes here.</span>`);
+        stopped = true; break;
       }
       if (res.status !== 200 || !res.data || !Array.isArray(res.data.results)) {
-        extractProgress(`<span class="text-danger">${esc((res.data && res.data.error) || 'Extraction failed — please try again.')}</span>`);
-        break;
+        extractProgress(`<span class="text-danger">${esc((res.data && res.data.error) || 'Extraction failed — please try again.')}` +
+          ` ${read.toLocaleString()} of ${total.toLocaleString()} were read and are kept.</span>`);
+        stopped = true; break;
       }
       res.data.results.forEach((out, n) => {
         const src = batch[n];
         if (!src) return;
         if (out.failed) failed += 1;
-        byRow.set(src.row, out.places || []);
+        done[src.unit] = out.places || [];
       });
-      done += batch.length;
+      read += batch.length;
+      await persist();                             // survive a closed tab, one batch at a time
     }
   } catch (err) {
     console.warn('[recon] per-row extraction failed', err);
-    extractProgress('<span class="text-danger">Extraction failed — check your connection and try again.</span>');
+    extractProgress(`<span class="text-danger">Extraction failed — check your connection and try again.` +
+      ` ${read.toLocaleString()} of ${total.toLocaleString()} were read and are kept.</span>`);
+    stopped = true;
   } finally {
     _nerRun = null;
     if (runBtn) runBtn.disabled = false;
     if (stopBtn) stopBtn.classList.add('d-none');
   }
-  if (!byRow.size) { if (!el('recon-tf-extract-progress').innerHTML) extractProgress('<span class="text-warning">Nothing was extracted.</span>'); return; }
-  await explodeExtraction(byRow, srcCol, scopeCol, { done, failed, total: pending.length });
+
+  if (stopped) { renderExtractPanel(); return; }   // keep the source table; offer to resume
+  if (!Object.keys(done).length) { extractProgress('<span class="text-warning">Nothing was extracted.</span>'); return; }
+  await explodeExtraction(done, cols, scopeCol, { read, failed, total });
 }
 
-// One row per (record x distinct place). Derived, not destructive: every source column is carried
-// through, so the record survives alongside the place and case-level counts come back by
+// One row per (record x column x distinct place). Derived, not destructive: every source column is
+// carried through, so the record survives alongside the place and case-level counts come back by
 // deduplicating on the identifier. Rows that named no place are KEPT and flagged — a quarter of the
 // sampled REQ 2 cases named none, and dropping them would make every denominator wrong.
-async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
+async function explodeExtraction(done, cols, scopeCol, stats) {
   const idIdx = colIndexByRole('id');
-  const srcName = project.columns[srcCol].name;
   const taken = project.columns.map((c) => c.name);
   const add = (n) => { const u = uniqueHeader(n, taken); taken.push(u); return u; };
   const NEW = {
@@ -1450,29 +1524,37 @@ async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
   for (let r = 0; r < project.rows.length; r++) {
     const base = project.rows[r].slice();
     const srcId = String(project.rows[r][idIdx] == null ? '' : project.rows[r][idIdx]);
-    const places = byRow.get(r);
-    if (places === undefined) continue;              // not reached before the run was stopped
-    if (!places.length) {
-      rows.push(base.concat(['', '0', '', srcName, 'no places found', `${srcId}|-|0`, '', '', '', '']));
-      continue;
-    }
-    const occ = new Map();
-    places.forEach((p) => {
-      const k = norm(p.name);
-      const n = occ.get(k) || 0; occ.set(k, n + 1);
-      const m = p.match || {};
-      // Say which of these need a human eye. Unmatched names are NOT dropped: on a REQ 2 sample the
-      // unmatched were half personal names and half genuine minor places the gazetteer simply lacks
-      // (Honyngforde, Laybroke, Medesyde) — which are precisely the places Map your Data exists to
-      // help someone contribute. Marking them makes both kinds filterable in one move.
-      const status = p.outside_container ? 'outside container' : (p.match ? '' : 'no gazetteer match');
-      rows.push(base.concat([
-        String(p.name || ''), String(p.mentions || 1), String(p.context || ''), srcName, status,
-        `${srcId}|${k}|${n}`,
-        String(m.title || ''), (m.ccodes || []).join(' '),
-        m.lng != null ? String(m.lng) : '', m.lat != null ? String(m.lat) : '',
-      ]));
+    let anyRead = false, anyPlace = false;
+    cols.forEach((col) => {
+      const places = done[`${r}::${col}`];
+      if (places === undefined) return;            // not reached before the run was stopped
+      anyRead = true;
+      const srcName = project.columns[col].name;
+      const occ = new Map();
+      places.forEach((p) => {
+        anyPlace = true;
+        const k = norm(p.name);
+        const n = occ.get(k) || 0; occ.set(k, n + 1);
+        const m = p.match || {};
+        // Say which of these need a human eye. Unmatched names are NOT dropped: on a REQ 2 sample the
+        // unmatched were part personal names and part genuine minor places the gazetteer simply lacks
+        // (Honyngforde, Laybroke, Medesyde) — which are precisely the places Map your Data exists to
+        // help someone contribute. Marking them makes both kinds filterable in one move.
+        const status = p.outside_container ? 'outside container' : (p.match ? '' : 'no gazetteer match');
+        rows.push(base.concat([
+          String(p.name || ''), String(p.mentions || 1), String(p.context || ''), srcName, status,
+          // The column is part of the key: the same name found in Plaintiffs and in Subject is two
+          // facts about the record, not one repeated.
+          `${srcId}|${srcName}|${k}|${n}`,
+          String(m.title || ''), (m.ccodes || []).join(' '),
+          m.lng != null ? String(m.lng) : '', m.lat != null ? String(m.lat) : '',
+        ]));
+      });
     });
+    if (anyRead && !anyPlace) {
+      rows.push(base.concat(['', '0', '', cols.map((c) => project.columns[c].name).join(' · '),
+        'no places found', `${srcId}|-|-|0`, '', '', '', '']));
+    }
   }
 
   // Force the roles the headers cannot imply, and re-wire the container so the new table reconciles
@@ -1480,28 +1562,33 @@ async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
   const roles = { [NEW.place_name]: 'name', [NEW.place_key]: 'id', [NEW.country]: 'country',
                   [NEW.lon]: 'lon', [NEW.lat]: 'lat' };
   if (idIdx >= 0) roles[baseCols[idIdx]] = 'other';   // place_key is the new identifier
+  const contName = scopeCol >= 0 ? baseCols[scopeCol] : null;
   const fileName = `${(project.fileName || 'dataset').replace(/\.[^.]+$/, '')}-places.csv`;
+  const srcLabel = cols.map((c) => project.columns[c].name).join(', ');
+  delete project.nerRun;                            // consumed; the exploded table IS the result
   await finishImport({ columns, rows, total: rows.length, roles }, fileName, 'ner-column');
 
   const placeIdx = project.columns.findIndex((c) => c.name === NEW.place_name);
-  if (scopeCol >= 0 && placeIdx >= 0) {
-    const cont = project.columns[scopeCol];
-    if (cont) { cont.role = 'contains'; cont.child = placeIdx; normalizeChain(); }
+  const contIdx = contName ? project.columns.findIndex((c) => c.name === contName) : -1;
+  if (contIdx >= 0 && placeIdx >= 0) {
+    project.columns[contIdx].role = 'contains';
+    project.columns[contIdx].child = placeIdx;
+    normalizeChain();
   }
   renderAll(); await persist();
   track('MyD: extract column', { rows: bucketCount(stats.total), places: bucketCount(rows.length),
-                                 scoped: scopeCol >= 0 ? 'yes' : 'no' });
+                                 cols: String(cols.length), scoped: scopeCol >= 0 ? 'yes' : 'no' });
   const statusIdx = baseCols.length + 4;
   const withPlaces = rows.filter((r) => r[baseCols.length]).length;
   const flagged = rows.filter((r) => r[baseCols.length] && r[statusIdx]).length;
-  extractProgress(`<span class="text-success">Read ${stats.done.toLocaleString()} row` +
-    `${stats.done === 1 ? '' : 's'} → <strong>${withPlaces.toLocaleString()}</strong> place mention` +
+  extractProgress(`<span class="text-success">Read ${stats.read.toLocaleString()} of ` +
+    `${esc(truncate(srcLabel, 60))} → <strong>${withPlaces.toLocaleString()}</strong> place mention` +
     `${withPlaces === 1 ? '' : 's'}, plus ${(rows.length - withPlaces).toLocaleString()} row` +
     `${rows.length - withPlaces === 1 ? '' : 's'} that named none.` +
     `${flagged ? ` <strong>${flagged.toLocaleString()}</strong> need a look — see the` +
       ` <em>${esc(NEW.place_status)}</em> column.` : ''}` +
-    `${stats.failed ? ` ${stats.failed} row${stats.failed === 1 ? '' : 's'} could not be read.` : ''}</span>`);
-  flashSaved(`Extracted ${withPlaces.toLocaleString()} place mentions from “${truncate(srcName, 24)}”`);
+    `${stats.failed ? ` ${stats.failed} could not be read.` : ''}</span>`);
+  flashSaved(`Extracted ${withPlaces.toLocaleString()} place mentions from ${truncate(srcLabel, 30)}`);
 }
 
 // ── What the importer did with the geometry (place#210) ─────────────────────
@@ -3428,7 +3515,13 @@ async function loadSaved() {
 // server — the snapshot is the shared document, the metadata is per-client. Editing a server project
 // debounces a background push (optimistic-lock: PUT with base_version → fast-forward / auto-merge /
 // conflict). Solo local projects are untouched (no serverId → no network).
-const SYNC_KEYS = ['serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal', 'sharedToken', 'sharedUrl'];
+// `nerRun` is here for a different reason from the rest: it is not per-client sync metadata but the
+// scratch state of an in-flight extraction — half a dataset's place names and context snippets cut
+// from the user's own rows. It belongs in IndexedDB so a closed tab does not lose an hour of model
+// time, and nowhere near the shared document, where it would both push row excerpts to the server and
+// churn conflicts between collaborators for the length of a run.
+const SYNC_KEYS = ['serverId', 'serverVersion', 'role', 'teamId', 'teamTitle', 'teamPersonal',
+                   'sharedToken', 'sharedUrl', 'nerRun'];
 let _pushTimer = null, _pushing = false, _pushQueued = false, _retryTimer = null;
 let _pendingConflict = null; // { mine, merged, conflicts, version }
 
