@@ -247,10 +247,41 @@ class Command(BaseCommand):
         self.stdout.write(f"  {created} created, {updated} updated "
                           f"(all prospects — no Register link)")
 
+    def _normalise_organisations(self):
+        """Fold whitespace-variant organisations into one.
+
+        Baserow carries non-breaking spaces, so "Academy of\xa0Korean Studies"
+        and "Academy of Korean Studies" are different rows to the database but
+        the same institution to a human. Repoint everything at the cleaned name
+        and delete the variant, so the next get_or_create matches instead of
+        creating yet another twin.
+        """
+        canonical = {}
+        merged = 0
+        for org in Organisation.objects.order_by("id"):
+            key = _clean(org.name)
+            if key in canonical:
+                keep = canonical[key]
+                org.contacts.update(organisation=keep)
+                org.projects.update(organisation=keep)
+                org.gazetteers.update(organisation=keep)
+                org.engagements.update(organisation=keep)
+                org.delete()
+                merged += 1
+                continue
+            if org.name != key:
+                org.name = key[:255]
+                org.save(update_fields=["name"])
+            canonical[key] = org
+        if merged:
+            self.stdout.write(f"  merged {merged} duplicate organisation(s)")
+        return canonical
+
     def _import_people(self):
         # These came out of the team's own Baserow research, not a
         # public submission — so "flagged internally", not "web form".
         found_by = self._vocab(DiscoverySource, "flagged-internally")
+        canonical_orgs = self._normalise_organisations()
         created = updated = skipped = 0
 
         for row in self._load("people-all"):
@@ -265,11 +296,13 @@ class Command(BaseCommand):
                 email = None
             name = _display_name(raw_name, email)
 
-            institution = _clean(row.get("Institution"))
+            institution = _clean(row.get("Institution"))[:255]
             org = None
             if institution:
-                org, _ = Organisation.objects.get_or_create(
-                    name=institution[:255])
+                org = canonical_orgs.get(institution)
+                if org is None:
+                    org = Organisation.objects.create(name=institution)
+                    canonical_orgs[institution] = org
 
             # Match on address where we have one — it is the only reliable key.
             existing = None
@@ -280,7 +313,10 @@ class Command(BaseCommand):
                                                   is_erased=False).first()
 
             if existing:
-                existing.organisation = existing.organisation or org
+                # Prefer the canonical organisation over whatever was there:
+                # _normalise_organisations has already merged the variants, so
+                # `org` is the surviving row.
+                existing.organisation = org or existing.organisation
                 if email and not existing.user_id:
                     existing.email = email
                 # Repair rows created before _display_name existed, whose name
