@@ -220,6 +220,8 @@
                     <div id="progress_bar_text" class="progress-bar-text">0% Complete</div>
                 </div>
                 <p id="estimated_time"></p>
+                <!-- Geometry summary: rows that ended up with no location at all -->
+                <p id="geometry_summary" class="small mb-1"></p>
                 <!-- Fixes -->
                 <a id="fixes" class="btn btn-link" data-bs-toggle="collapse" href="#fixes_content" role="button"
                    aria-expanded="false" aria-controls="fixes_content"></a>
@@ -360,9 +362,13 @@
             $(this).addClass('was-validated');
         });
 
+        function escapeHtml(text) {
+            return $('<div>').text(text == null ? '' : text).html();
+        }
+
         function formatMessage(message) {
             const {feature_id, description} = JSON.parse(message);
-            return `<strong>${feature_id}</strong>: <em>${description}</em>`;
+            return `<strong>${escapeHtml(feature_id)}</strong>: <em>${description}</em>`;
         }
 
         // Polling functionality for validation status
@@ -413,6 +419,20 @@
                         }
 
                         $('#progress_bar_text').text(bar_text);
+
+                        // Geometry summary: a row with no location is easy to miss, and the
+                        // map preview should not be the only place it shows up.
+                        const withoutGeometry = parseInt(taskStatus.rows_without_geometry || 0);
+                        if (withoutGeometry > 0) {
+                            const total = parseInt(taskStatus.total_features);
+                            $('#geometry_summary')
+                                .html(`<i class="fas fa-map-marker-alt"></i> ` +
+                                      `<b>${withoutGeometry}</b> of ${total} row${total === 1 ? '' : 's'} ` +
+                                      `will have no location.`)
+                                .show();
+                        } else {
+                            $('#geometry_summary').hide();
+                        }
 
                         // Handle fixes
                         if (taskStatus.fixes && taskStatus.fixes.length > 0) {

@@ -20,6 +20,7 @@ from shapely.geometry import shape
 from shapely.geometry import mapping as shapely_mapping
 from shapely.validation import make_valid
 
+from validation.coordinates import LON_LIMIT, LAT_LIMIT
 from validation.create_dataset import save_dataset
 
 logger = logging.getLogger('validation')
@@ -277,10 +278,12 @@ def validate_geometry(geometry):
     Apply buffer(0) first, then make_valid if necessary.
 
     :param geometry: A dictionary representing a GeoJSON geometry
-    :return: Tuple of (geometry, fixed, valid)
+    :return: Tuple of (geometry, fixed, valid, reason), where `reason` describes the
+             failure when `valid` is False (and is None otherwise)
     """
     fixed = False
     valid = False
+    reason = None
 
     geometry_type = geometry.get('type', None)
     geometry_coordinates = geometry.get('coordinates', None)
@@ -331,6 +334,8 @@ def validate_geometry(geometry):
                         valid = True
                     else:
                         logger.error("Failed to fix geometry with make_valid.")
+                        reason = ("Geometry is invalid (self-intersecting or malformed) and "
+                                  "could not be repaired.")
             else:
                 # Geometry is valid; ensure coordinates are normalized/rounded
                 try:
@@ -345,11 +350,31 @@ def validate_geometry(geometry):
 
         except Exception as e:
             logger.error(f"Error processing geometry: {e}")
+            reason = f"Geometry could not be read: {e}"
+
+        if valid:
+            # Range check. A coordinate outside these bounds is not a geometry problem
+            # Shapely can see — the shape is perfectly well-formed, it is just nowhere on
+            # Earth. Left unchecked it reaches the map (and the index) as a wild outlier.
+            try:
+                minx, miny, maxx, maxy = shape({
+                    'type': geometry.get('type'),
+                    'coordinates': geometry.get('coordinates'),
+                }).bounds
+                if (abs(minx) > LON_LIMIT or abs(maxx) > LON_LIMIT
+                        or abs(miny) > LAT_LIMIT or abs(maxy) > LAT_LIMIT):
+                    valid = False
+                    reason = (f"Coordinates ({minx:.10g}, {miny:.10g}) to ({maxx:.10g}, {maxy:.10g}) "
+                              f"are outside the valid range (longitude +/-{LON_LIMIT:.10g}, "
+                              f"latitude +/-{LAT_LIMIT:.10g}).")
+            except Exception as e:
+                logger.debug(f"Could not range-check geometry bounds: {e}")
     else:
         logger.error(f"Error: geometry lacks either type or coordinates.")
         valid = False
+        reason = "Geometry lacks either `type` or `coordinates`."
 
-    return geometry, fixed, valid
+    return geometry, fixed, valid, reason
 
 
 def validate_feature_geometry(feature):
@@ -358,11 +383,13 @@ def validate_feature_geometry(feature):
     Fix invalid geometries using a two-tier approach for single geometries or geometries in a GeometryCollection.
 
     :param feature: A GeoJSON feature with geometry to validate
-    :return: Tuple of (feature, fixed, valid), where fixed is a boolean indicating if a fix was applied,
-             and valid is a boolean indicating if the geometry is valid after fixing.
+    :return: Tuple of (feature, fixed, valid, reason), where fixed is a boolean indicating if a fix was
+             applied, valid is a boolean indicating if the geometry is valid after fixing, and reason
+             describes the failure when it is not.
     """
     fixed = False
     valid = False
+    reason = None
 
     if 'geometry' in feature:
         # Extract geometry from the feature
@@ -385,11 +412,13 @@ def validate_feature_geometry(feature):
                         continue
 
                     logger.debug(f"Validating geometry {i} in GeometryCollection.")
-                    geom, geom_fixed, geom_valid = validate_geometry(geom)
+                    geom, geom_fixed, geom_valid, geom_reason = validate_geometry(geom)
                     if geom_fixed:
                         fixed = True
                     if not geom_valid:
                         all_valid = False
+                        if reason is None:
+                            reason = f"Geometry {i} of the collection: {geom_reason}"
                     filtered_geometries.append(geom)  # Collect valid geometries
 
                 # Update the feature with filtered geometries
@@ -397,16 +426,18 @@ def validate_feature_geometry(feature):
                 valid = all_valid  # Set valid to True only if all geometries are valid
             elif geometry_type:
                 # Handle single geometries
-                geometry, fixed, valid = validate_geometry(geometry)
+                geometry, fixed, valid, reason = validate_geometry(geometry)
                 feature['geometry'] = geometry
             else:
                 logger.debug("Feature geometry lacks `type`.")
+                reason = "Feature geometry lacks `type`."
 
         else:
             logger.error("Invalid geometry format in feature.")
+            reason = "Feature geometry is not an object."
 
     # No need to handle absence of `geometry` or other errors as this will be done by JSON Schema validation
-    return feature, fixed, valid
+    return feature, fixed, valid, reason
 
 
 def revoke_all_subtasks(redis_client, task_id):
@@ -510,7 +541,7 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
             feature_start = time.time()
             logger.debug(f"Subtask {sub_task_id}: processing feature {processed_in_batch}/{len(feature_batch)} id={feature_id}")
 
-            feature, fixed, valid = validate_feature_geometry(feature)
+            feature, fixed, valid, geometry_reason = validate_feature_geometry(feature)
             geom_time = time.time() - feature_start
             logger.debug(f"Subtask {sub_task_id}: geometry validation for feature id={feature_id} -> valid={valid}, fixed={fixed} (took {geom_time:.2f}s)")
             # update Redis heartbeat
@@ -523,7 +554,7 @@ def validate_feature_batch(self, feature_batch, schema, task_id, namespaces=None
                 redis_client.rpush(f"{task_id}_errors", json.dumps({
                     "feature_id": feature.get("@id", "-- no @id --"),
                     "path": "features.feature.geometry",
-                    "description": "Geometry failed validation and could not be fixed."
+                    "description": geometry_reason or "Geometry failed validation and could not be fixed."
                 }))
                 redis_client.hset(task_id, 'last_update', timezone.now().isoformat())
             if fixed:

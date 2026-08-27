@@ -18,10 +18,12 @@ from django.db.utils import IntegrityError, DataError
 from django.http import HttpResponseServerError
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.utils.html import strip_tags
 
 from .exceptions import DelimInsertError, DataAlreadyProcessedError
 from .models import Dataset
 from areas.models import Area
+from validation.coordinates import resolve_lonlat
 from datasets.utils import aat_lookup, ccodesFromGeom, \
     makeCoords, parse_wkt, parsedates_tsv
 from places.models import *
@@ -333,16 +335,30 @@ def process_geom(row, newpl):
     geojson = None
     valid_ccodes = [ccode.upper() for c in Area.objects.filter(type='country') for ccode in c.ccodes]
 
-    # If 'lat' and 'lon' are both present, generate Point geometry
-    if all(col in row for col in ['lat', 'lon']) and row['lat'] and row['lon']:
-        coords = [float(row['lon']), float(row['lat'])]
-        geojson = {
-            "type": "Point",
-            "coordinates": coords,
-            "geowkt": 'POINT(' + str(coords[0]) + ' ' + str(coords[1]) + ')'
-        }
-    # If 'geowkt' is present, parse and generate corresponding geojson
-    elif 'geowkt' in row and row['geowkt']:
+    has_geowkt = 'geowkt' in row and row['geowkt']
+    has_lonlat = any(col in row and row[col] not in ('', None) for col in ('lat', 'lon'))
+
+    # If 'lat'/'lon' are given, generate Point geometry. The pair goes through the same
+    # parser as the validation path so that a locale-mangled, transposed or unreadable cell
+    # is repaired or reported rather than dropped on the floor (place#212).
+    if has_lonlat and not has_geowkt:
+        ccodes_raw = [c.strip() for c in str(row.get('ccodes') or '').split(';') if c.strip()]
+        lon, lat, repairs, coord_errors = resolve_lonlat(row.get('lon'), row.get('lat'), ccodes=ccodes_raw)
+        for repair in repairs:
+            logger.info(f"Place {newpl.src_id}: {strip_tags(repair)}")
+        if coord_errors:
+            error_msgs.extend(
+                f"{strip_tags(msg)} (place <b>{newpl} ({newpl.src_id})</b>)" for msg in coord_errors)
+        elif lon is not None and lat is not None:
+            coords = [lon, lat]
+            geojson = {
+                "type": "Point",
+                "coordinates": coords,
+                "geowkt": 'POINT(' + str(coords[0]) + ' ' + str(coords[1]) + ')'
+            }
+    # If 'geowkt' is present, parse and generate corresponding geojson. It supersedes
+    # lat/lon entirely, so any problem with those is not the contributor's to fix.
+    elif has_geowkt:
         # print('geowkt', row['geowkt'])
         try:
             geojson = parse_wkt(row['geowkt'])
@@ -500,8 +516,11 @@ def ds_insert_delim(df, pk):
             # PlaceWhen (always at least a start or attestation_year)
             objlists['PlaceWhen'].extend(process_when(row, newpl))
 
-            # PlaceGeom
-            if ('lat' in row and 'lon' in row and row['lat'] and row['lon']) or ('geowkt' in row and row['geowkt']):
+            # PlaceGeom. NB the lat/lon test is deliberately not a truthiness test on the
+            # pair: a row with only one of them, or with an unparseable value, must reach
+            # process_geom to be reported rather than quietly losing its location.
+            if (any(col in row and row[col] not in ('', None) for col in ('lat', 'lon'))
+                    or ('geowkt' in row and row['geowkt'])):
                 objlists['PlaceGeom'].extend(process_geom(row, newpl))
 
             # PlaceLink
