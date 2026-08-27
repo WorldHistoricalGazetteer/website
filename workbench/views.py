@@ -1134,6 +1134,21 @@ def _ner_row_places(text, user, scope, fallback):
     places = []
     for nm, count in mentions.items():
         m = matches.get(nm)
+        hits = extraction.find_all(text, nm)
+        # Everything below applies ONLY to names the gazetteer did not vouch for. A match is evidence;
+        # without one, the name has to earn its place in the output.
+        if not m:
+            # (a) Not in the source at all ⇒ the model invented it. On a row with no place in it —
+            # "obligation", "a bond" — it falls back on the prompt's own vocabulary and returns
+            # "towns, villages, parishes, counties, rivers, mountains, seas" as though they were
+            # findings. Nothing invented can be a mention of anything.
+            if not hits:
+                continue
+            # (b) Present, but never capitalised ⇒ a common noun, not a toponym. This is what separates
+            # "chain", "conspiracy" and "pearls" from Honyngforde, Laybroke and Medesyde — the genuine
+            # minor places the gazetteer lacks, which this must not throw away.
+            if not any(text[h:h + 1].isupper() for h in hits):
+                continue
         # Keep only what the model or the gazetteer vouches for: a capitalised span that matched
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
@@ -1146,7 +1161,6 @@ def _ner_row_places(text, user, scope, fallback):
         # evidence. So the gazetteer gets the benefit of the doubt only when the row is scoped.
         if _ner_appellative(nm) and not (m and scope):
             continue
-        hits = extraction.find_all(text, nm)
         places.append({
             'name': nm,
             'mentions': len(hits) or count,

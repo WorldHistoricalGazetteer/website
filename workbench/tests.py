@@ -710,6 +710,22 @@ class NerPerRowTests(TestCase):
         self.assertIn('Mill', names)
         self.assertNotIn("King's", names)       # a possessive does not escape the stop list
 
+    def test_invented_and_lowercase_names_are_refused(self):
+        """On a row naming no place the model falls back on the prompt's own vocabulary — "towns,
+        villages, parishes, counties, rivers, mountains, seas" — and returns it as findings. Nothing
+        it invented is a mention of anything. A word present but never capitalised is a common noun,
+        not a toponym; a capitalised one is kept even unmatched, because that is how a genuine minor
+        place the gazetteer lacks reaches the user."""
+        from unittest.mock import patch
+        text = 'obligation touching a chain of pearls, and lands at Honyngforde'
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('towns', 'villages', 'chain', 'pearls', 'Honyngforde')]
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': text}]})
+        names = [p['name'] for p in r.json()['results'][0]['places']]
+        self.assertEqual(names, ['Honyngforde'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',
