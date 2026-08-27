@@ -1295,16 +1295,23 @@ function datasetScopeContainers() {
   return (r.mode === 'whg' && r.place && r.place.id) ? [barePlaceId(r.place.id)] : [];
 }
 
-// Columns that could scope a row: any container in the chain that has resolved matches to offer.
+// Columns that could scope a row: ANY column with resolved matches, plus any declared container.
+// Deliberately not restricted to the containment chain. The table this is for — a catalogue whose
+// places are still locked inside its prose — has no place-name column at all until the extraction has
+// run, so there is no chain to belong to. The workable order is: point the County column at Place
+// name, reconcile it, then extract scoped by it; the explode below then demotes it to a container of
+// the places it scoped.
 function extractContainerCandidates() {
   if (!project) return [];
   return project.columns.map((c, i) => ({ i, c }))
-    .filter(({ i, c }) => c.role === 'contains' || (c.role !== 'name' && reconChain().includes(i)))
+    .filter(({ i, c }) => i !== _transformCol && c.role !== 'id')
     .map(({ i, c }) => {
       let resolved = 0;
       for (let r = 0; r < project.rows.length; r++) if (resolvedPlaceIds(i, r).length) resolved += 1;
       return { idx: i, name: c.name, resolved };
-    });
+    })
+    .filter((c) => c.resolved > 0 || project.columns[c.idx].role === 'contains'
+                || project.columns[c.idx].role === 'name');
 }
 
 function renderExtractPanel() {
@@ -1330,6 +1337,7 @@ function renderExtractPanel() {
     return;
   }
 
+  const scopable = conts.some((c) => c.resolved);
   const opts = ['<option value="-1">— none (search the whole world) —</option>'].concat(
     conts.map((c) => `<option value="${c.idx}"${c.resolved ? '' : ' disabled'}>${esc(truncate(c.name, 28))}` +
       ` — ${c.resolved.toLocaleString()} of ${rows.toLocaleString()} rows resolved${c.resolved ? '' : ' (reconcile it first)'}</option>`)).join('');
@@ -1344,6 +1352,10 @@ function renderExtractPanel() {
       <button type="button" id="recon-tf-extract-btn" class="btn btn-sm btn-outline-primary">Extract place names</button>
       <button type="button" id="recon-tf-extract-stop" class="btn btn-sm btn-outline-secondary d-none">Stop</button>
     </div>
+    ${scopable ? '' : `<div class="text-warning mt-1"><i class="fas fa-circle-info me-1"></i>Nothing can
+      scope these rows yet. To search each row inside its own area — far more accurate, and it stops
+      people's names matching places — set a column such as County to <strong>Place name</strong>,
+      reconcile it, then come back. This step will then make it the container of the places it scoped.</div>`}
     <div class="text-muted mt-1">Your current table is replaced by the result, which carries every one
       of its columns — take a Backup first if you want to keep this exact state.</div>`;
   const run = el('recon-tf-extract-btn');
