@@ -829,6 +829,25 @@ class ExtractionUnitTests(TestCase):
         self.assertEqual(by_name['Atlantis']['count'], 0)
         self.assertFalse(by_name['Atlantis']['verbatim'])
 
+    def test_a_transient_model_error_is_retried_not_surfaced(self):
+        """The model host returns the odd 500 while reloading after its keep-alive expires. Failing
+        the row would make a record that names places indistinguishable from one that names none."""
+        from unittest.mock import patch, Mock
+        bad, good = Mock(status_code=503), Mock(status_code=200)
+        good.json.return_value = {'response': '{"places": ["Duxford"]}'}
+        with patch('workbench.extraction.requests.post', side_effect=[bad, good]) as post, \
+                patch('workbench.extraction.time.sleep'):
+            names = extraction._generate('lands in Duxford')
+        self.assertEqual(names, ['Duxford'])
+        self.assertEqual(post.call_count, 2)
+
+    def test_a_persistent_model_error_still_raises(self):
+        from unittest.mock import patch, Mock
+        with patch('workbench.extraction.requests.post', return_value=Mock(status_code=500)), \
+                patch('workbench.extraction.time.sleep'):
+            with self.assertRaises(Exception):
+                extraction._generate('lands in Duxford')
+
     def test_unconfigured_host_raises_rather_than_calling_out(self):
         from django.test import override_settings
         with override_settings(OLLAMA_URL=''):
