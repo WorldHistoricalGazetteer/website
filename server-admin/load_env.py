@@ -1,5 +1,6 @@
 # load_env.py
 import json
+import re
 import os
 import shutil
 import importlib.util
@@ -91,16 +92,25 @@ def write_env_file(env_vars, output_path):
         for key, value in env_vars.items():
             file.write(f'{key}={value}\n')
 
+# A bare digit string is only safe to emit unquoted if it is a valid Python integer literal. `isdigit()`
+# is not that test: "098610660" is all digits and raises SyntaxError ("leading zeros in decimal integer
+# literals are not permitted"), which is a broken settings module and a site that will not boot. That is
+# not hypothetical — a git short hash of 098610660 took the dev site down. Roughly one commit in a
+# thousand draws an all-digit hash beginning with zero, so the failure is rare, load-bearing and
+# arrives at deploy time.
+_INT_LITERAL = re.compile(r'0|[1-9][0-9]*')
+
+
 def write_python_file(env_vars, output_path):
     with open(output_path, 'w') as file:
         file.write("# This file is auto-generated from .env\n\n")
         for key, value in env_vars.items():
-            if value.isdigit():
+            if _INT_LITERAL.fullmatch(value):
                 file.write(f"{key} = {value}\n")
             elif value.lower() in ['true', 'false']:
                 file.write(f"{key} = {value.capitalize()}\n")
             else:
-                file.write(f"{key} = '{value}'\n")
+                file.write(f"{key} = {value!r}\n")
 
 def render_jinja_template(template_path, env_vars, output_path):
     with open(template_path, 'r') as file:
