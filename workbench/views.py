@@ -1071,6 +1071,12 @@ _NER_APPELLATIVES = {
 }
 
 
+def _ner_appellative(name):
+    """A bare common noun or title, ignoring a possessive: "King's" is no more a place than "King"."""
+    n = re.sub(r"[’']s$", '', (name or '').strip().lower())
+    return n in _NER_APPELLATIVES or n in _NER_CAND_STOP
+
+
 def _ner_scope(value, limit=NER_SCOPE_MAX):
     """A caller's `contained_in` → a clean list of bare place ids."""
     if isinstance(value, str):
@@ -1120,8 +1126,12 @@ def _ner_row_places(text, user, scope, fallback):
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
             continue
-        if not m and nm.strip().lower() in _NER_APPELLATIVES:
-            continue                       # a bare common noun the gazetteer does not vouch for
+        # A bare common noun is dropped unless something trustworthy vouches for it — and OUTSIDE a
+        # container nothing does. Unscoped, the index will happily match "Master" to some obscure
+        # place and present a title as a location; inside a county polygon, a match is evidence. So
+        # the gazetteer gets the benefit of the doubt only when the row is scoped.
+        if _ner_appellative(nm) and not (m and scope):
+            continue
         hits = extraction.find_all(text, nm)
         places.append({
             'name': nm,

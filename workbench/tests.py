@@ -690,8 +690,25 @@ class NerPerRowTests(TestCase):
             r = self._post({'rows': [{'key': 'a', 'text': 'the Hospital and the Mill at Holloway'}]})
         names = [p['name'] for p in r.json()['results'][0]['places']]
         self.assertNotIn('Hospital', names)     # common noun, nothing vouches for it
-        self.assertIn('Mill', names)            # same shape, but the gazetteer knows it
+        self.assertNotIn('Mill', names)         # matched, but UNSCOPED — the match is not evidence
         self.assertIn('Holloway', names)        # unmatched, but not a common noun — kept and flagged
+
+    def test_a_vouched_appellative_survives_inside_a_container(self):
+        """Inside a county polygon a match IS evidence, so a real place called Mill comes through;
+        outside one the index will happily match "Master" and present a title as a location."""
+        from unittest.mock import patch
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('Mill', "King's")]
+        match = {'id': 'place:x:1', 'title': 'Mill', 'score': 100, 'ccodes': [], 'lng': 0, 'lat': 0,
+                 'ambiguous': False}
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate',
+                      return_value={'Mill': match, "King's": match}):
+            r = self._post({'rows': [{'key': 'a', 'text': "the Mill on the King's land",
+                                      'contained_in': ['ukhc:ESE']}]})
+        names = [p['name'] for p in r.json()['results'][0]['places']]
+        self.assertIn('Mill', names)
+        self.assertNotIn("King's", names)       # a possessive does not escape the stop list
 
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
