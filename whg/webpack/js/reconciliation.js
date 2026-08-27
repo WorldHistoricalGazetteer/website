@@ -1453,8 +1453,7 @@ async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
     const places = byRow.get(r);
     if (places === undefined) continue;              // not reached before the run was stopped
     if (!places.length) {
-      rows.push(base.concat(['', '0', '', srcName, 'no places found',
-        `${srcId}|-|0`, '', '', '', '']));
+      rows.push(base.concat(['', '0', '', srcName, 'no places found', `${srcId}|-|0`, '', '', '', '']));
       continue;
     }
     const occ = new Map();
@@ -1462,9 +1461,13 @@ async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
       const k = norm(p.name);
       const n = occ.get(k) || 0; occ.set(k, n + 1);
       const m = p.match || {};
+      // Say which of these need a human eye. Unmatched names are NOT dropped: on a REQ 2 sample the
+      // unmatched were half personal names and half genuine minor places the gazetteer simply lacks
+      // (Honyngforde, Laybroke, Medesyde) — which are precisely the places Map your Data exists to
+      // help someone contribute. Marking them makes both kinds filterable in one move.
+      const status = p.outside_container ? 'outside container' : (p.match ? '' : 'no gazetteer match');
       rows.push(base.concat([
-        String(p.name || ''), String(p.mentions || 1), String(p.context || ''), srcName,
-        p.outside_container ? 'outside container — check' : '',
+        String(p.name || ''), String(p.mentions || 1), String(p.context || ''), srcName, status,
         `${srcId}|${k}|${n}`,
         String(m.title || ''), (m.ccodes || []).join(' '),
         m.lng != null ? String(m.lng) : '', m.lat != null ? String(m.lat) : '',
@@ -1488,11 +1491,15 @@ async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
   renderAll(); await persist();
   track('MyD: extract column', { rows: bucketCount(stats.total), places: bucketCount(rows.length),
                                  scoped: scopeCol >= 0 ? 'yes' : 'no' });
+  const statusIdx = baseCols.length + 4;
   const withPlaces = rows.filter((r) => r[baseCols.length]).length;
+  const flagged = rows.filter((r) => r[baseCols.length] && r[statusIdx]).length;
   extractProgress(`<span class="text-success">Read ${stats.done.toLocaleString()} row` +
     `${stats.done === 1 ? '' : 's'} → <strong>${withPlaces.toLocaleString()}</strong> place mention` +
     `${withPlaces === 1 ? '' : 's'}, plus ${(rows.length - withPlaces).toLocaleString()} row` +
     `${rows.length - withPlaces === 1 ? '' : 's'} that named none.` +
+    `${flagged ? ` <strong>${flagged.toLocaleString()}</strong> need a look — see the` +
+      ` <em>${esc(NEW.place_status)}</em> column.` : ''}` +
     `${stats.failed ? ` ${stats.failed} row${stats.failed === 1 ? '' : 's'} could not be read.` : ''}</span>`);
   flashSaved(`Extracted ${withPlaces.toLocaleString()} place mentions from “${truncate(srcName, 24)}”`);
 }
