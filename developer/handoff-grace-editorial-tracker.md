@@ -1,14 +1,13 @@
 # Handoff — GRACE, the editorial tracker
 
 **Audience:** Claude Code in the `whg3` repo (desktop / PyCharm).
-**Branch:** `claude/palak-system-review-gwkmrr` — pushed, nothing uncommitted.
-**Status:** design review complete; **no code written, and none should be until
-decisions 1–4 below are settled.** This handoff exists so the next session starts
-with the findings rather than re-deriving them.
+**Branch:** `staging`.
+**Status:** all seven decisions settled; **the app is built and running on dev**
+(see §7). This handoff is the map — the reasoning lives in the review and in the
+module docstrings.
 
 ```bash
-git fetch origin claude/palak-system-review-gwkmrr
-git checkout claude/palak-system-review-gwkmrr
+git checkout staging      # the work is on staging; the review branch is deleted
 ```
 
 ---
@@ -157,18 +156,55 @@ Safe to act on independently of the decisions above, except where noted.
 
 ---
 
-## 7. Suggested first moves
+## 7. Build status — 27 August 2026
 
-1. Read `developer/whg-tracker-review.html`, then `api/views_indexing.py:103` and
-   `api/models.py:186`. Those two files carry most of the constraints.
-2. Then `developer/grace-leads-prototype-notes.md` — the `leads` prototype read
-   for you, with what to lift and what to leave.
-3. Build order: vocabulary tables → `Contact` + `Organisation` →
-   `TrackedGazetteer` + `Stage` → Engagement/ActionItem/Interaction → admin →
-   the `/contribute/` rebuild.
-4. Do not load real contact data until decision 6 returns.
+**All seven steps are built and deployed to dev.** The app is `grace/`, on the
+`staging` branch, live at <https://dev.whgazetteer.org/>.
 
----
+| Step | State |
+|------|-------|
+| 1. Vocabulary tables | ✅ `grace/vocabularies.py` — 18 tables, 109 seeded terms |
+| 2. Contact + Organisation | ✅ optional `User` one-to-one; local copies cleared on save |
+| 3. TrackedGazetteer + Stage | ✅ nullable FK to `api.GazetteerRegistryEntry` |
+| 4. Engagement / ActionItem / Interaction | ✅ one-owner rule + staleness alarm enforced |
+| 5. Admin | ✅ `grace/admin.py` — the whole UI, grouped by register |
+| 6. `/contribute/` rebuild | ✅ redirects to `grace:suggest`; **all `BASEROW_*` settings gone** |
+| 7. Import | ✅ 72 sources + 42 prospects loaded on dev; **people deliberately not loaded** |
+
+Verified on dev: 43/43 tests pass, migration applies clean from zero, the import
+is idempotent (a second run creates 0), `/contribute/` 302s to `/grace/suggest/`,
+the form renders for anonymous visitors, and `grace_retention_review` runs.
+
+### Where the reasoning lives
+
+Read the code, not a spec: the design decisions are argued in the module
+docstrings, next to what they constrain. In particular
+`grace/vocabularies.py` (why these are tables, not `choices=`),
+`grace/privacy.py` (the whole of decision 6), and `TrackedGazetteer` /
+`Contact` in `grace/models.py`.
+
+### Two things left for a human
+
+1. **The people import has not been run.** `import_baserow_export` will load
+   all 210 contacts, but it was run with `--skip-people` on dev — putting 210
+   real addresses on an extra environment is a bigger step than loading a
+   bibliography, and it starts the Article 14 clock. Run it without the flag
+   when the team is ready to send the notices:
+   ```
+   ./manage.py import_baserow_export        # loads People ALL too
+   ./manage.py grace_retention_review       # shows the Art. 14 backlog
+   ```
+   The export must be in place first — it is gitignored, so only the two
+   non-personal tables are currently on the dev server.
+2. **Palak should walk the vocabularies** in the admin and change whatever is
+   wrong. The 109 seeded terms are a starting point, not a claim — that is the
+   whole point of decision 3, and the seeder never overwrites an edited label.
+
+### Not built, deliberately
+
+External peer review (review §7, Q5 — sketch and defer). The
+`ReviewRecommendation` vocabulary exists so it is ready, and the platform's
+existing pending/approved/rejected language is what it should align with.
 
 ## Notes
 
