@@ -11,7 +11,8 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.core.cache import cache
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -330,10 +331,23 @@ class VocabularyTests(TestCase):
         self.assertNotIn("not indexed", labels)
 
 
+@override_settings(CACHES={"default": {
+    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    "LOCATION": "grace-tests",
+}})
 class SuggestFormTests(TestCase):
-    """The public intake door (decision 5)."""
+    """The public intake door (decision 5).
+
+    Pinned to a local-memory cache. The view's per-IP rate limit lives in the
+    cache, and the real one is a *shared* Redis: every test client request comes
+    from 127.0.0.1, so on the shared backend the counter accumulates across
+    tests and even across separate runs, and once it passes five the form
+    silently starts throttling instead of saving. Isolating the cache is the
+    fix; clearing it in setUp keeps each test independent of the last.
+    """
 
     def setUp(self):
+        cache.clear()
         self.untriaged = IntakeStatus.objects.create(
             label="Untriaged", is_untriaged=True)
 
@@ -432,3 +446,34 @@ class ImporterHygieneTests(TestCase):
         from grace.management.commands.import_baserow_export import _clean
         self.assertEqual(_clean("Academy of Korean Studies"),
                          "Academy of Korean Studies")
+
+
+@override_settings(CACHES={"default": {
+    "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    "LOCATION": "grace-ratelimit-tests",
+}})
+class RateLimitTests(TestCase):
+    """The anonymous rate limit, exercised deliberately rather than by accident."""
+
+    def setUp(self):
+        cache.clear()
+        IntakeStatus.objects.create(label="Untriaged", is_untriaged=True)
+
+    def _post(self, n):
+        for i in range(n):
+            self.client.post(reverse("grace:suggest"),
+                             {"title": f"Suggestion {i}", "website": ""})
+
+    def test_anonymous_submissions_are_capped(self):
+        from grace.views import RATE_LIMIT_MAX
+        self._post(RATE_LIMIT_MAX + 3)
+        self.assertEqual(SourceSuggestion.objects.count(), RATE_LIMIT_MAX)
+
+    def test_signed_in_users_are_not_rate_limited(self):
+        from grace.views import RATE_LIMIT_MAX
+        user = User.objects.create_user(
+            username="prolific", email="p@example.org", password="pw",
+            given_name="Pro", surname="Lific", name="Pro Lific")
+        self.client.force_login(user)
+        self._post(RATE_LIMIT_MAX + 3)
+        self.assertEqual(SourceSuggestion.objects.count(), RATE_LIMIT_MAX + 3)
