@@ -800,15 +800,6 @@ _NER_CAND_STOP = {
 NER_RECON_MAX = 25  # cap mentions reconciled against the gateway per request (one call each)
 
 
-def _ner_context(text, name, width=140):
-    i = text.lower().find(name.lower())
-    if i < 0:
-        return ''
-    a, b = max(0, i - width // 2), min(len(text), i + len(name) + width // 2)
-    snip = re.sub(r'\s+', ' ', text[a:b]).strip()
-    return ('…' if a > 0 else '') + snip + ('…' if b < len(text) else '')
-
-
 def _ner_candidates(text, already):
     """Capitalised spans the extractor did not return → {name: frequency}."""
     seen = {(n or '').lower() for n in already}
@@ -970,8 +961,12 @@ def ner_extract(request):
         if nm.lower() in have:
             continue
         have.add(nm.lower())
-        ents.append({'name': nm, 'label': 'GAZ', 'count': text.count(nm),
-                     'context': _ner_context(text, nm), 'match': m})
+        # Count whole-word occurrences, as extraction does — a bare substring count reports "Cam"
+        # three times in a text that says Cam once and Cambridgeshire twice.
+        hits = extraction.find_all(text, nm)
+        ents.append({'name': nm, 'label': 'GAZ', 'count': len(hits),
+                     'context': extraction.snippet(text, hits[0], len(nm)) if hits else '',
+                     'match': m})
         added += 1
     ents.sort(key=lambda e: (-(e.get('count') or 0), (e.get('name') or '').lower()))
     data['entities'] = ents
