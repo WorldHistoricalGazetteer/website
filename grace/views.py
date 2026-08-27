@@ -28,6 +28,18 @@ def _client_ip(request):
     return request.META.get("REMOTE_ADDR", "")
 
 
+def _can_map_data(user):
+    """Whether to offer the Map-your-Data link.
+
+    Resolved here rather than in the template: ``can_access_beta`` does not
+    exist on ``AnonymousUser``, and letting the template look it up makes
+    Django log a VariableDoesNotExist traceback on every anonymous visit even
+    though it handles it.
+    """
+    return bool(getattr(user, "is_authenticated", False)
+                and getattr(user, "can_access_beta", False))
+
+
 def suggest_source(request):
     """Suggest a printed gazetteer or dataset we should know about.
 
@@ -52,6 +64,7 @@ def suggest_source(request):
             )
             return render(request, "grace/suggest.html", {
                 "form": SourceSuggestionForm(), "show_honeypot": True,
+                "can_map_data": _can_map_data(request.user),
             })
 
         form = SourceSuggestionForm(request.POST, trusted=trusted)
@@ -84,6 +97,7 @@ def suggest_source(request):
 
     return render(request, "grace/suggest.html", {
         "form": form, "show_honeypot": not trusted,
+        "can_map_data": _can_map_data(request.user),
     })
 
 

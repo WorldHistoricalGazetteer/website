@@ -26,13 +26,15 @@
         the editorial team reads every suggestion.
     </p>
     {% comment %}
-      Only link Map your Data for users who can actually reach it — the
+      can_map_data is computed in the view, not looked up here — the
       reconciliation view is beta-gated and raises 404 for everyone else, so an
-      unconditional link would send anonymous visitors into a dead end.
+      unconditional link would send anonymous visitors into a dead end, and
+      resolving can_access_beta on AnonymousUser in the template makes Django
+      log a traceback on every anonymous visit.
     {% endcomment %}
     <p class="text-muted small">
         If you have data of your own you would like to contribute, this is not the right
-        form — {% if user.is_authenticated and user.can_access_beta %}use
+        form — {% if can_map_data %}use
         <a href="{% url 'reconciliation' %}">Map your Data</a>{% else %}sign in and use
         <em>Map your Data</em>{% endif %}, which takes you through validation and
         publication.
