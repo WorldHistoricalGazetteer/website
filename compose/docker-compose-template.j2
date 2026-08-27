@@ -4,6 +4,14 @@ networks:
     ipam:
       config:
         - subnet: {{ SUBNET }}
+{% if OLLAMA_NETWORK is defined and OLLAMA_NETWORK %}
+  # Shared LLM bridge (place#211). Declared EXTERNAL in every stack so that neither `docker-compose
+  # down` ever tries to remove it out from under the other stack — dev and prod both attach to it,
+  # and only the prod stack runs the `ollama` service itself. server-admin/deploy.sh creates it if
+  # it is missing (`docker network create {{ OLLAMA_NETWORK }}`), so a fresh host needs no manual step.
+  {{ OLLAMA_NETWORK }}:
+    external: true
+{% endif %}
 
 services:
 
@@ -229,6 +237,9 @@ services:
   ner:
     networks:
       - {{ ENV_CONTEXT }}
+{% if OLLAMA_NETWORK is defined and OLLAMA_NETWORK %}
+      - {{ OLLAMA_NETWORK }}          # so `http://ollama:11434` resolves from BOTH stacks
+{% endif %}
     build:
       context: {{ BASE_DIR }}/ner
     container_name: ner_{{ ENV_CONTEXT }}_{{ BRANCH }}
@@ -237,6 +248,58 @@ services:
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     restart: unless-stopped
+{% endif %}
+
+{% if OLLAMA_HOST_CONTEXT is defined and ENV_CONTEXT == OLLAMA_HOST_CONTEXT %}
+  # Local LLM host for Map-your-Data place-name extraction (place#211). Built on the host from
+  # ./ollama, which seeds the model volume on first start.
+  #
+  # DELIBERATELY ONE INSTANCE PER HOST, and it lives here in the production stack: the model runs on
+  # CPU (the droplet has no GPU) so a second copy in the dev stack would contend for the same eight
+  # cores and hold a second ~600 MB of a memory-tight box. The dev stack shares this one by attaching
+  # its `ner` container to the external `{{ OLLAMA_NETWORK }}` network above.
+  #
+  # Additive: if it is down or the model is missing, only LLM extraction is affected — the ner service
+  # reports the engine unavailable and Map-your-Data falls back to spaCy.
+  ollama:
+    networks:
+      - {{ ENV_CONTEXT }}
+{% if OLLAMA_NETWORK is defined and OLLAMA_NETWORK %}
+      - {{ OLLAMA_NETWORK }}
+{% endif %}
+    build:
+      context: {{ BASE_DIR }}/ollama
+    container_name: ollama_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    {% if MEM_LIMIT_OLLAMA is defined %}
+    mem_limit: {{ MEM_LIMIT_OLLAMA }}
+    {% endif %}
+    # Bound to loopback for host-side debugging (curl 127.0.0.1:{{ OLLAMA_PORT }}/api/tags); container
+    # traffic goes over the docker networks above, never through this published port.
+    ports:
+      - "127.0.0.1:{{ OLLAMA_PORT }}:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    env_file: {{ BASE_DIR }}/.env/.env
+    environment:
+      # CPU is the binding constraint here (~2400x spaCy's work per record), so serialise: one
+      # request at a time, with a bounded queue that returns 503 rather than growing without limit.
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_QUEUE={{ OLLAMA_MAX_QUEUE }}
+      - OLLAMA_MAX_LOADED_MODELS=1
+      # Unload after idle so the model's RSS is not held permanently next to prod on a box that is
+      # already swapping; reloading from page cache costs about a second.
+      - OLLAMA_KEEP_ALIVE={{ OLLAMA_KEEP_ALIVE }}
+      # Ollama probes for a GPU via Vulkan, and CUDA_VISIBLE_DEVICES alone does not stop it. Confirm
+      # `library=cpu` in the container log after any image bump.
+      - OLLAMA_VULKAN=false
+      - OLLAMA_PRELOAD={{ OLLAMA_MODEL }}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
+      interval: 60s
+      retries: 5
+      start_period: 300s
+      timeout: 15s
 {% endif %}
 
   {% if ENV_CONTEXT == 'local' %}
@@ -282,6 +345,9 @@ services:
 
 volumes:
   shared-tmp:
+{% if OLLAMA_HOST_CONTEXT is defined and ENV_CONTEXT == OLLAMA_HOST_CONTEXT %}
+  ollama-models:                      # keeps the pulled model across container recreation
+{% endif %}
 {% if ENV_CONTEXT == 'local' %}
   app:
   portainer_data:

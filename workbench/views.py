@@ -933,15 +933,25 @@ def _ner_reconcile_disambiguate(mentions, user):
 @_beta_required
 @require_http_methods(['POST'])
 def ner_extract(request):
-    text = _body(request).get('text') or ''
+    body = _body(request)
+    text = body.get('text') or ''
     if not text.strip():
         return _err('There’s no text to analyse.')
     text = text[:NER_MAX_CHARS]                      # the service caps too; bound the request here
     base = (getattr(settings, 'NER_URL', '') or '').rstrip('/')
     if not base:
         return _err('Place-name extraction isn’t available right now.', 503)
+    # Engine choice (place#211): 'spacy' (default, ~3 ms/record) or 'llm' (qwen2.5:0.5b on the shared
+    # ollama container — far better recall on historical registers, ~1 s/record of CPU). The service
+    # falls back to spaCy by itself if the LLM is unconfigured, busy or erroring, so an unknown value
+    # here is harmless.
+    engine = (body.get('engine') or '').strip().lower() or None
+    timeout = 300 if engine == 'llm' else 60
+    payload = {'text': text}
+    if engine:
+        payload['engine'] = engine
     try:
-        r = requests.post(base + '/extract', json={'text': text}, timeout=60)
+        r = requests.post(base + '/extract', json=payload, timeout=timeout)
     except requests.RequestException:
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
     if r.status_code != 200:

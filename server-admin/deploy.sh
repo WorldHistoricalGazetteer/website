@@ -139,6 +139,21 @@ echo "── Regenerating config..."
 sudo python3 ./server-admin/load_env.py
 echo ""
 
+# ─── Shared LLM network ──────────────────────────────────────────────────────
+
+# Both stacks attach their `ner` container to this bridge so they can share the single `ollama`
+# instance that the production stack runs (place#211). It is declared `external` in both compose
+# files precisely so that neither stack's `down` can remove it while the other is using it — which
+# means nothing else creates it. Idempotent.
+LLM_NETWORK=$(grep -E '^OLLAMA_NETWORK=' ./.env/.env 2>/dev/null | cut -d= -f2- || true)
+if [ -n "${LLM_NETWORK:-}" ]; then
+    if ! docker network inspect "$LLM_NETWORK" >/dev/null 2>&1; then
+        echo "── Creating shared LLM network $LLM_NETWORK..."
+        docker network create "$LLM_NETWORK"
+    fi
+fi
+echo ""
+
 # ─── Deploy action ───────────────────────────────────────────────────────────
 
 # Check if any containers are running for this environment

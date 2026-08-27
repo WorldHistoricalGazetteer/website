@@ -1,19 +1,37 @@
 """
 WHG place-name extraction microservice (Map-your-Data NER / geoparser).
 
-Runs spaCy NER server-side and returns candidate place names from free text. Built on the host via
-the compose `build:` directive (same pattern as ./hocuspocus) so the heavy spaCy + model dependency
-never touches the main pulled web image. Django (workbench.ner_extract) proxies to it over the compose
-network; it is not exposed publicly and holds no state.
+Returns candidate place names from free text. Built on the host via the compose `build:` directive
+(same pattern as ./hocuspocus) so the heavy model dependencies never touch the main pulled web image.
+Django (workbench.ner_extract) proxies to it over the compose network; it is not exposed publicly and
+holds no state.
+
+TWO ENGINES:
+
+  spacy  en_core_web_sm, in-process. Fast (~3 ms/record) but trained on modern news, so on historical
+         registers its LABELS are unusable — measured on TNA REQ 2 pleadings it tags Barking and
+         Chelmsford ORG, Little Burstead and Plymouth PERSON, and the common noun "cloth" PERSON
+         (place#211). Kept as the default and as the fallback when the LLM is unavailable.
+
+  llm    qwen2.5:0.5b on the shared ./ollama container. ~300x slower and hallucinates more, but on
+         that same corpus it recalls 14/16 places against spaCy's 10/16, splits the "<Person> of
+         <Place>" residence formula that spaCy swallows whole, and assigns each mention a ROLE. Its
+         extra false positives are cheap because the caller reconciles inside a container polygon,
+         which discards them.
 
 Contract:
-  GET  /health          → {"status":"ok","model": "..."}
-  POST /extract {text}   → {"entities":[{"name","label","count","context"}], "text_chars", "truncated"}
+  GET  /health          → {"status":"ok","model":"...","engines":{...}}
+  POST /extract {text, engine?, labels?}
+                        → {"entities":[{"name","label","count","context","role"?,"verbatim"?}],
+                           "engine", "text_chars", "truncated"}
 """
+import json
 import os
 import re
+import threading
 from collections import OrderedDict
 
+import requests
 import spacy
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -29,12 +47,56 @@ CONTEXT_CHARS = 140
 nlp = spacy.load(MODEL, disable=["lemmatizer", "attribute_ruler", "tagger"])
 nlp.max_length = MAX_CHARS + 1000
 
-app = FastAPI(title="WHG NER", version="1.0")
+# ── LLM engine (Ollama) ───────────────────────────────────────────────────────
+# One instance per host, in the production compose stack, shared with dev over the `whg-llm` bridge —
+# so `ollama` resolves identically from both. Empty OLLAMA_URL simply disables the engine.
+OLLAMA_URL = (os.environ.get("OLLAMA_URL") or "").rstrip("/")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
+OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "120"))
+OLLAMA_NUM_THREAD = int(os.environ.get("OLLAMA_NUM_THREAD", "4"))
+DEFAULT_ENGINE = os.environ.get("NER_ENGINE", "spacy")
+
+# The 0.5B model degrades sharply on long inputs, and each chunk costs ~1 s of eight-thread CPU, so
+# bound both the chunk size and the number of chunks. Per-row extraction (place#211) sends a few
+# hundred characters and never chunks; a pasted article does.
+LLM_CHUNK_CHARS = int(os.environ.get("NER_LLM_CHUNK_CHARS", "3000"))
+LLM_MAX_CHUNKS = int(os.environ.get("NER_LLM_MAX_CHUNKS", "40"))
+
+# Ollama is configured OLLAMA_NUM_PARALLEL=1, so requests serialise there anyway; this just keeps the
+# ner service's own worker threads from piling up behind it.
+_llm_gate = threading.Semaphore(int(os.environ.get("NER_LLM_CONCURRENCY", "2")))
+
+LLM_SYSTEM = (
+    "You extract place names from historical English records. "
+    "Reply with JSON only, no explanation."
+)
+LLM_PROMPT = """List every place name in the text below — towns, villages, parishes, counties, \
+countries, manors, named buildings and fields. Do NOT list people, occupations or objects.
+
+For each place give a role:
+  "residence" if the text says a person is "of" that place or lives there
+  "property"  if it is land or a building in dispute, leased, sold or bequeathed
+  "region"    if it is a county, shire or country
+  "other"     otherwise
+
+Copy each name exactly as it is spelled in the text.
+
+Reply with JSON of this shape and nothing else:
+{"places": [{"name": "Great Easton", "role": "residence"}]}
+
+Text:
+<<<
+%s
+>>>
+"""
+
+app = FastAPI(title="WHG NER", version="1.1")
 
 
 class ExtractIn(BaseModel):
     text: str = ""
     labels: list[str] | None = None
+    engine: str | None = None          # "spacy" | "llm"; defaults to NER_ENGINE
 
 
 def _clean(surface: str) -> str:
@@ -55,17 +117,132 @@ def _context(ent) -> str:
     return sent
 
 
-@app.get("/health")
-def health():
-    return {"status": "ok", "model": MODEL}
+def _find_all(text: str, name: str):
+    """Case-insensitive occurrences of `name` as a whole word. Returns a list of start offsets."""
+    if not name:
+        return []
+    try:
+        pat = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)", re.IGNORECASE)
+    except re.error:
+        return []
+    return [m.start() for m in pat.finditer(text)]
 
 
-@app.post("/extract")
-def extract(body: ExtractIn):
-    text = (body.text or "")[:MAX_CHARS]
-    truncated = len(body.text or "") > MAX_CHARS
-    wanted = ALLOWED_LABELS & set(body.labels) if body.labels else ALLOWED_LABELS
+def _snippet(text: str, start: int, length: int) -> str:
+    a = max(0, start - CONTEXT_CHARS // 2)
+    b = min(len(text), start + length + CONTEXT_CHARS // 2)
+    snip = re.sub(r"\s+", " ", text[a:b]).strip()
+    return ("…" if a > 0 else "") + snip + ("…" if b < len(text) else "")
 
+
+def _llm_chunks(text: str):
+    """Split on blank lines / sentence ends so a place name is never cut in half."""
+    if len(text) <= LLM_CHUNK_CHARS:
+        return [text] if text.strip() else []
+    chunks, buf = [], ""
+    for part in re.split(r"(?<=[.;\n])\s+", text):
+        if buf and len(buf) + len(part) + 1 > LLM_CHUNK_CHARS:
+            chunks.append(buf)
+            buf = part
+        else:
+            buf = f"{buf} {part}".strip() if buf else part
+        if len(chunks) >= LLM_MAX_CHUNKS:
+            break
+    if buf and len(chunks) < LLM_MAX_CHUNKS:
+        chunks.append(buf)
+    return chunks
+
+
+def _llm_call(chunk: str):
+    """One Ollama generation → list of {"name","role"}. Raises on transport/HTTP failure."""
+    r = requests.post(
+        OLLAMA_URL + "/api/generate",
+        json={
+            "model": OLLAMA_MODEL,
+            "system": LLM_SYSTEM,
+            "prompt": LLM_PROMPT % chunk,
+            "stream": False,
+            "format": "json",          # constrained decoding — the 0.5B will not emit valid JSON otherwise
+            "options": {
+                "temperature": 0,      # extraction, not composition: never sample
+                "num_predict": 512,
+                "num_thread": OLLAMA_NUM_THREAD,
+            },
+        },
+        timeout=OLLAMA_TIMEOUT,
+    )
+    r.raise_for_status()
+    raw = (r.json() or {}).get("response") or ""
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        return []
+    # format=json guarantees an object, but the model chooses the shape inside it. Accept the asked-for
+    # {"places":[…]}, a bare list, and the common near-misses rather than losing a whole chunk.
+    if isinstance(parsed, list):
+        items = parsed
+    elif isinstance(parsed, dict):
+        items = None
+        for key in ("places", "place_names", "placeNames", "names", "results"):
+            if isinstance(parsed.get(key), list):
+                items = parsed[key]
+                break
+        if items is None:
+            items = []
+    else:
+        items = []
+
+    out = []
+    for it in items:
+        if isinstance(it, str):
+            out.append({"name": _clean(it), "role": ""})
+        elif isinstance(it, dict):
+            name = _clean(str(it.get("name") or it.get("place") or ""))
+            role = str(it.get("role") or "").strip().lower()
+            if name:
+                out.append({"name": name, "role": role})
+    return out
+
+
+def _extract_llm(text: str):
+    """Aggregate the model's output over chunks, then ground every name back in the source text.
+
+    Grounding matters: a 0.5B model paraphrases and occasionally invents. Names found verbatim get a
+    real occurrence count and context snippet; names it produced but that are not in the text are kept
+    (a normalised spelling can still reconcile) but marked `verbatim: false` with count 0, so the
+    caller can rank or drop them.
+    """
+    agg = OrderedDict()
+    chunks = _llm_chunks(text)
+    for chunk in chunks:
+        for item in _llm_call(chunk):
+            name = item["name"]
+            if not name or len(name) > 120:
+                continue
+            key = name.lower()
+            rec = agg.get(key)
+            if rec is None:
+                agg[key] = {"name": name, "role": item.get("role") or ""}
+            elif not rec.get("role"):
+                rec["role"] = item.get("role") or ""
+
+    entities = []
+    for rec in agg.values():
+        hits = _find_all(text, rec["name"])
+        entities.append({
+            "name": text[hits[0]:hits[0] + len(rec["name"])] if hits else rec["name"],
+            "label": "LLM",
+            "count": len(hits),
+            "context": _snippet(text, hits[0], len(rec["name"])) if hits else "",
+            "role": rec["role"],
+            "verbatim": bool(hits),
+        })
+    entities.sort(key=lambda e: (not e["verbatim"], -e["count"], e["name"].lower()))
+    return entities, len(chunks)
+
+
+def _extract_spacy(text: str, labels=None):
+    wanted = ALLOWED_LABELS & set(labels) if labels else ALLOWED_LABELS
     doc = nlp(text)
     # Aggregate by case-insensitive name; keep the most frequent surface form + first context.
     agg = OrderedDict()
@@ -90,4 +267,70 @@ def extract(body: ExtractIn):
         rec.pop("_forms", None)
         entities.append(rec)
     entities.sort(key=lambda e: (-e["count"], e["name"].lower()))
-    return {"entities": entities, "text_chars": len(text), "truncated": truncated}
+    return entities
+
+
+def _llm_status():
+    """Cheap reachability probe: is the server up, and is the configured model actually pulled?"""
+    if not OLLAMA_URL:
+        return {"configured": False, "reachable": False, "model": OLLAMA_MODEL,
+                "model_present": False, "detail": "OLLAMA_URL not set"}
+    try:
+        r = requests.get(OLLAMA_URL + "/api/tags", timeout=5)
+        r.raise_for_status()
+        tags = [m.get("name", "") for m in (r.json() or {}).get("models") or []]
+    except Exception as e:                                   # noqa: BLE001 — report, never raise
+        return {"configured": True, "reachable": False, "model": OLLAMA_MODEL,
+                "model_present": False, "detail": str(e)[:200]}
+    # Ollama reports "qwen2.5:0.5b"; tolerate a caller configuring the bare name.
+    present = any(t == OLLAMA_MODEL or t.split(":")[0] == OLLAMA_MODEL.split(":")[0] for t in tags)
+    return {"configured": True, "reachable": True, "model": OLLAMA_MODEL,
+            "model_present": present, "models": tags}
+
+
+@app.get("/health")
+def health():
+    llm = _llm_status()
+    return {
+        "status": "ok",
+        "model": MODEL,
+        "default_engine": DEFAULT_ENGINE,
+        "engines": {"spacy": {"available": True, "model": MODEL}, "llm": llm},
+    }
+
+
+@app.post("/extract")
+def extract(body: ExtractIn):
+    text = (body.text or "")[:MAX_CHARS]
+    truncated = len(body.text or "") > MAX_CHARS
+    engine = (body.engine or DEFAULT_ENGINE or "spacy").lower()
+
+    chunks = 0
+    fallback = None
+    if engine == "llm":
+        if not OLLAMA_URL:
+            engine, fallback = "spacy", "llm not configured"
+        else:
+            acquired = _llm_gate.acquire(timeout=OLLAMA_TIMEOUT)
+            if not acquired:
+                # Ollama's own queue is bounded too; both paths degrade to spaCy rather than to an
+                # error, because extraction with the weaker engine beats no extraction.
+                engine, fallback = "spacy", "llm busy"
+            else:
+                try:
+                    entities, chunks = _extract_llm(text)
+                except Exception as e:                       # noqa: BLE001
+                    engine, fallback = "spacy", f"llm error: {str(e)[:160]}"
+                finally:
+                    _llm_gate.release()
+
+    if engine != "llm":
+        entities = _extract_spacy(text, body.labels)
+
+    out = {"entities": entities, "engine": engine, "text_chars": len(text), "truncated": truncated}
+    if engine == "llm":
+        out["llm_model"] = OLLAMA_MODEL
+        out["llm_chunks"] = chunks
+    if fallback:
+        out["fallback"] = fallback
+    return out
