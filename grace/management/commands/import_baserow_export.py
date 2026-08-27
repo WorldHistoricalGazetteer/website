@@ -76,6 +76,31 @@ def _split_tags(raw):
     return [t.strip() for t in re.split(r"[;,]", str(raw)) if t.strip()][:32]
 
 
+def _clean(text):
+    """Normalise whitespace, including the non-breaking spaces Baserow carries."""
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", str(text).replace("\u00a0", " ")).strip()
+
+
+def _display_name(name, email):
+    """A display name that is never an email address.
+
+    Some Baserow rows carry an address and no name. Falling back to the raw
+    address would put it in ``Contact.name`` — an unencrypted, indexed column —
+    which defeats the whole point of encrypting ``Contact.email``. So we use the
+    local part as a handle instead: enough to tell two rows apart in a list,
+    while the real address stays encrypted and is still findable via
+    ``Contact.objects.by_email()``.
+    """
+    name = _clean(name)
+    if name and "@" not in name:
+        return name
+    if email:
+        return email.split("@")[0][:255]
+    return name or "(no name recorded)"
+
+
 def _years(raw):
     """Pull a start and end year out of prose like '1877–1896' or 'c.1900'."""
     if not raw:
@@ -229,17 +254,18 @@ class Command(BaseCommand):
         created = updated = skipped = 0
 
         for row in self._load("people-all"):
-            name = (row.get("Name") or "").strip()
-            email = (row.get("Email Address") or "").strip() or None
-            if not name and not email:
+            raw_name = _clean(row.get("Name"))
+            email = _clean(row.get("Email Address")) or None
+            if not raw_name and not email:
                 skipped += 1
                 continue
             if email and not EMAIL_ONLY.match(email):
                 # Junk in the address column — keep the person, drop the value
                 # rather than storing something that is not an address.
                 email = None
+            name = _display_name(raw_name, email)
 
-            institution = (row.get("Institution") or "").strip()
+            institution = _clean(row.get("Institution"))
             org = None
             if institution:
                 org, _ = Organisation.objects.get_or_create(
@@ -257,11 +283,15 @@ class Command(BaseCommand):
                 existing.organisation = existing.organisation or org
                 if email and not existing.user_id:
                     existing.email = email
+                # Repair rows created before _display_name existed, whose name
+                # is a raw address sitting in an unencrypted column.
+                if "@" in existing.name:
+                    existing.name = name[:255]
                 existing.save()
                 updated += 1
             else:
                 Contact.objects.create(
-                    name=(name or email)[:255],
+                    name=name[:255],
                     email=email,
                     organisation=org,
                     discovery_source=found_by,

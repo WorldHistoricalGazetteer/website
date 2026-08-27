@@ -403,3 +403,32 @@ class SourceProvenanceTests(TestCase):
         self.assertEqual(list(source.derived_gazetteers.all()), [extracted])
         self.assertEqual(list(extracted.derived_from_sources.all()), [source])
         self.assertEqual(list(described.documented_by.all()), [source])
+
+
+class ImporterHygieneTests(TestCase):
+    """The importer must not undo the encryption it is feeding."""
+
+    def test_a_missing_name_never_becomes_an_email_address(self):
+        from grace.management.commands.import_baserow_export import _display_name
+        # Contact.name is an unencrypted, indexed column. Putting an address
+        # there would defeat the point of encrypting Contact.email.
+        self.assertEqual(_display_name("", "abolen2@unl.edu"), "abolen2")
+        self.assertNotIn("@", _display_name("", "abolen2@unl.edu"))
+
+    def test_a_real_name_is_kept(self):
+        from grace.management.commands.import_baserow_export import _display_name
+        self.assertEqual(_display_name("Werner Stangl", "w@example.org"),
+                         "Werner Stangl")
+
+    def test_an_address_in_the_name_column_is_replaced(self):
+        from grace.management.commands.import_baserow_export import _display_name
+        self.assertEqual(_display_name("a@b.org", "a@b.org"), "a")
+
+    def test_nothing_at_all_still_yields_something_readable(self):
+        from grace.management.commands.import_baserow_export import _display_name
+        self.assertEqual(_display_name("", None), "(no name recorded)")
+
+    def test_non_breaking_spaces_are_normalised(self):
+        from grace.management.commands.import_baserow_export import _clean
+        self.assertEqual(_clean("Academy of Korean Studies"),
+                         "Academy of Korean Studies")
