@@ -34,4 +34,5 @@ urlpatterns = [
     path('gsheet/', views.gsheet_proxy, name='gsheet'),
     path('gdoc/', views.gdoc_proxy, name='gdoc'),
     path('ner/', views.ner_extract, name='ner'),
+    path('ner/rows/', views.ner_extract_rows, name='ner-rows'),
 ]

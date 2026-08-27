@@ -26,6 +26,8 @@ from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
+from api.models import UserAPIProfile
+
 from . import doctypes, extraction
 from .merge import merge_snapshots
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot, RecordSuggestion,
@@ -1032,6 +1034,142 @@ def ner_extract(request):
     data['reconciled'] = sum(1 for e in ents if e.get('match'))
     return JsonResponse(data)
 
+
+
+# ── Per-row place-name extraction (place#211) ─────────────────────────────────
+# The block-of-text endpoint above is the wrong shape for the commonest research case: a table whose
+# narrative lives in a column. Run per row instead and three things fall out. Row provenance survives,
+# which for a catalogue corpus IS the point (cases per place, places per case, change over time). The
+# reconciliation cap stops binding — measured over TNA REQ 2, one ten-case block yielded 44 candidate
+# spans against NER_RECON_MAX = 25, while a row yields 4.2 on average and 12 at worst. And each row's
+# own container can scope its reconciliation, which beats the geoparser: unconstrained, Dovercourt
+# resolves to Canada and Stratford to Australia; inside `ukhc:ESE` both resolve in England, and 28
+# personal-name spans matched nothing at all, because there is no place in Essex called John Cowlande.
+#
+# Batched deliberately. Extraction costs seconds a row on a shared CPU next to production, so the
+# client sends small batches and shows progress rather than opening one request for a whole dataset.
+NER_ROWS_MAX = 10        # rows per request; ~40 s of model time, and the client loops
+NER_ROW_CHARS = 4000     # per-row text cap — a catalogue description, not a chapter
+
+
+def _ner_scope(value, limit=NER_SCOPE_MAX):
+    """A caller's `contained_in` → a clean list of bare place ids."""
+    if isinstance(value, str):
+        value = [value]
+    if not isinstance(value, list):
+        return []
+    return [str(v).strip() for v in value if str(v or '').strip()][:limit]
+
+
+def _ner_row_places(text, user, scope, fallback):
+    """One row's text → its distinct places, deduplicated within the row.
+
+    Returns [{name, mentions, context, match, outside_container}]. `mentions` is a count WITHIN THE
+    ROW: "Great Easton" twice in one description is one place mentioned twice, not two places.
+    """
+    ents = extraction.extract_places(text)
+    mentions = {}
+    for e in ents:
+        nm = (e.get('name') or '').strip()
+        if nm:
+            mentions[nm] = max(mentions.get(nm, 0), e.get('count') or 1)
+    contexts = {(e.get('name') or '').strip(): e.get('context') or '' for e in ents}
+    for nm, c in _ner_candidates(text, list(mentions.keys())).items():
+        mentions.setdefault(nm, c)
+
+    matches = _ner_reconcile_disambiguate(mentions, user, contained_in=scope) if mentions else {}
+
+    # Out-of-container fallback. The dataset's Scope region already acts as a floor, but only when the
+    # PARENT is unresolved — it never fires when the county resolves and the span simply is not inside
+    # it, so the mention is lost silently. Retry those against the coarser region, and mark them: they
+    # must NEVER be auto-confirmed. Re-querying 275 county-rejected spans against the UK recovered 11,
+    # of which 2 were real (a London merchant, an Oxford college) and 6 were personal names colliding
+    # with real UK features — and neither available signal separates them, because score is 100 for
+    # every exact match and place_types came back empty on all eleven.
+    outside = set()
+    if fallback and scope:
+        missed = {n: c for n, c in mentions.items() if n not in matches}
+        if missed:
+            for n, m in _ner_reconcile_disambiguate(missed, user, contained_in=fallback).items():
+                matches[n] = m
+                outside.add(n)
+
+    places = []
+    for nm, count in mentions.items():
+        m = matches.get(nm)
+        # Keep only what the model or the gazetteer vouches for: a capitalised span that matched
+        # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
+        if not m and nm not in contexts:
+            continue
+        hits = extraction.find_all(text, nm)
+        places.append({
+            'name': nm,
+            'mentions': len(hits) or count,
+            'context': contexts.get(nm) or (extraction.snippet(text, hits[0], len(nm)) if hits else ''),
+            'match': m,
+            'outside_container': nm in outside,
+        })
+    places.sort(key=lambda p: (-p['mentions'], p['name'].lower()))
+    return places
+
+
+@login_required
+@_beta_required
+@require_http_methods(['POST'])
+def ner_extract_rows(request):
+    """Extract place names from one batch of rows, each scoped by its own container.
+
+    Request:  {"rows": [{"key": "<stable row id>", "text": "…", "contained_in": ["ukhc:ESE"]}, …],
+               "fallback_contained_in": ["ohm:r2694795"]}
+    Response: {"results": [{"key": …, "places": [{name, mentions, context, match, outside_container}],
+                            "no_places_found": bool}, …], "rows_charged": n, "remaining_today": n}
+
+    A row that yields nothing comes back with an empty list and the flag set, and MUST be kept by the
+    caller: 23 of 90 sampled REQ 2 cases produced no place, and dropping them silently would lose a
+    quarter of the corpus and make every denominator wrong.
+    """
+    body = _body(request)
+    rows = body.get('rows')
+    if not isinstance(rows, list) or not rows:
+        return _err('No rows were sent for extraction.')
+    capped = len(rows) > NER_ROWS_MAX
+    rows = rows[:NER_ROWS_MAX]
+    fallback = _ner_scope(body.get('fallback_contained_in'))
+
+    # Daily allowance, charged per ROW because that is what costs. NB this is a cap, not a rate limit
+    # — the rate control that matters for a CPU-bound local model is the single in-flight request and
+    # bounded queue on the model host. It is charged here, in the view, because api/authentication.py
+    # only enforces it for Bearer/token auth and Map your Data calls with a session cookie.
+    profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
+    if profile.remaining_today() < len(rows):
+        return JsonResponse({'error': 'You have reached today’s extraction limit. It resets at '
+                                      'midnight UTC — or ask WHG staff to raise it.',
+                             'remaining_today': profile.remaining_today()}, status=429)
+
+    results = []
+    for row in rows:
+        row = row if isinstance(row, dict) else {}
+        key = str(row.get('key') or '')
+        text = (row.get('text') or '')[:NER_ROW_CHARS]
+        if not text.strip():
+            results.append({'key': key, 'places': [], 'no_places_found': True})
+            continue
+        try:
+            places = _ner_row_places(text, request.user, _ner_scope(row.get('contained_in')), fallback)
+        except extraction.ExtractionUnavailable:
+            return _err('The place-name extractor could not be reached — please try again shortly.', 503)
+        except Exception:                            # noqa: BLE001 — one bad row must not lose the batch
+            logger.exception('per-row extraction failed for key %r', key)
+            results.append({'key': key, 'places': [], 'no_places_found': True, 'failed': True})
+            continue
+        results.append({'key': key, 'places': places, 'no_places_found': not places})
+
+    profile.increment_usage(len(rows))
+    out = {'results': results, 'rows_charged': len(rows),
+           'remaining_today': profile.remaining_today(), 'model': getattr(settings, 'OLLAMA_MODEL', '')}
+    if capped:
+        out['capped'] = NER_ROWS_MAX
+    return JsonResponse(out)
 
 # ── Phase-2 real-time collab token ─────────────────────────────────────────────
 @login_required

@@ -565,6 +565,117 @@ class NerScopeTests(TestCase):
             self.assertEqual(len(recon.call_args.kwargs['contained_in']), views.NER_SCOPE_MAX)
 
 
+class NerPerRowTests(TestCase):
+    """place#211 items 3-6 — the per-row column operation's server half."""
+
+    def setUp(self):
+        self.user = make_user('rowrunner')
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _post(self, payload):
+        return self.client.post(reverse('workbench:ner-rows'), data=json.dumps(payload),
+                                content_type='application/json')
+
+    def test_each_row_is_scoped_by_its_own_container(self):
+        """The whole point: a table's rows sit in different counties, so one global region is wrong."""
+        from unittest.mock import patch
+        seen = []
+
+        def recon(mentions, user, contained_in=None):
+            seen.append(contained_in)
+            return {}
+
+        with patch('workbench.extraction.extract_places',
+                   return_value=[{'name': 'Dovercourt', 'count': 1, 'context': 'c',
+                                  'verbatim': True, 'label': 'LLM'}]), \
+                patch('workbench.views._ner_reconcile_disambiguate', side_effect=recon):
+            r = self._post({'rows': [
+                {'key': 'a', 'text': 'lands in Dovercourt', 'contained_in': ['ukhc:ESE']},
+                {'key': 'b', 'text': 'lands in Dovercourt', 'contained_in': ['ukhc:DEV']},
+            ]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(seen, [['ukhc:ESE'], ['ukhc:DEV']])
+
+    def test_rows_yielding_nothing_survive_with_a_flag(self):
+        """23 of 90 sampled REQ 2 cases produced no place. Dropping them makes every denominator
+        wrong, so they must come back, flagged."""
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places', return_value=[]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': 'a bond and nothing else'},
+                                     {'key': 'b', 'text': '   '}]})
+        out = r.json()['results']
+        self.assertEqual([x['key'] for x in out], ['a', 'b'])
+        self.assertTrue(all(x['no_places_found'] for x in out))
+
+    def test_mentions_are_deduplicated_within_the_row(self):
+        """"Great Easton" twice in one description is one place mentioned twice, not two rows."""
+        from unittest.mock import patch
+        text = 'Great Easton, and further lands at Great Easton in the same parish.'
+        with patch('workbench.extraction.extract_places',
+                   return_value=[{'name': 'Great Easton', 'count': 2, 'context': 'c',
+                                  'verbatim': True, 'label': 'LLM'}]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': text}]})
+        places = r.json()['results'][0]['places']
+        self.assertEqual([(p['name'], p['mentions']) for p in places], [('Great Easton', 2)])
+
+    def test_out_of_container_hits_are_marked_never_silently_accepted(self):
+        from unittest.mock import patch
+        calls = []
+
+        def recon(mentions, user, contained_in=None):
+            calls.append(contained_in)
+            if contained_in == ['ohm:r2694795']:
+                return {'London': {'id': 'place:wd:Q84', 'title': 'London', 'score': 100,
+                                   'ccodes': ['GB'], 'lng': -0.1, 'lat': 51.5, 'ambiguous': False}}
+            return {}
+
+        with patch('workbench.extraction.extract_places',
+                   return_value=[{'name': 'London', 'count': 1, 'context': 'c',
+                                  'verbatim': True, 'label': 'LLM'}]), \
+                patch('workbench.views._ner_reconcile_disambiguate', side_effect=recon):
+            r = self._post({'rows': [{'key': 'a', 'text': 'a merchant of London',
+                                      'contained_in': ['ukhc:ESE']}],
+                            'fallback_contained_in': ['ohm:r2694795']})
+        place = r.json()['results'][0]['places'][0]
+        self.assertEqual(calls, [['ukhc:ESE'], ['ohm:r2694795']])
+        self.assertTrue(place['outside_container'])
+
+    def test_batch_is_capped_and_charged_per_row(self):
+        from unittest.mock import patch
+        from api.models import UserAPIProfile
+        with patch('workbench.extraction.extract_places', return_value=[]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': str(i), 'text': 'x'} for i in range(40)]})
+        j = r.json()
+        self.assertEqual(j['capped'], views.NER_ROWS_MAX)
+        self.assertEqual(len(j['results']), views.NER_ROWS_MAX)
+        self.assertEqual(UserAPIProfile.objects.get(user=self.user).daily_count, views.NER_ROWS_MAX)
+
+    def test_exhausted_allowance_is_refused_before_any_model_work(self):
+        from unittest.mock import patch
+        from api.models import UserAPIProfile
+        UserAPIProfile.objects.create(user=self.user, daily_limit=1, daily_count=1)
+        with patch('workbench.extraction.extract_places') as extract:
+            r = self._post({'rows': [{'key': 'a', 'text': 'x'}, {'key': 'b', 'text': 'y'}]})
+        self.assertEqual(r.status_code, 429)
+        extract.assert_not_called()
+
+    def test_one_bad_row_does_not_lose_the_batch(self):
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places',
+                   side_effect=[ValueError('boom'),
+                                [{'name': 'Duxford', 'count': 1, 'context': 'c',
+                                  'verbatim': True, 'label': 'LLM'}]]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': 'x'}, {'key': 'b', 'text': 'y'}]})
+        out = r.json()['results']
+        self.assertTrue(out[0]['failed'])
+        self.assertEqual([p['name'] for p in out[1]['places']], ['Duxford'])
+
+
 class ExtractionUnitTests(TestCase):
     """workbench.extraction — the parts that do not need a model (place#211)."""
 
