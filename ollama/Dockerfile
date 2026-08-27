@@ -11,9 +11,11 @@
 FROM ollama/ollama:0.33.1
 
 # The model to have resident before the service reports healthy. Comma-separate for more than one.
-# qwen2.5:0.5b (~400 MB, Apache-2.0) was chosen empirically over larger siblings: qwen2.5:1.5b
-# returned bare `[]` on this register and llama3.2:1b scored worse at 3x the cost. See place#211.
-ENV OLLAMA_PRELOAD=qwen2.5:0.5b
+# qwen3:0.6b (522 MB, Apache-2.0) was chosen empirically, not by size: on the place#211 benchmark it
+# ties qwen2.5:0.5b on TNA REQ 2 (27/33) but is the smallest model that can carry a prompt naming
+# rivers, mountains and seas without collapsing into a repetition loop — which lifts a travel
+# narrative from 6/9 to 8/9. qwen2.5:1.5b is 2.5x the cost and worse at both.
+ENV OLLAMA_PRELOAD=qwen3:0.6b
 
 # chmod here rather than relying on the mode git recorded — a checkout that loses the exec
 # bit would otherwise fail the container at runtime, not at build.
