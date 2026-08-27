@@ -362,3 +362,36 @@ class GetFclassListTests(SimpleTestCase):
     def test_malformed_type_entry_is_skipped_not_fatal(self):
         feature = {'properties': {}, 'types': ['not a dict', {'identifier': 'aat:300008687'}]}
         self.assertEqual(get_fclass_list(feature), ['H'])
+
+
+class TypesWithoutAatTypesTests(SimpleTestCase):
+    """
+    LP-TSV permits a `types` value with no corresponding `aat_types`. The `aat_types`
+    column becomes the feature's `types`, so such a row used to keep its labels in
+    `additional_types` and end up with no `types` at all — failing the LPF schema's
+    "fclasses or types" requirement and blocking legitimate input (place#213).
+    """
+
+    def _convert(self, tsv):
+        directory = tempfile.mkdtemp()
+        path = os.path.join(directory, 'places.tsv')
+        with open(path, 'w') as f:
+            f.write(tsv)
+        lpf_path, *_ = parse_to_LPF(path, 'tsv')
+        with open(lpf_path) as f:
+            return {feat['@id']: feat for feat in json.load(f)['features']}
+
+    def test_labels_become_types_when_there_are_no_aat_types(self):
+        features = self._convert(
+            "id\ttitle\ttitle_source\tlon\tlat\tstart\ttypes\taat_types\n"
+            "1\tSerra\tIBGE\t-37.05\t-7.02\t1888\tquilombo;povoado\t\n")
+        self.assertEqual(features['1']['types'],
+                         [{'label': 'quilombo'}, {'label': 'povoado'}])
+        self.assertNotIn('additional_types', features['1'])
+
+    def test_labels_are_appended_when_aat_types_are_present(self):
+        features = self._convert(
+            "id\ttitle\ttitle_source\tlon\tlat\tstart\ttypes\taat_types\n"
+            "1\tSerra\tIBGE\t-37.05\t-7.02\t1888\tquilombo\t300263222\n")
+        self.assertEqual(features['1']['types'],
+                         [{'identifier': 'aat:300263222'}, {'label': 'quilombo'}])
