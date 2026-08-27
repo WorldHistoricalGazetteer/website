@@ -2,7 +2,7 @@
 //
 // plan-collaborativeCollections §8: the place-name extractor is an INPUT METHOD for collections, not
 // a Map-your-Data-only feature. This module packages the flow — paste text / upload a file / import a
-// Google Doc → WHG's server-side spaCy service (the one step that leaves the browser; the UI says so)
+// Google Doc → the language model on WHG's own server (the one step that leaves the browser; the UI says so)
 // → located place matches — behind one mount() call so Place Collection + Itinerary can offer it, and
 // Map your Data can adopt it later. It reuses the existing /ner + /gdoc endpoints (recon-sync) and the
 // docx/pdf text extractor (recon-textextract, lazy).

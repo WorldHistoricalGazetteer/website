@@ -69,8 +69,8 @@ export const searchDatasets = (q) => req('GET', '/datasets/search/?q=' + encodeU
 export const importGSheet = (url) => req('POST', '/gsheet/', { url });
 export const importGDoc = (url) => req('POST', '/gdoc/', { url });
 
-// Place-name extraction (NER). Sends text to WHG's server-side spaCy service (via a Django proxy) —
-// the one Map-your-Data step that leaves the browser. Returns { entities:[{name,label,count,context}] }.
+// Place-name extraction. Sends text to the small language model running on WHG's own server — the
+// one Map-your-Data step that leaves the browser. Returns { entities:[{name,label,count,context}] }.
 export const ner = (text) => req('POST', '/ner/', { text });
 
 // ── sharing (Phase 0) ─────────────────────────────────────────────────────────

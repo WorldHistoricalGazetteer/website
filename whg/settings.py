@@ -74,10 +74,17 @@ GITHUB_SNAG_TOKEN = os.environ.get('GITHUB_SNAG_TOKEN') or globals().get('GITHUB
 GITHUB_SNAG_REPO = os.environ.get('GITHUB_SNAG_REPO') or globals().get('GITHUB_SNAG_REPO',
                                                                        'WorldHistoricalGazetteer/place')
 
-# Place-name extraction (Map-your-Data NER). Django proxies pasted text to the on-host `ner` service
-# over the compose network. Empty in local dev where the service isn't running (the endpoint then
-# returns a friendly 503 and the UI degrades gracefully).
-NER_URL = os.environ.get('NER_URL') or globals().get('NER_URL', '')
+# Place-name extraction (Map-your-Data — place#211). Django calls the on-host Ollama container over
+# the shared `whg-llm` compose network; there is one instance per host, in the production stack, and
+# the dev stack reaches the same one. Empty OLLAMA_URL simply disables extraction: the endpoint
+# returns a friendly 503 and the UI degrades gracefully, which is the local-dev default.
+OLLAMA_URL = os.environ.get('OLLAMA_URL') or globals().get('OLLAMA_URL', '')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL') or globals().get('OLLAMA_MODEL', 'qwen3:0.6b')
+OLLAMA_TIMEOUT = float(os.environ.get('OLLAMA_TIMEOUT') or globals().get('OLLAMA_TIMEOUT', 120))
+OLLAMA_NUM_THREAD = int(os.environ.get('OLLAMA_NUM_THREAD') or globals().get('OLLAMA_NUM_THREAD', 4))
+# Only for a model whose chain-of-thought you actually want; qwen3 otherwise spends its whole token
+# budget deliberating over a list of place names.
+OLLAMA_THINK = str(os.environ.get('OLLAMA_THINK') or globals().get('OLLAMA_THINK', '')).lower() == 'true'
 
 # Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
 # Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only

@@ -256,15 +256,15 @@ class ApiTests(TestCase):
         self.assertEqual(r.status_code, 404)
 
     def test_ner_empty_text_rejected(self):
-        # Blank text → 400 without any call to the NER service.
+        # Blank text → 400 without any call to the extractor.
         r = self.client.post(reverse('workbench:ner'), data=json.dumps({'text': '   '}),
                              content_type='application/json')
         self.assertEqual(r.status_code, 400)
 
     def test_ner_service_unconfigured(self):
-        # No NER_URL configured → 503 (graceful), no network call.
+        # No OLLAMA_URL configured → 503 (graceful), no network call.
         from django.test import override_settings
-        with override_settings(NER_URL=''):
+        with override_settings(OLLAMA_URL=''):
             r = self.client.post(reverse('workbench:ner'),
                                  data=json.dumps({'text': 'Rome and Venice'}),
                                  content_type='application/json')
