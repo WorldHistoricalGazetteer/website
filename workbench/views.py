@@ -1141,10 +1141,11 @@ def ner_extract_rows(request):
     # bounded queue on the model host. It is charged here, in the view, because api/authentication.py
     # only enforces it for Bearer/token auth and Map your Data calls with a session cookie.
     profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
-    if profile.remaining_today() < len(rows):
+    remaining = profile.remaining_today()          # None ⇒ unlimited (a falsy daily_limit)
+    if remaining is not None and remaining < len(rows):
         return JsonResponse({'error': 'You have reached today’s extraction limit. It resets at '
                                       'midnight UTC — or ask WHG staff to raise it.',
-                             'remaining_today': profile.remaining_today()}, status=429)
+                             'remaining_today': remaining}, status=429)
 
     results = []
     for row in rows:

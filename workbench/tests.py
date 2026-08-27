@@ -663,6 +663,19 @@ class NerPerRowTests(TestCase):
         self.assertEqual(r.status_code, 429)
         extract.assert_not_called()
 
+    def test_a_zero_daily_limit_means_unlimited_not_blocked(self):
+        """api/authentication.py reads a falsy daily_limit as UNLIMITED (`if profile.daily_limit and
+        ...`), and accounts are set to 0 deliberately. Reading it as an exhausted quota locks exactly
+        those users out — which is what happened to a real account before this was pinned."""
+        from unittest.mock import patch
+        from api.models import UserAPIProfile
+        UserAPIProfile.objects.create(user=self.user, daily_limit=0, daily_count=9999)
+        with patch('workbench.extraction.extract_places', return_value=[]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': 'x'}]})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertIsNone(r.json()['remaining_today'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',
