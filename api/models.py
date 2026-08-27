@@ -51,7 +51,18 @@ class UserAPIProfile(models.Model):
         self.save()
 
     def remaining_today(self):
-        """Units left in today's allowance, accounting for a reset that has not been written yet."""
+        """Units left in today's allowance, or None when the account is UNLIMITED.
+
+        A falsy `daily_limit` means unlimited, not "no allowance". That is the convention
+        api/authentication.py already established — `if profile.daily_limit and ...` skips the check
+        entirely — and accounts have been set to 0 on purpose. Reading 0 as an exhausted quota would
+        silently lock exactly those users out of every metered feature.
+
+        Accounts for a day rollover that has not been written back yet, so a caller checking the
+        allowance before spending it sees today's figure rather than yesterday's.
+        """
+        if not self.daily_limit:
+            return None
         used = 0 if self.daily_reset != timezone.now().date() else self.daily_count
         return max(0, self.daily_limit - used)
 
