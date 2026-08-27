@@ -8,7 +8,6 @@ import numpy as np
 import traceback
 import warnings
 from dateutil.parser import parse
-from itertools import zip_longest
 
 from django.contrib import messages
 from django.contrib.gis.geos import GEOSGeometry
@@ -23,6 +22,7 @@ from django.utils.html import strip_tags
 from .exceptions import DelimInsertError, DataAlreadyProcessedError
 from .models import Dataset
 from areas.models import Area
+from datasets.place_types import apply_types_to_place, has_type_columns
 from validation.coordinates import resolve_lonlat
 from datasets.utils import aat_lookup, ccodesFromGeom, \
     makeCoords, parse_wkt, parsedates_tsv
@@ -57,13 +57,9 @@ def read_tsv_into_dataframe(file):
     # df=dfbroken
 
 
-aat_fclass = {}
-for type_obj in Type.objects.all():
-    # aat_fclass["aat:" + str(type_obj.aat_id)] = {
-    aat_fclass[type_obj.aat_id] = {
-        "fclass": type_obj.fclass,
-        "term_full": type_obj.term_full
-    }
+# The AAT lookup used to be built here, at import time, from a full `Type` table scan —
+# which made importing this module impossible without a database. It now lives in
+# `datasets.place_types.aat_index()`, built lazily and shared with the update path.
 
 
 # create Place and a PlaceName for its 'title'
@@ -127,70 +123,15 @@ def process_variants(row, newpl):
 
 # create PlaceType object for each aat_type; update Place with fclasses[]
 def process_types(row, newpl):
-    type_objects = []
-    error_msgs = []
-
+    """
+    Thin wrapper over the shared derivation in `datasets.place_types`, which the update
+    path calls too — the duplicated copy here is what let the two drift (place#213).
+    """
     try:
-        types = [t.strip() for t in str(row.get('types', '') or '').split(';') if t]
+        return apply_types_to_place(newpl, row)
     except Exception as e:
-        logger.exception(f"Error processing 'types': {e}")
-        types = []
-
-    try:
-        aat_types = [int(a.strip()) for a in str(row.get('aat_types', '')).split(';') if a]
-        # aat_types = [int(a.strip()) for a in str(row.get('aat_types', '') or '').split(';') if a]
-    except ValueError as ve:
-        logger.exception(f"Error converting 'aat_types' to int: {ve}")
-        aat_types = []
-    except Exception as e:
-        logger.exception(f"Error processing 'aat_types': {e}")
-        aat_types = []
-
-    try:
-        fclasses_from_row = [f.strip() for f in str(row.get('fclasses', '') or '').split(';') if f]
-    except Exception as e:
-        logger.exception(f"Error processing 'fclasses': {e}")
-        fclasses_from_row = []
-
-    logger.debug(f'Extracted types: {types}')
-    logger.debug(f'Extracted aat_types: {aat_types}')
-    logger.debug(f'Extracted fclasses: {fclasses_from_row}')
-
-    # Build the PlaceType objects for each type and aat_type
-    for type_, aat_type in zip_longest(types, aat_types, fillvalue=None):
-        try:
-            pt_data = {
-                'place': newpl,
-                'src_id': newpl.src_id,
-                'aat_id': aat_type,
-                # 'jsonb': {}
-                'jsonb': {
-                    'sourceLabel': type_ if type_ else '',
-                    'identifier': 'aat:' + str(aat_type) if aat_type else '',
-                    'label': aat_fclass.get(aat_type, {}).get('term_full') if aat_type else ''
-                }
-            }
-            type_objects.append(PlaceType(**pt_data))
-        except Exception as e:  # Catch all exceptions and store in variable e
-            error_msgs.append(f"Error writing type '{type_}' for place <b>{newpl} ({newpl.src_id})</b>. Details: {e}")
-
-    # Extract fclasses from aat_types and fclasses_from_row
-    try:
-        fclass_list = [aat_fclass.get(aat, {}).get('fclass') for aat in aat_types if aat]
-        fclass_list.extend(fclasses_from_row)
-
-        # Deduplicate fclass_list
-        fclass_list = list(set(fclass_list))
-        # Update the Place object's fclasses field
-        newpl.fclasses = fclass_list
-        newpl.save()
-    except Exception as e:  # Catch all exceptions and store in variable e
-        error_msgs.append(f"Error writing fclass codes for place <b>{newpl.title} ({newpl.src_id})</b>. Details: {e}")
-
-    if error_msgs:  # if there are any error messages
-        raise DelimInsertError("; ".join(error_msgs))  # raise an exception with all error messages joined
-
-    return type_objects
+        raise DelimInsertError(
+            f"Error writing types and fclass codes for place <b>{newpl} ({newpl.src_id})</b>. Details: {e}")
 
 
 # create PlaceWhen object; update Place with minmax, timespans
@@ -507,10 +448,7 @@ def ds_insert_delim(df, pk):
                 objlists['PlaceName'].extend(process_variants(row, newpl))
 
             # PlaceType
-            relevant_columns = ['types', 'aat_types', 'fclasses']
-
-            if any(col in df.columns for col in relevant_columns) and any(
-                    row.get(col, None) not in ['', None] for col in relevant_columns):
+            if has_type_columns(row):
                 objlists['PlaceType'].extend(process_types(row, newpl))
 
             # PlaceWhen (always at least a start or attestation_year)

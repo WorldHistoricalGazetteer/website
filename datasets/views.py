@@ -62,6 +62,7 @@ from .forms import (
     DatasetCreateEmptyModelForm
 )
 from .models import DatasetUser, DatasetFile
+from .place_types import apply_types_to_place, fclasses_for_row, has_type_columns, parse_type_columns
 from .services import _get_task_details, _get_hit_counts, _filter_unreviewed_places, _get_review_page_and_field, \
     _get_place_and_hits, _build_dataset_details, _extract_passes, _get_country_names, _build_feature_collection, \
     _process_matching_decisions
@@ -1516,11 +1517,7 @@ def update_rels_tsv(pobj, row):
     variants = [x.strip() for x in row['variants'].split(';')] \
         if 'variants' in header and row['variants'] not in ['', 'None', None] else []
 
-    types = [x.strip() for x in row['types'].split(';')] \
-        if 'types' in header and str(row['types']) not in ['', 'None', None] else []
-
-    aat_types = [x.strip() for x in row['aat_types'].split(';')] \
-        if 'aat_types' in header and str(row['aat_types']) not in ['', 'None', None] else []
+    # `types`/`aat_types`/`fclasses` are parsed by `datasets.place_types` below.
 
     parent_name = row.get('parent_name', '')
     parent_id = row.get('parent_id', '')
@@ -1571,27 +1568,11 @@ def update_rels_tsv(pobj, row):
             new_name.jsonb['lang'] = haslang.group(1)
         objs['PlaceName'].append(new_name)
 
-    # PlaceTypes
-    if types:
-        fclass_list = []
-        for i, t in enumerate(types):
-            aatnum = f'aat:{aat_types[i]}' if len(aat_types) >= len(types) else None
-            if aatnum and int(aatnum[4:]) in Type.objects.values_list('aat_id', flat=True):
-                fc = get_object_or_404(Type, aat_id=int(aatnum[4:])).fclass
-                fclass_list.append(fc)
-            objs['PlaceType'].append(
-                PlaceType(
-                    place=pobj,
-                    src_id=src_id,
-                    jsonb={
-                        "identifier": aatnum,
-                        "sourceLabel": t,
-                        "label": aat_lookup(int(aatnum[4:])) if aatnum != 'aat:' else ''
-                    }
-                )
-            )
-        pobj.fclasses = fclass_list
-        pobj.save()
+    # PlaceTypes. Derived by the same function the insert path uses, so the row's own
+    # `fclasses` column is merged rather than overwritten, and the guard fires on any of
+    # the three type columns rather than on `types` alone (place#213).
+    if has_type_columns(row):
+        objs['PlaceType'].extend(apply_types_to_place(pobj, row))
 
     # PlaceGeom
     if coords:
@@ -1880,6 +1861,16 @@ def ds_update(request):
                 p.timespans = [minmax_new]
 
                 if False in diffs:
+                    idx_delete.append(p.id)
+
+                # A row whose only change is its feature classes leaves `diffs` untouched
+                # (nothing in `diffs` looks at them), so the place would keep its stale
+                # classes in the index after being corrected in Postgres. Flag it for
+                # re-indexing without pushing it back into review — `diffs[-5:]` decides
+                # that, and its positional window must not be disturbed.
+                _, row_aat_types, row_fclasses = parse_type_columns(row)
+                if (sorted(fclasses_for_row(row_aat_types, row_fclasses))
+                        != sorted(pobj.get('fclasses') or [])) and p.id not in idx_delete:
                     idx_delete.append(p.id)
 
                 # Check if meaningful changes (last few fields)
