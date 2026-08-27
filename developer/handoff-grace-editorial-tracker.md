@@ -109,19 +109,23 @@ Do not re-derive these; they were checked against this branch.
 
 ---
 
-## 5. Open decisions — do not build past these
+## 5. Decisions — status as of 27 August 2026
 
-From the review's summary table. **1–4 block schema work.**
+**Decisions 1–5 and 7 are SETTLED** (Stephen Gadd, 27 Aug 2026: the review's
+recommendations accepted as written). **Schema work is unblocked.**
 
-| # | Decision | Recommendation in the review |
-|---|----------|------------------------------|
-| 1 | Does GRACE point at `GazetteerRegistryEntry` and read through it? | Yes — nullable FK, local title retained |
-| 2 | One `Contact` model with optional `User` link, or a separate People table? | One, optional one-to-one, **no duplicated fields** |
-| 3 | Vocabularies as editable lookup tables, or frozen `choices=`? | Tables by default — this is what preserves Palak's self-service |
-| 4 | Add an Organisations entity? | Yes — permission to publish is granted by institutions |
-| 5 | Is `/contribute/` a suggest-a-source tool or a general front door? | Suggest-a-source, with a visible untriaged intake state (**open since June**) |
-| 6 | Personal data: lawful basis, consent, erasure, encryption | Settle before populating; match `users.User` |
-| 7 | Terminology and register names | Datasets → Gazetteers; Catalogue · Engagement · Pipeline |
+**Decision 6 remains open and is a hard gate on *populating*, not on modelling.**
+Build the models; do not load real contact data until Ruth has ruled.
+
+| # | Decision | Outcome |
+|---|----------|---------|
+| 1 | Does GRACE point at `GazetteerRegistryEntry` and read through it? | ✅ **Yes** — nullable FK, local title retained |
+| 2 | One `Contact` model with optional `User` link, or a separate People table? | ✅ **One**, optional one-to-one, **no duplicated fields** |
+| 3 | Vocabularies as editable lookup tables, or frozen `choices=`? | ✅ **Tables by default** — preserves Palak's self-service |
+| 4 | Add an Organisations entity? | ✅ **Yes** — permission to publish is granted by institutions |
+| 5 | Is `/contribute/` a suggest-a-source tool or a general front door? | ✅ **Suggest-a-source**, with a visible untriaged intake state |
+| 6 | Personal data: lawful basis, consent, erasure, encryption | ⏳ **OPEN — with Ruth.** Settle before populating; match `users.User` |
+| 7 | Terminology and register names | ✅ Datasets → Gazetteers; Catalogue · Engagement · Pipeline |
 
 **Decision 3 deserves emphasis when you do build.** Model controlled vocabularies as
 their own tables, not `choices=` tuples — a `choices` list needs a developer and a
@@ -143,11 +147,11 @@ Safe to act on independently of the decisions above, except where noted.
 | Loose end | Action |
 |-----------|--------|
 | `/contribute/` → external Baserow form (`main/views.py:485`) | **The live one.** The site's public suggestion door leads out of WHG. Rebuild as a Django form writing to the intake model — but the shape depends on decision 5 |
-| `sync_licences_to_baserow` | Retire. `licensing/management/commands/` |
-| `BASEROW_*` settings (`whg/settings.py:86–99`) | Remove once nothing reads them. **The bot credentials and API token must be revoked, not merely unset** — the token was circulated by email in the clear |
-| The bibliography | Lives in an external Baserow table, loaded from `WHG_gazetteer_bibliography.xlsx`. Export → import into Sources. Obvious first real content for GRACE |
-| The `leads` prototype | An earlier in-Django attempt (lead model, admin triage UI, public form) on the `atlas` branch. Worth reading — close to what the intake model needs. **Its recorded teardown SQL should not be run** |
-| `developer/baserow-workflow-tool.md` | Mark superseded; do not delete — it records a decision and its reversal |
+| `sync_licences_to_baserow` | ✅ **DONE** — deleted (commit `1393f6d42`) |
+| `BASEROW_*` settings | ✅ **DONE** — the four bot/sync settings removed from `whg/settings.py` and from `local_settings.py`. `BASEROW_SUBMIT_FORM_URL` deliberately **kept**: it is still the only public suggestion door until the Django intake form replaces `/contribute/`. Credentials also still present in the deployed `.env` on prod and dev — strip after revocation |
+| The bibliography | ⚠️ **Now the only copy.** `leads_datasetlead` has already been dropped from both databases, so the ~72 seeded rows are gone from Postgres. Surviving copies: `WHG_gazetteer_bibliography.xlsx` and Baserow's *Gazetteer Bibliography* table. **Export before the workspace is shut down** |
+| The `leads` prototype | ✅ **READ** — written up in `developer/grace-leads-prototype-notes.md`. Take the public form, its honeypot + rate-limit, the admin triage pattern and the xlsx importer; leave the `TextChoices` vocabularies, the three overlapping region fields and the JSON rubric |
+| `developer/baserow-workflow-tool.md` | ✅ **DONE** — bannered as superseded, not deleted |
 
 ---
 
@@ -155,12 +159,12 @@ Safe to act on independently of the decisions above, except where noted.
 
 1. Read `developer/whg-tracker-review.html`, then `api/views_indexing.py:103` and
    `api/models.py:186`. Those two files carry most of the constraints.
-2. Nothing else until decisions 1–4 come back from Ruth, Palak and Alexandra.
-3. When they do, the natural order is: vocabulary tables → `Contact` + `Organisation`
-   → `TrackedGazetteer` + `Stage` → Engagement/ActionItem/Interaction → admin →
+2. Then `developer/grace-leads-prototype-notes.md` — the `leads` prototype read
+   for you, with what to lift and what to leave.
+3. Build order: vocabulary tables → `Contact` + `Organisation` →
+   `TrackedGazetteer` + `Stage` → Engagement/ActionItem/Interaction → admin →
    the `/contribute/` rebuild.
-4. Marking the Baserow note superseded and reading the `atlas` `leads` prototype can
-   happen at any point.
+4. Do not load real contact data until decision 6 returns.
 
 ---
 
