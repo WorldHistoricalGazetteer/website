@@ -1295,8 +1295,12 @@ function datasetScopeContainers() {
   return (r.mode === 'whg' && r.place && r.place.id) ? [barePlaceId(r.place.id)] : [];
 }
 
-// A column worth offering as prose: mostly-textual, several words per cell. Keeps identifiers, codes
-// and dates out of the "also read" list without asking the user to filter them by eye.
+// A column worth offering as prose: several words per cell. Identifiers, codes and dates are already
+// kept out by role, so this only has to separate a phrase from a token.
+//
+// Three words, not five. A Court of Requests Defendants column reads "James Hansett" or "William Todd
+// of Horndon" — under a five-word bar the whole column was hidden, and with it the residences of half
+// the litigants in the corpus. Erring the other way merely offers a column the user can leave unticked.
 function looksLikeProse(colIdx) {
   if (!project) return false;
   let sampled = 0, wordy = 0;
@@ -1304,7 +1308,7 @@ function looksLikeProse(colIdx) {
     const v = String(project.rows[r][colIdx] == null ? '' : project.rows[r][colIdx]).trim();
     if (!v) continue;
     sampled += 1;
-    if (v.split(/\s+/).length >= 5) wordy += 1;
+    if (v.split(/\s+/).length >= 3) wordy += 1;
   }
   return sampled > 0 && wordy / sampled >= 0.6;
 }
