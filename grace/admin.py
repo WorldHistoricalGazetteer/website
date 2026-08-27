@@ -176,17 +176,19 @@ class ContactAdmin(admin.ModelAdmin):
     def lawful_basis(self, obj):
         return privacy.LAWFUL_BASIS
 
-    @admin.display(description="account", boolean=True)
+    @admin.display(description="account")
     def account(self, obj):
-        return obj.has_account
+        """Not boolean=True: 209 red crosses down the page read as errors when
+        they only mean "this person never signed up", which is the norm."""
+        return "linked" if obj.has_account else "—"
 
     @admin.display(description="affiliation")
     def shown_affiliation(self, obj):
         return obj.resolved_affiliation or "—"
 
-    @admin.display(description="newsletter", boolean=True)
+    @admin.display(description="newsletter")
     def newsletter(self, obj):
-        return obj.resolved_news_consent
+        return "yes" if obj.resolved_news_consent else "—"
 
     @admin.display(description="Art. 14")
     def notice_state(self, obj):

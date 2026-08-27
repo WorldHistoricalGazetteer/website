@@ -587,8 +587,8 @@ class GraceAdminSiteTests(TestCase):
         """Stripping the register prefix would leave bare 'Statuses'/'Types'."""
         self.client.force_login(self.staff)
         body = self.client.get("/grace/admin/").content.decode()
-        self.assertIn("Content: types", body)
-        self.assertIn("Content: statuses", body)
+        self.assertIn("Content types", body)
+        self.assertIn("Content statuses", body)
 
 
 class GraceAdminThemeTests(TestCase):

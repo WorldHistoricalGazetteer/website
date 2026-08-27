@@ -98,8 +98,8 @@ class Organisation(TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "Catalogue: organisation"
-        verbose_name_plural = "Catalogue: organisations"
+        verbose_name = "organisation"
+        verbose_name_plural = "organisations"
 
     def __str__(self):
         return self.name
@@ -258,8 +258,8 @@ class Contact(TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "Catalogue: contact"
-        verbose_name_plural = "Catalogue: contacts"
+        verbose_name = "contact"
+        verbose_name_plural = "contacts"
 
     def __str__(self):
         return self.name or f"(erased contact #{self.pk})"
@@ -387,8 +387,8 @@ class Project(TimeStampedModel):
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "Catalogue: project"
-        verbose_name_plural = "Catalogue: projects"
+        verbose_name = "project"
+        verbose_name_plural = "projects"
 
     def __str__(self):
         return self.name
@@ -459,8 +459,8 @@ class Source(TimeStampedModel):
 
     class Meta:
         ordering = ["title"]
-        verbose_name = "Catalogue: source"
-        verbose_name_plural = "Catalogue: sources"
+        verbose_name = "source"
+        verbose_name_plural = "sources"
 
     def __str__(self):
         return self.title
@@ -585,8 +585,8 @@ class TrackedGazetteer(TimeStampedModel):
 
     class Meta:
         ordering = ["title"]
-        verbose_name = "Pipeline: gazetteer"
-        verbose_name_plural = "Pipeline: gazetteers"
+        verbose_name = "gazetteer"
+        verbose_name_plural = "gazetteers"
 
     def __str__(self):
         return self.title
@@ -704,8 +704,8 @@ class Engagement(TimeStampedModel):
 
     class Meta:
         ordering = ["-opened_on"]
-        verbose_name = "Engagement: engagement"
-        verbose_name_plural = "Engagement: engagements"
+        verbose_name = "engagement"
+        verbose_name_plural = "engagements"
 
     def __str__(self):
         who = self.contact.name if self.contact_id else "?"
@@ -765,8 +765,8 @@ class ActionItem(TimeStampedModel):
 
     class Meta:
         ordering = ["due_date", "-created_at"]
-        verbose_name = "Engagement: action item"
-        verbose_name_plural = "Engagement: action items"
+        verbose_name = "action item"
+        verbose_name_plural = "action items"
 
     def __str__(self):
         return self.description
@@ -803,8 +803,8 @@ class Interaction(TimeStampedModel):
 
     class Meta:
         ordering = ["-occurred_on", "-created_at"]
-        verbose_name = "Engagement: interaction"
-        verbose_name_plural = "Engagement: interactions"
+        verbose_name = "interaction"
+        verbose_name_plural = "interactions"
 
     def __str__(self):
         return f"{self.occurred_on}: {self.summary[:60]}"
@@ -874,8 +874,8 @@ class SourceSuggestion(TimeStampedModel):
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = "Pipeline: source suggestion"
-        verbose_name_plural = "Pipeline: source suggestions"
+        verbose_name = "source suggestion"
+        verbose_name_plural = "source suggestions"
 
     def __str__(self):
         return self.title
@@ -925,8 +925,8 @@ class Content(TimeStampedModel):
 
     class Meta:
         ordering = ["-planned_for", "title"]
-        verbose_name = "Content: item"
-        verbose_name_plural = "Content: items"
+        verbose_name = "content item"
+        verbose_name_plural = "content items"
 
     def __str__(self):
         return self.title

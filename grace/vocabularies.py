@@ -71,8 +71,8 @@ class ContactRole(VocabularyTerm):
     """What a person is to us — compiler, rights holder, archivist, and so on."""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: contact role"
-        verbose_name_plural = "Catalogue: contact roles"
+        verbose_name = "contact role"
+        verbose_name_plural = "contact roles"
 
 
 class ContactStatus(VocabularyTerm):
@@ -83,22 +83,22 @@ class ContactStatus(VocabularyTerm):
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: contact status"
-        verbose_name_plural = "Catalogue: contact statuses"
+        verbose_name = "contact status"
+        verbose_name_plural = "contact statuses"
 
 
 class OrganisationType(VocabularyTerm):
     """Archive, library, museum, university, publisher, society…"""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: organisation type"
-        verbose_name_plural = "Catalogue: organisation types"
+        verbose_name = "organisation type"
+        verbose_name_plural = "organisation types"
 
 
 class ProjectStatus(VocabularyTerm):
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: project status"
-        verbose_name_plural = "Catalogue: project statuses"
+        verbose_name = "project status"
+        verbose_name_plural = "project statuses"
 
 
 class SourceType(VocabularyTerm):
@@ -111,8 +111,8 @@ class SourceType(VocabularyTerm):
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: source type"
-        verbose_name_plural = "Catalogue: source types"
+        verbose_name = "source type"
+        verbose_name_plural = "source types"
 
 
 class DigitizationStatus(VocabularyTerm):
@@ -120,8 +120,8 @@ class DigitizationStatus(VocabularyTerm):
     catalogue record only, not digitised, unknown."""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: digitization status"
-        verbose_name_plural = "Catalogue: digitization statuses"
+        verbose_name = "digitization status"
+        verbose_name_plural = "digitization statuses"
 
 
 class DiscoverySource(VocabularyTerm):
@@ -132,8 +132,8 @@ class DiscoverySource(VocabularyTerm):
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Catalogue: discovery source"
-        verbose_name_plural = "Catalogue: discovery sources"
+        verbose_name = "discovery source"
+        verbose_name_plural = "discovery sources"
 
 
 # --------------------------------------------------------------------------
@@ -162,8 +162,8 @@ class Stage(VocabularyTerm):
     )
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Pipeline: editorial stage"
-        verbose_name_plural = "Pipeline: editorial stages"
+        verbose_name = "editorial stage"
+        verbose_name_plural = "editorial stages"
 
 
 class PermissionStatus(VocabularyTerm):
@@ -174,8 +174,8 @@ class PermissionStatus(VocabularyTerm):
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Pipeline: permission status"
-        verbose_name_plural = "Pipeline: permission statuses"
+        verbose_name = "permission status"
+        verbose_name_plural = "permission statuses"
 
 
 class ReviewRecommendation(VocabularyTerm):
@@ -187,8 +187,8 @@ class ReviewRecommendation(VocabularyTerm):
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Pipeline: review recommendation"
-        verbose_name_plural = "Pipeline: review recommendations"
+        verbose_name = "review recommendation"
+        verbose_name_plural = "review recommendations"
 
 
 class IntakeStatus(VocabularyTerm):
@@ -207,8 +207,8 @@ class IntakeStatus(VocabularyTerm):
     )
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Pipeline: intake status"
-        verbose_name_plural = "Pipeline: intake statuses"
+        verbose_name = "intake status"
+        verbose_name_plural = "intake statuses"
 
 
 # --------------------------------------------------------------------------
@@ -233,8 +233,8 @@ class EngagementStage(VocabularyTerm):
     )
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Engagement: conversation stage"
-        verbose_name_plural = "Engagement: conversation stages"
+        verbose_name = "conversation stage"
+        verbose_name_plural = "conversation stages"
 
 
 class Priority(VocabularyTerm):
@@ -242,16 +242,16 @@ class Priority(VocabularyTerm):
     gazetteer (review §7, Q2)."""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Engagement: priority"
-        verbose_name_plural = "Engagement: priorities"
+        verbose_name = "priority"
+        verbose_name_plural = "priorities"
 
 
 class InteractionChannel(VocabularyTerm):
     """Email, call, meeting, conference, letter…"""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Engagement: interaction channel"
-        verbose_name_plural = "Engagement: interaction channels"
+        verbose_name = "interaction channel"
+        verbose_name_plural = "interaction channels"
 
 
 class ActionItemStatus(VocabularyTerm):
@@ -262,16 +262,16 @@ class ActionItemStatus(VocabularyTerm):
     )
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Engagement: action-item status"
-        verbose_name_plural = "Engagement: action-item statuses"
+        verbose_name = "action-item status"
+        verbose_name_plural = "action-item statuses"
 
 
 class EngagementOutcome(VocabularyTerm):
     """How a conversation ended — agreed, declined, no reply, superseded."""
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Engagement: outcome"
-        verbose_name_plural = "Engagement: outcomes"
+        verbose_name = "engagement outcome"
+        verbose_name_plural = "engagement outcomes"
 
 
 # --------------------------------------------------------------------------
@@ -282,18 +282,18 @@ class ContentItemType(VocabularyTerm):
     """Blog post, newsletter item, conference paper, tutorial…
 
     Named ``ContentItemType`` rather than ``ContentType`` so it can never be
-    confused with ``django.contrib.contenttypes``. Palak sees "Content: type".
+    confused with ``django.contrib.contenttypes``. Palak sees "content type".
 
     Content is the fourth register. The original design folded it into
     Engagement, but content is *output*, not engagement (review §6).
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Content: type"
-        verbose_name_plural = "Content: types"
+        verbose_name = "content type"
+        verbose_name_plural = "content types"
 
 
 class ContentStatus(VocabularyTerm):
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "Content: status"
-        verbose_name_plural = "Content: statuses"
+        verbose_name = "content status"
+        verbose_name_plural = "content statuses"
