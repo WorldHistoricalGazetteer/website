@@ -9,6 +9,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from .merge import merge_snapshots
+from . import extraction
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
                      ROLE_VIEWER, ROLE_EDITOR, ROLE_OWNER)
 
@@ -270,6 +271,29 @@ class ApiTests(TestCase):
                                  content_type='application/json')
             self.assertEqual(r.status_code, 503)
 
+    def test_ner_success_shape(self):
+        """The endpoint returns the extractor's names even when reconciliation is unavailable."""
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places') as extract, \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            extract.return_value = [
+                {'name': 'Duxford', 'label': 'LLM', 'count': 1, 'context': 'in Duxford',
+                 'verbatim': True}]
+            r = self.client.post(reverse('workbench:ner'),
+                                 data=json.dumps({'text': 'a tenement in Duxford'}),
+                                 content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual([e['name'] for e in r.json()['entities']], ['Duxford'])
+
+    def test_ner_model_failure_is_502_not_500(self):
+        """A model fault is not the user's problem — it must not surface as a server error page."""
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places', side_effect=ValueError('boom')):
+            r = self.client.post(reverse('workbench:ner'),
+                                 data=json.dumps({'text': 'Rome and Venice'}),
+                                 content_type='application/json')
+        self.assertEqual(r.status_code, 502)
+
     def test_cannot_add_yourself_and_keep_owner_role(self):
         """place#203 — self-add used to overwrite the owner's own role with the default
         'editor', locking them out of managing the team they created."""
@@ -471,3 +495,38 @@ class PublishCheckoutTests(TestCase):
         self.assertEqual(new.published_collection_id, cid)
         self.assertEqual(new.snapshot['places'][0]['id'], f'whg:{p1.id}')
         self.assertEqual(new.snapshot['places'][0]['note'], 'hi')
+
+
+class ExtractionUnitTests(TestCase):
+    """workbench.extraction — the parts that do not need a model (place#211)."""
+
+    def test_compound_span_split_only_when_parts_are_real(self):
+        """qwen3 returns "Kingsbridge, Devon" as one span; it must become two names — but a comma
+        in a name whose parts are NOT separately in the text has to survive intact."""
+        text = 'John Joyce, shoemaker of Kingsbridge, Devon, v Robert Toly of East Allington, Devon.'
+        self.assertEqual(extraction._split_compound('Kingsbridge, Devon', text),
+                         ['Kingsbridge', 'Devon'])
+        # "Toly, Cornwall" — Cornwall never appears, so splitting would invent a place.
+        self.assertEqual(extraction._split_compound('Kingsbridge, Cornwall', text),
+                         ['Kingsbridge, Cornwall'])
+        self.assertEqual(extraction._split_compound('Saffron Walden', text), ['Saffron Walden'])
+
+    def test_names_are_grounded_in_the_source_text(self):
+        """A name the model invented is kept but flagged, so the caller can rank or drop it; a real
+        one carries its true occurrence count."""
+        from unittest.mock import patch
+        text = 'A messuage in Duxford, and lands in Duxford, county Cambridge.'
+        with patch('workbench.extraction._generate', return_value=['Duxford', 'Atlantis']):
+            ents = extraction.extract_places(text)
+        by_name = {e['name']: e for e in ents}
+        self.assertEqual(by_name['Duxford']['count'], 2)
+        self.assertTrue(by_name['Duxford']['verbatim'])
+        self.assertIn('Duxford', by_name['Duxford']['context'])
+        self.assertEqual(by_name['Atlantis']['count'], 0)
+        self.assertFalse(by_name['Atlantis']['verbatim'])
+
+    def test_unconfigured_host_raises_rather_than_calling_out(self):
+        from django.test import override_settings
+        with override_settings(OLLAMA_URL=''):
+            with self.assertRaises(extraction.ExtractionUnavailable):
+                extraction.extract_places('Rome and Venice')
