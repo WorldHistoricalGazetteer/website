@@ -528,3 +528,14 @@ class ContentAdmin(admin.ModelAdmin):
     search_fields = ("title", "notes")
     autocomplete_fields = ("content_type", "status", "author")
     filter_horizontal = ("gazetteers",)
+
+
+# --------------------------------------------------------------------------
+# Mirror everything above onto GRACE's own admin site at /grace/admin/.
+# Done here, at the bottom of this module, because by this point every
+# ModelAdmin is defined and registered — so the mirror cannot miss one.
+# --------------------------------------------------------------------------
+
+from .admin_site import register_grace_models  # noqa: E402
+
+register_grace_models()

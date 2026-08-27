@@ -515,3 +515,70 @@ class OrganisationMergeTests(TestCase):
         Organisation.objects.create(name="Uppsala University")
         self._normalise()
         self.assertEqual(Organisation.objects.get().name, "Uppsala University")
+
+
+class GraceAdminSiteTests(TestCase):
+    """The dedicated admin at /grace/admin/ (not Django's everything-view)."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="editor", email="editor@example.org", password="pw",
+            given_name="Ed", surname="Itor", name="Ed Itor")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+
+    def test_it_requires_a_login(self):
+        response = self.client.get("/grace/admin/")
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_the_index_lists_the_registers(self):
+        self.client.force_login(self.staff)
+        response = self.client.get("/grace/admin/")
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        for register in ("Pipeline", "Catalogue", "Engagement", "Content"):
+            self.assertIn(register, body)
+
+    def test_it_shows_only_grace_models(self):
+        """The whole point: no Auth, no Sites, no Celery Results."""
+        self.client.force_login(self.staff)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertNotIn("Celery", body)
+        self.assertNotIn("Authentication and Authorization", body)
+
+    def test_support_models_are_reachable_but_not_advertised(self):
+        """Registered for autocomplete, deliberately absent from the index."""
+        from grace.admin_site import grace_admin_site
+        from api.models import GazetteerRegistryEntry
+        self.assertIn(GazetteerRegistryEntry, grace_admin_site._registry)
+        self.client.force_login(self.staff)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertNotIn("Gazetteer registry entries", body)
+
+    def test_every_grace_model_is_mirrored(self):
+        from django.contrib import admin as django_admin
+        from grace.admin_site import grace_admin_site
+        default = {m for m in django_admin.site._registry
+                   if m._meta.app_label == "grace"}
+        mirrored = {m for m in grace_admin_site._registry
+                    if m._meta.app_label == "grace"}
+        self.assertEqual(default, mirrored)
+
+    def test_a_changelist_still_works(self):
+        self.client.force_login(self.staff)
+        response = self.client.get("/grace/admin/grace/trackedgazetteer/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_attention_panel_flags_an_untriaged_suggestion(self):
+        untriaged = IntakeStatus.objects.create(label="Untriaged",
+                                                is_untriaged=True)
+        SourceSuggestion.objects.create(title="Something", status=untriaged)
+        self.client.force_login(self.staff)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("untriaged suggestion", body)
+
+    def test_all_clear_when_there_is_nothing_to_do(self):
+        self.client.force_login(self.staff)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("Nothing needs attention", body)

@@ -1,0 +1,131 @@
+{% extends "admin/base_site.html" %}
+
+{% comment %}
+  GRACE's admin landing page. Replaces Django's alphabetical app list with the
+  three registers (plus Content), and leads with what needs attention — the
+  failure modes that happen by nobody noticing.
+
+  Everything below links into ordinary Django changelists, so all the filters,
+  bulk actions and inline editing built in grace/admin.py still apply.
+{% endcomment %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  :root { --grace-purple: #5b2a86; --grace-line: #e3d9ee; }
+
+  #content h1 { display: none; }
+
+  .grace-hero { margin: 0 0 24px; }
+  .grace-hero h1 {
+    display: block; font-size: 24px; font-weight: 600;
+    color: var(--grace-purple); margin: 0 0 4px;
+  }
+  .grace-hero p { margin: 0; color: #666; font-size: 13px; max-width: 60em; }
+
+  .grace-attention { margin: 0 0 24px; }
+  .grace-attention a {
+    display: block; padding: 10px 14px; margin-bottom: 6px; border-radius: 4px;
+    text-decoration: none; border-left: 4px solid;
+  }
+  .grace-attention .warn { background: #fbf6ec; border-color: #c47f17; }
+  .grace-attention .bad  { background: #fdf1f1; border-color: #a52222; }
+  .grace-attention .n { font-weight: 700; font-size: 15px; }
+  .grace-attention .warn .n { color: #9a6310; }
+  .grace-attention .bad .n  { color: #8c1d1d; }
+  .grace-attention .why { display: block; color: #555; font-size: 12px; margin-top: 2px; }
+  .grace-clear {
+    background: #f1f7f1; border-left: 4px solid #1a7a3c; padding: 10px 14px;
+    border-radius: 4px; color: #1a7a3c; font-weight: 600; margin-bottom: 24px;
+  }
+
+  .grace-registers { display: flex; flex-wrap: wrap; gap: 16px; }
+  .grace-register {
+    flex: 1 1 260px; border: 1px solid var(--grace-line); border-radius: 6px;
+    overflow: hidden; background: #fff;
+  }
+  .grace-register > h2 {
+    margin: 0; padding: 9px 14px; background: var(--grace-purple);
+    color: #fff; font-size: 14px; font-weight: 600;
+  }
+  .grace-register .blurb {
+    padding: 9px 14px 4px; margin: 0; color: #666; font-size: 12px;
+  }
+  .grace-register table { width: 100%; border-collapse: collapse; }
+  .grace-register td { padding: 7px 14px; border-top: 1px solid #f0ecf5; }
+  .grace-register td.count { text-align: right; color: #888; font-variant-numeric: tabular-nums; }
+  .grace-register td.add { text-align: right; width: 1%; white-space: nowrap; }
+  .grace-register td.add a { font-size: 11px; color: #888; }
+
+  .grace-vocab {
+    margin-top: 24px; border: 1px solid var(--grace-line); border-radius: 6px;
+    padding: 12px 14px; background: #fcfbfd;
+  }
+  .grace-vocab h2 { margin: 0 0 4px; font-size: 14px; color: var(--grace-purple); }
+  .grace-vocab p { margin: 0 0 8px; color: #666; font-size: 12px; max-width: 60em; }
+  .grace-vocab ul { list-style: none; margin: 0; padding: 0;
+                    display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .grace-vocab li { font-size: 12px; }
+  .grace-vocab .n { color: #aaa; }
+
+  @media (prefers-color-scheme: dark) {
+    .grace-register, .grace-vocab { background: var(--darkened-bg, #2b2b2b); }
+    .grace-register td { border-top-color: #3a3a3a; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="grace-hero">
+  <h1>GRACE</h1>
+  <p>The gazetteers we want, the people and institutions behind them, the printed
+     sources that document them, our correspondence, and where each gazetteer sits
+     on its way in.</p>
+</div>
+
+{% if attention %}
+<div class="grace-attention">
+  {% for item in attention %}
+    <a class="{{ item.level }}" href="{{ item.url }}">
+      <span class="n">{{ item.count }} {{ item.label }}{{ item.count|pluralize }}</span>
+      <span class="why">{{ item.why }}</span>
+    </a>
+  {% endfor %}
+</div>
+{% elif all_clear %}
+<div class="grace-clear">Nothing needs attention.</div>
+{% endif %}
+
+<div class="grace-registers">
+  {% for register in registers %}
+    <div class="grace-register">
+      <h2>{{ register.title }}</h2>
+      <p class="blurb">{{ register.blurb }}</p>
+      <table>
+        {% for row in register.rows %}
+          <tr>
+            <td><a href="{{ row.url }}">{{ row.name|capfirst }}</a></td>
+            <td class="count">{{ row.count }}</td>
+            <td class="add"><a href="{{ row.add_url }}">+ add</a></td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endfor %}
+</div>
+
+{% if vocabularies %}
+<div class="grace-vocab">
+  <h2>Vocabularies</h2>
+  <p>Every pick-list in GRACE is a table you can edit here — add a term, reorder
+     them, or retire one without deleting it. No developer needed, and no deploy.
+     Renaming a term is safe; the stable key underneath does not change.</p>
+  <ul>
+    {% for row in vocabularies %}
+      <li><a href="{{ row.url }}">{{ row.name|capfirst }}</a>
+          <span class="n">{{ row.count }}</span></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}
