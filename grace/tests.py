@@ -623,3 +623,8 @@ class GraceAdminThemeTests(TestCase):
     def test_the_browser_title_has_no_leading_pipe(self):
         body = self.client.get("/grace/admin/").content.decode()
         self.assertNotIn("<title>| ", body)
+
+    def test_empty_values_render_consistently(self):
+        """Django's default '-' clashed with the em dashes our columns return."""
+        from grace.admin_site import grace_admin_site
+        self.assertEqual(grace_admin_site.empty_value_display, "—")

@@ -39,6 +39,10 @@ class GraceAdminSite(admin.AdminSite):
     index_template = "grace/admin_index.html"
     enable_nav_sidebar = False
 
+    #: Django's default is a bare hyphen, which sat next to the em dashes the
+    #: Contact columns return and looked like two different kinds of "empty".
+    empty_value_display = "—"
+
     def each_context(self, request):
         context = super().each_context(request)
         # "View site" should lead back to the staff dashboard, which is where
