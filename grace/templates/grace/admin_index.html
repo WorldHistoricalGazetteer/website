@@ -32,17 +32,25 @@
     text-decoration: none; border: 1px solid; border-left-width: 4px;
   }
   .grace-attention a:hover { text-decoration: none; filter: brightness(0.98); }
-  .grace-attention .warn { background: #fdf8ec; border-color: #e0c081; border-left-color: #c47f17; }
-  .grace-attention .bad  { background: #fdf2f2; border-color: #e5b4b4; border-left-color: #a52222; }
+  .grace-attention .warn {
+    background: var(--grace-warn-bg); border-color: var(--grace-warn-line);
+    border-left-color: var(--grace-warn-fg);
+  }
+  .grace-attention .bad {
+    background: var(--grace-bad-bg); border-color: var(--grace-bad-line);
+    border-left-color: var(--grace-bad-fg);
+  }
   .grace-attention .n { display: block; font-weight: 700; font-size: 17px; line-height: 1.2; }
-  .grace-attention .warn .n { color: #8a5810; }
-  .grace-attention .bad  .n { color: #8c1d1d; }
+  .grace-attention .warn .n { color: var(--grace-warn-fg); }
+  .grace-attention .bad  .n { color: var(--grace-bad-fg); }
   .grace-attention .why {
-    display: block; color: #5a5a5a; font-size: 11.5px; line-height: 1.4; margin-top: 4px;
+    display: block; color: var(--grace-muted); font-size: 11.5px;
+    line-height: 1.4; margin-top: 4px;
   }
   .grace-clear {
-    background: #f2f8f3; border: 1px solid #c6e0cc; border-left: 4px solid #1a7a3c;
-    padding: 11px 15px; border-radius: 6px; color: #176433; font-size: 13px;
+    background: var(--grace-ok-bg); border: 1px solid var(--grace-ok-line);
+    border-left: 4px solid var(--grace-ok-fg);
+    padding: 11px 15px; border-radius: 6px; color: var(--grace-ok-fg); font-size: 13px;
     margin: 0 0 26px;
   }
 

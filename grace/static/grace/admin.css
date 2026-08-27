@@ -7,8 +7,8 @@
  * That is where an editor actually spends the day, and a purple index sitting
  * in front of Django's teal changelists looks worse than leaving it alone.
  *
- * Django 4.1's admin is built on CSS custom properties declared on :root, with
- * a `prefers-color-scheme: dark` block in dark_mode.css. Overriding those
+ * Django's admin is built on CSS custom properties declared on :root, with a
+ * dark-mode counterpart. Overriding those
  * variables retints every screen — buttons, filters, selected rows, object
  * tools — without touching a single Django rule. Everything below the variable
  * blocks is small structural polish on top.
@@ -50,19 +50,36 @@
 
   --selected-row: #fdf6e3;   /* Django's default here is a hard yellow. */
   --darkened-bg:  #faf8fc;
+
+  /* Semantic tokens for the landing page's attention panel. Defined here, in
+     one place, so the index template never hard-codes a colour and therefore
+     cannot forget to give it a dark counterpart. */
+  --grace-warn-bg: #fdf8ec; --grace-warn-line: #e0c081; --grace-warn-fg: #8a5810;
+  --grace-bad-bg:  #fdf2f2; --grace-bad-line:  #e5b4b4; --grace-bad-fg:  #8c1d1d;
+  --grace-ok-bg:   #f2f8f3; --grace-ok-line:   #c6e0cc; --grace-ok-fg:   #176433;
+  --grace-muted:   #5a5a5a;
 }
 
+/* Dark mode, twice.
+ *
+ * The deployed Django is 4.2, which added an explicit theme toggle setting
+ * html[data-theme="dark"|"light"]; local development runs 4.1, which only has
+ * the media query. Covering both means the theme holds whichever version is in
+ * front of you, and the :not([data-theme="light"]) guard stops the media query
+ * overriding someone who has deliberately chosen light.
+ */
 @media (prefers-color-scheme: dark) {
-  :root {
+  html:not([data-theme="light"]) {
     --grace-deep: #2a1440;
     --grace-mid:  #5c3690;
-    --grace-tint: #1e1826;
+    --grace-tint: #241d2e;
     --grace-line: #3a2f47;
 
     --primary:   var(--grace-mid);
     --secondary: var(--grace-deep);
 
-    --header-bg: var(--grace-deep);
+    --header-bg:       var(--grace-deep);
+    --breadcrumbs-bg:  var(--grace-mid);
 
     --link-fg:          #c9a9ee;
     --link-hover-color: #e0ccf7;
@@ -74,7 +91,41 @@
 
     --selected-row: #33244a;
     --darkened-bg:  #1a1520;
+
+    --grace-warn-bg: #33280f; --grace-warn-line: #6b5320; --grace-warn-fg: #f0c674;
+    --grace-bad-bg:  #3a1d1d; --grace-bad-line:  #6e3535; --grace-bad-fg:  #f09a9a;
+    --grace-ok-bg:   #16301f; --grace-ok-line:   #2d5a3b; --grace-ok-fg:   #8fd6a6;
+    --grace-muted:   #b9b9b9;
   }
+}
+
+html[data-theme="dark"] {
+  --grace-deep: #2a1440;
+  --grace-mid:  #5c3690;
+  --grace-tint: #241d2e;
+  --grace-line: #3a2f47;
+
+  --primary:   var(--grace-mid);
+  --secondary: var(--grace-deep);
+
+  --header-bg:       var(--grace-deep);
+  --breadcrumbs-bg:  var(--grace-mid);
+
+  --link-fg:          #c9a9ee;
+  --link-hover-color: #e0ccf7;
+  --link-selected-fg: #c9a9ee;
+
+  --button-bg:         var(--grace-mid);
+  --button-hover-bg:   #6d43a8;
+  --default-button-bg: #45277a;
+
+  --selected-row: #33244a;
+  --darkened-bg:  #1a1520;
+
+  --grace-warn-bg: #33280f; --grace-warn-line: #6b5320; --grace-warn-fg: #f0c674;
+  --grace-bad-bg:  #3a1d1d; --grace-bad-line:  #6e3535; --grace-bad-fg:  #f09a9a;
+  --grace-ok-bg:   #16301f; --grace-ok-line:   #2d5a3b; --grace-ok-fg:   #8fd6a6;
+  --grace-muted:   #b9b9b9;
 }
 
 /* ---- Header ------------------------------------------------------------ */
@@ -134,7 +185,7 @@ div.breadcrumbs {
 /* Django's "0 of N selected" strip and the row hover: soften both. */
 #changelist tbody tr:hover > * { background: var(--grace-tint); }
 
-/* Long verbose names ("Catalogue: contacts") wrap badly in the filter column. */
+/* Filter values can be long ("Approved with revisions"); let them wrap. */
 #changelist-filter li { line-height: 1.35; }
 
 /* ---- Forms ------------------------------------------------------------- */
