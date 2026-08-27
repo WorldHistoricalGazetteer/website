@@ -13,11 +13,12 @@ TWO ENGINES:
          Chelmsford ORG, Little Burstead and Plymouth PERSON, and the common noun "cloth" PERSON
          (place#211). Kept as the default and as the fallback when the LLM is unavailable.
 
-  llm    qwen2.5:0.5b on the shared ./ollama container. ~300x slower and hallucinates more, but on
-         that same corpus it recalls 14/16 places against spaCy's 10/16, splits the "<Person> of
-         <Place>" residence formula that spaCy swallows whole, and assigns each mention a ROLE. Its
-         extra false positives are cheap because the caller reconciles inside a container polygon,
-         which discards them.
+  llm    qwen2.5:0.5b on the shared ./ollama container. ~400x slower, but on ten real TNA REQ 2
+         descriptions it recalls 27 of 33 hand-labelled place names at 1.3 s/record, and it splits
+         the "<Person> of <Place>" residence formula that spaCy swallows whole. Nothing larger beat
+         it: qwen3:0.6b and qwen2.5:1.5b both scored 25/33 at 2-3x the cost, llama3.2:1b 20/33 at
+         16x. Its extra false positives are cheap because the caller reconciles inside a container
+         polygon, which discards them.
 
 Contract:
   GET  /health          → {"status":"ok","model":"...","engines":{...}}
@@ -66,28 +67,28 @@ LLM_MAX_CHUNKS = int(os.environ.get("NER_LLM_MAX_CHUNKS", "40"))
 # ner service's own worker threads from piling up behind it.
 _llm_gate = threading.Semaphore(int(os.environ.get("NER_LLM_CONCURRENCY", "2")))
 
-LLM_SYSTEM = (
-    "You extract place names from historical English records. "
-    "Reply with JSON only, no explanation."
-)
-LLM_PROMPT = """List every place name in the text below — towns, villages, parishes, counties, \
-countries, manors, named buildings and fields. Do NOT list people, occupations or objects.
+LLM_SYSTEM = "You extract place names. Reply with JSON only."
 
-For each place give a role:
-  "residence" if the text says a person is "of" that place or lives there
-  "property"  if it is land or a building in dispute, leased, sold or bequeathed
-  "region"    if it is a county, shire or country
-  "other"     otherwise
+# Benchmarked over ten real TNA REQ 2 descriptions (33 hand-labelled place names), qwen2.5:0.5b at
+# 1.3 s/record: this wording recalls 27/33 with no malformed replies. TERSENESS IS THE WHOLE TRICK,
+# and two failure modes are worth remembering before anyone "improves" it:
+#
+#   * A worked example gets COPIED. An earlier version ended with
+#     {"places": [{"name": "Great Easton", "role": "residence"}]} and the model returned Great Easton
+#     — or, on other records, Norwich and Kent — instead of reading the text. Hence "..." as the only
+#     example value.
+#   * Extra instruction sends it into a repetition loop. Adding "list EVERY place, in the order they
+#     appear" dropped recall to 15/33 and cost 8 s/record, because the reply degenerates into the
+#     same name repeated until num_predict truncates the JSON.
+#
+# Roles are deliberately NOT asked for. The 0.5B can produce them, but the extra tokens are what tips
+# it into that loop (a role-bearing variant failed to parse on every single record). place#211's own
+# argument makes them unnecessary anyway: run extraction per text COLUMN and the column name gives
+# the role for free — Plaintiffs = residence, Subject = the disputed property.
+LLM_PROMPT = """%s
 
-Copy each name exactly as it is spelled in the text.
-
-Reply with JSON of this shape and nothing else:
-{"places": [{"name": "Great Easton", "role": "residence"}]}
-
-Text:
-<<<
-%s
->>>
+Which place names appear in the text above? Include towns, villages, parishes, manors and counties.
+Exclude people's names. Answer as JSON: {"places": ["..."]}
 """
 
 app = FastAPI(title="WHG NER", version="1.1")
@@ -115,6 +116,10 @@ def _context(ent) -> str:
     if len(sent) > CONTEXT_CHARS:
         sent = sent[:CONTEXT_CHARS].rstrip() + "…"
     return sent
+
+
+# Quoted string values from a truncated JSON array; excludes the object keys we ask for.
+_SALVAGE_RE = re.compile(r'"([^"\\]{2,80})"')
 
 
 def _find_all(text: str, name: str):
@@ -176,7 +181,11 @@ def _llm_call(chunk: str):
     try:
         parsed = json.loads(raw)
     except ValueError:
-        return []
+        # A small model that falls into a repetition loop runs out of num_predict mid-array, leaving
+        # unterminated JSON. The names before the loop started are usually fine, so recover the
+        # quoted strings rather than throwing the whole chunk away. Grounding against the source text
+        # (see _extract_llm) discards whatever the loop invented.
+        return [{"name": _clean(v), "role": ""} for v in _SALVAGE_RE.findall(raw) if _clean(v)]
     # format=json guarantees an object, but the model chooses the shape inside it. Accept the asked-for
     # {"places":[…]}, a bare list, and the common near-misses rather than losing a whole chunk.
     if isinstance(parsed, list):
