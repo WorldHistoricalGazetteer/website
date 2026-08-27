@@ -477,3 +477,41 @@ class RateLimitTests(TestCase):
         self.client.force_login(user)
         self._post(RATE_LIMIT_MAX + 3)
         self.assertEqual(SourceSuggestion.objects.count(), RATE_LIMIT_MAX + 3)
+
+
+class OrganisationMergeTests(TestCase):
+    """Whitespace variants are one institution, not two."""
+
+    def _normalise(self):
+        from grace.management.commands.import_baserow_export import Command
+        cmd = Command()
+        cmd.stdout = __import__("io").StringIO()
+        return cmd._normalise_organisations()
+
+    def test_variant_is_merged_into_the_clean_row(self):
+        clean = Organisation.objects.create(name="Academy of Korean Studies")
+        variant = Organisation.objects.create(
+            name="Academy of Korean Studies")
+        contact = Contact.objects.create(name="Someone", organisation=variant)
+
+        self._normalise()
+
+        self.assertEqual(Organisation.objects.count(), 1)
+        contact.refresh_from_db()
+        self.assertEqual(contact.organisation, clean)
+
+    def test_merge_survives_whichever_row_was_created_first(self):
+        """The variant existing first must not rename onto the clean name."""
+        variant = Organisation.objects.create(name="Trinity College")
+        Organisation.objects.create(name="Trinity College")
+        Contact.objects.create(name="Someone", organisation=variant)
+
+        self._normalise()  # must not raise IntegrityError
+
+        self.assertEqual(Organisation.objects.count(), 1)
+        self.assertEqual(Organisation.objects.get().name, "Trinity College")
+
+    def test_a_lone_variant_is_just_cleaned(self):
+        Organisation.objects.create(name="Uppsala University")
+        self._normalise()
+        self.assertEqual(Organisation.objects.get().name, "Uppsala University")

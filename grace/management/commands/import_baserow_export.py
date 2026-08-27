@@ -258,7 +258,12 @@ class Command(BaseCommand):
         """
         canonical = {}
         merged = 0
-        for org in Organisation.objects.order_by("id"):
+        # Already-clean rows first, so a variant is merged INTO the canonical
+        # row rather than being renamed onto its name and tripping the unique
+        # constraint.
+        rows = sorted(Organisation.objects.all(),
+                      key=lambda o: (o.name != _clean(o.name), o.id))
+        for org in rows:
             key = _clean(org.name)
             if key in canonical:
                 keep = canonical[key]
