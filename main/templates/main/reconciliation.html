@@ -877,6 +877,18 @@
             </div>
             <div id="recon-tf-splitpreview" class="small text-muted mt-1"></div>
           </div>
+
+          {% comment %}Extract place names from a text column, one row at a time (place#211). The
+             block-of-text extractor in step 1 loses row provenance, which for a catalogue is the whole
+             point; this keeps it, and scopes each row's reconciliation by that row's own container.{% endcomment %}
+          <div class="mb-1 pt-2 mt-2 border-top">
+            <div class="small text-muted mb-1">Extract place names from this column
+              <i class="fas fa-question-circle" data-bs-toggle="tooltip"
+                 title="For a column of descriptive text — a catalogue entry, an abstract, a note — read the place names out of every row and build a new table with one row per place mentioned. Each row keeps its identifier and all its other columns, so you can still count places per record. Where you name a container column, each row's places are searched inside that row's own container, which is far more accurate than searching the whole world. Rows naming no place are kept, so your totals stay right."></i>
+            </div>
+            <div id="recon-tf-extract-body" class="small"></div>
+            <div id="recon-tf-extract-progress" class="small text-muted mt-1"></div>
+          </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
