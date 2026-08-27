@@ -79,24 +79,19 @@ GITHUB_SNAG_REPO = os.environ.get('GITHUB_SNAG_REPO') or globals().get('GITHUB_S
 # returns a friendly 503 and the UI degrades gracefully).
 NER_URL = os.environ.get('NER_URL') or globals().get('NER_URL', '')
 
-# Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
-# Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only
-# link out to it from /contribute/. The default below is the live public form URL (not a
-# secret); override via env var or local_settings if it ever changes.
+# Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; /contribute/
+# links out to it. The default below is the live public form URL (not a secret); override via
+# env var or local_settings if it ever changes.
+#
+# INTERIM. The Baserow route is retired (see developer/baserow-workflow-tool.md), but this is
+# still the site's only public suggestion door, so it stays until GRACE's Django intake form
+# replaces /contribute/. The licence-sync bot credentials that used to live below have been
+# removed and revoked at Baserow.
 BASEROW_SUBMIT_FORM_URL = (
     os.environ.get('BASEROW_SUBMIT_FORM_URL')
     or globals().get('BASEROW_SUBMIT_FORM_URL')
     or 'https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU'
 )
-
-# Baserow service account (bot) for the licence-vocabulary sync. Credentials are
-# secrets — set BASEROW_BOT_EMAIL / BASEROW_BOT_PASSWORD in local_settings (local)
-# or env (deployed); never commit them. The table id points at the synced "Licences"
-# lookup table in the WHG Dataset & Project Tracker database.
-BASEROW_API_URL = os.environ.get('BASEROW_API_URL') or globals().get('BASEROW_API_URL', 'https://api.baserow.io')
-BASEROW_BOT_EMAIL = os.environ.get('BASEROW_BOT_EMAIL') or globals().get('BASEROW_BOT_EMAIL', '')
-BASEROW_BOT_PASSWORD = os.environ.get('BASEROW_BOT_PASSWORD') or globals().get('BASEROW_BOT_PASSWORD', '')
-BASEROW_LICENCES_TABLE_ID = int(os.environ.get('BASEROW_LICENCES_TABLE_ID') or globals().get('BASEROW_LICENCES_TABLE_ID', 1037619))
 
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
