@@ -1071,10 +1071,22 @@ _NER_APPELLATIVES = {
 }
 
 
+def _ner_norm_word(name):
+    """Lower-case, and drop a possessive: "King’s", from "the King’s tenants", is no more a place
+    than "King", and the stop list already holds the latter."""
+    return re.sub(r"[’']s$", '', (name or '').strip().lower())
+
+
+def _ner_stopword(name):
+    """A structural stop-word. Candidate generation already refuses these, so the model must not be
+    able to reintroduce them by naming one — dropped whatever the gazetteer says."""
+    return _ner_norm_word(name) in _NER_CAND_STOP
+
+
 def _ner_appellative(name):
-    """A bare common noun or title, ignoring a possessive: "King's" is no more a place than "King"."""
-    n = re.sub(r"[’']s$", '', (name or '').strip().lower())
-    return n in _NER_APPELLATIVES or n in _NER_CAND_STOP
+    """A common noun or title that COULD be a place name. Unlike a stop-word this one gets the benefit
+    of the doubt, but only from a container (see the call site)."""
+    return _ner_norm_word(name) in _NER_APPELLATIVES
 
 
 def _ner_scope(value, limit=NER_SCOPE_MAX):
@@ -1126,10 +1138,12 @@ def _ner_row_places(text, user, scope, fallback):
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
             continue
-        # A bare common noun is dropped unless something trustworthy vouches for it — and OUTSIDE a
+        if _ner_stopword(nm):
+            continue                       # never a place; candidate generation refuses these too
+        # A common noun is dropped unless something trustworthy vouches for it — and OUTSIDE a
         # container nothing does. Unscoped, the index will happily match "Master" to some obscure
-        # place and present a title as a location; inside a county polygon, a match is evidence. So
-        # the gazetteer gets the benefit of the doubt only when the row is scoped.
+        # namesake and present a title as a located place; inside a county polygon, a match is
+        # evidence. So the gazetteer gets the benefit of the doubt only when the row is scoped.
         if _ner_appellative(nm) and not (m and scope):
             continue
         hits = extraction.find_all(text, nm)
