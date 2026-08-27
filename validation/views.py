@@ -19,6 +19,7 @@ from validation.create_dataset import read_json_features_in_batches
 from validation.tasks import validate_feature_batch, cleanup
 import redis
 from validation.tLPF_mappings import tLPF_mappings
+from validation.coordinates import resolve_lonlat, check_coordinate_pair, is_blank
 from shapely import wkt
 from shapely.geometry import mapping as shapely_mapping
 
@@ -78,6 +79,15 @@ def get_file_info(file_path):
 
 
 def parse_to_LPF(delimited_filepath, ext):
+    """
+    Convert a delimited upload to LPF.
+
+    Returns (lpf_file_path, feature_count, separator, header, coordinate_report), where
+    `coordinate_report` carries the `lon`/`lat` repairs and rejections found while
+    converting, plus a tally of rows that ended up with no geometry at all. Those used to
+    be discarded in silence — see place#212 — so they are collected here and pushed to the
+    validation report as soon as the task has an id.
+    """
     try:
         _, ext = os.path.splitext(delimited_filepath)
         ext = ext.lower()
@@ -189,6 +199,28 @@ def parse_to_LPF(delimited_filepath, ext):
                 d.extend([{}])
             d[final_key] = value
 
+        # Coordinate parsing/repair report (place#212). Lists are capped so that a
+        # wholesale mangling of a large file cannot exhaust memory, but the tallies are not.
+        max_reported = getattr(settings, 'VALIDATION_MAX_ERRORS', 100)
+        coordinate_report = {
+            'errors': [],
+            'fixes': [],
+            'error_count': 0,
+            'fix_count': 0,
+            'rows_without_geometry': 0,
+        }
+
+        counter_key = {'errors': 'error_count', 'fixes': 'fix_count'}
+
+        def report(bucket, feature_id, description):
+            coordinate_report[counter_key[bucket]] += 1
+            if len(coordinate_report[bucket]) < max_reported:
+                coordinate_report[bucket].append({
+                    'feature_id': feature_id,
+                    'path': 'features.feature.geometry',
+                    'description': description,
+                })
+
         with open(lpf_file_path, 'w') as lpf_file:
             first_line = True  # To handle commas between records in feature array
             feature_count = 0
@@ -202,6 +234,25 @@ def parse_to_LPF(delimited_filepath, ext):
                 for _, record in chunk.iterrows():
                     record = record.to_dict()  # Convert row to a dictionary
                     logger.debug(f"Processing record #{feature_count}: '{record}'.")
+
+                    feature_id = str(record.get('id', '')).strip() or f"row {feature_count + 1}"
+
+                    # Resolve `lon`/`lat` as a pair before the converters run. `float()`
+                    # failing here used to leave `coordinates` unassigned and the feature
+                    # with a null geometry, reported to the contributor as valid.
+                    if 'lon' in record or 'lat' in record:
+                        ccodes = [c.strip() for c in str(record.get('ccodes') or '').split(';') if c.strip()]
+                        lon, lat, repairs, coord_errors = resolve_lonlat(
+                            record.get('lon'), record.get('lat'), ccodes=ccodes)
+                        # A `geowkt` column supersedes lon/lat entirely, so its problems
+                        # are not the contributor's to fix.
+                        if is_blank(record.get('geowkt')):
+                            for description in repairs:
+                                report('fixes', feature_id, description)
+                            for description in coord_errors:
+                                report('errors', feature_id, description)
+                        record['lon'] = lon
+                        record['lat'] = lat
 
                     # Apply converters: NB these cannot be applied during pd.read_excel due to the unhashable lists they produce
                     for key, converter in converters.items():
@@ -232,6 +283,12 @@ def parse_to_LPF(delimited_filepath, ext):
 
                     if 'geometry' in lpf_feature and 'coordinates' in lpf_feature['geometry']:
                         lpf_feature['geometry']['type'] = 'Point'
+                        # Belt and braces: never hand a malformed position downstream to
+                        # GEOSGeometry, which would fail on insert long after validation.
+                        position_error = check_coordinate_pair(lpf_feature['geometry']['coordinates'])
+                        if position_error:
+                            report('errors', feature_id, position_error)
+                            lpf_feature['geometry'] = None
                     else:
                         lpf_feature['geometry'] = None
 
@@ -242,6 +299,9 @@ def parse_to_LPF(delimited_filepath, ext):
                         geojson_geometry = shapely_mapping(geometry)
                         lpf_feature['geometry'] = geojson_geometry
                         lpf_feature.pop('geowkt')
+
+                    if lpf_feature.get('geometry') is None:
+                        coordinate_report['rows_without_geometry'] += 1
 
                     logger.debug(f"Processed record #{feature_count}: '{lpf_feature}'.")
 
@@ -259,7 +319,10 @@ def parse_to_LPF(delimited_filepath, ext):
 
         logger.debug(f"fLPF file '{delimited_filepath}' converted to LPF and written to '{lpf_file_path}'.")
         logger.debug(f"Returning additional values: feature_count: {feature_count}, separator: {separator}, header: {header}.")
-        return lpf_file_path, feature_count, separator, header
+        logger.info(f"Coordinate report for '{delimited_filepath}': "
+                    f"{coordinate_report['fix_count']} repaired, {coordinate_report['error_count']} rejected, "
+                    f"{coordinate_report['rows_without_geometry']}/{feature_count} rows without geometry.")
+        return lpf_file_path, feature_count, separator, header, coordinate_report
 
     except Exception as e:
         logger.error(f"Error processing file {delimited_filepath}: {e}")
@@ -319,6 +382,7 @@ def validate_file(request, dataset_metadata):
     ext = ext.lower().lstrip('.')
     namespaces = None
     schema_org_metadata = None
+    coordinate_report = None
     try:
         # Handle .zip uploads by extracting the first suitable json/geojson/jsonld member
         if ext == 'zip':
@@ -379,7 +443,7 @@ def validate_file(request, dataset_metadata):
             dataset_metadata["format"] = ext
             dataset_metadata["delimited_filepath"] = uploaded_filepath
             dataset_metadata["jsonld_filepath"], dataset_metadata["feature_count"], dataset_metadata["separator"], \
-                dataset_metadata["header"] = parse_to_LPF(dataset_metadata["delimited_filepath"], ext)
+                dataset_metadata["header"], coordinate_report = parse_to_LPF(dataset_metadata["delimited_filepath"], ext)
     except Exception as e:
         message = f"Error converting delimited text to LPF: {e}"
         logger.error(message)
@@ -406,6 +470,29 @@ def validate_file(request, dataset_metadata):
     })
     redis_client.hset(f"{task_id}_metadata", mapping=dataset_metadata)
     logger.debug(f"Dataset metadata saved to redis: {dataset_metadata}")
+
+    # Coordinate repairs and rejections found while converting the delimited file. They are
+    # pushed here rather than in `parse_to_LPF` because the task id does not exist until now.
+    # Rejections land in `{task_id}_errors`, which both blocks the dataset save and shows the
+    # contributor exactly which cell was at fault (place#212).
+    if coordinate_report:
+        for bucket in ('fixes', 'errors'):
+            for entry in coordinate_report[bucket]:
+                redis_client.rpush(f"{task_id}_{bucket}", json.dumps(entry))
+        for bucket, reported, total in (('fixes', len(coordinate_report['fixes']), coordinate_report['fix_count']),
+                                        ('errors', len(coordinate_report['errors']), coordinate_report['error_count'])):
+            if total > reported:
+                redis_client.rpush(f"{task_id}_{bucket}", json.dumps({
+                    'feature_id': '-- summary --',
+                    'path': 'features.feature.geometry',
+                    'description': f"{total - reported} further coordinate "
+                                   f"{'repairs' if bucket == 'fixes' else 'problems'} are not listed here.",
+                }))
+        redis_client.hset(task_id, mapping={
+            'rows_without_geometry': coordinate_report['rows_without_geometry'],
+            'coordinates_repaired': coordinate_report['fix_count'],
+            'coordinates_rejected': coordinate_report['error_count'],
+        })
 
     try:
         total_scheduled = 0
