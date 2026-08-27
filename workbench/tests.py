@@ -742,8 +742,22 @@ class NerPerRowTests(TestCase):
             r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
         self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['Gaynes'])
 
+    def test_lower_case_junk_is_refused_even_when_the_row_has_no_capitals(self):
+        """A row with no capitals is usually a line with no proper nouns — not a lower-cased
+        transcription. Treating the two alike let nine common nouns through on one real Essex subject
+        line, because the guard below disabled the capitalisation test exactly there."""
+        from unittest.mock import patch
+        text = 'allegation of conspiracy to defraud the plaintiff, respecting a chain of pearls'
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('chain', 'pearls', 'conspiracy')]
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
+        self.assertTrue(r.json()['results'][0]['no_places_found'])
+
     def test_capitalisation_is_ignored_when_the_source_has_none(self):
-        """An all-lower-case transcription would otherwise lose every name in it."""
+        """The one exception: a name the GAZETTEER matched, in a source that uses no capitals at all,
+        where casing carries no information and the match is the only signal there is."""
         from unittest.mock import patch
         ents = [{'name': 'stifford', 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}]
         hit = {'id': 'place:gn:1', 'title': 'Stifford', 'score': 100, 'ccodes': ['GB'],
