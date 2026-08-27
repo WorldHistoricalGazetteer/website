@@ -664,7 +664,9 @@ def get_fclass_list(feat):
                 fclass_set.add(mapped_fclass)
             else:
                 logger.warning(f"Identifier {identifier} not found in geo_wd_mapping.")
-        else:
+        elif not t.get('label') and not t.get('sourceLabel'):
+            # A label-only type carries no identifier and is perfectly ordinary LPF;
+            # only an entry with nothing at all in it is worth a warning.
             logger.warning(f"Invalid type object encountered: {t}")
 
     # Sorted for a deterministic array; order carries no meaning here, and every consumer

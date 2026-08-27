@@ -272,9 +272,15 @@ def parse_to_LPF(delimited_filepath, ext):
                     if 'names' in lpf_feature and isinstance(lpf_feature['names'],
                                                              list) and 'additional_names' in lpf_feature:
                         lpf_feature['names'].extend(lpf_feature.pop('additional_names'))
-                    if 'types' in lpf_feature and isinstance(lpf_feature['types'],
-                                                             list) and 'additional_types' in lpf_feature:
-                        lpf_feature['types'].extend(lpf_feature.pop('additional_types'))
+                    # LP-TSV permits a `types` value with no corresponding `aat_types`.
+                    # `aat_types` becomes the feature's `types`, so such a row used to end up
+                    # with only `additional_types` and no `types` at all — which fails the
+                    # schema's "fclasses or types" requirement and blocks legitimate input.
+                    if 'additional_types' in lpf_feature:
+                        if isinstance(lpf_feature.get('types'), list):
+                            lpf_feature['types'].extend(lpf_feature.pop('additional_types'))
+                        else:
+                            lpf_feature['types'] = lpf_feature.pop('additional_types')
 
                     # Create `title` from names.0.toponym
                     if 'properties' not in lpf_feature:
