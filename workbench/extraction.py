@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import time
 
 import requests
 from django.conf import settings
@@ -145,14 +146,39 @@ def _chunks(text):
     return out
 
 
+def _post(url, payload, timeout, attempts=3):
+    """POST with a short retry on transient server errors.
+
+    The model host returns an occasional 500 — observed in adjacent bursts during a long run, which
+    is the shape of the model being reloaded after its keep-alive expires rather than of anything
+    wrong with the request. Retrying costs a second and turns a failed row into a good one; not
+    retrying leaves a record that names places looking like a record that names none, which is the
+    worse outcome because it is indistinguishable from a real result.
+    """
+    last = None
+    for attempt in range(attempts):
+        try:
+            r = requests.post(url, json=payload, timeout=timeout)
+            if r.status_code < 500:
+                r.raise_for_status()
+                return r
+            last = requests.HTTPError(f'{r.status_code} from the model host', response=r)
+        except requests.RequestException as e:
+            last = e
+        if attempt + 1 < attempts:
+            logger.warning('extraction: %s — retrying (%d/%d)', last, attempt + 2, attempts)
+            time.sleep(1 + 2 * attempt)
+    raise last
+
+
 def _generate(chunk):
     """One Ollama generation → list of raw place names. Raises on transport/HTTP failure."""
     base = (_conf('OLLAMA_URL', '') or '').rstrip('/')
     if not base:
         raise ExtractionUnavailable('OLLAMA_URL is not configured')
-    r = requests.post(
+    r = _post(
         base + '/api/generate',
-        json={
+        {
             'model': _conf('OLLAMA_MODEL', 'qwen3:0.6b'),
             'system': SYSTEM,
             'prompt': PROMPT % chunk,
@@ -168,9 +194,8 @@ def _generate(chunk):
                 'num_thread': int(_conf('OLLAMA_NUM_THREAD', 4)),
             },
         },
-        timeout=float(_conf('OLLAMA_TIMEOUT', 120)),
+        float(_conf('OLLAMA_TIMEOUT', 120)),
     )
-    r.raise_for_status()
     raw = (r.json() or {}).get('response') or ''
     try:
         parsed = json.loads(raw)
