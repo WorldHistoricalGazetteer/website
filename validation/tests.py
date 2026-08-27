@@ -314,3 +314,51 @@ class ParseToLPFCoordinateTests(SimpleTestCase):
         junk = [e for e in report['errors'] if e['feature_id'] == '4']
         self.assertEqual(len(junk), 1)
         self.assertIn('north', junk[0]['description'])
+
+
+"""
+Feature-class derivation from an LPF feature (place#213).
+
+LPF carries `types` at the FEATURE level, and that is where the delimited-to-LPF conversion
+puts a row's `aat_types` — but `get_fclass_list` read `properties.types`, so `aat_types`
+contributed no feature class at all on the live upload path.
+"""
+from datasets import place_types
+from validation.create_dataset import get_fclass_list
+
+
+class GetFclassListTests(SimpleTestCase):
+
+    def setUp(self):
+        place_types._aat_index = {
+            300263222: {'fclasses': ['A', 'P'], 'term': 'quilombos', 'term_full': 'quilombos'},
+            300008687: {'fclasses': ['H'], 'term': 'rivers', 'term_full': 'rivers'},
+        }
+
+    def tearDown(self):
+        place_types._aat_index = None
+
+    def test_feature_level_types_are_read(self):
+        feature = {'properties': {'title': 'Conceição'},
+                   'types': [{'identifier': 'aat:300263222'}]}
+        self.assertEqual(get_fclass_list(feature), ['A', 'P'])
+
+    def test_properties_fclasses_are_merged_with_derivation(self):
+        feature = {'properties': {'fclasses': ['S']},
+                   'types': [{'identifier': 'aat:300008687'}]}
+        self.assertEqual(get_fclass_list(feature), ['H', 'S'])
+
+    def test_types_nested_under_properties_still_work(self):
+        feature = {'properties': {'types': [{'identifier': 'aat:300008687'}]}}
+        self.assertEqual(get_fclass_list(feature), ['H'])
+
+    def test_wikidata_identifier_still_maps(self):
+        feature = {'properties': {}, 'types': [{'identifier': 'wd:Q515'}]}
+        self.assertEqual(get_fclass_list(feature), ['P'])
+
+    def test_no_types_and_no_column_is_empty(self):
+        self.assertEqual(get_fclass_list({'properties': {}}), [])
+
+    def test_malformed_type_entry_is_skipped_not_fatal(self):
+        feature = {'properties': {}, 'types': ['not a dict', {'identifier': 'aat:300008687'}]}
+        self.assertEqual(get_fclass_list(feature), ['H'])

@@ -47,7 +47,16 @@ class Type(models.Model):
 
     @property
     def fclass(self):
-        """Backward-compat: return the first fclass letter, or None."""
+        """
+        DEPRECATED — the first fclass letter, or None.
+
+        `fclasses` is stored sorted, so this silently truncates: `cities` and `quilombos`
+        both carry ['A', 'P'] and this returns 'A' — administrative — which dropped them
+        out of populated-place filtering. 583 of the ~59,000 concepts carry more than one
+        class. Derivation should read the whole `fclasses` array; see
+        `datasets.place_types.fclasses_for_aat` (place#213). Kept only for callers outside
+        this repository.
+        """
         if self.fclasses:
             return self.fclasses[0]
         return None

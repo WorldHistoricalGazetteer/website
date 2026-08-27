@@ -13,15 +13,15 @@ from django.contrib.gis.geos import GEOSGeometry
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction, IntegrityError, DataError
 from django.db.models import Max
-from django.shortcuts import get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 
 from datasets.models import Dataset, DatasetFile
+from datasets.place_types import aat_id_from_identifier, fclasses_for_aat
 from datasets.utils import aliasIt, ccodesFromGeom
 from main.models import Log
 from places.models import PlaceGeom, PlaceWhen, PlaceLink, PlaceRelated, PlaceDescription, PlaceDepiction, PlaceName, \
-    PlaceType, Place, Type
+    PlaceType, Place
 
 logger = logging.getLogger('validation')
 
@@ -355,9 +355,14 @@ def ds_insert(jsonld_filepath, ds, task_id):
         'PlaceNames': ('Name', 'names', lambda feat: [
             PlaceName(place=newpl, src_id=newpl.src_id, toponym=n['toponym'].split(',')[0].strip(), jsonb=n)
             for n in feat.get('names', []) if 'toponym' in n]),
+        # NB each type carries its own fclass. Zipping the type list against the place's
+        # de-duplicated fclass set silently dropped types whenever that set was shorter —
+        # every type, when the place had no fclasses at all (place#213).
         'PlaceTypes': ('Type', 'types', lambda feat: [
-            PlaceType(place=newpl, src_id=newpl.src_id, jsonb=t, fclass=fc)
-            for t, fc in zip(feat.get('types', []), fclass_list)])
+            PlaceType(place=newpl, src_id=newpl.src_id, jsonb=t,
+                      aat_id=aat_id_from_identifier(t.get('identifier')),
+                      fclass=(fclasses_for_aat(aat_id_from_identifier(t.get('identifier'))) or [''])[0])
+            for t in feat.get('types', [])])
     }
 
     errors = []
@@ -628,24 +633,29 @@ def get_fclass_list(feat):
 
     properties = feat.get('properties', {})
 
-    fclass_list = properties.get('fclasses', [])
+    fclass_list = properties.get('fclasses', []) or []
     fclass_set = set(fclass_list)
 
-    types_to_process = properties.get('types', [])
+    # LPF carries `types` at the FEATURE level, and that is where the delimited-to-LPF
+    # conversion puts a row's `aat_types`. Reading `properties.types` — which is what this
+    # did — found nothing, so `aat_types` contributed no feature class at all on the live
+    # upload path. `properties` is still read for any file that nests them there (place#213).
+    types_to_process = list(feat.get('types') or []) + list(properties.get('types') or [])
     for t in types_to_process:
+        if not isinstance(t, dict):
+            logger.warning(f"Invalid type object encountered: {t}")
+            continue
         identifier = t.get('identifier')
         if identifier and identifier.startswith('aat:'):
-            aat_id = int(identifier[4:])
-            # Check if the aat_id exists in the database
-            if Type.objects.filter(aat_id=aat_id).exists():
-                try:
-                    # If found, add fclass to the set
-                    fclass = get_object_or_404(Type, aat_id=aat_id).fclass
-                    fclass_set.add(fclass)
-                except Exception as e:
-                    logger.error(f"Error retrieving fclass for aat_id {aat_id}: {e}")
+            aat_id = aat_id_from_identifier(identifier)
+            # Every class the concept carries, not just the first. `Type.fclass` returns
+            # fclasses[0] of a sorted list, so `cities` (['A', 'P']) derived 'A' and
+            # dropped out of populated-place filtering.
+            derived = fclasses_for_aat(aat_id)
+            if derived:
+                fclass_set.update(derived)
             else:
-                logger.warning(f"aat_id {aat_id} not found in Type model.")
+                logger.warning(f"No feature class found for AAT concept {identifier}.")
         elif identifier:
             # Mapping from geo_wd_mapping
             mapped_fclass = next((fclass for fclass, wd_types in geo_wd_mapping.items() if identifier[3:] in wd_types),
@@ -657,8 +667,9 @@ def get_fclass_list(feat):
         else:
             logger.warning(f"Invalid type object encountered: {t}")
 
-    # Convert the set back to a list for return
-    return list(fclass_set)
+    # Sorted for a deterministic array; order carries no meaning here, and every consumer
+    # reads the whole array rather than its first element.
+    return sorted(fc for fc in fclass_set if fc)
 
 
 def get_memory_size(obj):
