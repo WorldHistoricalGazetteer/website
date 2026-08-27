@@ -15,6 +15,9 @@ FROM ollama/ollama:0.33.1
 # returned bare `[]` on this register and llama3.2:1b scored worse at 3x the cost. See place#211.
 ENV OLLAMA_PRELOAD=qwen2.5:0.5b
 
+# chmod here rather than relying on the mode git recorded — a checkout that loses the exec
+# bit would otherwise fail the container at runtime, not at build.
 COPY entrypoint.sh /usr/local/bin/whg-ollama-entrypoint.sh
+RUN chmod +x /usr/local/bin/whg-ollama-entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/whg-ollama-entrypoint.sh"]
