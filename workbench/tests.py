@@ -9,7 +9,7 @@ from django.test import TestCase, Client
 from django.urls import reverse
 
 from .merge import merge_snapshots
-from . import extraction
+from . import extraction, views
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot,
                      ROLE_VIEWER, ROLE_EDITOR, ROLE_OWNER)
 
@@ -495,6 +495,74 @@ class PublishCheckoutTests(TestCase):
         self.assertEqual(new.published_collection_id, cid)
         self.assertEqual(new.snapshot['places'][0]['id'], f'whg:{p1.id}')
         self.assertEqual(new.snapshot['places'][0]['note'], 'hi')
+
+
+class NerScopeTests(TestCase):
+    """place#211 items 1 and 2 — caller-supplied scope, and the residence formula."""
+
+    def setUp(self):
+        self.client = Client()
+        self.client.force_login(make_user('scoper'))
+
+    def test_person_of_place_yields_the_toponym(self):
+        """_NER_CAND_RE swallows "Robert Heard of Stifford" whole and it matches nothing; the tail is
+        the place and must be offered separately, while the full span survives too."""
+        got = views._ner_candidates('Robert Heard of Stifford, husbandman.', [])
+        self.assertIn('Stifford', got)
+        self.assertIn('Robert Heard of Stifford', got)
+
+    def test_of_split_takes_the_last_and_most_specific_tail(self):
+        got = views._ner_candidates('Master of the Hospital of St Mary Magdalen in Bath.', [])
+        self.assertIn('St Mary Magdalen', got)
+
+    def test_contained_in_is_passed_through_and_skips_mode_seeking(self):
+        """With a container the caller already knows where the row is; the global 250 km cluster is
+        wrong for a table whose rows sit in different counties, so it must not run."""
+        from unittest.mock import patch
+        captured = {}
+
+        def fake(queries, batch_size=None, user=None):
+            captured['queries'] = queries
+            return {'q0': {'result': [
+                # A far-apart pair the geographic pass would have had to choose between; inside the
+                # container, score alone decides.
+                {'id': 'place:osm:n1', 'name': 'Dovercourt', 'score': 91, 'repr_point': [1.2, 51.9]},
+                {'id': 'place:osm:n2', 'name': 'Dovercourt', 'score': 40, 'repr_point': [-79.0, 43.0]},
+            ]}}
+
+        with patch('api.reconcile.process_queries', fake):
+            out = views._ner_reconcile_disambiguate({'Dovercourt': 1}, None,
+                                                    contained_in=['ukhc:ESE'])
+        self.assertEqual(captured['queries']['q0']['contained_in'], ['ukhc:ESE'])
+        self.assertEqual(out['Dovercourt']['id'], 'place:osm:n1')
+        self.assertTrue(out['Dovercourt']['ambiguous'])         # two distinct locations survived
+
+    def test_names_only_skips_reconciliation_entirely(self):
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places') as extract, \
+                patch('workbench.views._ner_reconcile_disambiguate') as recon:
+            extract.return_value = [{'name': 'Duxford', 'label': 'LLM', 'count': 1,
+                                     'context': '', 'verbatim': True}]
+            r = self.client.post(reverse('workbench:ner'),
+                                 data=json.dumps({'text': 'lands in Duxford', 'names_only': True}),
+                                 content_type='application/json')
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertTrue(r.json()['names_only'])
+        recon.assert_not_called()
+
+    def test_scope_accepts_a_bare_string_and_is_bounded(self):
+        from unittest.mock import patch
+        with patch('workbench.extraction.extract_places', return_value=[]), \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}) as recon:
+            self.client.post(reverse('workbench:ner'),
+                             data=json.dumps({'text': 'x', 'contained_in': 'ukhc:ESE'}),
+                             content_type='application/json')
+            self.assertEqual(recon.call_args.kwargs['contained_in'], ['ukhc:ESE'])
+            self.client.post(reverse('workbench:ner'),
+                             data=json.dumps({'text': 'x',
+                                              'contained_in': [f'r{i}' for i in range(50)]}),
+                             content_type='application/json')
+            self.assertEqual(len(recon.call_args.kwargs['contained_in']), views.NER_SCOPE_MAX)
 
 
 class ExtractionUnitTests(TestCase):
