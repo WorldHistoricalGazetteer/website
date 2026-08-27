@@ -79,20 +79,6 @@ GITHUB_SNAG_REPO = os.environ.get('GITHUB_SNAG_REPO') or globals().get('GITHUB_S
 # returns a friendly 503 and the UI degrades gracefully).
 NER_URL = os.environ.get('NER_URL') or globals().get('NER_URL', '')
 
-# Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; /contribute/
-# links out to it. The default below is the live public form URL (not a secret); override via
-# env var or local_settings if it ever changes.
-#
-# INTERIM. The Baserow route is retired (see developer/baserow-workflow-tool.md), but this is
-# still the site's only public suggestion door, so it stays until GRACE's Django intake form
-# replaces /contribute/. The licence-sync bot credentials that used to live below have been
-# removed and revoked at Baserow.
-BASEROW_SUBMIT_FORM_URL = (
-    os.environ.get('BASEROW_SUBMIT_FORM_URL')
-    or globals().get('BASEROW_SUBMIT_FORM_URL')
-    or 'https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU'
-)
-
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -148,6 +134,7 @@ INSTALLED_APPS = [
     'collection.apps.CollectionConfig',  # "collections" (plural) is reserved in python
     'datasets.apps.DatasetsConfig',
     'elastic.apps.ElasticConfig',
+    'grace.apps.GraceConfig',  # editorial tracker: gazetteers, people, sources, outreach
     'ingestion.apps.IngestionConfig',
     'licensing.apps.LicensingConfig',
     'main.apps.MainConfig',

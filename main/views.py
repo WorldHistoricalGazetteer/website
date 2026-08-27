@@ -478,16 +478,15 @@ def group_list(request, sort='', order=''):
     return render(request, 'lists/group_list.html', context)
 
 
-# Link out to the external Baserow "Submit Your Dataset to WHG" form.
-# The workflow tool itself lives outside this codebase (Baserow workspace);
-# we keep a stable internal URL so the external target can change without
-# touching templates. Falls back gracefully until the form URL is configured.
+# /contribute/ — the public "suggest a source" door.
+#
+# This used to 302 out to an external Baserow form, which meant the site's only
+# public entry point for suggestions led off WHG entirely. It now redirects to
+# GRACE's own intake form (review decision 5: suggest-a-source, with a visible
+# untriaged queue). The name and the URL are unchanged so nav and any external
+# links keep working.
 def submit_dataset(request):
-    url = getattr(settings, 'BASEROW_SUBMIT_FORM_URL', '')
-    if url:
-        return redirect(url)
-    messages.info(request, "Dataset submission is being set up — please check back soon, or contact us in the meantime.")
-    return redirect('home')
+    return redirect('grace:suggest')
 
 
 # Gazetteer Workbench — browser-based, local-first Reconciliation UI.

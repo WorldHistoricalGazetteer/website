@@ -1,0 +1,24 @@
+{% extends 'main/base_webpack.html' %}
+
+{% block title %}<title>Thank you · WHG</title>{% endblock %}
+
+{% block extra_css %}
+    .grace-suggest { max-width: 720px; }
+{% endblock %}
+
+{% block content %}
+<div class="container grace-suggest my-5">
+    <h2>Thank you</h2>
+    <p>
+        Your suggestion has been added to our editorial queue. A member of the team reads
+        every one, though we cannot promise to follow up on each individually.
+    </p>
+    <p>
+        If you left an address, we will only use it to ask you about this suggestion.
+    </p>
+    <p class="mt-4">
+        <a class="btn btn-outline-primary" href="{% url 'grace:suggest' %}">Suggest another</a>
+        <a class="btn btn-link" href="{% url 'home' %}">Back to the home page</a>
+    </p>
+</div>
+{% endblock %}

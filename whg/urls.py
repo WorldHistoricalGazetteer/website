@@ -66,7 +66,8 @@ urlpatterns = [
                   # home page
                   path('', views.Home30a.as_view(), name="home"),
 
-                  # link out to the external Baserow dataset-submission form
+                  # public "suggest a source" door -> grace:suggest (kept as a
+                  # stable alias; the nav and older links still use this name)
                   path('contribute/', views.submit_dataset, name="submit-dataset"),
 
                   # apps
@@ -74,6 +75,7 @@ urlpatterns = [
                   path('collections/', include('collection.urls')),
                   path('datasets/', include('datasets.urls')),
                   path('elastic/', include('elastic.urls')),
+                  path('grace/', include('grace.urls')),
                   path('main/', include('main.urls')),  # utility urls/views
                   path('places/', include('places.urls')),
                   path('resources/', include('resources.urls')),

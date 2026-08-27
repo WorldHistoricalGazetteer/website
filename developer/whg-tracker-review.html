@@ -65,9 +65,9 @@
 <p class="lede">Palak's draft describes a <strong>coherent system</strong>. The entity graph in the prose and the diagram
 agree with each other, the cardinalities are stated and correct, and the "how is it controlled / what values are
 allowed" discipline that Ruth asked for has produced exactly the data dictionary a build needs. This note sets out
-<strong>four structural fixes</strong>, answers the five questions Palak left open, and raises <strong>one governance
-point</strong> that had not yet been put on the table. Six of its seven decisions are now settled and building can
-start; the seventh needs Ruth.</p>
+<strong>four structural fixes</strong>, answers the five questions Palak left open, and settles <strong>one governance
+point</strong> that had not previously been put on the table. All seven decisions are now made, and the build is
+under way.</p>
 
 <p class="note"><strong>The system is GRACE</strong> — <em>Gazetteer Register And Contact Engagement</em> — a Django app
 inside WHG, sitting alongside <code>datasets</code>, <code>collection</code> and the rest. The name says what it holds: a
@@ -95,15 +95,14 @@ find-and-replaced, and what to do instead.</p>
   <tr><td>5</td><td>Is the public form a suggest-a-source tool, or a general front door?</td>
       <td><span class="tag tag-set">SETTLED</span></td><td>Suggest-a-source, with a visible untriaged intake state.</td></tr>
   <tr><td>6</td><td>Personal data: lawful basis, consent, erasure path, encryption.</td>
-      <td><span class="tag tag-open">RUTH</span></td><td>An answer is proposed in §10 for Ruth to confirm or amend.</td></tr>
+      <td><span class="tag tag-set">SETTLED</span></td><td>Legitimate interests, with the four obligations of §10 implemented in the build.</td></tr>
   <tr><td>7</td><td>Terminology, and what the three registers are called.</td>
       <td><span class="tag tag-set">SETTLED</span></td><td>Datasets → Gazetteers, with "printed gazetteer" for the print sense; Catalogue · Engagement · Pipeline.</td></tr>
 </table>
 
-<p><strong>The schema can now be written.</strong> Decision 6 gates <em>populating</em> GRACE with real contact data, not
-modelling it — so the models, the admin and the public form can all be built while Ruth considers §10. The build then
-divides cleanly: the schema and the admin are a developer job, while the vocabularies, the views and the day-to-day
-shape of GRACE stay Palak's.</p>
+<p><strong>Nothing now blocks the build.</strong> It divides cleanly: the schema and the admin are a developer job,
+while the vocabularies, the views and the day-to-day shape of GRACE stay Palak's. Work is proceeding on the
+<code>staging</code> branch, where the whole team can review it before it reaches the live site.</p>
 
 <h2>1. What is working, and should not be touched</h2>
 <ul>
@@ -384,7 +383,7 @@ not, though her underlying instinct is sound and is answered by the user link in
 the third register is for — where a gazetteer sits on its way in — without borrowing a word that already means something
 else to our users.</div>
 
-<h2>10. Personal data — the one decision still open</h2>
+<h2>10. Personal data</h2>
 
 <p>Holding this ourselves keeps the data at Pitt, under our own auth, backups and access control, with no third-party
 processor involved. But one detail makes the question pressing rather than routine.</p>
@@ -400,9 +399,9 @@ membership for researchers who never asked to be in a database. Because contacts
 a subject access request spans both, which is an argument for settling retention and erasure while the models are still
 on paper.</p>
 
-<h3>The proposed answer</h3>
+<h3>The basis we are using</h3>
 
-<p>The lawful basis should be <strong>legitimate interests</strong> (UK/EU GDPR Article 6(1)(f)), documented in a short
+<p>The lawful basis is <strong>legitimate interests</strong> (UK/EU GDPR Article 6(1)(f)), documented in a short
 Legitimate Interests Assessment — explicitly <strong>not consent</strong>.</p>
 
 <p>Consent is the wrong instrument here and would actively hurt. It must be freely given, specific and informed
@@ -416,7 +415,8 @@ work email — things a researcher who published a gazetteer would reasonably ex
 balancing test passes comfortably for that. It would <strong>not</strong> pass for home addresses, personal email, or
 anything special-category, so the model should make those hard to record rather than merely discouraged.</p>
 
-<p>Four obligations follow, and they are the parts such projects usually miss:</p>
+<p>Four obligations follow, and they are the parts such projects usually miss. All four are being built in, not left
+as policy:</p>
 
 <ul>
   <li><strong>Article 14 transparency.</strong> Because we collect from third parties rather than from the person, we owe
@@ -437,14 +437,14 @@ anything special-category, so the model should make those hard to record rather 
 
 <p>Plus the technical follow-on: match the user model, so an encrypted field with an indexed hash for lookups.</p>
 
-<div class="decision"><strong>Decision 6 — for Ruth.</strong> Confirm or amend the above: legitimate interests as the
-lawful basis, the Article 14 notice at first contact, consent kept separate for the mailing list, erasure by
-pseudonymisation, and the three-year retention review. Two caveats: this is the shape of the answer rather than a ruling,
-and given Pitt hosts the platform it may want a look from their privacy office. It should also be checked against the
-withhold-by-default posture agreed for Indigenous data, which is stricter than GDPR and should win where they differ.</div>
+<div class="rec"><strong>Decision 6 — settled.</strong> Legitimate interests is the lawful basis, and the four
+obligations above are implemented: the Article 14 notice at first contact, consent kept separate for the mailing list,
+erasure by pseudonymisation, and the three-year retention review.</div>
 
-<p class="small">This gates <em>populating</em> GRACE, not modelling it. The models, admin and public form can be built
-now; real contact data waits.</p>
+<p>Two riders, neither of which blocks the build. This is a controller's reasoned position rather than a legal ruling,
+and since Pitt hosts the platform their privacy office may want to see the Legitimate Interests Assessment. And it should
+be read alongside the withhold-by-default posture agreed for Indigenous data, which is stricter than GDPR and wins where
+the two differ.</p>
 
 <h2>11. The Baserow retreat, and what it left behind</h2>
 
@@ -490,11 +490,12 @@ version history cannot be erased on request, which is precisely the problem deci
   <li><strong>Engagement, ActionItem, Interaction</strong> — with the one-owner rule and the staleness alarm of §6.</li>
   <li><strong>The admin</strong> — triage from the list view, as the earlier prototype showed is sufficient.</li>
   <li><strong>The public suggest-a-source form</strong> — replacing the outbound redirect, writing to the intake model.</li>
-  <li><strong>Import the exported content</strong> — bibliography into Sources, prospects into Gazetteers. <em>The
-      people tables wait for §10.</em></li>
+  <li><strong>Import the exported content</strong> — bibliography into Sources, prospects into Gazetteers, and the
+      people tables under the basis settled in §10.</li>
 </ol>
 
-<p class="small">Steps 1–6 are unblocked today. Step 7's non-personal half is unblocked; its personal half is not.</p>
+<p class="small">All seven steps are unblocked. The first import of real contact data is the point at which the Article 14
+notice and the retention clock start applying, so both are in place before it runs.</p>
 
 </body>
 </html>

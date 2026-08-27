@@ -1,0 +1,93 @@
+{% extends 'main/base_webpack.html' %}
+
+{% comment %}
+  The public intake door (GRACE decision 5: suggest-a-source, not a general
+  front door). Note that {% block title %} wraps its own <title> tags — the
+  base template's block includes them, so overriding it needs them too.
+
+  extra_css sits INSIDE a <style> element in the base template, so this block
+  must contain raw CSS and no <style> tags of its own.
+{% endcomment %}
+
+{% block title %}<title>Suggest a source · WHG</title>{% endblock %}
+
+{% block extra_css %}
+    /* Spam-trap field: hidden from humans, present for bots. */
+    .grace-hp { position: absolute !important; left: -9999px !important; width: 1px; height: 1px; overflow: hidden; }
+    .grace-suggest { max-width: 720px; }
+{% endblock %}
+
+{% block content %}
+<div class="container grace-suggest my-4">
+    <h2>Suggest a source</h2>
+    <p class="text-muted">
+        Know of a historical gazetteer, dataset, or reference work that the World Historical
+        Gazetteer should consider? Tell us about it below — no account needed. A member of
+        the editorial team reads every suggestion.
+    </p>
+    {% comment %}
+      Only link Map your Data for users who can actually reach it — the
+      reconciliation view is beta-gated and raises 404 for everyone else, so an
+      unconditional link would send anonymous visitors into a dead end.
+    {% endcomment %}
+    <p class="text-muted small">
+        If you have data of your own you would like to contribute, this is not the right
+        form — {% if user.is_authenticated and user.can_access_beta %}use
+        <a href="{% url 'reconciliation' %}">Map your Data</a>{% else %}sign in and use
+        <em>Map your Data</em>{% endif %}, which takes you through validation and
+        publication.
+    </p>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="post" action="{% url 'grace:suggest' %}" class="needs-validation" novalidate>
+        {% csrf_token %}
+
+        {# Spam-trap — keep this empty. Absent for logged-in (trusted) users. #}
+        {% if show_honeypot %}
+        <div class="grace-hp" aria-hidden="true">
+            <label for="{{ form.website.id_for_label }}">{{ form.website.label }}</label>
+            {{ form.website }}
+        </div>
+        {% endif %}
+
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+        {% endif %}
+
+        {% for field in form.visible_fields %}
+            {% if field.name != 'website' %}
+                <div class="mb-3">
+                    <label for="{{ field.id_for_label }}" class="form-label">
+                        {{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small class="form-text text-muted d-block">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% for error in field.errors %}
+                        <div class="text-danger small">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endfor %}
+
+        {% comment %}
+          GDPR Art. 13 — this data comes from the person directly, so the notice
+          belongs on the form itself. (Art. 14, for people we hear about from
+          third parties, is handled in the editorial workflow instead.)
+        {% endcomment %}
+        <p class="text-muted small">
+            If you give us your name and address we will use them only to follow up on this
+            suggestion, and we will not add you to any mailing list without asking. See our
+            <a href="{% url 'privacy_policy' %}">privacy notice</a>.
+        </p>
+
+        <button type="submit" class="btn btn-primary">Send suggestion</button>
+    </form>
+</div>
+{% endblock %}
