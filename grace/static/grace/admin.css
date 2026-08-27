@@ -17,7 +17,13 @@
  * you are fighting the framework and the next upgrade will break it.
  */
 
-:root {
+/* Light palette. Declared on BOTH selectors deliberately: Django 4.2 defines
+   its own light values under html[data-theme="light"], which outranks a bare
+   :root, so themeing :root alone leaves the breadcrumb bar teal the moment
+   someone clicks the toggle to light. :root covers the no-attribute (auto)
+   case; the attribute selector covers an explicit choice. */
+:root,
+html[data-theme="light"] {
   /* GRACE purple. --secondary is the header; --primary the breadcrumb bar,
      buttons and focus rings. */
   --grace-deep:   #4a2470;
