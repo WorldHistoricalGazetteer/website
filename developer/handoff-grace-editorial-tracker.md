@@ -167,13 +167,35 @@ Safe to act on independently of the decisions above, except where noted.
 | 2. Contact + Organisation | ✅ optional `User` one-to-one; local copies cleared on save |
 | 3. TrackedGazetteer + Stage | ✅ nullable FK to `api.GazetteerRegistryEntry` |
 | 4. Engagement / ActionItem / Interaction | ✅ one-owner rule + staleness alarm enforced |
-| 5. Admin | ✅ `grace/admin.py` — the whole UI, grouped by register |
+| 5. Admin | ✅ **`/grace/admin/`** — GRACE's own AdminSite (`grace/admin_site.py`), linked from `/dashboard_admin/` → Tools. Shows only GRACE, leads with what needs attention, calls out the editable vocabularies. Django's `/admin/` keeps them too |
 | 6. `/contribute/` rebuild | ✅ redirects to `grace:suggest`; **all `BASEROW_*` settings gone** |
-| 7. Import | ✅ 72 sources + 42 prospects loaded on dev; **people deliberately not loaded** |
+| 7. Import | ✅ **72 sources + 42 prospects + 209 contacts + 7 organisations** on dev |
 
-Verified on dev: 43/43 tests pass, migration applies clean from zero, the import
-is idempotent (a second run creates 0), `/contribute/` 302s to `/grace/suggest/`,
-the form renders for anonymous visitors, and `grace_retention_review` runs.
+Verified on dev: **62/62 tests pass** (twice consecutively, which is the check
+that matters — see below), migration applies clean from zero, the import is
+idempotent (a second run creates 0), `/contribute/` 302s to `/grace/suggest/`,
+the form renders for anonymous visitors, `grace_retention_review` runs, and
+`/grace/admin/` renders the registers with live counts.
+
+### Traps this build already fell into
+
+Recorded because each cost real time and none is obvious:
+
+- **`USE_TZ` is unset in `whg/settings.py`, so it is `False`.** `timezone.now()`
+  is naive and **`timezone.localdate()` raises `ValueError`**. Use
+  `datetime.date.today()`, as the rest of the codebase does.
+- **The test suite shares Redis.** The suggest view's per-IP rate limit lives in
+  the cache; every test-client request comes from 127.0.0.1, so the counter
+  accumulated across tests *and across runs* — after five anonymous POSTs the
+  form silently throttled and tests that passed on a cold cache failed on a warm
+  one. The form test classes are pinned to a locmem cache. **Run the suite twice
+  and compare** before believing it.
+- **`autocomplete_fields` resolves against the same admin site**, so a second
+  AdminSite needs its lookup targets registered too or every referencing form
+  raises `admin.E039`. See `SUPPORT_MODELS`.
+- **Never let an email address reach `Contact.name`.** It is plaintext and
+  indexed; `Contact.email` is encrypted precisely so addresses are not in the
+  clear. The importer's `_display_name()` uses the local part as a handle.
 
 ### Where the reasoning lives
 
@@ -185,17 +207,10 @@ docstrings, next to what they constrain. In particular
 
 ### Two things left for a human
 
-1. **The people import has not been run.** `import_baserow_export` will load
-   all 210 contacts, but it was run with `--skip-people` on dev — putting 210
-   real addresses on an extra environment is a bigger step than loading a
-   bibliography, and it starts the Article 14 clock. Run it without the flag
-   when the team is ready to send the notices:
-   ```
-   ./manage.py import_baserow_export        # loads People ALL too
-   ./manage.py grace_retention_review       # shows the Art. 14 backlog
-   ```
-   The export must be in place first — it is gitignored, so only the two
-   non-personal tables are currently on the dev server.
+1. **The Article 14 backlog is now real on dev.** 209 contacts are loaded, none
+   has been told we hold their details, and they become overdue a month after
+   import. `./manage.py grace_retention_review` lists them; the admin has a bulk
+   action to record the notice once sent. Prod has nothing loaded yet.
 2. **Palak should walk the vocabularies** in the admin and change whatever is
    wrong. The 109 seeded terms are a starting point, not a claim — that is the
    whole point of decision 3, and the seeder never overwrites an edited label.
