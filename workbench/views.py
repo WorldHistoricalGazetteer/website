@@ -798,18 +798,36 @@ _NER_CAND_STOP = {
     'his', 'her', 'their', 'our', 'its', 'i', 'mr', 'mrs', 'dr', 'st', 'sir', 'lord', 'king', 'queen',
 }
 NER_RECON_MAX = 25  # cap mentions reconciled against the gateway per request (one call each)
+NER_SCOPE_MAX = 8   # containers a caller may scope one request to; a row has one, a chain a handful
+
+
+# "<Name> of <Place>" is the canonical residence formula in early-modern legal records — Robert Heard
+# of Stifford, John Danby of Richmond, John Weekes of Exeter — and _NER_CAND_RE's `of` alternation
+# swallows the whole thing into one span that matches nothing (11% of spans in the place#211 sample:
+# that is exactly how Stifford is lost). The tail is reliably the toponym, so emit it as a candidate
+# of its own as well as keeping the full span. Only ` of ` is split: `upon`, `de` and `van` are
+# alternations too, but splitting them would break Stratford upon Avon and strip name particles.
+_NER_OF_RE = re.compile(r'\s+of\s+', re.IGNORECASE)
 
 
 def _ner_candidates(text, already):
     """Capitalised spans the extractor did not return → {name: frequency}."""
     seen = {(n or '').lower() for n in already}
     counts = {}
+
+    def add(name):
+        low = name.lower()
+        if not name or low in seen or low in _NER_CAND_STOP or len(name) < 3 or len(name) > 80:
+            return
+        counts[name] = counts.get(name, 0) + 1
+
     for m in _NER_CAND_RE.finditer(text):
         s = re.sub(r'\s+', ' ', m.group(0)).strip(" ,.;:’'\"-")
-        low = s.lower()
-        if not s or low in seen or low in _NER_CAND_STOP or len(s) < 3 or len(s) > 80:
-            continue
-        counts[s] = counts.get(s, 0) + 1
+        add(s)
+        if _NER_OF_RE.search(s):
+            # The last tail is the most specific: "Master of the Hospital of St Mary Magdalen" names
+            # St Mary Magdalen, not the Hospital.
+            add(_NER_OF_RE.split(s)[-1].strip(" ,.;:’'\"-"))
     return counts
 
 
@@ -852,19 +870,35 @@ def _cluster_locations(hits, thresh_km=40):
     return [([cl[0] / cl[2], cl[1] / cl[2]], cl[3]) for cl in clusters]
 
 
-def _ner_reconcile_disambiguate(mentions, user):
-    """mentions: {name: count}. Reconcile the most frequent (capped) against WHG, keep exact name/
-    alt-name matches, then DISAMBIGUATE by geographic coherence. A document's places share a country
-    and cluster spatially, so we: (1) country-vote to the dominant region; (2) ANCHOR on names that
-    resolve to a single location within that region (they pin the area unambiguously); (3) resolve the
-    genuinely ambiguous same-country siblings by proximity to that clean anchor cluster. Returns
-    {name: match} for gazetteer-matched names."""
+def _ner_match(hit, ambiguous=False):
+    """A gateway hit → the compact match the browser consumes."""
+    rp = hit.get('repr_point') or [None, None]
+    return {'id': hit.get('id'), 'title': hit.get('name'), 'score': round(hit.get('score') or 0, 3),
+            'ccodes': hit.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': ambiguous}
+
+
+def _ner_reconcile_disambiguate(mentions, user, contained_in=None):
+    """mentions: {name: count}. Reconcile the most frequent (capped) against WHG and keep exact name/
+    alt-name matches. Returns {name: match} for gazetteer-matched names.
+
+    With CONTAINED_IN, the caller already knows where these places are — a county column resolved to
+    an indexed polygon — so the region is supplied as a hard constraint and there is nothing left to
+    disambiguate. That is not merely a shortcut: the geographic pass below mode-seeks a SINGLE 250 km
+    cluster over the whole input, which is right for one narrative and actively wrong for a table
+    whose rows sit in different counties (place#211).
+
+    Without it, DISAMBIGUATE by geographic coherence. A document's places share a country and cluster
+    spatially, so we: (1) country-vote to the dominant region; (2) ANCHOR on names that resolve to a
+    single location within that region (they pin the area unambiguously); (3) resolve the genuinely
+    ambiguous same-country siblings by proximity to that clean anchor cluster.
+    """
     if not mentions:
         return {}
     names = [n for n, _ in sorted(mentions.items(), key=lambda kv: -kv[1])[:NER_RECON_MAX]]
+    query = {'contained_in': list(contained_in)} if contained_in else {}
     try:
         from api.reconcile import process_queries
-        res = process_queries({f'q{i}': {'query': n} for i, n in enumerate(names)},
+        res = process_queries({f'q{i}': dict(query, query=n) for i, n in enumerate(names)},
                               batch_size=NER_RECON_MAX, user=user)
     except Exception as e:  # gateway down / import issue → degrade to extractor-only
         logger.warning('NER gazetteer reconcile failed: %s', e)
@@ -877,6 +911,13 @@ def _ner_reconcile_disambiguate(mentions, user):
             hits_by_name[n] = exact
     if not hits_by_name:
         return {}
+
+    if contained_in:
+        # Every surviving hit is already inside the container. Take the best-scoring one, and flag
+        # the name ambiguous only if the container holds more than one distinct location for it.
+        return {n: _ner_match(max(hits, key=lambda h: h.get('score') or 0),
+                              ambiguous=len(_cluster_locations(hits)) > 1)
+                for n, hits in hits_by_name.items()}
 
     # One representative candidate per DISTINCT location a name resolves to (dedup near-dupes; keep the
     # best-scoring hit per location). We disambiguate by PURE GEOGRAPHY, not ccodes — country codes are
@@ -915,9 +956,7 @@ def _ner_reconcile_disambiguate(mentions, user):
             _, best = min(reps, key=lambda pr: _haversine_km(center, pr[0]) if pr[0] else 1e18)
         else:                                                   # no geography anywhere → best relevance
             _, best = max(reps, key=lambda pr: pr[1].get('score') or 0)
-        rp = best.get('repr_point') or [None, None]
-        chosen[n] = {'id': best.get('id'), 'title': best.get('name'), 'score': round(best.get('score') or 0, 3),
-                     'ccodes': best.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': len(reps) > 1}
+        chosen[n] = _ner_match(best, ambiguous=len(reps) > 1)
     return chosen
 
 
@@ -931,6 +970,18 @@ def ner_extract(request):
         return _err('There’s no text to analyse.')
     truncated = len(text) > NER_MAX_CHARS
     text = text[:NER_MAX_CHARS]
+
+    # Optional caller-supplied scope (place#211). `contained_in` is a list of BARE place ids — no
+    # `place:` prefix — naming indexed regions the results must fall inside; the gateway applies it as
+    # a hard polygon constraint, which on the REQ 2 sample was a better disambiguator than the
+    # geoparser (Dovercourt resolved to Canada unconstrained, to Essex within ukhc:ESE). `names_only`
+    # skips reconciliation altogether, for a caller that wants candidates and will scope them itself.
+    contained_in = body.get('contained_in') or []
+    if isinstance(contained_in, str):
+        contained_in = [contained_in]
+    contained_in = [str(c).strip() for c in contained_in if str(c or '').strip()][:NER_SCOPE_MAX]
+    names_only = bool(body.get('names_only'))
+
     try:
         ents = extraction.extract_places(text)
     except extraction.ExtractionUnavailable:
@@ -940,6 +991,11 @@ def ner_extract(request):
         return _err('The place-name extractor returned an error — please try again.', 502)
     data = {'entities': ents, 'text_chars': len(text), 'truncated': truncated,
             'model': getattr(settings, 'OLLAMA_MODEL', '')}
+    if names_only:
+        data['entities'] = sorted(ents, key=lambda e: (-(e.get('count') or 0),
+                                                       (e.get('name') or '').lower()))
+        data['names_only'] = True
+        return JsonResponse(data)
 
     # Union of extracted names + capitalised candidates → reconcile + geo-disambiguate (best-effort).
     mentions = {}
@@ -949,7 +1005,9 @@ def ner_extract(request):
             mentions[nm] = max(mentions.get(nm, 0), e.get('count') or 1)
     for nm, c in _ner_candidates(text, list(mentions.keys())).items():
         mentions.setdefault(nm, c)
-    matches = _ner_reconcile_disambiguate(mentions, request.user)
+    matches = _ner_reconcile_disambiguate(mentions, request.user, contained_in=contained_in)
+    if contained_in:
+        data['contained_in'] = contained_in
 
     have = {(e.get('name') or '').lower() for e in ents}
     for e in ents:                                   # attach a preliminary match to extracted names
