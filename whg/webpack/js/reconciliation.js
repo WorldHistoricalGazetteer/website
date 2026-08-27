@@ -1316,8 +1316,11 @@ function looksLikeProse(colIdx) {
 function pendingExtraction() {
   const p = project && project.nerRun;
   if (!p || !p.results) return null;
+  // A unit of work is one (row x column) pair, not one row: with two columns ticked, eight rows are
+  // sixteen readings, and reporting "10 of 8 rows" is worse than reporting nothing.
   const count = Object.keys(p.results).length;
-  return count ? { ...p, count } : null;
+  const total = project.rows.length * Math.max(1, (p.cols || []).length);
+  return count ? { ...p, count, total } : null;
 }
 function clearPendingExtraction() { if (project) { delete project.nerRun; persist(); } }
 
@@ -1384,7 +1387,9 @@ function renderExtractPanel() {
       you can stop at any point, and picking up where you left off does not re-read what is done.</div>
     ${resume ? `<div class="alert alert-info py-1 px-2 mb-1"><i class="fas fa-clock-rotate-left me-1"></i>
       An earlier run read <strong>${resume.count.toLocaleString()}</strong> of
-      ${rows.toLocaleString()} rows. Running again continues from there.
+      ${resume.total.toLocaleString()}${resume.cols && resume.cols.length > 1
+        ? ` readings (${rows.toLocaleString()} rows &times; ${resume.cols.length} columns)` : ' rows'}.
+      Running again with the same columns continues from there.
       <button type="button" class="btn btn-sm btn-link py-0 align-baseline" id="recon-tf-extract-forget">start over</button></div>` : ''}
     ${extras ? `<div class="mb-1">Also read <span class="text-muted">(each mention records which column
       it came from)</span>: ${extras}</div>` : ''}
