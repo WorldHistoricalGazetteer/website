@@ -55,64 +55,6 @@
           <li><a href="https://chat.whgazetteer.org/" target="_blank" rel="noopener">Zulip</a> &mdash; team chat</li>
         </ul>
         </div>
-
-        {% if grace %}
-        {% comment %}
-          GRACE — the editorial tracker. Its UI is the Django admin, so these are
-          deep links into it. The three badges are the failure modes that happen
-          by nobody noticing: an untriaged public suggestion, a stalled
-          conversation, and an Article 14 notice we owe but have not sent.
-        {% endcomment %}
-        <div class="mt-4">
-          <h5>GRACE &mdash; editorial tracker
-            <small class="text-muted fw-normal">gazetteers, people, sources, outreach</small>
-          </h5>
-
-          <p class="mb-2">
-            {% if grace.untriaged %}
-              <a class="btn btn-sm btn-warning me-1"
-                 href="/admin/grace/sourcesuggestion/?triage=untriaged">
-                {{ grace.untriaged }} untriaged suggestion{{ grace.untriaged|pluralize }}</a>
-            {% endif %}
-            {% if grace.stalled %}
-              <a class="btn btn-sm btn-danger me-1"
-                 href="/admin/grace/engagement/?stale=stale">
-                {{ grace.stalled }} stalled conversation{{ grace.stalled|pluralize }}</a>
-            {% endif %}
-            {% if grace.notices_due %}
-              <a class="btn btn-sm btn-outline-danger me-1"
-                 href="/admin/grace/contact/?notice=overdue"
-                 title="GDPR Art. 14 — people we hold details for who have not been told.">
-                {{ grace.notices_due }} privacy notice{{ grace.notices_due|pluralize }} due</a>
-            {% endif %}
-            {% if not grace.untriaged and not grace.stalled and not grace.notices_due %}
-              <span class="badge bg-success">Nothing needs attention</span>
-            {% endif %}
-          </p>
-
-          <ul>
-            <li><strong>Pipeline</strong> &mdash;
-              <a href="/admin/grace/trackedgazetteer/">Gazetteers</a>
-              ({{ grace.gazetteers }}, of which {{ grace.prospects }} prospect{{ grace.prospects|pluralize }}) &middot;
-              <a href="/admin/grace/sourcesuggestion/">Suggestions</a> inbox</li>
-            <li><strong>Catalogue</strong> &mdash;
-              <a href="/admin/grace/contact/">Contacts</a> ({{ grace.contacts }}) &middot;
-              <a href="/admin/grace/organisation/">Organisations</a> &middot;
-              <a href="/admin/grace/source/">Sources</a> ({{ grace.sources }}) &middot;
-              <a href="/admin/grace/project/">Projects</a></li>
-            <li><strong>Engagement</strong> &mdash;
-              <a href="/admin/grace/engagement/">Engagements</a> &middot;
-              <a href="/admin/grace/actionitem/">Action items</a> &middot;
-              <a href="/admin/grace/interaction/">Interaction log</a></li>
-            <li><strong>Content</strong> &mdash;
-              <a href="/admin/grace/content/">Planned &amp; published items</a></li>
-            <li><a href="/admin/grace/">All GRACE tables</a>, including the
-              vocabularies &mdash; pick-lists are editable here, no developer needed</li>
-            <li><a href="{% url 'grace:suggest' %}">Public suggest-a-source form</a>
-              &mdash; what <code>/contribute/</code> now shows</li>
-          </ul>
-        </div>
-        {% endif %}
       </div>
     </div>
   </div> <!-- .container -->
@@ -234,12 +176,7 @@
         });
 
         // Determine the initial tab to load
-        // A ?section= in the URL wins over the remembered tab, so a link like
-        // /dashboard_admin/?section=tools opens on the right one.
-        var requested = '{{ section|escapejs }}';
-        var activeTab = requested && $('#adminTabs a[href="#' + requested + '"]').length
-                        ? requested
-                        : sessionStorage.getItem('activeTab');
+        var activeTab = sessionStorage.getItem('activeTab');
         if (activeTab) {
             $('#adminTabs a[href="#' + activeTab + '"]').tab('show');
         } else {
