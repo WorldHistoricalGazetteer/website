@@ -143,3 +143,8 @@ server-configuration/secret.yaml
 # onnxruntime-web bundler-emitted wasm/mjs (superseded at runtime by ort.env.wasm.wasmPaths → static/webpack/symphonym/) onnxruntime-emitted
 /static/webpack/*.wasm
 /static/webpack/[0-9a-f]*.mjs
+
+# Baserow export (GRACE seed data) — LOCAL ONLY, never committed.
+# Contains personal data (People ALL: 210 name/email/institution rows) and this
+# repo is public. See developer/baserow-export/README.md
+developer/baserow-export/
