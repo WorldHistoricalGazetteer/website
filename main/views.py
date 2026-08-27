@@ -1594,8 +1594,38 @@ def dashboard_admin_view(request):
         'groups_led': groups_led,
         'is_admin': is_admin,
         'is_leader': is_leader,
+        'grace': _grace_dashboard_counts() if is_admin else None,
     }
     return render(request, 'main/dashboard_admin.html', context)
+
+
+def _grace_dashboard_counts():
+    """The GRACE numbers worth surfacing on the admin dashboard.
+
+    The first three are things that go wrong by *nobody noticing*: a public
+    suggestion nobody triaged, a conversation that stalled (a stall is the
+    absence of a stage change, so only the follow-up date reveals it), and an
+    Article 14 privacy notice we owe someone and have not sent. The rest are
+    just size. Cheap counts, computed only for admins.
+    """
+    import datetime
+
+    from grace.models import (
+        Contact, Engagement, Source, SourceSuggestion, TrackedGazetteer,
+    )
+
+    return {
+        'untriaged': SourceSuggestion.objects.filter(
+            status__is_untriaged=True).count(),
+        'stalled': Engagement.objects.filter(
+            stage__is_open=True,
+            next_follow_up__lt=datetime.date.today()).count(),
+        'notices_due': Contact.objects.owed_privacy_notice().count(),
+        'gazetteers': TrackedGazetteer.objects.count(),
+        'prospects': TrackedGazetteer.objects.prospects().count(),
+        'contacts': Contact.objects.live().count(),
+        'sources': Source.objects.count(),
+    }
 
 
 # for non-admins
