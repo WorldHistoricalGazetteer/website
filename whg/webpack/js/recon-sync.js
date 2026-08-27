@@ -72,6 +72,11 @@ export const importGDoc = (url) => req('POST', '/gdoc/', { url });
 // Place-name extraction. Sends text to the small language model running on WHG's own server — the
 // one Map-your-Data step that leaves the browser. Returns { entities:[{name,label,count,context}] }.
 export const ner = (text) => req('POST', '/ner/', { text });
+// Per-row extraction for the column operation (place#211). Each row carries its own container, so a
+// table whose rows sit in different counties is scoped row by row rather than by one global region.
+// Batched by the caller — the server caps a request at ten rows.
+export const nerRows = (rows, fallbackContainedIn) =>
+  req('POST', '/ner/rows/', { rows, fallback_contained_in: fallbackContainedIn || [] });
 
 // ── sharing (Phase 0) ─────────────────────────────────────────────────────────
 export const shareProject = (id) => req('POST', `/projects/${id}/share/`);

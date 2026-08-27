@@ -1110,6 +1110,7 @@ function openTransformModal(col) {
   if (nn) { nn.value = ''; nn.placeholder = truncate(project.columns[col].name, 28) + ' (transformed)'; nn.classList.add('d-none'); }
   renderTransformPreview();
   renderSplitPreview();
+  renderExtractPanel();
   openRowFilterInModal(col);
   if (box) box.querySelectorAll('.recon-tf-common').forEach((b) => b.addEventListener('click', () => {
     const t = CELL_TRANSFORMS.find((x) => x.id === b.dataset.id);
@@ -1269,6 +1270,219 @@ function applySplit() {
   pushUndo({ type: 'columns', label: `split “${src}” into ${N} levels`, snapshot: snap });
   persist(); rerenderData();
   flashSaved(`Split “${truncate(src, 24)}” into ${N} containment columns`);
+}
+
+// ── Extract place names from a text column, row by row (place#211) ───────────
+// The block-of-text extractor in step 1 returns a flat, deduplicated list of names with no link back
+// to the record each came from. For a catalogue corpus that linkage IS the research: cases per place,
+// places per case, change over time. So this runs the extractor per ROW and explodes the result to one
+// row per (record x distinct place), keeping every source column.
+//
+// Naming a container column is what makes it accurate. Each row's names are searched inside that row's
+// own resolved container, so a county column reconciled against UK Historic Counties scopes the places
+// found in the same row's description. Unconstrained, Dovercourt resolves to Canada and Stratford to
+// Australia; inside Essex both resolve in England, and personal names match nothing at all, because
+// there is no place in Essex called John Cowlande.
+const NER_ROW_BATCH = 10;           // the server's per-request cap; we loop
+let _nerRun = null;                 // { cancel } while a run is in flight
+
+// The dataset's Scope region, used ONLY as a coarser fallback when a row's own container resolves but
+// a name is not inside it. Those hits are marked, never auto-accepted: of 11 names recovered this way
+// on the REQ 2 sample, 2 were real and 6 were personal names colliding with real UK features, and
+// neither score nor place type separates them.
+function datasetScopeContainers() {
+  const r = (getScope() || {}).region || {};
+  return (r.mode === 'whg' && r.place && r.place.id) ? [barePlaceId(r.place.id)] : [];
+}
+
+// Columns that could scope a row: any container in the chain that has resolved matches to offer.
+function extractContainerCandidates() {
+  if (!project) return [];
+  return project.columns.map((c, i) => ({ i, c }))
+    .filter(({ i, c }) => c.role === 'contains' || (c.role !== 'name' && reconChain().includes(i)))
+    .map(({ i, c }) => {
+      let resolved = 0;
+      for (let r = 0; r < project.rows.length; r++) if (resolvedPlaceIds(i, r).length) resolved += 1;
+      return { idx: i, name: c.name, resolved };
+    });
+}
+
+function renderExtractPanel() {
+  const box = el('recon-tf-extract-body');
+  if (!box || !project || _transformCol < 0) return;
+  const srcName = project.columns[_transformCol].name;
+  const idIdx = colIndexByRole('id');
+  const rows = project.rows.length;
+  const conts = extractContainerCandidates();
+  // Honest about the cost: this is seconds a row on a shared CPU, not milliseconds.
+  const mins = Math.max(1, Math.round((rows * 3) / 60));
+
+  if (idIdx < 0) {
+    // A stable per-row key is not a nicety. The exploded rows are keyed on it, and keeping your
+    // choices across a re-run (place#207) needs an identity that survives the rows moving.
+    box.innerHTML = `<div class="alert alert-warning py-2 px-3 mb-0">
+      Your table needs a unique <strong>Identifier</strong> column first, so each extracted place can
+      point back at the record it came from.
+      <button type="button" class="btn btn-sm btn-outline-primary py-0 ms-1" id="recon-tf-extract-uuid">
+        <i class="fas fa-fingerprint me-1"></i>Generate UUIDs in a new column</button></div>`;
+    const b = el('recon-tf-extract-uuid');
+    if (b) b.addEventListener('click', () => { generateUuidColumn(); renderExtractPanel(); });
+    return;
+  }
+
+  const opts = ['<option value="-1">— none (search the whole world) —</option>'].concat(
+    conts.map((c) => `<option value="${c.idx}"${c.resolved ? '' : ' disabled'}>${esc(truncate(c.name, 28))}` +
+      ` — ${c.resolved.toLocaleString()} of ${rows.toLocaleString()} rows resolved${c.resolved ? '' : ' (reconcile it first)'}</option>`)).join('');
+  box.innerHTML = `
+    <div class="mb-1">Read place names out of <strong>${esc(truncate(srcName, 28))}</strong> for all
+      <strong>${rows.toLocaleString()}</strong> rows, and build a new table with one row per place
+      mentioned. Roughly <strong>${mins} minute${mins === 1 ? '' : 's'}</strong>; you can stop at any point.</div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="small mb-0">Search each row within
+        <select id="recon-tf-extract-scope" class="form-select form-select-sm d-inline-block ms-1"
+                style="width:auto;max-width:340px">${opts}</select></label>
+      <button type="button" id="recon-tf-extract-btn" class="btn btn-sm btn-outline-primary">Extract place names</button>
+      <button type="button" id="recon-tf-extract-stop" class="btn btn-sm btn-outline-secondary d-none">Stop</button>
+    </div>
+    <div class="text-muted mt-1">Your current table is replaced by the result, which carries every one
+      of its columns — take a Backup first if you want to keep this exact state.</div>`;
+  const run = el('recon-tf-extract-btn');
+  if (run) run.addEventListener('click', runColumnExtraction);
+  const stop = el('recon-tf-extract-stop');
+  if (stop) stop.addEventListener('click', () => { if (_nerRun) _nerRun.cancel = true; });
+}
+
+function extractProgress(html) { const p = el('recon-tf-extract-progress'); if (p) p.innerHTML = html; }
+
+async function runColumnExtraction() {
+  if (!project || _transformCol < 0 || _nerRun) return;
+  const srcCol = _transformCol;
+  const idIdx = colIndexByRole('id');
+  if (idIdx < 0) return;
+  const scopeSel = el('recon-tf-extract-scope');
+  const scopeCol = scopeSel ? Number(scopeSel.value) : -1;
+  const fallback = scopeCol >= 0 ? datasetScopeContainers() : [];
+
+  _nerRun = { cancel: false };
+  const runBtn = el('recon-tf-extract-btn'); if (runBtn) runBtn.disabled = true;
+  const stopBtn = el('recon-tf-extract-stop'); if (stopBtn) stopBtn.classList.remove('d-none');
+
+  const pending = [];
+  for (let r = 0; r < project.rows.length; r++) {
+    const text = String(project.rows[r][srcCol] == null ? '' : project.rows[r][srcCol]).trim();
+    pending.push({
+      key: String(project.rows[r][idIdx] == null ? '' : project.rows[r][idIdx]),
+      row: r,
+      text,
+      contained_in: scopeCol >= 0 ? resolvedPlaceIds(scopeCol, r).map(barePlaceId) : [],
+    });
+  }
+
+  const byRow = new Map();
+  let done = 0, failed = 0;
+  try {
+    for (let i = 0; i < pending.length; i += NER_ROW_BATCH) {
+      if (_nerRun.cancel) break;
+      const batch = pending.slice(i, i + NER_ROW_BATCH);
+      extractProgress(`<i class="fas fa-spinner fa-spin me-1"></i>Reading row ${(i + 1).toLocaleString()}` +
+        ` of ${pending.length.toLocaleString()}…`);
+      const res = await Sync.nerRows(batch.map(({ key, text, contained_in }) => ({ key, text, contained_in })), fallback);
+      if (res.status === 429) {
+        extractProgress(`<span class="text-warning">${esc((res.data && res.data.error) || 'Daily extraction limit reached.')}` +
+          ` Stopped after ${done.toLocaleString()} row${done === 1 ? '' : 's'} — what was read so far is kept.</span>`);
+        break;
+      }
+      if (res.status !== 200 || !res.data || !Array.isArray(res.data.results)) {
+        extractProgress(`<span class="text-danger">${esc((res.data && res.data.error) || 'Extraction failed — please try again.')}</span>`);
+        break;
+      }
+      res.data.results.forEach((out, n) => {
+        const src = batch[n];
+        if (!src) return;
+        if (out.failed) failed += 1;
+        byRow.set(src.row, out.places || []);
+      });
+      done += batch.length;
+    }
+  } catch (err) {
+    console.warn('[recon] per-row extraction failed', err);
+    extractProgress('<span class="text-danger">Extraction failed — check your connection and try again.</span>');
+  } finally {
+    _nerRun = null;
+    if (runBtn) runBtn.disabled = false;
+    if (stopBtn) stopBtn.classList.add('d-none');
+  }
+  if (!byRow.size) { if (!el('recon-tf-extract-progress').innerHTML) extractProgress('<span class="text-warning">Nothing was extracted.</span>'); return; }
+  await explodeExtraction(byRow, srcCol, scopeCol, { done, failed, total: pending.length });
+}
+
+// One row per (record x distinct place). Derived, not destructive: every source column is carried
+// through, so the record survives alongside the place and case-level counts come back by
+// deduplicating on the identifier. Rows that named no place are KEPT and flagged — a quarter of the
+// sampled REQ 2 cases named none, and dropping them would make every denominator wrong.
+async function explodeExtraction(byRow, srcCol, scopeCol, stats) {
+  const idIdx = colIndexByRole('id');
+  const srcName = project.columns[srcCol].name;
+  const taken = project.columns.map((c) => c.name);
+  const add = (n) => { const u = uniqueHeader(n, taken); taken.push(u); return u; };
+  const NEW = {
+    place_name: add('place_name'), mentions: add('mentions'), context: add('context'),
+    source_column: add('source_column'), place_status: add('place_status'), place_key: add('place_key'),
+    whg_match: add('whg_match'), country: add('country'), lon: add('lon'), lat: add('lat'),
+  };
+  const baseCols = project.columns.map((c) => c.name);
+  const columns = baseCols.concat(Object.values(NEW));
+
+  const norm = (s) => String(s || '').trim().toLowerCase();
+  const rows = [];
+  for (let r = 0; r < project.rows.length; r++) {
+    const base = project.rows[r].slice();
+    const srcId = String(project.rows[r][idIdx] == null ? '' : project.rows[r][idIdx]);
+    const places = byRow.get(r);
+    if (places === undefined) continue;              // not reached before the run was stopped
+    if (!places.length) {
+      rows.push(base.concat(['', '0', '', srcName, 'no places found',
+        `${srcId}|-|0`, '', '', '', '']));
+      continue;
+    }
+    const occ = new Map();
+    places.forEach((p) => {
+      const k = norm(p.name);
+      const n = occ.get(k) || 0; occ.set(k, n + 1);
+      const m = p.match || {};
+      rows.push(base.concat([
+        String(p.name || ''), String(p.mentions || 1), String(p.context || ''), srcName,
+        p.outside_container ? 'outside container — check' : '',
+        `${srcId}|${k}|${n}`,
+        String(m.title || ''), (m.ccodes || []).join(' '),
+        m.lng != null ? String(m.lng) : '', m.lat != null ? String(m.lat) : '',
+      ]));
+    });
+  }
+
+  // Force the roles the headers cannot imply, and re-wire the container so the new table reconciles
+  // scoped exactly as this run did — the preliminary match is a seed, not the reconciliation.
+  const roles = { [NEW.place_name]: 'name', [NEW.place_key]: 'id', [NEW.country]: 'country',
+                  [NEW.lon]: 'lon', [NEW.lat]: 'lat' };
+  if (idIdx >= 0) roles[baseCols[idIdx]] = 'other';   // place_key is the new identifier
+  const fileName = `${(project.fileName || 'dataset').replace(/\.[^.]+$/, '')}-places.csv`;
+  await finishImport({ columns, rows, total: rows.length, roles }, fileName, 'ner-column');
+
+  const placeIdx = project.columns.findIndex((c) => c.name === NEW.place_name);
+  if (scopeCol >= 0 && placeIdx >= 0) {
+    const cont = project.columns[scopeCol];
+    if (cont) { cont.role = 'contains'; cont.child = placeIdx; normalizeChain(); }
+  }
+  renderAll(); await persist();
+  track('MyD: extract column', { rows: bucketCount(stats.total), places: bucketCount(rows.length),
+                                 scoped: scopeCol >= 0 ? 'yes' : 'no' });
+  const withPlaces = rows.filter((r) => r[baseCols.length]).length;
+  extractProgress(`<span class="text-success">Read ${stats.done.toLocaleString()} row` +
+    `${stats.done === 1 ? '' : 's'} → <strong>${withPlaces.toLocaleString()}</strong> place mention` +
+    `${withPlaces === 1 ? '' : 's'}, plus ${(rows.length - withPlaces).toLocaleString()} row` +
+    `${rows.length - withPlaces === 1 ? '' : 's'} that named none.` +
+    `${stats.failed ? ` ${stats.failed} row${stats.failed === 1 ? '' : 's'} could not be read.` : ''}</span>`);
+  flashSaved(`Extracted ${withPlaces.toLocaleString()} place mentions from “${truncate(srcName, 24)}”`);
 }
 
 // ── What the importer did with the geometry (place#210) ─────────────────────
