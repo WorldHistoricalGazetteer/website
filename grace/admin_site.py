@@ -57,12 +57,15 @@ class GraceAdminSite(admin.AdminSite):
 
             verbose_name_plural is "Catalogue: contacts" so the DEFAULT admin
             index groups legibly; inside a register card that prefix is noise.
+            Only safe under a card — in the flat vocabulary list, stripping it
+            leaves bare "Statuses" and "Types", so that list uses full_name.
             """
             return str(model._meta.verbose_name_plural).split(": ")[-1]
 
         models_by_name = {
             model.__name__: {
                 "name": short(model),
+                "full_name": str(model._meta.verbose_name_plural),
                 "url": f"/grace/admin/grace/{model._meta.model_name}/",
                 "add_url": f"/grace/admin/grace/{model._meta.model_name}/add/",
                 "count": model.objects.count(),

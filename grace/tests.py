@@ -582,3 +582,10 @@ class GraceAdminSiteTests(TestCase):
         self.client.force_login(self.staff)
         body = self.client.get("/grace/admin/").content.decode()
         self.assertIn("Nothing needs attention", body)
+
+    def test_vocabulary_names_stay_unambiguous(self):
+        """Stripping the register prefix would leave bare 'Statuses'/'Types'."""
+        self.client.force_login(self.staff)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("Content: types", body)
+        self.assertIn("Content: statuses", body)

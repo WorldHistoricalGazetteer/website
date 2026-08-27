@@ -122,7 +122,8 @@
      Renaming a term is safe; the stable key underneath does not change.</p>
   <ul>
     {% for row in vocabularies %}
-      <li><a href="{{ row.url }}">{{ row.name|capfirst }}</a>
+      {# full_name, not name: this list is flat, so "Content: types" beats a bare "Types". #}
+      <li><a href="{{ row.url }}">{{ row.full_name|capfirst }}</a>
           <span class="n">{{ row.count }}</span></li>
     {% endfor %}
   </ul>
