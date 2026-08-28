@@ -805,10 +805,12 @@ class NerPerRowTests(TestCase):
             self.assertEqual(views._ner_reconcile_disambiguate({'Admiralty': 1}, None,
                                                                contained_in=['ukhc:DOR']), {})
 
-    def test_a_cataloguers_initials_are_not_a_place(self):
-        """REQ 2 descriptions end with the cataloguer's initials. "CSP" is capitalised, is in the
-        source text, and is not a stop word — so it passed every other test and matched the Chartered
-        Society of Physiotherapy, becoming the sixth-busiest place on a map of Tudor litigation."""
+    def test_archival_shorthand_is_not_a_place(self):
+        """Catalogue descriptions carry archival shorthand — "[CSP]" citing the Calendar of State
+        Papers for a man's court office, or the cataloguer's initials at the end. "CSP" is
+        capitalised, is in the source text, and is not a stop word, so it passed every other test and
+        matched the Chartered Society of Physiotherapy, becoming the sixth-busiest place on a map of
+        Tudor litigation."""
         from unittest.mock import patch
         hit = {'id': 'place:wd:Q5086859', 'title': 'Chartered Society of Physiotherapy', 'score': 100,
                'ccodes': ['GB'], 'lng': -0.116, 'lat': 51.52, 'ambiguous': False}
