@@ -1187,6 +1187,17 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
             continue
+        # A short run of capitals with no lower-case in it is an abbreviation, not a toponym. REQ 2
+        # descriptions end with the cataloguer's initials — SFP, CSP, UBP, CBP — and they pass every
+        # other test here: capitalised, present in the source, not a stop word. 1,325 of them were
+        # emitted across England and Wales, and 55 found a match, which is how the sixth-busiest place
+        # on the map came to be the Chartered Society of Physiotherapy, and six Middlesex cases were
+        # placed at Castle Bar Park railway station.
+        #
+        # Only reachable in the per-row extraction path, where the text is prose. A user reconciling a
+        # column of names that really are abbreviations is not affected.
+        if len(nm) <= 5 and nm.isalpha() and nm.isupper():
+            continue
         if _ner_stopword(nm):
             continue                       # never a place; candidate generation refuses these too
         # A common noun is dropped unless something trustworthy vouches for it — and OUTSIDE a

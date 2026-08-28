@@ -805,6 +805,22 @@ class NerPerRowTests(TestCase):
             self.assertEqual(views._ner_reconcile_disambiguate({'Admiralty': 1}, None,
                                                                contained_in=['ukhc:DOR']), {})
 
+    def test_a_cataloguers_initials_are_not_a_place(self):
+        """REQ 2 descriptions end with the cataloguer's initials. "CSP" is capitalised, is in the
+        source text, and is not a stop word — so it passed every other test and matched the Chartered
+        Society of Physiotherapy, becoming the sixth-busiest place on a map of Tudor litigation."""
+        from unittest.mock import patch
+        hit = {'id': 'place:wd:Q5086859', 'title': 'Chartered Society of Physiotherapy', 'score': 100,
+               'ccodes': ['GB'], 'lng': -0.116, 'lat': 51.52, 'ambiguous': False}
+        ents = [{'name': n, 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}
+                for n in ('CSP', 'Westminster')]
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate',
+                      return_value={'CSP': hit, 'Westminster': dict(hit, title='Westminster')}):
+            r = self._post({'rows': [{'key': 'a', 'contained_in': ['ukhc:MDX'],
+                                      'text': 'Hugh Lewys, yeoman of the Queen\'s Chamber at Westminster [CSP]'}]})
+        self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['Westminster'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',
