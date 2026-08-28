@@ -785,6 +785,31 @@ class NerPerRowTests(TestCase):
             r = self._post({'rows': [{'key': 'a', 'text': text, 'contained_in': ['ukhc:ESE']}]})
         self.assertEqual([p['name'] for p in r.json()['results'][0]['places']], ['Colchester'])
 
+    def test_a_bare_parish_group_name_matches_its_qualified_parishes(self):
+        """A clerk writes "lands at Tolleshunt"; the gazetteer holds only Tolleshunt D'Arcy, Knights
+        and Major. Exact-name matching rejects all three and a real place is lost."""
+        from unittest.mock import patch
+        hits = [{'id': 'place:tgn:1', 'name': "Tolleshunt D'Arcy", 'score': 100,
+                 'repr_point': [0.75, 51.77]},
+                {'id': 'place:tgn:2', 'name': 'Tolleshunt Major', 'score': 99,
+                 'repr_point': [0.73, 51.76]}]
+        with patch('api.reconcile.process_queries', return_value={'q0': {'result': hits}}):
+            out = views._ner_reconcile_disambiguate({'Tolleshunt': 1}, None,
+                                                    contained_in=['ukhc:ESE'])
+        self.assertEqual(out['Tolleshunt']['id'], 'place:tgn:1')
+        self.assertTrue(out['Tolleshunt']['approximate'])   # right parish group, not right parish
+        self.assertTrue(out['Tolleshunt']['ambiguous'])
+
+    def test_prefix_matching_refuses_a_bare_qualifier_and_needs_a_container(self):
+        """"Great" prefixes hundreds of English names, and unscoped there is no county to bound the
+        damage — so neither is allowed to reach the prefix fallback."""
+        from unittest.mock import patch
+        hits = [{'id': 'place:x:1', 'name': 'Great Easton', 'score': 100, 'repr_point': [0.3, 51.9]}]
+        with patch('api.reconcile.process_queries', return_value={'q0': {'result': hits}}):
+            self.assertEqual(views._ner_reconcile_disambiguate({'Great': 1}, None,
+                                                               contained_in=['ukhc:ESE']), {})
+            self.assertEqual(views._ner_reconcile_disambiguate({'Tolleshunt': 1}, None), {})
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',
