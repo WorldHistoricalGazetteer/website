@@ -1045,7 +1045,7 @@ def ner_extract(request):
     names_only = bool(body.get('names_only'))
 
     try:
-        ents = extraction.extract_places(text)
+        ents = extraction.extract_places(text, names=names)
     except extraction.ExtractionUnavailable:
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
     except Exception:                                # noqa: BLE001 — a model fault is not the user's
@@ -1158,7 +1158,7 @@ def _ner_scope(value, limit=NER_SCOPE_MAX):
     return [str(v).strip() for v in value if str(v or '').strip()][:limit]
 
 
-def _ner_row_places(text, user, scope, fallback):
+def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     """One row's text → its distinct places, deduplicated within the row.
 
     Returns [{name, mentions, context, match, outside_container}]. `mentions` is a count WITHIN THE
@@ -1174,7 +1174,21 @@ def _ner_row_places(text, user, scope, fallback):
     for nm, c in _ner_candidates(text, list(mentions.keys())).items():
         mentions.setdefault(nm, c)
 
-    matches = _ner_reconcile_disambiguate(mentions, user, contained_in=scope) if mentions else {}
+    # A name recurs across many rows of the same county — "Colchester" in a hundred Essex cases — and
+    # each occurrence was a fresh round trip to the gateway. Measured on Essex, roughly 3.5 lookups per
+    # distinct name. The cache is per (scope, name) because the same name in a different county is a
+    # genuinely different question.
+    if cache is None:
+        matches = _ner_reconcile_disambiguate(mentions, user, contained_in=scope) if mentions else {}
+    else:
+        key = tuple(scope or ())
+        want = {n: c for n, c in mentions.items() if (key, n) not in cache}
+        if want:
+            fresh = _ner_reconcile_disambiguate(want, user, contained_in=scope)
+            for n in want:
+                cache[(key, n)] = fresh.get(n)          # a miss is cached too; it will miss again
+        matches = {n: cache[(key, n)] for n in mentions
+                   if cache.get((key, n)) is not None}
 
     # Out-of-container fallback. The dataset's Scope region already acts as a floor, but only when the
     # PARENT is unresolved — it never fires when the county resolves and the span simply is not inside
