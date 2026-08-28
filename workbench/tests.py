@@ -810,6 +810,39 @@ class NerPerRowTests(TestCase):
                                                                contained_in=['ukhc:ESE']), {})
             self.assertEqual(views._ner_reconcile_disambiguate({'Tolleshunt': 1}, None), {})
 
+    def test_the_reconciliation_cache_asks_once_per_name_and_scope(self):
+        """A name recurs across many rows of one county and each occurrence was a fresh gateway round
+        trip. The same name in a DIFFERENT county is a different question, so the key carries both."""
+        from unittest.mock import patch
+        calls = []
+
+        def recon(mentions, user, contained_in=None):
+            calls.append((tuple(contained_in or ()), tuple(sorted(mentions))))
+            return {n: {'id': 'place:x:1', 'title': n, 'score': 100, 'ccodes': [],
+                        'lng': 0.1, 'lat': 51.9, 'ambiguous': False} for n in mentions}
+
+        cache = {}
+        ents = [{'name': 'Colchester', 'count': 1, 'context': 'c', 'verbatim': True, 'label': 'LLM'}]
+        with patch('workbench.extraction.extract_places', return_value=ents), \
+                patch('workbench.views._ner_reconcile_disambiguate', side_effect=recon):
+            for _ in range(3):
+                views._ner_row_places('lands in Colchester', None, ['ukhc:ESE'], [], cache=cache)
+            views._ner_row_places('lands in Colchester', None, ['ukhc:SFK'], [], cache=cache)
+        self.assertEqual(len(calls), 2)                       # once per county, not once per row
+        self.assertEqual(calls[0][0], ('ukhc:ESE',))
+        self.assertEqual(calls[1][0], ('ukhc:SFK',))
+
+    def test_names_can_be_supplied_instead_of_asking_the_model(self):
+        """The model is the expensive half and it is stateless, so it can run elsewhere while the
+        judgement about what counts as a place stays in one implementation."""
+        from unittest.mock import patch
+        with patch('workbench.extraction._generate') as gen, \
+                patch('workbench.views._ner_reconcile_disambiguate', return_value={}):
+            out = views._ner_row_places('a messuage in Duxford', None, [], [],
+                                        names=['Duxford', 'nowhere-in-the-text'])
+        gen.assert_not_called()
+        self.assertEqual([p['name'] for p in out], ['Duxford'])
+
     def test_one_bad_row_does_not_lose_the_batch(self):
         from unittest.mock import patch
         with patch('workbench.extraction.extract_places',

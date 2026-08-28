@@ -224,8 +224,12 @@ def _generate(chunk):
     return [n for n in out if n]
 
 
-def extract_places(text):
+def extract_places(text, names=None):
     """text → [{name, count, context, verbatim}, …], most-mentioned first.
+
+    `names` lets a caller supply the model's raw output instead of asking for it — the model is the
+    expensive half and it is stateless, so it can be run somewhere with GPUs while the judgement about
+    what counts as a place stays here, in one implementation.
 
     Every name is grounded back in the source text. Grounding matters: a model this small paraphrases
     and occasionally invents. Names found verbatim get a real occurrence count and a context snippet;
@@ -235,15 +239,18 @@ def extract_places(text):
     Raises ExtractionUnavailable if the model host is unconfigured or unreachable.
     """
     seen = {}
-    chunk_list = _chunks(text)
+    chunk_list = [None] if names is not None else _chunks(text)
     for chunk in chunk_list:
-        try:
-            names = _generate(chunk)
-        except ExtractionUnavailable:
-            raise
-        except requests.RequestException as e:
-            raise ExtractionUnavailable(str(e))
-        for raw_name in names:
+        if names is None:
+            try:
+                produced = _generate(chunk)
+            except ExtractionUnavailable:
+                raise
+            except requests.RequestException as e:
+                raise ExtractionUnavailable(str(e))
+        else:
+            produced = [_clean(n) for n in names if _clean(n)]
+        for raw_name in produced:
             for name in _split_compound(raw_name, text):
                 if name and len(name) <= 120:
                     seen.setdefault(name.lower(), name)
