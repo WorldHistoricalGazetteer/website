@@ -872,11 +872,53 @@ def _cluster_locations(hits, thresh_km=40):
     return [([cl[0] / cl[2], cl[1] / cl[2]], cl[3]) for cl in clusters]
 
 
-def _ner_match(hit, ambiguous=False):
+# Qualifiers that begin a great many English place names. A bare one of these is not a name being
+# used loosely, it is half a name, and prefix-matching on it would attach "Great" to Great Easton.
+_NER_QUALIFIERS = {
+    'great', 'little', 'much', 'old', 'new', 'upper', 'lower', 'high', 'low', 'north', 'south',
+    'east', 'west', 'nether', 'over', 'saint', 'st', 'abbots', 'bishops', 'kings', 'queens',
+    'castle', 'temple', 'long', 'broad', 'black', 'white',
+}
+
+
+def _ner_prefix_hits(hits, name):
+    """Hits whose name is `name` plus a qualifier — Tolleshunt → Tolleshunt D'Arcy, Knights, Major.
+
+    A parish group is routinely named unqualified in this register: a 16th-century clerk writes
+    "lands at Tolleshunt" where the gazetteer holds only the three parishes that share the name. An
+    exact-name matcher rejects all three and the mention is lost, which is how a real place ends up in
+    the not-located list.
+
+    Deliberately narrow. The query must be the whole first word of the hit, must be long enough not to
+    be an accident, and must not itself be one of the qualifiers that start hundreds of English names.
+    And this only ever runs INSIDE a container, where the candidates are already confined to one
+    county — the same constraint that makes the rest of this safe.
+    """
+    n = (name or '').strip()
+    if len(n) < 5 or n.lower() in _NER_QUALIFIERS:
+        return []
+    low = n.lower()
+    out = []
+    for h in hits:
+        for candidate in [h.get('name') or ''] + list(h.get('alt_names') or []):
+            c = (candidate or '').strip().lower()
+            if c.startswith(low) and len(c) > len(low) and not c[len(low)].isalnum():
+                out.append(h)
+                break
+    return out
+
+
+def _ner_match(hit, ambiguous=False, approximate=False):
     """A gateway hit → the compact match the browser consumes."""
     rp = hit.get('repr_point') or [None, None]
-    return {'id': hit.get('id'), 'title': hit.get('name'), 'score': round(hit.get('score') or 0, 3),
-            'ccodes': hit.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': ambiguous}
+    m = {'id': hit.get('id'), 'title': hit.get('name'), 'score': round(hit.get('score') or 0, 3),
+         'ccodes': hit.get('ccodes') or [], 'lng': rp[0], 'lat': rp[1], 'ambiguous': ambiguous}
+    if approximate:
+        # The name was matched to a longer one it begins — the right parish group, not necessarily the
+        # right parish. Carried through so review can see it needs settling, and so nothing downstream
+        # mistakes it for an exact identification.
+        m['approximate'] = True
+    return m
 
 
 def _ner_reconcile_disambiguate(mentions, user, contained_in=None):
@@ -906,11 +948,18 @@ def _ner_reconcile_disambiguate(mentions, user, contained_in=None):
         logger.warning('NER gazetteer reconcile failed: %s', e)
         return {}
 
-    hits_by_name = {}
+    hits_by_name, approx = {}, set()
     for i, n in enumerate(names):
-        exact = [h for h in ((res.get(f'q{i}') or {}).get('result') or []) if _ner_name_hit(h, n)]
+        all_hits = (res.get(f'q{i}') or {}).get('result') or []
+        exact = [h for h in all_hits if _ner_name_hit(h, n)]
         if exact:
             hits_by_name[n] = exact
+        elif contained_in:
+            # Only inside a container, and only then: see _ner_prefix_hits.
+            pre = _ner_prefix_hits(all_hits, n)
+            if pre:
+                hits_by_name[n] = pre
+                approx.add(n)
     if not hits_by_name:
         return {}
 
@@ -918,7 +967,8 @@ def _ner_reconcile_disambiguate(mentions, user, contained_in=None):
         # Every surviving hit is already inside the container. Take the best-scoring one, and flag
         # the name ambiguous only if the container holds more than one distinct location for it.
         return {n: _ner_match(max(hits, key=lambda h: h.get('score') or 0),
-                              ambiguous=len(_cluster_locations(hits)) > 1)
+                              ambiguous=len(_cluster_locations(hits)) > 1,
+                              approximate=n in approx)
                 for n, hits in hits_by_name.items()}
 
     # One representative candidate per DISTINCT location a name resolves to (dedup near-dupes; keep the
@@ -1182,6 +1232,7 @@ def _ner_row_places(text, user, scope, fallback):
         if _ner_appellative(nm) and not (m and scope):
             continue
         places.append({
+            'approximate': bool((m or {}).get('approximate')),
             'name': nm,
             'mentions': len(hits) or count,
             'context': contexts.get(nm) or (extraction.snippet(text, hits[0], len(nm)) if hits else ''),
