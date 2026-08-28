@@ -964,12 +964,22 @@ def _ner_reconcile_disambiguate(mentions, user, contained_in=None):
         return {}
 
     if contained_in:
-        # Every surviving hit is already inside the container. Take the best-scoring one, and flag
-        # the name ambiguous only if the container holds more than one distinct location for it.
-        return {n: _ner_match(max(hits, key=lambda h: h.get('score') or 0),
-                              ambiguous=len(_cluster_locations(hits)) > 1,
-                              approximate=n in approx)
-                for n, hits in hits_by_name.items()}
+        # Every surviving hit is already inside the container, so take the best-scoring one.
+        #
+        # Ambiguity here has two sources, and distance only catches the first. Two places of the same
+        # name in different parts of the county are ambiguous by location; three parishes SHARING a
+        # name — Tolleshunt D'Arcy, Knights and Major — are ambiguous by identity even though they sit
+        # a mile apart and cluster as one point. A match that came from the prefix fallback is
+        # therefore ambiguous whenever the hits carry more than one name between them.
+        out = {}
+        for n, hits in hits_by_name.items():
+            distinct_names = {(h.get('name') or '').strip().lower() for h in hits}
+            out[n] = _ner_match(
+                max(hits, key=lambda h: h.get('score') or 0),
+                ambiguous=len(_cluster_locations(hits)) > 1
+                          or (n in approx and len(distinct_names) > 1),
+                approximate=n in approx)
+        return out
 
     # One representative candidate per DISTINCT location a name resolves to (dedup near-dupes; keep the
     # best-scoring hit per location). We disambiguate by PURE GEOGRAPHY, not ccodes — country codes are
