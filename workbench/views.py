@@ -1045,7 +1045,7 @@ def ner_extract(request):
     names_only = bool(body.get('names_only'))
 
     try:
-        ents = extraction.extract_places(text, names=names)
+        ents = extraction.extract_places(text)
     except extraction.ExtractionUnavailable:
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
     except Exception:                                # noqa: BLE001 — a model fault is not the user's
@@ -1164,7 +1164,7 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     Returns [{name, mentions, context, match, outside_container}]. `mentions` is a count WITHIN THE
     ROW: "Great Easton" twice in one description is one place mentioned twice, not two places.
     """
-    ents = extraction.extract_places(text)
+    ents = extraction.extract_places(text, names=names)
     mentions = {}
     for e in ents:
         nm = (e.get('name') or '').strip()
