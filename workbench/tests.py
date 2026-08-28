@@ -805,6 +805,25 @@ class NerPerRowTests(TestCase):
             self.assertEqual(views._ner_reconcile_disambiguate({'Admiralty': 1}, None,
                                                                contained_in=['ukhc:DOR']), {})
 
+    def test_bracketed_apparatus_never_reaches_the_extractor(self):
+        """Filtering apparatus after extraction is too late: the model has already spent attention on
+        it, and grounding vouches for it because the token really is in the text. Mask it first."""
+        mask = extraction.mask_apparatus
+        for text, gone in [("the Queen's draper [CSP]", "CSP"),
+                           ("Joan Walle [SFP] of Ipswich", "SFP"),
+                           ("2 mm. [Standard surname: Tolley]", "Tolley")]:
+            masked = mask(text)
+            self.assertNotIn(gone, masked)
+            self.assertEqual(len(masked), len(text), "offsets must survive masking")
+
+    def test_masking_keeps_brackets_that_carry_places(self):
+        """Most brackets are not apparatus. A modern spelling, a containing parish and a cataloguer's
+        conjecture all name real places, and stripping brackets wholesale would throw them away."""
+        for text in ("Ralph Sheldon of Beeley [Beoley], Worcestershire",
+                     "lands in Thorpe [both in Romsey], Hampshire",
+                     "[? Gaterygge or Bradebrigg, in Romsey]"):
+            self.assertEqual(extraction.mask_apparatus(text), text)
+
     def test_archival_shorthand_is_not_a_place(self):
         """Catalogue descriptions carry archival shorthand — "[CSP]" citing the Calendar of State
         Papers for a man's court office, or the cataloguer's initials at the end. "CSP" is
