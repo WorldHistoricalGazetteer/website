@@ -984,8 +984,9 @@ def ner_extract(request):
     contained_in = [str(c).strip() for c in contained_in if str(c or '').strip()][:NER_SCOPE_MAX]
     names_only = bool(body.get('names_only'))
 
+    source = extraction.mask_apparatus(text)          # see _ner_row_places — apparatus is not prose
     try:
-        ents = extraction.extract_places(text)
+        ents = extraction.extract_places(source)
     except extraction.ExtractionUnavailable:
         return _err('The place-name extractor could not be reached — please try again shortly.', 503)
     except Exception:                                # noqa: BLE001 — a model fault is not the user's
@@ -1005,7 +1006,7 @@ def ner_extract(request):
         nm = (e.get('name') or '').strip()
         if nm:
             mentions[nm] = max(mentions.get(nm, 0), e.get('count') or 1)
-    for nm, c in _ner_candidates(text, list(mentions.keys())).items():
+    for nm, c in _ner_candidates(source, list(mentions.keys())).items():
         mentions.setdefault(nm, c)
     matches = _ner_reconcile_disambiguate(mentions, request.user, contained_in=contained_in)
     if contained_in:
@@ -1023,7 +1024,7 @@ def ner_extract(request):
         have.add(nm.lower())
         # Count whole-word occurrences, as extraction does — a bare substring count reports "Cam"
         # three times in a text that says Cam once and Cambridgeshire twice.
-        hits = extraction.find_all(text, nm)
+        hits = extraction.find_all(source, nm)
         ents.append({'name': nm, 'label': 'GAZ', 'count': len(hits),
                      'context': extraction.snippet(text, hits[0], len(nm)) if hits else '',
                      'match': m})
@@ -1104,14 +1105,18 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     Returns [{name, mentions, context, match, outside_container}]. `mentions` is a count WITHIN THE
     ROW: "Great Easton" twice in one description is one place mentioned twice, not two places.
     """
-    ents = extraction.extract_places(text, names=names)
+    # Apparatus is masked once here and the masked copy used for every scan and every grounding check
+    # below, so a citation or a cataloguer's sign-off cannot become a place. Context snippets still
+    # come from `text`, unmasked, because the reader should see the description as it was catalogued.
+    source = extraction.mask_apparatus(text)
+    ents = extraction.extract_places(source, names=names)
     mentions = {}
     for e in ents:
         nm = (e.get('name') or '').strip()
         if nm:
             mentions[nm] = max(mentions.get(nm, 0), e.get('count') or 1)
     contexts = {(e.get('name') or '').strip(): e.get('context') or '' for e in ents}
-    for nm, c in _ner_candidates(text, list(mentions.keys())).items():
+    for nm, c in _ner_candidates(source, list(mentions.keys())).items():
         mentions.setdefault(nm, c)
 
     # A name recurs across many rows of the same county — "Colchester" in a hundred Essex cases — and
@@ -1148,7 +1153,7 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     places = []
     for nm, count in mentions.items():
         m = matches.get(nm)
-        hits = extraction.find_all(text, nm)
+        hits = extraction.find_all(source, nm)
         # Not in this row's text at all ⇒ the model invented it, and an invented name is not a mention
         # of anything HERE, whether or not some gazetteer holds a place by that name. That last part is
         # the point: "place" is absent from a subject line about a chain of pearls, yet matches an Index
@@ -1171,7 +1176,7 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
         # hypothetical for a world gazetteer, and it is the reason this keys on the NAME's script
         # rather than on whether the surrounding text happens to contain a capital.
         name_is_cased = any(ch.isupper() or ch.islower() for ch in nm)
-        if name_is_cased and hits and not any(text[h:h + 1].isupper() for h in hits):
+        if name_is_cased and hits and not any(source[h:h + 1].isupper() for h in hits):
             continue
         # On a row naming no place — "obligation", "a bond" — the model falls back on the prompt's own
         # vocabulary and returns "towns, villages, parishes, counties, rivers, mountains, seas" as

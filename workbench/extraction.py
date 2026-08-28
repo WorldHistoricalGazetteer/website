@@ -70,6 +70,36 @@ class ExtractionUnavailable(Exception):
     """The model host is unconfigured or unreachable — the caller should return a friendly 503."""
 
 
+# Catalogue descriptions carry editorial apparatus in square brackets, and the model should never see
+# the part of it that is not prose. Two forms are pure apparatus: a short run of capitals citing a
+# source or signing off the cataloguing ("the Queen's draper [CSP]" for the Calendar of State Papers,
+# "Joan Walle [SFP]" for the cataloguer), and an explicitly labelled note ("[Standard surname:
+# Tolley]"). Filtering these downstream is too late and too blunt — by then the model has spent
+# attention on them, and grounding vouches for them because the token really is in the text, which is
+# how four Middlesex suits came to be heard at Castle Bar Park railway station.
+#
+# Brackets are not stripped wholesale, because most of them carry information worth keeping: a modern
+# spelling ("Beeley [Beoley]"), a containing parish ("[both in Romsey]"), a cataloguer's conjecture
+# ("[? Gaterygge or Bradebrigg, in Romsey]"). Of 567 bracketed spans in a 1,000-record sample, these
+# two patterns matched 256 and every one of them was apparatus.
+_APPARATUS_RE = re.compile(r"""
+    \[ \s* (?:
+        [A-Z]{2,6} \.?                      # [CSP]  [SFP]  [CBP.]
+      | [A-Z][A-Za-z]{0,20}(?:\ [a-z]+){0,3} : [^\]]{0,120}   # [Standard surname: Tolley]
+    ) \s* \]
+""", re.VERBOSE)
+
+
+def mask_apparatus(text):
+    """Blank out editorial apparatus, preserving length so character offsets stay valid.
+
+    Callers ground names by searching this same masked text, so a masked span cannot be found and
+    cannot be reported — while context snippets, taken from the original at the same offsets, still
+    show the reader the description as catalogued.
+    """
+    return _APPARATUS_RE.sub(lambda m: ' ' * len(m.group(0)), text)
+
+
 def _conf(name, default):
     return getattr(settings, name, None) or default
 
@@ -238,8 +268,9 @@ def extract_places(text, names=None):
 
     Raises ExtractionUnavailable if the model host is unconfigured or unreachable.
     """
+    source = mask_apparatus(text)
     seen = {}
-    chunk_list = [None] if names is not None else _chunks(text)
+    chunk_list = [None] if names is not None else _chunks(source)
     for chunk in chunk_list:
         if names is None:
             try:
@@ -251,13 +282,13 @@ def extract_places(text, names=None):
         else:
             produced = [_clean(n) for n in names if _clean(n)]
         for raw_name in produced:
-            for name in _split_compound(raw_name, text):
+            for name in _split_compound(raw_name, source):
                 if name and len(name) <= 120:
                     seen.setdefault(name.lower(), name)
 
     entities = []
     for name in seen.values():
-        hits = find_all(text, name)
+        hits = find_all(source, name)
         entities.append({
             'name': text[hits[0]:hits[0] + len(name)] if hits else name,
             'label': 'LLM',
