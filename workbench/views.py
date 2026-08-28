@@ -1012,6 +1012,7 @@ def ner_extract(request):
     if contained_in:
         data['contained_in'] = contained_in
 
+    matches = {n: m for n, m in matches.items() if not _acronym_title(m)}
     have = {(e.get('name') or '').lower() for e in ents}
     for e in ents:                                   # attach a preliminary match to extracted names
         m = matches.get((e.get('name') or '').strip())
@@ -1099,6 +1100,21 @@ def _ner_scope(value, limit=NER_SCOPE_MAX):
     return [str(v).strip() for v in value if str(v or '').strip()][:limit]
 
 
+def _acronym_title(match):
+    """True if a gazetteer hit is named like an abbreviation rather than a place.
+
+    The complement of masking apparatus out of the input: here the input is a real word and the
+    MATCH is junk. "Alice, wife of the plaintiff" and "Sampson Bett and Amy Bett" are people, and
+    they found Wikidata items titled ALICE and BETT — acronym disambiguation pages, not settlements.
+    No English place is called ALICE in capitals, so a short all-caps title is a reliable tell.
+
+    The mention is not discarded, only unmatched: it stays in the named-but-not-located list, which is
+    the truthful place for a name whose only candidate was nonsense.
+    """
+    t = ((match or {}).get('title') or '').strip()
+    return len(t) <= 5 and t.isalpha() and t.isupper()
+
+
 def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     """One row's text → its distinct places, deduplicated within the row.
 
@@ -1153,6 +1169,8 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
     places = []
     for nm, count in mentions.items():
         m = matches.get(nm)
+        if _acronym_title(m):
+            m = None
         hits = extraction.find_all(source, nm)
         # Not in this row's text at all ⇒ the model invented it, and an invented name is not a mention
         # of anything HERE, whether or not some gazetteer holds a place by that name. That last part is

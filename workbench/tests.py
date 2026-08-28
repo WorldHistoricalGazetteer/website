@@ -805,6 +805,15 @@ class NerPerRowTests(TestCase):
             self.assertEqual(views._ner_reconcile_disambiguate({'Admiralty': 1}, None,
                                                                contained_in=['ukhc:DOR']), {})
 
+    def test_a_gazetteer_hit_titled_like_an_acronym_is_not_a_match(self):
+        """The other half of the problem: clean input, junk candidate. "Alice, wife of the
+        plaintiff" found a Wikidata item titled ALICE. Unmatch it rather than drop the mention."""
+        self.assertTrue(views._acronym_title({'title': 'ALICE'}))
+        self.assertTrue(views._acronym_title({'title': 'BETT'}))
+        self.assertFalse(views._acronym_title({'title': 'Lewes'}))
+        self.assertFalse(views._acronym_title({'title': 'YORK MINSTER'}))
+        self.assertFalse(views._acronym_title(None))
+
     def test_bracketed_apparatus_never_reaches_the_extractor(self):
         """Filtering apparatus after extraction is too late: the model has already spent attention on
         it, and grounding vouches for it because the token really is in the text. Mask it first."""
