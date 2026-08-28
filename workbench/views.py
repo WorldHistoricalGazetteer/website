@@ -1187,12 +1187,14 @@ def _ner_row_places(text, user, scope, fallback, names=None, cache=None):
         # nothing is noise (a surname, an occupation), and this is a per-row table, not a candidate list.
         if not m and nm not in contexts:
             continue
-        # A short run of capitals with no lower-case in it is an abbreviation, not a toponym. REQ 2
-        # descriptions end with the cataloguer's initials — SFP, CSP, UBP, CBP — and they pass every
-        # other test here: capitalised, present in the source, not a stop word. 1,325 of them were
-        # emitted across England and Wales, and 55 found a match, which is how the sixth-busiest place
-        # on the map came to be the Chartered Society of Physiotherapy, and six Middlesex cases were
-        # placed at Castle Bar Park railway station.
+        # A short run of capitals with no lower-case in it is archival shorthand, not a toponym, and it
+        # passes every other test here: capitalised, present in the source, not a stop word. Catalogue
+        # descriptions are full of it, in two kinds — a source citation in brackets after a fact it
+        # supports ("yeoman of the Queen's chamber [CSP]", the Calendar of State Papers), and the
+        # cataloguer's own initials unbracketed at the end (SMP, JMP, CBP). 1,325 such tokens were
+        # emitted across England and Wales and 55 found a match, which is how the sixth-busiest place
+        # on a map of Tudor litigation came to be the Chartered Society of Physiotherapy, and six
+        # Middlesex cases were placed at Castle Bar Park railway station.
         #
         # Only reachable in the per-row extraction path, where the text is prose. A user reconciling a
         # column of names that really are abbreviations is not affected.
