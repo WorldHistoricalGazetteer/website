@@ -7,8 +7,6 @@ an account touched its limit, every later request raised before the rollover cou
 limit became permanent: one account sat locked out for 16 days and 940k refused requests.
 """
 from datetime import timedelta
-from unittest import mock
-
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
@@ -23,7 +21,8 @@ User = get_user_model()
 class DailyLimitRolloverTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(
-            username='recon-client', password='x', email='recon@example.org')
+            username='recon-client', password='x', email='recon@example.org',
+            given_name='Recon', surname='Client')
         self.token = APIToken.objects.create(user=self.user, key='k-rollover')
         self.factory = RequestFactory()
 
