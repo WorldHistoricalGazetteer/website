@@ -308,9 +308,9 @@
           </p>
           <p>
             <strong>Remaining Daily Quota:</strong>
-            <span id="api-token-quota">{{ api_token_quota_remaining|localize }}</span> requests
+            <span id="api-token-quota">{% if api_token_quota_remaining is None %}Unlimited{% else %}{{ api_token_quota_remaining|localize }} requests{% endif %}</span>
             <i class="fas fa-info-circle text-muted smaller" data-bs-toggle="tooltip"
-               data-bs-title="The API token allows you to make up to {{ api_token_quota }} requests per day. This quota resets at midnight UTC. Refresh this page to update the remaining quota."></i>
+               data-bs-title="{% if api_token_quota %}The API token allows you to make up to {{ api_token_quota }} requests per day. This quota resets at midnight UTC. Refresh this page to update the remaining quota. A single reconciliation request may carry up to 50 queries and is charged as one call.{% else %}This account has no daily API cap.{% endif %}"></i>
           </p>
           <button class="generate-token btn btn-sm btn-outline-secondary me-2">
             <i class="fas fa-sync-alt me-1"></i> Regenerate Token
