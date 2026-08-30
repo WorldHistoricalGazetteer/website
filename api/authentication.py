@@ -53,7 +53,13 @@ class TokenQueryOrBearerAuthentication(BaseAuthentication):
 
             user = token.user
             profile, _ = UserAPIProfile.objects.get_or_create(user=user)
-            if profile.daily_limit and profile.daily_count >= profile.daily_limit:
+            # Ask `remaining_today()`, not `daily_count` directly: the day rollover lives inside
+            # `increment_usage()`, which this branch never reaches once the cap is hit. Reading the
+            # raw counter therefore turned a DAILY cap into a PERMANENT lockout — the account stayed
+            # at limit/limit with `daily_reset` frozen on the day it was exhausted, and no amount of
+            # waiting cleared it. `remaining_today()` applies the rollover; `increment_usage()` below
+            # then writes it back. None means UNLIMITED, so compare against 0 explicitly.
+            if profile.remaining_today() == 0:
                 raise AuthenticationFailed(
                     f"Daily API limit ({profile.daily_limit} calls) exceeded"
                 )

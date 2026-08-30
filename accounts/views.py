@@ -316,7 +316,7 @@ def profile_edit(request):
                 form = UserModelForm(instance=request.user)
                 api_token = getattr(request.user, "api_token", None)
                 api_profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
-                remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
+                remaining_quota = api_profile.remaining_today()   # None ⇒ unlimited
                 total_quota = api_profile.daily_limit
 
                 def not_available_html(field_name):
@@ -384,7 +384,7 @@ def profile_edit(request):
     # Ensure profile exists
     api_profile, _ = UserAPIProfile.objects.get_or_create(user=request.user)
 
-    remaining_quota = max(api_profile.daily_limit - api_profile.daily_count, 0)
+    remaining_quota = api_profile.remaining_today()   # None ⇒ unlimited (a falsy daily_limit)
     total_quota = api_profile.daily_limit
 
     # Helper to generate "not available" HTML with tooltip
