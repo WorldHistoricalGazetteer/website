@@ -16,6 +16,7 @@ Two conventions to preserve:
 import datetime
 
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
 from django.db.models import Count
 from django.utils import timezone
 from django.utils.html import format_html
@@ -23,7 +24,10 @@ from django.utils.html import format_html
 from users.models import email_lookup_hash
 
 from . import privacy
-from .admin_links import add_hint, changelist_url, panel
+from .admin_links import (
+    NamedUserAutocompleteView, UserNameChoiceField, add_hint, changelist_url,
+    panel, user_label,
+)
 from .models import (
     ActionItem, Content, Engagement, Interaction, Organisation, Person,
     Project, Review, Source, SourceSuggestion, TrackedDataset,
@@ -104,6 +108,15 @@ for _model in (Stage, EngagementStage, ActionItemStatus):
 # --------------------------------------------------------------------------
 # Catalogue
 # --------------------------------------------------------------------------
+
+class UserLabelMixin:
+    """Label every account field on this ModelAdmin by name, not username."""
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.remote_field.model is get_user_model():
+            kwargs.setdefault("form_class", UserNameChoiceField)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
 
 class ConnectionsMixin:
     """Adds the read-only "Connections" panel described in admin_links.py.
@@ -207,7 +220,7 @@ class RetentionFilter(admin.SimpleListFilter):
 
 
 @admin.register(Person)
-class PersonAdmin(ConnectionsMixin, admin.ModelAdmin):
+class PersonAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     list_display = ("name", "account", "shown_affiliation", "role", "status",
                     "reach", "engagements_count", "datasets_count",
                     "notice_state", "last_seen")
@@ -520,11 +533,12 @@ class ReviewInline(admin.TabularInline):
 
 
 @admin.register(TrackedDataset)
-class TrackedDatasetAdmin(ConnectionsMixin, admin.ModelAdmin):
+class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     list_display = ("title", "kind", "stage", "owner", "permission_status",
                     "records", "reconciliation", "review_state", "on_whg",
                     "is_active")
     list_editable = ("stage", "owner", "permission_status")
+    #: Widget labels come from UserLabelMixin; this is the read-only column.
     list_filter = (ProspectFilter, "stage", "permission_status",
                    ResponsibleFilter, "is_active", "data_format",
                    "geometry_status", "discovery_source", "regions")
@@ -717,7 +731,7 @@ class UntriagedFilter(admin.SimpleListFilter):
 
 
 @admin.register(SourceSuggestion)
-class SourceSuggestionAdmin(admin.ModelAdmin):
+class SourceSuggestionAdmin(UserLabelMixin, admin.ModelAdmin):
     list_display = ("title", "author_compiler", "status", "submitter_name",
                     "created_at", "promoted")
     list_editable = ("status",)
@@ -844,7 +858,7 @@ class StaleFilter(admin.SimpleListFilter):
 
 
 @admin.register(Engagement)
-class EngagementAdmin(ConnectionsMixin, admin.ModelAdmin):
+class EngagementAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     list_display = ("person", "subject", "dataset", "stage",
                     "priority", "who", "next_follow_up", "state")
     list_editable = ("stage", "priority", "next_follow_up")
@@ -895,7 +909,7 @@ class EngagementAdmin(ConnectionsMixin, admin.ModelAdmin):
         if not person:
             return "—"
         inherited = "" if obj.responsible_id else " (inherited)"
-        return f"{person}{inherited}"
+        return f"{user_label(person)}{inherited}"
 
     @admin.display(description="state")
     def state(self, obj):
@@ -905,7 +919,7 @@ class EngagementAdmin(ConnectionsMixin, admin.ModelAdmin):
 
 
 @admin.register(Interaction)
-class InteractionAdmin(admin.ModelAdmin):
+class InteractionAdmin(UserLabelMixin, admin.ModelAdmin):
     list_display = ("occurred_on", "person", "channel", "summary", "added_by")
     list_filter = ("channel",)
     search_fields = ("summary", "person__name")
@@ -914,7 +928,7 @@ class InteractionAdmin(admin.ModelAdmin):
 
 
 @admin.register(ActionItem)
-class ActionItemAdmin(admin.ModelAdmin):
+class ActionItemAdmin(UserLabelMixin, admin.ModelAdmin):
     list_display = ("description", "assignee", "due_date", "status", "overdue")
     list_editable = ("assignee", "due_date", "status")
     list_filter = ("status", "assignee")
@@ -931,7 +945,7 @@ class ActionItemAdmin(admin.ModelAdmin):
 # --------------------------------------------------------------------------
 
 @admin.register(Content)
-class ContentAdmin(admin.ModelAdmin):
+class ContentAdmin(UserLabelMixin, admin.ModelAdmin):
     list_display = ("title", "content_type", "status", "author", "planned_for",
                     "published_on")
     list_editable = ("status", "planned_for")

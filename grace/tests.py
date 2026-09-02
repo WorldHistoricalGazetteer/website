@@ -947,7 +947,15 @@ class ResponsibleFilterTests(TestCase):
         TrackedDataset.objects.create(title="Owned", owner=self.owner)
         body = self.client.get(
             "/grace/admin/grace/trackeddataset/").content.decode()
-        self.assertIn("Ruth Mostern", body)
+        self.assertIn(
+            f'<a href="?responsible={self.owner.pk}">Ruth Mostern</a>', body)
+
+    def test_the_owner_widget_shows_a_name_too(self):
+        """The inline-edit select renders its selected option server-side, so
+        the filter alone was not enough."""
+        TrackedDataset.objects.create(title="Owned", owner=self.owner)
+        body = self.client.get(
+            "/grace/admin/grace/trackeddataset/").content.decode()
         self.assertNotIn("mostern-0000-0001-8219-7174", body)
 
     def test_people_who_own_nothing_are_not_offered(self):

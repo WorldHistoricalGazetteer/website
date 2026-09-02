@@ -257,4 +257,26 @@ def register_grace_models():
             continue
         if model in grace_admin_site._registry:
             continue
-        grace_admin_site.register(model, type(model_admin))
+        grace_admin_site.register(model, _admin_class_for(model, model_admin))
+
+
+def _admin_class_for(model, model_admin):
+    """The ModelAdmin to mirror, with GRACE's one substitution.
+
+    Accounts are offered as *people* throughout GRACE, but ``User.__str__`` is
+    the ORCID-derived username. The form-side label is handled by
+    ``UserLabelMixin``; this covers the other half, the select2 endpoint that
+    serves the dropdown's options.
+    """
+    base = type(model_admin)
+    if model._meta.label_lower != "users.user":
+        return base
+
+    from .admin_links import NamedUserAutocompleteView
+
+    def autocomplete_view(self, request):
+        return NamedUserAutocompleteView.as_view(
+            admin_site=self.admin_site)(request)
+
+    return type("GraceUserAdmin", (base,),
+                {"autocomplete_view": autocomplete_view})

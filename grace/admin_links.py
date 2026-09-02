@@ -14,6 +14,8 @@ Everything is rendered against ``admin_site.name``, so the same ModelAdmin
 produces GRACE links inside ``/grace/admin/`` and stock links inside
 ``/admin/`` without knowing which it is in.
 """
+from django import forms
+from django.contrib.admin.views.autocomplete import AutocompleteJsonView
 from django.urls import NoReverseMatch, reverse
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
@@ -111,3 +113,36 @@ def add_hint():
         '<span style="color:var(--body-quiet-color)">Save this record first — '
         'its connections appear here once it exists.</span>'
     )
+
+
+# --------------------------------------------------------------------------
+# Accounts, shown as people
+# --------------------------------------------------------------------------
+
+def user_label(user):
+    """A WHG account as a person's name.
+
+    ``User.__str__`` is the username, which on this project is ORCID-derived
+    (``davf-sa-0009-0006-6530-9940``). That is fine in a log and useless in a
+    picker, so GRACE labels accounts by name everywhere it offers one. Changing
+    ``__str__`` itself would reach the whole site, so this stays local.
+    """
+    if user is None:
+        return ""
+    return (getattr(user, "name", "")
+            or f"{user.given_name or ''} {user.surname or ''}".strip()
+            or user.get_username())
+
+
+class UserNameChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        return user_label(obj)
+
+
+class NamedUserAutocompleteView(AutocompleteJsonView):
+    """The AJAX half of the same thing — select2 fetches its options here."""
+
+    def serialize_result(self, obj, to_field_name):
+        result = super().serialize_result(obj, to_field_name)
+        result["text"] = user_label(obj)
+        return result
