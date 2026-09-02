@@ -140,6 +140,7 @@ class GraceAdminSite(admin.AdminSite):
             **self.each_context(request),
             "title": "",
             "board": self._board(),
+            "board_total": self._board_total,
             "board_url": "/grace/admin/grace/trackeddataset/",
             "registers": registers,
             "vocabularies": vocabularies,
@@ -155,22 +156,37 @@ class GraceAdminSite(admin.AdminSite):
     BOARD_ROWS = 30
 
     def _board(self):
-        """Active datasets, most-urgent first, for the landing page.
+        """Active datasets, furthest along first, for the landing page.
 
-        Ordering is the point: the things that have stalled or are waiting on
-        us come first, so the top of the board is the work. Everything here is
-        one query plus the prefetches; the read-throughs to the Register and to
-        ``datasets.Dataset`` are per-row and so are deliberately not in the
-        board — the changelist has them.
+        Ordering is the point. Everything starts at "on our radar", so sorting
+        by stage ascending would fill the top of the board with the backlog and
+        bury the four things anyone is actually working on. Descending puts the
+        work first and lets the backlog fall off the end, where the full
+        changelist picks it up. Terminal stages ("declined", "complete") sort
+        after the live ones however far along they are, and a dataset with no
+        stage at all goes last rather than first.
+
+        One query plus the prefetch. The read-throughs to the Register and to
+        ``datasets.Dataset`` are per-row, so they stay off the board and live
+        on the changelist instead.
         """
+        from django.db.models import Case, F, IntegerField, Value, When
+
         from .models import TrackedDataset
 
-        rows = (TrackedDataset.objects
+        live = (TrackedDataset.objects
                 .filter(is_active=True)
                 .select_related("stage", "owner", "permission_status",
                                 "registry", "project")
                 .prefetch_related("reviews")
-                .order_by("stage__sort_order", "title")[:self.BOARD_ROWS])
+                .annotate(_shelved=Case(
+                    When(stage__is_open=False, then=Value(1)),
+                    default=Value(0), output_field=IntegerField()))
+                .order_by("_shelved",
+                          F("stage__sort_order").desc(nulls_last=True),
+                          "title"))
+        self._board_total = live.count()
+        rows = live[:self.BOARD_ROWS]
         board = []
         for row in rows:
             reviews = list(row.reviews.all())
