@@ -432,7 +432,8 @@ function fromJSON(data) {
   const citation = lpfCitation(data);
   const notes = [note, lpf.note].filter(Boolean);
   return { columns, rows, total: rows.length, roles, note: notes.join('; '),
-           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, rowNames: lpf.rowNames, citation };
+           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, rowNames: lpf.rowNames,
+           rowGeomMeta: lpf.rowGeomMeta, citation };
 }
 
 // ── Linked Places import: read the record, not just its properties ───────────────────────────────
@@ -482,6 +483,20 @@ function addLpfColumns(records, columns, rows, roles) {
   records.forEach((f, i) => {
     const ns = ((f && f.names) || []).filter((n) => n && (n.toponym || n.ethnonym) && (n.lang || n.citations));
     if (ns.length) rowNames[i] = ns.map((n) => Object.assign({}, n));
+  });
+
+  // …and what it said about each GEOMETRY. The coordinates themselves survive as lon/lat or WKT
+  // columns, so a bare point round-trips fine; everything qualifying it does not. That is the part a
+  // careful dataset spends its effort on — `approximation` carries the source's own stated precision
+  // (`geo:hasSpatialAccuracy`, tolerance in km), and losing it discards the figure a methodology may
+  // require be retained, while keeping the coordinate it qualifies (place#231).
+  const rowGeomMeta = {};
+  records.forEach((f, i) => {
+    const g = f && f.geometry;
+    if (!g || typeof g !== 'object') return;
+    const meta = {};
+    ['certainty', 'approximation', 'citations', 'when'].forEach((k) => { if (g[k] != null) meta[k] = g[k]; });
+    if (Object.keys(meta).length) rowGeomMeta[i] = JSON.parse(JSON.stringify(meta));
   });
 
   // Place types. The identifiers go straight into rowTypes (where the LPF builder reads them); the
@@ -540,7 +555,8 @@ function addLpfColumns(records, columns, rows, roles) {
   }
 
   return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null,
-           rowNames: Object.keys(rowNames).length ? rowNames : null, note: notes.join('; ') };
+           rowNames: Object.keys(rowNames).length ? rowNames : null,
+           rowGeomMeta: Object.keys(rowGeomMeta).length ? rowGeomMeta : null, note: notes.join('; ') };
 }
 
 // The file's own dataset metadata, so a contributor's citation survives a round trip instead of
@@ -2461,6 +2477,7 @@ async function finishImport(parsed, fileName, format) {
     rowTypes: parsed.rowTypes || {},
     rowLinks: parsed.rowLinks || {},
     rowNames: parsed.rowNames || {},
+    rowGeomMeta: parsed.rowGeomMeta || {},
   };
   // Dataset metadata the file carried. Applied AFTER the project exists, because the defaults read
   // `project.fileName` for the fallback title and would otherwise read the previous project's.
@@ -2933,7 +2950,7 @@ async function buildExportRecords(opts, onProgress) {
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd,
-                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i), fileNames: rowNamesFor(i),
+                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i), fileNames: rowNamesFor(i), fileGeomMeta: rowGeomMetaFor(i),
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -3156,6 +3173,15 @@ function buildLPF(data) {
       let gts = timespanFrom(rec.geomWhenStart, rec.geomWhenEnd);
       if (!gts) { const gsc = getScope(); if (gsc) gts = timespanFrom(gsc.geomStart, gsc.geomEnd); }
       if (gts) feat.geometry = Object.assign({}, feat.geometry, { when: { timespans: [gts] } });
+    }
+    // What the imported file said about this geometry, restored. Only when the shape is still the
+    // file's own: a shape the contributor has since drawn or cloned is a different shape, and the
+    // old assessment of accuracy does not describe it. A capture date given here wins over the
+    // file's, being the more recent statement about the same shape.
+    if (feat.geometry && !rec.geomProv && rec.fileGeomMeta) {
+      const restored = Object.assign({}, rec.fileGeomMeta);
+      if (feat.geometry.when) delete restored.when;
+      feat.geometry = Object.assign({}, feat.geometry, restored);
     }
     // Each accepted/auto-confirmed match becomes a closeMatch link, carrying WHG's reconciliation
     // confidence under the SAME name the CSV/JSON exports use, so the score is findable by one name in
@@ -7076,6 +7102,9 @@ function rowTypesFor(i) { return (project && project.rowTypes && project.rowType
 function rowLinksFor(i) { return (project && project.rowLinks && project.rowLinks[i]) || []; }
 // `names[]` entries the imported file carried, with their `lang` and `citations` intact (place#230).
 function rowNamesFor(i) { return (project && project.rowNames && project.rowNames[i]) || []; }
+// What the imported file said about this row's geometry — certainty, stated precision, citations,
+// validity — as distinct from the coordinates, which travel as columns (place#231).
+function rowGeomMetaFor(i) { return (project && project.rowGeomMeta && project.rowGeomMeta[i]) || null; }
 function untypedRowCount() { if (!project) return 0; let n = 0; for (let i = 0; i < project.rows.length; i++) if (!rowTypesFor(i).length) n += 1; return n; }
 // Append a blank type-role column ("Place type") when the dataset has none. Undoable (column snapshot).
 function addPlaceTypeColumn() {
