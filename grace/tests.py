@@ -972,3 +972,41 @@ class ResponsibleFilterTests(TestCase):
         ).content.decode()
         self.assertIn("Owned", body)
         self.assertNotIn("Unowned", body)
+
+
+class PickerLabelTests(TestCase):
+    """Nothing in GRACE should offer a machine identifier as a choice.
+
+    A WHG account renders as an ORCID-derived username and a Register entry as
+    "gn (authority)". Both are right in a shell and useless in a picker.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="picker-1", email="picker@example.org", password="pw",
+            given_name="Pick", surname="Er", name="Pick Er")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+        GazetteerRegistryEntry.objects.create(
+            id="gnx", name="GeoNames Example", namespace="gnx",
+            entry_class="authority", record_count=1, status="published")
+        GazetteerRegistryEntry.objects.create(
+            id="whg:9", name="A contribution", namespace="whg",
+            entry_class="dataset", record_count=1, status="published")
+        self.dataset = TrackedDataset.objects.create(title="Needs a picker")
+
+    def test_register_entries_are_offered_by_name(self):
+        body = self.client.get(
+            f"/grace/admin/grace/trackeddataset/{self.dataset.pk}/change/"
+        ).content.decode()
+        self.assertIn("GeoNames Example (gnx)", body)
+
+    def test_only_authorities_are_reconciliation_targets(self):
+        """The Register also holds a row per WHG dataset; offering those
+        alongside GeoNames would make the picker useless."""
+        body = self.client.get(
+            f"/grace/admin/grace/trackeddataset/{self.dataset.pk}/change/"
+        ).content.decode()
+        self.assertNotIn("A contribution (whg:9)", body)

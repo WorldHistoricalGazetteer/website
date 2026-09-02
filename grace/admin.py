@@ -25,8 +25,8 @@ from users.models import email_lookup_hash
 
 from . import privacy
 from .admin_links import (
-    NamedUserAutocompleteView, UserNameChoiceField, add_hint, changelist_url,
-    panel, user_label,
+    RegistryChoiceField, RegistryMultipleChoiceField, UserNameChoiceField,
+    add_hint, changelist_url, panel, user_label,
 )
 from .models import (
     ActionItem, Content, Engagement, Interaction, Organisation, Person,
@@ -599,16 +599,24 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
             "permission_status")
 
     def formfield_for_manytomany(self, db_field, request, **kwargs):
-        """Only authorities are reconciliation targets.
+        """Only authorities are reconciliation targets, and they go by name.
 
         The Register also holds a row per WHG dataset, and offering 40-odd of
-        those alongside GeoNames would make the picker useless.
+        those alongside GeoNames would make the picker useless. Entries are
+        labelled by name rather than by __str__, which renders ``gn
+        (authority)`` — right for a shell, wrong for choosing an authority.
         """
         if db_field.name == "reconciled_against":
             from api.models import GazetteerRegistryEntry
             kwargs["queryset"] = GazetteerRegistryEntry.objects.filter(
                 entry_class="authority").order_by("name")
+            kwargs.setdefault("form_class", RegistryMultipleChoiceField)
         return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "registry":
+            kwargs.setdefault("form_class", RegistryChoiceField)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
     def connection_sections(self, obj):
         site = self.admin_site.name

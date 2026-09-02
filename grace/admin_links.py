@@ -146,3 +146,42 @@ class NamedUserAutocompleteView(AutocompleteJsonView):
         result = super().serialize_result(obj, to_field_name)
         result["text"] = user_label(obj)
         return result
+
+
+# --------------------------------------------------------------------------
+# Register entries, shown by name
+# --------------------------------------------------------------------------
+
+def registry_label(entry):
+    """A Gazetteer Register entry as its name plus its id.
+
+    ``GazetteerRegistryEntry.__str__`` renders the namespace and class —
+    ``gn (authority)`` — which is right for a developer reading a shell and
+    wrong for someone choosing what a dataset was reconciled against. The id
+    stays, because it is what appears in the Register and in the API.
+    """
+    if entry is None:
+        return ""
+    name = getattr(entry, "name", "") or ""
+    return f"{name} ({entry.pk})" if name else str(entry)
+
+
+class RegistryChoiceMixin:
+    def label_from_instance(self, obj):
+        return registry_label(obj)
+
+
+class RegistryChoiceField(RegistryChoiceMixin, forms.ModelChoiceField):
+    pass
+
+
+class RegistryMultipleChoiceField(RegistryChoiceMixin,
+                                  forms.ModelMultipleChoiceField):
+    pass
+
+
+class NamedRegistryAutocompleteView(AutocompleteJsonView):
+    def serialize_result(self, obj, to_field_name):
+        result = super().serialize_result(obj, to_field_name)
+        result["text"] = registry_label(obj)
+        return result

@@ -260,23 +260,34 @@ def register_grace_models():
         grace_admin_site.register(model, _admin_class_for(model, model_admin))
 
 
-def _admin_class_for(model, model_admin):
-    """The ModelAdmin to mirror, with GRACE's one substitution.
+#: Support models whose ``__str__`` is unhelpful in a picker, and the view that
+#: relabels their select2 options. The form-side half is handled by
+#: ``UserLabelMixin`` and ``formfield_for_*`` in ``admin.py``; this covers the
+#: AJAX half, which fetches its options straight from the target model's admin.
+RELABELLED_AUTOCOMPLETES = {
+    "users.user": "NamedUserAutocompleteView",
+    "api.gazetteerregistryentry": "NamedRegistryAutocompleteView",
+}
 
-    Accounts are offered as *people* throughout GRACE, but ``User.__str__`` is
-    the ORCID-derived username. The form-side label is handled by
-    ``UserLabelMixin``; this covers the other half, the select2 endpoint that
-    serves the dropdown's options.
+
+def _admin_class_for(model, model_admin):
+    """The ModelAdmin to mirror, with GRACE's relabelling applied.
+
+    A WHG account renders as an ORCID-derived username and a Register entry as
+    ``gn (authority)``. Both are right for a developer reading a shell and
+    useless in a picker, and changing either ``__str__`` would reach the whole
+    site — so the substitution stays here.
     """
     base = type(model_admin)
-    if model._meta.label_lower != "users.user":
+    view_name = RELABELLED_AUTOCOMPLETES.get(model._meta.label_lower)
+    if not view_name:
         return base
 
-    from .admin_links import NamedUserAutocompleteView
+    from . import admin_links
+    view = getattr(admin_links, view_name)
 
     def autocomplete_view(self, request):
-        return NamedUserAutocompleteView.as_view(
-            admin_site=self.admin_site)(request)
+        return view.as_view(admin_site=self.admin_site)(request)
 
-    return type("GraceUserAdmin", (base,),
+    return type(f"Grace{base.__name__}", (base,),
                 {"autocomplete_view": autocomplete_view})
