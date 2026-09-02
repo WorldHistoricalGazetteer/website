@@ -610,9 +610,16 @@ class GraceAdminThemeTests(TestCase):
         self.assertIn("grace/admin.css", body)
 
     def test_the_acronym_is_spelled_out_in_the_header(self):
+        """Each initial is emboldened, so the words arrive split by markup.
+
+        GRACE keeps its expansion even though the register it names is now
+        People: the acronym is the product's name, and "contact engagement" is
+        still what the Engagement register records.
+        """
         body = self.client.get("/grace/admin/").content.decode()
-        for word in ("Gazetteer", "Register", "Contact", "Engagement"):
-            self.assertIn(word, body)
+        for initial, rest in (("G", "azetteer"), ("R", "egister"),
+                              ("A", "nd"), ("C", "ontact"), ("E", "ngagement")):
+            self.assertIn(f"<b>{initial}</b>{rest}", body)
 
     def test_the_default_admin_is_left_alone(self):
         """base_site.html is shared, so /admin/ must be untouched."""
