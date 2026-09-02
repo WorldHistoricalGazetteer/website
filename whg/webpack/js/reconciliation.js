@@ -547,6 +547,11 @@ function lpfCitation(data) {
   const out = {};
   const title = text(idx && idx.name) || text(csl && csl.title);
   if (title) out.title = title;
+  // The file's own description. Missed on the first pass because the citation seeding (place#224)
+  // was written before there was a description field to seed (place#227) — so a file that carried
+  // one still produced a dataset that reported having none. `abstract` is CSL's name for it.
+  const description = text(idx && idx.description) || text(csl && csl.abstract);
+  if (description) out.description = description;
   if (year) out.year = year;
   const version = text(idx && idx.version) || text(csl && csl.version);
   if (version) out.version = version;
