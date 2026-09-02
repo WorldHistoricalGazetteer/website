@@ -84,7 +84,15 @@ class UserManager(BaseUserManager):
         if not surname:
             raise ValueError(_("The surname must be set"))
         email = self.normalize_email(email)
-        user = self.model(username=username, email=email, **extra_fields)
+        # given_name and surname are named parameters, so they are NOT in
+        # extra_fields and have to be passed through explicitly. Omitting them
+        # dropped both silently — and save() derives `name` from them, so every
+        # account created this way ended up displaying its username instead of
+        # the person's name.
+        user = self.model(
+            username=username, email=email,
+            given_name=given_name, surname=surname, **extra_fields,
+        )
         user.set_password(password)
         user.save()
         return user
