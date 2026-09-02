@@ -3,20 +3,23 @@
 DESIGN DECISION 3 (see ``developer/whg-tracker-review.html`` §5). These are
 tables, **not** ``choices=`` tuples, and that is deliberate. A ``choices`` list
 is frozen in code: changing it needs a developer, a migration and a deploy. A
-lookup table is editable in the Django admin in ten seconds, by Palak, without
-us. Self-service is the reason the team wanted a no-code tool in the first
+lookup table is editable in the Django admin in ten seconds, by an editor,
+without a developer. Self-service is the reason the team wanted a no-code tool in the first
 place, and this is what preserves it.
 
 **Do not "tidy" these into ``choices=``.** If you are tempted, the test is
-whether *code branches on a specific value*. Almost nothing here does. The two
+whether *code branches on a specific value*. Almost nothing here does. The few
 exceptions are handled properly, by a boolean flag on the row rather than by
 matching a label:
 
 * ``Stage.is_open`` and ``EngagementStage.is_open`` — the staleness alarm and
   the mandatory-follow-up rule branch on these (see ``models.Engagement``).
 * ``ActionItemStatus.is_open`` — same, for outstanding tasks.
+* ``IntakeStatus.is_untriaged`` — the public-suggestion queue badge.
+* ``PersonRole.is_internal`` — exempts our own people from the Article 14
+  notice queue.
 
-Code must branch on those flags, never on ``slug`` or ``label``, so Palak can
+Code must branch on those flags, never on ``slug`` or ``label``, so an editor can
 rename or add terms without breaking anything.
 """
 from django.db import models
@@ -67,24 +70,39 @@ class VocabularyTerm(models.Model):
 # Catalogue vocabularies
 # --------------------------------------------------------------------------
 
-class ContactRole(VocabularyTerm):
-    """What a person is to us — compiler, rights holder, archivist, and so on."""
+class PersonRole(VocabularyTerm):
+    """What a person is to us — compiler, rights holder, archivist, WHG staff.
+
+    ``is_internal`` is the one flag code reads: it marks our own side (staff,
+    collaborators, technical experts) so that colleagues do not appear in the
+    Article 14 privacy-notice queue. That obligation applies to people whose
+    details we obtained from somewhere other than themselves; our own people
+    are told at hiring, under Article 13.
+    """
+
+    is_internal = models.BooleanField(
+        default=False,
+        verbose_name="one of us",
+        help_text="Tick for roles on WHG's own side — staff, collaborators, "
+                  "technical experts. People in an internal role are exempt "
+                  "from the Article 14 notice queue.",
+    )
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "contact role"
-        verbose_name_plural = "contact roles"
+        verbose_name = "person role"
+        verbose_name_plural = "person roles"
 
 
-class ContactStatus(VocabularyTerm):
+class PersonStatus(VocabularyTerm):
     """Where a person stands with us — active, dormant, do-not-contact.
 
     Note that *dormant* is a status, not erasure. A genuine erasure request is
-    handled by ``Contact.pseudonymise()``, which is a different thing entirely.
+    handled by ``Person.pseudonymise()``, which is a different thing entirely.
     """
 
     class Meta(VocabularyTerm.Meta):
-        verbose_name = "contact status"
-        verbose_name_plural = "contact statuses"
+        verbose_name = "person status"
+        verbose_name_plural = "person statuses"
 
 
 class OrganisationType(VocabularyTerm):
@@ -104,10 +122,10 @@ class ProjectStatus(VocabularyTerm):
 class SourceType(VocabularyTerm):
     """What kind of source a bibliography entry is.
 
-    One term needs care: the *printed gazetteer*. That is the single place in
-    GRACE where "gazetteer" means a **lead** — something we might turn into a
-    WHG gazetteer — rather than a contribution WHG holds. The label says so
-    explicitly for that reason (review §8).
+    This is where the *printed gazetteer* lives — the bibliographic sense of
+    the word, a reference work we might mine for places. It is deliberately
+    not the name of the pipeline record: what a contributor brings is a
+    ``TrackedDataset``, and it becomes a gazetteer once published.
     """
 
     class Meta(VocabularyTerm.Meta):
@@ -141,11 +159,11 @@ class DiscoverySource(VocabularyTerm):
 # --------------------------------------------------------------------------
 
 class Stage(VocabularyTerm):
-    """The **editorial** stage of a gazetteer on its way into WHG.
+    """The **editorial** stage of a dataset on its way into WHG.
 
     Editorial values only. The derived, machine-known values — *published*,
     *indexed*, *not indexed* — are deliberately absent: they are read through
-    ``TrackedGazetteer.registry`` instead, because the ingest push owns them and
+    ``TrackedDataset.registry`` instead, because the ingest push owns them and
     typing them here would only let the two copies drift (review §2).
 
     ``is_open`` is the one flag code branches on: an engagement sitting at an
@@ -239,7 +257,7 @@ class EngagementStage(VocabularyTerm):
 
 class Priority(VocabularyTerm):
     """Priority of a conversation. A property of the engagement, not of the
-    gazetteer (review §7, Q2)."""
+    dataset (review §7, Q2)."""
 
     class Meta(VocabularyTerm.Meta):
         verbose_name = "priority"

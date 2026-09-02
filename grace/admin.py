@@ -10,7 +10,7 @@ Two conventions to preserve:
 * Every vocabulary is editable here — that is the whole point of decision 3.
   ``VocabularyAdmin`` gives inline editing of order and retirement.
 * Nothing displays a raw encrypted address in a list view without going through
-  the resolved accessor, and contact search matches email by HMAC rather than
+  the resolved accessor, and person search matches email by HMAC rather than
   by scanning (the column is encrypted and unqueryable).
 """
 import datetime
@@ -23,11 +23,11 @@ from users.models import email_lookup_hash
 
 from . import privacy
 from .models import (
-    ActionItem, Contact, Content, Engagement, Interaction, Organisation,
-    Project, Source, SourceSuggestion, TrackedGazetteer,
+    ActionItem, Person, Content, Engagement, Interaction, Organisation,
+    Project, Source, SourceSuggestion, TrackedDataset,
 )
 from .vocabularies import (
-    ActionItemStatus, ContactRole, ContactStatus, ContentItemType,
+    ActionItemStatus, PersonRole, PersonStatus, ContentItemType,
     ContentStatus, DigitizationStatus, DiscoverySource, EngagementOutcome,
     EngagementStage, IntakeStatus, InteractionChannel, OrganisationType,
     PermissionStatus, Priority, ProjectStatus, ReviewRecommendation,
@@ -70,7 +70,17 @@ class IntakeStatusAdmin(VocabularyAdmin):
     list_filter = ("is_untriaged", "is_active")
 
 
-for _model in (ContactRole, ContactStatus, OrganisationType, ProjectStatus,
+@admin.register(PersonRole)
+class PersonRoleAdmin(VocabularyAdmin):
+    """The People register is everyone, so this vocabulary has to say which
+    roles are ours — that is what keeps colleagues out of the Art. 14 queue."""
+
+    list_display = ("label", "is_internal", "sort_order", "is_active", "description")
+    list_editable = ("is_internal", "sort_order", "is_active")
+    list_filter = ("is_internal", "is_active")
+
+
+for _model in (PersonStatus, OrganisationType, ProjectStatus,
                SourceType, DigitizationStatus, DiscoverySource,
                PermissionStatus, ReviewRecommendation, Priority,
                InteractionChannel, EngagementOutcome, ContentItemType,
@@ -101,7 +111,8 @@ class PrivacyNoticeFilter(admin.SimpleListFilter):
     parameter_name = "notice"
 
     def lookups(self, request, model_admin):
-        return [("overdue", "Overdue"), ("sent", "Sent"), ("pending", "Not yet due")]
+        return [("overdue", "Overdue"), ("sent", "Sent"),
+                ("pending", "Not yet due"), ("internal", "N/A — one of us")]
 
     def queryset(self, request, queryset):
         if self.value() == "overdue":
@@ -109,10 +120,12 @@ class PrivacyNoticeFilter(admin.SimpleListFilter):
         if self.value() == "sent":
             return queryset.filter(privacy_notice_sent_at__isnull=False)
         if self.value() == "pending":
-            return queryset.filter(
+            return queryset.exclude(role__is_internal=True).filter(
                 privacy_notice_sent_at__isnull=True,
                 created_at__gte=privacy.privacy_notice_cutoff(),
             )
+        if self.value() == "internal":
+            return queryset.filter(role__is_internal=True)
         return queryset
 
 
@@ -131,8 +144,8 @@ class RetentionFilter(admin.SimpleListFilter):
         return queryset
 
 
-@admin.register(Contact)
-class ContactAdmin(admin.ModelAdmin):
+@admin.register(Person)
+class PersonAdmin(admin.ModelAdmin):
     list_display = ("name", "account", "shown_affiliation", "role", "status",
                     "newsletter", "notice_state", "last_seen")
     list_filter = ("role", "status", "is_erased", PrivacyNoticeFilter,
@@ -144,7 +157,7 @@ class ContactAdmin(admin.ModelAdmin):
     filter_horizontal = ("regions",)
     readonly_fields = ("is_erased", "erased_at", "created_at", "updated_at",
                        "lawful_basis")
-    actions = ["mark_privacy_notice_sent", "pseudonymise_contacts"]
+    actions = ["mark_privacy_notice_sent", "pseudonymise_people"]
 
     fieldsets = (
         ("Identity", {
@@ -154,7 +167,7 @@ class ContactAdmin(admin.ModelAdmin):
                            "copies below are cleared on save.",
         }),
         ("Affiliation", {"fields": ("organisation", "affiliation_text")}),
-        ("Contact details", {
+        ("Person details", {
             "fields": ("email", "orcid"),
             "description": "The address is encrypted at rest. Leave blank for a "
                            "person with a linked account.",
@@ -192,6 +205,8 @@ class ContactAdmin(admin.ModelAdmin):
 
     @admin.display(description="Art. 14")
     def notice_state(self, obj):
+        if obj.is_internal:
+            return format_html('<span style="color:#888">n/a — one of us</span>')
         if obj.privacy_notice_sent_at:
             return format_html('<span style="color:#1a7a3c">sent</span>')
         if obj.privacy_notice_overdue:
@@ -219,19 +234,19 @@ class ContactAdmin(admin.ModelAdmin):
     def mark_privacy_notice_sent(self, request, queryset):
         n = queryset.filter(privacy_notice_sent_at__isnull=True).update(
             privacy_notice_sent_at=timezone.now())
-        self.message_user(request, f"Notice recorded for {n} contact(s).",
+        self.message_user(request, f"Notice recorded for {n} person/people.",
                           messages.SUCCESS)
 
     @admin.action(description="Erase personal data (keep engagement history)")
-    def pseudonymise_contacts(self, request, queryset):
+    def pseudonymise_people(self, request, queryset):
         """Obligation 3. Not a delete — the interaction log survives intact."""
         done = 0
-        for contact in queryset.filter(is_erased=False):
-            contact.pseudonymise()
+        for person in queryset.filter(is_erased=False):
+            person.pseudonymise()
             done += 1
         self.message_user(
             request,
-            f"Erased {done} contact(s). Engagement and interaction history was "
+            f"Erased {done} person/people. Engagement and interaction history was "
             f"kept, with the identity removed.",
             messages.WARNING,
         )
@@ -243,7 +258,7 @@ class ProjectAdmin(admin.ModelAdmin):
     list_filter = ("status", "organisation")
     search_fields = ("name", "description", "funder", "grant_number", "notes")
     autocomplete_fields = ("status", "organisation")
-    filter_horizontal = ("regions", "contacts")
+    filter_horizontal = ("regions", "people")
 
 
 @admin.register(Source)
@@ -254,7 +269,7 @@ class SourceAdmin(admin.ModelAdmin):
     search_fields = ("title", "volume_example", "author_compiler",
                      "region_covered", "repository", "notes")
     autocomplete_fields = ("source_type", "digitization_status")
-    filter_horizontal = ("regions", "documents", "derived_gazetteers")
+    filter_horizontal = ("regions", "documents", "derived_datasets")
 
     fieldsets = (
         ("Bibliographic", {
@@ -264,10 +279,10 @@ class SourceAdmin(admin.ModelAdmin):
         }),
         ("Coverage", {"fields": ("regions", "region_covered")}),
         ("Access", {"fields": ("repository", "source_url", "digitization_status")}),
-        ("Links to gazetteers", {
-            "fields": ("documents", "derived_gazetteers"),
-            "description": "‘Documents’ describes a gazetteer. ‘Derived "
-                           "gazetteers’ were extracted FROM this source — that "
+        ("Links to datasets", {
+            "fields": ("documents", "derived_datasets"),
+            "description": "‘Documents’ describes a dataset. ‘Derived "
+                           "datasets’ were extracted FROM this source — that "
                            "is the provenance chain.",
         }),
         ("Other", {"fields": ("tags", "notes")}),
@@ -296,8 +311,8 @@ class ProspectFilter(admin.SimpleListFilter):
         return queryset
 
 
-@admin.register(TrackedGazetteer)
-class TrackedGazetteerAdmin(admin.ModelAdmin):
+@admin.register(TrackedDataset)
+class TrackedDatasetAdmin(admin.ModelAdmin):
     list_display = ("title", "kind", "stage", "owner", "permission_status",
                     "registry_records", "is_active")
     list_editable = ("stage", "owner", "permission_status")
@@ -306,7 +321,7 @@ class TrackedGazetteerAdmin(admin.ModelAdmin):
     search_fields = ("title", "notes", "registry__id", "registry__name")
     autocomplete_fields = ("stage", "owner", "organisation", "project",
                            "permission_status", "discovery_source", "registry")
-    filter_horizontal = ("regions", "contacts")
+    filter_horizontal = ("regions", "people")
     readonly_fields = ("registry_readout", "created_at", "updated_at")
 
     fieldsets = (
@@ -322,7 +337,7 @@ class TrackedGazetteerAdmin(admin.ModelAdmin):
                        "on_radar_since", "discovery_source", "notes"),
         }),
         ("Who and where", {
-            "fields": ("organisation", "contacts", "project", "regions",
+            "fields": ("organisation", "people", "project", "regions",
                        "languages"),
         }),
         ("Time period", {
@@ -392,13 +407,13 @@ class SourceSuggestionAdmin(admin.ModelAdmin):
     list_filter = (UntriagedFilter, "status")
     search_fields = ("title", "author_compiler", "region_covered", "notes",
                      "submitter_name", "triage_notes")
-    autocomplete_fields = ("status", "promoted_to_source", "promoted_to_gazetteer")
+    autocomplete_fields = ("status", "promoted_to_source", "promoted_to_dataset")
     readonly_fields = ("created_at", "submitter_user", "triaged_at", "triaged_by")
     actions = ["promote_to_source"]
 
     @admin.display(description="promoted", boolean=True)
     def promoted(self, obj):
-        return bool(obj.promoted_to_source_id or obj.promoted_to_gazetteer_id)
+        return bool(obj.promoted_to_source_id or obj.promoted_to_dataset_id)
 
     @admin.action(description="Promote to a Source (bibliography) record")
     def promote_to_source(self, request, queryset):
@@ -468,13 +483,13 @@ class StaleFilter(admin.SimpleListFilter):
 
 @admin.register(Engagement)
 class EngagementAdmin(admin.ModelAdmin):
-    list_display = ("contact", "subject", "tracked_gazetteer", "stage",
+    list_display = ("person", "subject", "dataset", "stage",
                     "priority", "who", "next_follow_up", "state")
     list_editable = ("stage", "priority", "next_follow_up")
     list_filter = (StaleFilter, "stage", "priority", "responsible", "outcome")
-    search_fields = ("subject", "notes", "contact__name",
-                     "tracked_gazetteer__title")
-    autocomplete_fields = ("contact", "tracked_gazetteer", "project",
+    search_fields = ("subject", "notes", "person__name",
+                     "dataset__title")
+    autocomplete_fields = ("person", "dataset", "project",
                            "organisation", "stage", "priority", "responsible",
                            "outcome")
     inlines = [InteractionInline, ActionItemInline]
@@ -497,10 +512,10 @@ class EngagementAdmin(admin.ModelAdmin):
 
 @admin.register(Interaction)
 class InteractionAdmin(admin.ModelAdmin):
-    list_display = ("occurred_on", "contact", "channel", "summary", "added_by")
+    list_display = ("occurred_on", "person", "channel", "summary", "added_by")
     list_filter = ("channel",)
-    search_fields = ("summary", "contact__name")
-    autocomplete_fields = ("engagement", "contact", "channel")
+    search_fields = ("summary", "person__name")
+    autocomplete_fields = ("engagement", "person", "channel")
     date_hierarchy = "occurred_on"
 
 
@@ -509,7 +524,7 @@ class ActionItemAdmin(admin.ModelAdmin):
     list_display = ("description", "assignee", "due_date", "status", "overdue")
     list_editable = ("assignee", "due_date", "status")
     list_filter = ("status", "assignee")
-    search_fields = ("description", "engagement__contact__name")
+    search_fields = ("description", "engagement__person__name")
     autocomplete_fields = ("engagement", "assignee", "status")
 
     @admin.display(description="overdue", boolean=True)
@@ -529,7 +544,7 @@ class ContentAdmin(admin.ModelAdmin):
     list_filter = ("content_type", "status", "author")
     search_fields = ("title", "notes")
     autocomplete_fields = ("content_type", "status", "author")
-    filter_horizontal = ("gazetteers",)
+    filter_horizontal = ("datasets",)
 
 
 # --------------------------------------------------------------------------

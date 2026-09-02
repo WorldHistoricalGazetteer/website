@@ -1,7 +1,7 @@
 """Tests for GRACE.
 
 Weighted towards the two things that would be expensive to get wrong: the
-no-duplicated-facts rule on Contact, and the decision-6 data-protection
+no-duplicated-facts rule on Person, and the decision-6 data-protection
 machinery. A field that quietly holds a second copy of an address, or an
 erasure that takes the engagement history with it, is not the kind of bug that
 shows up in a screenshot.
@@ -20,8 +20,8 @@ from api.models import GazetteerRegistryEntry
 
 from . import privacy
 from .models import (
-    ActionItem, Contact, Engagement, Interaction, Organisation, Source,
-    SourceSuggestion, TrackedGazetteer,
+    ActionItem, Person, Engagement, Interaction, Organisation, Source,
+    SourceSuggestion, TrackedDataset,
 )
 from .vocabularies import (
     ActionItemStatus, DiscoverySource, EngagementStage, IntakeStatus,
@@ -42,7 +42,7 @@ class ContactLinkTests(TestCase):
         )
 
     def test_local_copies_cleared_when_account_linked(self):
-        c = Contact.objects.create(
+        c = Person.objects.create(
             name="Ada Lovelace", email="stale@example.org",
             affiliation_text="Somewhere Old", orcid="0000-0000-0000-0000",
             user=self.user,
@@ -55,26 +55,26 @@ class ContactLinkTests(TestCase):
         self.assertEqual(c.orcid, "")
 
     def test_resolved_accessors_read_through_the_link(self):
-        c = Contact.objects.create(name="Ada Lovelace", user=self.user)
+        c = Person.objects.create(name="Ada Lovelace", user=self.user)
         self.assertEqual(c.resolved_email, "ada@example.org")
         self.assertEqual(c.resolved_affiliation, "Analytical Society")
         self.assertEqual(c.resolved_orcid, self.user.orcid)
 
-    def test_unlinked_contact_keeps_its_own_details(self):
-        c = Contact.objects.create(name="Grace Hopper",
+    def test_unlinked_person_keeps_their_own_details(self):
+        c = Person.objects.create(name="Grace Hopper",
                                    email="grace@example.org")
         self.assertEqual(c.resolved_email, "grace@example.org")
 
     def test_organisation_beats_free_text_affiliation(self):
         org = Organisation.objects.create(name="Bodleian Library")
-        c = Contact.objects.create(name="Anon", organisation=org,
+        c = Person.objects.create(name="Anon", organisation=org,
                                    affiliation_text="typed by hand")
         self.assertEqual(c.resolved_affiliation, "Bodleian Library")
 
     def test_newsletter_consent_follows_the_account_when_linked(self):
         self.user.news_permitted = True
         self.user.save()
-        c = Contact.objects.create(name="Ada", user=self.user,
+        c = Person.objects.create(name="Ada", user=self.user,
                                    news_consent=False)
         # The account flag is the one the person can change themselves.
         self.assertTrue(c.resolved_news_consent)
@@ -84,20 +84,20 @@ class ContactEmailLookupTests(TestCase):
     """The address is encrypted, so equality has to go through the HMAC."""
 
     def test_by_email_finds_an_encrypted_address(self):
-        c = Contact.objects.create(name="Grace", email="grace@example.org")
-        self.assertEqual(Contact.objects.by_email("grace@example.org"), c)
+        c = Person.objects.create(name="Grace", email="grace@example.org")
+        self.assertEqual(Person.objects.by_email("grace@example.org"), c)
 
     def test_lookup_is_case_and_space_insensitive(self):
-        Contact.objects.create(name="Grace", email="grace@example.org")
-        self.assertIsNotNone(Contact.objects.by_email("  GRACE@Example.ORG "))
+        Person.objects.create(name="Grace", email="grace@example.org")
+        self.assertIsNotNone(Person.objects.by_email("  GRACE@Example.ORG "))
 
     def test_direct_filter_on_the_encrypted_column_finds_nothing(self):
         """Documents the trap: this is why by_email exists."""
-        Contact.objects.create(name="Grace", email="grace@example.org")
-        self.assertFalse(Contact.objects.filter(email="grace@example.org").exists())
+        Person.objects.create(name="Grace", email="grace@example.org")
+        self.assertFalse(Person.objects.filter(email="grace@example.org").exists())
 
     def test_no_address_means_no_hash(self):
-        c = Contact.objects.create(name="Nameless")
+        c = Person.objects.create(name="Nameless")
         self.assertIsNone(c.email_hash)
 
 
@@ -105,44 +105,44 @@ class ErasureTests(TestCase):
     """Obligation 3: erasure is pseudonymisation, never a cascade delete."""
 
     def setUp(self):
-        self.contact = Contact.objects.create(
+        self.person = Person.objects.create(
             name="Someone Real", email="real@example.org",
             affiliation_text="A University", notes="private jottings",
         )
-        self.engagement = Engagement.objects.create(contact=self.contact,
+        self.engagement = Engagement.objects.create(person=self.person,
                                                     subject="Rights enquiry")
         Interaction.objects.create(
-            engagement=self.engagement, contact=self.contact,
+            engagement=self.engagement, person=self.person,
             occurred_on=datetime.date.today(), summary="Asked about licensing",
         )
 
     def test_identity_is_removed(self):
-        self.contact.pseudonymise()
-        self.contact.refresh_from_db()
-        self.assertTrue(self.contact.is_erased)
-        self.assertIsNone(self.contact.email)
-        self.assertIsNone(self.contact.email_hash)
-        self.assertEqual(self.contact.affiliation_text, "")
-        self.assertEqual(self.contact.notes, "")
-        self.assertNotIn("Someone Real", self.contact.name)
+        self.person.pseudonymise()
+        self.person.refresh_from_db()
+        self.assertTrue(self.person.is_erased)
+        self.assertIsNone(self.person.email)
+        self.assertIsNone(self.person.email_hash)
+        self.assertEqual(self.person.affiliation_text, "")
+        self.assertEqual(self.person.notes, "")
+        self.assertNotIn("Someone Real", self.person.name)
 
     def test_engagement_history_survives(self):
         """The point of the whole design. The record of what happened stays."""
-        self.contact.pseudonymise()
+        self.person.pseudonymise()
         self.assertEqual(Engagement.objects.count(), 1)
         interaction = Interaction.objects.get()
         self.assertEqual(interaction.summary, "Asked about licensing")
 
-    def test_erased_contacts_drop_out_of_live_queries(self):
-        self.contact.pseudonymise()
-        self.assertEqual(Contact.objects.live().count(), 0)
-        self.assertEqual(Contact.objects.count(), 1)
+    def test_erased_people_drop_out_of_live_queries(self):
+        self.person.pseudonymise()
+        self.assertEqual(Person.objects.live().count(), 0)
+        self.assertEqual(Person.objects.count(), 1)
 
     def test_erasure_does_not_touch_the_linked_account(self):
         user = User.objects.create(username="u1", name="U", email="u@x.org")
-        self.contact.user = user
-        self.contact.save()
-        self.contact.pseudonymise()
+        self.person.user = user
+        self.person.save()
+        self.person.pseudonymise()
         self.assertTrue(User.objects.filter(pk=user.pk).exists())
 
 
@@ -150,40 +150,40 @@ class RetentionAndNoticeTests(TestCase):
     """Obligations 1 and 4."""
 
     def test_three_years_quiet_triggers_a_review(self):
-        old = Contact.objects.create(name="Long Silent")
-        Contact.objects.filter(pk=old.pk).update(
+        old = Person.objects.create(name="Long Silent")
+        Person.objects.filter(pk=old.pk).update(
             created_at=timezone.now() - timedelta(days=365 * 4))
-        self.assertIn(old, Contact.objects.needing_retention_review())
+        self.assertIn(old, Person.objects.needing_retention_review())
 
     def test_a_recent_interaction_resets_the_clock(self):
-        c = Contact.objects.create(name="Recently Spoken To")
-        Contact.objects.filter(pk=c.pk).update(
+        c = Person.objects.create(name="Recently Spoken To")
+        Person.objects.filter(pk=c.pk).update(
             created_at=timezone.now() - timedelta(days=365 * 4))
-        engagement = Engagement.objects.create(contact=c)
-        Interaction.objects.create(engagement=engagement, contact=c,
+        engagement = Engagement.objects.create(person=c)
+        Interaction.objects.create(engagement=engagement, person=c,
                                    occurred_on=datetime.date.today(),
                                    summary="Spoke last week")
-        self.assertNotIn(c, Contact.objects.needing_retention_review())
+        self.assertNotIn(c, Person.objects.needing_retention_review())
 
     def test_retention_period_is_three_years(self):
         self.assertEqual(privacy.RETENTION_REVIEW_YEARS, 3)
 
     def test_privacy_notice_becomes_overdue_after_a_month(self):
-        c = Contact.objects.create(name="Not Yet Told")
-        self.assertNotIn(c, Contact.objects.owed_privacy_notice())
-        Contact.objects.filter(pk=c.pk).update(
+        c = Person.objects.create(name="Not Yet Told")
+        self.assertNotIn(c, Person.objects.owed_privacy_notice())
+        Person.objects.filter(pk=c.pk).update(
             created_at=timezone.now() - timedelta(days=45))
-        self.assertIn(c, Contact.objects.owed_privacy_notice())
+        self.assertIn(c, Person.objects.owed_privacy_notice())
 
     def test_sending_the_notice_clears_the_backlog(self):
-        c = Contact.objects.create(name="Told")
-        Contact.objects.filter(pk=c.pk).update(
+        c = Person.objects.create(name="Told")
+        Person.objects.filter(pk=c.pk).update(
             created_at=timezone.now() - timedelta(days=45),
             privacy_notice_sent_at=timezone.now())
-        self.assertNotIn(c, Contact.objects.owed_privacy_notice())
+        self.assertNotIn(c, Person.objects.owed_privacy_notice())
 
     def test_consent_needs_evidence(self):
-        c = Contact(name="X", news_consent=True)
+        c = Person(name="X", news_consent=True)
         with self.assertRaises(ValidationError):
             c.clean()
 
@@ -192,33 +192,33 @@ class TrackedGazetteerTests(TestCase):
     """Decision 1: the Register link, and what 'prospect' means."""
 
     def test_no_register_link_means_prospect(self):
-        g = TrackedGazetteer.objects.create(title="Something we heard about")
+        g = TrackedDataset.objects.create(title="Something we heard about")
         self.assertTrue(g.is_prospect)
-        self.assertIn(g, TrackedGazetteer.objects.prospects())
+        self.assertIn(g, TrackedDataset.objects.prospects())
 
-    def test_linked_gazetteer_is_held_and_reads_through(self):
+    def test_linked_dataset_is_held_and_reads_through(self):
         entry = GazetteerRegistryEntry.objects.create(
             id="test:1", name="Test Authority", namespace="test",
             entry_class="authority", record_count=4242, status="published",
             rights_holder="Some Archive",
         )
-        g = TrackedGazetteer.objects.create(title="Local name", registry=entry)
+        g = TrackedDataset.objects.create(title="Local name", registry=entry)
         self.assertFalse(g.is_prospect)
-        self.assertIn(g, TrackedGazetteer.objects.held())
+        self.assertIn(g, TrackedDataset.objects.held())
         # Machine facts are read, never stored.
         self.assertEqual(g.registry_record_count, 4242)
         self.assertEqual(g.registry_rights_holder, "Some Archive")
         self.assertTrue(g.is_published)
 
     def test_prospect_read_through_is_safe(self):
-        g = TrackedGazetteer.objects.create(title="Prospect")
+        g = TrackedDataset.objects.create(title="Prospect")
         self.assertIsNone(g.registry_record_count)
         self.assertIsNone(g.registry_licence)
         self.assertFalse(g.is_published)
 
     def test_no_machine_fact_is_stored_locally(self):
         """A regression guard: these belong to the Register (review §2)."""
-        local = {f.name for f in TrackedGazetteer._meta.get_fields()}
+        local = {f.name for f in TrackedDataset._meta.get_fields()}
         for forbidden in ("licence", "license", "record_count",
                           "rights_holder", "citation_text", "h3_coverage"):
             self.assertNotIn(forbidden, local)
@@ -232,54 +232,54 @@ class EngagementRuleTests(TestCase):
             label="Awaiting reply", is_open=True)
         self.closed_stage = EngagementStage.objects.create(
             label="Concluded", is_open=False)
-        self.contact = Contact.objects.create(name="A Correspondent")
+        self.person = Person.objects.create(name="A Correspondent")
         self.owner = User.objects.create(username="owner1", name="Owner",
                                          email="owner@example.org")
 
     def test_open_conversation_requires_a_follow_up_date(self):
-        e = Engagement(contact=self.contact, stage=self.open_stage)
+        e = Engagement(person=self.person, stage=self.open_stage)
         with self.assertRaises(ValidationError):
             e.clean()
 
     def test_closed_conversation_does_not(self):
-        e = Engagement(contact=self.contact, stage=self.closed_stage)
+        e = Engagement(person=self.person, stage=self.closed_stage)
         e.clean()  # must not raise
 
-    def test_responsible_person_is_inherited_from_the_gazetteer(self):
-        g = TrackedGazetteer.objects.create(title="G", owner=self.owner)
-        e = Engagement.objects.create(contact=self.contact,
-                                      tracked_gazetteer=g)
+    def test_responsible_person_is_inherited_from_the_dataset(self):
+        g = TrackedDataset.objects.create(title="G", owner=self.owner)
+        e = Engagement.objects.create(person=self.person,
+                                      dataset=g)
         self.assertEqual(e.effective_responsible, self.owner)
 
     def test_an_explicit_responsible_person_overrides(self):
         other = User.objects.create(username="other1", name="Other",
                                     email="other@example.org")
-        g = TrackedGazetteer.objects.create(title="G", owner=self.owner)
-        e = Engagement.objects.create(contact=self.contact,
-                                      tracked_gazetteer=g, responsible=other)
+        g = TrackedDataset.objects.create(title="G", owner=self.owner)
+        e = Engagement.objects.create(person=self.person,
+                                      dataset=g, responsible=other)
         self.assertEqual(e.effective_responsible, other)
 
     def test_a_stalled_conversation_is_detected(self):
         e = Engagement.objects.create(
-            contact=self.contact, stage=self.open_stage,
+            person=self.person, stage=self.open_stage,
             next_follow_up=datetime.date.today() - timedelta(days=1))
         self.assertTrue(e.is_stale)
 
     def test_a_conversation_in_hand_is_not_stale(self):
         e = Engagement.objects.create(
-            contact=self.contact, stage=self.open_stage,
+            person=self.person, stage=self.open_stage,
             next_follow_up=datetime.date.today() + timedelta(days=7))
         self.assertFalse(e.is_stale)
 
-    def test_interaction_defaults_to_the_engagements_contact(self):
-        e = Engagement.objects.create(contact=self.contact)
+    def test_interaction_defaults_to_the_engagements_person(self):
+        e = Engagement.objects.create(person=self.person)
         i = Interaction.objects.create(engagement=e, summary="Note")
-        self.assertEqual(i.contact, self.contact)
+        self.assertEqual(i.person, self.person)
 
     def test_overdue_action_item(self):
         todo = ActionItemStatus.objects.create(label="To do", is_open=True)
         done = ActionItemStatus.objects.create(label="Done", is_open=False)
-        e = Engagement.objects.create(contact=self.contact)
+        e = Engagement.objects.create(person=self.person)
         yesterday = datetime.date.today() - timedelta(days=1)
         self.assertTrue(ActionItem.objects.create(
             engagement=e, description="Chase", status=todo,
@@ -408,13 +408,13 @@ class SourceProvenanceTests(TestCase):
         printed = SourceType.objects.create(label="Printed gazetteer")
         source = Source.objects.create(title="A print gazetteer",
                                        source_type=printed)
-        described = TrackedGazetteer.objects.create(title="Described")
-        extracted = TrackedGazetteer.objects.create(title="Extracted from it")
+        described = TrackedDataset.objects.create(title="Described")
+        extracted = TrackedDataset.objects.create(title="Extracted from it")
         source.documents.add(described)
-        source.derived_gazetteers.add(extracted)
+        source.derived_datasets.add(extracted)
 
         self.assertEqual(list(source.documents.all()), [described])
-        self.assertEqual(list(source.derived_gazetteers.all()), [extracted])
+        self.assertEqual(list(source.derived_datasets.all()), [extracted])
         self.assertEqual(list(extracted.derived_from_sources.all()), [source])
         self.assertEqual(list(described.documented_by.all()), [source])
 
@@ -424,8 +424,8 @@ class ImporterHygieneTests(TestCase):
 
     def test_a_missing_name_never_becomes_an_email_address(self):
         from grace.management.commands.import_baserow_export import _display_name
-        # Contact.name is an unencrypted, indexed column. Putting an address
-        # there would defeat the point of encrypting Contact.email.
+        # Person.name is an unencrypted, indexed column. Putting an address
+        # there would defeat the point of encrypting Person.email.
         self.assertEqual(_display_name("", "abolen2@unl.edu"), "abolen2")
         self.assertNotIn("@", _display_name("", "abolen2@unl.edu"))
 
@@ -492,19 +492,19 @@ class OrganisationMergeTests(TestCase):
         clean = Organisation.objects.create(name="Academy of Korean Studies")
         variant = Organisation.objects.create(
             name="Academy of Korean Studies")
-        contact = Contact.objects.create(name="Someone", organisation=variant)
+        person = Person.objects.create(name="Someone", organisation=variant)
 
         self._normalise()
 
         self.assertEqual(Organisation.objects.count(), 1)
-        contact.refresh_from_db()
-        self.assertEqual(contact.organisation, clean)
+        person.refresh_from_db()
+        self.assertEqual(person.organisation, clean)
 
     def test_merge_survives_whichever_row_was_created_first(self):
         """The variant existing first must not rename onto the clean name."""
         variant = Organisation.objects.create(name="Trinity College")
         Organisation.objects.create(name="Trinity College")
-        Contact.objects.create(name="Someone", organisation=variant)
+        Person.objects.create(name="Someone", organisation=variant)
 
         self._normalise()  # must not raise IntegrityError
 
@@ -567,7 +567,7 @@ class GraceAdminSiteTests(TestCase):
 
     def test_a_changelist_still_works(self):
         self.client.force_login(self.staff)
-        response = self.client.get("/grace/admin/grace/trackedgazetteer/")
+        response = self.client.get("/grace/admin/grace/trackeddataset/")
         self.assertEqual(response.status_code, 200)
 
     def test_the_attention_panel_flags_an_untriaged_suggestion(self):
@@ -604,14 +604,14 @@ class GraceAdminThemeTests(TestCase):
         self.client.force_login(self.staff)
 
     def test_the_stylesheet_is_on_a_changelist_too(self):
-        """The point of the base_site override — /grace/admin/grace/contact/
+        """The point of the base_site override — /grace/admin/grace/person/
         was still stock Django until it loaded."""
-        body = self.client.get("/grace/admin/grace/contact/").content.decode()
+        body = self.client.get("/grace/admin/grace/person/").content.decode()
         self.assertIn("grace/admin.css", body)
 
     def test_the_acronym_is_spelled_out_in_the_header(self):
         body = self.client.get("/grace/admin/").content.decode()
-        for word in ("Gazetteer", "Register", "Contact", "Engagement"):
+        for word in ("Gazetteer", "Register", "Person", "Engagement"):
             self.assertIn(word, body)
 
     def test_the_default_admin_is_left_alone(self):

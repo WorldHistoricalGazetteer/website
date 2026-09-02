@@ -23,11 +23,11 @@ Usage::
 from django.core.management.base import BaseCommand
 
 from grace import privacy
-from grace.models import Contact
+from grace.models import Person
 
 
 class Command(BaseCommand):
-    help = ("Report contacts due a retention review or an Article 14 privacy "
+    help = ("Report people due a retention review or an Article 14 privacy "
             "notice. Read-only unless --erase-reviewed is passed.")
 
     def add_arguments(self, parser):
@@ -59,7 +59,7 @@ class Command(BaseCommand):
             self._report_retention(years, options["erase_reviewed"])
 
     def _report_notices(self):
-        owed = Contact.objects.owed_privacy_notice().order_by("created_at")
+        owed = Person.objects.owed_privacy_notice().order_by("created_at")
         self.stdout.write(self.style.MIGRATE_HEADING(
             f"\nArticle 14 notices overdue "
             f"(added > {privacy.PRIVACY_NOTICE_DUE_DAYS} days ago, none sent): "
@@ -75,7 +75,7 @@ class Command(BaseCommand):
                 "'Record that the Art. 14 privacy notice was sent'.")
 
     def _report_retention(self, years, erase):
-        due = Contact.objects.needing_retention_review(years).order_by("name")
+        due = Person.objects.needing_retention_review(years).order_by("name")
         self.stdout.write(self.style.MIGRATE_HEADING(
             f"\nRetention review due (no interaction for {years}y): "
             f"{due.count()}"))

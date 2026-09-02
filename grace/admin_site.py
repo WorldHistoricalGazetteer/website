@@ -21,10 +21,10 @@ from django.contrib import admin
 #: registered but not listed here still shows, under "Other" — so forgetting to
 #: add a new model degrades gracefully instead of hiding it.
 REGISTERS = [
-    ("Pipeline", "Gazetteers on their way in, and the public suggestion queue.",
-     ["TrackedGazetteer", "SourceSuggestion"]),
+    ("Pipeline", "Datasets on their way in, and the public suggestion queue.",
+     ["TrackedDataset", "SourceSuggestion"]),
     ("Catalogue", "Who and what we track: people, institutions, projects, sources.",
-     ["Contact", "Organisation", "Project", "Source"]),
+     ["Person", "Organisation", "Project", "Source"]),
     ("Engagement", "Correspondence: conversations, tasks and the dated log.",
      ["Engagement", "ActionItem", "Interaction"]),
     ("Content", "Blog posts, newsletter items and talks — the output side.",
@@ -40,7 +40,7 @@ class GraceAdminSite(admin.AdminSite):
     enable_nav_sidebar = False
 
     #: Django's default is a bare hyphen, which sat next to the em dashes the
-    #: Contact columns return and looked like two different kinds of "empty".
+    #: Person columns return and looked like two different kinds of "empty".
     empty_value_display = "—"
 
     def each_context(self, request):
@@ -55,7 +55,7 @@ class GraceAdminSite(admin.AdminSite):
 
     def index(self, request, extra_context=None):
         """The landing page: what needs attention, then the registers."""
-        from .models import Contact, Engagement, SourceSuggestion
+        from .models import Person, Engagement, SourceSuggestion
 
         import datetime
 
@@ -110,8 +110,8 @@ class GraceAdminSite(admin.AdminSite):
             },
             {
                 "label": "privacy notice due",
-                "count": Contact.objects.owed_privacy_notice().count(),
-                "url": "/grace/admin/grace/contact/?notice=overdue",
+                "count": Person.objects.owed_privacy_notice().count(),
+                "url": "/grace/admin/grace/person/?notice=overdue",
                 "level": "bad",
                 "why": "GDPR Art. 14 — we hold their details and have not told "
                        "them.",

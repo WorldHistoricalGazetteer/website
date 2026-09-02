@@ -20,17 +20,21 @@ policy:
 
 1. **Article 14 transparency.** We collect from third parties, not from the
    person, so a privacy notice is owed within a month or at first contact,
-   whichever is sooner. ``Contact.privacy_notice_sent_at`` records it and
-   ``Contact.objects.owed_privacy_notice()`` finds who is still waiting.
+   whichever is sooner. ``Person.privacy_notice_sent_at`` records it and
+   ``Person.objects.owed_privacy_notice()`` finds who is still waiting. Our
+   own people are out of scope — Article 14 is about data obtained from
+   someone other than the person, and staff and collaborators are told under
+   Article 13 when they join. ``PersonRole.is_internal`` is what marks them,
+   so who counts as internal stays editable rather than hard-coded.
 2. **Consent stays separate for the mailing list.** A newsletter is direct
    marketing and needs consent under PECR/ePrivacy whatever our Article 6 basis
    for the record itself. Legitimate interests covers the Catalogue entry;
    consent covers the mail. One flag must never do both jobs.
 3. **Erasure by pseudonymisation, not cascade delete.** See
-   ``Contact.pseudonymise()``. The editorial history survives; the person does
+   ``Person.pseudonymise()``. The editorial history survives; the person does
    not.
 4. **Retention: three years without interaction triggers a review.** See
-   ``Contact.objects.needing_retention_review()`` and the
+   ``Person.objects.needing_retention_review()`` and the
    ``grace_retention_review`` management command.
 
 Encryption matches the standard the user model already sets: the address is

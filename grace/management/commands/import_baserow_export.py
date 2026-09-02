@@ -13,8 +13,8 @@ re-running never duplicates:
 Baserow table                 GRACE model                         matched on
 ============================  ==================================  ==============
 Print Gazetteer Bibliography  ``Source`` (printed gazetteer)      title + volume
-Possible Datasets             ``TrackedGazetteer`` (prospects)     title
-People ALL                    ``Contact``                          email, else name
+Possible Datasets             ``TrackedDataset`` (prospects)     title
+People ALL                    ``Person``                          email, else name
 ============================  ==================================  ==============
 
 Deliberately **not** imported:
@@ -47,7 +47,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from grace.models import Contact, Organisation, Source, TrackedGazetteer
+from grace.models import Person, Organisation, Source, TrackedDataset
 from grace.vocabularies import (
     DigitizationStatus, DiscoverySource, SourceType, Stage,
 )
@@ -87,11 +87,11 @@ def _display_name(name, email):
     """A display name that is never an email address.
 
     Some Baserow rows carry an address and no name. Falling back to the raw
-    address would put it in ``Contact.name`` — an unencrypted, indexed column —
-    which defeats the whole point of encrypting ``Contact.email``. So we use the
+    address would put it in ``Person.name`` — an unencrypted, indexed column —
+    which defeats the whole point of encrypting ``Person.email``. So we use the
     local part as a handle instead: enough to tell two rows apart in a list,
     while the real address stays encrypted and is still findable via
-    ``Contact.objects.by_email()``.
+    ``Person.objects.by_email()``.
     """
     name = _clean(name)
     if name and "@" not in name:
@@ -133,7 +133,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.MIGRATE_HEADING("Sources (bibliography)"))
             self._import_bibliography()
 
-            self.stdout.write(self.style.MIGRATE_HEADING("\nGazetteers (prospects)"))
+            self.stdout.write(self.style.MIGRATE_HEADING("\nDatasets (prospects)"))
             self._import_possible_datasets()
 
             if options["skip_people"]:
@@ -229,11 +229,13 @@ class Command(BaseCommand):
                 value = (row.get(label) or "").strip()
                 if value:
                     notes.append(f"{label}: {value}")
+            # NB: "Contact Person" is Baserow's own column name — a foreign
+            # data source, not a GRACE identifier, so it does not get renamed.
             contact_raw = (row.get("Contact Person") or "").strip()
             if contact_raw:
                 notes.append(f"Contact (from Baserow): {contact_raw}")
 
-            obj, was_created = TrackedGazetteer.objects.update_or_create(
+            obj, was_created = TrackedDataset.objects.update_or_create(
                 title=title[:500],
                 defaults={
                     "notes": "\n".join(notes),
@@ -267,9 +269,9 @@ class Command(BaseCommand):
             key = _clean(org.name)
             if key in canonical:
                 keep = canonical[key]
-                org.contacts.update(organisation=keep)
+                org.people.update(organisation=keep)
                 org.projects.update(organisation=keep)
-                org.gazetteers.update(organisation=keep)
+                org.datasets.update(organisation=keep)
                 org.engagements.update(organisation=keep)
                 org.delete()
                 merged += 1
@@ -312,9 +314,9 @@ class Command(BaseCommand):
             # Match on address where we have one — it is the only reliable key.
             existing = None
             if email:
-                existing = Contact.objects.by_email(email)
+                existing = Person.objects.by_email(email)
             if existing is None and name:
-                existing = Contact.objects.filter(name=name[:255],
+                existing = Person.objects.filter(name=name[:255],
                                                   is_erased=False).first()
 
             if existing:
@@ -331,7 +333,7 @@ class Command(BaseCommand):
                 existing.save()
                 updated += 1
             else:
-                Contact.objects.create(
+                Person.objects.create(
                     name=name[:255],
                     email=email,
                     organisation=org,

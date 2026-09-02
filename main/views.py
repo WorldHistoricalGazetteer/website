@@ -1611,7 +1611,7 @@ def _grace_dashboard_counts():
     import datetime
 
     from grace.models import (
-        Contact, Engagement, Source, SourceSuggestion, TrackedGazetteer,
+        Engagement, Person, Source, SourceSuggestion, TrackedDataset,
     )
 
     return {
@@ -1620,10 +1620,10 @@ def _grace_dashboard_counts():
         'stalled': Engagement.objects.filter(
             stage__is_open=True,
             next_follow_up__lt=datetime.date.today()).count(),
-        'notices_due': Contact.objects.owed_privacy_notice().count(),
-        'gazetteers': TrackedGazetteer.objects.count(),
-        'prospects': TrackedGazetteer.objects.prospects().count(),
-        'contacts': Contact.objects.live().count(),
+        'notices_due': Person.objects.owed_privacy_notice().count(),
+        'datasets': TrackedDataset.objects.count(),
+        'prospects': TrackedDataset.objects.prospects().count(),
+        'people': Person.objects.live().count(),
         'sources': Source.objects.count(),
     }
 

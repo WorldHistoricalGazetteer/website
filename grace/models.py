@@ -1,26 +1,34 @@
 """GRACE — Gazetteer Register And Contact Engagement.
 
-WHG's editorial tracker: the gazetteers we want, the people and institutions
+WHG's editorial tracker: the datasets we want, the people and institutions
 behind them, the printed sources that document them, our correspondence, and
-where each gazetteer sits on its way in.
+where each dataset sits on its way in.
 
 The design and its reasoning are in ``developer/whg-tracker-review.html``.
-Four things in here will look odd without it:
+Five things in here will look odd without it:
 
-* **A tracked gazetteer points at the Gazetteer Register, not at a Dataset**
-  (§2). Licence, rights holder, record count, coverage and citation are *read
-  through* that link and never stored here, so they cannot drift. The link is
-  nullable, and a row without one **is** a prospect — no vocabulary says so.
-* **Contact has an optional one-to-one to the user model** (§3), and where it
+* **The pipeline record is a Dataset, not a gazetteer** (§2). A contributor
+  brings a *dataset*; once reconciled and published it is a *gazetteer*. Same
+  object, two life stages — and GRACE's record exists almost entirely during
+  the first, because the moment it becomes a gazetteer the authoritative
+  record is the Gazetteer Register row. So "gazetteer" inside GRACE means
+  exactly two things, neither of them this model: a **printed gazetteer** (a
+  Source type) and a **published WHG gazetteer** (a Register entry).
+* **A tracked dataset points at the Gazetteer Register, not at**
+  ``datasets.Dataset`` (§2). Licence, rights holder, record count, coverage
+  and citation are *read through* that link and never stored here, so they
+  cannot drift. The link is nullable, and a row without one **is** a prospect
+  — no vocabulary says so.
+* **Person has an optional one-to-one to the user model** (§3), and where it
   is set, email / ORCID / affiliation are read through it. Nothing is stored
-  twice.
+  twice. The table is everyone we track, ourselves included — not only people
+  we write to.
 * **Every controlled vocabulary is a table** (§5), in ``vocabularies.py``.
 * **Personal data is held under legitimate interests** (§10), with a real
   erasure path. See ``privacy.py``.
 
-The registers are Catalogue · Engagement · Pipeline, plus Content. Django's
-admin groups models by app, so each model's ``verbose_name_plural`` is prefixed
-with its register to keep the admin index legible.
+The registers are Catalogue · Engagement · Pipeline, plus Content; the
+grouping lives in ``admin_site.py``.
 """
 import datetime
 
@@ -36,7 +44,7 @@ from users.models import email_lookup_hash
 
 from . import privacy
 from .vocabularies import (  # noqa: F401  (re-exported for convenience)
-    ActionItemStatus, ContactRole, ContactStatus, ContentStatus, ContentItemType,
+    ActionItemStatus, PersonRole, PersonStatus, ContentStatus, ContentItemType,
     DigitizationStatus, DiscoverySource, EngagementOutcome, EngagementStage,
     IntakeStatus, InteractionChannel, OrganisationType, PermissionStatus,
     Priority, ProjectStatus, ReviewRecommendation, SourceType, Stage,
@@ -105,7 +113,7 @@ class Organisation(TimeStampedModel):
         return self.name
 
 
-class ContactQuerySet(models.QuerySet):
+class PersonQuerySet(models.QuerySet):
     """Queries that implement the decision-6 obligations."""
 
     def live(self):
@@ -113,7 +121,7 @@ class ContactQuerySet(models.QuerySet):
         return self.filter(is_erased=False)
 
     def by_email(self, email):
-        """Look a contact up by exact address.
+        """Look a person up by exact address.
 
         Mirrors ``User.objects.by_email``. The ``email`` column is encrypted and
         so unqueryable — ``filter(email=…)`` silently matches nothing — which is
@@ -130,8 +138,14 @@ class ContactQuerySet(models.QuerySet):
         is owed within a month of the record being created (or at first
         contact, whichever is sooner — the engagement workflow covers that
         half).
+
+        Our own people are excluded. Article 14 covers data obtained from
+        someone other than the person; staff and collaborators are told at
+        hiring or on joining, under Article 13, so nagging about them would
+        bury the notices that are genuinely owed. ``PersonRole.is_internal``
+        is the flag, so who counts as internal stays editable.
         """
-        return self.live().filter(
+        return self.live().exclude(role__is_internal=True).filter(
             privacy_notice_sent_at__isnull=True,
             created_at__lt=privacy.privacy_notice_cutoff(),
         )
@@ -151,8 +165,16 @@ class ContactQuerySet(models.QuerySet):
         )
 
 
-class Contact(TimeStampedModel):
+class Person(TimeStampedModel):
     """A person we track — whether or not they have a WHG account.
+
+    **Everyone belongs here, ourselves included.** Staff, collaborators and
+    technical experts are people we track just as much as an archivist we are
+    negotiating with, and holding them somewhere else would break the one
+    thing GRACE exists for: open a person, see everything they touch. The
+    ``PersonRole.is_internal`` flag marks our own side, and keeps colleagues
+    out of the Article 14 notice queue — they are told at hiring under Art. 13,
+    not by GRACE.
 
     **One table, with an optional link** (review §3, decision 2). Most people
     in the Catalogue will never have an account: we have merely heard of them,
@@ -175,7 +197,7 @@ class Contact(TimeStampedModel):
 
     user = models.OneToOneField(
         USER, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="grace_contact",
+        related_name="grace_person",
         help_text="Link to a WHG account, if this person has one. When set, "
                   "email, ORCID and affiliation are read from the account and "
                   "the local copies here are cleared.",
@@ -183,7 +205,7 @@ class Contact(TimeStampedModel):
 
     organisation = models.ForeignKey(
         Organisation, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="contacts",
+        related_name="people",
     )
     affiliation_text = models.CharField(
         max_length=255, blank=True,
@@ -206,19 +228,19 @@ class Contact(TimeStampedModel):
     )
 
     role = models.ForeignKey(
-        ContactRole, on_delete=models.PROTECT, null=True, blank=True,
-        related_name="contacts",
+        PersonRole, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="people",
     )
     status = models.ForeignKey(
-        ContactStatus, on_delete=models.PROTECT, null=True, blank=True,
-        related_name="contacts",
+        PersonStatus, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="people",
     )
     regions = models.ManyToManyField(
-        "regions.Region", blank=True, related_name="grace_contacts",
+        "regions.Region", blank=True, related_name="grace_people",
     )
     discovery_source = models.ForeignKey(
         DiscoverySource, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="contacts",
+        related_name="people",
     )
     notes = models.TextField(blank=True)
 
@@ -254,15 +276,15 @@ class Contact(TimeStampedModel):
     )
     erased_at = models.DateTimeField(null=True, blank=True, editable=False)
 
-    objects = ContactQuerySet.as_manager()
+    objects = PersonQuerySet.as_manager()
 
     class Meta:
         ordering = ["name"]
-        verbose_name = "contact"
-        verbose_name_plural = "contacts"
+        verbose_name = "person"
+        verbose_name_plural = "people"
 
     def __str__(self):
-        return self.name or f"(erased contact #{self.pk})"
+        return self.name or f"(erased person #{self.pk})"
 
     def save(self, *args, **kwargs):
         # Never store the same fact twice. A linked account owns email, ORCID
@@ -314,8 +336,14 @@ class Contact(TimeStampedModel):
         return self.interactions.aggregate(d=Max("occurred_on"))["d"]
 
     @property
+    def is_internal(self):
+        """One of us — see ``PersonRole.is_internal``."""
+        return bool(self.role and self.role.is_internal)
+
+    @property
     def privacy_notice_overdue(self):
         return (not self.is_erased
+                and not self.is_internal
                 and self.privacy_notice_sent_at is None
                 and self.created_at is not None
                 and self.created_at < privacy.privacy_notice_cutoff())
@@ -333,7 +361,7 @@ class Contact(TimeStampedModel):
         Note that a linked WHG account is **not** touched: that account belongs
         to the person and has its own erasure path. Only the link is dropped.
         """
-        self.name = f"(erased contact #{self.pk})"
+        self.name = f"(erased person #{self.pk})"
         self.given_name = ""
         self.surname = ""
         self.email = None
@@ -353,7 +381,7 @@ class Contact(TimeStampedModel):
 
 
 class Project(TimeStampedModel):
-    """A funded or organised effort behind one or more gazetteers.
+    """A funded or organised effort behind one or more datasets.
 
     Funder and grant number stay here deliberately (review §7, Q3): they are
     part of the credit chain WHG already models — the Gazetteer Register
@@ -371,7 +399,7 @@ class Project(TimeStampedModel):
         Organisation, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="projects",
     )
-    contacts = models.ManyToManyField(Contact, blank=True, related_name="projects")
+    people = models.ManyToManyField(Person, blank=True, related_name="projects")
     regions = models.ManyToManyField(
         "regions.Region", blank=True, related_name="grace_projects",
     )
@@ -397,12 +425,14 @@ class Project(TimeStampedModel):
 class Source(TimeStampedModel):
     """The bibliography — including printed gazetteers.
 
-    Printed gazetteers live here rather than in their own table: giving them a
-    separate record would duplicate the bibliography for no gain (review §1).
+    This is one of only two places where "gazetteer" keeps its bibliographic
+    sense: a **printed** gazetteer, a reference work. It lives here rather than
+    in a table of its own, because giving it a separate record would duplicate
+    the bibliography for no gain (review §1).
 
-    Note the two distinct relations to a tracked gazetteer. *Documents* is a
-    documentation relation — this source describes that gazetteer. *Derived
-    gazetteers* is a derivation relation — that gazetteer was extracted **from**
+    Note the two distinct relations to a tracked dataset. *Documents* is a
+    documentation relation — this source describes that dataset. *Derived
+    datasets* is a derivation relation — that dataset was extracted **from**
     this source. Turning printed gazetteers into WHG gazetteers is the main
     reason the bibliography exists, so losing the second would cost us the
     provenance chain for the whole programme (review §4).
@@ -446,11 +476,11 @@ class Source(TimeStampedModel):
     )
 
     documents = models.ManyToManyField(
-        "TrackedGazetteer", blank=True, related_name="documented_by",
+        "TrackedDataset", blank=True, related_name="documented_by",
         help_text="Gazetteers this source describes.",
     )
-    derived_gazetteers = models.ManyToManyField(
-        "TrackedGazetteer", blank=True, related_name="derived_from_sources",
+    derived_datasets = models.ManyToManyField(
+        "TrackedDataset", blank=True, related_name="derived_from_sources",
         help_text="Gazetteers extracted FROM this source. This is the "
                   "provenance chain — keep it accurate.",
     )
@@ -470,18 +500,32 @@ class Source(TimeStampedModel):
 # PIPELINE
 # ==========================================================================
 
-class TrackedGazetteerQuerySet(models.QuerySet):
+class TrackedDatasetQuerySet(models.QuerySet):
     def prospects(self):
         """Things we are still chasing — no Register row yet."""
         return self.filter(registry__isnull=True)
 
     def held(self):
-        """Gazetteers WHG actually holds."""
+        """Datasets WHG actually holds — i.e. they are gazetteers now."""
         return self.filter(registry__isnull=False)
 
 
-class TrackedGazetteer(TimeStampedModel):
-    """GRACE's record of one gazetteer — held or merely wanted.
+class TrackedDataset(TimeStampedModel):
+    """GRACE's record of one dataset on its way in — held or merely wanted.
+
+    **Named for its life stage.** A contributor brings a *dataset*; once
+    reconciled and published it is a *gazetteer*. Same object, two stages —
+    and this record exists almost entirely during the first, because the
+    moment it becomes a gazetteer the authoritative record is the Register
+    row, which is read through rather than copied. So the pipeline record is a
+    Dataset, and "gazetteer" is left to mean the two things it means
+    everywhere else at WHG: a printed reference work (a ``Source``) and a
+    published WHG gazetteer (a Register entry).
+
+    Roughly half of these are authority gazetteers — TGN, Pleiades, CHGIS —
+    which never arrive as a contributed dataset at all. Calling those
+    "datasets" is a slight stretch; it is a smaller one than calling a
+    contributor's spreadsheet a gazetteer.
 
     **The load-bearing model** (review §2). It exists from the moment something
     lands on our radar, long before there is anything in WHG to point at, so
@@ -520,39 +564,39 @@ class TrackedGazetteer(TimeStampedModel):
     )
     stage = models.ForeignKey(
         Stage, on_delete=models.PROTECT, null=True, blank=True,
-        related_name="gazetteers",
+        related_name="datasets",
         help_text="Editorial stage only. Published / indexed are read from "
                   "the Register, not set here.",
     )
     owner = models.ForeignKey(
         USER, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="grace_gazetteers",
+        related_name="grace_datasets",
         verbose_name="responsible person",
         help_text="The one accountable owner. Engagements inherit this unless "
                   "they deliberately override it.",
     )
     organisation = models.ForeignKey(
         Organisation, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="gazetteers",
+        related_name="datasets",
         help_text="Who can actually grant permission to publish.",
     )
-    contacts = models.ManyToManyField(
-        Contact, blank=True, related_name="gazetteers",
+    people = models.ManyToManyField(
+        Person, blank=True, related_name="datasets",
     )
     project = models.ForeignKey(
         Project, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="gazetteers",
+        related_name="datasets",
     )
     permission_status = models.ForeignKey(
         PermissionStatus, on_delete=models.PROTECT, null=True, blank=True,
-        related_name="gazetteers",
+        related_name="datasets",
     )
     discovery_source = models.ForeignKey(
         DiscoverySource, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="gazetteers",
+        related_name="datasets",
     )
     regions = models.ManyToManyField(
-        "regions.Region", blank=True, related_name="grace_gazetteers",
+        "regions.Region", blank=True, related_name="grace_datasets",
         help_text="UN M49. Several is fine and normal.",
     )
     languages = ArrayField(
@@ -581,12 +625,12 @@ class TrackedGazetteer(TimeStampedModel):
     )
     notes = models.TextField(blank=True)
 
-    objects = TrackedGazetteerQuerySet.as_manager()
+    objects = TrackedDatasetQuerySet.as_manager()
 
     class Meta:
         ordering = ["title"]
-        verbose_name = "gazetteer"
-        verbose_name_plural = "gazetteers"
+        verbose_name = "dataset"
+        verbose_name_plural = "datasets"
 
     def __str__(self):
         return self.title
@@ -642,12 +686,12 @@ class Engagement(TimeStampedModel):
     The single best decision in the original design (review §1): an engagement
     is with a person, not with a record. That is what makes "open one person
     and see every conversation" possible, and why the register survives a
-    project being renamed or a gazetteer being withdrawn.
+    project being renamed or a dataset being withdrawn.
 
     Two rules are enforced here:
 
     * **One accountable owner.** ``responsible`` may be left blank, in which
-      case it is inherited from the gazetteer's owner. Two owner fields that
+      case it is inherited from the dataset's owner. Two owner fields that
       can silently disagree was a defect in the draft (review §6).
     * **An open conversation must carry a next-follow-up date.** What goes
       wrong in outreach is stalling, and a stall is the *absence* of a stage
@@ -655,12 +699,12 @@ class Engagement(TimeStampedModel):
       stage is open turns the existing reminder into a staleness alarm.
     """
 
-    contact = models.ForeignKey(
-        Contact, on_delete=models.CASCADE, related_name="engagements",
+    person = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="engagements",
     )
-    tracked_gazetteer = models.ForeignKey(
-        TrackedGazetteer, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name="engagements", verbose_name="gazetteer",
+    dataset = models.ForeignKey(
+        TrackedDataset, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="engagements", verbose_name="dataset",
     )
     project = models.ForeignKey(
         Project, on_delete=models.SET_NULL, null=True, blank=True,
@@ -681,7 +725,7 @@ class Engagement(TimeStampedModel):
     responsible = models.ForeignKey(
         USER, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="grace_engagements",
-        help_text="Leave blank to inherit the gazetteer's responsible person. "
+        help_text="Leave blank to inherit the dataset's responsible person. "
                   "Set only to deliberately override it.",
     )
     next_follow_up = models.DateField(
@@ -708,7 +752,7 @@ class Engagement(TimeStampedModel):
         verbose_name_plural = "engagements"
 
     def __str__(self):
-        who = self.contact.name if self.contact_id else "?"
+        who = self.person.name if self.person_id else "?"
         return f"{who} — {self.subject or self.stage or 'engagement'}"
 
     def clean(self):
@@ -723,8 +767,8 @@ class Engagement(TimeStampedModel):
         """One accountable owner, inherited unless deliberately overridden."""
         if self.responsible_id:
             return self.responsible
-        if self.tracked_gazetteer_id:
-            return self.tracked_gazetteer.owner
+        if self.dataset_id:
+            return self.dataset.owner
         return None
 
     @property
@@ -789,9 +833,9 @@ class Interaction(TimeStampedModel):
     engagement = models.ForeignKey(
         Engagement, on_delete=models.CASCADE, related_name="interactions",
     )
-    contact = models.ForeignKey(
-        Contact, on_delete=models.CASCADE, related_name="interactions",
-        help_text="Normally the engagement's contact; set explicitly so the "
+    person = models.ForeignKey(
+        Person, on_delete=models.CASCADE, related_name="interactions",
+        help_text="Normally the engagement's person; set explicitly so the "
                   "log can be queried per person without a join.",
     )
     channel = models.ForeignKey(
@@ -810,8 +854,8 @@ class Interaction(TimeStampedModel):
         return f"{self.occurred_on}: {self.summary[:60]}"
 
     def save(self, *args, **kwargs):
-        if not self.contact_id and self.engagement_id:
-            self.contact = self.engagement.contact
+        if not self.person_id and self.engagement_id:
+            self.person = self.engagement.person
         super().save(*args, **kwargs)
 
 
@@ -823,7 +867,7 @@ class SourceSuggestion(TimeStampedModel):
     """A suggestion arriving from the public form.
 
     Decision 5: ``/contribute/`` is a **suggest-a-source** tool, not a general
-    front door that triages everyone and routes gazetteer owners onward. The
+    front door that triages everyone and routes dataset owners onward. The
     old design had nowhere for a public submission to land and no discovery
     value meaning "arrived from the web"; both are fixed here.
 
@@ -866,8 +910,8 @@ class SourceSuggestion(TimeStampedModel):
         Source, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="from_suggestions",
     )
-    promoted_to_gazetteer = models.ForeignKey(
-        TrackedGazetteer, on_delete=models.SET_NULL, null=True, blank=True,
+    promoted_to_dataset = models.ForeignKey(
+        TrackedDataset, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="from_suggestions",
     )
     triage_notes = models.TextField(blank=True)
@@ -918,8 +962,8 @@ class Content(TimeStampedModel):
     planned_for = models.DateField(null=True, blank=True)
     published_on = models.DateField(null=True, blank=True)
     url = models.URLField(max_length=500, blank=True)
-    gazetteers = models.ManyToManyField(
-        TrackedGazetteer, blank=True, related_name="content",
+    datasets = models.ManyToManyField(
+        TrackedDataset, blank=True, related_name="content",
     )
     notes = models.TextField(blank=True)
 

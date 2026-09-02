@@ -5,7 +5,7 @@ without duplicating anything, and never touches a term's label or description
 once someone has edited it.
 
 **These are starting points, not a fixed list.** Every one of these tables is
-Palak's to edit in the admin — that is the whole point of decision 3. Adding a
+an editor's to change in the admin — the whole point of decision 3. Adding a
 term here is a convenience for a fresh database, not a claim on the vocabulary.
 
 Terms that code actually depends on are flagged, and the command refuses to
@@ -29,16 +29,25 @@ from grace import vocabularies as V
 
 # (model, [(label, sort_order, {extra flags}), …])
 SEED = [
-    (V.ContactRole, [
-        ("Compiler / author", 10, {}),
-        ("Rights holder", 20, {}),
-        ("Archivist / librarian", 30, {}),
-        ("Researcher", 40, {}),
-        ("Project lead", 50, {}),
-        ("Institutional contact", 60, {}),
-        ("Other", 900, {}),
+    (V.PersonRole, [
+        # People on the other side of a conversation.
+        ("Compiler / author", 10, {"is_internal": False}),
+        ("Rights holder", 20, {"is_internal": False}),
+        ("Archivist / librarian", 30, {"is_internal": False}),
+        ("Researcher", 40, {"is_internal": False}),
+        ("Project lead", 50, {"is_internal": False}),
+        ("Institutional contact", 60, {"is_internal": False}),
+        # Our own side. The People register is everyone, ourselves included,
+        # and is_internal keeps colleagues out of the Art. 14 notice queue.
+        ("WHG staff", 100, {"is_internal": True}),
+        ("WHG advisory board", 110, {"is_internal": True}),
+        ("Collaborator", 120, {"is_internal": True}),
+        ("Technical expert", 130, {"is_internal": True}),
+        ("Developer", 140, {"is_internal": True}),
+        ("Translator", 150, {"is_internal": True}),
+        ("Other", 900, {"is_internal": False}),
     ]),
-    (V.ContactStatus, [
+    (V.PersonStatus, [
         ("Active", 10, {}),
         ("Dormant", 20, {}),
         ("Do not contact", 30, {}),
