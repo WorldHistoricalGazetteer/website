@@ -582,6 +582,14 @@ def _creator_name(node):
     return ''
 
 
+# The schema.org keys this reader takes out of an uploaded file's `indexing` block. Named here
+# because it is a CONTRACT, not an implementation detail: Map your Data writes this block, and a key
+# added to the reader that the writer never emits fails silently — the dataset simply lands with the
+# field blank on a public page, which is exactly what happened to `description` (place#227).
+# `main.tests.MydContractTests` pins both halves against this list.
+INDEXING_FIELDS_READ = ('creator', 'name', 'description', 'url', 'citation')
+
+
 def extract_dataset_metadata(file_path):
     dataset_metadata = {
         'creator': '',
