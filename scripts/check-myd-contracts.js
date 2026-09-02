@@ -130,10 +130,42 @@ function checkCitationRoundTrip() {
   } else ok(`citation round trip (${fields.length} citation fields)`);
 }
 
+// ── 4. The feature round trip ────────────────────────────────────────────────
+// Every part of a Linked Places FEATURE that the importer reads must be re-emitted by the exporter.
+// The citation round trip (3) covers dataset metadata; this covers the records themselves, and it is
+// the check that was missing when `links` went in and nothing came out — 147 links on import,
+// including two identity assertions a contributor had already resolved, and an exported file with
+// none (place#228).
+// Keyed on the DATA PATH, not on the output key. The first version of this check asserted that
+// `buildLPF` assigns `feat.links` — which it always did; the bug was that the array it assigned was
+// built from reconciliation alone and never included the file's own links. A check that passes on
+// the broken state is the failure it exists to prevent, so each part names the accessor that
+// carries the importer's output into the exporter.
+const FEATURE_PARTS = [
+  ['names', /rowVariants\(/, 'the alt_names column the importer fills'],
+  ['types', /rowTypesFor\(/, 'project.rowTypes'],
+  ['when', /rec\.whenStart/, 'the date column the importer fills'],
+  ['geometry', /rec\.geom\b/, 'the geometry column'],
+  ['links', /rec\.fileLinks/, 'project.rowLinks'],
+];
+function checkFeatureRoundTrip() {
+  const start = src.indexOf('function buildLPF');
+  if (start < 0) { bad('feature round trip', 'buildLPF not found'); return; }
+  const body = src.slice(start, src.indexOf('\nfunction ', start + 1))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const lost = FEATURE_PARTS.filter(([, re]) => !re.test(body));
+  if (lost.length) {
+    bad('feature round trip', lost.map(([k, , via]) =>
+      `the importer reads \`${k}\` out of a Linked Places feature and stores it in ${via}, but buildLPF never reads that back`).join('; ') +
+      '. Import then export and the contributor loses it.');
+  } else ok(`feature round trip (${FEATURE_PARTS.length} feature parts)`);
+}
+
 const required = (process.argv[2] || 'creator,name,description,url,citation').split(',').filter(Boolean);
 console.log('Map your Data contract checks');
 checkRoles();
 checkIndexingContract(required);
 checkCitationRoundTrip();
+checkFeatureRoundTrip();
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');
