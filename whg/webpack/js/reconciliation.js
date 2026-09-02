@@ -2851,7 +2851,9 @@ async function buildExportRecords(opts, onProgress) {
     // to the row's resolved match — the record it must have been cloned from.
     const geomProv = ov ? { source: ov.source,
                             from: ov.from || (ov.source === 'match' && info
-                              ? ((resolvedMatchList(info.key)[0] || {}).id || '') : '') } : null;
+                              ? ((resolvedMatchList(info.key)[0] || {}).id || '') : ''),
+                            certainty: ov.certainty || '',
+                            approximation: ov.approximation || null } : null;
     // lon/lat still come from the coordinate columns: the first vertex of a polygon is a corner, not a
     // position for the place. A WKT POINT is the one geometry that IS a coordinate.
     const coord = ov ? firstLngLat(ov.geometry)
@@ -3222,16 +3224,24 @@ function buildLPF(data) {
 //   from the dataset's own WKT column → the contributor's data, exported bare, as before.
 function geomProvenance(geometry, prov) {
   if (!geometry || !prov) return geometry;
+  // What the contributor said about their own shape, if they said anything. It overrides the
+  // defaults below in both directions: they may raise a cloned shape to `certain` because they
+  // recognise the record, or lower a drawn one to `uncertain` because they were guessing. The tool
+  // guessing on their behalf and then refusing to be corrected would be the worse failure.
+  const declared = {};
+  if (prov.certainty) declared.certainty = prov.certainty;
+  if (prov.approximation) declared.approximation = prov.approximation;
+
   if (prov.source === 'match') {
     const src = prov.from ? barePlaceId(prov.from) : '';
     const cite = src ? { label: `WHG reconciliation match ${src}`, '@id': src }
       : { label: 'WHG reconciliation match' };
-    return { ...geometry, certainty: 'less-certain', citations: [cite] };
+    return { ...geometry, certainty: 'less-certain', citations: [cite], ...declared };
   }
   if (prov.source === 'drawn') {
-    return { ...geometry, citations: [{ label: 'Drawn by the contributor (WHG Map your Data)' }] };
+    return { ...geometry, citations: [{ label: 'Drawn by the contributor (WHG Map your Data)' }], ...declared };
   }
-  return geometry;
+  return { ...geometry, ...declared };
 }
 function serializeLPF(data) { return JSON.stringify(buildLPF(data), null, 2); }
 
@@ -6263,6 +6273,21 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="finish">Finish</button>
        <button type="button" class="btn btn-sm btn-outline-danger" data-geom="clear"${(project.geom && project.geom[meta.key]) ? '' : ' disabled'}>Clear</button>
        <span id="recon-geom-status" class="text-muted ms-1">${esc(geomStatusText(meta.key))}</span>
+     </div>
+     <div class="recon-geom-quality d-flex flex-wrap align-items-center gap-2 mt-1 small${geomOverride(meta.key) ? '' : ' d-none'}" id="recon-geom-quality">
+       <label class="mb-0 text-muted">How sure is this location?
+         <select id="recon-geom-certainty" class="form-select form-select-sm d-inline-block" style="width:auto">
+           <option value="">don't say</option>
+           <option value="certain">certain</option>
+           <option value="less-certain">less certain</option>
+           <option value="uncertain">uncertain</option>
+         </select>
+       </label>
+       <label class="mb-0 text-muted">accurate to within
+         <input type="number" id="recon-geom-tolerance" class="form-control form-control-sm d-inline-block"
+                style="width:84px" min="0" step="any" placeholder="—"> km
+       </label>
+       <span class="text-muted">— your judgement, exported with the shape.</span>
      </div>`;
   // A Wikipedia link inside a candidate must open the article, NOT toggle acceptance of the candidate.
   card.querySelectorAll('.recon-cand-wiki').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
@@ -6316,6 +6341,10 @@ function renderReviewCard() {
     reviewAction(b.dataset.act);
   }));
   card.querySelectorAll('[data-geom]').forEach((b) => b.addEventListener('click', () => geomAction(b.dataset.geom, meta.key)));
+  ['recon-geom-certainty', 'recon-geom-tolerance'].forEach((id) => {
+    const x = el(id); if (x) x.addEventListener('change', () => setGeomQuality(meta.key));
+  });
+  renderGeomQuality(meta.key);
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
 }
 
@@ -7245,10 +7274,44 @@ async function fetchCandidateGeometry(id) {
     return (feat && feat.geometry) || null;
   } catch (_) { return null; }
 }
+function geomOverride(key) { return (project && project.geom && project.geom[key]) || null; }
+
+// The contributor's own assessment of the shape they just made. LPF admits both on any geometry:
+// `certainty` is confidence in the assertion ("is this the right place"), `approximation` is
+// quantified spatial accuracy (`geo:hasSpatialAccuracy`, tolerance in kilometres).
+//
+// Cloned and drawn geometry get sensible defaults — a borrowed shape is less-certain, a drawn one
+// says how it was made and claims no certainty, because MyD cannot know how sure the contributor is
+// (place#220). But the CONTRIBUTOR can know, and until now had no way to say: the tool's silence was
+// being read as their silence. A declaration here always wins over the default.
+function setGeomQuality(key) {
+  const g = geomOverride(key); if (!g) return;
+  const certSel = el('recon-geom-certainty'), tolInp = el('recon-geom-tolerance');
+  const cert = certSel ? certSel.value : '';
+  const tolRaw = tolInp ? String(tolInp.value).trim() : '';
+  const tol = tolRaw === '' ? null : Number(tolRaw);
+  if (cert) g.certainty = cert; else delete g.certainty;
+  if (tol != null && Number.isFinite(tol) && tol >= 0) g.approximation = { type: 'geo:hasSpatialAccuracy', tolerance: tol };
+  else delete g.approximation;
+  persist(); refreshExport();
+}
+function renderGeomQuality(key) {
+  const box = el('recon-geom-quality'); if (!box) return;
+  const g = geomOverride(key);
+  box.classList.toggle('d-none', !g);
+  const certSel = el('recon-geom-certainty'), tolInp = el('recon-geom-tolerance');
+  if (certSel) certSel.value = (g && g.certainty) || '';
+  if (tolInp) tolInp.value = (g && g.approximation && g.approximation.tolerance != null) ? String(g.approximation.tolerance) : '';
+}
+
 // Record / clear a geometry override for a place (all rows sharing the key). Overrides win on export.
 function onReviewGeom(key, geometry) {
   project.geom = project.geom || {};
-  if (geometry) project.geom[key] = { source: 'drawn', geometry };
+  // Redrawing the shape does not retract what the contributor said about it.
+  const prev = geomOverride(key) || {};
+  if (geometry) project.geom[key] = Object.assign({ source: 'drawn', geometry },
+    prev.certainty ? { certainty: prev.certainty } : {},
+    prev.approximation ? { approximation: prev.approximation } : {});
   else delete project.geom[key];
   persist();
   updateGeomStatus(key);
@@ -7262,6 +7325,7 @@ function geomStatusText(key) {
 }
 function updateGeomStatus(key) {
   const s = el('recon-geom-status'); if (s) s.textContent = geomStatusText(key);
+  renderGeomQuality(key);
   const card = el('recon-review-card');
   if (card) card.querySelectorAll('[data-geom]').forEach((b) => {
     if (b.dataset.geom === 'clear') b.disabled = !(project.geom && project.geom[key]);
@@ -7293,7 +7357,10 @@ async function geomAction(kind, key) {
     // Record which record the shape came from, not just that it came from one: on export the geometry
     // is cited to it, exactly as an auto-enriched location is (place#184). Without `from` a cloned
     // shape would export bare — indistinguishable from one the contributor surveyed themselves.
-    project.geom[key] = { source: 'match', from: cand.id, geometry: g };
+    const prevQ = geomOverride(key) || {};
+    project.geom[key] = Object.assign({ source: 'match', from: cand.id, geometry: g },
+      prevQ.certainty ? { certainty: prevQ.certainty } : {},
+      prevQ.approximation ? { approximation: prevQ.approximation } : {});
     mod.setOverride(g);
     persist(); updateGeomStatus(key); refreshExport();
   }
