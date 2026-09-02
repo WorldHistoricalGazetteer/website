@@ -432,7 +432,7 @@ function fromJSON(data) {
   const citation = lpfCitation(data);
   const notes = [note, lpf.note].filter(Boolean);
   return { columns, rows, total: rows.length, roles, note: notes.join('; '),
-           repPoints, repCols, rowTypes: lpf.rowTypes, citation };
+           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, citation };
 }
 
 // ── Linked Places import: read the record, not just its properties ───────────────────────────────
@@ -506,11 +506,20 @@ function addLpfColumns(records, columns, rows, roles) {
     notes.push('features with more than one timespan keep the full <code>when</code> in <code>when_all</code>');
   }
 
-  // No modelled home, but far better visible than dropped. Relations especially: MyD builds
-  // containment from reconciled columns, so an imported relation cannot be re-emitted as one — it is
-  // carried as data and the user is told, rather than disappearing without a word.
-  push('links', records.map((f) => ((f && f.links) || [])
-    .map((l) => [l && l.type, l && l.identifier].filter(Boolean).join(':')).filter(Boolean).join('; ')), 'other');
+  // Links. The column is for the eye; the objects are what actually travel, because a `closeMatch`
+  // carries `certainty` and `citations` that a flattened "type:identifier" string would throw away.
+  // Held per row like the types are, and merged back into `links[]` on export — otherwise a file's
+  // identity assertions go in and nothing comes out, which is what happened before place#228.
+  const rowLinks = {};
+  records.forEach((f, i) => {
+    const ls = ((f && f.links) || []).filter((l) => l && l.type && l.identifier);
+    if (ls.length) rowLinks[i] = ls.map((l) => Object.assign({}, l));
+  });
+  const nLinks = Object.values(rowLinks).reduce((a, v) => a + v.length, 0);
+  if (push('links', records.map((f) => ((f && f.links) || [])
+    .map((l) => [l && l.type, l && l.identifier].filter(Boolean).join(':')).filter(Boolean).join('; ')), 'other') && nLinks) {
+    notes.push(`kept <strong>${nLinks.toLocaleString()}</strong> link${nLinks === 1 ? '' : 's'} from <code>links</code>`);
+  }
   push('description', records.map((f) => ((f && f.descriptions) || [])
     .map((d) => String((d && d.value) || '').trim()).filter(Boolean).join(' | ')), 'other');
   const nRel = records.reduce((a, f) => a + (((f && f.relations) || []).length), 0);
@@ -520,7 +529,7 @@ function addLpfColumns(records, columns, rows, roles) {
       '(containment is rebuilt by reconciling the columns that carry it, so these are not re-exported as relations)');
   }
 
-  return { rowTypes: nTyped ? rowTypes : null, note: notes.join('; ') };
+  return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null, note: notes.join('; ') };
 }
 
 // The file's own dataset metadata, so a contributor's citation survives a round trip instead of
@@ -2439,6 +2448,7 @@ async function finishImport(parsed, fileName, format) {
     // An LPF import brings its own place types and dataset metadata; both are the file's, not
     // guesses, so they seed the project rather than waiting to be re-entered by hand (place#224).
     rowTypes: parsed.rowTypes || {},
+    rowLinks: parsed.rowLinks || {},
   };
   // Dataset metadata the file carried. Applied AFTER the project exists, because the defaults read
   // `project.fileName` for the fallback title and would otherwise read the previous project's.
@@ -2909,7 +2919,7 @@ async function buildExportRecords(opts, onProgress) {
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd,
-                   geomWhenStart, geomWhenEnd, match, parents,
+                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i),
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -3166,6 +3176,17 @@ function buildLPF(data) {
           .forEach((url) => links.push({ type: 'primaryTopicOf', identifier: url }));
       }
     }
+    // Links the file itself carried — a `closeMatch` a contributor already resolved, a `seeAlso` to
+    // the source record. They are the contributor's assertions, not ours, so they are preserved
+    // verbatim and merged after the reconciliation's own: same identifier, same type, kept once.
+    // Losing them was place#228 — 147 links in, none out, identity assertions included.
+    const seenLink = new Set(links.map((l) => `${l.type}|${l.identifier}`));
+    (rec.fileLinks || []).forEach((l) => {
+      const k = `${l.type}|${l.identifier}`;
+      if (seenLink.has(k)) return;
+      seenLink.add(k);
+      links.push(Object.assign({}, l));
+    });
     if (links.length) feat.links = links;
     return feat;
   });
@@ -6995,6 +7016,9 @@ const scopeAat = createAatPicker(
 // type-role column → AAT picker). Stored in project.rowTypes = { rowIndex: [{id,text}] }; the LPF build
 // reads them per row. Needed only to CONTRIBUTE to WHG — plain CSV/JSON export never requires them.
 function rowTypesFor(i) { return (project && project.rowTypes && project.rowTypes[i]) || []; }
+// Links the imported file asserted for this row, kept verbatim so `certainty` and `citations`
+// survive the round trip alongside the identifier (place#228).
+function rowLinksFor(i) { return (project && project.rowLinks && project.rowLinks[i]) || []; }
 function untypedRowCount() { if (!project) return 0; let n = 0; for (let i = 0; i < project.rows.length; i++) if (!rowTypesFor(i).length) n += 1; return n; }
 // Append a blank type-role column ("Place type") when the dataset has none. Undoable (column snapshot).
 function addPlaceTypeColumn() {
