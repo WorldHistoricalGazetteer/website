@@ -432,7 +432,7 @@ function fromJSON(data) {
   const citation = lpfCitation(data);
   const notes = [note, lpf.note].filter(Boolean);
   return { columns, rows, total: rows.length, roles, note: notes.join('; '),
-           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, citation };
+           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, rowNames: lpf.rowNames, citation };
 }
 
 // ── Linked Places import: read the record, not just its properties ───────────────────────────────
@@ -473,6 +473,16 @@ function addLpfColumns(records, columns, rows, roles) {
   if (push('alt_names', alts, 'alt_names')) {
     notes.push(`kept <strong>${nAlt.toLocaleString()}</strong> name variant${nAlt === 1 ? '' : 's'} from <code>names</code>`);
   }
+  // The column holds toponyms; a `names[]` entry holds more than a toponym. `lang` says which
+  // language it is, and `citations` can say something the toponym cannot say for itself — that a name
+  // was COINED for this contribution and is not attested usage. A gazetteer may coin a name when
+  // nothing else exists; it may not let a coined name come back looking attested, which is what
+  // happened when the round trip kept only the strings (place#230).
+  const rowNames = {};
+  records.forEach((f, i) => {
+    const ns = ((f && f.names) || []).filter((n) => n && (n.toponym || n.ethnonym) && (n.lang || n.citations));
+    if (ns.length) rowNames[i] = ns.map((n) => Object.assign({}, n));
+  });
 
   // Place types. The identifiers go straight into rowTypes (where the LPF builder reads them); the
   // column exists so they are visible, and so the per-row picker's "apply to all rows with this
@@ -529,7 +539,8 @@ function addLpfColumns(records, columns, rows, roles) {
       '(containment is rebuilt by reconciling the columns that carry it, so these are not re-exported as relations)');
   }
 
-  return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null, note: notes.join('; ') };
+  return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null,
+           rowNames: Object.keys(rowNames).length ? rowNames : null, note: notes.join('; ') };
 }
 
 // The file's own dataset metadata, so a contributor's citation survives a round trip instead of
@@ -2449,6 +2460,7 @@ async function finishImport(parsed, fileName, format) {
     // guesses, so they seed the project rather than waiting to be re-entered by hand (place#224).
     rowTypes: parsed.rowTypes || {},
     rowLinks: parsed.rowLinks || {},
+    rowNames: parsed.rowNames || {},
   };
   // Dataset metadata the file carried. Applied AFTER the project exists, because the defaults read
   // `project.fileName` for the fallback title and would otherwise read the previous project's.
@@ -2851,7 +2863,9 @@ async function buildExportRecords(opts, onProgress) {
     // to the row's resolved match — the record it must have been cloned from.
     const geomProv = ov ? { source: ov.source,
                             from: ov.from || (ov.source === 'match' && info
-                              ? ((resolvedMatchList(info.key)[0] || {}).id || '') : '') } : null;
+                              ? ((resolvedMatchList(info.key)[0] || {}).id || '') : ''),
+                            certainty: ov.certainty || '',
+                            approximation: ov.approximation || null } : null;
     // lon/lat still come from the coordinate columns: the first vertex of a polygon is a corner, not a
     // position for the place. A WKT POINT is the one geometry that IS a coordinate.
     const coord = ov ? firstLngLat(ov.geometry)
@@ -2919,7 +2933,7 @@ async function buildExportRecords(opts, onProgress) {
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd,
-                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i),
+                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i), fileNames: rowNamesFor(i),
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -3051,6 +3065,20 @@ function buildLPF(data) {
     const names = [];
     if (title) names.push({ toponym: title });
     rowVariants(rec.row).forEach((v) => { if (v && v !== title) names.push({ toponym: v }); });
+    // Restore what the imported file said ABOUT each name. The column carries toponyms; the file
+    // carried `lang`, and `citations` that can state a name was coined for this contribution rather
+    // than attested. Merged by toponym so an edit in the table still wins on the string itself, and
+    // any name the user removed from the column stays removed — but a name that survived comes back
+    // with what was said about it, instead of as a bare string (place#230).
+    if ((rec.fileNames || []).length) {
+      const byTop = new Map(rec.fileNames.map((n) => [String(n.toponym || n.ethnonym || '').toLowerCase(), n]));
+      names.forEach((n) => {
+        const src = byTop.get(String(n.toponym || '').toLowerCase());
+        if (!src) return;
+        if (src.lang && !n.lang) n.lang = src.lang;
+        if (src.citations && src.citations.length && !n.citations) n.citations = src.citations.map((c) => Object.assign({}, c));
+      });
+    }
     // Enrichment: the matched record's own toponyms. Opt-in (the Enrich box), and each carries a
     // citation naming the record it came from, so a reader can tell the contributor's names from the
     // gazetteer's. Previously these reached the CSV and were dropped from the LPF entirely (place#184).
@@ -3222,16 +3250,24 @@ function buildLPF(data) {
 //   from the dataset's own WKT column → the contributor's data, exported bare, as before.
 function geomProvenance(geometry, prov) {
   if (!geometry || !prov) return geometry;
+  // What the contributor said about their own shape, if they said anything. It overrides the
+  // defaults below in both directions: they may raise a cloned shape to `certain` because they
+  // recognise the record, or lower a drawn one to `uncertain` because they were guessing. The tool
+  // guessing on their behalf and then refusing to be corrected would be the worse failure.
+  const declared = {};
+  if (prov.certainty) declared.certainty = prov.certainty;
+  if (prov.approximation) declared.approximation = prov.approximation;
+
   if (prov.source === 'match') {
     const src = prov.from ? barePlaceId(prov.from) : '';
     const cite = src ? { label: `WHG reconciliation match ${src}`, '@id': src }
       : { label: 'WHG reconciliation match' };
-    return { ...geometry, certainty: 'less-certain', citations: [cite] };
+    return { ...geometry, certainty: 'less-certain', citations: [cite], ...declared };
   }
   if (prov.source === 'drawn') {
-    return { ...geometry, citations: [{ label: 'Drawn by the contributor (WHG Map your Data)' }] };
+    return { ...geometry, citations: [{ label: 'Drawn by the contributor (WHG Map your Data)' }], ...declared };
   }
-  return geometry;
+  return { ...geometry, ...declared };
 }
 function serializeLPF(data) { return JSON.stringify(buildLPF(data), null, 2); }
 
@@ -6263,6 +6299,21 @@ function renderReviewCard() {
        <button type="button" class="btn btn-sm btn-outline-secondary" data-geom="finish">Finish</button>
        <button type="button" class="btn btn-sm btn-outline-danger" data-geom="clear"${(project.geom && project.geom[meta.key]) ? '' : ' disabled'}>Clear</button>
        <span id="recon-geom-status" class="text-muted ms-1">${esc(geomStatusText(meta.key))}</span>
+     </div>
+     <div class="recon-geom-quality d-flex flex-wrap align-items-center gap-2 mt-1 small${geomOverride(meta.key) ? '' : ' d-none'}" id="recon-geom-quality">
+       <label class="mb-0 text-muted">How sure is this location?
+         <select id="recon-geom-certainty" class="form-select form-select-sm d-inline-block" style="width:auto">
+           <option value="">don't say</option>
+           <option value="certain">certain</option>
+           <option value="less-certain">less certain</option>
+           <option value="uncertain">uncertain</option>
+         </select>
+       </label>
+       <label class="mb-0 text-muted">accurate to within
+         <input type="number" id="recon-geom-tolerance" class="form-control form-control-sm d-inline-block"
+                style="width:84px" min="0" step="any" placeholder="—"> km
+       </label>
+       <span class="text-muted">— your judgement, exported with the shape.</span>
      </div>`;
   // A Wikipedia link inside a candidate must open the article, NOT toggle acceptance of the candidate.
   card.querySelectorAll('.recon-cand-wiki').forEach((a) => a.addEventListener('click', (e) => e.stopPropagation()));
@@ -6316,6 +6367,10 @@ function renderReviewCard() {
     reviewAction(b.dataset.act);
   }));
   card.querySelectorAll('[data-geom]').forEach((b) => b.addEventListener('click', () => geomAction(b.dataset.geom, meta.key)));
+  ['recon-geom-certainty', 'recon-geom-tolerance'].forEach((id) => {
+    const x = el(id); if (x) x.addEventListener('change', () => setGeomQuality(meta.key));
+  });
+  renderGeomQuality(meta.key);
   updateReviewMap(meta.key); // async: plot candidate + own coordinates on a map
 }
 
@@ -7019,6 +7074,8 @@ function rowTypesFor(i) { return (project && project.rowTypes && project.rowType
 // Links the imported file asserted for this row, kept verbatim so `certainty` and `citations`
 // survive the round trip alongside the identifier (place#228).
 function rowLinksFor(i) { return (project && project.rowLinks && project.rowLinks[i]) || []; }
+// `names[]` entries the imported file carried, with their `lang` and `citations` intact (place#230).
+function rowNamesFor(i) { return (project && project.rowNames && project.rowNames[i]) || []; }
 function untypedRowCount() { if (!project) return 0; let n = 0; for (let i = 0; i < project.rows.length; i++) if (!rowTypesFor(i).length) n += 1; return n; }
 // Append a blank type-role column ("Place type") when the dataset has none. Undoable (column snapshot).
 function addPlaceTypeColumn() {
@@ -7245,10 +7302,44 @@ async function fetchCandidateGeometry(id) {
     return (feat && feat.geometry) || null;
   } catch (_) { return null; }
 }
+function geomOverride(key) { return (project && project.geom && project.geom[key]) || null; }
+
+// The contributor's own assessment of the shape they just made. LPF admits both on any geometry:
+// `certainty` is confidence in the assertion ("is this the right place"), `approximation` is
+// quantified spatial accuracy (`geo:hasSpatialAccuracy`, tolerance in kilometres).
+//
+// Cloned and drawn geometry get sensible defaults — a borrowed shape is less-certain, a drawn one
+// says how it was made and claims no certainty, because MyD cannot know how sure the contributor is
+// (place#220). But the CONTRIBUTOR can know, and until now had no way to say: the tool's silence was
+// being read as their silence. A declaration here always wins over the default.
+function setGeomQuality(key) {
+  const g = geomOverride(key); if (!g) return;
+  const certSel = el('recon-geom-certainty'), tolInp = el('recon-geom-tolerance');
+  const cert = certSel ? certSel.value : '';
+  const tolRaw = tolInp ? String(tolInp.value).trim() : '';
+  const tol = tolRaw === '' ? null : Number(tolRaw);
+  if (cert) g.certainty = cert; else delete g.certainty;
+  if (tol != null && Number.isFinite(tol) && tol >= 0) g.approximation = { type: 'geo:hasSpatialAccuracy', tolerance: tol };
+  else delete g.approximation;
+  persist(); refreshExport();
+}
+function renderGeomQuality(key) {
+  const box = el('recon-geom-quality'); if (!box) return;
+  const g = geomOverride(key);
+  box.classList.toggle('d-none', !g);
+  const certSel = el('recon-geom-certainty'), tolInp = el('recon-geom-tolerance');
+  if (certSel) certSel.value = (g && g.certainty) || '';
+  if (tolInp) tolInp.value = (g && g.approximation && g.approximation.tolerance != null) ? String(g.approximation.tolerance) : '';
+}
+
 // Record / clear a geometry override for a place (all rows sharing the key). Overrides win on export.
 function onReviewGeom(key, geometry) {
   project.geom = project.geom || {};
-  if (geometry) project.geom[key] = { source: 'drawn', geometry };
+  // Redrawing the shape does not retract what the contributor said about it.
+  const prev = geomOverride(key) || {};
+  if (geometry) project.geom[key] = Object.assign({ source: 'drawn', geometry },
+    prev.certainty ? { certainty: prev.certainty } : {},
+    prev.approximation ? { approximation: prev.approximation } : {});
   else delete project.geom[key];
   persist();
   updateGeomStatus(key);
@@ -7262,6 +7353,7 @@ function geomStatusText(key) {
 }
 function updateGeomStatus(key) {
   const s = el('recon-geom-status'); if (s) s.textContent = geomStatusText(key);
+  renderGeomQuality(key);
   const card = el('recon-review-card');
   if (card) card.querySelectorAll('[data-geom]').forEach((b) => {
     if (b.dataset.geom === 'clear') b.disabled = !(project.geom && project.geom[key]);
@@ -7293,7 +7385,10 @@ async function geomAction(kind, key) {
     // Record which record the shape came from, not just that it came from one: on export the geometry
     // is cited to it, exactly as an auto-enriched location is (place#184). Without `from` a cloned
     // shape would export bare — indistinguishable from one the contributor surveyed themselves.
-    project.geom[key] = { source: 'match', from: cand.id, geometry: g };
+    const prevQ = geomOverride(key) || {};
+    project.geom[key] = Object.assign({ source: 'match', from: cand.id, geometry: g },
+      prevQ.certainty ? { certainty: prevQ.certainty } : {},
+      prevQ.approximation ? { approximation: prevQ.approximation } : {});
     mod.setOverride(g);
     persist(); updateGeomStatus(key); refreshExport();
   }
