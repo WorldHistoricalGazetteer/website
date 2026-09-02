@@ -533,10 +533,25 @@ def ds_insert(jsonld_filepath, ds, task_id):
 
 
 def parse_dates(feature):
-    paths = [  # valid `when` locations
+    """Collect the feature's temporal claims ABOUT THE PLACE, for `Place.minmax` / `Place.timespans`.
+
+    Deliberately NOT every location LPF permits a `when`. A `when` on the geometry is a claim about
+    the geometry — "this is the shape we have, for this moment or period" — and not about when the
+    place existed. Rolling it into `Place.minmax` turns "we traced this lake from a 2019 image" into
+    "this lake existed in 2019", and because `minmax` drives the map's temporal filter
+    (`utils/mapdata.py`, feature `min`/`max`), the place then vanishes from every other time window.
+    Measured before this change: an undated lake contributed with a 2019 acquisition date came out
+    as `minmax [2019, 2019]` (place#222).
+
+    Evidence that a place had a shape at some time is not evidence that it existed only then. The
+    geometry's own `when` is preserved verbatim in `PlaceGeom.jsonb` and surfaced by
+    `PlaceGeom.minmax`, which is where a claim about a geometry belongs.
+
+    The other locations stay: a name, a type or a relation holding during a period each attest the
+    PLACE at that time, which is what `minmax` is for.
+    """
+    paths = [  # `when` locations that speak about the place itself
         ['when'],
-        ['geometry', 'when'],
-        ['geometries', 'when'],
         ['names', 'when'],
         ['types', 'when'],
         ['relations', 'when'],
