@@ -921,3 +921,46 @@ class BoardTests(TestCase):
         body = self.client.get("/grace/admin/").content.decode()
         self.assertIn("review not passed on", body)
         self.assertIn("author not told", body)
+
+
+class ResponsibleFilterTests(TestCase):
+    """Point 3 asked to filter by person; Django's default lists usernames.
+
+    On this project those are ORCID-derived strings, which is not something
+    anyone can filter by at a glance.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="filterer", email="filterer@example.org", password="pw",
+            given_name="Fil", surname="Terer", name="Fil Terer")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+        self.owner = User.objects.create_user(
+            username="mostern-0000-0001-8219-7174",
+            email="owner@example.org", password="pw",
+            given_name="Ruth", surname="Mostern", name="Ruth Mostern")
+
+    def test_the_filter_shows_a_name_not_a_username(self):
+        TrackedDataset.objects.create(title="Owned", owner=self.owner)
+        body = self.client.get(
+            "/grace/admin/grace/trackeddataset/").content.decode()
+        self.assertIn("Ruth Mostern", body)
+        self.assertNotIn("mostern-0000-0001-8219-7174", body)
+
+    def test_people_who_own_nothing_are_not_offered(self):
+        """A filter listing every account on the site filters nothing."""
+        body = self.client.get(
+            "/grace/admin/grace/trackeddataset/").content.decode()
+        self.assertNotIn("Ruth Mostern", body)
+
+    def test_the_filter_actually_narrows(self):
+        TrackedDataset.objects.create(title="Owned", owner=self.owner)
+        TrackedDataset.objects.create(title="Unowned")
+        body = self.client.get(
+            f"/grace/admin/grace/trackeddataset/?responsible={self.owner.pk}"
+        ).content.decode()
+        self.assertIn("Owned", body)
+        self.assertNotIn("Unowned", body)

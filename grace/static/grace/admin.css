@@ -209,3 +209,23 @@ fieldset.module h2 { background: var(--grace-mid); }
 .object-tools a:visited { background: var(--grace-mid); }
 .object-tools a:focus,
 .object-tools a:hover { background: var(--grace-deep); }
+
+/* ---- Changelist column widths ------------------------------------------
+ *
+ * The editable selects on the dataset and engagement lists are wide, and
+ * Django gives the remaining space to whatever is left — which squeezed the
+ * title into a three-line column while the table scrolled sideways anyway.
+ * The name of the thing is what you scan, so give it room.
+ */
+
+#changelist th.column-title,
+#changelist td.field-title,
+#changelist th.column-name,
+#changelist td.field-name,
+#changelist th.column-label,
+#changelist td.field-label {
+  min-width: 230px;
+}
+
+#changelist td.field-title,
+#changelist td.field-name { line-height: 1.35; }

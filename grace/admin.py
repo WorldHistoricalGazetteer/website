@@ -451,6 +451,46 @@ class SourceAdmin(ConnectionsMixin, admin.ModelAdmin):
 # Pipeline
 # --------------------------------------------------------------------------
 
+class ResponsibleFilter(admin.SimpleListFilter):
+    """Filter by the person responsible, listed by name.
+
+    Django's default related filter renders each user with ``__str__``, which
+    on this project is the username — ORCID-derived strings like
+    ``davf-sa-0009-0006-6530-9940``. Unusable for the "filter by person" the
+    board was asked for, so the lookups are built by hand from display names,
+    and only from people who actually own something.
+    """
+
+    title = "responsible person"
+    parameter_name = "responsible"
+    #: Reverse accessor from the user to the rows this filter narrows.
+    relation = "grace_datasets"
+    #: Field on the filtered model holding the user.
+    field = "owner"
+
+    def lookups(self, request, model_admin):
+        from django.contrib.auth import get_user_model
+
+        owners = (get_user_model().objects
+                  .filter(**{f"{self.relation}__isnull": False})
+                  .distinct())
+        rows = [(user.pk, (user.name
+                           or f"{user.given_name} {user.surname}".strip()
+                           or user.username))
+                for user in owners]
+        return sorted(rows, key=lambda row: row[1].lower())
+
+    def queryset(self, request, queryset):
+        if self.value():
+            return queryset.filter(**{f"{self.field}_id": self.value()})
+        return queryset
+
+
+class EngagementResponsibleFilter(ResponsibleFilter):
+    relation = "grace_engagements"
+    field = "responsible"
+
+
 class ProspectFilter(admin.SimpleListFilter):
     """A row with no Register link *is* a prospect — no vocabulary needed."""
 
@@ -485,9 +525,9 @@ class TrackedDatasetAdmin(ConnectionsMixin, admin.ModelAdmin):
                     "records", "reconciliation", "review_state", "on_whg",
                     "is_active")
     list_editable = ("stage", "owner", "permission_status")
-    list_filter = (ProspectFilter, "stage", "permission_status", "owner",
-                   "is_active", "data_format", "geometry_status",
-                   "discovery_source", "regions")
+    list_filter = (ProspectFilter, "stage", "permission_status",
+                   ResponsibleFilter, "is_active", "data_format",
+                   "geometry_status", "discovery_source", "regions")
     search_fields = ("title", "notes", "registry__id", "registry__name")
     autocomplete_fields = ("stage", "owner", "organisation", "project",
                            "permission_status", "discovery_source", "registry",
@@ -808,7 +848,8 @@ class EngagementAdmin(ConnectionsMixin, admin.ModelAdmin):
     list_display = ("person", "subject", "dataset", "stage",
                     "priority", "who", "next_follow_up", "state")
     list_editable = ("stage", "priority", "next_follow_up")
-    list_filter = (StaleFilter, "stage", "priority", "responsible", "outcome")
+    list_filter = (StaleFilter, "stage", "priority",
+                   EngagementResponsibleFilter, "outcome")
     search_fields = ("subject", "notes", "person__name",
                      "dataset__title")
     autocomplete_fields = ("person", "dataset", "project",
