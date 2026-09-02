@@ -115,6 +115,9 @@
                             ]
                         },
 	                    {
+	                        "required": [
+	                            "geometry"
+	                        ],
 	                        "properties": {
 	                            "geometry": {
 	                                "type": "object",
@@ -166,6 +169,9 @@
 	                        }
 	                    },
                         {
+                            "required": [
+                                "types"
+                            ],
                             "properties": {
                                 "types": {
                                     "items": {
@@ -191,6 +197,9 @@
                             }
                         },
                         {
+                            "required": [
+                                "relations"
+                            ],
                             "properties": {
                                 "relations": {
                                     "items": {
@@ -216,6 +225,9 @@
                             }
                         },
                         {
+                            "required": [
+                                "names"
+                            ],
                             "properties": {
                                 "names": {
                                     "items": {
@@ -241,6 +253,9 @@
                             }
                         },
                         {
+                            "required": [
+                                "names"
+                            ],
                             "properties": {
                                 "names": {
                                     "items": {

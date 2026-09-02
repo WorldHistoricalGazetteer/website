@@ -77,11 +77,19 @@ const ROLES = [
 // 'container' is a transient marker for admin/area columns; initChain() wires the actual containment
 // links (contains:<child>) once all columns are known.
 const ROLE_HINTS = [
-  ['name', /^(place|placename|name|toponym|title|label)s?$/i],
+  // `place_name` and `place name` are as common as `placename` and were matching none of them.
+  // Deliberately not a general `*_name`: `basin_name` and `mountain_range` name other things, and a
+  // wrong place-name column is worse than an unmapped one.
+  ['name', /^(place[\s_-]?name|placename|place|name|toponym|title|label)s?$/i],
   ['alt_names', /^(alt.?names?|alternat(e|ive).?names?|name.?variants?|variant.?names?|variants?|aka|also.?known.?as|aliases?)$/i],
-  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough|riding|barony|arrondissement)$/i],
-  ['country', /^(country|ccode|iso|nation)$/i],
-  ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
+  // `oblast` and its neighbours are administrative levels like any other; without them a Central
+  // Asian dataset's most important column is left unmapped (place#225).
+  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough|riding|barony|arrondissement|oblast|rayon|raion|viloyat|velayat|aimag|aimak|okrug|krai|krai|governorate|subdistrict|sub.?district)$/i],
+  // `ccodes` (plural) is the spelling LPF itself uses — matching only the singular meant every LPF
+  // import left its country column unmapped, and the containment reconciled to the wrong country.
+  ['country', /^(country|countries|ccode|ccodes|iso|iso\d*|nation)$/i],
+  // `aat_type` is what a dataset that has already done the vocabulary work calls the column.
+  ['type', /^(type|types|feature.?type|fclass|category|placetype|place.?type|kind|aat|aat.?type|aat.?id)$/i],
   ['lat', /^(lat|latitude|y)$/i],
   ['lon', /^(lon|lng|long|longitude|x)$/i],
   // Before BOTH the coordinate hints and the date hint. `coords` below is unanchored, so it claims
@@ -117,8 +125,22 @@ function adminRank(columnName, fallbackIdx) {
   return 100 + fallbackIdx; // unknown levels: keep dataset order, after all known levels
 }
 
+// A header that describes HOW a value was arrived at, or how good it is, names metadata about a
+// column rather than a column of that kind. `coordinate_method` holds prose about a method and
+// `coordinate_precision_m` a tolerance in metres; both were guessed as `Coordinates / grid ref`
+// because the coords hint is deliberately loose and matches anything containing "coord". That is
+// not a cosmetic mislabel: `colIndexByRole` takes the FIRST claimant, so a prose column holding the
+// coords role silenced correctly-mapped latitude/longitude columns and every coordinate in the
+// dataset read as absent (place#225). A curated dataset is the most likely to carry such fields.
+//
+// Tested before the hints, so it withholds a role rather than competing for one: these columns land
+// on 'other' and the user can still assign them by hand. Kept to qualifiers that are unambiguous —
+// `gridref` and `easting` are coordinates, not descriptions of one, and must keep matching.
+const ROLE_QUALIFIER = /(^|[\s_-])(method|methods|precision|accuracy|uncertainty|tolerance|error|quality|confidence|provenance|source|sources|note|notes|comment|comments|remark|remarks|status|datum|crs|srid|system)([\s_-]|$)/i;
+
 function detectRole(columnName) {
   const n = String(columnName || '').trim();
+  if (ROLE_QUALIFIER.test(n)) return 'other';
   for (const [role, re] of ROLE_HINTS) if (re.test(n)) return role;
   return 'other';
 }
@@ -377,6 +399,19 @@ function representativePoint(g) {
   return (p && isLonLat([p.lon, p.lat])) ? p : null;
 }
 
+// A scalar array (`ccodes: ["KG"]`, `fclasses: ["H"]`) is a list of values, not an object to be
+// serialised. Stringifying it put the literal `["KG"]` in the cell, which no country check accepts —
+// so LPF's own `ccodes` was unusable even when the column was mapped by hand (place#225).
+function cellValue(v) {
+  if (v == null) return '';
+  if (Array.isArray(v)) {
+    return v.every((x) => x == null || typeof x !== 'object')
+      ? v.filter((x) => x != null && String(x) !== '').map(String).join(';')
+      : JSON.stringify(v);
+  }
+  return typeof v === 'object' ? JSON.stringify(v) : String(v);
+}
+
 function fromJSON(data) {
   const records = Array.isArray(data) ? data : (Array.isArray(data.features) ? data.features : null);
   if (!records || !records.length) throw new Error('Expected a non-empty JSON array of records.');
@@ -389,12 +424,138 @@ function fromJSON(data) {
   });
   const columns = [], seen = new Set();
   flat.forEach((r) => Object.keys(r || {}).forEach((k) => { if (!seen.has(k)) { seen.add(k); columns.push(k); } }));
-  const rows = flat.map((r) => columns.map((c) => {
-    const v = r ? r[c] : '';
-    return v == null ? '' : (typeof v === 'object' ? JSON.stringify(v) : String(v));
-  }));
+  const rows = flat.map((r) => columns.map((c) => cellValue(r ? r[c] : '')));
   const { roles, note, repPoints, repCols } = addGeometryColumns(records, columns, rows);
-  return { columns, rows, total: rows.length, roles, note, repPoints, repCols };
+  // Everything a Linked Places record carries OUTSIDE `properties` — which used to be silently
+  // discarded, and is the part worth having (place#224).
+  const lpf = addLpfColumns(records, columns, rows, roles);
+  const citation = lpfCitation(data);
+  const notes = [note, lpf.note].filter(Boolean);
+  return { columns, rows, total: rows.length, roles, note: notes.join('; '),
+           repPoints, repCols, rowTypes: lpf.rowTypes, citation };
+}
+
+// ── Linked Places import: read the record, not just its properties ───────────────────────────────
+// `fromJSON` flattens a GeoJSON-ish feature to `properties`, which for real LPF throws away almost
+// everything that distinguishes it from a spreadsheet: the toponyms, the place types, the dates, the
+// links. Measured on a 71-feature file: 111 names (40 of them in Russian and attested nowhere else
+// in the index), 71 AAT types and 5 feature-level `when`s, all gone — and the file then reported as
+// having no types and no dates, which its own contents contradict. MyD writes every one of these on
+// export, so the round-trip was open in both directions (place#224).
+//
+// Each part lands where MyD already knows how to use it: toponyms in an `alt_names` column the
+// exporter re-emits as `names[]`, types in `project.rowTypes` which the exporter reads per row, the
+// timespan in a date column. Anything with no modelled home (links, descriptions, relations) becomes
+// a plain column so it stays visible and travels with the table instead of vanishing.
+function addLpfColumns(records, columns, rows, roles) {
+  const isLPF = records.some((r) => r && (Array.isArray(r.names) || Array.isArray(r.types) || r.when));
+  if (!isLPF) return { rowTypes: null, note: '' };
+  const notes = [];
+  const push = (header, values, role) => {
+    if (!values.some((v) => v !== '')) return null;
+    const name = uniqueHeader(header, columns);
+    columns.push(name);
+    rows.forEach((r, i) => r.push(values[i]));
+    if (role) roles[name] = role;
+    return name;
+  };
+  const title = (f) => String((f && f.properties && f.properties.title) || '').trim();
+
+  // Toponyms. The title is already a column; the rest are the variants, which is exactly what the
+  // alt_names role means and what the exporter turns back into `names[]`.
+  const alts = records.map((f) => {
+    const seenT = new Set([title(f).toLowerCase()]);
+    return ((f && f.names) || []).map((n) => String((n && (n.toponym || n.ethnonym)) || '').trim())
+      .filter((t) => { const k = t.toLowerCase(); if (!t || seenT.has(k)) return false; seenT.add(k); return true; })
+      .join(';');
+  });
+  const nAlt = alts.reduce((a, v) => a + (v ? v.split(';').length : 0), 0);
+  if (push('alt_names', alts, 'alt_names')) {
+    notes.push(`kept <strong>${nAlt.toLocaleString()}</strong> name variant${nAlt === 1 ? '' : 's'} from <code>names</code>`);
+  }
+
+  // Place types. The identifiers go straight into rowTypes (where the LPF builder reads them); the
+  // column exists so they are visible, and so the per-row picker's "apply to all rows with this
+  // value" grouping works on them.
+  const rowTypes = {};
+  const typeCells = records.map((f, i) => {
+    const ts = ((f && f.types) || []).filter((t) => t && t.identifier);
+    if (ts.length) rowTypes[i] = ts.map((t) => ({ id: String(t.identifier), text: String(t.label || t.identifier) }));
+    return ts.map((t) => String(t.identifier)).join(';');
+  });
+  const nTyped = Object.keys(rowTypes).length;
+  if (push('aat_type', typeCells, 'type')) {
+    notes.push(`assigned place types to <strong>${nTyped.toLocaleString()}</strong> row${nTyped === 1 ? '' : 's'} from <code>types</code>`);
+  }
+
+  // Temporality. One timespan renders as `start/end`, which the date parser reads as a range. A
+  // feature with several keeps the full object in its own column rather than losing the extras.
+  const edge = (o) => String((o && (o.in || o.earliest || o.latest)) || '').trim();
+  const spans = records.map((f) => ((f && f.when && f.when.timespans) || []));
+  const whenCells = spans.map((ts) => {
+    if (!ts.length) return '';
+    const a = edge(ts[0].start), b = edge(ts[0].end);
+    return (a && b) ? `${a}/${b}` : (a || b);
+  });
+  const nWhen = whenCells.filter(Boolean).length;
+  if (push('when', whenCells, 'date')) {
+    notes.push(`read <strong>${nWhen.toLocaleString()}</strong> date${nWhen === 1 ? '' : 's'} from <code>when</code>`);
+  }
+  if (spans.some((ts) => ts.length > 1)) {
+    push('when_all', records.map((f) => (f && f.when ? JSON.stringify(f.when) : '')), 'other');
+    notes.push('features with more than one timespan keep the full <code>when</code> in <code>when_all</code>');
+  }
+
+  // No modelled home, but far better visible than dropped. Relations especially: MyD builds
+  // containment from reconciled columns, so an imported relation cannot be re-emitted as one — it is
+  // carried as data and the user is told, rather than disappearing without a word.
+  push('links', records.map((f) => ((f && f.links) || [])
+    .map((l) => [l && l.type, l && l.identifier].filter(Boolean).join(':')).filter(Boolean).join('; ')), 'other');
+  push('description', records.map((f) => ((f && f.descriptions) || [])
+    .map((d) => String((d && d.value) || '').trim()).filter(Boolean).join(' | ')), 'other');
+  const nRel = records.reduce((a, f) => a + (((f && f.relations) || []).length), 0);
+  if (push('relations', records.map((f) => ((f && f.relations) || [])
+    .map((r) => [r && r.relationType, r && r.relationTo].filter(Boolean).join(' ')).filter(Boolean).join('; ')), 'other') && nRel) {
+    notes.push(`<strong>${nRel.toLocaleString()}</strong> relation${nRel === 1 ? '' : 's'} kept as a column ` +
+      '(containment is rebuilt by reconciling the columns that carry it, so these are not re-exported as relations)');
+  }
+
+  return { rowTypes: nTyped ? rowTypes : null, note: notes.join('; ') };
+}
+
+// The file's own dataset metadata, so a contributor's citation survives a round trip instead of
+// resetting to the filename. `indexing` is the schema.org block WHG's ingest actually reads and the
+// one MyD writes; the CSL `citation` block is the fallback. Licence is deliberately NOT inferred —
+// it is a legal claim, and the picker records a specific code the user chose.
+function lpfCitation(data) {
+  const idx = data && data.indexing;
+  const csl = data && data.citation && data.citation.citationItems
+    && data.citation.citationItems[0] && data.citation.citationItems[0].itemData;
+  if (!idx && !csl) return null;
+  const text = (v) => (v == null ? '' : (typeof v === 'object' ? String(v.name || v['@id'] || '') : String(v))).trim();
+  const people = []
+    .concat((idx && idx.creator) || [], (csl && csl.author) || [])
+    .map((c) => (typeof c === 'object' && c && (c.family || c.given)
+      ? [c.given, c.family].filter(Boolean).join(' ').trim()
+      : text(c)))
+    .filter(Boolean);
+  const seenP = new Set();
+  const contributors = people.filter((n) => { const k = n.toLowerCase(); if (seenP.has(k)) return false; seenP.add(k); return true; })
+    .map((name) => ({ name, orcid: '', affiliation: '', role: '', degree: '', corresponding: false }));
+  const published = text(idx && idx.datePublished) || String((csl && csl.issued && csl.issued['date-parts'] && csl.issued['date-parts'][0] && csl.issued['date-parts'][0][0]) || '');
+  const year = (published.match(/\d{4}/) || [''])[0];
+  const out = {};
+  const title = text(idx && idx.name) || text(csl && csl.title);
+  if (title) out.title = title;
+  if (year) out.year = year;
+  const version = text(idx && idx.version) || text(csl && csl.version);
+  if (version) out.version = version;
+  const publisher = text(idx && idx.publisher) || text(csl && csl.publisher);
+  if (publisher) out.publisher = publisher;
+  const url = text(idx && idx.url) || text(idx && idx.identifier) || text(csl && (csl.DOI || csl.URL));
+  if (url) out.url = url;
+  if (contributors.length) out.contributors = contributors;
+  return Object.keys(out).length ? out : null;
 }
 
 // Append longitude/latitude (points) and geometry_wkt (everything else) columns for a feature array,
@@ -1044,6 +1205,9 @@ function renderMapping() {
       renderPreview();       // 'other' (ignore) columns are hidden in the preview
       renderCoords();        // coords/lat/lon mapping affects the coordinate panel
       renderDates();         // date mapping affects the date panel
+      renderTypePrompt();    // ...and the type nudge, which otherwise kept saying "no place-type
+                             // column detected" after the user had just mapped one — the opposite of
+                             // the truth, at the moment they are looking for confirmation.
       refreshReconSection(); // name/country mapping affects what can be reconciled
       renderColSwitcher();   // the chain (which columns/levels) may have changed → refresh the pills
       refreshReview();       // and the review pane's active column may no longer exist
@@ -2267,7 +2431,13 @@ async function finishImport(parsed, fileName, format) {
     // Points derived from lines/polygons — held, unapplied, until the user asks for them (place#210).
     repPoints: parsed.repPoints || null,
     repPointCols: parsed.repCols || null,
+    // An LPF import brings its own place types and dataset metadata; both are the file's, not
+    // guesses, so they seed the project rather than waiting to be re-entered by hand (place#224).
+    rowTypes: parsed.rowTypes || {},
   };
+  // Dataset metadata the file carried. Applied AFTER the project exists, because the defaults read
+  // `project.fileName` for the fallback title and would otherwise read the previous project's.
+  if (parsed.citation) project.citation = Object.assign(citationDefaults(), parsed.citation);
   el('recon-resume').classList.add('d-none'); // fresh import, not a resume
   _tracked.clear(); // new dataset → let the once-per-dataset funnel events fire again
   console.log(`[recon] imported "${fileName}" locally: ${project.total} rows, ${project.columns.length} cols`);
@@ -2536,9 +2706,14 @@ function hasCoordRole() {
 function rowCoordValue(i) {
   const coordsIdx = colIndexByRole('coords'), latIdx = colIndexByRole('lat'), lonIdx = colIndexByRole('lon');
   try {
+    // A combined coordinate column wins when it actually yields a position. When it does not, fall
+    // through to mapped lat/lon rather than reporting the row as unlocated: a single mis-assigned
+    // coords column used to suppress every coordinate in the dataset, which is a lot of damage for
+    // one wrong guess (place#225). Belt and braces alongside the detection fix.
     if (coordsIdx >= 0) {
       const fmt = project.coordFormat || Coords.detectCoordFormat(coordColumnSamples(coordsIdx)).format;
-      return Coords.parseCoord(fmt, project.rows[i][coordsIdx]);
+      const c = Coords.parseCoord(fmt, project.rows[i][coordsIdx]);
+      if (c) return c;
     }
     if (latIdx >= 0 && lonIdx >= 0) {
       return Coords.parseLatLonPair(project.rows[i][latIdx], project.rows[i][lonIdx], !!project.coordSwap);

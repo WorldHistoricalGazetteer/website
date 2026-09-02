@@ -12,7 +12,7 @@ import tempfile
 import shutil
 import time
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 
 from validation.create_dataset import read_json_features_in_batches
@@ -641,3 +641,43 @@ def extract_context_namespaces(file_path):
                 context_namespaces.update(item)
 
     return context_namespaces
+
+
+# ── Schema documents at the $id they declare ─────────────────────────────────
+# Both schemas name themselves under https://whgazetteer.org/schema/, and lpf_v2.0
+# $refs csl-citation.json by that URL. The prefix used to be served only under DEBUG,
+# with a comment in whg/urls.py noting that staging and production needed an nginx
+# alias — which was never added, so in production both 404'd at their own $id
+# (place#226). Anyone validating a WHG-exported LPF by the address the file gives for
+# itself got an unresolvable reference rather than a pass or a list of errors, which is
+# a poor answer when we hand contributors an export and tell them it is valid.
+#
+# Served by Django rather than by an nginx alias so it holds wherever the app runs and
+# cannot drift out of the deployment again. The name is matched against a fixed set —
+# never joined from user input — so there is no path to traverse.
+SCHEMA_FILES = {
+    'lpf_v2.0.jsonld': 'application/schema+json',
+    'lpo_v2.0.jsonld': 'application/ld+json',
+    'csl-citation.json': 'application/schema+json',
+    'whg_schema.jsonld': 'application/schema+json',
+}
+
+
+def schema_document(request, name):
+    """Serve a validation schema at its declared `$id`. Whitelisted names only."""
+    content_type = SCHEMA_FILES.get(name)
+    if content_type is None:
+        raise Http404(f"No such schema: {name}")
+    path = os.path.join(settings.BASE_DIR, 'validation', 'static', name)
+    try:
+        with codecs.open(path, 'r', 'utf8') as f:
+            body = f.read()
+    except IOError:
+        logger.error(f"Schema file missing from disk: {path}")
+        raise Http404(f"No such schema: {name}")
+    response = HttpResponse(body, content_type=content_type)
+    # Schemas are versioned by filename, so they can be cached hard. CORS is open
+    # because the point of a resolvable $id is that someone else's validator fetches it.
+    response['Cache-Control'] = 'public, max-age=86400'
+    response['Access-Control-Allow-Origin'] = '*'
+    return response

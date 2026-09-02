@@ -22,6 +22,7 @@ from accounts.views import profile_edit
 from datasets.views import PublicListsView  # , DataListsView
 from licensing import views as licensing_views
 from main import views
+from validation import views as validation_views
 from resources.views import TeachingPortalView
 from sitemap.views import StaticViewSitemap, ToponymSitemap
 from utils import mapdata
@@ -202,6 +203,12 @@ urlpatterns = [
                   # Dataset Validation
                   path('validation/', include('validation.urls')),
 
+                  # Validation schemas at the `$id` they declare (place#226). Both schemas name
+                  # themselves under /schema/ and lpf_v2.0 $refs csl-citation.json by that URL, so the
+                  # prefix has to resolve in production and not only under DEBUG — otherwise a third
+                  # party validating a WHG-exported LPF gets an unresolvable ref rather than an answer.
+                  path('schema/<str:name>', validation_views.schema_document, name="schema-document"),
+
                   # Serve the CDNfallbacks folder with host check
                   re_path(r'^CDNfallbacks/(?P<path>.*)$', serve_cdnfallbacks),
 
@@ -217,15 +224,4 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-
-    # Serve files from the 'validation/static' directory with the 'schema/' URL prefix
-    schema_root = os.path.join(settings.BASE_DIR, 'validation', 'static')
-    urlpatterns += static('schema/', document_root=schema_root)
-    # NB: requires additional Nginx directive in staging/production:
-    #
-    # location /schema/ {
-    #     alias /home/whgadmin/sites/dev-whgazetteer-org/validation/static/;
-    #     autoindex on;  # Enable directory listing
-    # }
-
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
