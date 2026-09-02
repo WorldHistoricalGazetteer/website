@@ -794,6 +794,28 @@
               <label class="mb-0 ms-2"><input type="checkbox" id="recon-scope-undated"> include undated places</label>
             </div>
             <div class="form-text small">Negative years are BCE. Leave both blank for no date constraint.</div>
+            {% comment %}
+              Geometry capture range (place#220). Deliberately separate from the range above: that one
+              constrains which gazetteer records may match, and "this polygon was traced from a 2019
+              image" is not a claim about which records should match. Linked Places requires a date
+              somewhere on every place, and accepts one on the geometry — so an undated dataset whose
+              shapes have acquisition dates can say something true rather than invent dates.
+            {% endcomment %}
+            <hr class="my-2">
+            <label class="small fw-semibold mb-1"><i class="fas fa-draw-polygon me-1 text-secondary"></i>Geometry captured <span class="text-muted fw-normal">(optional)</span></label>
+            <div class="d-flex align-items-center flex-wrap gap-2 small">
+              <label class="mb-0">From year
+                <input type="number" id="recon-scope-geom-start" class="form-control form-control-sm d-inline-block" style="width:100px" step="1" placeholder="e.g. 2019"></label>
+              <label class="mb-0">to
+                <input type="number" id="recon-scope-geom-end" class="form-control form-control-sm d-inline-block" style="width:100px" step="1" placeholder="e.g. 2019"></label>
+            </div>
+            <div class="form-text small">
+              When <em>your own</em> coordinates or shapes were surveyed, traced or acquired &mdash; not when the places existed.
+              Use this when the places themselves are undated. It rides into the exported <code>geometry.when</code>, satisfies WHG's
+              date requirement, and never constrains which records you match against. For per&#8209;row capture dates, give a column
+              the <strong>Geometry captured (date)</strong> role in Step&nbsp;2 instead. Geometry cloned from a match is left alone:
+              that shape is the gazetteer's, not yours.
+            </div>
           </fieldset>
         </div>
         <div class="modal-footer">
