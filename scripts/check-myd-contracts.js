@@ -147,6 +147,7 @@ const FEATURE_PARTS = [
   ['types', /rowTypesFor\(/, 'project.rowTypes'],
   ['when', /rec\.whenStart/, 'the date column the importer fills'],
   ['geometry', /rec\.geom\b/, 'the geometry column'],
+  ['geometry (certainty + approximation)', /rec\.fileGeomMeta/, 'project.rowGeomMeta'],
   ['links', /rec\.fileLinks/, 'project.rowLinks'],
 ];
 function checkFeatureRoundTrip() {
