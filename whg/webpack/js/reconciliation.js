@@ -3633,10 +3633,12 @@ function datasetMetaGaps() {
 function metaNoteHTML(v) {
   const gaps = (v && v.meta) || [];
   if (!gaps.length) return '';
+  const one = gaps.length === 1;
   return '<div class="recon-validate-meta small text-muted mt-2">' +
     '<i class="fas fa-circle-info me-1"></i>Your dataset itself has ' +
     gaps.join(', and ') +
-    '. Both are set under <strong>Citation &amp; provenance</strong> below, and neither blocks contributing.</div>';
+    `. ${one ? 'It is' : 'Both are'} set under <strong>Citation &amp; provenance</strong> below, and ` +
+    `${one ? 'it does not block' : 'neither blocks'} contributing.</div>`;
 }
 
 function renderValidation(v) {
