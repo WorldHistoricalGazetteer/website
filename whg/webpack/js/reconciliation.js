@@ -2622,6 +2622,12 @@ async function buildExportRecords(opts, onProgress) {
     const rawWkt = (!ov && geowktIdx >= 0) ? String(project.rows[i][geowktIdx] == null ? '' : project.rows[i][geowktIdx]).trim() : '';
     const wktGeom = rawWkt ? wktToGeoJSON(rawWkt) : null;
     const geom = ov ? ov.geometry : wktGeom;
+    // How that override came about, so the LPF can say so rather than exporting the shape bare.
+    // Projects saved before this shipped carry `source` but no `from`, so a cloned geometry falls back
+    // to the row's resolved match — the record it must have been cloned from.
+    const geomProv = ov ? { source: ov.source,
+                            from: ov.from || (ov.source === 'match' && info
+                              ? ((resolvedMatchList(info.key)[0] || {}).id || '') : '') } : null;
     // lon/lat still come from the coordinate columns: the first vertex of a polygon is a corner, not a
     // position for the place. A WKT POINT is the one geometry that IS a coordinate.
     const coord = ov ? firstLngLat(ov.geometry)
@@ -2680,7 +2686,7 @@ async function buildExportRecords(opts, onProgress) {
       // reconciled to a record carrying sitelinks (in practice, a Wikidata one).
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
-    records.push({ row: i, orig, aug, coord, geom, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd, match, parents,
+    records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd, match, parents,
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -2860,7 +2866,7 @@ function buildLPF(data) {
     // Dataset-scope PeriodO period(s) apply to every place (scope-level, not per row).
     const scp = scopePeriods();
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
-    if (rec.geom) feat.geometry = rec.geom;                              // override (point / line / polygon) wins
+    if (rec.geom) feat.geometry = geomProvenance(rec.geom, rec.geomProv);  // override (point / line / polygon) wins
     else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
     else if (opts.enrich && rec.match && rec.match.first && _candCoord[rec.match.first.id]) {
       // Enrichment: the matched record's location, for a row that brought no coordinates of its own.
@@ -2941,6 +2947,32 @@ function buildLPF(data) {
   }
   fc.features = features;
   return fc;
+}
+// Where an override geometry came from, said in LPF's own terms. The spec admits `certainty`,
+// `citations`, `when` and `approximation` on ANY geometry (definitions/optionalProperties), and WHG's
+// ingest stores the geometry object verbatim (PlaceGeom.jsonb), so this survives contribution instead
+// of stopping at the download.
+//
+//   cloned from a match → the GAZETTEER's shape, not the contributor's. Cited to the record it came
+//     from and marked less-certain: the same treatment the auto-enriched location gets (place#184),
+//     because it is the same claim however the shape got there — the reader needs to know the shape
+//     is borrowed, not who clicked.
+//   drawn on the map → the contributor's OWN assertion, so no `certainty` (we cannot know how sure
+//     they are, and claiming 'certain' would say they surveyed it). It still says how it was made:
+//     silence makes a shape traced over a basemap indistinguishable from a surveyed position.
+//   from the dataset's own WKT column → the contributor's data, exported bare, as before.
+function geomProvenance(geometry, prov) {
+  if (!geometry || !prov) return geometry;
+  if (prov.source === 'match') {
+    const src = prov.from ? barePlaceId(prov.from) : '';
+    const cite = src ? { label: `WHG reconciliation match ${src}`, '@id': src }
+      : { label: 'WHG reconciliation match' };
+    return { ...geometry, certainty: 'less-certain', citations: [cite] };
+  }
+  if (prov.source === 'drawn') {
+    return { ...geometry, citations: [{ label: 'Drawn by the contributor (WHG Map your Data)' }] };
+  }
+  return geometry;
 }
 function serializeLPF(data) { return JSON.stringify(buildLPF(data), null, 2); }
 
@@ -6940,7 +6972,10 @@ async function geomAction(kind, key) {
     const g = await fetchCandidateGeometry(cand.id);
     if (!g) { if (s) s.textContent = 'no geometry available for this match'; return; }
     project.geom = project.geom || {};
-    project.geom[key] = { source: 'match', geometry: g };
+    // Record which record the shape came from, not just that it came from one: on export the geometry
+    // is cited to it, exactly as an auto-enriched location is (place#184). Without `from` a cloned
+    // shape would export bare — indistinguishable from one the contributor surveyed themselves.
+    project.geom[key] = { source: 'match', from: cand.id, geometry: g };
     mod.setOverride(g);
     persist(); updateGeomStatus(key); refreshExport();
   }
