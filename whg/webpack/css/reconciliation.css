@@ -123,6 +123,27 @@
 .recon-rowfilter-chip .recon-rowfilter-x:hover { color: #b02a37; }
 #recon-preview-body tr.recon-row-excluded td { color: #a8b0b8; font-style: italic; }
 
+/* Left out of the contribution (place#232). Read as struck-through and faded rather than merely
+   greyed: "not being reconciled" and "not being published" are different states and a user has to be
+   able to tell them apart at a glance, including when a row is both. */
+#recon-preview-body tr.recon-row-left-out td { color: #b0b6bd; text-decoration: line-through; background: #f7f8f9; }
+#recon-preview-body tr.recon-row-left-out td .recon-type-chip { opacity: .55; }
+
+/* The per-row toggle. Deliberately quiet until the row is hovered — it sits in every row of a table
+   people scroll through, and a column of hard black icons would shout over the data. */
+button.recon-row-ex {
+  border: 0; background: none; padding: 0 .35em 0 0; margin: 0;
+  color: #ccd2d8; cursor: pointer; font-size: .85em; line-height: 1; vertical-align: baseline;
+}
+#recon-preview-body tr:hover button.recon-row-ex { color: #8a929a; }
+button.recon-row-ex:hover { color: #b02a37; }
+#recon-preview-body tr.recon-row-left-out button.recon-row-ex { color: #b02a37; }
+#recon-preview-body tr.recon-row-left-out button.recon-row-ex:hover { color: #146c43; }
+button.recon-row-ex:focus-visible { outline: 2px solid #0d6efd; outline-offset: 1px; }
+
+/* Not a warning — a choice the contributor made, and reversible. */
+.recon-validate-leftout { border-left: 3px solid #dee2e6; padding-left: .6em; }
+
 .recon-transform-btn { color: #8a94a0; }
 .recon-transform-btn:hover { color: #0d6efd; }
 
