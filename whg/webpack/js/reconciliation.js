@@ -84,13 +84,16 @@ const ROLE_HINTS = [
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
   ['lon', /^(lon|lng|long|longitude|x)$/i],
+  // Before BOTH the coordinate hints and the date hint. `coords` below is unanchored, so it claims
+  // anything merely containing "geom"/"geometry"/"coord" — including `geometry_date`, which is a date
+  // and not a coordinate column. And a capture date describes the GEOMETRY, not the place: letting the
+  // plain date hint take `acquisition_date` is how an undated dataset ends up asserting dates it does
+  // not have. Narrow enough not to steal `geom_wkt` or `the_geom`, which name no date.
+  ['geom_date', /^((geom|geometry|coord|coordinate|polygon|shape|survey|image|imagery|scene|sensor)[ _-]?(date|year|captured|acquired|acquisition)|(captur|acquisiti?|survey)[a-z]*[ _-]?(date|year|on)|date[ _-]?(captured|acquired|surveyed|of[ _-]?(capture|acquisition|survey)))$/i],
   // Before the coordinate hint, and deliberately narrow: only names that can ONLY mean a WKT geometry.
   // A column called "geometry" holding "51.5, -0.1" is still a coordinate column, so it isn't claimed.
   ['geowkt', /^(wkt|geo_?wkt|geom_?wkt|geometry_?wkt|the_geom|geom_?text)$/i],
   ['coords', /coord|geometry|geom|wkt|gridref|grid.?ref|osgb|national.?grid|easting|northing/i],
-  // Before the date hint: a capture/acquisition date describes the GEOMETRY, not the place, and
-  // claiming it as a place date is how an undated dataset ends up asserting dates it doesn't have.
-  ['geom_date', /^((geom|geometry|coord|coordinate|polygon|shape|survey|image|imagery|scene|sensor)[ _-]?(date|year|captured|acquired|acquisition)|(captur|acquisiti?|survey)[a-z]*[ _-]?(date|year|on)|date[ _-]?(captured|acquired|surveyed|of[ _-]?(capture|acquisition|survey)))$/i],
   ['date', /^(date|year|start|end|from|to|period|century)$/i],
   ['id', /^(id|uid|key|identifier|wikidata|qid|geonames|gn.?id)$/i],
 ];
