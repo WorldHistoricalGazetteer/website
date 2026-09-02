@@ -72,6 +72,11 @@ const ROLE_CASES = [
   ['acquisition_date', 'geom_date'], ['geometry_date', 'geom_date'], ['capture_date', 'geom_date'],
   ['image_date', 'geom_date'], ['survey_date', 'geom_date'],
   ['date', 'date'], ['year', 'date'], ['period', 'date'],
+  // A column of years that dates OBSERVATIONS of a place, not the place. Emitting these as the
+  // place's own `when` would collapse to [min, max] and hide the place outside that window — a
+  // lake measured in 1911 and 2009 existed before and after both. It must stay unclaimed.
+  ['observation_years', 'other'], ['observation_year', 'other'], ['observed_years', 'other'],
+  ['observation_date', 'other'], ['attestation_years', 'other'],
   ['id', 'id'], ['uid', 'id'], ['wikidata', 'id'],
   // Columns that name something OTHER than the place must not be claimed as its name.
   ['basin_name', 'other'], ['mountain_range', 'other'], ['record_status', 'other'],
@@ -105,9 +110,30 @@ function checkIndexingContract(required) {
   } else ok(`indexing contract (${required.length} fields the ingest reads)`);
 }
 
+// ── 3. The round trip ────────────────────────────────────────────────────────
+// MyD writes dataset metadata into `indexing` on export and reads it back on import. Every field
+// the citation form holds must survive that trip, or a contributor who exports and re-imports
+// silently loses it. `description` did exactly this: the import seeding was written before the
+// field existed, so a file that carried a description produced a dataset reporting it had none.
+function checkCitationRoundTrip() {
+  const fm = src.match(/const CITE_FIELDS = \[([^\]]*)\]/);
+  if (!fm) { bad('citation round trip', 'CITE_FIELDS not found'); return; }
+  const fields = [...fm[1].matchAll(/'(\w+)'/g)].map((m) => m[1]);
+  const start = src.indexOf('function lpfCitation');
+  if (start < 0) { bad('citation round trip', 'lpfCitation not found'); return; }
+  const body = src.slice(start, src.indexOf('\nfunction ', start + 1))
+    .replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const lost = fields.filter((f) => !new RegExp(`out\\.${f}\\s*=`).test(body));
+  if (lost.length) {
+    bad('citation round trip', `Map your Data writes ${lost.join(', ')} into \`indexing\` but lpfCitation never reads ${lost.length === 1 ? 'it' : 'them'} back. ` +
+      'Export then re-import and the contributor loses it.');
+  } else ok(`citation round trip (${fields.length} citation fields)`);
+}
+
 const required = (process.argv[2] || 'creator,name,description,url,citation').split(',').filter(Boolean);
 console.log('Map your Data contract checks');
 checkRoles();
 checkIndexingContract(required);
+checkCitationRoundTrip();
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');
