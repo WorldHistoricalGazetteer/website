@@ -3617,10 +3617,16 @@ function renderValidation(v) {
     .map((k) => { const [what, fix] = VALIDATE_HELP[k];
       return `<li><strong>${v.miss[k].toLocaleString()}</strong> of ${total.toLocaleString()} ${plural(v.miss[k])} have ${what}${fix ? ` — ${fix}` : ''}.</li>`; });
   // Schema errors the friendly checks don't already explain (bad @id, malformed values, …) → one bullet.
-  const covered = /place name|name variant|location|date\/period|place type|fclasses|types|missing (in|earliest|latest)|anyOf|oneOf/i;
+  const covered = /place name|name variant|location|date\/period|place type|fclasses|types|missing (in|earliest|latest|when|geometry)|anyOf|oneOf/i;
   const other = (v.schemaSummary || []).filter((g) => !covered.test(g.msg));
   if (other.length) {
-    const n = other.reduce((a, g) => a + (g.count || 1), 0);
+    // Distinct RECORDS, not error occurrences. One record can fail several rules, and one rule
+    // written as an anyOf reports a failure per branch — summing those and calling them records
+    // announced "678 records" for a 71-record file, which reads as catastrophe rather than as the
+    // one missing field it actually was.
+    const affected = new Set();
+    other.forEach((g) => (g.features || []).forEach((i) => affected.add(i)));
+    const n = affected.size || other.reduce((a, g) => a + (g.records || g.count || 1), 0);
     bullets.push(`<li><strong>${n.toLocaleString()}</strong> ${n === 1 ? 'record has' : 'records have'} other format issues — see the technical details below.</li>`);
   }
 
@@ -3633,7 +3639,11 @@ function renderValidation(v) {
     return;
   }
   // Full raw list, hidden behind a disclosure for the technically-minded.
-  const techLines = (v.schemaSummary || []).map((g) => `<li>${esc(g.msg)}${g.count > 1 ? ` <span class="text-muted">(${g.count}×)</span>` : ''}</li>`);
+  const techLines = (v.schemaSummary || []).map((g) => {
+    const n = g.records || g.count;
+    const unit = g.records ? `${n.toLocaleString()} record${n === 1 ? '' : 's'}` : `${n.toLocaleString()}×`;
+    return `<li>${esc(g.msg)}${n > 1 ? ` <span class="text-muted">(${unit})</span>` : ''}</li>`;
+  });
   const tech = techLines.length
     ? `<details class="recon-validate-tech small mt-2"><summary class="text-muted">Technical validation details (${techLines.length})</summary><ul class="mb-0 mt-1">${techLines.join('')}</ul></details>`
     : '';
