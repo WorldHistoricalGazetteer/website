@@ -1965,6 +1965,34 @@ function rowFilterFns() {
 }
 // Is this row in the working subset? Everything that SEARCHES rows asks this; nothing that stores or
 // exports them does.
+// ── Excluding a record from the contribution (place#232) ─────────────────────────────────────────
+// Distinct from the row filter, which scopes RECONCILIATION and says so: filtered rows are still
+// exported. This is the other thing people want and had no way to ask for — leave this record out
+// of what I publish. Reviewing a dataset is how you find the row that does not belong, and MyD was
+// good at surfacing those and offered nothing to do about it.
+//
+// An exclude, not a delete. The data stays, so it is reversible, and "I excluded it and want it
+// back" is a normal thing to want in a browser-local tool with no server-side copy to restore from.
+function rowExcluded(i) { return !!(project && project.excludedRows && project.excludedRows[i]); }
+function excludedRowCount() {
+  if (!project || !project.excludedRows) return 0;
+  let n = 0;
+  for (let i = 0; i < project.rows.length; i++) if (rowExcluded(i)) n += 1;
+  return n;
+}
+function contributedRowCount() { return project ? project.rows.length - excludedRowCount() : 0; }
+function toggleRowExcluded(i) {
+  if (!project) return;
+  project.excludedRows = project.excludedRows || {};
+  if (project.excludedRows[i]) delete project.excludedRows[i];
+  else project.excludedRows[i] = true;
+  persist();
+  paintPreviewWindow();
+  updatePreviewCount();
+  refreshExport();
+  runValidation();
+}
+
 function rowIncluded(i) {
   const fns = rowFilterFns();
   for (let k = 0; k < fns.length; k++) if (!fns[k].test(project.rows[i][fns[k].col])) return false;
@@ -2195,25 +2223,37 @@ function paintPreviewWindow() {
     const ri = view ? view[vi] : vi;
     const r = project.rows[ri];
     let tds = '';
+    const isEx = rowExcluded(ri);
     for (let c = 0; c < nc; c++) {
       const ci = vis[c]; const raw = r[ci];
+      // The exclude toggle rides in the first cell rather than a column of its own: the preview is
+      // virtualised with a measured colgroup, and a new column would have to be threaded through all
+      // of it for one button.
+      const exBtn = c === 0
+        ? `<button type="button" class="recon-row-ex" data-ri="${ri}" tabindex="-1" ` +
+          `title="${isEx ? 'Excluded from your contribution — click to put it back' : 'Leave this record out of your contribution'}" ` +
+          `aria-label="${isEx ? 'Include this record' : 'Exclude this record'}">` +
+          `<i class="fas ${isEx ? 'fa-rotate-left' : 'fa-ban'}"></i></button>`
+        : '';
       if (project.columns[ci].role === 'type') {
         const types = rowTypesFor(ri);
         if (types.length) {
-          tds += `<td data-ci="${ci}" class="recon-type-cell" title="${esc(types.map((t) => t.text).join(', '))}">` +
+          tds += `<td data-ci="${ci}" class="recon-type-cell" title="${esc(types.map((t) => t.text).join(', '))}">${exBtn}` +
             types.map((t) => `<span class="recon-type-chip">${truncate(t.text, 22)}</span>`).join(' ') + '</td>';
         } else {
           const hint = raw != null && String(raw).trim() !== '' ? `<span class="recon-type-hint">${truncate(raw, 22)}</span>` : '';
-          tds += `<td data-ci="${ci}" class="recon-type-cell recon-type-empty" title="${esc(raw)}">${hint}<span class="recon-type-assign">+ type</span></td>`;
+          tds += `<td data-ci="${ci}" class="recon-type-cell recon-type-empty" title="${esc(raw)}">${exBtn}${hint}<span class="recon-type-assign">+ type</span></td>`;
         }
       } else {
-        tds += `<td data-ci="${ci}" title="${esc(raw)}">${truncate(raw, 60)}</td>`;
+        tds += `<td data-ci="${ci}" title="${esc(raw)}">${exBtn}${truncate(raw, 60)}</td>`;
       }
     }
     // Rows outside the row filter stay visible and editable — they're just not being reconciled, and
     // saying so here is what stops the short match count reading as lost rows (place#209).
-    const excl = filtered && !rowIncluded(ri);
-    parts.push(`<tr data-ri="${ri}"${excl ? ' class="recon-row-excluded" title="Not being reconciled (row filter)"' : ''}>${tds}</tr>`);
+    const notSearched = filtered && !rowIncluded(ri);
+    const cls = [isEx ? 'recon-row-left-out' : '', notSearched ? 'recon-row-excluded' : ''].filter(Boolean).join(' ');
+    const why = isEx ? 'Left out of your contribution' : (notSearched ? 'Not being reconciled (row filter)' : '');
+    parts.push(`<tr data-ri="${ri}"${cls ? ` class="${cls}"` : ''}${why ? ` title="${why}"` : ''}>${tds}</tr>`);
   }
   parts.push(`<tr class="recon-vspacer"><td colspan="${nc}" style="height:${Math.max(0, (total - last) * rowH)}px"></td></tr>`);
   body.innerHTML = parts.join('');
@@ -2223,8 +2263,10 @@ function updatePreviewCount() {
   const c = el('recon-preview-count'); if (!c || !project) return;
   const total = project.rows.length;
   const shown = _previewView ? _previewView.length : total;
+  const left = excludedRowCount();
   c.textContent = (_previewFilter ? `${shown.toLocaleString()} of ${total.toLocaleString()} rows` : `${total.toLocaleString()} row${total === 1 ? '' : 's'}`) +
-    (rowFiltersActive() ? ` · ${includedRowCount().toLocaleString()} being reconciled` : '');
+    (rowFiltersActive() ? ` · ${includedRowCount().toLocaleString()} being reconciled` : '') +
+    (left ? ` · ${left.toLocaleString()} left out` : '');
 }
 
 // ── Data-browser edit mode ────────────────────────────────────────────────────────────────────────
@@ -2863,6 +2905,7 @@ async function buildExportRecords(opts, onProgress) {
 
   const records = [];
   for (let i = 0; i < project.rows.length; i++) {
+    if (rowExcluded(i)) continue;   // left out of the contribution (place#232)
     const orig = project.rows[i].map((v) => (v == null ? '' : v));
     const aug = {};
     let whenStart = '', whenEnd = '', geomWhenStart = '', geomWhenEnd = '', match = null;
@@ -3388,7 +3431,9 @@ function refreshExport() {
     // decisions alone reported "0 confirmed matches" for a fully auto-matched dataset (place#183).
     let confirmed = 0;
     Object.keys(project.matches || {}).forEach((key) => { if (resolvedMatchList(key).length) confirmed += 1; });
-    sum.textContent = hasMatches ? `${confirmed.toLocaleString()} confirmed match${confirmed === 1 ? '' : 'es'}` : 'augmented columns ready';
+    const left = excludedRowCount();
+    sum.textContent = (hasMatches ? `${confirmed.toLocaleString()} confirmed match${confirmed === 1 ? '' : 'es'}` : 'augmented columns ready') +
+      (left ? ` · ${contributedRowCount().toLocaleString()} of ${project.rows.length.toLocaleString()} records` : '');
   }
   renderCitation();
 }
@@ -3679,7 +3724,7 @@ async function runValidation() {
   let schemaOk = null; let schemaErrs = 0; let schemaSummary = [];
   try { const mod = await loadValidate(); const res = await mod.validateLPF(fc); schemaOk = res.ok; schemaErrs = res.errorCount; schemaSummary = res.summary; }
   catch (e) { console.error('[recon] LPF validator unavailable', e); }
-  _validation = { total: n, miss, schemaOk, schemaErrs, schemaSummary, meta: datasetMetaGaps() };
+  _validation = { total: n, miss, schemaOk, schemaErrs, schemaSummary, meta: datasetMetaGaps(), leftOut: excludedRowCount() };
   renderValidation(_validation);
   updateContributeGate();
   return _validation;
@@ -3718,6 +3763,16 @@ function datasetMetaGaps() {
   }
   return gaps;
 }
+// Records the contributor has left out. Said in every branch of the validation pane, because "N of M
+// places pass" invites the question "what happened to the others" and the answer should not have to
+// be hunted for. Not a warning — it is a choice they made, and it is reversible from the table.
+function leftOutHTML(v) {
+  const n = (v && v.leftOut) || 0;
+  if (!n) return '';
+  return `<div class="recon-validate-leftout small text-muted mt-2">` +
+    `<i class="fas fa-ban me-1"></i>${n.toLocaleString()} record${n === 1 ? '' : 's'} left out of this contribution ` +
+    `by you, and not counted above. Put ${n === 1 ? 'it' : 'them'} back from the table in Step&nbsp;2.</div>`;
+}
 function metaNoteHTML(v) {
   const gaps = (v && v.meta) || [];
   if (!gaps.length) return '';
@@ -3753,7 +3808,9 @@ function renderValidation(v) {
   }
 
   if (v.schemaOk === true && !bullets.length) {
-    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${total.toLocaleString()} places pass WHG's Linked Places validation.</div>` + metaNoteHTML(v);
+    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> ` +
+      `${v.leftOut ? `${total.toLocaleString()} of ${(total + v.leftOut).toLocaleString()} records` : `All ${total.toLocaleString()} places`} ` +
+      `pass WHG's Linked Places validation.</div>` + leftOutHTML(v) + metaNoteHTML(v);
     return;
   }
   if (v.schemaOk == null && !bullets.length) {
@@ -3773,6 +3830,7 @@ function renderValidation(v) {
   body.innerHTML =
     `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
     (bullets.length ? `<ul class="recon-validate-issues small mb-0">${bullets.join('')}</ul>` : '') +
+    leftOutHTML(v) +
     metaNoteHTML(v) +
     tech;
 }
@@ -5392,6 +5450,7 @@ function buildUniqueQueries(colIndex) {
     const val = String(r[colIndex] == null ? '' : r[colIndex]).trim();
     if (!val) return;
     if (!rowIncluded(i)) return; // outside the row filter — not searched, not reviewed (place#209)
+    if (rowExcluded(i)) return;  // left out of the contribution — no point searching it (place#232)
     const country = (countryIdx >= 0 && isCcode(r[countryIdx])) ? String(r[countryIdx]).trim().toUpperCase() : '';
     map.set(colIndex + ':' + i, { query: val, country, rows: [i] });
   });
@@ -8238,7 +8297,15 @@ function init() {
   const peditBtn = el('recon-preview-edit');
   if (peditBtn) peditBtn.addEventListener('click', () => { if (project) setPreviewEdit(!_previewEdit); });
   const pbody = el('recon-preview-body');
+  // The exclude toggle is always live, in or out of edit mode, and must never start a cell edit.
+  if (pbody) pbody.addEventListener('click', (e) => {
+    const btn = e.target.closest && e.target.closest('.recon-row-ex');
+    if (!btn || !project) return;
+    e.preventDefault(); e.stopPropagation();
+    toggleRowExcluded(Number(btn.dataset.ri));
+  });
   if (pbody) pbody.addEventListener('mousedown', (e) => {
+    if (e.target.closest && e.target.closest('.recon-row-ex')) { e.preventDefault(); return; }
     if (!_previewEdit || !project) return;
     const td = e.target.closest && e.target.closest('td[data-ci]');
     if (!td || td.querySelector('input')) return; // ignore spacers / the cell already being edited
