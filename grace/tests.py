@@ -20,18 +20,18 @@ from api.models import GazetteerRegistryEntry
 
 from . import privacy
 from .models import (
-    ActionItem, Person, Engagement, Interaction, Organisation, Source,
+    ActionItem, Engagement, Interaction, Organisation, Person, Review, Source,
     SourceSuggestion, TrackedDataset,
 )
 from .vocabularies import (
-    ActionItemStatus, DiscoverySource, EngagementStage, IntakeStatus,
-    SourceType, Stage,
+    ActionItemStatus, DiscoverySource, EmailStatus, EngagementStage,
+    IntakeStatus, PersonRole, ReviewType, SourceType, Stage,
 )
 
 User = get_user_model()
 
 
-class ContactLinkTests(TestCase):
+class PersonLinkTests(TestCase):
     """Decision 2: one table, an optional link, and never two copies of a fact."""
 
     def setUp(self):
@@ -611,7 +611,7 @@ class GraceAdminThemeTests(TestCase):
 
     def test_the_acronym_is_spelled_out_in_the_header(self):
         body = self.client.get("/grace/admin/").content.decode()
-        for word in ("Gazetteer", "Register", "Person", "Engagement"):
+        for word in ("Gazetteer", "Register", "Contact", "Engagement"):
             self.assertIn(word, body)
 
     def test_the_default_admin_is_left_alone(self):
@@ -628,3 +628,289 @@ class GraceAdminThemeTests(TestCase):
         """Django's default '-' clashed with the em dashes our columns return."""
         from grace.admin_site import grace_admin_site
         self.assertEqual(grace_admin_site.empty_value_display, "—")
+
+
+# ==========================================================================
+# Palak's review of the staging build — points 1 to 7
+# ==========================================================================
+
+class InternalRoleTests(TestCase):
+    """Point 2: the People register is everyone, ourselves included.
+
+    The reason that is not free: Article 14 covers data obtained from someone
+    *other than* the person, so it does not apply to our own staff. Without an
+    exemption, adding colleagues would bury the notices genuinely owed under a
+    pile of false ones.
+    """
+
+    def setUp(self):
+        self.outside = PersonRole.objects.create(
+            label="Rights holder", is_internal=False)
+        self.inside = PersonRole.objects.create(
+            label="WHG staff", is_internal=True)
+        self.long_ago = timezone.now() - timedelta(
+            days=privacy.PRIVACY_NOTICE_DUE_DAYS + 10)
+
+    def _person(self, name, role):
+        person = Person.objects.create(name=name, role=role)
+        Person.objects.filter(pk=person.pk).update(created_at=self.long_ago)
+        return Person.objects.get(pk=person.pk)
+
+    def test_outsiders_are_owed_a_notice(self):
+        person = self._person("An Archivist", self.outside)
+        self.assertIn(person, Person.objects.owed_privacy_notice())
+        self.assertTrue(person.privacy_notice_overdue)
+
+    def test_our_own_people_are_not(self):
+        colleague = self._person("A Colleague", self.inside)
+        self.assertNotIn(colleague, Person.objects.owed_privacy_notice())
+        self.assertFalse(colleague.privacy_notice_overdue)
+        self.assertTrue(colleague.is_internal)
+
+    def test_the_exemption_reads_the_flag_not_the_label(self):
+        """Renaming the role must not change who is exempt."""
+        self.inside.label = "Core team"
+        self.inside.save()
+        colleague = self._person("A Colleague", self.inside)
+        self.assertNotIn(colleague, Person.objects.owed_privacy_notice())
+
+
+class EmailDeliverabilityTests(TestCase):
+    """Point 2, second half: a bounce must not lose the person.
+
+    GRACE is deliberately not the mailing list — the sending platform owns
+    subscription state — so all that is held here is whether the address works.
+    """
+
+    def setUp(self):
+        self.ok = EmailStatus.objects.create(
+            label="Deliverable", is_undeliverable=False)
+        self.bounced = EmailStatus.objects.create(
+            label="Bounced", is_undeliverable=True)
+
+    def test_a_bounce_is_visible_without_deleting_anything(self):
+        person = Person.objects.create(
+            name="Gone Away", email="gone@example.org",
+            email_status=self.bounced)
+        self.assertTrue(person.email_is_undeliverable)
+        self.assertIn(person, Person.objects.live())
+
+    def test_deliverable_is_not_undeliverable(self):
+        person = Person.objects.create(name="Still Here", email_status=self.ok)
+        self.assertFalse(person.email_is_undeliverable)
+
+    def test_erasure_clears_the_deliverability_trail(self):
+        """It is derived from an address we are erasing, so it must go too."""
+        person = Person.objects.create(
+            name="Erase Me", email="e@example.org", email_status=self.bounced)
+        person.pseudonymise()
+        person.refresh_from_db()
+        self.assertIsNone(person.email_status_id)
+        self.assertIsNone(person.email_status)
+
+
+class ExpectedVersusRegisterTests(TestCase):
+    """Point 4: a prospect has no Register row to read figures from.
+
+    The rule from review §2 stands — machine facts are never copied into GRACE
+    — so these fields hold a *different* fact: what someone told us during a
+    negotiation. The Register wins the moment there is one.
+    """
+
+    def setUp(self):
+        self.entry = GazetteerRegistryEntry.objects.create(
+            id="tst", name="Test Gazetteer", namespace="tst",
+            entry_class="authority", record_count=4200, status="published",
+            rights_holder="Test Trust",
+        )
+
+    def test_a_prospect_reports_what_we_were_told(self):
+        dataset = TrackedDataset.objects.create(
+            title="Something promised", expected_record_count=5000,
+            expected_rights_holder="A County Society")
+        self.assertTrue(dataset.is_prospect)
+        self.assertTrue(dataset.figures_are_expectations)
+        self.assertEqual(dataset.effective_record_count, 5000)
+        self.assertEqual(dataset.effective_rights_holder, "A County Society")
+
+    def test_the_register_wins_once_linked(self):
+        dataset = TrackedDataset.objects.create(
+            title="Something delivered", registry=self.entry,
+            expected_record_count=5000,
+            expected_rights_holder="A County Society")
+        self.assertFalse(dataset.figures_are_expectations)
+        self.assertEqual(dataset.effective_record_count, 4200)
+        self.assertEqual(dataset.effective_rights_holder, "Test Trust")
+
+    def test_the_expectation_survives_accession(self):
+        """‘They offered X and delivered Y’ is worth keeping."""
+        dataset = TrackedDataset.objects.create(
+            title="Both", registry=self.entry, expected_record_count=5000)
+        dataset.refresh_from_db()
+        self.assertEqual(dataset.expected_record_count, 5000)
+        self.assertEqual(dataset.registry_record_count, 4200)
+
+
+class WhgLinkTests(TestCase):
+    """The board's ‘WHG’ column, and the reconciliation read-through."""
+
+    def test_a_whg_contribution_links_to_its_dataset_page(self):
+        entry = GazetteerRegistryEntry.objects.create(
+            id="whg:1234", name="A contribution", namespace="whg",
+            entry_class="dataset", record_count=10, status="published")
+        dataset = TrackedDataset.objects.create(title="A contribution",
+                                                registry=entry)
+        self.assertEqual(dataset.whg_dataset_id, 1234)
+        self.assertEqual(dataset.whg_url, "/datasets/1234/status")
+
+    def test_an_authority_has_no_page_of_its_own_here(self):
+        entry = GazetteerRegistryEntry.objects.create(
+            id="gnx", name="An authority", namespace="gnx",
+            entry_class="authority", record_count=10, status="published")
+        dataset = TrackedDataset.objects.create(title="An authority",
+                                                registry=entry)
+        self.assertIsNone(dataset.whg_dataset_id)
+        self.assertIsNone(dataset.whg_url)
+        self.assertIsNone(dataset.reconciliation_status)
+
+    def test_a_prospect_has_neither(self):
+        dataset = TrackedDataset.objects.create(title="Only wanted")
+        self.assertIsNone(dataset.whg_url)
+        self.assertIsNone(dataset.reconciliation_status)
+
+
+class ReviewTests(TestCase):
+    """Point 5. Both failure modes here are absences of an event."""
+
+    def setUp(self):
+        self.dataset = TrackedDataset.objects.create(title="Under review")
+        self.internal = ReviewType.objects.create(label="Internal editorial")
+        self.reviewer = Person.objects.create(name="A Reviewer")
+
+    def test_sent_and_not_back_is_outstanding(self):
+        review = Review.objects.create(
+            dataset=self.dataset, reviewer=self.reviewer,
+            review_type=self.internal, sent_on=datetime.date(2026, 1, 1))
+        self.assertTrue(review.is_outstanding)
+        self.assertFalse(review.awaiting_share)
+
+    def test_back_and_author_not_told_is_the_worse_one(self):
+        """From the contributor's side, nothing has happened at all."""
+        review = Review.objects.create(
+            dataset=self.dataset, review_type=self.internal,
+            sent_on=datetime.date(2026, 1, 1),
+            returned_on=datetime.date(2026, 2, 1))
+        self.assertFalse(review.is_outstanding)
+        self.assertTrue(review.awaiting_share)
+
+    def test_shared_is_finished(self):
+        review = Review.objects.create(
+            dataset=self.dataset, review_type=self.internal,
+            sent_on=datetime.date(2026, 1, 1),
+            returned_on=datetime.date(2026, 2, 1),
+            shared_with_author_on=datetime.date(2026, 2, 3))
+        self.assertFalse(review.is_outstanding)
+        self.assertFalse(review.awaiting_share)
+
+    def test_an_outside_reviewer_needs_no_whg_account(self):
+        """The People register covers both sides, so one field does."""
+        outsider = Person.objects.create(name="External Reader")
+        review = Review.objects.create(dataset=self.dataset, reviewer=outsider)
+        self.assertIsNone(review.reviewer.user_id)
+        self.assertIn(review, self.dataset.reviews.all())
+
+
+class ConnectionsTests(TestCase):
+    """Point 1: open one record and see everything tied to it.
+
+    Django shows the relations a record points at and nothing pointing back,
+    which is exactly the half that matters here.
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="conn", email="conn@example.org", password="pw",
+            given_name="Con", surname="Nection", name="Con Nection")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+
+        self.person = Person.objects.create(name="Well Connected")
+        self.dataset = TrackedDataset.objects.create(title="Their dataset")
+        self.dataset.people.add(self.person)
+        stage = EngagementStage.objects.create(label="In discussion",
+                                               is_open=True)
+        self.engagement = Engagement.objects.create(
+            person=self.person, dataset=self.dataset, stage=stage,
+            subject="About their dataset",
+            next_follow_up=datetime.date.today() + timedelta(days=7))
+        self.source = Source.objects.create(title="A printed gazetteer")
+        self.source.people.add(self.person)
+        self.source.derived_datasets.add(self.dataset)
+
+    def test_a_person_shows_their_engagements_and_datasets(self):
+        body = self.client.get(
+            f"/grace/admin/grace/person/{self.person.pk}/change/"
+        ).content.decode()
+        self.assertIn("Connected records", body)
+        self.assertIn("About their dataset", body)
+        self.assertIn("Their dataset", body)
+        self.assertIn("A printed gazetteer", body)
+
+    def test_a_dataset_shows_its_people_and_sources_back(self):
+        body = self.client.get(
+            f"/grace/admin/grace/trackeddataset/{self.dataset.pk}/change/"
+        ).content.decode()
+        self.assertIn("Well Connected", body)
+        self.assertIn("A printed gazetteer", body)
+
+    def test_the_panel_does_not_break_the_add_form(self):
+        """There is no object yet, so it must say so rather than explode."""
+        body = self.client.get(
+            "/grace/admin/grace/person/add/").content.decode()
+        self.assertEqual(
+            self.client.get("/grace/admin/grace/person/add/").status_code, 200)
+        self.assertIn("Save this record first", body)
+
+
+class BoardTests(TestCase):
+    """Point 3: a board anyone can scan, on the landing page itself."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="boarder", email="boarder@example.org", password="pw",
+            given_name="Bo", surname="Arder", name="Bo Arder")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+        self.stage = Stage.objects.create(label="Making contact", is_open=True)
+
+    def test_active_datasets_appear_on_the_landing_page(self):
+        TrackedDataset.objects.create(title="On the board", stage=self.stage)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("Datasets on their way in", body)
+        self.assertIn("On the board", body)
+
+    def test_a_shelved_dataset_does_not(self):
+        """is_active is how you put something down without deleting it."""
+        TrackedDataset.objects.create(title="Shelved", stage=self.stage,
+                                      is_active=False)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertNotIn("Shelved", body)
+
+    def test_prospects_and_held_are_told_apart(self):
+        TrackedDataset.objects.create(title="Only wanted", stage=self.stage)
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("prospect", body)
+
+    def test_an_unshared_review_is_flagged_for_attention(self):
+        dataset = TrackedDataset.objects.create(title="Reviewed",
+                                                stage=self.stage)
+        Review.objects.create(dataset=dataset,
+                              sent_on=datetime.date(2026, 1, 1),
+                              returned_on=datetime.date(2026, 2, 1))
+        body = self.client.get("/grace/admin/").content.decode()
+        self.assertIn("review not passed on", body)
+        self.assertIn("author not told", body)

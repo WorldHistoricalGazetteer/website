@@ -52,6 +52,12 @@ SEED = [
         ("Dormant", 20, {}),
         ("Do not contact", 30, {}),
     ]),
+    (V.EmailStatus, [
+        ("Deliverable", 10, {"is_undeliverable": False}),
+        ("Bounced", 20, {"is_undeliverable": True}),
+        ("Unsubscribed", 30, {"is_undeliverable": True}),
+        ("Unknown", 40, {"is_undeliverable": False}),
+    ]),
     (V.OrganisationType, [
         ("Archive", 10, {}), ("Library", 20, {}), ("Museum", 30, {}),
         ("University", 40, {}), ("Research institute", 50, {}),
@@ -114,6 +120,29 @@ SEED = [
         ("Refused", 50, {}),
         ("Not required (open licence)", 60, {}),
         ("Unclear", 70, {}),
+    ]),
+    (V.DataFormat, [
+        ("Linked Places (LPF)", 10, {}),
+        ("CSV / TSV", 20, {}),
+        ("Spreadsheet (Excel)", 30, {}),
+        ("GeoJSON", 40, {}),
+        ("Shapefile", 50, {}),
+        ("Database dump", 60, {}),
+        ("Scans / page images", 70, {}),
+        ("Not yet known", 900, {}),
+    ]),
+    (V.GeometryStatus, [
+        # A vocabulary rather than a boolean: "no" and "we have not looked"
+        # are different answers to how much work this will be.
+        ("Coordinates present", 10, {}),
+        ("Place names only", 20, {}),
+        ("Mixed / partial", 30, {}),
+        ("Unknown", 900, {}),
+    ]),
+    (V.ReviewType, [
+        ("Internal editorial", 10, {}),
+        # Not worked yet, but the structure allows for it (review §7, Q5).
+        ("External peer review", 20, {}),
     ]),
     (V.ReviewRecommendation, [
         ("Pending", 10, {}), ("Approved", 20, {}),

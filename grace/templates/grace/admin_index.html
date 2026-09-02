@@ -54,6 +54,42 @@
     margin: 0 0 26px;
   }
 
+  /* ---- The board ---- */
+  .grace-board { margin: 0 0 30px; }
+  .grace-board table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    border: 1px solid var(--grace-line); border-radius: 7px; overflow: hidden;
+  }
+  .grace-board thead th {
+    background: var(--grace-tint); border-bottom: 1px solid var(--grace-line);
+    text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.6px; text-transform: uppercase;
+    color: var(--body-quiet-color); white-space: nowrap;
+  }
+  .grace-board tbody td {
+    padding: 7px 12px; border-top: 1px solid var(--hairline-color);
+    vertical-align: top;
+  }
+  .grace-board tbody tr:first-child td { border-top: none; }
+  .grace-board tbody tr:hover > td { background: var(--grace-tint); }
+  .grace-board td.what { width: 34%; }
+  .grace-board td.what a { font-weight: 600; }
+  .grace-board .held {
+    display: inline-block; margin-left: 7px; font-size: 10px;
+    letter-spacing: 0.5px; text-transform: uppercase; padding: 1px 6px;
+    border-radius: 9px; background: var(--grace-ok-bg);
+    color: var(--grace-ok-fg); border: 1px solid var(--grace-ok-line);
+    vertical-align: 1px;
+  }
+  .grace-board .prospect {
+    background: transparent; color: var(--grace-muted);
+    border-color: var(--grace-line);
+  }
+  .grace-board .quiet { color: var(--body-quiet-color); }
+  .grace-board .bad  { color: var(--grace-bad-fg);  font-weight: 700; }
+  .grace-board .warn { color: var(--grace-warn-fg); font-weight: 600; }
+  .grace-board .more { margin: 9px 0 0; font-size: 12px; }
+
   /* ---- Registers ---- */
   .grace-sectionhead {
     font-size: 11px; font-weight: 700; letter-spacing: 1.1px;
@@ -129,6 +165,41 @@
 </div>
 {% elif all_clear %}
 <div class="grace-clear">Nothing needs attention.</div>
+{% endif %}
+
+{% if board %}
+<div class="grace-board">
+  <h2 class="grace-sectionhead">Datasets on their way in</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Dataset</th><th>Stage</th><th>Permission</th><th>Review</th>
+        <th>Responsible</th><th>On radar</th><th>WHG</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in board %}
+        <tr>
+          <td class="what">
+            <a href="{{ row.url }}">{{ row.title }}</a>
+            {% if row.held %}<span class="held">held</span>
+            {% else %}<span class="held prospect">prospect</span>{% endif %}
+          </td>
+          <td>{{ row.stage|default:"—" }}</td>
+          <td class="quiet">{{ row.permission|default:"—" }}</td>
+          <td class="{{ row.review_level }}">{{ row.review|default:"—" }}</td>
+          <td class="quiet">{{ row.owner|default:"—" }}</td>
+          <td class="quiet">{{ row.on_radar|date:"M Y"|default:"—" }}</td>
+          <td>{% if row.whg_url %}<a href="{{ row.whg_url }}">open</a>
+              {% else %}<span class="quiet">—</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="more"><a href="{{ board_url }}">All datasets</a> — filter by stage,
+     by person, or by held/prospect, and edit stage, owner and permission
+     straight in the list.</p>
+</div>
 {% endif %}
 
 <h2 class="grace-sectionhead">Registers</h2>

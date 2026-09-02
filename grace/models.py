@@ -44,10 +44,11 @@ from users.models import email_lookup_hash
 
 from . import privacy
 from .vocabularies import (  # noqa: F401  (re-exported for convenience)
-    ActionItemStatus, PersonRole, PersonStatus, ContentStatus, ContentItemType,
-    DigitizationStatus, DiscoverySource, EngagementOutcome, EngagementStage,
-    IntakeStatus, InteractionChannel, OrganisationType, PermissionStatus,
-    Priority, ProjectStatus, ReviewRecommendation, SourceType, Stage,
+    ActionItemStatus, ContentItemType, ContentStatus, DataFormat,
+    DigitizationStatus, DiscoverySource, EmailStatus, EngagementOutcome,
+    EngagementStage, GeometryStatus, IntakeStatus, InteractionChannel,
+    OrganisationType, PermissionStatus, PersonRole, PersonStatus, Priority,
+    ProjectStatus, ReviewRecommendation, ReviewType, SourceType, Stage,
     VocabularyTerm,
 )
 
@@ -227,6 +228,18 @@ class Person(TimeStampedModel):
                   "save(). The encrypted column itself cannot be queried.",
     )
 
+    email_status = models.ForeignKey(
+        EmailStatus, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="people",
+        help_text="Whether the address still works. GRACE is not the mailing "
+                  "list — the sending platform owns subscriptions — but a "
+                  "bounce recorded here stops us losing the person along with "
+                  "their address.",
+    )
+    email_status_checked_on = models.DateField(
+        null=True, blank=True, verbose_name="address last checked",
+    )
+
     role = models.ForeignKey(
         PersonRole, on_delete=models.PROTECT, null=True, blank=True,
         related_name="people",
@@ -336,6 +349,11 @@ class Person(TimeStampedModel):
         return self.interactions.aggregate(d=Max("occurred_on"))["d"]
 
     @property
+    def email_is_undeliverable(self):
+        """The address is known bad — bounced or unsubscribed."""
+        return bool(self.email_status and self.email_status.is_undeliverable)
+
+    @property
     def is_internal(self):
         """One of us — see ``PersonRole.is_internal``."""
         return bool(self.role and self.role.is_internal)
@@ -372,6 +390,8 @@ class Person(TimeStampedModel):
         self.user = None
         self.news_consent = False
         self.news_consent_source = ""
+        self.email_status = None
+        self.email_status_checked_on = None
         self.is_erased = True
         self.erased_at = timezone.now()
         if save:
@@ -475,13 +495,21 @@ class Source(TimeStampedModel):
         models.CharField(max_length=64), blank=True, default=list,
     )
 
+    people = models.ManyToManyField(
+        "Person", blank=True, related_name="sources",
+        help_text="Authors, compilers and editors we hold a record for. "
+                  "‘Author / compiler’ above stays as the bibliography writes "
+                  "it; this is the queryable version, and it is what lets a "
+                  "person's own page show the sources they are behind.",
+    )
+
     documents = models.ManyToManyField(
         "TrackedDataset", blank=True, related_name="documented_by",
-        help_text="Gazetteers this source describes.",
+        help_text="Datasets this source describes.",
     )
     derived_datasets = models.ManyToManyField(
         "TrackedDataset", blank=True, related_name="derived_from_sources",
-        help_text="Gazetteers extracted FROM this source. This is the "
+        help_text="Datasets extracted FROM this source. This is the "
                   "provenance chain — keep it accurate.",
     )
 
@@ -601,8 +629,49 @@ class TrackedDataset(TimeStampedModel):
     )
     languages = ArrayField(
         models.CharField(max_length=3), blank=True, default=list,
-        help_text="ISO 639-3 codes. The data is multilingual; free text will "
-                  "not group.",
+        help_text="ISO 639-3 codes, comma-separated — e.g. <code>eng, fra, "
+                  "ara</code>. The data is multilingual; free text will not "
+                  "group.",
+    )
+
+    # --- what we know before we have the data ---------------------------
+    # These are NOT copies of Register fields, and the distinction is the whole
+    # point: they record what we were *told* during a negotiation, at a time
+    # when there is no Register row to read anything from. They stay meaningful
+    # afterwards too — "they offered CC-BY and delivered CC-BY-NC" is worth
+    # keeping. Once ``registry`` is set the Register is authoritative and these
+    # are shown greyed beside it, never in place of it.
+    data_format = models.ForeignKey(
+        DataFormat, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="datasets",
+        help_text="How the data arrives. A Linked Places file is a day's work; "
+                  "a set of page scans is a project.",
+    )
+    geometry_status = models.ForeignKey(
+        GeometryStatus, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="datasets", verbose_name="coordinates",
+    )
+    expected_record_count = models.IntegerField(
+        null=True, blank=True, verbose_name="records (expected)",
+        help_text="Roughly how many places we have been told to expect. Once "
+                  "accessioned, the Register's own count supersedes this.",
+    )
+    expected_licence = models.ForeignKey(
+        "licensing.License", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="grace_expected_datasets", verbose_name="licence (offered)",
+        help_text="The licence under discussion — not a copy of the Register's. "
+                  "Leave blank until someone has actually said.",
+    )
+    expected_rights_holder = models.CharField(
+        max_length=255, blank=True, verbose_name="rights holder (as told)",
+    )
+    reconciled_against = models.ManyToManyField(
+        "api.GazetteerRegistryEntry", blank=True,
+        related_name="grace_reconciliation_targets",
+        verbose_name="reconciled against",
+        help_text="Authorities this data has been matched to. Drawn from the "
+                  "Gazetteer Register rather than typed, so it is the same "
+                  "list of authorities the rest of WHG uses.",
     )
 
     # Prose plus numbers, for the same reason as Source.publication_years — and
@@ -674,6 +743,146 @@ class TrackedDataset(TimeStampedModel):
     @property
     def is_published(self):
         return self.registry_status == "published"
+
+    # --- expected vs actual -------------------------------------------------
+    # The Register wins wherever it has an answer. These exist so a changelist
+    # column can show *something* for a prospect without pretending it is the
+    # same kind of fact; ``*_is_estimate`` is what lets the UI say which.
+
+    @property
+    def effective_record_count(self):
+        if self.registry_id:
+            return self.registry.record_count
+        return self.expected_record_count
+
+    @property
+    def effective_licence(self):
+        if self.registry_id and self.registry.license_id:
+            return self.registry.license
+        return self.expected_licence
+
+    @property
+    def effective_rights_holder(self):
+        if self.registry_id and self.registry.rights_holder:
+            return self.registry.rights_holder
+        return self.expected_rights_holder
+
+    @property
+    def figures_are_expectations(self):
+        """True while the numbers are only what someone told us."""
+        return self.registry_id is None
+
+    # --- links out ----------------------------------------------------------
+
+    @property
+    def whg_dataset_id(self):
+        """The ``datasets.Dataset`` id behind a ``whg:NNNN`` Register entry.
+
+        Register ids are namespace-derived, so a WHG contribution carries its
+        dataset id in the sub-namespace. Authorities have none.
+        """
+        if self.registry_id and str(self.registry_id).startswith("whg:"):
+            tail = str(self.registry_id).split(":", 1)[1]
+            return int(tail) if tail.isdigit() else None
+        return None
+
+    @property
+    def whg_url(self):
+        """Where to go to see this on WHG itself, if anywhere yet.
+
+        Only WHG contributions have a page of their own here. An authority's
+        home is its own site, which the Register already holds as
+        ``source_url`` and the read-out already shows.
+        """
+        dataset_id = self.whg_dataset_id
+        return f"/datasets/{dataset_id}/status" if dataset_id else None
+
+    @property
+    def reconciliation_status(self):
+        """Read through to the contributed dataset, for WHG contributions.
+
+        Reconciliation is not a GRACE fact and is deliberately not stored here
+        — it is owned by ``datasets.Dataset.ds_status`` and would only drift if
+        copied. For an authority there is nothing to report: we did not
+        reconcile it, we ingested it.
+
+        Returns the human label ("Reconciling", "Indexed"), not the raw code.
+        """
+        dataset_id = self.whg_dataset_id
+        if not dataset_id:
+            return None
+        from datasets.models import Dataset
+        dataset = Dataset.objects.filter(id=dataset_id).only("ds_status").first()
+        return dataset.get_ds_status_display() if dataset else None
+
+
+class Review(TimeStampedModel):
+    """One round of review on a dataset.
+
+    Internal editorial review is all that is worked today, but the shape is
+    the same for external peer review, so ``review_type`` is a vocabulary
+    rather than a boolean and nothing here assumes the reviewer is a colleague.
+    When external review comes it needs a new term and a decision about
+    anonymity, not a migration.
+
+    The reviewer is a ``Person``, not a ``User``: since the People register is
+    everyone — ourselves included — one field covers a colleague and an outside
+    reviewer who will never have a WHG account.
+
+    Two dates carry the failure modes. A review *sent* and never *returned* is
+    a stall; a review returned and never *shared with the author* is worse,
+    because from the contributor's side nothing has happened at all. Both are
+    absences, so only a date can reveal them.
+    """
+
+    dataset = models.ForeignKey(
+        TrackedDataset, on_delete=models.CASCADE, related_name="reviews",
+    )
+    reviewer = models.ForeignKey(
+        "Person", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="reviews",
+        help_text="Anyone in the People register — a colleague or an outside "
+                  "reviewer.",
+    )
+    review_type = models.ForeignKey(
+        ReviewType, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="reviews", verbose_name="type",
+    )
+    sent_on = models.DateField(
+        null=True, blank=True, verbose_name="sent to reviewer",
+    )
+    returned_on = models.DateField(
+        null=True, blank=True, verbose_name="returned",
+    )
+    recommendation = models.ForeignKey(
+        ReviewRecommendation, on_delete=models.PROTECT, null=True, blank=True,
+        related_name="reviews",
+    )
+    comments = models.TextField(blank=True)
+    shared_with_author_on = models.DateField(
+        null=True, blank=True, verbose_name="shared with author",
+        help_text="Until this is filled in, nothing has happened as far as "
+                  "the contributor can tell.",
+    )
+
+    class Meta:
+        ordering = ["-sent_on", "-created_at"]
+        verbose_name = "review"
+        verbose_name_plural = "reviews"
+
+    def __str__(self):
+        what = self.dataset.title if self.dataset_id else "review"
+        return f"{what} — {self.recommendation or 'in progress'}"
+
+    @property
+    def is_outstanding(self):
+        """Sent, and not back yet."""
+        return bool(self.sent_on and not self.returned_on)
+
+    @property
+    def awaiting_share(self):
+        """Back, and the author still has not been told."""
+        return bool(self.returned_on and not self.shared_with_author_on)
 
 
 # ==========================================================================

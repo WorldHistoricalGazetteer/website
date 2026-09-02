@@ -21,8 +21,9 @@ from django.contrib import admin
 #: registered but not listed here still shows, under "Other" — so forgetting to
 #: add a new model degrades gracefully instead of hiding it.
 REGISTERS = [
-    ("Pipeline", "Datasets on their way in, and the public suggestion queue.",
-     ["TrackedDataset", "SourceSuggestion"]),
+    ("Pipeline", "Datasets on their way in, their reviews, and the public "
+                 "suggestion queue.",
+     ["TrackedDataset", "Review", "SourceSuggestion"]),
     ("Catalogue", "Who and what we track: people, institutions, projects, sources.",
      ["Person", "Organisation", "Project", "Source"]),
     ("Engagement", "Correspondence: conversations, tasks and the dated log.",
@@ -54,8 +55,15 @@ class GraceAdminSite(admin.AdminSite):
         return context
 
     def index(self, request, extra_context=None):
-        """The landing page: what needs attention, then the registers."""
-        from .models import Person, Engagement, SourceSuggestion
+        """The landing page: what needs attention, the board, then the registers.
+
+        The board is deliberately first-class rather than a link. GRACE was
+        asked for "a single view of datasets on their way in… simple enough for
+        anyone on the team to navigate without training", and a landing page
+        that only counts things is not that.
+        """
+        from .models import Person, Engagement, Review, SourceSuggestion, \
+            TrackedDataset
 
         import datetime
 
@@ -109,6 +117,16 @@ class GraceAdminSite(admin.AdminSite):
                        "absence of a change, so nothing else would show it.",
             },
             {
+                "label": "review not passed on",
+                "count": Review.objects.filter(
+                    returned_on__isnull=False,
+                    shared_with_author_on__isnull=True).count(),
+                "url": "/grace/admin/grace/review/?state=unshared",
+                "level": "bad",
+                "why": "A reviewer has replied and the contributor has not "
+                       "been told. From their side nothing has happened.",
+            },
+            {
                 "label": "privacy notice due",
                 "count": Person.objects.owed_privacy_notice().count(),
                 "url": "/grace/admin/grace/person/?notice=overdue",
@@ -121,6 +139,8 @@ class GraceAdminSite(admin.AdminSite):
         context = {
             **self.each_context(request),
             "title": "",
+            "board": self._board(),
+            "board_url": "/grace/admin/grace/trackeddataset/",
             "registers": registers,
             "vocabularies": vocabularies,
             "attention": [a for a in attention if a["count"]],
@@ -128,6 +148,53 @@ class GraceAdminSite(admin.AdminSite):
             **(extra_context or {}),
         }
         return super().index(request, extra_context=context)
+
+
+    #: How many rows the landing-page board shows before handing over to the
+    #: full changelist. Enough to scan, few enough to stay a summary.
+    BOARD_ROWS = 30
+
+    def _board(self):
+        """Active datasets, most-urgent first, for the landing page.
+
+        Ordering is the point: the things that have stalled or are waiting on
+        us come first, so the top of the board is the work. Everything here is
+        one query plus the prefetches; the read-throughs to the Register and to
+        ``datasets.Dataset`` are per-row and so are deliberately not in the
+        board — the changelist has them.
+        """
+        from .models import TrackedDataset
+
+        rows = (TrackedDataset.objects
+                .filter(is_active=True)
+                .select_related("stage", "owner", "permission_status",
+                                "registry", "project")
+                .prefetch_related("reviews")
+                .order_by("stage__sort_order", "title")[:self.BOARD_ROWS])
+        board = []
+        for row in rows:
+            reviews = list(row.reviews.all())
+            if any(r.awaiting_share for r in reviews):
+                review = ("author not told", "bad")
+            elif any(r.is_outstanding for r in reviews):
+                review = ("out for review", "warn")
+            elif reviews and reviews[0].recommendation:
+                review = (str(reviews[0].recommendation), "")
+            else:
+                review = ("", "")
+            board.append({
+                "title": row.title,
+                "url": f"/grace/admin/grace/trackeddataset/{row.pk}/change/",
+                "stage": row.stage,
+                "held": not row.is_prospect,
+                "permission": row.permission_status,
+                "owner": row.owner,
+                "on_radar": row.on_radar_since,
+                "review": review[0],
+                "review_level": review[1],
+                "whg_url": row.whg_url,
+            })
+        return board
 
 
 grace_admin_site = GraceAdminSite(name="grace_admin")
@@ -141,6 +208,7 @@ grace_admin_site = GraceAdminSite(name="grace_admin")
 SUPPORT_MODELS = [
     ("api", "gazetteerregistryentry"),
     ("users", "user"),
+    ("licensing", "license"),
 ]
 
 
@@ -151,6 +219,19 @@ def register_grace_models():
     the two in step automatically: a model registered in ``admin.py`` shows up
     here without anyone remembering to add it in a second place.
     """
+    # Import the support apps' admin modules first. This function runs while
+    # Django is autodiscovering admin modules, so whether ``licensing.admin``
+    # has been imported yet depends on INSTALLED_APPS order — and if it has
+    # not, mirroring silently misses it and every form with a licence
+    # autocomplete raises admin.E039. Importing explicitly makes the order
+    # irrelevant; the import is idempotent.
+    from importlib import import_module
+    for app_label, _model_name in SUPPORT_MODELS:
+        try:
+            import_module(f"{app_label}.admin")
+        except ModuleNotFoundError:
+            pass
+
     wanted = set(SUPPORT_MODELS)
     for model, model_admin in admin.site._registry.items():
         meta = model._meta

@@ -16,22 +16,24 @@ Two conventions to preserve:
 import datetime
 
 from django.contrib import admin, messages
+from django.db.models import Count
 from django.utils import timezone
 from django.utils.html import format_html
 
 from users.models import email_lookup_hash
 
 from . import privacy
+from .admin_links import add_hint, changelist_url, panel
 from .models import (
-    ActionItem, Person, Content, Engagement, Interaction, Organisation,
-    Project, Source, SourceSuggestion, TrackedDataset,
+    ActionItem, Content, Engagement, Interaction, Organisation, Person,
+    Project, Review, Source, SourceSuggestion, TrackedDataset,
 )
 from .vocabularies import (
-    ActionItemStatus, PersonRole, PersonStatus, ContentItemType,
-    ContentStatus, DigitizationStatus, DiscoverySource, EngagementOutcome,
-    EngagementStage, IntakeStatus, InteractionChannel, OrganisationType,
-    PermissionStatus, Priority, ProjectStatus, ReviewRecommendation,
-    SourceType, Stage,
+    ActionItemStatus, ContentItemType, ContentStatus, DataFormat,
+    DigitizationStatus, DiscoverySource, EmailStatus, EngagementOutcome,
+    EngagementStage, GeometryStatus, IntakeStatus, InteractionChannel,
+    OrganisationType, PermissionStatus, PersonRole, PersonStatus, Priority,
+    ProjectStatus, ReviewRecommendation, ReviewType, SourceType, Stage,
 )
 
 
@@ -80,11 +82,19 @@ class PersonRoleAdmin(VocabularyAdmin):
     list_filter = ("is_internal", "is_active")
 
 
+@admin.register(EmailStatus)
+class EmailStatusAdmin(VocabularyAdmin):
+    list_display = ("label", "is_undeliverable", "sort_order", "is_active",
+                    "description")
+    list_editable = ("is_undeliverable", "sort_order", "is_active")
+    list_filter = ("is_undeliverable", "is_active")
+
+
 for _model in (PersonStatus, OrganisationType, ProjectStatus,
                SourceType, DigitizationStatus, DiscoverySource,
-               PermissionStatus, ReviewRecommendation, Priority,
-               InteractionChannel, EngagementOutcome, ContentItemType,
-               ContentStatus):
+               PermissionStatus, DataFormat, GeometryStatus, ReviewType,
+               ReviewRecommendation, Priority, InteractionChannel,
+               EngagementOutcome, ContentItemType, ContentStatus):
     admin.site.register(_model, VocabularyAdmin)
 
 for _model in (Stage, EngagementStage, ActionItemStatus):
@@ -95,13 +105,65 @@ for _model in (Stage, EngagementStage, ActionItemStatus):
 # Catalogue
 # --------------------------------------------------------------------------
 
+class ConnectionsMixin:
+    """Adds the read-only "Connections" panel described in admin_links.py.
+
+    Subclasses supply ``connection_sections(obj)``. The mixin handles the add
+    form (no object yet), the fieldset, and making the field read-only.
+    """
+
+    @admin.display(description="Connected records")
+    def connections(self, obj):
+        if obj is None or obj.pk is None:
+            return add_hint()
+        return panel(self.connection_sections(obj), self.admin_site.name)
+
+    def get_readonly_fields(self, request, obj=None):
+        fields = super().get_readonly_fields(request, obj)
+        return tuple(fields) + ("connections",) if "connections" not in fields \
+            else fields
+
+
 @admin.register(Organisation)
-class OrganisationAdmin(admin.ModelAdmin):
-    list_display = ("name", "org_type", "ror_id", "url")
+class OrganisationAdmin(ConnectionsMixin, admin.ModelAdmin):
+    list_display = ("name", "org_type", "people_count", "datasets_count",
+                    "ror_id", "url")
     list_filter = ("org_type",)
     search_fields = ("name", "short_name", "ror_id", "wikidata", "notes")
     filter_horizontal = ("regions",)
     autocomplete_fields = ("org_type",)
+
+    fieldsets = (
+        (None, {"fields": ("name", "short_name", "org_type", "url", "ror_id",
+                           "wikidata", "regions", "notes")}),
+        ("Connections", {"fields": ("connections",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _people=Count("people", distinct=True),
+            _datasets=Count("datasets", distinct=True),
+        )
+
+    @admin.display(description="people", ordering="_people")
+    def people_count(self, obj):
+        return obj._people or "—"
+
+    @admin.display(description="datasets", ordering="_datasets")
+    def datasets_count(self, obj):
+        return obj._datasets or "—"
+
+    def connection_sections(self, obj):
+        site = self.admin_site.name
+        return [
+            ("People", obj.people.all(),
+             changelist_url(Person, site, organisation__id__exact=obj.pk)),
+            ("Datasets", obj.datasets.all(),
+             changelist_url(TrackedDataset, site, organisation__id__exact=obj.pk)),
+            ("Projects", obj.projects.all(), None),
+            ("Engagements", obj.engagements.all(),
+             changelist_url(Engagement, site, organisation__id__exact=obj.pk)),
+        ]
 
 
 class PrivacyNoticeFilter(admin.SimpleListFilter):
@@ -145,15 +207,17 @@ class RetentionFilter(admin.SimpleListFilter):
 
 
 @admin.register(Person)
-class PersonAdmin(admin.ModelAdmin):
+class PersonAdmin(ConnectionsMixin, admin.ModelAdmin):
     list_display = ("name", "account", "shown_affiliation", "role", "status",
-                    "newsletter", "notice_state", "last_seen")
-    list_filter = ("role", "status", "is_erased", PrivacyNoticeFilter,
-                   RetentionFilter, "discovery_source")
+                    "reach", "engagements_count", "datasets_count",
+                    "notice_state", "last_seen")
+    list_filter = ("role", "role__is_internal", "status", "email_status",
+                   "is_erased", PrivacyNoticeFilter, RetentionFilter,
+                   "discovery_source", "regions")
     search_fields = ("name", "given_name", "surname", "affiliation_text",
                      "orcid", "notes")
     autocomplete_fields = ("user", "organisation", "role", "status",
-                           "discovery_source")
+                           "email_status", "discovery_source")
     filter_horizontal = ("regions",)
     readonly_fields = ("is_erased", "erased_at", "created_at", "updated_at",
                        "lawful_basis")
@@ -167,10 +231,14 @@ class PersonAdmin(admin.ModelAdmin):
                            "copies below are cleared on save.",
         }),
         ("Affiliation", {"fields": ("organisation", "affiliation_text")}),
-        ("Person details", {
-            "fields": ("email", "orcid"),
+        ("Contact details", {
+            "fields": ("email", "orcid", "email_status",
+                       "email_status_checked_on"),
             "description": "The address is encrypted at rest. Leave blank for a "
-                           "person with a linked account.",
+                           "person with a linked account. GRACE is not the "
+                           "mailing list — the sending platform owns "
+                           "subscriptions — but a bounce recorded here stops "
+                           "us losing the person along with their address.",
         }),
         ("Editorial", {"fields": ("role", "status", "regions",
                                   "discovery_source", "notes")}),
@@ -181,9 +249,55 @@ class PersonAdmin(admin.ModelAdmin):
             "description": "Newsletter consent is separate from the lawful "
                            "basis for holding this record. Do not conflate them.",
         }),
+        ("Connections", {"fields": ("connections",)}),
         ("Provenance", {"classes": ("collapse",),
                         "fields": ("added_by", "created_at", "updated_at")}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "role", "status", "organisation", "user", "email_status",
+        ).annotate(
+            _engagements=Count("engagements", distinct=True),
+            _datasets=Count("datasets", distinct=True),
+        )
+
+    def connection_sections(self, obj):
+        site = self.admin_site.name
+        return [
+            ("Engagements", obj.engagements.all(),
+             changelist_url(Engagement, site, person__id__exact=obj.pk)),
+            ("Datasets", obj.datasets.all(),
+             changelist_url(TrackedDataset, site, people__id__exact=obj.pk)),
+            ("Projects", obj.projects.all(), None),
+            ("Sources", obj.sources.all(), None),
+            ("Organisation", [obj.organisation], None),
+            ("Reviews given", obj.reviews.all(), None),
+            ("Interactions", obj.interactions.all(),
+             changelist_url(Interaction, site, person__id__exact=obj.pk)),
+        ]
+
+    @admin.display(description="engagements", ordering="_engagements")
+    def engagements_count(self, obj):
+        return obj._engagements or "—"
+
+    @admin.display(description="datasets", ordering="_datasets")
+    def datasets_count(self, obj):
+        return obj._datasets or "—"
+
+    @admin.display(description="reach")
+    def reach(self, obj):
+        """Newsletter consent and whether the address still works, together.
+
+        Two separate facts, but an editor scanning the list wants one answer to
+        "can I write to this person?"
+        """
+        if obj.email_is_undeliverable:
+            return format_html(
+                '<span style="color:#a52222">{}</span>', obj.email_status.label)
+        if obj.resolved_news_consent:
+            return "newsletter"
+        return "—"
 
     @admin.display(description="lawful basis")
     def lawful_basis(self, obj):
@@ -198,10 +312,6 @@ class PersonAdmin(admin.ModelAdmin):
     @admin.display(description="affiliation")
     def shown_affiliation(self, obj):
         return obj.resolved_affiliation or "—"
-
-    @admin.display(description="newsletter")
-    def newsletter(self, obj):
-        return "yes" if obj.resolved_news_consent else "—"
 
     @admin.display(description="Art. 14")
     def notice_state(self, obj):
@@ -253,23 +363,56 @@ class PersonAdmin(admin.ModelAdmin):
 
 
 @admin.register(Project)
-class ProjectAdmin(admin.ModelAdmin):
-    list_display = ("name", "status", "organisation", "funder", "start_date", "end_date")
-    list_filter = ("status", "organisation")
+class ProjectAdmin(ConnectionsMixin, admin.ModelAdmin):
+    list_display = ("name", "status", "organisation", "datasets_count",
+                    "funder", "start_date", "end_date")
+    list_filter = ("status", "organisation", "regions")
     search_fields = ("name", "description", "funder", "grant_number", "notes")
     autocomplete_fields = ("status", "organisation")
     filter_horizontal = ("regions", "people")
 
+    fieldsets = (
+        (None, {"fields": ("name", "description", "status", "organisation",
+                           "people", "regions")}),
+        ("Funding", {
+            "fields": ("funder", "grant_number", "start_date", "end_date",
+                       "url"),
+            "description": "Funder and grant number feed citation metadata, "
+                           "not just administration — see the model docstring.",
+        }),
+        ("Connections", {"fields": ("connections",)}),
+        ("Other", {"fields": ("notes",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            _datasets=Count("datasets", distinct=True))
+
+    @admin.display(description="datasets", ordering="_datasets")
+    def datasets_count(self, obj):
+        return obj._datasets or "—"
+
+    def connection_sections(self, obj):
+        site = self.admin_site.name
+        return [
+            ("Datasets", obj.datasets.all(),
+             changelist_url(TrackedDataset, site, project__id__exact=obj.pk)),
+            ("People", obj.people.all(), None),
+            ("Organisation", [obj.organisation], None),
+            ("Engagements", obj.engagements.all(),
+             changelist_url(Engagement, site, project__id__exact=obj.pk)),
+        ]
+
 
 @admin.register(Source)
-class SourceAdmin(admin.ModelAdmin):
+class SourceAdmin(ConnectionsMixin, admin.ModelAdmin):
     list_display = ("title", "author_compiler", "publication_years",
                     "source_type", "digitization_status", "repository")
     list_filter = ("source_type", "digitization_status")
     search_fields = ("title", "volume_example", "author_compiler",
                      "region_covered", "repository", "notes")
     autocomplete_fields = ("source_type", "digitization_status")
-    filter_horizontal = ("regions", "documents", "derived_datasets")
+    filter_horizontal = ("regions", "people", "documents", "derived_datasets")
 
     fieldsets = (
         ("Bibliographic", {
@@ -279,14 +422,29 @@ class SourceAdmin(admin.ModelAdmin):
         }),
         ("Coverage", {"fields": ("regions", "region_covered")}),
         ("Access", {"fields": ("repository", "source_url", "digitization_status")}),
+        ("People", {
+            "fields": ("people",),
+            "description": "Authors, compilers and editors we hold a record "
+                           "for. The free-text ‘author / compiler’ above stays "
+                           "as the bibliography writes it.",
+        }),
         ("Links to datasets", {
             "fields": ("documents", "derived_datasets"),
             "description": "‘Documents’ describes a dataset. ‘Derived "
                            "datasets’ were extracted FROM this source — that "
                            "is the provenance chain.",
         }),
+        ("Connections", {"fields": ("connections",)}),
         ("Other", {"fields": ("tags", "notes")}),
     )
+
+    def connection_sections(self, obj):
+        return [
+            ("People", obj.people.all(), None),
+            ("Describes", obj.documents.all(), None),
+            ("Datasets derived from it", obj.derived_datasets.all(), None),
+            ("Arrived as a suggestion", obj.from_suggestions.all(), None),
+        ]
 
 
 # --------------------------------------------------------------------------
@@ -311,18 +469,32 @@ class ProspectFilter(admin.SimpleListFilter):
         return queryset
 
 
+class ReviewInline(admin.TabularInline):
+    model = Review
+    extra = 0
+    fields = ("review_type", "reviewer", "sent_on", "returned_on",
+              "recommendation", "shared_with_author_on")
+    autocomplete_fields = ("review_type", "reviewer", "recommendation")
+    ordering = ("-sent_on",)
+    show_change_link = True
+
+
 @admin.register(TrackedDataset)
-class TrackedDatasetAdmin(admin.ModelAdmin):
+class TrackedDatasetAdmin(ConnectionsMixin, admin.ModelAdmin):
     list_display = ("title", "kind", "stage", "owner", "permission_status",
-                    "registry_records", "is_active")
+                    "records", "reconciliation", "review_state", "on_whg",
+                    "is_active")
     list_editable = ("stage", "owner", "permission_status")
     list_filter = (ProspectFilter, "stage", "permission_status", "owner",
-                   "is_active", "discovery_source")
+                   "is_active", "data_format", "geometry_status",
+                   "discovery_source", "regions")
     search_fields = ("title", "notes", "registry__id", "registry__name")
     autocomplete_fields = ("stage", "owner", "organisation", "project",
-                           "permission_status", "discovery_source", "registry")
-    filter_horizontal = ("regions", "people")
+                           "permission_status", "discovery_source", "registry",
+                           "data_format", "geometry_status", "expected_licence")
+    filter_horizontal = ("regions", "people", "reconciled_against")
     readonly_fields = ("registry_readout", "created_at", "updated_at")
+    inlines = [ReviewInline]
 
     fieldsets = (
         ("What it is", {
@@ -336,9 +508,25 @@ class TrackedDatasetAdmin(admin.ModelAdmin):
             "fields": ("stage", "owner", "permission_status", "is_active",
                        "on_radar_since", "discovery_source", "notes"),
         }),
+        ("The data", {
+            "fields": ("data_format", "geometry_status", "languages",
+                       "reconciled_against"),
+            "description": "Languages are ISO 639-3 codes, comma-separated. "
+                           "‘Reconciled against’ is drawn from the Gazetteer "
+                           "Register, so it is the same list of authorities "
+                           "the rest of WHG uses.",
+        }),
+        ("What we have been told", {
+            "fields": ("expected_record_count", "expected_licence",
+                       "expected_rights_holder"),
+            "description": "What someone said during a negotiation, before we "
+                           "had the data. These are NOT copies of Register "
+                           "fields: once this is accessioned the Register is "
+                           "authoritative and these stay only as a record of "
+                           "what was offered.",
+        }),
         ("Who and where", {
-            "fields": ("organisation", "people", "project", "regions",
-                       "languages"),
+            "fields": ("organisation", "people", "project", "regions"),
         }),
         ("Time period", {
             "fields": ("temporal_prose", "temporal_start_year",
@@ -346,24 +534,104 @@ class TrackedDatasetAdmin(admin.ModelAdmin):
             "description": "A prospect has no Register entry to read a "
                            "temporal extent from, so it is recorded here.",
         }),
+        ("Connections", {"fields": ("connections",)}),
         ("Provenance", {"classes": ("collapse",),
                         "fields": ("added_by", "created_at", "updated_at")}),
     )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "registry", "registry__license", "stage", "owner",
+            "permission_status")
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        """Only authorities are reconciliation targets.
+
+        The Register also holds a row per WHG dataset, and offering 40-odd of
+        those alongside GeoNames would make the picker useless.
+        """
+        if db_field.name == "reconciled_against":
+            from api.models import GazetteerRegistryEntry
+            kwargs["queryset"] = GazetteerRegistryEntry.objects.filter(
+                entry_class="authority").order_by("name")
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def connection_sections(self, obj):
+        site = self.admin_site.name
+        return [
+            ("Project", [obj.project], None),
+            ("Organisation", [obj.organisation], None),
+            ("People", obj.people.all(), None),
+            ("Engagements", obj.engagements.all(),
+             changelist_url(Engagement, site, dataset__id__exact=obj.pk)),
+            ("Reviews", obj.reviews.all(), None),
+            ("Described by", obj.documented_by.all(), None),
+            ("Derived from", obj.derived_from_sources.all(), None),
+            ("Content about it", obj.content.all(), None),
+            ("Arrived as a suggestion", obj.from_suggestions.all(), None),
+        ]
 
     @admin.display(description="kind")
     def kind(self, obj):
         return "prospect" if obj.is_prospect else "held"
 
     @admin.display(description="records")
-    def registry_records(self, obj):
-        count = obj.registry_record_count
-        return f"{count:,}" if count else "—"
+    def records(self, obj):
+        """The Register's count where there is one, otherwise what we were
+        told — marked so the two are never mistaken for each other."""
+        count = obj.effective_record_count
+        if not count:
+            return "—"
+        if obj.figures_are_expectations:
+            return format_html(
+                '<span style="color:var(--body-quiet-color)" '
+                'title="Expected — no Register entry yet">~{}</span>',
+                f"{count:,}")
+        return f"{count:,}"
+
+    @admin.display(description="reconciliation")
+    def reconciliation(self, obj):
+        """Read through to the contributed dataset — never stored here."""
+        return obj.reconciliation_status or "—"
+
+    @admin.display(description="review")
+    def review_state(self, obj):
+        """The two review failure modes, which are both absences of an event."""
+        reviews = list(obj.reviews.all())
+        if not reviews:
+            return "—"
+        if any(r.awaiting_share for r in reviews):
+            return format_html(
+                '<strong style="color:#a52222">author not told</strong>')
+        if any(r.is_outstanding for r in reviews):
+            return format_html('<span style="color:#8a5810">out</span>')
+        latest = reviews[0]
+        return str(latest.recommendation or "returned")
+
+    @admin.display(description="on WHG")
+    def on_whg(self, obj):
+        url = obj.whg_url
+        return format_html('<a href="{}">open</a>', url) if url else "—"
 
     @admin.display(description="Read from the Gazetteer Register")
     def registry_readout(self, obj):
         """Everything the Register already knows. Never stored here."""
         if not obj.registry_id:
-            return "No Register entry — this is a prospect."
+            rows = [
+                ("Records (expected)",
+                 f"{obj.expected_record_count:,}"
+                 if obj.expected_record_count else "—"),
+                ("Licence (offered)", obj.expected_licence or "—"),
+                ("Rights holder (as told)", obj.expected_rights_holder or "—"),
+            ]
+            return format_html(
+                "<p style='margin:0 0 6px'>No Register entry — this is a "
+                "prospect. Below is what we have been <em>told</em>, which is "
+                "a different kind of fact.</p><table style='border:0'>{}</table>",
+                format_html("".join(
+                    "<tr><td style='padding:1px 12px 1px 0;color:#666'>{}</td>"
+                    "<td>{}</td></tr>".format(k, v) for k, v in rows)),
+            )
         r = obj.registry
         rows = [
             ("Register id", r.id),
@@ -375,6 +643,15 @@ class TrackedDatasetAdmin(admin.ModelAdmin):
             ("Source URL", r.source_url or "—"),
             ("Citation", r.citation_text or "—"),
         ]
+        # Show what we were told beside what arrived, but only where the two
+        # actually differ — a silent mismatch is the thing worth catching.
+        if (obj.expected_record_count
+                and abs(obj.expected_record_count - r.record_count)
+                > max(1, r.record_count * 0.05)):
+            rows.append(("⚠ expected records",
+                         f"{obj.expected_record_count:,} (as told)"))
+        if obj.expected_licence_id and obj.expected_licence_id != r.license_id:
+            rows.append(("⚠ licence offered", str(obj.expected_licence)))
         return format_html(
             "<table style='border:0'>{}</table>",
             format_html("".join(
@@ -437,6 +714,51 @@ class SourceSuggestionAdmin(admin.ModelAdmin):
                           messages.SUCCESS)
 
 
+class ReviewOutstandingFilter(admin.SimpleListFilter):
+    """Both review failure modes are absences, so only a date reveals them."""
+
+    title = "state"
+    parameter_name = "state"
+
+    def lookups(self, request, model_admin):
+        return [("out", "Out with the reviewer"),
+                ("unshared", "Returned, author not told"),
+                ("done", "Shared with the author")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "out":
+            return queryset.filter(sent_on__isnull=False,
+                                   returned_on__isnull=True)
+        if self.value() == "unshared":
+            return queryset.filter(returned_on__isnull=False,
+                                   shared_with_author_on__isnull=True)
+        if self.value() == "done":
+            return queryset.filter(shared_with_author_on__isnull=False)
+        return queryset
+
+
+@admin.register(Review)
+class ReviewAdmin(admin.ModelAdmin):
+    list_display = ("dataset", "review_type", "reviewer", "sent_on",
+                    "returned_on", "recommendation", "shared_with_author_on",
+                    "state")
+    list_editable = ("returned_on", "recommendation", "shared_with_author_on")
+    list_filter = (ReviewOutstandingFilter, "review_type", "recommendation")
+    search_fields = ("dataset__title", "reviewer__name", "comments")
+    autocomplete_fields = ("dataset", "reviewer", "review_type",
+                           "recommendation")
+    date_hierarchy = "sent_on"
+
+    @admin.display(description="state")
+    def state(self, obj):
+        if obj.awaiting_share:
+            return format_html(
+                '<strong style="color:#a52222">author not told</strong>')
+        if obj.is_outstanding:
+            return format_html('<span style="color:#8a5810">out</span>')
+        return "—" if not obj.returned_on else "shared"
+
+
 # --------------------------------------------------------------------------
 # Engagement
 # --------------------------------------------------------------------------
@@ -482,7 +804,7 @@ class StaleFilter(admin.SimpleListFilter):
 
 
 @admin.register(Engagement)
-class EngagementAdmin(admin.ModelAdmin):
+class EngagementAdmin(ConnectionsMixin, admin.ModelAdmin):
     list_display = ("person", "subject", "dataset", "stage",
                     "priority", "who", "next_follow_up", "state")
     list_editable = ("stage", "priority", "next_follow_up")
@@ -494,6 +816,37 @@ class EngagementAdmin(admin.ModelAdmin):
                            "outcome")
     inlines = [InteractionInline, ActionItemInline]
     date_hierarchy = "opened_on"
+
+    fieldsets = (
+        ("The conversation", {
+            "fields": ("person", "subject", "stage", "priority", "responsible",
+                       "next_follow_up", "outcome", "opened_on", "closed_on"),
+            "description": "An engagement is with a <em>person</em>, not with a "
+                           "record — that is what makes ‘open one person and "
+                           "see every conversation’ possible.",
+        }),
+        ("What it is about", {
+            "fields": ("dataset", "project", "organisation")}),
+        ("Connections", {"fields": ("connections",)}),
+        ("Other", {"fields": ("notes",)}),
+    )
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            "person", "dataset", "stage", "priority", "responsible",
+            "dataset__owner")
+
+    def connection_sections(self, obj):
+        site = self.admin_site.name
+        return [
+            ("Person", [obj.person], None),
+            ("Dataset", [obj.dataset], None),
+            ("Project", [obj.project], None),
+            ("Organisation", [obj.organisation], None),
+            ("Interactions", obj.interactions.all(),
+             changelist_url(Interaction, site, engagement__id__exact=obj.pk)),
+            ("Action items", obj.action_items.all(), None),
+        ]
 
     @admin.display(description="responsible")
     def who(self, obj):

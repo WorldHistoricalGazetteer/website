@@ -18,6 +18,8 @@ matching a label:
 * ``IntakeStatus.is_untriaged`` — the public-suggestion queue badge.
 * ``PersonRole.is_internal`` — exempts our own people from the Article 14
   notice queue.
+* ``EmailStatus.is_undeliverable`` — keeps dead addresses out of any list we
+  hand to the mailing platform.
 
 Code must branch on those flags, never on ``slug`` or ``label``, so an editor can
 rename or add terms without breaking anything.
@@ -103,6 +105,33 @@ class PersonStatus(VocabularyTerm):
     class Meta(VocabularyTerm.Meta):
         verbose_name = "person status"
         verbose_name_plural = "person statuses"
+
+
+class EmailStatus(VocabularyTerm):
+    """Whether a person's address still works.
+
+    The People register is not the mailing list and must not become one — the
+    sending platform owns subscription state, because that is where the
+    unsubscribe link points and where bounces are recorded, and a second copy
+    would eventually disagree with it. What GRACE needs is narrower: somewhere
+    to say "this address stopped working", so that a person whose email bounces
+    goes quiet rather than getting lost along with their whole engagement
+    history.
+
+    ``is_undeliverable`` is the flag code reads, so that any future export can
+    skip a dead address without matching on a label.
+    """
+
+    is_undeliverable = models.BooleanField(
+        default=False,
+        help_text="Tick for states meaning 'do not send to this address' — "
+                  "bounced, unsubscribed. Used to keep dead addresses out of "
+                  "any list we hand to the mailing platform.",
+    )
+
+    class Meta(VocabularyTerm.Meta):
+        verbose_name = "email status"
+        verbose_name_plural = "email statuses"
 
 
 class OrganisationType(VocabularyTerm):
@@ -194,6 +223,43 @@ class PermissionStatus(VocabularyTerm):
     class Meta(VocabularyTerm.Meta):
         verbose_name = "permission status"
         verbose_name_plural = "permission statuses"
+
+
+class DataFormat(VocabularyTerm):
+    """How the data actually arrives — LPF, CSV, a shapefile, a pile of scans.
+
+    Worth knowing before we promise a timescale: a Linked Places file is a
+    day's work and a set of page images is a project.
+    """
+
+    class Meta(VocabularyTerm.Meta):
+        verbose_name = "data format"
+        verbose_name_plural = "data formats"
+
+
+class GeometryStatus(VocabularyTerm):
+    """Whether the data carries coordinates, or only place names.
+
+    A vocabulary rather than a boolean because *unknown* is the normal state
+    early on, and "no" and "we have not looked yet" are different answers to
+    the question of how much work this will be.
+    """
+
+    class Meta(VocabularyTerm.Meta):
+        verbose_name = "geometry"
+        verbose_name_plural = "geometry statuses"
+
+
+class ReviewType(VocabularyTerm):
+    """Internal editorial review, or external peer review.
+
+    Only internal review is worked today. External peer review needs no schema
+    change when it comes — just a term here, and a decision about anonymity.
+    """
+
+    class Meta(VocabularyTerm.Meta):
+        verbose_name = "review type"
+        verbose_name_plural = "review types"
 
 
 class ReviewRecommendation(VocabularyTerm):
