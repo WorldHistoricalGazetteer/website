@@ -205,7 +205,9 @@ export default class TypeTreeWidget {
                     if ($cb.prop('checked')) {
                         const id = $cb.val();
                         if (!seen.has(id)) { seen.add(id); out.push({ id, text: this._labelOf($n, id, labelFallback) }); }
-                    } else if ($cb.prop('indeterminate')) {
+                    } else if ($cb.prop('indeterminate') || $cb.length === 0) {
+                        // No checkbox at all = a facet row: never selected itself, always
+                        // descended into, or the concepts beneath it are invisible here.
                         walk($n.children('.tt-children').children('.tt-node'));
                     }
                 });
@@ -425,28 +427,53 @@ export default class TypeTreeWidget {
      *  Internal: tri-state checkbox propagation
      * ------------------------------------------------------------ */
 
+    /**
+     * The selectable children of ``$node``, looking straight through facet rows.
+     *
+     * The AAT tree interleaves grouping rows (``li.tt-node.tt-guide`` — the italic
+     * "by biome", "by form", "by condition") which organise concepts but carry no
+     * checkbox of their own. Treating them as ordinary children makes a parent look
+     * as though it has zero selectable children, which silently broke every walk
+     * below: no ancestor was ever marked indeterminate, so a concept ticked beneath a
+     * facet row read back as no selection at all (place#223). They are organisational,
+     * not selectable, so every walk has to see through them.
+     */
+    _conceptChildren($node) {
+        let out = $();
+        $node.children('.tt-children').children('.tt-node').each((_, el) => {
+            const $c = $(el);
+            if ($c.children('.tt-cb').length) out = out.add($c);
+            else out = out.add(this._conceptChildren($c));
+        });
+        return out;
+    }
+
     _updateAncestors($li) {
         const $parent = $li.parent('.tt-children').closest('.tt-node');
         if ($parent.length === 0) return;
 
-        const $childCbs = $parent.children('.tt-children').children('.tt-node').children('.tt-cb');
+        const $childCbs = this._conceptChildren($parent).children('.tt-cb');
         const total = $childCbs.length;
-        if (total === 0) return;
 
-        let checked = 0;
-        let indeterminate = 0;
-        $childCbs.each(function () {
-            if (this.checked) checked++;
-            if (this.indeterminate) indeterminate++;
-        });
+        // A facet row has no checkbox of its own: `$pcb` is empty, the `.prop()` calls
+        // below are no-ops, and what matters is that we keep climbing to the real
+        // concept above it rather than stopping here.
+        if (total > 0) {
+            let checked = 0;
+            let indeterminate = 0;
+            $childCbs.each(function () {
+                if (this.checked) checked++;
+                if (this.indeterminate) indeterminate++;
+            });
 
-        const $pcb = $parent.children('.tt-cb');
-        if (checked === total && indeterminate === 0) {
-            $pcb.prop({ checked: true, indeterminate: false });
-        } else if (checked === 0 && indeterminate === 0) {
-            $pcb.prop({ checked: false, indeterminate: false });
-        } else {
-            $pcb.prop({ checked: false, indeterminate: true });
+            const $pcb = $parent.children('.tt-cb');
+            if (checked === total && indeterminate === 0) {
+                $pcb.prop({ checked: true, indeterminate: false });
+            } else if (checked === 0 && indeterminate === 0) {
+                $pcb.prop({ checked: false, indeterminate: false });
+            } else {
+                $pcb.prop({ checked: false, indeterminate: true });
+            }
         }
 
         // Keep walking up
@@ -465,8 +492,8 @@ export default class TypeTreeWidget {
             if ($cb.prop('checked')) {
                 // Whole subtree implied → return just this node
                 ids.push($cb.val());
-            } else if ($cb.prop('indeterminate')) {
-                // Partial → recurse into children
+            } else if ($cb.prop('indeterminate') || $cb.length === 0) {
+                // Partial, or a facet row that carries no checkbox → recurse into children
                 const $childNodes = $n.children('.tt-children').children('.tt-node');
                 ids.push(...this._collectSelected($childNodes));
             }

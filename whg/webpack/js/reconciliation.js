@@ -68,6 +68,7 @@ const ROLES = [
   ['coords', 'Coordinates / grid ref'],
   ['geowkt', 'Geometry (WKT)'],
   ['date', 'Date / year'],
+  ['geom_date', 'Geometry captured (date)'],
   ['id', 'Identifier'],
   ['other', 'Other (ignore)'],
 ];
@@ -83,6 +84,12 @@ const ROLE_HINTS = [
   ['type', /^(type|feature.?type|fclass|category|placetype|kind)$/i],
   ['lat', /^(lat|latitude|y)$/i],
   ['lon', /^(lon|lng|long|longitude|x)$/i],
+  // Before BOTH the coordinate hints and the date hint. `coords` below is unanchored, so it claims
+  // anything merely containing "geom"/"geometry"/"coord" — including `geometry_date`, which is a date
+  // and not a coordinate column. And a capture date describes the GEOMETRY, not the place: letting the
+  // plain date hint take `acquisition_date` is how an undated dataset ends up asserting dates it does
+  // not have. Narrow enough not to steal `geom_wkt` or `the_geom`, which name no date.
+  ['geom_date', /^((geom|geometry|coord|coordinate|polygon|shape|survey|image|imagery|scene|sensor)[ _-]?(date|year|captured|acquired|acquisition)|(captur|acquisiti?|survey)[a-z]*[ _-]?(date|year|on)|date[ _-]?(captured|acquired|surveyed|of[ _-]?(capture|acquisition|survey)))$/i],
   // Before the coordinate hint, and deliberately narrow: only names that can ONLY mean a WKT geometry.
   // A column called "geometry" holding "51.5, -0.1" is still a coordinate column, so it isn't claimed.
   ['geowkt', /^(wkt|geo_?wkt|geom_?wkt|geometry_?wkt|the_geom|geom_?text)$/i],
@@ -739,12 +746,9 @@ function renderCoordReport(res) {
 }
 
 // ── Date-parsing panel ──────────────────────────────────────────────────────
-async function renderDates() {
-  const box = el('recon-dates');
-  const idx = colIndexByRole('date');
-  if (idx < 0) { box.classList.add('d-none'); box.innerHTML = ''; return; }
-  await loadDates(); // lazy-load the date/Temporal parser on first use
-
+// Parse a sample of one date column, so the user can see that their values were understood before
+// they rely on them. Shared by the place-date column and the geometry capture column (place#220).
+function sampleDateColumn(idx) {
   let sample = null, parsed = 0, checked = 0;
   const cap = Math.min(project.rows.length, 500);
   for (let i = 0; i < cap; i++) {
@@ -759,23 +763,52 @@ async function renderDates() {
       (sample.r.calendar ? ` <span class="badge bg-info text-dark">${truncate(sample.r.calendar, 32)}</span>` : '') +
       (sample.r.approximate ? ' <span class="badge bg-secondary">approx</span>' : '')
     : '<span class="text-warning">no values parsed — check the column</span>';
+  return { parsed, checked, sh };
+}
+async function renderDates() {
+  const box = el('recon-dates');
+  const idx = colIndexByRole('date');
+  const gidx = colIndexByRole('geom_date');
+  if (idx < 0 && gidx < 0) { box.classList.add('d-none'); box.innerHTML = ''; return; }
+  await loadDates(); // lazy-load the date/Temporal parser on first use
 
-  box.innerHTML =
-    `<div class="recon-coords-inner">
-       <div class="d-flex align-items-center flex-wrap gap-2">
+  // The place-date column: the same panel it has always had, shown only when that column exists.
+  let placeBlock = '';
+  if (idx >= 0) {
+    const d = sampleDateColumn(idx);
+    placeBlock =
+      `<div class="d-flex align-items-center flex-wrap gap-2">
          <i class="fas fa-calendar-days text-secondary"></i>
          <span>Date column → ISO start/end · UK day/month · BCE/CE · regnal, feast &amp; global calendars
            (Hijri, Hebrew, Śaka, French Republican…)</span>
        </div>
-       <div class="small text-muted mt-1">Sample: <strong>${parsed.toLocaleString()}</strong> of ${checked.toLocaleString()} parsed · ${sh}</div>
+       <div class="small text-muted mt-1">Sample: <strong>${d.parsed.toLocaleString()}</strong> of ${d.checked.toLocaleString()} parsed · ${d.sh}</div>
        <div class="mt-2 d-flex flex-wrap gap-1">
          <button type="button" id="recon-date-checkall" class="btn btn-sm btn-outline-secondary">
            <i class="fas fa-list-check me-1"></i>Validate all ${project.total.toLocaleString()} rows
          </button>
          <button type="button" id="recon-date-insert" class="btn btn-sm btn-outline-primary" title="Add the parsed ISO start &amp; end dates as columns in your table"><i class="fas fa-table-columns me-1"></i>Insert ISO date columns</button>
        </div>
-       <div id="recon-date-report" class="recon-coord-report mt-2"></div>
-     </div>`;
+       <div id="recon-date-report" class="recon-coord-report mt-2"></div>`;
+  }
+
+  // The geometry capture column. It gets its own line rather than being folded into the one above,
+  // because it is a claim about the SHAPE and not about the place — the whole point of the role. The
+  // user needs to see it parsed: if it doesn't, their places silently lose the date that would have
+  // made them contributable, and the validation pane can only say "no date" after the fact.
+  let geomBlock = '';
+  if (gidx >= 0) {
+    const d = sampleDateColumn(gidx);
+    geomBlock =
+      `<div class="d-flex align-items-center flex-wrap gap-2${idx >= 0 ? ' mt-2 pt-2 border-top' : ''}">
+         <i class="fas fa-draw-polygon text-secondary"></i>
+         <span>Geometry captured → exported as <code>geometry.when</code>, not as a date for the place</span>
+       </div>
+       <div class="small text-muted mt-1">Sample: <strong>${d.parsed.toLocaleString()}</strong> of ${d.checked.toLocaleString()} parsed · ${d.sh}</div>
+       <div class="small text-muted">Rides with your own coordinates and shapes only — geometry cloned from a match keeps the gazetteer's provenance instead.</div>`;
+  }
+
+  box.innerHTML = `<div class="recon-coords-inner">${placeBlock}${geomBlock}</div>`;
   box.classList.remove('d-none');
   const chk = el('recon-date-checkall');
   if (chk) chk.addEventListener('click', checkAllDates);
@@ -2088,7 +2121,7 @@ function ensurePreviewRowVisible(vi) {
 function refreshAfterCellEdit(ci, invalidated) {
   const role = project.columns[ci].role;
   if (role === 'coords' || role === 'lat' || role === 'lon') renderCoords();
-  if (role === 'date') renderDates();
+  if (role === 'date' || role === 'geom_date') renderDates();
   if (invalidated) { reconActiveIdx = -1; refreshReconSection(); renderColSwitcher(); refreshReview(); refreshFullMapPane(); }
   refreshExport(); updatePaneSummaries();
 }
@@ -2578,6 +2611,7 @@ async function buildExportRecords(opts, onProgress) {
   // Load the coord parser whenever a coordinate column exists — even if the WGS84 columns aren't
   // requested — so LPF/LP-TSV geometry and geometry-override centroids can be computed.
   const dateIdx = colIndexByRole('date');
+  const geomDateIdx = colIndexByRole('geom_date'); // when the geometry was CAPTURED, not when the place existed (place#220)
   const geowktIdx = colIndexByRole('geowkt'); // the dataset's own geometry, exported verbatim (place#210)
   // Coordinates (for LPF geometry + map) and parsed dates (for LPF `when`) are always derived from the
   // column roles — users materialise them as columns in Step 2 (the coordinate/date panels) if they want
@@ -2612,7 +2646,7 @@ async function buildExportRecords(opts, onProgress) {
   for (let i = 0; i < project.rows.length; i++) {
     const orig = project.rows[i].map((v) => (v == null ? '' : v));
     const aug = {};
-    let whenStart = '', whenEnd = '', match = null;
+    let whenStart = '', whenEnd = '', geomWhenStart = '', geomWhenEnd = '', match = null;
     const info = built && keyForRow(built, i);
 
     // Geometry, in order of authority: an override the user cloned from a match or drew on the map;
@@ -2640,6 +2674,14 @@ async function buildExportRecords(opts, onProgress) {
       const d = (raw != null && String(raw).trim() !== '') ? Dates.parseDate(raw, { locale: 'uk' }) : null;
       whenStart = (d && d.startISO) || '';
       whenEnd = (d && d.endISO) || '';
+    }
+    // The same again for the geometry's capture date, which is a claim about the SHAPE and never
+    // about the place — so it is parsed separately and never reaches the reconciliation query.
+    if (geomDateIdx >= 0) {
+      const raw = project.rows[i][geomDateIdx];
+      const d = (raw != null && String(raw).trim() !== '') ? Dates.parseDate(raw, { locale: 'uk' }) : null;
+      geomWhenStart = (d && d.startISO) || '';
+      geomWhenEnd = (d && d.endISO) || '';
     }
     // Containers (County, Parish, …) resolved for this row. Computed regardless of the CSV/JSON
     // toggles because LPF carries them as relations, not as columns.
@@ -2686,7 +2728,8 @@ async function buildExportRecords(opts, onProgress) {
       // reconciled to a record carrying sitelinks (in practice, a Wikidata one).
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
-    records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd, match, parents,
+    records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd,
+                   geomWhenStart, geomWhenEnd, match, parents,
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -2866,8 +2909,11 @@ function buildLPF(data) {
     // Dataset-scope PeriodO period(s) apply to every place (scope-level, not per row).
     const scp = scopePeriods();
     if (scp.length) { feat.when = feat.when || {}; feat.when.periods = scp.map((p) => { const o = { name: p.label }; if (p.uri) o['@id'] = p.uri; return o; }); }
-    if (rec.geom) feat.geometry = geomProvenance(rec.geom, rec.geomProv);  // override (point / line / polygon) wins
-    else if (rec.coord) feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] };
+    // `ownGeom` — is the exported shape the CONTRIBUTOR's, or borrowed from a gazetteer? A capture
+    // date is a claim about how they made the shape, so it may only ride on a shape they made.
+    let ownGeom = false;
+    if (rec.geom) { feat.geometry = geomProvenance(rec.geom, rec.geomProv); ownGeom = !(rec.geomProv && rec.geomProv.source === 'match'); }  // override (point / line / polygon) wins
+    else if (rec.coord) { feat.geometry = { type: 'Point', coordinates: [+rec.coord.lon.toFixed(6), +rec.coord.lat.toFixed(6)] }; ownGeom = true; }
     else if (opts.enrich && rec.match && rec.match.first && _candCoord[rec.match.first.id]) {
       // Enrichment: the matched record's location, for a row that brought no coordinates of its own.
       // It is the gazetteer's point, not the contributor's, so it is cited as such and marked
@@ -2880,6 +2926,18 @@ function buildLPF(data) {
         certainty: 'less-certain',
         citations: [{ label: `WHG reconciliation match ${src}`, '@id': src }],
       };
+    }
+    // Temporality of the GEOMETRY rather than of the place (place#220). LPF requires a `when`
+    // somewhere on every feature, and accepts one on the geometry — so a dataset of undated things
+    // whose shapes have acquisition dates ("the lake is undated; the polygon was traced from a 2019
+    // image") can say something true instead of inventing a date range for the places. Per row from a
+    // `geom_date` column, else the dataset-wide capture range in Scope → When. Only ever on the
+    // contributor's OWN shape: a cloned or auto-enriched geometry is the gazetteer's, and their
+    // capture date says nothing about it.
+    if (feat.geometry && ownGeom) {
+      let gts = timespanFrom(rec.geomWhenStart, rec.geomWhenEnd);
+      if (!gts) { const gsc = getScope(); if (gsc) gts = timespanFrom(gsc.geomStart, gsc.geomEnd); }
+      if (gts) feat.geometry = Object.assign({}, feat.geometry, { when: { timespans: [gts] } });
     }
     // Each accepted/auto-confirmed match becomes a closeMatch link, carrying WHG's reconciliation
     // confidence under the SAME name the CSV/JSON exports use, so the score is findable by one name in
@@ -3344,7 +3402,9 @@ async function runValidation() {
     if (!(f.properties && f.properties.title)) miss.title += 1;
     if (!(f.names && f.names.length)) miss.names += 1;
     if (!f.geometry) miss.geometry += 1;
-    if (!f.when) miss.when += 1;
+    // LPF accepts the required `when` on the geometry as well as on the feature (place#220), so the
+    // gate must too — otherwise a dated shape on an undated place still reads as "no date".
+    if (!f.when && !(f.geometry && f.geometry.when)) miss.when += 1;
     if (!(f.types && f.types.length) && !(f.properties && f.properties.fclasses)) miss.types += 1;
   });
   // Authoritative schema pass (Ajv, same schema the server uses). Null if the validator can't load.
@@ -3367,7 +3427,7 @@ const VALIDATE_LABELS = {
 // when that requirement actually fails. Raw schema messages stay hidden behind a disclosure.
 const VALIDATE_HELP = {
   types:    ['no place type', 'assign one per row in the table (Step&nbsp;2), or set a dataset-wide type in <strong>Scope&nbsp;→&nbsp;What</strong>'],
-  when:     ['no date or period', 'add a date column in Step&nbsp;2, or set a year range or historical period in <strong>Scope&nbsp;→&nbsp;When</strong>'],
+  when:     ['no date or period', 'add a date column in Step&nbsp;2, or set a year range or historical period in <strong>Scope&nbsp;→&nbsp;When</strong>. If the <em>places</em> are undated but you know when their <em>geometry</em> was captured, give that instead — a <strong>Geometry captured (date)</strong> column, or the capture range in <strong>Scope&nbsp;→&nbsp;When</strong>'],
   geometry: ['no location', 'add coordinates in Step&nbsp;2, or draw geometry on the map'],
   title:    ['no place name', 'map your place-name column in Step&nbsp;2'],
   names:    ['no name variant', ''],
@@ -4780,7 +4840,10 @@ function defaultScope() {
   // to include all descendants (what the query actually filters on, since types.identifier is exact-match).
   // periods = dataset-scope PeriodO periods ({id:'period:…', uri, label, start, stop}); scope-level only
   // (not per row). Selecting one seeds start/end and travels into LPF `when.periods`.
-  return { region: { mode: 'none', ccodes: [], place: null, geometry: null }, start: null, end: null, undated: false, types: { selected: [], ids: [] }, periods: [] };
+  // geomStart/geomEnd = when the contributor's GEOMETRY was captured (place#220). Deliberately not
+  // start/end: those constrain the reconciliation query, and "this polygon was traced from a 2019
+  // image" is not a claim about which gazetteer records should match.
+  return { region: { mode: 'none', ccodes: [], place: null, geometry: null }, start: null, end: null, geomStart: null, geomEnd: null, undated: false, types: { selected: [], ids: [] }, periods: [] };
 }
 function getScope() { return (project && project.scope) || null; }
 function scopeRegion() { const s = getScope(); return (s && s.region) || { mode: 'none' }; }
@@ -6383,6 +6446,8 @@ function populateScopeModal() {
   const st = el('recon-scope-start'); if (st) st.value = s.start != null ? s.start : '';
   const en = el('recon-scope-end'); if (en) en.value = s.end != null ? s.end : '';
   const ud = el('recon-scope-undated'); if (ud) ud.checked = !!s.undated;
+  const gs = el('recon-scope-geom-start'); if (gs) gs.value = s.geomStart != null ? s.geomStart : '';
+  const ge = el('recon-scope-geom-end'); if (ge) ge.value = s.geomEnd != null ? s.geomEnd : '';
   // PeriodO period(s) — restore selection and load data-tailored suggestions.
   _scopePeriods = (s.periods || []).map((p) => Object.assign({}, p));
   el('recon-scope-period-q') && (el('recon-scope-period-q').value = '');
@@ -6793,6 +6858,10 @@ async function applyScope() {
   scope.start = Number.isFinite(start) ? start : null;
   scope.end = Number.isFinite(end) ? end : null;
   scope.undated = !!(el('recon-scope-undated') || {}).checked;
+  const gStart = parseInt((el('recon-scope-geom-start') || {}).value, 10);
+  const gEnd = parseInt((el('recon-scope-geom-end') || {}).value, 10);
+  scope.geomStart = Number.isFinite(gStart) ? gStart : null;
+  scope.geomEnd = Number.isFinite(gEnd) ? gEnd : null;
   // PeriodO scope period(s) — dataset-level canonical period(s).
   scope.periods = _scopePeriods.map((p) => Object.assign({}, p));
   // AAT types: keep the picked concepts for display, expand to descendant ids for the query. Each
@@ -8011,6 +8080,8 @@ function init() {
     const stb = el('recon-scope-start'); if (stb) stb.value = '';
     const enb = el('recon-scope-end'); if (enb) enb.value = '';
     const udb = el('recon-scope-undated'); if (udb) udb.checked = false;
+    const gsb = el('recon-scope-geom-start'); if (gsb) gsb.value = '';
+    const geb = el('recon-scope-geom-end'); if (geb) geb.value = '';
     const none = document.querySelector('input[name="recon-scope-region-mode"][value="none"]'); if (none) none.checked = true;
     _scopeDraft = { whgPlace: null, geometry: null };
     _scopePeriods = [];
