@@ -8,7 +8,8 @@
     "watch": "webpack --watch",
     "analyze": "ANALYZE=1 webpack",
     "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack",
-    "audit:licenses": "node scripts/audit-js-licenses.js"
+    "audit:licenses": "node scripts/audit-js-licenses.js",
+    "test:myd": "node scripts/check-myd-contracts.js"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",

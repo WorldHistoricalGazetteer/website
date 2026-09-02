@@ -3311,11 +3311,11 @@ function refreshExport() {
 // term URIs). Everything lives on project.citation so it persists with the project.
 // NB: `license` is deliberately absent — it is chosen via the controlled picker
 // (wireLicenseControl below), not typed, but still lives on project.citation.
-const CITE_FIELDS = ['title', 'year', 'version', 'publisher', 'url'];
+const CITE_FIELDS = ['title', 'description', 'year', 'version', 'publisher', 'url'];
 function citationDefaults() {
   const base = (project && project.fileName ? project.fileName : 'My dataset').replace(/\.[^.]+$/, '');
   return {
-    title: base, year: String(new Date().getFullYear()), version: '1.0',
+    title: base, description: '', year: String(new Date().getFullYear()), version: '1.0',
     publisher: 'World Historical Gazetteer', url: '', license: '', contributors: [],
   };
 }
@@ -3481,6 +3481,11 @@ function personNode(c) {
 }
 function schemaOrgDataset(m) {
   const doc = { '@context': 'https://schema.org/', '@type': 'Dataset', name: m.title || 'Untitled dataset' };
+  // WHG's ingest reads this and renders it on the dataset's public page and in the dataset list.
+  // It was the one field the reader wanted and the writer never emitted, so every contributed
+  // dataset arrived with a placeholder where its description should be (place#227). Capped to the
+  // width of the column it lands in.
+  if (m.description) doc.description = String(m.description).slice(0, 2044);
   if (m.year) doc.datePublished = m.year;
   if (m.version) doc.version = m.version;
   if (m.publisher) doc.publisher = { '@type': 'Organization', name: m.publisher };
@@ -3586,7 +3591,7 @@ async function runValidation() {
   let schemaOk = null; let schemaErrs = 0; let schemaSummary = [];
   try { const mod = await loadValidate(); const res = await mod.validateLPF(fc); schemaOk = res.ok; schemaErrs = res.errorCount; schemaSummary = res.summary; }
   catch (e) { console.error('[recon] LPF validator unavailable', e); }
-  _validation = { total: n, miss, schemaOk, schemaErrs, schemaSummary };
+  _validation = { total: n, miss, schemaOk, schemaErrs, schemaSummary, meta: datasetMetaGaps() };
   renderValidation(_validation);
   updateContributeGate();
   return _validation;
@@ -3607,6 +3612,33 @@ const VALIDATE_HELP = {
   title:    ['no place name', 'map your place-name column in Step&nbsp;2'],
   names:    ['no name variant', ''],
 };
+// Dataset-level metadata WHG's ingest reads and then shows publicly. Deliberately NOT part of the
+// Contribute gate — a dataset with no description is still a good contribution, and blocking on it
+// would be a worse error than the one it fixes. But the omission has to be VISIBLE to the only
+// person who can supply the text, at the moment they are already fixing things: the failure that
+// produced place#227 was not that the field was empty, it was that nothing anywhere said so, and it
+// surfaced as a placeholder on a public page long after the contributor had gone.
+function datasetMetaGaps() {
+  if (!project) return [];
+  const m = citationModel();
+  const gaps = [];
+  if (!String(m.description || '').trim()) {
+    gaps.push('no <strong>description</strong> — WHG shows it on your dataset&rsquo;s page and in the public dataset list');
+  }
+  if (!citeUniqueContributors().length) {
+    gaps.push('no named <strong>contributor</strong> — the dataset would be published with no attribution');
+  }
+  return gaps;
+}
+function metaNoteHTML(v) {
+  const gaps = (v && v.meta) || [];
+  if (!gaps.length) return '';
+  return '<div class="recon-validate-meta small text-muted mt-2">' +
+    '<i class="fas fa-circle-info me-1"></i>Your dataset itself has ' +
+    gaps.join(', and ') +
+    '. Both are set under <strong>Citation &amp; provenance</strong> below, and neither blocks contributing.</div>';
+}
+
 function renderValidation(v) {
   const body = el('recon-validate-body'); if (!body || !v) return;
   const total = v.total;
@@ -3631,11 +3663,11 @@ function renderValidation(v) {
   }
 
   if (v.schemaOk === true && !bullets.length) {
-    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${total.toLocaleString()} places pass WHG's Linked Places validation.</div>`;
+    body.innerHTML = `<div class="text-success"><i class="fas fa-circle-check me-1"></i><strong>Ready to contribute.</strong> All ${total.toLocaleString()} places pass WHG's Linked Places validation.</div>` + metaNoteHTML(v);
     return;
   }
   if (v.schemaOk == null && !bullets.length) {
-    body.innerHTML = `<div class="small text-muted"><i class="fas fa-circle-info me-1"></i>The full schema check couldn't run in your browser, but the basic requirements (name, location, place type, date) all look present. Try <strong>Re-check</strong>, or just export — WHG validates again on upload.</div>`;
+    body.innerHTML = `<div class="small text-muted"><i class="fas fa-circle-info me-1"></i>The full schema check couldn't run in your browser, but the basic requirements (name, location, place type, date) all look present. Try <strong>Re-check</strong>, or just export — WHG validates again on upload.</div>` + metaNoteHTML(v);
     return;
   }
   // Full raw list, hidden behind a disclosure for the technically-minded.
@@ -3651,6 +3683,7 @@ function renderValidation(v) {
   body.innerHTML =
     `<div class="text-danger mb-1"><i class="fas fa-triangle-exclamation me-1"></i><strong>Not ready to contribute.</strong>${note}</div>` +
     (bullets.length ? `<ul class="recon-validate-issues small mb-0">${bullets.join('')}</ul>` : '') +
+    metaNoteHTML(v) +
     tech;
 }
 // Enable "Contribute to WHG" only when the LPF passes validation. Manual Export stays available.
