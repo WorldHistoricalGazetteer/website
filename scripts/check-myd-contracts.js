@@ -143,6 +143,7 @@ function checkCitationRoundTrip() {
 // carries the importer's output into the exporter.
 const FEATURE_PARTS = [
   ['names', /rowVariants\(/, 'the alt_names column the importer fills'],
+  ['names (lang + citations)', /rec\.fileNames/, 'project.rowNames'],
   ['types', /rowTypesFor\(/, 'project.rowTypes'],
   ['when', /rec\.whenStart/, 'the date column the importer fills'],
   ['geometry', /rec\.geom\b/, 'the geometry column'],

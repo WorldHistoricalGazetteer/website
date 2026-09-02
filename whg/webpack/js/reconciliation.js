@@ -432,7 +432,7 @@ function fromJSON(data) {
   const citation = lpfCitation(data);
   const notes = [note, lpf.note].filter(Boolean);
   return { columns, rows, total: rows.length, roles, note: notes.join('; '),
-           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, citation };
+           repPoints, repCols, rowTypes: lpf.rowTypes, rowLinks: lpf.rowLinks, rowNames: lpf.rowNames, citation };
 }
 
 // ── Linked Places import: read the record, not just its properties ───────────────────────────────
@@ -473,6 +473,16 @@ function addLpfColumns(records, columns, rows, roles) {
   if (push('alt_names', alts, 'alt_names')) {
     notes.push(`kept <strong>${nAlt.toLocaleString()}</strong> name variant${nAlt === 1 ? '' : 's'} from <code>names</code>`);
   }
+  // The column holds toponyms; a `names[]` entry holds more than a toponym. `lang` says which
+  // language it is, and `citations` can say something the toponym cannot say for itself — that a name
+  // was COINED for this contribution and is not attested usage. A gazetteer may coin a name when
+  // nothing else exists; it may not let a coined name come back looking attested, which is what
+  // happened when the round trip kept only the strings (place#230).
+  const rowNames = {};
+  records.forEach((f, i) => {
+    const ns = ((f && f.names) || []).filter((n) => n && (n.toponym || n.ethnonym) && (n.lang || n.citations));
+    if (ns.length) rowNames[i] = ns.map((n) => Object.assign({}, n));
+  });
 
   // Place types. The identifiers go straight into rowTypes (where the LPF builder reads them); the
   // column exists so they are visible, and so the per-row picker's "apply to all rows with this
@@ -529,7 +539,8 @@ function addLpfColumns(records, columns, rows, roles) {
       '(containment is rebuilt by reconciling the columns that carry it, so these are not re-exported as relations)');
   }
 
-  return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null, note: notes.join('; ') };
+  return { rowTypes: nTyped ? rowTypes : null, rowLinks: nLinks ? rowLinks : null,
+           rowNames: Object.keys(rowNames).length ? rowNames : null, note: notes.join('; ') };
 }
 
 // The file's own dataset metadata, so a contributor's citation survives a round trip instead of
@@ -2449,6 +2460,7 @@ async function finishImport(parsed, fileName, format) {
     // guesses, so they seed the project rather than waiting to be re-entered by hand (place#224).
     rowTypes: parsed.rowTypes || {},
     rowLinks: parsed.rowLinks || {},
+    rowNames: parsed.rowNames || {},
   };
   // Dataset metadata the file carried. Applied AFTER the project exists, because the defaults read
   // `project.fileName` for the fallback title and would otherwise read the previous project's.
@@ -2921,7 +2933,7 @@ async function buildExportRecords(opts, onProgress) {
       aug[wikiHeader] = match ? [...new Set(match.list.map(preferredWikipedia).filter(Boolean))].join('; ') : '';
     }
     records.push({ row: i, orig, aug, coord, geom, geomProv, geowkt: wktGeom ? rawWkt : '', whenStart, whenEnd,
-                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i),
+                   geomWhenStart, geomWhenEnd, match, parents, fileLinks: rowLinksFor(i), fileNames: rowNamesFor(i),
                    note: info ? noteFor(info.key) : '' });
   }
   // The chosen options travel WITH the records: the LPF builder needs to know whether enrichment and
@@ -3053,6 +3065,20 @@ function buildLPF(data) {
     const names = [];
     if (title) names.push({ toponym: title });
     rowVariants(rec.row).forEach((v) => { if (v && v !== title) names.push({ toponym: v }); });
+    // Restore what the imported file said ABOUT each name. The column carries toponyms; the file
+    // carried `lang`, and `citations` that can state a name was coined for this contribution rather
+    // than attested. Merged by toponym so an edit in the table still wins on the string itself, and
+    // any name the user removed from the column stays removed — but a name that survived comes back
+    // with what was said about it, instead of as a bare string (place#230).
+    if ((rec.fileNames || []).length) {
+      const byTop = new Map(rec.fileNames.map((n) => [String(n.toponym || n.ethnonym || '').toLowerCase(), n]));
+      names.forEach((n) => {
+        const src = byTop.get(String(n.toponym || '').toLowerCase());
+        if (!src) return;
+        if (src.lang && !n.lang) n.lang = src.lang;
+        if (src.citations && src.citations.length && !n.citations) n.citations = src.citations.map((c) => Object.assign({}, c));
+      });
+    }
     // Enrichment: the matched record's own toponyms. Opt-in (the Enrich box), and each carries a
     // citation naming the record it came from, so a reader can tell the contributor's names from the
     // gazetteer's. Previously these reached the CSV and were dropped from the LPF entirely (place#184).
@@ -7048,6 +7074,8 @@ function rowTypesFor(i) { return (project && project.rowTypes && project.rowType
 // Links the imported file asserted for this row, kept verbatim so `certainty` and `citations`
 // survive the round trip alongside the identifier (place#228).
 function rowLinksFor(i) { return (project && project.rowLinks && project.rowLinks[i]) || []; }
+// `names[]` entries the imported file carried, with their `lang` and `citations` intact (place#230).
+function rowNamesFor(i) { return (project && project.rowNames && project.rowNames[i]) || []; }
 function untypedRowCount() { if (!project) return 0; let n = 0; for (let i = 0; i < project.rows.length; i++) if (!rowTypesFor(i).length) n += 1; return n; }
 // Append a blank type-role column ("Place type") when the dataset has none. Undoable (column snapshot).
 function addPlaceTypeColumn() {
