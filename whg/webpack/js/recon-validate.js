@@ -47,7 +47,19 @@ export async function validateLPF(fc) {
   // "missing relations", "missing citation", "missing geometry", and so on. Those are the machinery
   // of one rule, not several faults, and listing them makes a dataset look far more broken than it
   // is. They collapse into the one statement that is true.
-  const TEMPORAL = /\/definitions\/feature\/allOf\/1\/anyOf\//;
+  // Ajv resolves the `$ref` and reports relative to the referenced subschema, so the path is
+  // `#/allOf/1/anyOf/…` and not `#/definitions/feature/…`. Anchor on the exact pairing of that
+  // `anyOf` with a feature-level instancePath: a nested subschema's anyOf would sit deeper in the
+  // instance, so this cannot swallow an unrelated failure.
+  const featureIndex = (e) => {
+    const raw = (e.instancePath || '').split('/').filter(Boolean);
+    return (raw[0] === 'features' && /^\d+$/.test(raw[1])) ? Number(raw[1]) : null;
+  };
+  const TEMPORAL_ANCHOR = '#/allOf/1/anyOf';
+  const undated = new Set(errors
+    .filter((e) => e.schemaPath === TEMPORAL_ANCHOR && /^\/features\/\d+$/.test(e.instancePath || ''))
+    .map(featureIndex).filter((i) => i != null));
+
   const groups = {};              // msg → { count, records:Set }
   const add = (msg, fi) => {
     const g = groups[msg] || (groups[msg] = { count: 0, records: new Set() });
@@ -56,8 +68,11 @@ export async function validateLPF(fc) {
   };
   for (const e of errors) {
     const raw = (e.instancePath || '').split('/').filter(Boolean);
-    const fi = (raw[0] === 'features' && /^\d+$/.test(raw[1])) ? Number(raw[1]) : null;
-    if (TEMPORAL.test(e.schemaPath || '')) { add('missing when (in any location the format accepts)', fi); continue; }
+    const fi = featureIndex(e);
+    if (fi != null && undated.has(fi) && String(e.schemaPath || '').startsWith(TEMPORAL_ANCHOR)) {
+      add('missing when (in any location the format accepts)', fi);
+      continue;
+    }
     // Drop numeric (array-index) segments so per-feature errors collapse: /features/3/@id → "@id".
     const parts = raw.filter((p) => !/^\d+$/.test(p));
     const field = parts.length ? parts[parts.length - 1] : '(feature)';
