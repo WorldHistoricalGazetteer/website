@@ -1010,3 +1010,79 @@ class PickerLabelTests(TestCase):
             f"/grace/admin/grace/trackeddataset/{self.dataset.pk}/change/"
         ).content.decode()
         self.assertNotIn("A contribution (whg:9)", body)
+
+
+class DemoSeedTests(TestCase):
+    """The worked example exists so the admin demonstrates itself.
+
+    The imported catalogue has datasets and people and not one engagement
+    joining them, so every Connections panel renders empty and neither alarm
+    fires — which reads as "the feature is missing".
+    """
+
+    def _seed(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        out = StringIO()
+        call_command("seed_grace_vocabularies", stdout=StringIO())
+        call_command("seed_grace_demo", stdout=out)
+        return out.getvalue()
+
+    def test_every_vocabulary_slug_it_asks_for_exists(self):
+        """The failure mode is a demo that seeds cleanly and shows nothing,
+        because a term was renamed before its slug existed."""
+        output = self._seed()
+        self.assertNotIn("were not found", output)
+
+    def test_it_creates_a_connected_cluster(self):
+        self._seed()
+        person = Person.objects.get(name__startswith="DEMO — Jane")
+        self.assertTrue(person.engagements.exists())
+        self.assertTrue(person.datasets.exists())
+        self.assertTrue(person.projects.exists())
+        dataset = TrackedDataset.objects.get(
+            title__startswith="DEMO — Exampleshire Parish")
+        self.assertTrue(dataset.reviews.exists())
+        self.assertTrue(dataset.derived_from_sources.exists())
+
+    def test_it_lights_both_alarms(self):
+        """Both are absences of an event, so only dated data can show them."""
+        self._seed()
+        self.assertTrue(Engagement.objects.filter(
+            stage__is_open=True,
+            next_follow_up__lt=datetime.date.today()).exists())
+        self.assertTrue(Review.objects.filter(
+            returned_on__isnull=False,
+            shared_with_author_on__isnull=True).exists())
+
+    def test_the_demo_people_owe_no_privacy_notice(self):
+        """They are fictional, and leaving them unmarked would inflate the
+        real Article 14 backlog on the landing page."""
+        self._seed()
+        owed = Person.objects.owed_privacy_notice().filter(
+            name__startswith="DEMO")
+        self.assertFalse(owed.exists())
+
+    def test_everything_is_labelled_and_removable(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        self._seed()
+        for model, field in ((Person, "name"), (TrackedDataset, "title"),
+                             (Engagement, "subject"), (Organisation, "name"),
+                             (Source, "title")):
+            for value in model.objects.values_list(field, flat=True):
+                self.assertTrue(value.startswith("DEMO — "), value)
+
+        call_command("seed_grace_demo", "--remove", stdout=StringIO())
+        self.assertEqual(Person.objects.filter(name__startswith="DEMO").count(), 0)
+        self.assertEqual(TrackedDataset.objects.count(), 0)
+        self.assertEqual(Engagement.objects.count(), 0)
+        self.assertEqual(Review.objects.count(), 0)
+
+    def test_seeding_twice_does_not_duplicate(self):
+        self._seed()
+        first = TrackedDataset.objects.count()
+        self._seed()
+        self.assertEqual(TrackedDataset.objects.count(), first)
