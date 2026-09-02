@@ -232,7 +232,7 @@ class PersonAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     autocomplete_fields = ("user", "organisation", "role", "status",
                            "email_status", "discovery_source")
     filter_horizontal = ("regions",)
-    readonly_fields = ("is_erased", "erased_at", "created_at", "updated_at",
+    readonly_fields = ("erasure_state", "created_at", "updated_at",
                        "lawful_basis")
     actions = ["mark_privacy_notice_sent", "pseudonymise_people"]
 
@@ -258,7 +258,7 @@ class PersonAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
         ("Data protection", {
             "fields": ("lawful_basis", "privacy_notice_sent_at", "news_consent",
                        "news_consent_recorded_at", "news_consent_source",
-                       "is_erased", "erased_at"),
+                       "erasure_state"),
             "description": "Newsletter consent is separate from the lawful "
                            "basis for holding this record. Do not conflate them.",
         }),
@@ -315,6 +315,20 @@ class PersonAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     @admin.display(description="lawful basis")
     def lawful_basis(self, obj):
         return privacy.LAWFUL_BASIS
+
+    @admin.display(description="erasure")
+    def erasure_state(self, obj):
+        """Not the raw boolean: Django renders a readonly False as a red cross,
+        and "this person has not asked to be erased" is the normal state, not
+        an error."""
+        if obj is None or not obj.pk:
+            return "—"
+        if not obj.is_erased:
+            return "Not erased."
+        when = obj.erased_at.date() if obj.erased_at else "an unrecorded date"
+        return format_html(
+            "<strong>Erased on {}.</strong> The identity is gone; the "
+            "engagement history remains.", when)
 
     @admin.display(description="account")
     def account(self, obj):

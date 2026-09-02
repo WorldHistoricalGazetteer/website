@@ -1086,3 +1086,32 @@ class DemoSeedTests(TestCase):
         first = TrackedDataset.objects.count()
         self._seed()
         self.assertEqual(TrackedDataset.objects.count(), first)
+
+
+class ErasureDisplayTests(TestCase):
+    """A readonly False renders as a red cross, and "this person has not asked
+    to be erased" is the normal state, not an error."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username="eraser-1", email="eraser@example.org", password="pw",
+            given_name="Er", surname="Aser", name="Er Aser")
+        self.staff.is_staff = True
+        self.staff.is_superuser = True
+        self.staff.save()
+        self.client.force_login(self.staff)
+        self.person = Person.objects.create(name="Still Here")
+
+    def test_a_live_person_says_so_in_words(self):
+        body = self.client.get(
+            f"/grace/admin/grace/person/{self.person.pk}/change/"
+        ).content.decode()
+        self.assertIn("Not erased.", body)
+        self.assertNotIn('alt="False"', body)
+
+    def test_an_erased_person_says_what_survived(self):
+        self.person.pseudonymise()
+        body = self.client.get(
+            f"/grace/admin/grace/person/{self.person.pk}/change/"
+        ).content.decode()
+        self.assertIn("the engagement history remains", body)
