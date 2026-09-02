@@ -2,9 +2,11 @@
 
 **Audience:** Claude Code in the `whg3` repo (desktop / PyCharm).
 **Branch:** `staging`.
-**Status:** all seven decisions settled; **the app is built and running on dev**
-(see §7). This handoff is the map — the reasoning lives in the review and in the
-module docstrings.
+**Status:** built, deployed to dev, and **reviewed by the team** (2 Sep 2026).
+Palak's seven review points are addressed; §8 records them. Decision 7 was
+**overturned** by that review — the pipeline record is a **Dataset**, not a
+gazetteer, and Contacts are **People**. This handoff is the map; the reasoning
+lives in the review and in the module docstrings.
 
 ```bash
 git checkout staging      # the work is on staging; the review branch is deleted
@@ -16,9 +18,15 @@ git checkout staging      # the work is on staging; the review branch is deleted
 
 **GRACE** — *Gazetteer Register And Contact Engagement* — is a planned Django app
 inside WHG (app label `grace/`, alongside `datasets/`, `collection/`). It tracks the
-research world around the platform: the gazetteers we want, the people and projects
+research world around the platform: the datasets we want, the people and projects
 behind them, the printed sources that document them, our correspondence, and where
-each gazetteer sits on its way in.
+each dataset sits on its way in.
+
+**Terminology (revised 2 Sep 2026).** A contributor brings a *dataset*; once
+reconciled and published it is a *gazetteer*. GRACE's pipeline record exists almost
+entirely during the first stage, so it is `TrackedDataset`. "Gazetteer" is left to
+mean the two things it means everywhere else at WHG: a **printed** gazetteer (a
+`Source`) and a **published WHG** gazetteer (a Register entry). See review §8.
 
 It replaces an earlier attempt that ran on Baserow, an external no-code database.
 That route is abandoned; §6 lists what it left behind.
@@ -41,25 +49,25 @@ navigation aid; that file carries the reasoning.
 
 ## 2. The three registers
 
-Palak's structure, which the review endorses. Names below are the review's proposal
-(decision 7) — hers used "Dashboard" for the third, which collides with WHG's
-contributor dashboard.
+Palak's structure, which the review endorses. Hers used "Dashboard" for the third,
+which collides with WHG's contributor dashboard. Content is a fourth register in the
+build — it is *output*, not engagement.
 
 | Register | Holds |
 |----------|-------|
-| **Catalogue** | Gazetteers (held and prospective), People, Projects, Sources (the bibliography, including printed gazetteers) |
+| **Catalogue** | People, Organisations, Projects, Sources (the bibliography, including printed gazetteers) |
 | **Engagement** | Engagements with people, their action items, and a dated interaction log. Plus Content (blog posts etc.) — which is really a fourth register; see the review's §6 nits |
-| **Pipeline** | Editorial state of a gazetteer on its way into WHG, and its reviews |
+| **Pipeline** | Datasets on their way into WHG (held and prospective), their reviews, and the public suggestion queue |
 
 ---
 
 ## 3. The load-bearing decision: point at the Gazetteer Register
 
-The tracked-gazetteer record carries a **nullable FK to `GazetteerRegistryEntry`**,
+The tracked-dataset record carries a **nullable FK to `GazetteerRegistryEntry`**,
 not to `datasets.Dataset`:
 
 ```python
-class TrackedGazetteer(models.Model):
+class TrackedDataset(models.Model):
     title    = models.CharField(...)          # what we called it when we first heard of it
     registry = models.ForeignKey('api.GazetteerRegistryEntry',
                                  null=True, blank=True, ...)
@@ -110,21 +118,18 @@ Do not re-derive these; they were checked against this branch.
 
 ## 5. Decisions — status as of 27 August 2026
 
-**Decisions 1–5 and 7 are SETTLED** (Stephen Gadd, 27 Aug 2026: the review's
-recommendations accepted as written). **Schema work is unblocked.**
-
-**Decision 6 remains open and is a hard gate on *populating*, not on modelling.**
-Build the models; do not load real contact data until Ruth has ruled.
+All seven were settled on 27 Aug 2026. **Decision 7 was then overturned** by the
+team's review of the working build on 2 Sep — see §8 and review §8.
 
 | # | Decision | Outcome |
 |---|----------|---------|
 | 1 | Does GRACE point at `GazetteerRegistryEntry` and read through it? | ✅ **Yes** — nullable FK, local title retained |
-| 2 | One `Contact` model with optional `User` link, or a separate People table? | ✅ **One**, optional one-to-one, **no duplicated fields** |
+| 2 | One `Person` model with optional `User` link, or a separate People table? | ✅ **One**, optional one-to-one, **no duplicated fields** |
 | 3 | Vocabularies as editable lookup tables, or frozen `choices=`? | ✅ **Tables by default** — preserves Palak's self-service |
 | 4 | Add an Organisations entity? | ✅ **Yes** — permission to publish is granted by institutions |
 | 5 | Is `/contribute/` a suggest-a-source tool or a general front door? | ✅ **Suggest-a-source**, with a visible untriaged intake state |
-| 6 | Personal data: lawful basis, consent, erasure, encryption | ⏳ **OPEN — with Ruth.** Settle before populating; match `users.User` |
-| 7 | Terminology and register names | ✅ Datasets → Gazetteers; Catalogue · Engagement · Pipeline |
+| 6 | Personal data: lawful basis, consent, erasure, encryption | ✅ **Legitimate interests**, with the four obligations of review §10 built |
+| 7 | Terminology and register names | ⚠️ **REVISED 2 Sep** — pipeline record is a **Dataset**, Contacts are **People**; Catalogue · Engagement · Pipeline unchanged |
 
 **Decision 3 deserves emphasis when you do build.** Model controlled vocabularies as
 their own tables, not `choices=` tuples — a `choices` list needs a developer and a
@@ -133,7 +138,7 @@ lists that code actually branches on, and say so in the model docstring so nobod
 later "tidies" them.
 
 **Decision 6 is a hard gate, not advice.** `User.email` is encrypted at rest with an
-indexed HMAC for lookups. A `Contact` table holding plain-text addresses for people
+indexed HMAC for lookups. A `Person` table holding plain-text addresses for people
 who never signed up would be a regression against the platform's own standard, in the
 same database.
 
@@ -156,7 +161,7 @@ Safe to act on independently of the decisions above, except where noted.
 
 ---
 
-## 7. Build status — 27 August 2026
+## 7. Build status
 
 **All seven steps are built and deployed to dev.** The app is `grace/`, on the
 `staging` branch, live at <https://dev.whgazetteer.org/>.
@@ -164,18 +169,20 @@ Safe to act on independently of the decisions above, except where noted.
 | Step | State |
 |------|-------|
 | 1. Vocabulary tables | ✅ `grace/vocabularies.py` — 18 tables, 109 seeded terms |
-| 2. Contact + Organisation | ✅ optional `User` one-to-one; local copies cleared on save |
-| 3. TrackedGazetteer + Stage | ✅ nullable FK to `api.GazetteerRegistryEntry` |
+| 2. Person + Organisation | ✅ optional `User` one-to-one; local copies cleared on save |
+| 3. TrackedDataset + Stage | ✅ nullable FK to `api.GazetteerRegistryEntry` |
 | 4. Engagement / ActionItem / Interaction | ✅ one-owner rule + staleness alarm enforced |
 | 5. Admin | ✅ **`/grace/admin/`** — GRACE's own AdminSite (`grace/admin_site.py`), linked from `/dashboard_admin/` → Tools. Shows only GRACE, leads with what needs attention, calls out the editable vocabularies. Django's `/admin/` keeps them too |
 | 6. `/contribute/` rebuild | ✅ redirects to `grace:suggest`; **all `BASEROW_*` settings gone** |
-| 7. Import | ✅ **72 sources + 42 prospects + 209 contacts + 7 organisations** on dev |
+| 7. Import | ✅ **72 sources + 42 datasets (41 prospects) + 209 people + 7 organisations** on dev |
+| 8. Post-review work | ✅ Connections panels, the board, Reviews, the new fields — see §8 |
 
-Verified on dev: **62/62 tests pass** (twice consecutively, which is the check
-that matters — see below), migration applies clean from zero, the import is
-idempotent (a second run creates 0), `/contribute/` 302s to `/grace/suggest/`,
-the form renders for anonymous visitors, `grace_retention_review` runs, and
-`/grace/admin/` renders the registers with live counts.
+Verified on dev: **99/99 tests pass** (`manage.py test grace users`; run it twice
+consecutively, which is the check that matters — see below), migrations apply
+clean from zero, the import is idempotent (a second run creates 0),
+`/contribute/` 302s to `/grace/suggest/`, the form renders for anonymous
+visitors, `grace_retention_review` runs, and `/grace/admin/` renders the board
+and the registers with live counts.
 
 ### Traps this build already fell into
 
@@ -193,21 +200,30 @@ Recorded because each cost real time and none is obvious:
 - **`autocomplete_fields` resolves against the same admin site**, so a second
   AdminSite needs its lookup targets registered too or every referencing form
   raises `admin.E039`. See `SUPPORT_MODELS`.
-- **Never let an email address reach `Contact.name`.** It is plaintext and
-  indexed; `Contact.email` is encrypted precisely so addresses are not in the
+- **Never let an email address reach `Person.name`.** It is plaintext and
+  indexed; `Person.email` is encrypted precisely so addresses are not in the
   clear. The importer's `_display_name()` uses the local part as a handle.
+- **The admin mirror runs during autodiscovery.** `register_grace_models()` is
+  called from the bottom of `grace/admin.py`, which Django imports while walking
+  `INSTALLED_APPS` — so whether `licensing.admin` had been imported yet was down
+  to app order, and when it had not, every licence autocomplete raised
+  `admin.E039`. It now imports the support apps' admin modules itself.
+- **`User.__str__` is the username**, which on this project is ORCID-derived.
+  Nothing user-facing should render it. `grace/admin_links.py` has `user_label`
+  and `registry_label`, and both need fixing in *three* places to take effect:
+  the form field, the select2 AJAX endpoint, and the mirrored admin serving it.
 
 ### Where the reasoning lives
 
 Read the code, not a spec: the design decisions are argued in the module
 docstrings, next to what they constrain. In particular
 `grace/vocabularies.py` (why these are tables, not `choices=`),
-`grace/privacy.py` (the whole of decision 6), and `TrackedGazetteer` /
-`Contact` in `grace/models.py`.
+`grace/privacy.py` (the whole of decision 6), and `TrackedDataset` /
+`Person` in `grace/models.py`.
 
 ### Two things left for a human
 
-1. **The Article 14 backlog is now real on dev.** 209 contacts are loaded, none
+1. **The Article 14 backlog is now real on dev.** 209 people are loaded, none
    has been told we hold their details, and they become overdue a month after
    import. `./manage.py grace_retention_review` lists them; the admin has a bulk
    action to record the notice once sent. Prod has nothing loaded yet.
@@ -221,11 +237,67 @@ External peer review (review §7, Q5 — sketch and defer). The
 `ReviewRecommendation` vocabulary exists so it is ready, and the platform's
 existing pending/approved/rejected language is what it should align with.
 
+## 8. The team's review — 2 September 2026
+
+Palak reviewed the build on dev and raised seven points. All are addressed; the
+reasoning is in review §13, and only the parts that constrain future work are
+repeated here.
+
+| # | Point | What was built |
+|---|-------|----------------|
+| 1 | Records should show their connections | `grace/admin_links.py` — a read-only **Connections** panel on every change form, both directions, plus reverse counts on the lists. `Source.people` was added: there had been *no* person↔source relation at all |
+| 2 | People should be everyone, us included | Six internal roles seeded; `PersonRole.is_internal` exempts them from the Article 14 queue. **Mailing-list membership deliberately not built** — see below |
+| 3 | A board anyone can scan | On the `/grace/admin/` landing page, ordered furthest-along first. `reconciliation_status` reads through to `datasets.Dataset`; nothing is copied |
+| 4 | Missing dataset fields | `data_format`, `geometry_status`, and the `expected_*` trio — which are **not** copies of Register fields, see below |
+| 5 | A way to record reviews | `grace.models.Review`, inline on the dataset. External peer review needs a vocabulary term, not a migration |
+| 6 | Reconciled-against and regions vocabularies | `reconciled_against` is an M2M to the Register limited to authorities. Regions were always modelled — `regions.Region` simply had **zero rows** |
+| 7 | Datasets ≠ gazetteers; Contacts → People | The rename. See review §8 |
+
+**Three rules this review established, which later work must not undo:**
+
+1. **GRACE is not the mailing list.** The sending platform (Ali's, likely
+   Mailchimp) owns subscription state — that is where the unsubscribe link points
+   and where bounces are recorded. GRACE holds `Person.email_status` only:
+   whether the address still works. Do not add list membership, campaigns or a
+   sync. If a sync is ever wanted it is *one-way in*: import an export, match on
+   `email_hash`, set `email_status`. And do not pour the mailing list into the
+   People register — everyone in it is owed an Article 14 notice.
+2. **`expected_*` fields are a different fact, not a second copy.** Review §2
+   forbids storing Register facts in GRACE, and a test asserts it. The
+   `expected_record_count` / `expected_licence` / `expected_rights_holder` trio
+   records what someone *told us* during a negotiation, when there was no
+   Register row to read. The Register wins the moment there is one. Do not
+   "simplify" them into plain fields.
+3. **Reconciliation and publication status are read through, never stored.**
+   `TrackedDataset.reconciliation_status` resolves `whg:NNNN` to a
+   `datasets.Dataset` and returns its `ds_status`. Authorities have none — we
+   ingested them, we did not reconcile them.
+
+### Open, for humans
+
+- **Nothing links a prospect to its Register entry automatically.** 41 of 42 rows
+  are prospects; `China Historical GIS (CHGIS)` was linked by hand because it is
+  an exact match to registry `chgis`. A fuzzy scan also matched *GeoNames
+  Historical Layer* to `gn`, which is almost certainly wrong — which is why
+  matching must stay a human decision. A suggest-and-confirm action is not built.
+- **No first-indexed date exists to read.** The Register has `updated_at` and
+  `reingest_finished_at` only. Raise it against the indexing repo (as a `place`
+  issue) rather than adding a field here.
+- **The imported data has no engagements**, so every Connections panel on dev is
+  empty. That is the data, not the feature.
+
+---
+
 ## Notes
 
 - The review is written for the team, not for a developer — it argues rather than
   specifies. Where it and this file disagree on detail, the review is authoritative
   on *what* and this file on *where*.
-- The terminology decision is human-facing only: the `Dataset` model name stays.
-  "Gazetteer" replaces "dataset"/"collection" in language, not in code.
-- The name GRACE is settled. The three register names are decision 7.
+- The terminology decision is **not** human-facing only, contrary to what this file
+  said before 2 Sep: the Python classes were renamed too, because a label that
+  disagrees with the code underneath is a trap. `TrackedGazetteer → TrackedDataset`,
+  `Contact → Person`, `ContactRole → PersonRole`, `ContactStatus → PersonStatus`.
+- The name GRACE is settled, and keeps its expansion — *Gazetteer Register And
+  Contact Engagement* — even though the register of people is now People. The
+  acronym is the product's name; contact engagement is still what the Engagement
+  register records.

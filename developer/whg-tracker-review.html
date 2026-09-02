@@ -50,6 +50,7 @@
   .tag-set { background: #1a7a3c; color: #fff; }
   .tag-open { background: #c47f17; color: #fff; }
   .tag-done { background: #555; color: #fff; }
+  .tag-rev  { background: #7a2f7a; color: #fff; }
   .small { font-size: 8.6pt; color: #666; }
   .code-block { font-family: 'SF Mono', 'Consolas', monospace; font-size: 8.3pt; background: #f7f4fa; border: 1px solid #e3d9ee; border-radius: 3px; padding: 8pt 10pt; margin: 6pt 0 10pt 0; line-height: 1.5; color: #3d2058; white-space: pre; page-break-inside: avoid; }
 </style>
@@ -58,7 +59,7 @@
 
 <h1>GRACE</h1>
 <p class="subtitle">Palak's editorial tracker: the design, reviewed and settled</p>
-<p class="meta"><strong>Prepared by:</strong> Stephen Gadd &nbsp;·&nbsp; <strong>Date:</strong> 27 August 2026 &nbsp;·&nbsp;
+<p class="meta"><strong>Prepared by:</strong> Stephen Gadd &nbsp;·&nbsp; <strong>Date:</strong> 27 August 2026, revised 2 September 2026 &nbsp;·&nbsp;
 <strong>For:</strong> Ruth Mostern, Palak Vashist, Alexandra Straub &nbsp;·&nbsp;
 <strong>Purpose:</strong> response to <em>"Tracking people, projects, and datasets — a working design for our editorial workflow"</em></p>
 
@@ -69,16 +70,20 @@ allowed" discipline that Ruth asked for has produced exactly the data dictionary
 point</strong> that had not previously been put on the table. All seven decisions are now made, and the build is
 under way.</p>
 
+<p class="lede"><strong>Revised, 2 September 2026.</strong> Palak has now reviewed the working build on
+<code>staging</code>. One of her seven points overturns a decision taken here: §8 argued for calling the pipeline record
+a <em>gazetteer</em>, and that was wrong. §8 has been rewritten and §13 records what the review changed.</p>
+
 <p class="note"><strong>The system is GRACE</strong> — <em>Gazetteer Register And Contact Engagement</em> — a Django app
 inside WHG, sitting alongside <code>datasets</code>, <code>collection</code> and the rest. The name says what it holds: a
 register of the gazetteers, people, projects and sources we track, and a record of our dealings with them.</p>
 
-<p class="note"><strong>A note on terms.</strong> Every contribution to WHG is a <strong>gazetteer</strong>, the single
-term replacing the older "dataset"&nbsp;/&nbsp;"collection" split. Today a gazetteer is realised in the software as a
-<em>Dataset</em> or a <em>Collection</em>; the concept extends to routes, itineraries and networks. A <em>print
-historical gazetteer</em> is a <strong>source</strong> we might turn <em>into</em> a WHG gazetteer — a lead, not a
-gazetteer in the platform sense. §8 explains why the draft's persistent "dataset" should not simply be
-find-and-replaced, and what to do instead.</p>
+<p class="note"><strong>A note on terms.</strong> A contributor brings a <strong>dataset</strong>; once reconciled and
+published it is a <strong>gazetteer</strong>. One object, two life stages — the same thing we tell people on Map your
+Data. GRACE's pipeline record exists almost entirely during the first stage, so it is called a <strong>Dataset</strong>.
+That leaves "gazetteer" free to mean the two things it means everywhere else at WHG: a <em>printed</em> gazetteer, which
+is a <strong>source</strong> we might mine for places, and a <em>published WHG</em> gazetteer, which is a row in the
+Gazetteer Register. §8 sets out the reasoning, and why the first version of this note got it wrong.</p>
 
 <h2>Where this stands</h2>
 
@@ -97,7 +102,9 @@ find-and-replaced, and what to do instead.</p>
   <tr><td>6</td><td>Personal data: lawful basis, consent, erasure path, encryption.</td>
       <td><span class="tag tag-set">SETTLED</span></td><td>Legitimate interests, with the four obligations of §10 implemented in the build.</td></tr>
   <tr><td>7</td><td>Terminology, and what the three registers are called.</td>
-      <td><span class="tag tag-set">SETTLED</span></td><td>Datasets → Gazetteers, with "printed gazetteer" for the print sense; Catalogue · Engagement · Pipeline.</td></tr>
+      <td><span class="tag tag-rev">REVISED</span></td><td>The pipeline record is a <strong>Dataset</strong> and the
+      people register is <strong>People</strong> — see §8, rewritten after Palak's review. "Printed gazetteer" stays a
+      source type. Registers: Catalogue · Engagement · Pipeline.</td></tr>
 </table>
 
 <p><strong>Nothing now blocks the build.</strong> It divides cleanly: the schema and the admin are a developer job,
@@ -354,23 +361,54 @@ and said so in the model docstrings so nobody later "tidies" them into <code>cho
 
 <h2>8. On "dataset" and "gazetteer"</h2>
 
-<p>The draft uses "dataset" throughout, and it is worth being precise about why a find-and-replace would be the wrong
-correction. Palak's usage is not careless — it matches the current Django model name, which is exactly why it reads
-naturally.</p>
+<p class="note"><strong>Rewritten, 2 September 2026.</strong> The first version of this section decided the opposite of
+what follows. It is replaced rather than amended, because the reasoning changed, not just the conclusion.</p>
 
-<p>The real issue is that her table holds <strong>two different kinds of thing</strong>: prospects (format unknown,
-permission not yet asked, someone mentioned it at a conference) and actual WHG gazetteers. "Dataset" is
-wrong for the second; "gazetteer" is premature for the first.</p>
+<p>Palak's draft used "dataset" throughout, and the first version of this note treated that as the thing to correct. The
+argument ran: her table holds two kinds of thing — prospects nobody has asked about yet, and gazetteers WHG actually
+holds — and since "dataset" is wrong for the second, call the table <em>Gazetteers</em> and let the nullable Register
+link carry the distinction.</p>
 
-<div class="rec"><strong>Decision 7 — settled.</strong> Call the table <strong>Gazetteers</strong>, and let the nullable
-Register link from §2 carry the prospective-versus-actual distinction structurally. A row with a Register link is a
-gazetteer WHG holds; a row without one is a gazetteer we are still pursuing. No vocabulary has to express it, and nothing
-has to be reclassified by hand when a prospect lands.</div>
+<p>That was the wrong half to name it after. Reviewing the working build, Palak put the counter-argument plainly:
+a dataset is what a contributor submits and what moves through the pipeline toward publication, so the record on its way
+in should be called a Dataset.</p>
 
-<p>Two riders. <em>Source type: gazetteer</em> stays as it is, but is labelled "<strong>printed
-gazetteer</strong>" — that is the one place in the whole system where the word means a lead rather than a
-contribution, and the label should say so. And the code keeps the <code>Dataset</code> model name: this is a change to
-human-facing language, not a migration.</p>
+<p>Her stated premise — that a gazetteer is printed material, a reference work — is the bibliographic sense, and it is
+not how WHG uses the word anywhere else: the Gazetteer Register, Atlas&nbsp;▸&nbsp;Gazetteers, the twenty-two authority
+gazetteers behind <code>/api/sources/</code>, the name of the platform. Adopting that premise would mean renaming half
+the site. But her conclusion holds on a different and stronger argument, and it is one WHG already makes to its
+users:</p>
+
+<div class="rec"><strong>Decision 7 — revised.</strong> A contributor brings a <strong>dataset</strong>; once reconciled
+and published it is a <strong>gazetteer</strong>. One object, two life stages. GRACE's pipeline record exists almost
+entirely during the first, because at the moment it becomes a gazetteer the authoritative record is the Register row it
+reads through (§2). So the record is a <strong>Dataset</strong>, and the register of people is
+<strong>People</strong>.</div>
+
+<p>The gain is not merely that one label is more accurate. It is that "gazetteer" inside GRACE now means exactly two
+things, and neither of them is the pipeline record: a <strong>printed gazetteer</strong>, which is a source type, and a
+<strong>published WHG gazetteer</strong>, which is a Register entry. The apologetic rider in the first version of this
+section — that <em>source type: printed gazetteer</em> was "the one place in the whole system where the word means a lead
+rather than a contribution" — is no longer needed, because there is no longer a competing sense to distinguish it
+from.</p>
+
+<p>Two riders of its own. First, roughly half the tracked rows are <strong>authority gazetteers</strong> — TGN,
+Pleiades, CHGIS — which never arrive as a contributed dataset at all; we ingest them from a third party. Calling those
+"datasets" is a slight stretch. It is a smaller stretch than calling a contributor's spreadsheet a gazetteer, and the
+rule the team will actually use should be the one that fits the common case.</p>
+
+<p>Second, the earlier claim that this was "a change to human-facing language, not a migration" no longer holds, and
+should not have been used to avoid the question. The Python classes were renamed too —
+<code>TrackedGazetteer&nbsp;→&nbsp;TrackedDataset</code>, <code>Contact&nbsp;→&nbsp;Person</code>,
+<code>ContactRole&nbsp;→&nbsp;PersonRole</code>, <code>ContactStatus&nbsp;→&nbsp;PersonStatus</code> — because a label
+that disagrees with the code underneath it is a trap for the next developer. It is <code>TrackedDataset</code> rather
+than plain <code>Dataset</code> because <code>datasets.Dataset</code> already exists in this project and the two are
+deliberately <em>not</em> the same thing (§2). The rename was cheap: production held no GRACE tables, and Django renames
+models and columns without touching the rows.</p>
+
+<p>GRACE keeps its expansion — <em>Gazetteer Register And Contact Engagement</em>. The acronym is the product's name,
+the Gazetteer Register is exactly what the Pipeline points at, and contact engagement is exactly what the Engagement
+register records. Only the table holding the people changed.</p>
 
 <h2>9. Naming the registers</h2>
 
@@ -496,6 +534,87 @@ version history cannot be erased on request, which is precisely the problem deci
 
 <p class="small">All seven steps are unblocked. The first import of real contact data is the point at which the Article 14
 notice and the retention clock start applying, so both are in place before it runs.</p>
+
+<p class="note">All seven were completed and deployed to <code>dev.whgazetteer.org</code> in August 2026. §13 records
+what the team's review of that build changed.</p>
+
+<h2>13. What Palak's review of the build changed</h2>
+
+<p>Palak reviewed the working system on <code>staging</code> at the start of September 2026 and raised seven points.
+They are recorded here because two of them contradict decisions taken above, and because the reasoning matters more
+than the outcome.</p>
+
+<table>
+  <tr><th style="width:4%">#</th><th style="width:34%">Point</th><th style="width:14%">Outcome</th><th>What it changed</th></tr>
+
+  <tr><td>1</td><td>Records should show what they are connected to, in both directions.</td>
+      <td><span class="tag tag-set">BUILT</span></td>
+      <td>The reason the tracker was wanted at all, and the build did not have it. Django's admin shows the relations a
+      record points <em>at</em> and nothing pointing back, so a person's page said nothing about their conversations.
+      Every change form now carries a read-only <strong>Connections</strong> panel covering both directions, with
+      reverse counts on the lists. One real gap in the schema surfaced: there was no relation between a person and a
+      source at all (author&nbsp;/&nbsp;compiler was free text), so "a contact to their sources" could not be shown. A
+      link was added; the free-text string stays as the bibliography writes it.</td></tr>
+
+  <tr><td>2</td><td>People should be everyone, ourselves included, with status and mailing-list fields.</td>
+      <td><span class="tag tag-open">PART</span></td>
+      <td>Roles for our own side were added, and <code>PersonRole.is_internal</code> marks them — necessary, because
+      Article 14 covers data obtained from someone <em>other than</em> the person, so it does not apply to colleagues,
+      and without the exemption they would bury the notices genuinely owed. Active&nbsp;/&nbsp;dormant status already
+      existed. <strong>Mailing-list membership was deliberately not built</strong>: the sending platform owns
+      subscription state, because that is where the unsubscribe link points and where bounces are recorded, and a second
+      copy would eventually contradict it. GRACE holds only whether the address still works, so a bounce marks the
+      address dead without losing the person or their history. Growing the register to mailing-list size was also
+      declined — everyone in it is owed an Article 14 notice, while subscribers got Article 13 at sign-up.</td></tr>
+
+  <tr><td>3</td><td>A dashboard the whole team can scan without training.</td>
+      <td><span class="tag tag-set">BUILT</span></td>
+      <td>The landing page now leads with a board of datasets on their way in — stage, permission, review, responsible,
+      on-radar, and a link through to WHG — ordered furthest-along first, because everything starts "on our radar" and
+      ascending order buried the live work under the backlog. Two requested columns needed care.
+      <strong>Reconciliation</strong> is not a GRACE fact and is not stored: it is read through to
+      <code>datasets.Dataset</code>, the same discipline as the licence read-through in §2. There is <strong>no
+      first-indexed date</strong> anywhere to read — the Register has only <code>updated_at</code> and
+      <code>reingest_finished_at</code> — so one has been asked for from the indexing side rather than invented
+      here.</td></tr>
+
+  <tr><td>4</td><td>Missing dataset fields: language, record count, coordinates, licence, permission, format.</td>
+      <td><span class="tag tag-set">BUILT</span></td>
+      <td>Language and permission already existed and were merely buried. Record count, licence and rights existed as
+      read-throughs — but only once linked, and a prospect, which is exactly when the question is live, has no Register
+      row to read. Rather than break §2's rule against copying Register facts, the new <code>expected_*</code> fields
+      hold a <em>different</em> fact: what someone told us during a negotiation. The Register wins the moment there is
+      one; the expectation survives as a record of what was offered, and a mismatch is shown rather than hidden.
+      Coordinates are a vocabulary, not a boolean, because "unknown" is the normal early state and is not "no".</td></tr>
+
+  <tr><td>5</td><td>A way to record reviews.</td>
+      <td><span class="tag tag-set">BUILT</span></td>
+      <td>Partly anticipated: the review-recommendation vocabulary was already seeded and the stage list already had
+      "in internal review". A <strong>Review</strong> record now carries reviewer, type, sent, returned,
+      recommendation, comments and shared-with-author. External peer review needs a vocabulary term, not a migration.
+      The reviewer is a Person rather than a WHG account, which works only because the register is now everyone. A
+      recommendation deliberately does <em>not</em> advance the stage on its own — implicit state changes are how a
+      tracker stops being trusted.</td></tr>
+
+  <tr><td>6</td><td>Two missing vocabularies: reconciled-against, and regions.</td>
+      <td><span class="tag tag-set">BUILT</span></td>
+      <td>"Reconciled against" is <em>not</em> a hand-typed vocabulary: WHG already holds that list, and a typed copy
+      would drift, so it is a link to the Gazetteer Register limited to authorities — the same names users see in Map
+      your Data. Regions turned out to be already modelled on every model, exactly as §3 said. The reason nobody could
+      find them is that <code>regions.Region</code> held <strong>zero rows</strong>, on dev and on production alike, so
+      the picker was empty and the feature looked absent. Loaded on dev; production deliberately left alone, since
+      populating it there would change Atlas behaviour.</td></tr>
+
+  <tr><td>7</td><td>Datasets and gazetteers are different things; and rename Contacts to People.</td>
+      <td><span class="tag tag-rev">REVISED</span></td>
+      <td>Overturns Decision 7. See §8, rewritten.</td></tr>
+</table>
+
+<p class="small">Three defects outside GRACE surfaced while building this and were fixed: the custom user manager
+validated <code>given_name</code> and <code>surname</code> and then silently discarded them, so every account created
+through it displayed an ORCID-derived username where a name should be; the GRACE admin mirrored the default site's
+model admins during autodiscovery, so whether a licence autocomplete worked depended on <code>INSTALLED_APPS</code>
+order; and nothing in GRACE offered an account or a Register entry by name rather than by machine identifier.</p>
 
 </body>
 </html>
