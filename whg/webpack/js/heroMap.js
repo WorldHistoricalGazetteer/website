@@ -13,6 +13,7 @@
 
 import filterState from './filterState';
 import GazetteerInteraction from './gazetteerInteraction';
+import { temporalFilterClause, withTemporalClause } from './temporalFilter';
 
 const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
@@ -192,6 +193,9 @@ class HeroMap {
         // Active two-mode date filter (place#176), remembered so a gazetteer
         // selected later opens already filtered rather than briefly unfiltered.
         this._temporal = null;
+        // The boundary request currently on screen ({source, boundaryValues}),
+        // so a date-filter change can recompose its layers (place#234).
+        this._boundaryOpts = null;
         // True while the shown gazetteer carries a place#140 coverage footprint
         // (a polygon gazetteer). Drives the "zoom in for detail" hint pill.
         this._hasCoverage = false;
@@ -684,6 +688,9 @@ class HeroMap {
             console.warn('heroMap.showBoundaries: unknown source', source);
             return;
         }
+        // Remembered so a later date-filter change can recompose these layers'
+        // filters without the caller having to re-issue the request (place#234).
+        this._boundaryOpts = { source, boundaryValues };
 
         for (const [sId, layerIds] of Object.entries(this._layersBySource)) {
             if (sId === source) continue;
@@ -713,10 +720,16 @@ class HeroMap {
                 continue;
             }
             try {
+                // The tier's `boundary` match and the date window are independent
+                // constraints on the same features, so they must be AND-ed rather
+                // than either replacing the other. Composing through the shared
+                // helper keeps this identical to the dynamic gazetteer layers,
+                // which reach it via registerTemporalLayer (place#234).
+                const clause = this._temporalClause();
                 if (layerId === fillId && valueFilter) {
-                    this.map.setFilter(layerId, valueFilter);
+                    this.map.setFilter(layerId, withTemporalClause(valueFilter, clause));
                 } else {
-                    this.map.setFilter(layerId, original || null);
+                    this.map.setFilter(layerId, withTemporalClause(original || null, clause));
                 }
                 this._widenLayerZoomRange(layerId);
                 this.map.setLayoutProperty(layerId, 'visibility', 'visible');
@@ -775,18 +788,28 @@ class HeroMap {
      * source with an ad-hoc filter is synchronous and answers about the data
      * rather than about the current paint.
      *
+     * With ``temporal: true`` the active date window is AND-ed in, so calling it
+     * twice — once without, once with — separates *this level is empty here* from
+     * *this level has nothing in the chosen period*, which the panel otherwise
+     * cannot tell apart (place#234). With the filter off the two counts are equal
+     * by construction, since the clause is then null.
+     *
      * @param {string} source — boundary source-layer name
      * @param {string[]} boundaryValues — admin levels making up the tier
+     * @param {Object} [opts]
+     * @param {boolean} [opts.temporal=false] — also apply the active date window
      * @returns {number} distinct features found
      */
-    countBoundaryFeatures(source, boundaryValues) {
+    countBoundaryFeatures(source, boundaryValues, opts = {}) {
         if (!this.map || !source || !this._layersBySource[source]) return 0;
         try {
+            const levelFilter = (boundaryValues && boundaryValues.length)
+                ? ['match', ['get', 'boundary'], boundaryValues, true, false]
+                : null;
+            const clause = opts.temporal ? this._temporalClause() : null;
             const features = this.map.querySourceFeatures(source, {
                 sourceLayer: source,
-                filter: (boundaryValues && boundaryValues.length)
-                    ? ['match', ['get', 'boundary'], boundaryValues, true, false]
-                    : null,
+                filter: withTemporalClause(levelFilter, clause),
             });
             const seen = new Set();
             for (const f of features) {
@@ -819,6 +842,7 @@ class HeroMap {
         }
         this._hovered = null;
         this._selected = null;
+        this._boundaryOpts = null;
         this._currentSource = null;
         this.clearBoundaryHover();
     }
@@ -1019,7 +1043,9 @@ class HeroMap {
      */
     setTemporalFilter(mode, fromYear, toYear) {
         this._temporal = { mode, fromYear, toYear };
-        if (this.map) this.map.applyTemporalFilter(mode, fromYear, toYear);
+        if (!this.map) return;
+        this.map.applyTemporalFilter(mode, fromYear, toYear);   // dynamic gazetteer layers
+        this._reapplyBoundaryTemporal();                        // base-style boundary layers
     }
 
     /** Re-apply the active date filter to layers that have just been (re)built. */
@@ -1027,6 +1053,38 @@ class HeroMap {
         if (!this._temporal || !this.map) return;
         const { mode, fromYear, toYear } = this._temporal;
         this.map.applyTemporalFilter(mode, fromYear, toYear);
+    }
+
+    /**
+     * The active date window as ``{mode, fromYear, toYear}``, or null when the
+     * filter is off — so a panel can word a message about it (place#234).
+     */
+    temporalState() {
+        if (!this._temporal || this._temporal.mode === 'off') return null;
+        return { ...this._temporal };
+    }
+
+    /**
+     * The active date window as a MapLibre filter clause, or null when the filter
+     * is off. The single source of truth for both filter paths (place#234).
+     */
+    _temporalClause() {
+        if (!this._temporal) return null;
+        const { mode, fromYear, toYear } = this._temporal;
+        return temporalFilterClause(mode, fromYear, toYear);
+    }
+
+    /**
+     * Recompose the on-screen boundary tier's filters after a date change.
+     *
+     * The base-style boundary layers do NOT go through the registerTemporalLayer
+     * registry — showBoundaries owns their filters, composing a tier's `boundary`
+     * match with each layer's styled original. So applyTemporalFilter cannot reach
+     * them and the request has to be re-issued instead (place#234).
+     */
+    _reapplyBoundaryTemporal() {
+        if (!this.map || !this._boundaryOpts) return;
+        this.showBoundaries(this._boundaryOpts);
     }
 
     /**

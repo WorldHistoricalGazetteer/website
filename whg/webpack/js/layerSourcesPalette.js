@@ -11,6 +11,7 @@
  */
 
 import heroMap from './heroMap';
+import { formatYear } from './utilities';
 
 /* ── Boundary tier definitions ──
  *
@@ -294,6 +295,47 @@ export default class LayerSourcesPalette {
         el.classList.toggle('boundary-level-status--empty', !!muted);
     }
 
+    /**
+     * The readout for a tier, distinguishing the two ways it can come up empty
+     * (place#234).
+     *
+     * With a date filter active, "nothing here" is ambiguous and the two causes
+     * want different responses: a level this source does not use here means try
+     * another tier, whereas a populated level with nothing in the window means
+     * widen the dates or switch mode. `countBoundaryFeatures` is therefore called
+     * twice — once for the level alone, once with the date window AND-ed in — and
+     * the pair says which it is. With the filter off the clause is null, so the
+     * two counts are equal and the wording collapses to what it always was.
+     *
+     * @returns {[string, boolean]} the message and whether to style it as empty
+     */
+    _tierStatus(source, tier) {
+        const label = tier.label.toLowerCase();
+        const level = heroMap.countBoundaryFeatures(source, tier.levels);
+        const temporal = heroMap.temporalState();
+        if (!temporal) {
+            return level > 0
+                ? [`${level} ${level === 1 ? 'region' : 'regions'} here`, false]
+                : [`No ${label} boundaries here — try another level`, true];
+        }
+        const window = `${formatYear(temporal.fromYear)}–${formatYear(temporal.toYear)}`;
+        if (level === 0) {
+            // Structurally absent: the date filter is irrelevant to this one, so
+            // don't mention it and send the user to another tier.
+            return [`No ${label} boundaries here — try another level`, true];
+        }
+        const inPeriod = heroMap.countBoundaryFeatures(source, tier.levels, { temporal: true });
+        if (inPeriod === 0) {
+            return [`${level} ${label} ${level === 1 ? 'boundary' : 'boundaries'} here, `
+                + `but none in ${window} — widen the dates or switch mode`, true];
+        }
+        if (inPeriod === level) {
+            return [`${level} ${level === 1 ? 'region' : 'regions'} here, all in ${window}`, false];
+        }
+        return [`${inPeriod} of ${level} ${label} `
+            + `${level === 1 ? 'region' : 'regions'} in ${window}`, false];
+    }
+
     /* ──────────────────────────────────────────────────────────────── */
     /*  Auto tier switching                                            */
     /* ──────────────────────────────────────────────────────────────── */
@@ -347,16 +389,21 @@ export default class LayerSourcesPalette {
             const count = heroMap.countBoundaryFeatures(source, wanted.levels);
             if (count > 0) {
                 this._showTier(wanted);
-                this._setStatus(`${count} ${count === 1 ? 'region' : 'regions'} here`);
+                this._setStatus(...this._tierStatus(source, wanted));
                 return true;
             }
+            // Auto-tier falls back on the LEVEL count only, never the in-period
+            // count: a tier that is populated but empty for the chosen window is
+            // still the right tier, and jumping away from it would make the map
+            // hop between levels as the date sliders move. The date situation is
+            // explained in the status line instead (place#234).
             const next = this._nextNonEmptyTier(wanted, source);
             if (next) {
                 this._showTier(next);
+                const [detail] = this._tierStatus(source, next);
                 this._setStatus(
                     `No ${wanted.label.toLowerCase()} boundaries here — showing `
-                    + `${next.label.toLowerCase()} instead `
-                    + `(${heroMap.countBoundaryFeatures(source, next.levels)})`);
+                    + `${next.label.toLowerCase()} instead: ${detail.toLowerCase()}`);
                 return true;
             }
             // Empty at every level is what a source whose tiles have not yet
@@ -375,13 +422,15 @@ export default class LayerSourcesPalette {
             const source = tileSourceFor(this._activeSource);
             const count = heroMap.countBoundaryFeatures(source, tier.levels);
             if (count > 0) {
-                this._setStatus(`${count} ${count === 1 ? 'region' : 'regions'} here`);
+                this._setStatus(...this._tierStatus(source, tier));
                 return true;
             }
             // Distinguish "this level is empty here" from "nothing has loaded".
+            // Deliberately the untimed count: with a date filter on, a source
+            // whose every feature falls outside the window would otherwise look
+            // like tiles that had not arrived, and the panel would wait for ever.
             if (heroMap.countBoundaryFeatures(source, null) === 0) return false;
-            this._setStatus(
-                `No ${tier.label.toLowerCase()} boundaries here — try another level`, true);
+            this._setStatus(...this._tierStatus(source, tier));
             return true;
         });
     }
@@ -551,6 +600,19 @@ export default class LayerSourcesPalette {
     /** Re-apply the current boundary filter (show or hide based on current admin level). */
     refreshBoundaries() {
         this._updateBoundaryFilter();
+    }
+
+    /**
+     * Re-read the status line against the current date window (place#234).
+     *
+     * The tier itself does not change when the dates move — only how much of it
+     * falls in the window — so this re-probes rather than re-tiering. Cheap:
+     * `_probeTier` is two synchronous `querySourceFeatures` calls over already
+     * loaded tiles, and it no-ops when no tier is active.
+     */
+    refreshTemporalStatus() {
+        if (!this._currentTier || !this._boundariesVisible) return;
+        this._probeTier();
     }
 
     /**

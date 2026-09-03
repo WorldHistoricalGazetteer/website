@@ -653,3 +653,12 @@ export function initSimpleTypeahead(selector, {
         clearDropdown();
     });
 }
+
+// Temporal formatting: negative years → BCE. Returns '' for a null/absent year.
+// Lives here rather than in atlas.js so the Regions panel can word a date-window
+// message with the same formatting the temporal controls use (place#234) —
+// layerSourcesPalette cannot import from atlas.js, which imports it.
+export function formatYear(y) {
+	if (y == null) return '';
+	return y < 0 ? `${-y} BCE` : `${y}`;
+}
