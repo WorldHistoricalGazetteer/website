@@ -12,7 +12,7 @@ import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
-import { clusterHits, scorePair, DEFAULT_PARAMS } from './clustering.js';
+import { clusterHits, cosineByte, DEFAULT_PARAMS } from './clustering.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -1442,11 +1442,11 @@ async function runValueClustering() {
     const pairs = [];
     for (let i = 0; i < records.length; i++) {
       for (let j = i + 1; j < records.length; j++) {
-        const r = scorePair(records[i], records[j], {});
-        pairs.push({ a: records[i].name, b: records[j].name, composite: +r.composite.toFixed(3) });
+        const c = cosineByte(records[i].phon_emb, records[j].phon_emb);
+        if (c != null) pairs.push({ a: records[i].name, b: records[j].name, name: +c.toFixed(3) });
       }
     }
-    pairs.sort((x, y) => y.composite - x.composite);
+    pairs.sort((x, y) => y.name - x.name);
     console.log('[recon] value clustering — theta', theta.toFixed(3), debug, 'top pairs:', pairs.slice(0, 8));
     _clusterGroups = clusters
       .filter((c) => (c.memberIds || []).length > 1)
