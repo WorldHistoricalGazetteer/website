@@ -12,7 +12,7 @@ import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
-import { clusterHits, DEFAULT_PARAMS } from './clustering.js';
+import { clusterHits, scorePair, DEFAULT_PARAMS } from './clustering.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -1434,7 +1434,20 @@ async function runValueClustering() {
     // No `namespace` on these: every value comes from one column, so declaring one
     // would trip clustering.js's same-namespace repulsion and block every group.
     const theta = (DEFAULT_PARAMS.thresholds.theta_query || 0.55) + DEFAULT_PARAMS.same_ns_penalty;
-    const { clusters } = clusterHits({ hits: records, edges: [], theta });
+    const { clusters, debug } = clusterHits({ hits: records, edges: [], theta });
+    // Log the strongest pairs alongside the threshold, as the Atlas logs its own
+    // clustering. Without this a column that groups nothing is indistinguishable
+    // from a threshold set slightly too high, which is the likeliest way this
+    // feature disappoints.
+    const pairs = [];
+    for (let i = 0; i < records.length; i++) {
+      for (let j = i + 1; j < records.length; j++) {
+        const r = scorePair(records[i], records[j], {});
+        pairs.push({ a: records[i].name, b: records[j].name, composite: +r.composite.toFixed(3) });
+      }
+    }
+    pairs.sort((x, y) => y.composite - x.composite);
+    console.log('[recon] value clustering — theta', theta.toFixed(3), debug, 'top pairs:', pairs.slice(0, 8));
     _clusterGroups = clusters
       .filter((c) => (c.memberIds || []).length > 1)
       .map((c) => {
