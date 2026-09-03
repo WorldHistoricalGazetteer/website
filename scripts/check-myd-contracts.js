@@ -163,11 +163,100 @@ function checkFeatureRoundTrip() {
   } else ok(`feature round trip (${FEATURE_PARTS.length} feature parts)`);
 }
 
+
+// ── 5. Cluster & merge similar values (place#235) ────────────────────────────
+// `buildClusterTransform` decides which of the user's cell values get REWRITTEN, so a
+// bug here corrupts their data rather than merely slowing a run. Three properties, each
+// of which would fail silently:
+//
+//   • a value that is not in any ticked group must pass through UNCHANGED — a mapping
+//     that returned the canonical for everything would flatten the column;
+//   • unticking a group must exclude it, because that tick is the only thing standing
+//     between a proposed merge and two real places being conflated;
+//   • the pseudo-hits handed to clusterHits must carry NO `namespace`: every value comes
+//     from one column, so declaring one trips clustering.js's same-namespace repulsion
+//     and no group is ever proposed. The feature would look like "no variants found".
+//
+// The REAL functions are evaluated against a minimal fake DOM.
+function loadClusterTransform(groups, ticked, canonicals) {
+  const m = src.match(/^function buildClusterTransform\(\)[\s\S]*?^\}/m);
+  if (!m) throw new Error('buildClusterTransform not found in reconciliation.js — renamed?');
+  const box = {
+    innerHTML: '',
+    querySelectorAll: (sel) => (sel.includes('recon-cl-use')
+      ? groups.map((_, i) => ({ checked: ticked[i], dataset: { i: String(i) } }))
+      : []),
+    querySelector: (sel) => {
+      const i = Number((sel.match(/data-i="(\d+)"/) || [])[1]);
+      return { value: canonicals[i] };
+    },
+  };
+  let pending = null;
+  const fn = new Function(
+    'el', '_clusterGroups', 'renderTransformPreview', 'setPending',
+    `${m[0]}; return buildClusterTransform;`,
+  );
+  // `_pendingTransform` is module-level in the real file; capture assignments to it by
+  // running the body with a local of that name and reading it back through a getter.
+  const body = m[0].replace(/_pendingTransform =/g, 'pending =');
+  const runner = new Function(
+    'el', '_clusterGroups', 'renderTransformPreview',
+    `let pending = null; ${body}; buildClusterTransform(); return pending;`,
+  );
+  return runner(() => box, groups, () => {});
+}
+
+function checkValueClustering() {
+  const groups = [
+    { canonical: 'Newton', variants: ['Newton', 'Newtown', 'Neweton'], rows: 3 },
+    { canonical: 'Lisbon', variants: ['Lisbon', 'Lisboa'], rows: 2 },
+  ];
+
+  // Both groups ticked.
+  const t1 = loadClusterTransform(groups, [true, true], ['Newton', 'Lisbon']);
+  if (!t1 || typeof t1.fn !== 'function') {
+    bad('value clustering / transform', 'no transform was built from two ticked groups');
+  } else if (t1.fn('Newtown') !== 'Newton' || t1.fn('Neweton') !== 'Newton') {
+    bad('value clustering / mapping', 'a variant was not rewritten to the canonical value');
+  } else if (t1.fn('Berlin') !== 'Berlin') {
+    bad('value clustering / passthrough',
+      'a value outside every group was rewritten — the column would be flattened');
+  } else if (t1.fn('Newton') !== 'Newton') {
+    bad('value clustering / canonical', 'the canonical value itself was rewritten');
+  } else ok('value clustering: rewrites variants, leaves everything else alone');
+
+  // Second group unticked — its variants must survive untouched.
+  const t2 = loadClusterTransform(groups, [true, false], ['Newton', 'Lisbon']);
+  if (!t2 || t2.fn('Lisboa') !== 'Lisboa') {
+    bad('value clustering / opt-out',
+      'unticking a group did not spare it — the only guard against conflating two real places');
+  } else if (t2.fn('Newtown') !== 'Newton') {
+    bad('value clustering / opt-out', 'unticking one group also disabled the others');
+  } else ok('value clustering: unticking a group spares its values');
+
+  // An edited canonical must win over the proposed one.
+  const t3 = loadClusterTransform(groups, [true, false], ['Newtown', 'Lisbon']);
+  if (!t3 || t3.fn('Newton') !== 'Newtown') {
+    bad('value clustering / edited canonical',
+      'editing the canonical spelling had no effect on the mapping');
+  } else ok('value clustering: an edited canonical spelling is used');
+
+  // The namespace trap, read off the real source.
+  const run = src.match(/^async function runValueClustering\(\)[\s\S]*?^\}/m);
+  if (!run) {
+    bad('value clustering / namespace', 'runValueClustering not found — renamed?');
+  } else if (/namespace/.test(run[0].replace(/\/\/.*$/gm, ''))) {
+    bad('value clustering / namespace', 'the pseudo-hits carry a `namespace`, which trips ' +
+      "clustering.js's same-namespace repulsion — no group would ever be proposed");
+  } else ok('value clustering: pseudo-hits declare no namespace');
+}
+
 const required = (process.argv[2] || 'creator,name,description,url,citation').split(',').filter(Boolean);
 console.log('Map your Data contract checks');
 checkRoles();
 checkIndexingContract(required);
 checkCitationRoundTrip();
 checkFeatureRoundTrip();
+checkValueClustering();
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');

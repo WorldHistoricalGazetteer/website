@@ -12,6 +12,7 @@ import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
+import { clusterHits, DEFAULT_PARAMS } from './clustering.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -1346,6 +1347,8 @@ function openTransformModal(col) {
   const nc = el('recon-tf-newcol'); if (nc) nc.checked = false;
   const nn = el('recon-tf-newcolname');
   if (nn) { nn.value = ''; nn.placeholder = truncate(project.columns[col].name, 28) + ' (transformed)'; nn.classList.add('d-none'); }
+  _clusterGroups = [];
+  const cp = el('recon-tf-clusterpreview'); if (cp) cp.innerHTML = '';
   renderTransformPreview();
   renderSplitPreview();
   renderExtractPanel();
@@ -1371,6 +1374,137 @@ function findReplaceTransform() {
   catch (err) { return { error: err.message }; }
   return { fn: (v) => String(v == null ? '' : v).replace(re, replace), label: `replace “${find}”` };
 }
+
+// ── Cluster & merge similar values (place#235) ───────────────────────────────
+// OpenRefine's "cluster and edit", at the NORMALISE stage of place#111's
+// Import -> Clean -> Normalise -> Reconcile pipeline. It groups the column's
+// DISTINCT values by how they sound and proposes one canonical spelling per
+// group; accepting builds an ordinary value->value transform, so the existing
+// Apply path gives it the undo snapshot, the match invalidation and the
+// persistence that every other transform gets.
+//
+// Deliberately a data-cleaning step and NOT an optimisation inside the
+// reconciler. Merging rows at query time would contradict MyD's rule that
+// identical place names are never merged, "so each row can be matched to a
+// different place" — a row would be matched on a spelling that was never its
+// own. Normalising first is the user's decision, recorded and reversible, and
+// the query saving follows for free because identical values already collapse
+// into one reconciliation unit.
+//
+// Scored with the SAME calibrated scorer the Atlas uses, over embeddings
+// computed here by `attachSelfEmbeddings` — which is exactly what that
+// primitive is for: at this stage nothing has been embedded yet.
+const CLUSTER_MAX_VALUES = 2000;   // embedding cost is linear; a bigger column needs blocking first
+let _clusterGroups = [];           // [{ canonical, variants:[...], rows }]
+
+/** Distinct non-empty values of a column, with the row count behind each. */
+function distinctColumnValues(col) {
+  const counts = new Map();
+  project.rows.forEach((r) => {
+    const v = String(r[col] == null ? '' : r[col]).trim();
+    if (v) counts.set(v, (counts.get(v) || 0) + 1);
+  });
+  return [...counts.entries()].map(([value, rows]) => ({ value, rows }));
+}
+
+async function runValueClustering() {
+  const col = _transformCol;
+  const box = el('recon-tf-clusterpreview');
+  if (col < 0 || !project || !box) return;
+  const values = distinctColumnValues(col);
+  if (values.length < 2) {
+    box.innerHTML = '<span class="text-muted">Nothing to group — the column has fewer than two distinct values.</span>';
+    return;
+  }
+  if (values.length > CLUSTER_MAX_VALUES) {
+    box.innerHTML = `<span class="text-danger">Too many distinct values to group (${values.length.toLocaleString()}; `
+      + `the limit is ${CLUSTER_MAX_VALUES.toLocaleString()}). Clean the column first.</span>`;
+    return;
+  }
+  box.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading the phonetic model…';
+  try {
+    const { attachSelfEmbeddings } = await import(/* webpackChunkName: "recon-cluster" */ './clustering-embed.js');
+    const records = values.map((v) => ({ id: v.value, name: v.value, rows: v.rows }));
+    await attachSelfEmbeddings(records, {
+      lang: getLang(),
+      onProgress: (d, t) => {
+        box.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>embeddings ${d.toLocaleString()} / ${t.toLocaleString()}…`;
+      },
+    });
+    // No `namespace` on these: every value comes from one column, so declaring one
+    // would trip clustering.js's same-namespace repulsion and block every group.
+    const theta = (DEFAULT_PARAMS.thresholds.theta_query || 0.55) + DEFAULT_PARAMS.same_ns_penalty;
+    const { clusters } = clusterHits({ hits: records, edges: [], theta });
+    _clusterGroups = clusters
+      .filter((c) => (c.memberIds || []).length > 1)
+      .map((c) => {
+        const members = c.memberIds
+          .map((id) => records.find((r) => r.id === id))
+          .filter(Boolean)
+          .sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name));
+        return {
+          canonical: members[0].name,          // the commonest spelling, editable below
+          variants: members.map((m) => m.name),
+          rows: members.reduce((n, m) => n + m.rows, 0),
+        };
+      });
+    renderClusterGroups();
+  } catch (err) {
+    console.error('[recon] value clustering failed', err);
+    box.innerHTML = `<span class="text-danger">Could not group values: ${esc(err.message)}</span>`;
+  }
+}
+
+function renderClusterGroups() {
+  const box = el('recon-tf-clusterpreview');
+  if (!box) return;
+  if (!_clusterGroups.length) {
+    box.innerHTML = '<span class="text-muted">No variant spellings found in this column.</span>';
+    return;
+  }
+  // Every group is opt-out: a wrong merge conflates two real places, which costs
+  // the user more than the tidiness is worth, so nothing is applied until Apply.
+  box.innerHTML = `<div class="mb-1">Found ${_clusterGroups.length} group${_clusterGroups.length === 1 ? '' : 's'}. `
+    + `Untick any that are different places; edit a name to choose a different spelling.</div>`
+    + _clusterGroups.map((g, i) => `
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <input type="checkbox" class="recon-cl-use" data-i="${i}" checked>
+        <input type="text" class="form-control form-control-sm recon-cl-canon" data-i="${i}"
+               style="width:180px" value="${esc(g.canonical)}">
+        <span class="text-muted">&larr; ${g.variants.map((v) => esc(v)).join(', ')}
+          <span class="ms-1">(${g.rows} row${g.rows === 1 ? '' : 's'})</span></span>
+      </div>`).join('');
+  box.querySelectorAll('.recon-cl-use, .recon-cl-canon').forEach((c) =>
+    c.addEventListener('input', buildClusterTransform));
+  buildClusterTransform();
+}
+
+/** Turn the ticked groups into a value->value transform the normal Apply path can run. */
+function buildClusterTransform() {
+  const box = el('recon-tf-clusterpreview');
+  if (!box) return;
+  const map = new Map();
+  let groups = 0;
+  box.querySelectorAll('.recon-cl-use').forEach((cb) => {
+    if (!cb.checked) return;
+    const i = Number(cb.dataset.i);
+    const canonEl = box.querySelector(`.recon-cl-canon[data-i="${i}"]`);
+    const canonical = ((canonEl && canonEl.value) || '').trim();
+    if (!canonical) return;
+    groups += 1;
+    _clusterGroups[i].variants.forEach((v) => { if (v !== canonical) map.set(v, canonical); });
+  });
+  if (!map.size) { _pendingTransform = null; renderTransformPreview(); return; }
+  _pendingTransform = {
+    fn: (v) => {
+      const s = String(v == null ? '' : v).trim();
+      return map.has(s) ? map.get(s) : v;
+    },
+    label: `group ${groups} spelling${groups === 1 ? '' : 's'}`,
+  };
+  renderTransformPreview();
+}
+
 function onFindReplaceInput() {
   el('recon-transform-common').querySelectorAll('.recon-tf-common').forEach((x) => x.classList.remove('active', 'btn-primary'));
   const fr = findReplaceTransform();
@@ -8503,6 +8637,7 @@ function init() {
   const sdEl = el('recon-tf-splitdelim'); if (sdEl) sdEl.addEventListener('input', renderSplitPreview);
   const srEl = el('recon-tf-splitrev'); if (srEl) srEl.addEventListener('change', renderSplitPreview);
   const splitBtn = el('recon-tf-splitbtn'); if (splitBtn) splitBtn.addEventListener('click', applySplit);
+  const clusterBtn = el('recon-tf-clusterbtn'); if (clusterBtn) clusterBtn.addEventListener('click', runValueClustering);
   // Row-filter controls (same modal) — live count of what a condition would leave, then Apply/Clear.
   const rfVal = el('recon-tf-filterval'); if (rfVal) rfVal.addEventListener('input', renderRowFilterControls);
   const rfOp = el('recon-tf-filterop'); if (rfOp) rfOp.addEventListener('change', renderRowFilterControls);
