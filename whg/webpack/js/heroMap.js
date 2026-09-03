@@ -200,6 +200,7 @@ class HeroMap {
         // (a polygon gazetteer). Drives the "zoom in for detail" hint pill.
         this._hasCoverage = false;
         this._currentBasemap = 'whg-context';   // active basemap style id (see setBasemapStyle)
+        this._basemapSwap = null;               // in-flight init-time basemap swap (place#237)
         this._gazetteerInteraction = null;
         this._contextLayerIds = [];
         this._settlementDiagnostic = null;
@@ -234,23 +235,8 @@ class HeroMap {
      */
     init(basemapId) {
         if (this._readyPromise) return this._readyPromise;
-        const target = basemapId || 'whg-context';
-        this._currentBasemap = target;
-        // The six Areas>Regions boundary sources exist ONLY in whg-context. Rather
-        // than build on Context and swap — which fetched and discarded ~200 tiles,
-        // and could not be moved earlier because swapping during the initial
-        // style.load stops MapLibre's `load` firing at all — build on the basemap we
-        // actually want and graft those sources/layers in from Context's style JSON.
-        // The fetch runs in parallel with map construction, so it costs nothing.
-        const contextStyle = (target === 'whg-context') ? null
-            : fetch(`${process.env.TILEBOSS}/styles/whg-context/style.json`)
-                .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-                .catch((e) => {
-                    // Non-fatal: the map still works, Areas>Regions just has nothing
-                    // to draw. Better than failing the whole init.
-                    console.warn('heroMap.init: could not load boundary definitions', e);
-                    return null;
-                });
+        // Only a DIFFERENT basemap needs the early swap; Context is what we build on.
+        const pendingBasemap = (basemapId && basemapId !== 'whg-context') ? basemapId : null;
 
         const startInGlobe = !readGlobeDisabled();
         this._isGlobe = startInGlobe;
@@ -262,7 +248,7 @@ class HeroMap {
                 minZoom: 0.5,
                 maxZoom: 22,
                 maxBounds: undefined,
-                style: [target],
+                style: ['whg-context'],
                 fullscreenControl: false,
                 downloadMapControl: false,
                 drawingControl: false,
@@ -272,12 +258,7 @@ class HeroMap {
                 globeMode: startInGlobe,
             });
 
-            this.map.on('load', async () => {
-                // Before _initBoundaryLayers scans for them.
-                if (contextStyle) {
-                    const cs = await contextStyle;
-                    if (cs) this._graftBoundaryLayers(cs);
-                }
+            this.map.on('load', () => {
                 this._addOverlayLayers();
                 this._addSuggestionLayers();
                 this._addResultLayers();
@@ -315,7 +296,20 @@ class HeroMap {
                         }, { once: true });
                     }
                 });
-                fadeLoadingOverlay();
+                // Swap to the basemap this page actually wants BEFORE releasing the
+                // spinner. The map must be built on whg-context — the six
+                // Areas>Regions boundary sources exist only there, and
+                // setBasemapStyle's transformStyle is what carries them onto a
+                // basemap that lacks them — so a swap is unavoidable when another
+                // basemap is remembered. What is avoidable is closing the spinner
+                // over a render that is about to be discarded (place#237).
+                if (pendingBasemap) {
+                    this._basemapSwap = this.setBasemapStyle(pendingBasemap)
+                        .catch((e) => console.warn('heroMap.init: basemap swap failed', e));
+                    this._basemapSwap.then(fadeLoadingOverlay, fadeLoadingOverlay);
+                } else {
+                    fadeLoadingOverlay();
+                }
 
                 this._ready = true;
                 // Debug hook: expose the map for console/automation when enabled.
@@ -327,44 +321,6 @@ class HeroMap {
         });
 
         return this._readyPromise;
-    }
-
-    /**
-     * Copy the Areas>Regions boundary sources and layers out of the whg-context
-     * style JSON into the current (non-Context) style (place#237).
-     *
-     * Those six sources — osm, ohm, osm_misc, po, clio, nl — are defined only in
-     * whg-context, so any other basemap has nothing for Regions to draw. Grafting
-     * them is what lets the map be BUILT on the basemap the user wants instead of
-     * being built on Context and swapped, which fetched and threw away ~200 tiles.
-     *
-     * Called before ``_initBoundaryLayers``, so the usual scan finds them and their
-     * filters, zoom ranges and handlers are set up exactly as on Context. The layers
-     * carry no sprite references (checked: 13 line, 10 symbol, 6 fill, zero
-     * ``icon-image``), and glyphs come from the same host, so nothing else has to
-     * come with them.
-     *
-     * @param {object} styleJSON — the parsed whg-context style
-     */
-    _graftBoundaryLayers(styleJSON) {
-        if (!this.map || !styleJSON) return;
-        const wanted = new Set(BOUNDARY_SOURCE_LAYERS);
-        try {
-            for (const [id, def] of Object.entries(styleJSON.sources || {})) {
-                if (!wanted.has(id) || this.map.getSource(id)) continue;
-                this.map.addSource(id, def);
-            }
-            for (const layer of (styleJSON.layers || [])) {
-                if (!wanted.has(layer.source) || this.map.getLayer(layer.id)) continue;
-                // Appended on top: _initBoundaryLayers hides them immediately and
-                // showBoundaries controls visibility, so draw order only matters
-                // once a tier is switched on — where being above the basemap is
-                // what we want anyway.
-                this.map.addLayer(layer);
-            }
-        } catch (e) {
-            console.warn('heroMap._graftBoundaryLayers: failed', e);
-        }
     }
 
     // ── Overlay layers (for selected region polygons) ──
