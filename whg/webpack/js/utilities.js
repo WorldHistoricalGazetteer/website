@@ -662,3 +662,10 @@ export function formatYear(y) {
 	if (y == null) return '';
 	return y < 0 ? `${-y} BCE` : `${y}`;
 }
+
+// A date window for display. Collapses to a single year when the two ends are
+// equal, which is what the "as at year Y" lock produces (place#234) — "1300–1300"
+// reads as a mistake rather than as a moment.
+export function formatYearWindow(from, to) {
+	return from === to ? formatYear(from) : `${formatYear(from)}\u2013${formatYear(to)}`;
+}

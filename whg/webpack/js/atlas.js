@@ -8,7 +8,7 @@
 import { errorModal } from './error-modal.js';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import { geomsGeoJSON, formatYear } from './utilities';
+import { geomsGeoJSON, formatYear, formatYearWindow } from './utilities';
 import CountryParents from './countryParents';
 import TypeTreeWidget from './typeTreeWidget';
 import filterState from './filterState';
@@ -373,7 +373,7 @@ const debouncedTemporalResearch = debounce(() => {
 // the temporal params already carried in gatherToponymOptions).
 function temporalFilterLabel() {
     if (temporalMode === 'off') return '';
-    const range = `${formatYear(temporalFrom)}–${formatYear(temporalTo)}`;
+    const range = formatYearWindow(temporalFrom, temporalTo);
     return `${range} (${temporalMode})`;
 }
 function updatePlaceListTemporal() {
