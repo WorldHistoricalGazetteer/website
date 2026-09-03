@@ -700,6 +700,28 @@ function setGazetteerCoverageSwitch(id, active) {
     }
 }
 
+// Declared here, ABOVE the map-init block, because waitMapLoad() reads
+// basemapForMode(atlasMapMode) to tell heroMap.init() which basemap to end up on
+// (place#237). `const`/`let` are not hoist-initialised, so leaving these ~700 lines
+// further down put them in the temporal dead zone and the Atlas threw
+// "Cannot access ... before initialization" before the map was ever created.
+
+/* ── Basemap style switcher (per-mode, persisted) ──
+   The Atlas map remembers a basemap style per mode (Areas / Places / Explore)
+   in localStorage, so e.g. Gazetteer Explore can use a detailed OSM/Satellite
+   backdrop while Areas stays on the minimal WHG Context style. The swap keeps
+   all overlays intact (heroMap.setBasemapStyle). */
+const ATLAS_STYLE_KEY = 'whg.atlas_style';
+const ATLAS_BASEMAPS = [
+    { id: 'whg-context', label: 'WHG Context', hint: 'Minimal, low-clutter' },
+    { id: 'whg-enhanced', label: 'WHG Enhanced', hint: 'More physical / terrain context' },
+    { id: 'OSM', label: 'OpenStreetMap', hint: 'Roads, settlements, labels' },
+    { id: 'Satellite', label: 'Satellite', hint: 'Aerial imagery' },
+];
+const ATLAS_DEFAULT_BASEMAP = 'whg-context';
+const ATLAS_MODE_LABELS = { areas: 'Areas', places: 'Places', explore: 'Gazetteer Explore' };
+let atlasMapMode = 'areas';   // 'areas' | 'places' | 'explore'
+
 /* ═══════════════════════════════════════════════════════════════════
    Map init
    ═══════════════════════════════════════════════════════════════════ */
@@ -1469,21 +1491,6 @@ function updateTreeBadge() {
     else $badge.hide();
 }
 
-/* ── Basemap style switcher (per-mode, persisted) ──
-   The Atlas map remembers a basemap style per mode (Areas / Places / Explore)
-   in localStorage, so e.g. Gazetteer Explore can use a detailed OSM/Satellite
-   backdrop while Areas stays on the minimal WHG Context style. The swap keeps
-   all overlays intact (heroMap.setBasemapStyle). */
-const ATLAS_STYLE_KEY = 'whg.atlas_style';
-const ATLAS_BASEMAPS = [
-    { id: 'whg-context', label: 'WHG Context', hint: 'Minimal, low-clutter' },
-    { id: 'whg-enhanced', label: 'WHG Enhanced', hint: 'More physical / terrain context' },
-    { id: 'OSM', label: 'OpenStreetMap', hint: 'Roads, settlements, labels' },
-    { id: 'Satellite', label: 'Satellite', hint: 'Aerial imagery' },
-];
-const ATLAS_DEFAULT_BASEMAP = 'whg-context';
-const ATLAS_MODE_LABELS = { areas: 'Areas', places: 'Places', explore: 'Gazetteer Explore' };
-let atlasMapMode = 'areas';   // 'areas' | 'places' | 'explore'
 
 function readBasemapPrefs() {
     try { return JSON.parse(localStorage.getItem(ATLAS_STYLE_KEY)) || {}; }
