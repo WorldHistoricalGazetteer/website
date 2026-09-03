@@ -59,6 +59,12 @@ let exploreSelection = null;          // single namespace selected in Explore mo
 /* ── Temporal range state ── */
 let temporalFrom = 800;
 let temporalTo = 1800;
+// place#234 item 2 — "as at year Y". When locked the window collapses to the
+// degenerate [Y, Y]; the predicate needs no special case, since both modes are
+// overlap tests and a zero-width window is a valid one. The span in force before
+// locking is kept so unlocking restores the user's range rather than a default.
+let temporalLocked = false;
+let temporalSpanBeforeLock = 1000;
 const TEMPORAL_MIN = -2000;
 const TEMPORAL_MAX = 2100;
 
@@ -232,7 +238,12 @@ function fillTemporalSlider() {
     if (!fromSlider || !toSlider) return;
     const range = TEMPORAL_MAX - TEMPORAL_MIN;
     const fromPct = ((temporalFrom - TEMPORAL_MIN) / range) * 100;
-    const toPct = ((temporalTo - TEMPORAL_MIN) / range) * 100;
+    // A locked year is a zero-width window, which would paint no fill at all and
+    // leave the track looking inert. Give it a hairline so the year is visible on
+    // the timeline (place#234).
+    const toPct = temporalLocked
+        ? Math.min(100, fromPct + 0.6)
+        : ((temporalTo - TEMPORAL_MIN) / range) * 100;
     toSlider.style.background = `linear-gradient(to right,
         #b0bec5 0%, #b0bec5 ${fromPct}%,
         #546e7a ${fromPct}%, #546e7a ${toPct}%,
@@ -260,8 +271,13 @@ function fillTemporalSlider() {
 function updateTemporalLabels() {
     const fromLabel = document.getElementById('temporal_from_label');
     const toLabel = document.getElementById('temporal_to_label');
-    if (fromLabel) fromLabel.textContent = temporalFrom;
-    if (toLabel) toLabel.textContent = temporalTo;
+    // formatYear so a negative year reads "500 BCE" rather than "-500", matching
+    // the scale ticks underneath, which always did.
+    if (fromLabel) fromLabel.textContent = formatYear(temporalFrom);
+    if (toLabel) toLabel.textContent = formatYear(temporalTo);
+    // Locked to a single year: "800 to 800" is noise, so drop the second half.
+    const toGroup = document.getElementById('temporal_to_group');
+    if (toGroup) toGroup.hidden = temporalLocked;
 }
 
 // Client-side mirror of the gateway temporal filter, so the range control can
@@ -284,6 +300,65 @@ function temporalHitPasses(h) {
     const s = span[0] == null ? -Infinity : span[0];
     const e = span[1] == null ? Infinity : span[1];
     return s <= temporalTo && e >= temporalFrom;
+}
+
+// ── "As at year Y" lock (place#234 item 2) ──
+// Collapses the two-handle range to a single year and steps through time. The
+// filter predicate is untouched: a locked year is the window [Y, Y], and because
+// both modes are interval-overlap tests that means "alive at Y" — *possibly* still
+// admits undated places, *definitely* still demands an attested core spanning Y.
+
+/** Move both handles to a single year, clamped to the slider's range. */
+function setTemporalYear(year) {
+    const y = Math.max(TEMPORAL_MIN, Math.min(TEMPORAL_MAX, Math.round(year)));
+    temporalFrom = y;
+    temporalTo = y;
+    syncTemporalSliders();
+}
+
+/** Push the current from/to back onto the inputs and repaint the track. */
+function syncTemporalSliders() {
+    const fromSlider = document.getElementById('temporal_from_slider');
+    const toSlider = document.getElementById('temporal_to_slider');
+    if (fromSlider) fromSlider.value = temporalFrom;
+    if (toSlider) toSlider.value = temporalTo;
+    updateTemporalLabels();
+    fillTemporalSlider();
+    temporalRangeChanged();
+}
+
+function setTemporalLock(locked) {
+    const btn = document.getElementById('temporal_lock_btn');
+    if (locked === temporalLocked) return;
+    if (locked) {
+        // Lock to the middle of what the user was already looking at, so the map
+        // does not jump to an unrelated period on the way in.
+        temporalSpanBeforeLock = Math.max(0, temporalTo - temporalFrom);
+        temporalLocked = true;
+        setTemporalYear((temporalFrom + temporalTo) / 2);
+    } else {
+        // Restore the previous span centred on the year being left, rather than
+        // snapping back to wherever the handles were before.
+        const centre = temporalFrom;
+        const half = temporalSpanBeforeLock / 2;
+        temporalLocked = false;
+        temporalFrom = Math.max(TEMPORAL_MIN, Math.round(centre - half));
+        temporalTo = Math.min(TEMPORAL_MAX, Math.round(centre + half));
+        syncTemporalSliders();
+    }
+    if (btn) {
+        btn.classList.toggle('active', temporalLocked);
+        btn.setAttribute('aria-pressed', String(temporalLocked));
+    }
+    document.getElementById('temporal_control')?.classList.toggle('temporal-locked', temporalLocked);
+    applyTemporalLive();
+}
+
+/** Step the locked year. Shift multiplies the step, as it does on a range input. */
+function stepTemporalYear(delta) {
+    if (!temporalLocked) return;
+    setTemporalYear(temporalFrom + delta);
+    applyTemporalLive();
 }
 
 // Live temporal interaction: throttled instant re-filter/re-cluster of the loaded
@@ -429,6 +504,12 @@ function wireTemporalControl() {
     if (!fromSlider || !toSlider) return;
 
     fromSlider.addEventListener('input', () => {
+        if (temporalLocked) {
+            // Locked: either handle drags the single year (place#234).
+            setTemporalYear(parseInt(fromSlider.value));
+            applyTemporalLive();
+            return;
+        }
         temporalFrom = parseInt(fromSlider.value);
         if (temporalFrom >= temporalTo) {
             temporalTo = temporalFrom;
@@ -441,6 +522,11 @@ function wireTemporalControl() {
     });
 
     toSlider.addEventListener('input', () => {
+        if (temporalLocked) {
+            setTemporalYear(parseInt(toSlider.value));
+            applyTemporalLive();
+            return;
+        }
         temporalTo = parseInt(toSlider.value);
         if (temporalTo <= temporalFrom) {
             temporalFrom = temporalTo;
@@ -450,6 +536,24 @@ function wireTemporalControl() {
         fillTemporalSlider();
         temporalRangeChanged();
         applyTemporalLive();
+    });
+
+    // ── "As at year Y" lock + keyboard stepping (place#234 item 2) ──
+    const lockBtn = document.getElementById('temporal_lock_btn');
+    if (lockBtn) {
+        lockBtn.addEventListener('click', () => setTemporalLock(!temporalLocked));
+    }
+    // Arrow keys step the locked year. Scoped to the temporal control so they do
+    // not steal the arrow keys from the map or the search box; a range input
+    // already handles them itself, so only act when the focus is elsewhere in
+    // the control (the lock button, typically, right after clicking it).
+    document.getElementById('temporal_control')?.addEventListener('keydown', (e) => {
+        if (!temporalLocked) return;
+        if (e.target === fromSlider || e.target === toSlider) return;
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        const step = (e.shiftKey ? 10 : 1) * (e.key === 'ArrowLeft' ? -1 : 1);
+        stepTemporalYear(step);
     });
 
     // Temporal mode toggle
@@ -486,6 +590,12 @@ function wireTemporalControl() {
             const px = wrap.getBoundingClientRect().width || 1;
             const deltaYears = Math.round(((e.clientX - startX) / px) * (TEMPORAL_MAX - TEMPORAL_MIN));
             let newFrom = startFrom + deltaYears;
+            if (temporalLocked) {
+                // Zero-width window: dragging the band slides the single year.
+                setTemporalYear(newFrom);
+                applyTemporalLive();
+                return;
+            }
             // Clamp so the span stays within bounds (both handles move together).
             newFrom = Math.max(TEMPORAL_MIN, Math.min(newFrom, TEMPORAL_MAX - span));
             temporalFrom = newFrom;
@@ -515,6 +625,13 @@ function resetTemporalControl() {
     temporalFrom = 800;
     temporalTo = 1800;
     temporalMode = 'off';
+    temporalLocked = false;
+    const lockBtn = document.getElementById('temporal_lock_btn');
+    if (lockBtn) {
+        lockBtn.classList.remove('active');
+        lockBtn.setAttribute('aria-pressed', 'false');
+    }
+    document.getElementById('temporal_control')?.classList.remove('temporal-locked');
     const fromSlider = document.getElementById('temporal_from_slider');
     const toSlider = document.getElementById('temporal_to_slider');
     if (fromSlider) fromSlider.value = temporalFrom;

@@ -177,13 +177,26 @@
                             title="Show places that COULD have existed in the selected years — anything its sources do not rule out. Many sources record a place as it was at one moment and say nothing about when it began, so they are possible, not certain, at earlier dates. Places with no recorded dates are kept, since nothing rules them out either.">Possibly</button>
                     <button type="button" class="btn" data-temporal-mode="definitely"
                             data-bs-toggle="tooltip"
-                            title="Show only places ATTESTED to have existed throughout the selected years. Stricter: a place whose sources merely allow it to have been there is excluded, as is a place with no recorded dates.">Definitely</button>
+                            title="Show only places ATTESTED to have existed during the selected years — a source pins both ends of their life, and that attested span falls in your window. Stricter: a place whose sources merely allow it to have been there is excluded, as is a place with no recorded dates.">Definitely</button>
                 </div>
                 <div class="temporal-year-labels">
                     <span id="temporal_from_label">800</span>
-                    <span style="color:#90a4ae; font-weight:400; font-size:0.65rem">to</span>
-                    <span id="temporal_to_label">1800</span>
+                    <span id="temporal_to_group">
+                        <span style="color:#90a4ae; font-weight:400; font-size:0.65rem">to</span>
+                        <span id="temporal_to_label">1800</span>
+                    </span>
                 </div>
+                {# place#234 item 2: collapse the range to a single year and step #}
+                {# through time. The predicate needs nothing new — a locked year #}
+                {# is the degenerate window [Y, Y], and both modes are overlap    #}
+                {# tests, so `possibly` still admits undated places and           #}
+                {# `definitely` still demands an attested core containing Y.      #}
+                <button type="button" id="temporal_lock_btn" class="temporal-lock"
+                        aria-pressed="false"
+                        data-bs-toggle="tooltip"
+                        title="Lock to a single year — show the map as at one moment, and step through time with the arrow keys">
+                    <i class="fas fa-thumbtack"></i>
+                </button>
             </div>
             <div class="temporal-slider-wrap">
                 <input type="range" class="temporal-from" id="temporal_from_slider"
