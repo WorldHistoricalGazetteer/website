@@ -258,16 +258,23 @@ class HeroMap {
                 globeMode: startInGlobe,
             });
 
-            if (pendingBasemap) {
-                // `once`, and before `load`: the boundary layer DEFINITIONS arrive with
-                // the style JSON, so we do not need Context to render — only to exist.
-                this.map.once('style.load', () => {
+            // Driven by `style.load`, NOT `load`. Swapping the style during the
+            // initial style.load stops MapLibre's `load` ever firing — the whole
+            // init chain then hangs and the map stays blank (measured; place#237).
+            // Counting style loads is deterministic where promise timing is not:
+            // the first one either triggers the swap or wires up, and with a swap
+            // the second one wires up once the real basemap is in.
+            let styleLoads = 0;
+            this.map.on('style.load', () => {
+                styleLoads += 1;
+                if (styleLoads === 1 && pendingBasemap) {
+                    // The boundary layer DEFINITIONS arrive with the Context style
+                    // JSON, so Context must exist but never has to render.
                     this._basemapSwap = this.setBasemapStyle(pendingBasemap)
                         .catch((e) => console.warn('heroMap.init: basemap swap failed', e));
-                });
-            }
-
-            this.map.on('load', () => {
+                    return;
+                }
+                if (this._ready) return;   // later user-driven basemap switches
                 this._addOverlayLayers();
                 this._addSuggestionLayers();
                 this._addResultLayers();
