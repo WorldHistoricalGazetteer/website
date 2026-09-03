@@ -17,7 +17,7 @@ limits on all containers, no Flower or Webpack) to protect the production site.
 
 ## Local Workflow
 
-All code changes, branch merges, and webpack builds happen locally. The servers
+All code changes, promotions, and webpack builds happen locally. The servers
 only ever pull and restart.
 
 ### Webpack Build
@@ -26,31 +26,69 @@ Webpack bundles are committed to the repository and **must only be built
 locally**. The webpack container is only included in the `local` Docker Compose
 configuration.
 
+⚠️ Use **`npm run build:prod`**. Bare `npm run build` starts webpack in **watch
+mode** and never exits.
+
 ```bash
-npm run build
+npm run build:prod
 git add static/webpack/
 git commit -m "Rebuild webpack bundles"
-git push origin main
+git push origin staging     # day-to-day work happens on staging
 ```
 
-### Branch Merges
+Because the bundles are committed and `STATIC_ROOT` is `<BASE_DIR>/static`, a
+bundle change needs **no `--collectstatic`** on deploy.
 
-Merge feature branches into `main` locally:
+### Promoting staging to production
+
+`staging` is the development branch and `main` is production. Work lands on
+`staging` first, is verified on `dev.whgazetteer.org`, and is then promoted to
+`main` **one commit at a time**.
+
+⚠️ **NEVER merge `staging` into `main`.** `staging` carries dev-only apps (GRACE)
+that must not reach production, and the merge would also collide with the ~139
+generated bundle files under `static/webpack/`. The branches have diverged, so
+`git merge --ff-only` between them fails outright in either direction.
+
+⚠️ **Promote by EXPLICIT SHA, never by looping a commit range.** Iterating
+`git log origin/main..origin/staging` to promote "the new ones" is how three GRACE
+commits once reached `main`: most of the range fails noisily, but some hunks apply,
+and the failures scroll past looking like success.
+
+A plain `git cherry-pick` conflicts on the committed bundles, so apply the
+**source-only** diff and rebuild once on `main`:
 
 ```bash
 git checkout main
-git pull origin main
-git merge feature-branch
+git pull --ff-only origin main
+
+# 1. Source only — exclude the generated bundles.
+git diff <sha>^ <sha> -- . ':(exclude)static/webpack' | git apply --index
+git commit -C <sha>          # reuse the original commit message
+
+# 2. One rebuild on main, as its own commit.
+npm run build:prod
+git add -A static/webpack
+git commit -m "build(webpack): rebuild bundles on main"
+
 git push origin main
 ```
 
-To propagate to the development site, fast-forward `staging`:
+Before pushing, confirm the promoted sources match what was verified on dev —
+this should print nothing:
 
 ```bash
-git checkout staging
-git merge --ff-only main
-git push origin staging
+git diff origin/staging main -- <the files the commit touched>
 ```
+
+Then deploy (see **Deploy Script** below). For a change that is only Python,
+templates, JS or bundles, `deploy prod restart` is sufficient — **no `--migrate`,
+no `--celery`, no `--collectstatic`**. Add `--migrate` only for a schema change and
+`--celery` only when Celery *task* code changed, since a plain restart leaves the
+worker on stale modules.
+
+`main` is a protected branch: it cannot be force-pushed without temporarily
+editing the branch-protection rule.
 
 ### Feature Branch Testing
 
