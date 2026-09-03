@@ -46,7 +46,7 @@ let searchMode = 'areas';       // 'areas' | 'toponyms'
 let searchMatchMode = 'in';   // main Places search match type: exact | starts | in (contains) | phonetic
 let useViewport = false;       // viewport-constraint toggle (non-globe only)
 let clusterResults = true;
-let selectedRegions = [];        // Array of {id, label, admin_level, namespace, geometry}
+let selectedRegions = [];        // Array of {id, label, namespace, geometry}
 let areaSearchResults = [];      // Current area search dropdown results
 let areaDropdownIndex = -1;
 
@@ -868,7 +868,6 @@ Promise.all([
         addRegionSelection({
             id: `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`,
             label: detail.name || 'Unnamed',
-            admin_level: detail.admin_level,
             namespace: detail.namespace || 'osm',
             geometry: detail.geometry,
         });
@@ -2220,7 +2219,6 @@ function selectAreaResult(index) {
         addRegionSelection({
             id: item.id,
             label: item.label,
-            admin_level: item.admin_level,
             namespace: item.namespace || 'osm',
             geometry: item.geometry,
         });
@@ -2323,7 +2321,6 @@ function renderSelectionChips() {
         <span class="filter-chip" data-region-id="${item.id}">
             <i class="fas fa-vector-square me-1"></i>
             ${escapeHtml(item.label)}
-            ${item.admin_level != null ? `<span class="filter-chip-meta">(level ${item.admin_level})</span>` : ''}
             <button type="button" class="filter-chip-dismiss" aria-label="Remove" data-dismiss-id="${item.id}">
                 <i class="fas fa-times"></i>
             </button>
