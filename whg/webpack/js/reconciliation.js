@@ -1433,8 +1433,19 @@ async function runValueClustering() {
     });
     // No `namespace` on these: every value comes from one column, so declaring one
     // would trip clustering.js's same-namespace repulsion and block every group.
-    const theta = (DEFAULT_PARAMS.thresholds.theta_query || 0.55) + DEFAULT_PARAMS.same_ns_penalty;
-    const { clusters, debug } = clusterHits({ hits: records, edges: [], theta });
+    //
+    // ⚠️ NAME-ONLY SCORING, against the calibrated NAME threshold — not the composite
+    // one. We are comparing spellings of a value, not places: a value can occur in rows
+    // all over the map, so there is no coordinate, date or type to bring. Left at their
+    // default weights the composite could never clear theta here, because `signals.link`
+    // is ALWAYS defined (0.0 when no hard-link edge exists) and always carries its
+    // weight — so a name-only pair scores (0.35·name + 0.15·0) / 0.50, capping a PERFECT
+    // match at exactly 0.70 and making a merge unreachable. Zeroing the other weights
+    // makes the composite the name signal itself, and `tau_name` is the threshold the
+    // calibration provides for exactly that quantity.
+    const weights = { name: 1, spatial: 0, temporal: 0, type: 0, link: 0 };
+    const theta = DEFAULT_PARAMS.thresholds.tau_name || 0.75;
+    const { clusters, debug } = clusterHits({ hits: records, edges: [], theta, weights });
     // Log the strongest pairs alongside the threshold, as the Atlas logs its own
     // clustering. Without this a column that groups nothing is indistinguishable
     // from a threshold set slightly too high, which is the likeliest way this
