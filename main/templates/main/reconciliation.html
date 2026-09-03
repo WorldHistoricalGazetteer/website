@@ -866,6 +866,27 @@
               <label class="small mb-0 ms-1"><input type="checkbox" id="recon-tf-case"> case-sensitive</label>
             </div>
           </div>
+          {% comment %}
+            place#235 — OpenRefine's "cluster and edit", at the Normalise stage of
+            place#111's Import -> Clean -> Normalise -> Reconcile pipeline. Groups the
+            column's DISTINCT values by how they sound (the same calibrated scorer the
+            Atlas clusters with), proposes a canonical spelling per group, and applies
+            the choice as an ordinary value transform — so it lands in the undo history
+            and invalidates stale matches like every other transform. Fewer
+            reconciliation queries follow for free, because identical values already
+            collapse into one query.
+          {% endcomment %}
+          <div class="border rounded p-2 mt-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <button type="button" id="recon-tf-clusterbtn" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-object-group me-1"></i>Group similar spellings</button>
+              <span class="text-muted small">finds variant spellings of the same name
+                (&ldquo;Newton&rdquo; / &ldquo;Newtown&rdquo; / &ldquo;Neweton&rdquo;) so you can
+                make them consistent &mdash; downloads a one-off phonetic model the first time</span>
+            </div>
+            <div id="recon-tf-clusterpreview" class="small mt-1"></div>
+          </div>
+
           <div id="recon-transform-preview" class="recon-transform-preview"></div>
 
           {% comment %}Write the result to a NEW column instead of overwriting the source (place#194) —
