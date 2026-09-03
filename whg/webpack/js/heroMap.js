@@ -258,23 +258,7 @@ class HeroMap {
                 globeMode: startInGlobe,
             });
 
-            // Driven by `style.load`, NOT `load`. Swapping the style during the
-            // initial style.load stops MapLibre's `load` ever firing — the whole
-            // init chain then hangs and the map stays blank (measured; place#237).
-            // Counting style loads is deterministic where promise timing is not:
-            // the first one either triggers the swap or wires up, and with a swap
-            // the second one wires up once the real basemap is in.
-            let styleLoads = 0;
-            this.map.on('style.load', () => {
-                styleLoads += 1;
-                if (styleLoads === 1 && pendingBasemap) {
-                    // The boundary layer DEFINITIONS arrive with the Context style
-                    // JSON, so Context must exist but never has to render.
-                    this._basemapSwap = this.setBasemapStyle(pendingBasemap)
-                        .catch((e) => console.warn('heroMap.init: basemap swap failed', e));
-                    return;
-                }
-                if (this._ready) return;   // later user-driven basemap switches
+            this.map.on('load', () => {
                 this._addOverlayLayers();
                 this._addSuggestionLayers();
                 this._addResultLayers();
@@ -312,8 +296,20 @@ class HeroMap {
                         }, { once: true });
                     }
                 });
-                if (this._basemapSwap) this._basemapSwap.then(fadeLoadingOverlay, fadeLoadingOverlay);
-                else fadeLoadingOverlay();
+                // Swap to the basemap this page actually wants BEFORE releasing the
+                // spinner. The map must be built on whg-context — the six
+                // Areas>Regions boundary sources exist only there, and
+                // setBasemapStyle's transformStyle is what carries them onto a
+                // basemap that lacks them — so a swap is unavoidable when another
+                // basemap is remembered. What is avoidable is closing the spinner
+                // over a render that is about to be discarded (place#237).
+                if (pendingBasemap) {
+                    this._basemapSwap = this.setBasemapStyle(pendingBasemap)
+                        .catch((e) => console.warn('heroMap.init: basemap swap failed', e));
+                    this._basemapSwap.then(fadeLoadingOverlay, fadeLoadingOverlay);
+                } else {
+                    fadeLoadingOverlay();
+                }
 
                 this._ready = true;
                 // Debug hook: expose the map for console/automation when enabled.
