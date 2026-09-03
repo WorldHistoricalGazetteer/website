@@ -1464,10 +1464,19 @@ async function runValueClustering() {
       .map((c) => {
         const members = c.memberIds
           .map((id) => records.find((r) => r.id === id))
-          .filter(Boolean)
-          .sort((a, b) => b.rows - a.rows || a.name.localeCompare(b.name));
+          .filter(Boolean);
+        // Propose the commonest spelling; on a tie — which is the norm in a small
+        // column, where every variant occurs once — fall back to the MEDOID, the
+        // spelling most like the others, rather than to alphabetical order. On
+        // Newton/Newtown/Neweton, alphabetical proposes the misspelling "Neweton",
+        // which reads as a broken suggestion even though the grouping is right.
+        const centrality = new Map(members.map((m) => [m.id, members.reduce((sum, o) =>
+          (o === m ? sum : sum + (cosineByte(m.phon_emb, o.phon_emb) || 0)), 0)]));
+        members.sort((x, y) => y.rows - x.rows
+          || centrality.get(y.id) - centrality.get(x.id)
+          || x.name.localeCompare(y.name));
         return {
-          canonical: members[0].name,          // the commonest spelling, editable below
+          canonical: members[0].name,          // editable below
           variants: members.map((m) => m.name),
           rows: members.reduce((n, m) => n + m.rows, 0),
         };
