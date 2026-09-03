@@ -288,9 +288,18 @@ class HeroMap {
                 // crosses the footprint→boundaries threshold (place#140).
                 this.map.on('zoom', () => this._updateCoverageHint());
 
-                // Fade out the loading overlay once the map is idle
-                // (globe projection has finished its initial render)
-                this.map.once('idle', () => {
+                // Fade out the loading overlay once the map is idle (globe
+                // projection has finished its initial render) — or after a
+                // timeout, whichever comes first. An overlay dismissible ONLY
+                // by `idle` turns any source that fails to complete into a
+                // permanently blank page over a map that is otherwise usable:
+                // that is exactly how place#237 presented. The map is already
+                // interactive by `load`, so a late fade costs nothing.
+                let overlayCleared = false;
+                const clearLoadingOverlay = () => {
+                    if (overlayCleared) return;
+                    overlayCleared = true;
+                    clearTimeout(overlayTimer);
                     const overlay = document.getElementById('map_loading_overlay');
                     if (overlay) {
                         overlay.classList.add('fade-out');
@@ -298,7 +307,12 @@ class HeroMap {
                             overlay.style.display = 'none';
                         }, { once: true });
                     }
-                });
+                };
+                const overlayTimer = setTimeout(() => {
+                    console.warn('Map still not idle after 8s — clearing the loading overlay anyway.');
+                    clearLoadingOverlay();
+                }, 8000);
+                this.map.once('idle', clearLoadingOverlay);
 
                 // A basemap that does not carry the boundary sources still has to be
                 // reached by swapping. Unchanged behaviour for those (place#237).

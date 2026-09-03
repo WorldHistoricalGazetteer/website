@@ -1535,6 +1535,41 @@ maplibregl.Map = function (options = {}) {
 
     mapInstance.initOptions = chosenOptions;
 
+    // Every LATER projection change (the globe control, heroMap's bounds-driven
+    // globe↔flat switching) hits the same trap as place#237's opening one, because
+    // by then the raster-dem tiles have loaded. Drop their worker actors first so
+    // MapLibre's reload is a real load and the tiles can reach 'loaded' again;
+    // otherwise the map's readiness never recovers from a globe toggle. Private
+    // API, so it is guarded — if it moves we are no worse off than before.
+    const originalSetProjection = mapInstance.setProjection.bind(mapInstance);
+    mapInstance.setProjection = function (projection) {
+        try {
+            const caches = (mapInstance.style && mapInstance.style.sourceCaches) || {};
+            for (const id in caches) {
+                if (caches[id].getSource().type !== 'raster-dem') continue;
+                Object.values(caches[id]._tiles).forEach((tile) => { tile.actor = null; });
+            }
+        } catch (e) { /* not fatal: worst case is the pre-existing behaviour */ }
+        return originalSetProjection(projection);
+    };
+
+    // Apply the opening projection at `style.load`, NOT at `load` (place#237).
+    //
+    // MapLibre's Style._setProjectionInternal reloads EVERY source cache, and its
+    // RasterDEMTileSource.loadTile only sends a tile to the worker when
+    // `!tile.actor || tile.state === 'expired'`. A raster-dem tile that has already
+    // loaded once therefore enters state 'reloading' and never leaves it: the source
+    // never completes, map.loaded() stays false, and `idle` never fires — so anything
+    // waiting on idle (the Atlas loading overlay) waits for ever and the map reads as
+    // blank. `style.load` fires after the sources are registered but before any tile
+    // has loaded, so the reload is a no-op. This mirrors what heroMap.setBasemapStyle
+    // already does on a basemap swap, which is why a swap has been masking the stall.
+    if (chosenOptions.globeControl && chosenOptions.globeMode) {
+        mapInstance.once('style.load', () => {
+            try { mapInstance.setProjection({ type: 'globe' }); } catch (e) { console.warn('Could not set globe projection:', e); }
+        });
+    }
+
     mapInstance.on('error', (e) => {
         // Identify if this is a "Fatal" error (WebGL or Critical Resource Failure)
         let isFatal = false;
@@ -1614,7 +1649,9 @@ maplibregl.Map = function (options = {}) {
 		}
 		if (chosenOptions.globeControl) {
 			mapInstance.addControl(new maplibregl.GlobeControl(), 'top-right');
-			if (chosenOptions.globeMode) mapInstance.setProjection({ type: 'globe' });
+			// The projection itself is applied at `style.load`, above — setting it
+			// here (after the first tiles have loaded) permanently stalls any
+			// raster-dem source in the style. See place#237.
 			// MapLibre adds a redundant `title` attribute to the globe control button after first click on it
 			const globeButton = mapInstance.getContainer().querySelector('.maplibregl-ctrl-globe');
 			if (globeButton) {
