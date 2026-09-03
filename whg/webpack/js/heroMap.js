@@ -200,6 +200,7 @@ class HeroMap {
         // (a polygon gazetteer). Drives the "zoom in for detail" hint pill.
         this._hasCoverage = false;
         this._currentBasemap = 'whg-context';   // active basemap style id (see setBasemapStyle)
+        this._basemapSwap = null;               // in-flight init-time basemap swap (place#237)
         this._gazetteerInteraction = null;
         this._contextLayerIds = [];
         this._settlementDiagnostic = null;
@@ -222,9 +223,20 @@ class HeroMap {
     /**
      * Initialise the map in the #hero_map container.
      * Returns a promise that resolves when the map is loaded.
+     *
+     * @param {string} [basemapId] — the basemap the caller actually wants. The map
+     *   is ALWAYS constructed on ``whg-context`` regardless, because the six
+     *   Areas>Regions boundary sources exist only in that style and
+     *   ``setBasemapStyle``'s ``transformStyle`` is what carries them onto any
+     *   other basemap. Passing the target here swaps at ``style.load`` — before
+     *   MapLibre fetches Context's ~200 tiles — instead of after the first render,
+     *   so nothing is painted and discarded and the spinner covers the basemap the
+     *   user actually gets (place#237).
      */
-    init() {
+    init(basemapId) {
         if (this._readyPromise) return this._readyPromise;
+        // Only a DIFFERENT basemap needs the early swap; Context is what we build on.
+        const pendingBasemap = (basemapId && basemapId !== 'whg-context') ? basemapId : null;
 
         const startInGlobe = !readGlobeDisabled();
         this._isGlobe = startInGlobe;
@@ -245,6 +257,15 @@ class HeroMap {
                 globeControl: true,
                 globeMode: startInGlobe,
             });
+
+            if (pendingBasemap) {
+                // `once`, and before `load`: the boundary layer DEFINITIONS arrive with
+                // the style JSON, so we do not need Context to render — only to exist.
+                this.map.once('style.load', () => {
+                    this._basemapSwap = this.setBasemapStyle(pendingBasemap)
+                        .catch((e) => console.warn('heroMap.init: basemap swap failed', e));
+                });
+            }
 
             this.map.on('load', () => {
                 this._addOverlayLayers();
@@ -269,9 +290,13 @@ class HeroMap {
                 // crosses the footprint→boundaries threshold (place#140).
                 this.map.on('zoom', () => this._updateCoverageHint());
 
-                // Fade out the loading overlay once the map is idle
-                // (globe projection has finished its initial render)
-                this.map.once('idle', () => {
+                // Fade out the loading overlay once the map is idle (the globe
+                // projection has finished its initial render). When a basemap swap
+                // is in flight, wait for it first: fading on the FIRST idle closed
+                // the spinner over a Context render that was about to be thrown
+                // away, so the real basemap then appeared seconds later on an
+                // apparently-loaded map (place#237).
+                const fadeLoadingOverlay = () => this.map.once('idle', () => {
                     const overlay = document.getElementById('map_loading_overlay');
                     if (overlay) {
                         overlay.classList.add('fade-out');
@@ -280,6 +305,8 @@ class HeroMap {
                         }, { once: true });
                     }
                 });
+                if (this._basemapSwap) this._basemapSwap.then(fadeLoadingOverlay, fadeLoadingOverlay);
+                else fadeLoadingOverlay();
 
                 this._ready = true;
                 // Debug hook: expose the map for console/automation when enabled.

@@ -705,9 +705,14 @@ function setGazetteerCoverageSwitch(id, active) {
    ═══════════════════════════════════════════════════════════════════ */
 
 function waitMapLoad() {
-    return heroMap.init().then(() => {
-        // Apply the basemap remembered for the initial (Areas) mode, once the
-        // map exists. No-op when it's already the default WHG Context style.
+    // Hand init the basemap this mode actually wants, so the swap happens before
+    // Context's tiles are fetched rather than after they have been rendered and
+    // discarded (place#237). The map is still BUILT on Context — that is where the
+    // Areas>Regions boundary sources live.
+    return heroMap.init(basemapForMode(atlasMapMode)).then(() => {
+        // Now a genuine no-op (setBasemapStyle returns early when the id matches);
+        // kept so the menu highlight is refreshed and any later mode change still
+        // routes through one place.
         applyBasemapForMode();
         // Reflect the current zoom in the URL so a shared link restores it.
         heroMap.map.on('zoomend', () => updateZoomUrl(heroMap.map.getZoom()));
