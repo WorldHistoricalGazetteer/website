@@ -477,10 +477,6 @@ body.atlas-tooltips-off .tooltip:not(.tt-advisory) { display: none !important; }
     color: #2c3e50;
     line-height: 1.4;
 }
-#selection_chips .filter-chip-meta {
-    color: #7f8c8d;
-    font-size: 0.65rem;
-}
 #selection_chips .filter-chip-dismiss {
     background: none;
     border: none;
