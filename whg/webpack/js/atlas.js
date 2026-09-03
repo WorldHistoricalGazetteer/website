@@ -700,14 +700,40 @@ function setGazetteerCoverageSwitch(id, active) {
     }
 }
 
+// Hoisted ABOVE the map-init block on purpose: waitMapLoad() reads
+// basemapForMode(atlasMapMode) to tell heroMap.init() which basemap to build on
+// (place#237). `const`/`let` are NOT hoist-initialised, so with these left ~700
+// lines further down they sat in the temporal dead zone and the Atlas threw
+// "Cannot access ... before initialization" before the map was ever created.
+
+/* ── Basemap style switcher (per-mode, persisted) ──
+   The Atlas map remembers a basemap style per mode (Areas / Places / Explore)
+   in localStorage, so e.g. Gazetteer Explore can use a detailed OSM/Satellite
+   backdrop while Areas stays on the minimal WHG Context style. The swap keeps
+   all overlays intact (heroMap.setBasemapStyle). */
+const ATLAS_STYLE_KEY = 'whg.atlas_style';
+const ATLAS_BASEMAPS = [
+    { id: 'whg-context', label: 'WHG Context', hint: 'Minimal, low-clutter' },
+    { id: 'whg-enhanced', label: 'WHG Enhanced', hint: 'More physical / terrain context' },
+    { id: 'OSM', label: 'OpenStreetMap', hint: 'Roads, settlements, labels' },
+    { id: 'Satellite', label: 'Satellite', hint: 'Aerial imagery' },
+];
+const ATLAS_DEFAULT_BASEMAP = 'whg-context';
+const ATLAS_MODE_LABELS = { areas: 'Areas', places: 'Places', explore: 'Gazetteer Explore' };
+let atlasMapMode = 'areas';   // 'areas' | 'places' | 'explore'
+
 /* ═══════════════════════════════════════════════════════════════════
    Map init
    ═══════════════════════════════════════════════════════════════════ */
 
 function waitMapLoad() {
-    return heroMap.init().then(() => {
-        // Apply the basemap remembered for the initial (Areas) mode, once the
-        // map exists. No-op when it's already the default WHG Context style.
+    // Tell init which basemap this mode wants. It builds straight onto it when that
+    // style carries the Areas>Regions boundary sources, and otherwise builds on
+    // Context and swaps as before (place#237).
+    return heroMap.init(basemapForMode(atlasMapMode)).then(() => {
+        // A no-op when init already built on (or swapped to) the right style —
+        // setBasemapStyle returns early on a matching id. Kept so the menu
+        // highlight refreshes and later mode changes route through one place.
         applyBasemapForMode();
         // Reflect the current zoom in the URL so a shared link restores it.
         heroMap.map.on('zoomend', () => updateZoomUrl(heroMap.map.getZoom()));
@@ -1464,21 +1490,6 @@ function updateTreeBadge() {
     else $badge.hide();
 }
 
-/* ── Basemap style switcher (per-mode, persisted) ──
-   The Atlas map remembers a basemap style per mode (Areas / Places / Explore)
-   in localStorage, so e.g. Gazetteer Explore can use a detailed OSM/Satellite
-   backdrop while Areas stays on the minimal WHG Context style. The swap keeps
-   all overlays intact (heroMap.setBasemapStyle). */
-const ATLAS_STYLE_KEY = 'whg.atlas_style';
-const ATLAS_BASEMAPS = [
-    { id: 'whg-context', label: 'WHG Context', hint: 'Minimal, low-clutter' },
-    { id: 'whg-enhanced', label: 'WHG Enhanced', hint: 'More physical / terrain context' },
-    { id: 'OSM', label: 'OpenStreetMap', hint: 'Roads, settlements, labels' },
-    { id: 'Satellite', label: 'Satellite', hint: 'Aerial imagery' },
-];
-const ATLAS_DEFAULT_BASEMAP = 'whg-context';
-const ATLAS_MODE_LABELS = { areas: 'Areas', places: 'Places', explore: 'Gazetteer Explore' };
-let atlasMapMode = 'areas';   // 'areas' | 'places' | 'explore'
 
 function readBasemapPrefs() {
     try { return JSON.parse(localStorage.getItem(ATLAS_STYLE_KEY)) || {}; }

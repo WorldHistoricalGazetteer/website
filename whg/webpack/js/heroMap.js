@@ -31,6 +31,19 @@ const SUGGESTION_LABELS = 'suggestion-labels';
 // mbtiles equals the source id, so this list also indexes by that name.
 const BOUNDARY_SOURCE_LAYERS = ['osm', 'ohm', 'osm_misc', 'po', 'clio', 'nl'];
 
+// Basemap styles that carry BOUNDARY_SOURCE_LAYERS themselves, so the map can be
+// built on them directly (place#237). Any other basemap must still be reached by
+// building on whg-context and swapping, because setBasemapStyle's transformStyle
+// is then the only thing putting the Areas>Regions layers on the map — Regions
+// works on OSM/Satellite TODAY by exactly that route, and would break if we built
+// straight onto a style that lacks the sources.
+//
+// ⚠️ These are SERVED style ids, which are what the client requests and are not
+// always the on-disk directory name (`Satellite` is served from `satellite/`).
+// Add a style here only once the deployed style actually carries the sources —
+// this list is what makes the ordering safe by construction rather than by memory.
+const BASEMAPS_WITH_BOUNDARIES = new Set(['whg-context', 'whg-enhanced']);
+
 // Persistent user preference: when set, the map opens in Mercator and the
 // gazetteer-bounds rule never auto-switches into globe. Toggled on/off by
 // the globe control on the Atlas map.
@@ -223,8 +236,14 @@ class HeroMap {
      * Initialise the map in the #hero_map container.
      * Returns a promise that resolves when the map is loaded.
      */
-    init() {
+    init(basemapId) {
         if (this._readyPromise) return this._readyPromise;
+        // Build on the requested basemap when it carries the boundary sources;
+        // otherwise build on Context and swap afterwards, exactly as before.
+        const wanted = basemapId || 'whg-context';
+        const buildOn = BASEMAPS_WITH_BOUNDARIES.has(wanted) ? wanted : 'whg-context';
+        const pendingSwap = (wanted === buildOn) ? null : wanted;
+        this._currentBasemap = buildOn;
 
         const startInGlobe = !readGlobeDisabled();
         this._isGlobe = startInGlobe;
@@ -236,7 +255,7 @@ class HeroMap {
                 minZoom: 0.5,
                 maxZoom: 22,
                 maxBounds: undefined,
-                style: ['whg-context'],
+                style: [buildOn],
                 fullscreenControl: false,
                 downloadMapControl: false,
                 drawingControl: false,
@@ -280,6 +299,13 @@ class HeroMap {
                         }, { once: true });
                     }
                 });
+
+                // A basemap that does not carry the boundary sources still has to be
+                // reached by swapping. Unchanged behaviour for those (place#237).
+                if (pendingSwap) {
+                    this.setBasemapStyle(pendingSwap)
+                        .catch((err) => console.warn('heroMap.init: basemap swap failed', err));
+                }
 
                 this._ready = true;
                 // Debug hook: expose the map for console/automation when enabled.
