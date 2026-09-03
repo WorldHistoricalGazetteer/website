@@ -310,6 +310,10 @@ function updatePlaceListTemporal() {
 const debouncedPlaceListRefresh = debounce(() => PlaceList.refresh(), 400);
 function applyTemporalLive() {
     throttledTemporalRender();     // instant preview on what's already loaded
+    // Explore map: filter the gazetteer's own tile layers by the same window and
+    // mode the gateway is being asked for (place#176 §3). Purely client-side, so
+    // it needs no re-query and tracks the sliders as they move.
+    heroMap.setTemporalFilter(temporalMode, temporalFrom, temporalTo);
     debouncedTemporalResearch();   // authoritative top-N in-range from the index
     applyGazetteerCoverageFilter(); // re-filter the Gazetteers list if its Date Range switch is on
     updatePlaceListTemporal();     // Explore list: update the date-filter indicator
@@ -522,6 +526,7 @@ function resetTemporalControl() {
     const offBtn = document.querySelector('#temporal_control .temporal-mode-toggle .btn[data-temporal-mode="off"]');
     if (offBtn) offBtn.classList.add('active');
     document.getElementById('temporal_control')?.classList.add('temporal-off');
+    heroMap.setTemporalFilter('off', temporalFrom, temporalTo);
     updateGazetteerPeriodSwitch();
 }
 

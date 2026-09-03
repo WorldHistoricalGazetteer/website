@@ -189,6 +189,9 @@ class HeroMap {
         this._hoverTooltip = null;
         this._currentSource = null;
         this._currentGazetteer = null;
+        // Active two-mode date filter (place#176), remembered so a gazetteer
+        // selected later opens already filtered rather than briefly unfiltered.
+        this._temporal = null;
         // True while the shown gazetteer carries a place#140 coverage footprint
         // (a polygon gazetteer). Drives the "zoom in for detail" hint pill.
         this._hasCoverage = false;
@@ -936,6 +939,7 @@ class HeroMap {
         }
         this._gazetteerInteraction.attach(id, baseIds);
         this._addGazetteerLabels(id, vectorLayers, baseIds);
+        this._reapplyTemporalFilter();
         // Polygon gazetteers carry a `coverage` field (place#140); points don't.
         // Drives the low-zoom "zoom in for detail" hint.
         this._hasCoverage = vectorLayers.some(
@@ -998,7 +1002,31 @@ class HeroMap {
             } catch (e) {
                 console.warn('heroMap._addGazetteerLabels: failed', labelId, e);
             }
+            // Labels follow their features through the date filter — otherwise a
+            // filtered-out place keeps its name floating over empty map.
+            this.map.registerTemporalLayer(labelId);
         });
+    }
+
+    /**
+     * Set the two-mode date filter on the current gazetteer's tile layers
+     * (place#176 §3). Mirrors the gateway's ``temporal_mode`` so the map and the
+     * result list agree about what falls in the window.
+     *
+     * @param {string} mode - ``off`` | ``possibly`` | ``definitely``
+     * @param {number} fromYear - window start
+     * @param {number} toYear - window end
+     */
+    setTemporalFilter(mode, fromYear, toYear) {
+        this._temporal = { mode, fromYear, toYear };
+        if (this.map) this.map.applyTemporalFilter(mode, fromYear, toYear);
+    }
+
+    /** Re-apply the active date filter to layers that have just been (re)built. */
+    _reapplyTemporalFilter() {
+        if (!this._temporal || !this.map) return;
+        const { mode, fromYear, toYear } = this._temporal;
+        this.map.applyTemporalFilter(mode, fromYear, toYear);
     }
 
     /**
