@@ -8,7 +8,7 @@
 import { errorModal } from './error-modal.js';
 import throttle from 'lodash/throttle';
 import debounce from 'lodash/debounce';
-import { geomsGeoJSON } from './utilities';
+import { geomsGeoJSON, formatYear } from './utilities';
 import CountryParents from './countryParents';
 import TypeTreeWidget from './typeTreeWidget';
 import filterState from './filterState';
@@ -187,12 +187,9 @@ function chipRow(cls, items) {
         + items.map(it => `<span class="${it.chip}"${it.title ? ` title="${escapeHtml(it.title)}"` : ''}>${escapeHtml(it.text)}</span>`).join('')
         + `</div>`;
 }
-// Temporal formatting: negative years → BCE; a [start,end] range collapses to a
-// single year when equal. Returns '' for undated (null/malformed) ranges.
-function formatYear(y) {
-    if (y == null) return '';
-    return y < 0 ? `${-y} BCE` : `${y}`;
-}
+// Temporal formatting: a [start,end] range collapses to a single year when equal.
+// Returns '' for undated (null/malformed) ranges. `formatYear` moved to
+// ./utilities so the Regions panel can share it (place#234).
 function formatRange(tr) {
     if (!Array.isArray(tr) || tr.length !== 2) return '';
     const [s, e] = tr;
@@ -314,6 +311,9 @@ function applyTemporalLive() {
     // mode the gateway is being asked for (place#176 §3). Purely client-side, so
     // it needs no re-query and tracks the sliders as they move.
     heroMap.setTemporalFilter(temporalMode, temporalFrom, temporalTo);
+    // Regions panel: the tier is unchanged, but how much of it falls in the
+    // window is not — re-read the status line (place#234).
+    if (layerPalette) layerPalette.refreshTemporalStatus();
     debouncedTemporalResearch();   // authoritative top-N in-range from the index
     applyGazetteerCoverageFilter(); // re-filter the Gazetteers list if its Date Range switch is on
     updatePlaceListTemporal();     // Explore list: update the date-filter indicator
