@@ -171,6 +171,121 @@ function whenStyleMutable(map, timeoutMs = 8000) {
 	});
 }
 
+
+// ── Two-mode temporal filtering of gazetteer tile layers (place#176 §3) ──
+//
+// The tiles carry up to four per-feature year props (indexing
+// ``processing/generate_tiles.py::_temporal_props``):
+//
+//   start / end          the POSSIBLE envelope — outer bounds, with a sentinel
+//                        on any side nothing bounds, so both are present on any
+//                        feature with temporal information at all.
+//   start_def / end_def  the ATTESTED CORE — inner bounds. Present only when a
+//                        timespan pins both, which is exactly when a
+//                        *definitely* test can be satisfied.
+//   (all four absent)    genuinely undated.
+//
+// Both modes are an interval-OVERLAP test, mirroring the gateway clause by clause
+// (``gateway/es_helpers.py::_temporal_filter``): the feature must have started at
+// or before the window ends and still been there at or after it begins. The mode
+// only selects WHICH bound stands for "the feature's start" — the envelope's
+// outer bound for *possibly*, the core's inner bound for *definitely*. Keeping
+// that identical to the server is the whole point: the map and the result list
+// must not disagree about what is in the window.
+//
+// ⚠️ The tile builder's own comment sketches *definitely* as a CONTAINMENT test
+// (``start_def <= from && end_def >= to``, i.e. alive throughout the window).
+// That is not what the gateway does and not what the deployed hit-mirror
+// (``atlas.js::temporalHitPasses``) does. Overlap is authoritative here.
+//
+// The sentinels are ±9999 and are compared as ordinary numbers — deliberately no
+// magic-value branch. Note they are NOT reserved: -9999 is inside every
+// namespace's admissible year range, and +9999 is inside ``po``'s, so a real
+// reading can collide with one. The collision is benign in both directions: it
+// widens a feature's envelope only over [-inf, -9999] or [9999, +inf], windows
+// the Atlas cannot express, and in both cases the feature already matched.
+
+/**
+ * The filter clause for a date window in the given mode, or null for no filter.
+ *
+ * @param {string} mode — ``off`` | ``possibly`` | ``definitely``
+ * @param {number} fromYear — window start
+ * @param {number} toYear — window end
+ * @returns {Array|null} a MapLibre filter expression, or null when unfiltered
+ */
+export function temporalFilterClause(mode, fromYear, toYear) {
+	if (mode !== 'possibly' && mode !== 'definitely') return null;
+	if (!Number.isFinite(fromYear) || !Number.isFinite(toYear)) return null;
+	if (mode === 'definitely') {
+		// No core ⇒ no window can ever be satisfied — the client's half of the
+		// gateway's ``unbounded_passes=False``. The ``has`` guards also keep
+		// ``<=``/``>=`` from ever seeing a null operand.
+		return ['all',
+			['has', 'start_def'], ['has', 'end_def'],
+			['<=', ['get', 'start_def'], toYear],
+			['>=', ['get', 'end_def'], fromYear],
+		];
+	}
+	// Undated features are unbounded, so nothing can rule them out of a
+	// *possibly* window — matching the gateway's ``undated`` branch, which the
+	// Atlas turns on precisely when the mode is *possibly*.
+	return ['any',
+		['!', ['has', 'start']],
+		['all',
+			['has', 'start'], ['has', 'end'],
+			['<=', ['get', 'start'], toYear],
+			['>=', ['get', 'end'], fromYear],
+		],
+	];
+}
+
+/**
+ * Combine a layer's own filter with a temporal clause.
+ * A base of ``['all', ...]`` is flattened rather than nested so the result stays
+ * readable in the MapLibre inspector.
+ */
+function withTemporalClause(base, clause) {
+	if (!clause) return base || null;
+	if (!base) return clause;
+	if (Array.isArray(base) && base[0] === 'all') return [...base, clause];
+	return ['all', base, clause];
+}
+
+/**
+ * Record a layer as date-filterable, capturing the filter it was created with.
+ *
+ * Must be called immediately after ``addLayer``: the captured filter is the
+ * layer's pristine base, and every later temporal filter is composed from it,
+ * so capturing a filter that already has a temporal clause on it would bake the
+ * clause in permanently. Layers are recreated (via ``eraseSource``) whenever the
+ * gazetteer changes, so re-registering the same id simply refreshes the base.
+ */
+maplibregl.Map.prototype.registerTemporalLayer = function (layerId) {
+	if (!this._temporalBaseFilters) this._temporalBaseFilters = {};
+	if (!this.getLayer(layerId)) return this;
+	this._temporalBaseFilters[layerId] = this.getFilter(layerId) || null;
+	return this;
+};
+
+/**
+ * Apply (or clear, with mode ``off``) the date filter on every registered layer.
+ * Layers whose source has since been erased are dropped from the registry.
+ */
+maplibregl.Map.prototype.applyTemporalFilter = function (mode, fromYear, toYear) {
+	const registry = this._temporalBaseFilters;
+	if (!registry) return this;
+	const clause = temporalFilterClause(mode, fromYear, toYear);
+	for (const layerId of Object.keys(registry)) {
+		if (!this.getLayer(layerId)) { delete registry[layerId]; continue; }
+		try {
+			this.setFilter(layerId, withTemporalClause(registry[layerId], clause));
+		} catch (e) {
+			console.warn('applyTemporalFilter: failed', layerId, e);
+		}
+	}
+	return this;
+};
+
 // Dynamically load a gazetteer vector tileset (one not in the base whg-context
 // style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
 // so the caller (heroMap.showGazetteer) can read vector_layers + bounds. The
@@ -292,6 +407,16 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 					'circle-stroke-opacity': ['interpolate', ['linear'], ['zoom'], POINT_MINZOOM, 0, HEAT_MAXZOOM, 1],
 				},
 			}, beforeId);
+		}
+		// Date-filterable layers (place#176): everything drawing the gazetteer's
+		// own features, registered with the pristine filter each was created with.
+		// The `_coverage_*` layers are deliberately NOT registered — the dissolved
+		// footprint (place#140) is the gazetteer's overall extent rather than a
+		// place, and carries no temporal props at all, so filtering it would drop
+		// it wholesale in *definitely* and keep it regardless in *possibly*.
+		// Neither states anything true about the window.
+		for (const suffix of ['_heat', '_fill', '_line', '_circle']) {
+			this.registerTemporalLayer(`${baseId}${suffix}`);
 		}
 		// place#140 coverage footprint: three mottle `fill-pattern` layers
 		// (bottom→top BLUE, ORANGE, YELLOW) + a solid blue border matching the
