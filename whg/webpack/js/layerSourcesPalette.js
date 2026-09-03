@@ -11,7 +11,7 @@
  */
 
 import heroMap from './heroMap';
-import { formatYear } from './utilities';
+import { formatYearWindow } from './utilities';
 
 /* ── Boundary tier definitions ──
  *
@@ -318,7 +318,7 @@ export default class LayerSourcesPalette {
                 ? [`${level} ${level === 1 ? 'region' : 'regions'} here`, false]
                 : [`No ${label} boundaries here — try another level`, true];
         }
-        const window = `${formatYear(temporal.fromYear)}–${formatYear(temporal.toYear)}`;
+        const window = formatYearWindow(temporal.fromYear, temporal.toYear);
         if (level === 0) {
             // Structurally absent: the date filter is irrelevant to this one, so
             // don't mention it and send the user to another tier.
