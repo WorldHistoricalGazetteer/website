@@ -254,7 +254,11 @@ export class UnionFind {
 	}
 }
 
-const pairKey = (a, b) => (a < b ? `${a} ${b}` : `${b} ${a}`);
+// NB: the separator is written as the ESCAPE `\u0000`, never as a literal NUL
+// byte. A literal one makes `file` report this module as binary data, and grep
+// then SILENTLY SKIPS it — so a codebase-wide search for any symbol defined here
+// returns a false negative. Same runtime value; the file stays greppable.
+const pairKey = (a, b) => (a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`);
 
 /**
  * Score one pair of hits. Graceful degradation: any signal whose evidence is
