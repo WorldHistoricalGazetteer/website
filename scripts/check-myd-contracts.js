@@ -163,11 +163,95 @@ function checkFeatureRoundTrip() {
   } else ok(`feature round trip (${FEATURE_PARTS.length} feature parts)`);
 }
 
+
+// ── 5. Variant-spelling grouping (place#235) ─────────────────────────────────
+// `mergeVariantUnits` folds near-duplicate reconciliation units into one so a place
+// spelled several ways costs one query. Two properties are easy to break and neither
+// shows up as an error — the run just gets slower, or silently conflates places:
+//
+//   • it must NOT stamp a `namespace` on the pseudo-hits. Every unit comes from the
+//     user's own file, so declaring one trips clustering.js's same-namespace
+//     repulsion and blocks EVERY merge. The feature would be inert, not broken.
+//   • the surviving unit must carry the absorbed units' memberKeys, or the rows
+//     behind an absorbed spelling get no match written back at all.
+//
+// The REAL function is evaluated, with clusterHits injected so the fold can be
+// tested deterministically without the 21 MB embedding model.
+function loadMergeVariantUnits(recordHits, clustersToReturn) {
+  const m = src.match(/^function mergeVariantUnits\([\s\S]*?^\}/m);
+  if (!m) throw new Error('mergeVariantUnits not found in reconciliation.js — has it been renamed?');
+  // The real margin too, not a copy: if someone retunes it the test follows.
+  const margin = src.match(/^const VARIANT_THETA_MARGIN = .*;$/m);
+  if (!margin) throw new Error('VARIANT_THETA_MARGIN not found in reconciliation.js');
+  const factory = new Function(
+    'clusterHits', 'DEFAULT_PARAMS', 'rowCoordValue', 'console',
+    `${margin[0]}\n${m[0]}; return mergeVariantUnits;`,
+  );
+  return factory(
+    (args) => { recordHits.push(...args.hits); return { clusters: clustersToReturn(args) }; },
+    { thresholds: { theta_query: 0.55 }, same_ns_penalty: 0.15 },
+    () => null,                                   // no coordinates in this fixture
+    { log() {}, error() {} },
+  );
+}
+
+function checkVariantGrouping() {
+  const unit = (key, q, rows) => ({ repKey: key, memberKeys: rows, v: { query: q } });
+
+  // Newton/Newtown cluster together; Lisbon stands alone.
+  const units = [
+    unit('u:0', 'Newton', ['u:0']),
+    unit('u:1', 'Newtown', ['u:1', 'u:9']),
+    unit('u:2', 'Lisbon', ['u:2']),
+  ];
+  const hits = [];
+  const fn = loadMergeVariantUnits(hits, () => ([
+    { root: 'u:1', memberIds: ['u:0', 'u:1'] },
+    { root: 'u:2', memberIds: ['u:2'] },
+  ]));
+  const groups = fn(units, { 'u:0': [1], 'u:1': [1], 'u:2': [1] });
+
+  if (hits.some((h) => 'namespace' in h)) {
+    bad('variant grouping / namespace', 'pseudo-hits carry a `namespace`, which trips ' +
+      "clustering.js's same-namespace repulsion and blocks every merge — the feature goes inert");
+  } else ok('variant grouping: pseudo-hits declare no namespace');
+
+  if (units.length !== 2) {
+    bad('variant grouping / fold', `expected 2 units after folding, got ${units.length}`);
+  } else if (!units.some((u) => u.memberKeys.length === 3)) {
+    bad('variant grouping / memberKeys',
+      'the surviving unit does not carry the absorbed unit\'s memberKeys — the rows behind ' +
+      'that spelling would get no match written back');
+  } else if (groups.length !== 1 || groups[0].kept !== 'Newtown') {
+    bad('variant grouping / representative',
+      `expected the commonest spelling ("Newtown", 2 rows) to survive, got ${JSON.stringify(groups)}`);
+  } else ok('variant grouping: folds units, keeps the commonest spelling, carries memberKeys');
+
+  // A scorer failure must degrade to reconciling every unit separately, not throw
+  // mid-run and abandon the pass.
+  const units2 = [unit('u:0', 'Newton', ['u:0']), unit('u:1', 'Newtown', ['u:1'])];
+  const boom = new Function(
+    'clusterHits', 'DEFAULT_PARAMS', 'rowCoordValue', 'console',
+    `${src.match(/^const VARIANT_THETA_MARGIN = .*;$/m)[0]}\n`
+    + `${src.match(/^function mergeVariantUnits\([\s\S]*?^\}/m)[0]}; return mergeVariantUnits;`,
+  )(() => { throw new Error('scorer exploded'); },
+    { thresholds: { theta_query: 0.55 }, same_ns_penalty: 0.15 }, () => null,
+    { log() {}, error() {} });
+  let threw = false;
+  let out;
+  try { out = boom(units2, {}); } catch (e) { threw = true; }
+  if (threw) bad('variant grouping / degradation', 'a scorer failure propagates and kills the run');
+  else if (out.length !== 0 || units2.length !== 2) {
+    bad('variant grouping / degradation', 'a scorer failure did not leave the units untouched');
+  } else ok('variant grouping: a scorer failure degrades to one query per unit');
+}
+
 const required = (process.argv[2] || 'creator,name,description,url,citation').split(',').filter(Boolean);
 console.log('Map your Data contract checks');
 checkRoles();
 checkIndexingContract(required);
 checkCitationRoundTrip();
 checkFeatureRoundTrip();
+checkVariantGrouping();
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');

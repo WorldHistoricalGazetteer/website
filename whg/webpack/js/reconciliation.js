@@ -12,6 +12,7 @@ import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
+import { clusterHits, DEFAULT_PARAMS } from './clustering.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -3892,6 +3893,100 @@ function phoneticEnabled() {
   if (box) return box.checked;
   return !!(project && project.phonetic === true); // default off
 }
+
+// Near-duplicate row grouping (place#235). MyD already merges IDENTICAL queries into one
+// reconciliation unit (mergeSig below); this extends that to variant SPELLINGS, so a place
+// written a dozen ways costs one query rather than twelve and the user is shown the grouping.
+// Depends on the phonetic embeddings, so it is meaningless without them: the calibrated
+// cosine over `phon_emb` is the name signal, and MyD's own Sorensen-Dice `nameSimilarity` is
+// a second, uncalibrated measure we deliberately do NOT introduce here (place#219).
+function groupVariantsEnabled() {
+  if (!phoneticEnabled()) return false;
+  const box = el('recon-group-variants');
+  if (box) return box.checked;
+  return !!(project && project.groupVariants === true); // default off
+}
+
+// ── Near-duplicate unit grouping (place#235) ────────────────────────────────
+// A merge here is CONSERVATIVE by construction: it must clear the calibrated
+// theta_query by a margin, because a wrong merge conflates two real places,
+// which costs the user more than the wasted query it saves. The margin reuses
+// `same_ns_penalty` — the same "other signals must be very strong" override the
+// Atlas applies when a merge would put two records of one gazetteer together,
+// which is exactly the situation here: every unit comes from one source, the
+// user's own file.
+const VARIANT_THETA_MARGIN = DEFAULT_PARAMS.same_ns_penalty;
+
+/**
+ * Fold units whose names are variant spellings of the same place into one, so
+ * each cluster costs a single reconciliation query and fans back to every member
+ * row — the near-match extension of `mergeSig`'s exact-match merge.
+ *
+ * Scores with the SAME calibrated scorer the Atlas uses (`clustering.js`), on:
+ *   • name    — the int8 Symphonym cosine over the vectors MyD has already
+ *               computed for the gateway's phonetic KNN. Free at this point.
+ *   • spatial — the row's own coordinate, where the dataset has one.
+ * Type and temporal degrade out (a user's rows carry no AAT paths, and the date
+ * column is parsed lazily elsewhere); `clusterHits` renormalises the remaining
+ * weights, so the composite stays in [0,1]. Link degrades out too — there are no
+ * hard-link assertions between a user's own rows.
+ *
+ * ⚠️ `namespace` is deliberately NOT set on the pseudo-hits. Every unit here comes
+ * from the same source, so declaring one would trip the same-namespace repulsion
+ * constraint and block every merge.
+ *
+ * MUTATES `units`, removing the absorbed ones.
+ *
+ * @param {Array}  units     reconciliation units, post-`mergeSig`
+ * @param {Object} embByKey  unit repKey → int8 128-d vector
+ * @returns {Array} the groups formed, for reporting: [{ kept, absorbed:[], rows }]
+ */
+function mergeVariantUnits(units, embByKey) {
+  const byKey = new Map(units.map((u) => [u.repKey, u]));
+  const hits = units.map((u) => {
+    const h = { id: u.repKey, title: u.v.query };
+    const emb = embByKey[u.repKey];
+    if (Array.isArray(emb)) h.phon_emb = emb;
+    // `rowCoordValue` wants a row index; a unit's representative key carries one.
+    const rowIdx = parseInt(u.repKey.slice(u.repKey.indexOf(':') + 1), 10);
+    if (Number.isFinite(rowIdx)) {
+      const c = rowCoordValue(rowIdx);
+      if (c && Number.isFinite(c.lat) && Number.isFinite(c.lon)) h.point = [c.lat, c.lon];
+    }
+    return h;
+  });
+
+  const theta = (DEFAULT_PARAMS.thresholds.theta_query || 0.55) + VARIANT_THETA_MARGIN;
+  let clusters;
+  try {
+    ({ clusters } = clusterHits({ hits, edges: [], theta }));
+  } catch (err) {
+    console.error('[recon] variant grouping failed; reconciling every unit separately', err);
+    return [];
+  }
+
+  const groups = [];
+  for (const cluster of clusters) {
+    const ids = cluster.memberIds || [];
+    if (ids.length < 2) continue;
+    const members = ids.map((id) => byKey.get(id)).filter(Boolean);
+    if (members.length < 2) continue;
+    // Keep the unit standing for the most rows — the commonest spelling is the
+    // most likely to reconcile well, and it is the one the user recognises.
+    members.sort((a, b) => b.memberKeys.length - a.memberKeys.length);
+    const [kept, ...absorbed] = members;
+    absorbed.forEach((u) => { kept.memberKeys.push(...u.memberKeys); });
+    groups.push({
+      kept: kept.v.query,
+      absorbed: absorbed.map((u) => u.v.query),
+      rows: kept.memberKeys.length,
+    });
+    const drop = new Set(absorbed.map((u) => u.repKey));
+    for (let i = units.length - 1; i >= 0; i--) if (drop.has(units[i].repKey)) units.splice(i, 1);
+  }
+  return groups;
+}
+
 // Languages offered in the override dropdown (value = Symphonym lang code; 'und' = undetermined).
 // The Symphonym model is conditioned on ~1,900 languages (static/webpack/symphonym/lang_vocab.json);
 // this list is only what we surface. Keep the Celtic languages in it: a Welsh/Irish/Gaelic toponym
@@ -8033,7 +8128,10 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
     });
     groups.forEach((g) => units.push(g));
   }
-  const total = units.length;
+  // `total` is not const: variant grouping below can absorb units after the
+  // embeddings exist, and the progress bar must count the queries actually sent
+  // rather than the pre-merge unit count (place#235).
+  let total = units.length;
   let done = 0;
   updateProgress(done, total);
 
@@ -8066,6 +8164,25 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
         variantForms.forEach((s, i) => { embByVariant[s] = vecAt(units.length + i); });
       }
     } catch (err) { console.error('[recon] embedding failed; using text matching', err); }
+  }
+
+  // Fold variant spellings of the same place into one unit (place#235), now that
+  // the vectors exist. Done AFTER embedding and BEFORE the query loop, so each
+  // group costs one /api/reconcile call instead of one per spelling — the
+  // near-match half of the pre-aggregation mergeSig already does for exact
+  // matches. Opt-in, and silently skipped when embeddings are unavailable.
+  let variantGroups = [];
+  if (groupVariantsEnabled() && embByKey && units.length > 1) {
+    variantGroups = mergeVariantUnits(units, embByKey);
+    if (variantGroups.length) {
+      const merged = variantGroups.reduce((n, g) => n + g.absorbed.length, 0);
+      console.log('[recon] variant grouping:', variantGroups);
+      setReconSummary(`${passLabel}grouped ${merged.toLocaleString()} variant `
+        + `spelling${merged === 1 ? '' : 's'} into ${variantGroups.length.toLocaleString()} `
+        + `place${variantGroups.length === 1 ? '' : 's'} — ${merged.toLocaleString()} fewer queries`);
+      total = units.length;
+      updateProgress(done, total);
+    }
   }
 
   for (let b = 0; b < units.length && !stopRequested; b += RECON_BATCH) {
@@ -8406,6 +8523,11 @@ function init() {
   if (phon) {
     if (project && project.phonetic === false) phon.checked = false;
     phon.addEventListener('change', () => { if (project) { project.phonetic = phon.checked; persist(); } });
+  }
+  const groupVar = el('recon-group-variants');
+  if (groupVar) {
+    if (project && project.groupVariants === true) groupVar.checked = true;
+    groupVar.addEventListener('change', () => { if (project) { project.groupVariants = groupVar.checked; persist(); } });
   }
   const langSel = el('recon-lang');
   if (langSel) langSel.addEventListener('change', () => { if (project) { project.lang = langSel.value; persist(); } });
