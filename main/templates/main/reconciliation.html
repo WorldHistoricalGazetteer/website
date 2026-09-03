@@ -315,12 +315,6 @@
     <div class="d-flex align-items-center flex-wrap gap-3 small mb-2 recon-phonetic-bar">
       <label class="mb-0"><input type="checkbox" id="recon-phonetic">
         Phonetic matching <span class="text-muted">(Symphonym embeddings, computed in-browser — ranks candidates by how the name sounds; off by default)</span></label>
-      {% comment %}
-        place#235. Depends on the phonetic embeddings, so it is only meaningful with the box
-        above ticked — groupVariantsEnabled() enforces that in JS rather than trusting the UI.
-      {% endcomment %}
-      <label class="mb-0"><input type="checkbox" id="recon-group-variants">
-        Group variant spellings <span class="text-muted">(reconcile "Newton" / "Newtown" / "Neweton" once instead of three times — needs phonetic matching)</span></label>
       <label class="mb-0 d-flex align-items-center gap-1">Language
         <select id="recon-lang" class="form-select form-select-sm py-0" style="width:auto"></select>
         <span class="text-muted">(auto-detected — override if wrong)</span>
