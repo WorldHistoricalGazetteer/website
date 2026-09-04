@@ -3,6 +3,8 @@ Render a source-licence badge.
 
 Context:
   license                a licensing.License instance (or None)
+  license_source         optional str — how the licence came to be recorded
+                         (licensing.models.LICENSE_SOURCE_CHOICES)
   rights_statement       optional free-text rights (e.g. for custom licences)
   commercial_on_request  optional bool — commercial use offered "by arrangement"
   adaptations_on_request optional bool — adaptations offered "by arrangement"
@@ -23,5 +25,22 @@ Renders nothing when `license` is falsy — callers decide on a fallback
   {% endif %}
   {% if rights_statement %}
     <div class="small text-muted mt-1">{{ rights_statement }}</div>
+  {% endif %}
+  {% comment %}
+  Where WHG recorded the licence retrospectively rather than the contributor
+  choosing it, say so. The two are not equally strong and flattening them would
+  present an inference as a choice (place#158). A contributor-selected licence
+  is the unremarkable case and gets no note.
+  {% endcomment %}
+  {% if license_source == 'legacy_acceptance' %}
+    <div class="small text-muted fst-italic mt-1"
+         title="This dataset predates per-dataset licence selection. The contributor accepted this licence at upload, and WHG has recorded it against the dataset retrospectively.">
+      Recorded from the licence accepted at upload
+    </div>
+  {% elif license_source == 'legacy_notice' %}
+    <div class="small text-muted fst-italic mt-1"
+         title="This dataset predates per-dataset licence selection. This licence was stated on the upload form at the time, and WHG has recorded it against the dataset retrospectively.">
+      Recorded from the licence stated at upload
+    </div>
   {% endif %}
 {% endif %}

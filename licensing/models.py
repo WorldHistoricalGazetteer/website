@@ -1,6 +1,17 @@
 from django.db import models
 
 
+# How an object's ``license`` came to be recorded. A licence the contributor
+# chose and a licence WHG derived retrospectively are different things, and
+# collapsing them would make the second permanently indistinguishable from the
+# first. Consumers should surface the distinction rather than hide it.
+LICENSE_SOURCE_CHOICES = [
+    ("contributor_selected", "Chosen by the contributor"),
+    ("legacy_acceptance", "Recorded retrospectively: contributor accepted a blanket licence at upload"),
+    ("legacy_notice", "Recorded retrospectively: licence was displayed at upload but not recorded"),
+]
+
+
 class License(models.Model):
     """A reusable, SPDX-anchored licence record.
 

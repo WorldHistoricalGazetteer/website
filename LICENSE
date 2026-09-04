@@ -1,5 +1,9 @@
 BSD 3-Clause License
 
+Third-party packages deployed with the World Historical Gazetteer remain under
+their own licences and copyrights; this licence covers only WHG's own code.
+See the THIRD_PARTY_LICENSES file in this repository for the full list.
+
 Copyright (c) 2019, WHG contributors
 All rights reserved.
 

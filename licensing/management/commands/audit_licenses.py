@@ -22,8 +22,14 @@ Usage::
     python manage.py audit_licenses            # write the snapshot
     python manage.py audit_licenses --check     # CI: fail if it would change
 
-Output: ``licensing/data/software_licenses.json``, committed to the repo and
-rendered by ``/licenses/software/``.
+Outputs, both committed to the repo:
+
+* ``licensing/data/software_licenses.json`` — the structured snapshot, rendered
+  by ``/licenses/software/``.
+* ``THIRD_PARTY_LICENSES`` — the same audit as a plain-text notice file at the
+  repository root, which is the conventional place for downstream recipients
+  (and packagers) to look, and which travels with the release artefacts rather
+  than only being reachable over HTTP.
 """
 import json
 import subprocess
@@ -190,6 +196,67 @@ def _git_revision():
         return ''
 
 
+def _notice_substance(text):
+    """The notice minus its volatile header lines, for --check comparison."""
+    return "\n".join(
+        l for l in text.splitlines()
+        if not l.startswith(("Audited:", "Revision:", "App version:"))
+    )
+
+
+def render_notice(snapshot):
+    """Render the audit as a plain-text third-party notice file.
+
+    Deliberately a flat, greppable list rather than a pretty table: this file
+    exists to be read by people checking compliance and by tooling, and both are
+    better served by one package per line than by alignment that breaks the
+    moment a name grows long.
+    """
+    lines = [
+        "THIRD-PARTY SOFTWARE NOTICES",
+        "World Historical Gazetteer",
+        "",
+        "This file lists the third-party packages distributed with or deployed as",
+        "part of the World Historical Gazetteer, and the licence each is made",
+        "available under. It is generated from the running environment by",
+        "`python manage.py audit_licenses` — do not edit it by hand.",
+        "",
+        "Each package remains under its own licence and its own copyright. Nothing",
+        "here alters those terms; the WHG licence in LICENSE covers only WHG's own",
+        "code. The same audit is published at https://whgazetteer.org/licenses/software/",
+        "",
+        f"Audited:     {snapshot['audited']}",
+        f"Revision:    {snapshot['revision'] or 'unknown'}",
+        f"App version: {snapshot['app_version'] or 'unknown'}",
+        "",
+    ]
+
+    for heading, section in (
+        ("PYTHON PACKAGES (server-side)", snapshot["python"]),
+        ("JAVASCRIPT PACKAGES (delivered to the browser)", snapshot["javascript"]),
+    ):
+        packages = section.get("packages", [])
+        lines += ["=" * 72, f"{heading} — {len(packages)}", "=" * 72, ""]
+        if section.get("missing"):
+            lines += ["  (not audited in this environment — run `npm run audit:licenses`)", ""]
+            continue
+        for row in packages:
+            version = row.get("version") or ""
+            lines.append(f"{row['name']}{' ' + version if version else ''}")
+            lines.append(f"    Licence: {row.get('license') or 'Not declared'}")
+            # Where we chose one arm of a multi-licence offer, say which and why:
+            # a bare "MIT" against a dual-licensed package looks like an error.
+            election = row.get("election")
+            if election:
+                lines.append(f"    Elected: {election.get('elected')} "
+                             f"(offered: {election.get('offered', '')})")
+            if row.get("url"):
+                lines.append(f"    {row['url']}")
+            lines.append("")
+
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 class Command(BaseCommand):
     help = ("Audit third-party package licences in the RUNNING environment and "
             "write licensing/data/software_licenses.json.")
@@ -218,6 +285,9 @@ class Command(BaseCommand):
         out.parent.mkdir(parents=True, exist_ok=True)
         rendered = json.dumps(snapshot, indent=1, ensure_ascii=False) + '\n'
 
+        notice = Path(settings.BASE_DIR) / 'THIRD_PARTY_LICENSES'
+        notice_text = render_notice(snapshot)
+
         if opts['check']:
             if not out.exists():
                 self.stderr.write(self.style.ERROR('No snapshot; run audit_licenses.'))
@@ -232,14 +302,24 @@ class Command(BaseCommand):
                     'Dependency licences have changed since the last audit — '
                     'run: python manage.py audit_licenses'))
                 raise SystemExit(1)
+            # The header carries the audit date and revision, which change on
+            # every run; compare the substance only, exactly as above.
+            if (not notice.exists()
+                    or _notice_substance(notice.read_text()) != _notice_substance(notice_text)):
+                self.stderr.write(self.style.ERROR(
+                    'THIRD_PARTY_LICENSES is missing or stale — '
+                    'run: python manage.py audit_licenses'))
+                raise SystemExit(1)
             self.stdout.write(self.style.SUCCESS('Licence snapshot is current.'))
             return
 
         out.write_text(rendered)
+        notice.write_text(notice_text)
 
         undeclared = [r['name'] for r in python_rows if not r['declared']]
         self.stdout.write(self.style.SUCCESS(
-            f"Wrote {out.relative_to(settings.BASE_DIR)} — "
+            f"Wrote {out.relative_to(settings.BASE_DIR)} and "
+            f"{notice.relative_to(settings.BASE_DIR)} — "
             f"{len(python_rows)} Python, {(js or {}).get('count', 0)} JavaScript."))
         if undeclared:
             self.stdout.write(self.style.WARNING(

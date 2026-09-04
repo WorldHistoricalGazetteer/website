@@ -120,8 +120,8 @@ def attribution_for_datasets(dataset_refs):
         q = q | Q(label__in=labels)
     out = {}
     for row in (Dataset.objects.filter(q)
-                .values('label', 'title', 'citation', 'creator',
-                        'rights_statement', 'webpage', *_LICENSE_FIELDS)):
+                .values('label', 'title', 'citation', 'creator', 'rights_statement',
+                        'webpage', 'license_source', *_LICENSE_FIELDS)):
         out[row['label']] = {
             'name': row['title'],
             'citation': row['citation'] or '',
@@ -132,6 +132,11 @@ def attribution_for_datasets(dataset_refs):
             # cannot be inferred from the SPDX id alone.
             'rights_statement': row['rights_statement'] or '',
             'license': _license_object(row),
+            # How the licence came to be recorded. A contributor's own choice and
+            # a licence WHG recorded retrospectively are not equally strong, and a
+            # consumer weighing reuse is entitled to tell them apart rather than
+            # have the difference flattened away (place#158).
+            'license_source': row['license_source'] or None,
         }
     return out
 

@@ -157,6 +157,9 @@ def save_dataset(task_id):
             # Create Dataset object
             dataset = Dataset.objects.create(
                 license=license_obj,
+                # The contributor picked this themselves, which is a stronger
+                # basis than anything recorded retrospectively (place#158).
+                license_source='contributor_selected' if license_obj else None,
                 title=dataset_metadata[
                           'title'] or f"[-Title yet to be added to metadata-] ({dataset_metadata['label']})",
                 label=dataset_metadata['label'],

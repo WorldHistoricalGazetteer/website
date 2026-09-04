@@ -21,6 +21,7 @@ from django_celery_results.models import TaskResult
 from django_resized import ResizedImageField
 from elastic.es_utils import escount_ds
 from geojson import Feature
+from licensing.models import LICENSE_SOURCE_CHOICES
 
 from main.choices import *
 from places.models import Place, PlaceGeom, PlaceLink
@@ -137,6 +138,14 @@ class Dataset(models.Model):
     rights_statement = models.TextField(
         null=True, blank=True,
         help_text="Free-text rights, for custom licences or extra conditions.",
+    )
+    # Provenance of ``license`` — see licensing.models.LICENSE_SOURCE_CHOICES.
+    # NULL alongside a set licence means the provenance was never captured;
+    # NULL alongside a null licence simply means no licence is recorded.
+    license_source = models.CharField(
+        max_length=32, null=True, blank=True,
+        choices=LICENSE_SOURCE_CHOICES,
+        help_text="How this licence came to be recorded.",
     )
 
     # Fields to be deprecated following their migration to CSL

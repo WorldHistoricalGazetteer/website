@@ -14,6 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from datasets.models import Dataset
+from licensing.models import LICENSE_SOURCE_CHOICES
 from main.choices import COLLECTIONCLASSES, LINKTYPES, TEAMROLES, STATUS_COLL, \
     USER_ROLE, COLLECTIONTYPES, COLLECTIONGROUP_TYPES
 from places.models import Place, PlaceGeom
@@ -112,6 +113,14 @@ class Collection(models.Model):
     rights_statement = models.TextField(
         null=True, blank=True,
         help_text="Free-text rights, for custom licences or extra conditions.",
+    )
+    # Provenance of ``license`` — see licensing.models.LICENSE_SOURCE_CHOICES.
+    # NULL alongside a set licence means the provenance was never captured;
+    # NULL alongside a null licence simply means no licence is recorded.
+    license_source = models.CharField(
+        max_length=32, null=True, blank=True,
+        choices=LICENSE_SOURCE_CHOICES,
+        help_text="How this licence came to be recorded.",
     )
     # "By arrangement" qualifiers layered on top of the chosen licence: the
     # rights-holder will CONSIDER requests for a use the licence itself forbids

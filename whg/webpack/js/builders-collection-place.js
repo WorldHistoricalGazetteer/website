@@ -1,10 +1,12 @@
 import VisualisationControl from './visualisationControl.js';
 import './enlarge.js';
 import {minmaxer, showChooser} from './utilities';
+import wireCollectionLicense from './collectionLicenseControl.js';
 
 import '../css/builders-collection-place.css';
 
 $(function () {
+    wireCollectionLicense();
     $(".col-place-card").first().click();
     new VisualisationControl(); // Returns `null` if #configurationTable element does not exist
 
