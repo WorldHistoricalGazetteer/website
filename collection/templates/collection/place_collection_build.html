@@ -102,6 +102,20 @@
                   <label for="Contact email">
                     Contact email</label><br/>{{ form.contact }}
                 </div>
+                <div class="form-group">
+                  <label for="Licence">Licence</label><br/>
+                  <span class="d-inline-flex align-items-center gap-2">
+                    <button type="button" id="coll-license-btn" class="btn btn-sm btn-primary">Choose a licence…</button>
+                    <a href="#" id="coll-license-clear" class="small" hidden>clear</a>
+                  </span>
+                  <div id="coll-license-display" class="small mt-1"></div>
+                  <p class="my-0 small text-muted">
+                    Optional. The places in a collection keep the terms of the datasets they came from;
+                    this covers your selection and arrangement. Each option is explained on the
+                    <a href="{% url 'licenses' %}" target="_blank">licences page</a>.
+                  </p>
+                  {{ form.license }}
+                </div>
                 <p><span class="strong mt-2">Status</span>: &nbsp;{{ form.status.value }}</p>
 {#                {% if action == "update" and not object.group and not whgteam %}#}
                 {% if action == "update" and not object.group and not whgteam %}

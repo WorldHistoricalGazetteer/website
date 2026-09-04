@@ -2,8 +2,10 @@
 
 import './enlarge.js';
 import '../css/builders-collection-dataset.css';
+import wireCollectionLicense from './collectionLicenseControl.js';
 
 $(function() {
+    wireCollectionLicense();
 
 	let dslist = [] // holds ids of selected datasets
 	

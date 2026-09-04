@@ -173,6 +173,43 @@ def get_object(type, id):
         return None
 
 
+def get_rights_list(obj):
+    """Build DataCite ``rightsList`` from the object's own recorded licence.
+
+    Returns ``[]`` when no licence is recorded, so that the key is omitted
+    entirely. This previously registered a hard-coded CC-BY-NC-4.0 statement
+    against every DOI regardless of the object's actual terms; DataCite metadata
+    is externally cached and hard to walk back, so asserting nothing is the only
+    honest option where we hold nothing. See place#158.
+
+    Note this is the *source* licence — the data's own rights. WHG's
+    curation/aggregation overlay is asserted separately and is not registered
+    here on a contributor's behalf.
+    """
+    licence = getattr(obj, 'license', None)
+    rights = []
+
+    if licence:
+        entry = {"rights": licence.label, "lang": "en"}
+        if licence.url:
+            entry["rightsURI"] = licence.url
+        # A bespoke licence has no SPDX identity, and claiming one would be
+        # worse than omitting it.
+        if not licence.custom:
+            entry["rightsIdentifier"] = licence.spdx_id
+            entry["rightsIdentifierScheme"] = "SPDX"
+            entry["schemeURI"] = licence.spdx_uri
+        rights.append(entry)
+
+    # Extra conditions layered on the licence, or the whole of the terms for a
+    # custom one — they cannot be inferred from an SPDX id, so they travel too.
+    statement = (getattr(obj, 'rights_statement', '') or '').strip()
+    if statement:
+        rights.append({"rights": statement, "lang": "en"})
+
+    return rights
+
+
 def get_doi_metadata(type, id):
 
     obj = get_object(type, id)
@@ -234,16 +271,7 @@ def get_doi_metadata(type, id):
                 "schemeURI": "http://id.loc.gov/authorities/subjects"
             }
         ],
-        "rightsList": [
-            {
-                "rights": "Creative Commons Attribution-NonCommercial 4.0 International",
-                "rightsURI": "https://creativecommons.org/licenses/by-nc/4.0/",
-                "rightsIdentifier": "CC-BY-NC-4.0",
-                "rightsIdentifierScheme": "SPDX",
-                "schemeURI": "https://spdx.org/licenses/",
-                "lang": "en"
-            }
-        ]
+        **({"rightsList": _rights} if (_rights := get_rights_list(obj)) else {}),
     }
 
     return obj, metadata

@@ -69,6 +69,12 @@ See [CHANGELOG.md](./CHANGELOG.md) for detailed release notes and version histor
 
 This project is licensed under the BSD 3-Clause License. See [LICENSE](./LICENSE) for details.
 
+Third-party packages deployed with WHG remain under their own licences. Those are
+listed in [THIRD_PARTY_LICENSES](./THIRD_PARTY_LICENSES) and published at
+[/licenses/software/](https://whgazetteer.org/licenses/software/); both are generated
+from the running environment by `python manage.py audit_licenses` rather than
+maintained by hand, so they cannot quietly go stale.
+
 ---
 
 <p align="center">

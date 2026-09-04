@@ -56,6 +56,14 @@ class CollectionModelForm(forms.ModelForm):
     # ** trying to return to referrer
     next = forms.CharField(required=False)
 
+    # Licence chosen through the shared picker, posted as a bare SPDX id and
+    # resolved to the FK in ``save()`` (place#158). Not a Meta field: the picker
+    # gives an identifier, not a primary key. Optional here, unlike the dataset
+    # upload form — a collection is a selection and arrangement of records that
+    # already carry their own terms, so refusing to save one over a missing
+    # licence would block work for no gain.
+    license = forms.CharField(required=False, widget=forms.HiddenInput())
+
     class Meta:
         model = Collection
         fields = ('id', 'owner', 'title','collection_class', 'description', 'keywords', 'rel_keywords',
@@ -90,3 +98,31 @@ class CollectionModelForm(forms.ModelForm):
         self.fields['group'].queryset = user_groups
         if self.instance.status == 'nominated':
             self.fields['group'].disabled = True
+        # Seed the picker with whatever the collection already carries.
+        if self.instance and self.instance.pk and self.instance.license_id:
+            self.fields['license'].initial = self.instance.license.spdx_id
+
+    def clean_license(self):
+        from licensing.forms import clean_contributor_license
+        return clean_contributor_license(
+            self.cleaned_data.get('license'), context="Collection builder")
+
+    def save(self, commit=True):
+        """Resolve the chosen SPDX id to the ``License`` FK.
+
+        Only touches the licence when the picker actually sent something, so an
+        edit that leaves the field alone cannot silently clear a licence the
+        owner set earlier.
+        """
+        obj = super().save(commit=False)
+        spdx = (self.cleaned_data.get('license') or '').strip()
+        if spdx:
+            from licensing.models import License
+            lic = License.objects.filter(spdx_id=spdx).first()
+            if lic and lic.pk != obj.license_id:
+                obj.license = lic
+                obj.license_source = 'contributor_selected'
+        if commit:
+            obj.save()
+            self.save_m2m()
+        return obj
