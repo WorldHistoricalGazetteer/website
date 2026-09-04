@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Unlisted working draft: kept out of search results deliberately. It is a
+     prototype of a form WHG does not yet operate, and must not be mistaken for
+     a live one. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Declared Use Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --paper:#f3f4f1; --panel:#fbfbf9; --sunk:#e9ebe6;
+    --ink:#151c29; --ink-2:#414c5e; --ink-3:#6d7889;
+    --rule:#d9dcd4; --rule-2:#c2c7bb;
+    --brass:#8a6420; --brass-soft:#f2e8d5;
+    --ok:#2f6046; --ok-soft:#e3ece6;
+    --no:#93372a; --no-soft:#f5e4e0;
+    --warn:#7a5a12; --warn-soft:#f7edd8;
+    --shadow:0 1px 2px rgba(21,28,41,.05), 0 10px 28px -20px rgba(21,28,41,.35);
+    --serif:"Spectral",Georgia,"Times New Roman",serif;
+    --sans:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#11141a; --panel:#181d24; --sunk:#212730;
+      --ink:#e9ebee; --ink-2:#b6bdc8; --ink-3:#858e9d;
+      --rule:#2a313b; --rule-2:#3b434f;
+      --brass:#d2a45c; --brass-soft:#2e2618;
+      --ok:#79bd9a; --ok-soft:#1a2a22;
+      --no:#e0897a; --no-soft:#2e1d1a;
+      --warn:#d9b464; --warn-soft:#2c2517;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -20px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#11141a; --panel:#181d24; --sunk:#212730;
+    --ink:#e9ebee; --ink-2:#b6bdc8; --ink-3:#858e9d;
+    --rule:#2a313b; --rule-2:#3b434f;
+    --brass:#d2a45c; --brass-soft:#2e2618;
+    --ok:#79bd9a; --ok-soft:#1a2a22;
+    --no:#e0897a; --no-soft:#2e1d1a;
+    --warn:#d9b464; --warn-soft:#2c2517;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -20px rgba(0,0,0,.8);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 64px}
+
+  header.masthead{border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--brass);margin:0 0 8px}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.1;margin:0 0 10px;text-wrap:balance;letter-spacing:-.01em}
+  .standfirst{font-family:var(--serif);font-size:17px;color:var(--ink-2);margin:0;max-width:64ch}
+  .draftflag{display:inline-flex;align-items:center;gap:7px;margin-top:14px;padding:5px 11px;border:1px solid var(--rule-2);border-radius:2px;background:var(--brass-soft);color:var(--brass);font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+
+  .ctxbar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-bottom:26px;padding:12px 15px;background:var(--sunk);border:1px dashed var(--rule-2);border-radius:4px}
+  .ctxbar .demo{font-family:var(--mono);font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--brass)}
+  .seg{display:inline-flex;border:1px solid var(--rule-2);border-radius:3px;overflow:hidden;background:var(--panel)}
+  .seg button{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:7px 15px;border:none;background:transparent;color:var(--ink-2);cursor:pointer}
+  .seg button + button{border-left:1px solid var(--rule-2)}
+  .seg button[aria-pressed="true"]{background:var(--brass);color:var(--panel)}
+  .seg button:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
+  .ctxbar p{margin:0;font-size:12.5px;color:var(--ink-3);flex:1 1 260px;min-width:0}
+
+  .cols{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:34px;align-items:start}
+  @media (max-width:940px){.cols{grid-template-columns:1fr;gap:26px}}
+
+  .step{border-top:1px solid var(--rule);padding:20px 0 4px}
+  .step:first-child{border-top:none;padding-top:0}
+  .step-n{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.1em}
+  .step h2{font-family:var(--serif);font-size:20px;font-weight:600;margin:4px 0 3px;letter-spacing:-.005em}
+  .step p.help{color:var(--ink-2);font-size:13.5px;margin:0 0 14px;max-width:58ch}
+
+  .field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+  .field[hidden]{display:none !important}
+  .field label{font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-3)}
+  .field input[type=text]{font-family:var(--sans);font-size:15px;padding:9px 11px;border:1px solid var(--rule-2);border-radius:3px;background:var(--panel);color:var(--ink);width:100%}
+  .field input[type=text]:focus-visible{outline:2px solid var(--brass);outline-offset:1px;border-color:var(--brass)}
+
+  .choices{display:flex;flex-direction:column;gap:8px}
+  .choice{display:flex;gap:11px;align-items:flex-start;padding:11px 13px;border:1px solid var(--rule);border-radius:3px;background:var(--panel);cursor:pointer;transition:border-color .12s,background .12s}
+  .choice:hover{border-color:var(--rule-2)}
+  .choice:focus-within{outline:2px solid var(--brass);outline-offset:1px}
+  .choice input{margin:3px 0 0;accent-color:var(--brass);flex:none}
+  .choice.sel{border-color:var(--brass);background:var(--brass-soft)}
+  .choice .ct{font-weight:600;font-size:14px;display:block}
+  .choice .cd{font-size:13px;color:var(--ink-2);display:block;margin-top:2px}
+  .checkline{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;color:var(--ink-2);margin-top:10px}
+  .checkline[hidden]{display:none !important}
+  .checkline input{margin-top:3px;accent-color:var(--brass);flex:none}
+
+  .aside{border-left:3px solid var(--warn);background:var(--warn-soft);color:var(--ink-2);padding:11px 14px;font-size:13px;margin:12px 0 0;border-radius:0 3px 3px 0}
+  .aside.calm{border-left-color:var(--ok);background:var(--ok-soft)}
+  .aside strong{color:var(--ink)}
+  .aside[hidden]{display:none !important}
+
+  .effect{position:sticky;top:18px;background:var(--panel);border:1px solid var(--rule);border-radius:4px;box-shadow:var(--shadow);overflow:hidden}
+  @media (max-width:940px){.effect{position:static}}
+  .effect-hd{padding:15px 18px;border-bottom:1px solid var(--rule);background:var(--sunk)}
+  .effect-hd h2{font-family:var(--serif);font-size:17px;margin:0;font-weight:600}
+  .effect-hd p{margin:3px 0 0;font-size:12.5px;color:var(--ink-3)}
+
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));border-bottom:1px solid var(--rule)}
+  .tile{padding:13px 14px;border-right:1px solid var(--rule)}
+  .tile:last-child{border-right:none}
+  .tile .v{font-family:var(--mono);font-size:19px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.15}
+  .tile .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:3px}
+  .tile.good .v{color:var(--ok)}
+  .tile.bad .v{color:var(--no)}
+  .tile.unk .v{color:var(--warn)}
+
+  .tblwrap{max-height:420px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{position:sticky;top:0;background:var(--panel);text-align:left;font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:9px 12px;border-bottom:1px solid var(--rule-2)}
+  tbody td{padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr.out{background:var(--no-soft)}
+  .srcname{font-weight:600;display:block}
+  .srcns{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+  .lic{font-family:var(--mono);font-size:11.5px;color:var(--ink-2);white-space:nowrap}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;color:var(--ink-2);white-space:nowrap}
+  .why{font-size:12px;color:var(--no);display:block;margin-top:2px}
+  .oblig{font-size:11.5px;color:var(--ink-3);display:block;margin-top:2px}
+
+  .chip{display:inline-block;padding:1px 7px;border-radius:2px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+  .chip.in{background:var(--ok-soft);color:var(--ok)}
+  .chip.ex{background:var(--no-soft);color:var(--no)}
+  .chip.unk{background:var(--warn-soft);color:var(--warn)}
+  tbody tr.unk{background:var(--warn-soft)}
+  tbody tr.grp td{background:var(--sunk);padding:7px 12px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--rule-2)}
+  .why.unk{color:var(--warn)}
+
+  .routed{padding:14px 18px;border-top:1px solid var(--rule);background:var(--brass-soft);font-size:13px;color:var(--ink-2)}
+  .routed strong{color:var(--ink);display:block;font-size:13.5px;margin-bottom:3px}
+  .routed[hidden]{display:none !important}
+
+  .decl{margin-top:38px;border-top:2px solid var(--ink);padding-top:24px}
+  .decl h2{font-family:var(--serif);font-size:23px;font-weight:600;margin:0 0 4px}
+  .decl > p.help{color:var(--ink-2);font-size:13.5px;margin:0 0 18px;max-width:66ch}
+  .declgrid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:26px;align-items:start}
+  @media (max-width:940px){.declgrid{grid-template-columns:1fr}}
+  .declbox{background:var(--panel);border:1px solid var(--rule);border-radius:4px;padding:20px 22px;box-shadow:var(--shadow)}
+  ol.points{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:11px}
+  ol.points li{font-family:var(--serif);font-size:15px;line-height:1.5}
+  ol.points li b{font-weight:600}
+  .sigrow{margin-top:18px;padding-top:14px;border-top:1px dashed var(--rule-2);display:flex;flex-wrap:wrap;gap:22px;font-size:12.5px;color:var(--ink-3)}
+  .sigrow div span{display:block;font-family:var(--mono);color:var(--ink-2);font-size:12px;margin-top:2px}
+
+  .act{margin-top:18px;padding-top:16px;border-top:1px solid var(--rule)}
+  .act[hidden]{display:none !important}
+  #go{font-family:var(--sans);font-size:15px;font-weight:600;padding:11px 20px;border:1px solid var(--brass);border-radius:3px;background:var(--brass);color:var(--panel);cursor:pointer;transition:opacity .12s}
+  #go:hover:not(:disabled){opacity:.88}
+  #go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  #go:disabled{opacity:.45;cursor:not-allowed}
+  .consequence{margin:9px 0 0;font-size:12.5px;color:var(--ink-3);max-width:54ch}
+  .done{margin-top:18px;padding:14px 16px;border-top:1px solid var(--rule);background:var(--ok-soft);border-radius:0 0 3px 3px}
+  .done[hidden]{display:none !important}
+  .done-t{margin:0;font-family:var(--serif);font-size:16px;font-weight:600;color:var(--ok)}
+  .done-d{margin:5px 0 12px;font-family:var(--mono);font-size:12px;color:var(--ink-2);line-height:1.5;white-space:pre-wrap}
+  #again{font-family:var(--sans);font-size:13px;padding:6px 13px;border:1px solid var(--rule-2);border-radius:3px;background:var(--panel);color:var(--ink-2);cursor:pointer}
+  #again:focus-visible{outline:2px solid var(--brass);outline-offset:1px}
+
+  .record{background:var(--sunk);border:1px solid var(--rule);border-radius:4px;padding:16px 18px}
+  .record h3{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin:0 0 10px;font-weight:600}
+  .record dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px}
+  .record dt{color:var(--ink-3)}
+  .record dd{margin:0;font-family:var(--mono);font-size:12px;color:var(--ink-2);word-break:break-word}
+
+  .wording{margin-top:34px;background:var(--sunk);border:1px solid var(--rule);border-left:3px solid var(--brass);border-radius:0 4px 4px 0;padding:18px 22px;max-width:78ch}
+  .wording h3{font-family:var(--serif);font-size:17px;font-weight:600;margin:0 0 8px}
+  .wording p{margin:0 0 10px;font-size:13.5px;color:var(--ink-2)}
+  .wording p:last-child{margin-bottom:0}
+  .wording ul{margin:0 0 12px;padding-left:20px;display:flex;flex-direction:column;gap:7px}
+  .wording li{font-size:13.5px;color:var(--ink-2)}
+  .wording b{color:var(--ink)}
+
+  footer.note{margin-top:40px;border-top:1px solid var(--rule);padding-top:16px;font-size:12.5px;color:var(--ink-3);max-width:74ch}
+  footer.note strong{color:var(--ink-2)}
+  a{color:var(--brass)}
+  @media (prefers-reduced-motion:reduce){*{transition:none !important;animation:none !important}}
+</style>
+<style>
+  /* The artifact host supplied these; standalone the page needs its own. In
+     particular [hidden] must be enforced, since several panels are toggled
+     through the hidden property alone. */
+  html,body{margin:0}
+  img{max-width:100%}
+  [hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">World Historical Gazetteer &middot; prototype</p>
+    <h1>Declared Use Check</h1>
+    <p class="standfirst">WHG holds 51&nbsp;million place records drawn from 26 authority gazetteers under nine different licences, plus 2.8&nbsp;million contributed by its own users. Before data leaves the platform we would ask what it is for, and release only those sources whose terms allow it. This is a working sketch of that exchange &mdash; and of where it breaks down.</p>
+    <span class="draftflag">Draft for discussion &middot; not live</span>
+  </header>
+
+  <div class="ctxbar">
+    <span class="demo">Demo control</span>
+    <div class="seg" role="group" aria-label="Which access route to preview">
+      <button type="button" id="ctx-download" aria-pressed="true">Downloading data</button>
+      <button type="button" id="ctx-token" aria-pressed="false">Requesting an API token</button>
+    </div>
+    <p>The real form would be served according to context and would carry no switch. It is here so the two wordings can be compared: a download is one extraction of a known set, whereas a token is standing access to whatever is queried later, so the declaration has to reach further forward.</p>
+  </div>
+
+  <div class="cols">
+    <div>
+      <section class="step">
+        <p class="step-n">01</p>
+        <h2>Who is declaring?</h2>
+        <p class="help">A declaration made by an anonymous account transfers responsibility to nobody. We need a name, and to know who stands behind it.</p>
+        <div class="field"><label for="who">Name</label><input type="text" id="who" value="Dr Stephen Gadd"></div>
+        <div class="choices" id="q-cap"></div>
+        <div class="field" id="orgfield" style="margin-top:12px"><label for="org">Institution</label><input type="text" id="org" value="University of Cambridge"></div>
+        <label class="checkline" id="authline"><input type="checkbox" id="auth" checked> I am authorised to make this declaration on my institution's behalf.</label>
+        <div class="aside calm" id="solo-help" hidden><strong>Independent researchers are not second-class here.</strong> Capacity decides who the declaration binds, not what you receive: an unaffiliated genealogist or local historian is served exactly the same sources as a university. All we lose is the ability to look to an institution if the declaration proves untrue, and a named person answering for themselves is enough.</div>
+      </section>
+
+      <section class="step">
+        <p class="step-n">02</p>
+        <h2 id="h-comm">Will the use be commercial?</h2>
+        <p class="help" id="p-comm">&ldquo;Non-commercial&rdquo; is notoriously undefined, so we ask about the act rather than the category.</p>
+        <div class="choices" id="q-comm"></div>
+        <div class="aside" id="unsure-help" hidden><strong>If in doubt, treat it as commercial.</strong> A grant-funded study whose outputs are published open access is not commercial. Consultancy delivered for a fee, a paid subscription product, or a dataset sold on, all are &mdash; even where the buyer is a university.</div>
+      </section>
+
+      <section class="step">
+        <p class="step-n">03</p>
+        <h2 id="h-redis">Will you pass the data on?</h2>
+        <p class="help" id="p-redis">Attribution and share-alike obligations only work if they travel. This decides whether you take on that duty.</p>
+        <div class="choices" id="q-redis"></div>
+        <div class="aside" id="sa-help" hidden><strong>Share-alike engages.</strong> <span id="sa-detail"></span></div>
+      </section>
+
+      <section class="step">
+        <p class="step-n">04</p>
+        <h2 id="h-adapt">Will you alter or combine the records?</h2>
+        <p class="help" id="p-adapt">Reformatting, merging with your own data, or deriving new records from ours all count as adaptation.</p>
+        <div class="choices" id="q-adapt"></div>
+        <div class="aside" id="nd-help" hidden><strong>One source forbids adaptations.</strong> The Digital Gazetteer of the Song Dynasty is published under CC BY-ND 4.0, so it is withheld from any use that adapts it.</div>
+      </section>
+    </div>
+
+    <aside class="effect" aria-live="polite">
+      <div class="effect-hd">
+        <h2 id="eff-h">What we would release to you</h2>
+        <p id="eff-p">Recomputed from your answers against each source's own terms.</p>
+      </div>
+      <div class="tiles">
+        <div class="tile good"><div class="v" id="t-in">&mdash;</div><div class="k" id="k-in">Sources released</div></div>
+        <div class="tile bad"><div class="v" id="t-out">&mdash;</div><div class="k">Withheld</div></div>
+        <div class="tile unk"><div class="v" id="t-unk">&mdash;</div><div class="k">Terms unknown</div></div>
+        <div class="tile"><div class="v" id="t-rec">&mdash;</div><div class="k" id="k-rec">Records available</div></div>
+      </div>
+      <div class="tblwrap">
+        <table>
+          <thead><tr><th>Source</th><th>Licence</th><th style="text-align:right">Records</th><th>Status</th></tr></thead>
+          <tbody id="srcbody"></tbody>
+        </table>
+      </div>
+      <div class="routed" id="routed" hidden><strong>Routed to a licensing enquiry</strong><span id="routed-d"></span></div>
+      <div class="routed" id="unknown-note" style="background:var(--warn-soft)"><strong>2,650,634 records whose terms we do not hold</strong>The gate works cleanly against the authority gazetteers, because each one's licence is recorded. It cannot work at all against most contributed material: 332 datasets and all 190 collections carry no licence, so there is nothing to check a declared use against, and the figure does not move however these questions are answered. Whether we may release material whose terms we cannot state is the open question, not a detail of this form.</div>
+    </aside>
+  </div>
+
+  <section class="decl">
+    <h2>The declaration this produces</h2>
+    <p class="help">Only the clauses your answers make relevant appear. The wording changes with the branch and with the route, which is the point of asking rather than presenting one flat form.</p>
+    <div class="declgrid">
+      <div class="declbox">
+        <ol class="points" id="points"></ol>
+        <div class="sigrow">
+          <div>Declared by<span id="sig-who">&mdash;</span></div>
+          <div id="sig-forwrap">For<span id="sig-org">&mdash;</span></div>
+          <div>Date<span id="sig-date">&mdash;</span></div>
+        </div>
+        <div class="act" id="act">
+          <button type="button" id="go">Make this declaration</button>
+          <p class="consequence" id="consequence">&mdash;</p>
+        </div>
+        <div class="done" id="done" hidden>
+          <p class="done-t" id="done-t">Declaration recorded</p>
+          <p class="done-d" id="done-d">&mdash;</p>
+          <button type="button" id="again">Start again</button>
+        </div>
+      </div>
+      <div class="record">
+        <h3>What we would store</h3>
+        <dl id="recdl"></dl>
+      </div>
+    </div>
+  </section>
+
+  <section class="wording">
+    <h3>Why the button says what it says</h3>
+    <p>The label is not decoration. What the user is asked to <em>do</em> at the moment of clicking is what the record afterwards evidences, so three plainer alternatives were rejected.</p>
+    <ul>
+      <li><b>&ldquo;I agree to these terms&rdquo;</b> &mdash; frames the click as accepting conditions we are imposing. For material we hold under CC BY 4.0 that is the one thing we must not do: clause 2(a)(5)(B) forbids a redistributor from adding downstream restrictions.</li>
+      <li><b>&ldquo;Accept and download&rdquo;</b> &mdash; makes the download the object of the sentence. The declaration is the object; the download is its consequence.</li>
+      <li><b>&ldquo;Submit&rdquo;</b> &mdash; names no act at all, and a record of someone having pressed <em>Submit</em> evidences nothing about what they said.</li>
+    </ul>
+    <p><b>&ldquo;Make this declaration&rdquo;</b> names the act, and names it as a statement of fact rather than a promise. That is what makes an untrue one a misrepresentation, which is the whole basis on which the record is supposed to protect us. The label is the same on both routes, because the act is the same one; only its consequence differs.</p>
+  </section>
+
+  <footer class="note">
+    <strong>About this sketch.</strong> The 26 sources, their SPDX licences and their record counts are the real ones, read from the WHG gazetteer registry on 4 September 2026. The branching, the wording and the stored record are proposals, not policy. One deliberate constraint shapes the drafting: for material we hold under CC BY 4.0 we must not make access conditional on promises going beyond that licence, since clause 2(a)(5)(B) forbids a redistributor from imposing downstream restrictions. So this operates as a declaration of fact, used by us to decide what to release &mdash; never as a contractual restriction on what a recipient may afterwards do with material whose licence already permits it.
+  </footer>
+</div>
+
+<script>
+const SOURCES = [{"ns":"osm","name":"OpenStreetMap","spdx":"ODbL-1.0","url":"https://opendatacommons.org/licenses/odbl/1-0/","comm":true,"sa":true,"nd":false,"n":20622228},{"ns":"gn","name":"GeoNames","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":13454817},{"ns":"wd","name":"Wikidata","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":11459393},{"ns":"tgn","name":"Getty TGN","spdx":"ODC-By-1.0","url":"https://opendatacommons.org/licenses/by/1-0/","comm":true,"sa":false,"nd":false,"n":2991143},{"ns":"gb","name":"GB1900","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":1174449},{"ns":"ohm","name":"OpenHistoricalMap","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":945156},{"ns":"chgis","name":"China Historical GIS","spdx":"custom-chgis-academic","url":"","comm":false,"sa":false,"nd":false,"n":81292},{"ns":"tm","name":"Trismegistos","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":64196},{"ns":"pl","name":"Pleiades","spdx":"CC-BY-3.0","url":"https://creativecommons.org/licenses/by/3.0/","comm":true,"sa":false,"nd":false,"n":25561},{"ns":"iv","name":"Index Villaris","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":24000},{"ns":"kain_par","name":"Ancient Parishes of England &amp; Wales","spdx":"custom-ukds-eul","url":"","comm":false,"sa":false,"nd":false,"n":23177},{"ns":"alc","name":"Alcedo","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":18223},{"ns":"ofs","name":"Ottoman NFS Gazetteer","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":16296},{"ns":"clio","name":"Cliopatria","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":15690},{"ns":"hgis","name":"HGIS de las Indias","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":14105},{"ns":"po","name":"PeriodO","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":9017},{"ns":"og","name":"Ottoman Gazetteer","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":6260},{"ns":"nl","name":"Native Land","spdx":"custom-nativeland-dst","url":"","comm":false,"sa":false,"nd":false,"n":4363},{"ns":"dgsd","name":"Digital Gazetteer of the Song Dynasty","spdx":"CC-BY-ND-4.0","url":"https://creativecommons.org/licenses/by-nd/4.0/","comm":true,"sa":false,"nd":true,"n":3828},{"ns":"dp","name":"D-PLACE","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":2599},{"ns":"vob_lgd","name":"GBHGIS Local Government Districts","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":2056},{"ns":"vob_rd","name":"GBHGIS Registration Districts","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":674},{"ns":"un","name":"UN Countries","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":247},{"ns":"ukhc","name":"UK Historic Counties","spdx":"custom-historic-counties","url":"","comm":true,"sa":false,"nd":false,"n":92},{"ns":"vob_cty","name":"GBHGIS Administrative Counties","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":65},{"ns":"vob_rc","name":"GBHGIS Registration Counties","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":55}];
+
+// Material contributed to WHG by its users, grouped by what we actually hold.
+// Counts are places, from the production database on 4 September 2026. The
+// third and fourth rows are the point of including them at all: for 2.65m
+// records we hold no terms, so no declared use can be checked against them.
+const CONTRIB = [
+  {ns:'whg:contributed', name:'Contributed datasets (107)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:122121, grp:'contributed'},
+  {ns:'whg:contributed', name:'Contributed dataset (1)', spdx:'CC0-1.0', url:'https://creativecommons.org/publicdomain/zero/1.0/', comm:true, sa:false, nd:false, n:4, grp:'contributed'},
+  {ns:'whg:contributed', name:'Contributed datasets (332)', spdx:null, url:'', comm:null, sa:false, nd:false, n:2650634, grp:'contributed', unknown:true},
+  {ns:'whg:collections', name:'Place collections (190)', spdx:null, url:'', comm:null, sa:false, nd:false, n:null, grp:'contributed', unknown:true}
+];
+
+const COPY = {
+  download: {
+    effH:'What we would release to you', kIn:'Sources released', kRec:'Records available',
+    hComm:'Will the use be commercial?',
+    hRedis:'Will you pass the data on?',
+    pRedis:'Attribution and share-alike obligations only work if they travel. This decides whether you take on that duty.',
+    hAdapt:'Will you alter or combine the records?',
+    pAdapt:'Reformatting, merging with your own data, or deriving new records from ours all count as adaptation.',
+    routed:'A commercial declaration is not refused. You would receive the commercially-licensed subset now, and an enquiry would open with the WHG team for the remainder, which we take up with the rights-holders concerned.',
+    doneT:'Declaration recorded',
+    comm:[
+      {v:'no',  t:'No, not commercial', d:'Nothing produced from this data will be sold, licensed for a fee, or used to generate revenue.'},
+      {v:'yes', t:'Yes, commercial',    d:'The data will be used in, or to produce, something sold or charged for.'},
+      {v:'unsure', t:'I am not certain', d:'We will treat the use as commercial until you tell us otherwise.'}],
+    redis:[
+      {v:'no',  t:'No, for my own use', d:'The data stays within my project and is not handed on.'},
+      {v:'yes', t:'Yes, I will pass it on', d:'I will redistribute the records, or works derived from them, to others.'}],
+    adapt:[
+      {v:'no',  t:'No, I will use them as they are', d:'No modification, merging or derivation.'},
+      {v:'yes', t:'Yes, I will adapt or combine them', d:'Reformatting, merging with other data, or deriving new records.'}]
+  },
+  token: {
+    effH:'What your token would reach', kIn:'Sources reachable', kRec:'Records reachable',
+    hComm:'Will what you are building be commercial?',
+    hRedis:'Will your application pass the data on?',
+    pRedis:'A token usually feeds something other people use. Serving our records to your own users is passing them on, and the obligations travel with them.',
+    hAdapt:'Will your application alter or combine the records?',
+    pAdapt:'Reformatting, merging with other data, or deriving new records from ours all count as adaptation.',
+    routed:'A commercial declaration is not refused. Your token would be issued against the commercially-licensed subset, and an enquiry would open with the WHG team for the remainder, which we take up with the rights-holders concerned.',
+    doneT:'Declaration recorded &middot; token issued',
+    comm:[
+      {v:'no',  t:'No, not commercial', d:'The service or research this token feeds is not sold, charged for, or used to generate revenue.'},
+      {v:'yes', t:'Yes, commercial',    d:'The application, service or output this token feeds is sold, charged for, or otherwise generates revenue.'},
+      {v:'unsure', t:'I am not certain', d:'We will treat the use as commercial until you tell us otherwise.'}],
+    redis:[
+      {v:'no',  t:'No, internal use only', d:'Records are consumed inside my own project and never shown or handed to anyone else.'},
+      {v:'yes', t:'Yes, my users will see them', d:'The application serves these records onward, publishes them, or hands them to its own users.'}],
+    adapt:[
+      {v:'no',  t:'No, served as they are', d:'Records are passed through unaltered.'},
+      {v:'yes', t:'Yes, adapted or combined', d:'Reformatted, merged with other data, or used to derive new records.'}]
+  }
+};
+
+const CAPS = [
+  {v:'org',  t:'On behalf of an institution', d:'A university, library, museum, company or other body which can stand behind the declaration.'},
+  {v:'solo', t:'In a personal capacity',      d:'An independent researcher, genealogist or local historian, answering for themselves.'}
+];
+
+const state = {ctx:'download', cap:'org', comm:'no', redis:'no', adapt:'no'};
+const fmt = n => n.toLocaleString('en-GB');
+const $ = id => document.getElementById(id);
+
+function radios(key, host, opts){
+  host.innerHTML = '';
+  opts.forEach(o => {
+    const lab = document.createElement('label');
+    lab.className = 'choice' + (state[key]===o.v ? ' sel' : '');
+    lab.innerHTML = '<input type="radio" name="'+key+'" value="'+o.v+'"'+(state[key]===o.v?' checked':'')
+      + '><span><span class="ct">'+o.t+'</span><span class="cd">'+o.d+'</span></span>';
+    lab.querySelector('input').addEventListener('change', () => { state[key]=o.v; render(); });
+    host.appendChild(lab);
+  });
+}
+
+function evaluate(){
+  const treatCommercial = state.comm !== 'no';
+  const all = SOURCES.map(s => ({...s, grp:'authority'})).concat(CONTRIB);
+  return all.map(s => {
+    // Nothing can be checked against terms we do not hold. This state is not a
+    // refusal and not a release; it is the honest answer, and it does not move
+    // however the questions are answered.
+    if (s.unknown) return {...s, in:false, unknown:true, why:'No terms recorded, so no declared use can be checked'};
+    if (treatCommercial && !s.comm) return {...s, in:false, why:'Licence forbids commercial use'};
+    if (state.adapt === 'yes' && s.nd) return {...s, in:false, why:'Licence forbids adaptations'};
+    const ob = [];
+    if (s.sa && state.redis === 'yes') ob.push('share-alike on anything you pass on');
+    else if (s.sa) ob.push('share-alike, dormant while you do not pass it on');
+    return {...s, in:true, why:'', oblig:ob.join('; ')};
+  });
+}
+
+function setCtx(c){
+  state.ctx = c;
+  $('ctx-download').setAttribute('aria-pressed', String(c==='download'));
+  $('ctx-token').setAttribute('aria-pressed', String(c==='token'));
+  $('done').hidden = true; $('act').hidden = false;
+  render();
+}
+
+function render(){
+  const C = COPY[state.ctx];
+  const isToken = state.ctx === 'token';
+
+  radios('cap', $('q-cap'), CAPS);
+  radios('comm', $('q-comm'), C.comm);
+  radios('redis', $('q-redis'), C.redis);
+  radios('adapt', $('q-adapt'), C.adapt);
+
+  $('h-comm').textContent = C.hComm;
+  $('h-redis').textContent = C.hRedis;  $('p-redis').textContent = C.pRedis;
+  $('h-adapt').textContent = C.hAdapt;  $('p-adapt').textContent = C.pAdapt;
+  $('eff-h').textContent = C.effH;
+  $('k-in').textContent = C.kIn;  $('k-rec').textContent = C.kRec;
+  $('routed-d').textContent = C.routed;
+
+  const solo = state.cap === 'solo';
+  $('orgfield').hidden = solo;
+  $('authline').hidden = solo;
+  $('solo-help').hidden = !solo;
+  $('sig-forwrap').hidden = solo;
+
+  const rows = evaluate();
+  const kept = rows.filter(r => r.in);
+  const unknown = rows.filter(r => r.unknown);
+  const gone = rows.filter(r => !r.in && !r.unknown);
+  const sa = kept.filter(r => r.sa);
+  const commercial = state.comm === 'yes';
+
+  $('unsure-help').hidden = state.comm !== 'unsure';
+  $('nd-help').hidden = state.adapt !== 'yes';
+  $('sa-help').hidden = !(state.redis === 'yes' && sa.length);
+  $('sa-detail').textContent = sa.length + ' of the sources you would receive carry share-alike terms, '
+    + fmt(sa.reduce((a,r)=>a+r.n,0)) + ' records in all, dominated by OpenStreetMap under ODbL. A database built on them and then published must carry the same terms.';
+  $('routed').hidden = !commercial;
+
+  $('t-in').textContent = kept.length;
+  $('t-out').textContent = gone.length;
+  $('t-unk').textContent = fmt(unknown.reduce((a,r)=>a+(r.n||0),0));
+  $('t-rec').textContent = fmt(kept.reduce((a,r)=>a+(r.n||0),0));
+
+  const rowHtml = r =>
+    '<tr class="'+(r.unknown?'unk':(r.in?'':'out'))+'">'
+    + '<td><span class="srcname">'+r.name+'</span><span class="srcns">'+r.ns+'</span>'
+      + (r.in && r.oblig ? '<span class="oblig">'+r.oblig+'</span>' : '')
+      + (!r.in ? '<span class="why'+(r.unknown?' unk':'')+'">'+r.why+'</span>' : '') + '</td>'
+    + '<td class="lic">'+(r.spdx ? (r.url ? '<a href="'+r.url+'" target="_blank" rel="noopener">'+r.spdx+'</a>' : r.spdx) : '&mdash;')+'</td>'
+    + '<td class="num">'+(r.n === null ? '&mdash;' : fmt(r.n))+'</td>'
+    + '<td><span class="chip '+(r.unknown?'unk':(r.in?'in':'ex'))+'">'
+      + (r.unknown ? 'unknown' : (r.in ? (isToken?'reachable':'released') : 'withheld')) + '</span></td>'
+    + '</tr>';
+  const grpRow = t => '<tr class="grp"><td colspan="4">'+t+'</td></tr>';
+  $('srcbody').innerHTML =
+      grpRow('Authority gazetteers &mdash; licence recorded for each')
+    + rows.filter(r => r.grp === 'authority').map(rowHtml).join('')
+    + grpRow('Contributed to WHG by its users')
+    + rows.filter(r => r.grp === 'contributed').map(rowHtml).join('');
+
+  const who = $('who').value.trim() || '[name]';
+  const org = $('org').value.trim() || '[institution]';
+  const authorised = $('auth').checked;
+  const pts = [];
+
+  if (solo) pts.push('I am <b>' + who + '</b>, making this declaration in a personal capacity and on my own responsibility.');
+  else pts.push('I am <b>' + who + '</b>, of <b>' + org + '</b>'
+    + (authorised ? ', and I am authorised to make this declaration on its behalf.'
+                  : '. <b>I have not confirmed that I may bind my institution, so this declaration binds me personally.</b>'));
+
+  pts.push('I have read the terms of the ' + kept.length + ' sources set out beside this form.');
+  if (unknown.length) pts.push('I understand that some material held by WHG carries <b>no recorded terms</b>, that WHG asserts none on its contributors\u2019 behalf, and that its absence is not a grant of permission.');
+
+  pts.push(commercial
+    ? (isToken
+        ? 'What this token feeds <b>is commercial</b> &mdash; the application, service or output is sold, licensed for a fee, or otherwise generates revenue.'
+        : 'My intended use <b>is commercial</b> &mdash; the data will be used in, or to produce, something which is sold, licensed for a fee, or otherwise used to generate revenue.')
+    : (state.comm === 'unsure'
+        ? 'I am <b>not certain</b> whether this use is commercial, and accept that it is treated as commercial until I say otherwise.'
+        : (isToken
+            ? 'What this token feeds <b>is not commercial</b>: it is not sold, licensed for a fee, or otherwise used to generate revenue.'
+            : 'My intended use <b>is not commercial</b>: nothing produced from this data will be sold, licensed for a fee, or otherwise used to generate revenue.')));
+
+  if (state.redis === 'yes'){
+    pts.push(isToken
+      ? 'My application <b>will</b> serve these records onward to its own users, and it will carry these terms to them.'
+      : 'I <b>will</b> pass the data, or works derived from it, to others, and I will pass these terms on with it.');
+    if (sa.length) pts.push('Where I publish a database built on the share-alike sources above, I will publish it under those same terms.');
+  } else {
+    pts.push(isToken
+      ? 'My application <b>will not</b> serve these records onward. If that changes, I will make a fresh declaration first.'
+      : 'I <b>will not</b> pass the data or works derived from it to others. If that changes, I will make a fresh declaration first.');
+  }
+
+  if (state.adapt === 'yes') pts.push('These records <b>will</b> be adapted or combined, and I accept that sources forbidding adaptation are withheld.');
+
+  if (isToken){
+    pts.push('I understand that this token is <b>provisioned to reach only the sources listed</b>, that this declaration is made once at issue rather than with each request, and that it must be renewed with the token.');
+    pts.push('If what this token feeds changes &mdash; in purpose, in audience, or in what is done with the records &mdash; I will make a fresh declaration <b>before</b> putting it to the new use.');
+  } else {
+    pts.push('If my intended use changes, I will make a fresh declaration before using the data for the new purpose.');
+  }
+
+  pts.push('I understand that the World Historical Gazetteer has <b>selected which sources to ' + (isToken?'make reachable':'release') + ' on the basis of this declaration</b>, and would ' + (isToken?'provision a different token':'release a different set') + ', or none at all, were it different.');
+  pts.push('I understand that if this declaration is or becomes untrue, my access may be withdrawn and the rights-holders concerned may be told.');
+
+  $('points').innerHTML = pts.map(p => '<li>'+p+'</li>').join('');
+
+  const now = new Date();
+  const expiry = new Date(now.getFullYear()+1, now.getMonth(), now.getDate());
+  const dfmt = d => d.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  $('sig-who').textContent = who;
+  $('sig-org').textContent = authorised ? org : org + ' (personal)';
+  $('sig-date').textContent = dfmt(now);
+
+  const ref = (isToken ? 'whg-tok-' : 'whg-dl-') + '2026-0904-'
+    + (commercial ? 'c' : 'n') + state.redis[0] + state.adapt[0] + '-8f31';
+  const use = (commercial ? 'commercial' : state.comm === 'unsure' ? 'unstated, treated as commercial' : 'non-commercial')
+    + '; ' + (state.redis === 'yes' ? (isToken?'serves onward':'redistributing') : (isToken?'internal only':'no redistribution'))
+    + '; ' + (state.adapt === 'yes' ? 'adapting' : 'no adaptation');
+  const acct = who.toLowerCase().replace(/[^a-z]+/g,'.').replace(/^\.|\.$/g,'') + (solo ? '@example.com' : '@example.ac.uk');
+
+  const recRows = [
+    [isToken ? 'Token' : 'Extraction', ref],
+    ['Account', acct],
+    ['Declared by', solo ? who + ' (personal capacity)' : who + ', ' + org + (authorised ? '' : ' (personal)')],
+    ['Declared use', use],
+    [isToken ? 'Reachable' : 'Released', kept.map(r=>r.ns).join(' ')],
+    ['Withheld', gone.length ? gone.map(r=>r.ns).join(' ') : '(none)'],
+    ['Terms unknown', unknown.length ? unknown.map(r=>r.ns).join(' ') + ' (' + fmt(unknown.reduce((a,r)=>a+(r.n||0),0)) + ' records)' : '(none)'],
+    ['Licences shown', [...new Set(rows.map(r=>r.spdx).filter(Boolean))].join(' ')]
+  ];
+  if (isToken) recRows.push(['Expires', dfmt(expiry) + ' — re-declaration required']);
+  $('recdl').innerHTML = recRows.map(([k,v]) => '<dt>'+k+'</dt><dd>'+v+'</dd>').join('');
+
+  const named = !!($('who').value.trim() && (solo || $('org').value.trim()));
+  $('go').disabled = !named;
+  $('consequence').textContent = !named
+    ? (solo ? 'Give a name first: a declaration by nobody in particular records nothing worth holding.'
+            : 'Give a name and an institution first: a declaration by nobody in particular records nothing worth holding.')
+    : (commercial
+        ? (isToken
+            ? 'We would issue a token reaching the ' + kept.length + ' commercially-licensed sources, and open an enquiry with the WHG team about the ' + gone.length + ' withheld.'
+            : 'We would prepare your download of the ' + kept.length + ' commercially-licensed sources, and open an enquiry with the WHG team about the ' + gone.length + ' withheld.')
+        : (isToken
+            ? 'We would issue a token reaching the ' + kept.length + ' sources listed, ' + fmt(kept.reduce((a,r)=>a+r.n,0)) + ' records, valid until ' + dfmt(expiry) + '.'
+            : 'We would prepare your download of the ' + kept.length + ' sources listed above, ' + fmt(kept.reduce((a,r)=>a+r.n,0)) + ' records.'));
+
+  $('done-t').innerHTML = C.doneT;
+  render._ref = ref; render._use = use; render._kept = kept.length; render._expiry = dfmt(expiry);
+  render._who = solo ? who + ', in a personal capacity' : who + ', ' + org;
+}
+
+$('go').addEventListener('click', () => {
+  const when = new Date().toLocaleString('en-GB',{dateStyle:'long',timeStyle:'short'});
+  $('done-d').textContent = render._ref + '  ·  ' + when + '\n' + render._who + '\n'
+    + 'Declared use: ' + render._use + '\n'
+    + (state.ctx === 'token'
+        ? render._kept + ' sources reachable; token expires ' + render._expiry + ', when a fresh declaration is required.'
+        : render._kept + ' sources released; the declaration and the licences shown are held against this extraction.');
+  $('act').hidden = true; $('done').hidden = false;
+});
+$('again').addEventListener('click', () => { $('done').hidden = true; $('act').hidden = false; });
+$('ctx-download').addEventListener('click', () => setCtx('download'));
+$('ctx-token').addEventListener('click', () => setCtx('token'));
+['who','org'].forEach(id => $(id).addEventListener('input', render));
+$('auth').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

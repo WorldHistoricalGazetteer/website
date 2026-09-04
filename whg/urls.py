@@ -111,6 +111,13 @@ urlpatterns = [
 
                   # static content
                   path('about/', TemplateView.as_view(template_name="main/about.html"), name="about"),
+
+                  # Unlisted working draft of the declared-use questionnaire (place#158 C7).
+                  # Deliberately not linked from anywhere and marked noindex: it is a
+                  # prototype of a form WHG does not operate, shared by URL for comment.
+                  path('prototypes/use-declaration/',
+                       TemplateView.as_view(template_name="main/use_declaration_prototype.html"),
+                       name="use-declaration-prototype"),
                   path('development/', views.beta_status_view, name="beta_status"),
                   # path('contributing/', TemplateView.as_view(template_name="main/../_local/_older/contributing.html"), name="contributing"),
 
