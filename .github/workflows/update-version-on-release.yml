@@ -35,14 +35,39 @@ jobs:
           # Export for later steps: shell variables do not survive across steps.
           echo "CLEAN_TAG=${CLEAN_TAG}" >> "$GITHUB_ENV"
 
-      - name: Commit and push VERSION file
+      # The copyright notice's end year signals that the work is still being
+      # published, so it should advance on an actual release rather than on the
+      # calendar or on page load. (The year carrying legal weight is the year of
+      # FIRST publication — 2019 — which never changes; see 17 U.S.C. 401(b)(2).)
+      - name: Refresh the LICENSE copyright year
+        run: |
+          CURRENT_YEAR="$(date -u +%Y)"
+          echo "CURRENT_YEAR=${CURRENT_YEAR}" >> "$GITHUB_ENV"
+          # Anchored to the exact expected line. If LICENSE is ever reformatted
+          # or the owner changes, this fails rather than rewriting the wrong
+          # thing in a legal document.
+          if ! grep -qE '^Copyright \(c\) 2019-[0-9]{4} University of Pittsburgh$' LICENSE; then
+            echo "::error::LICENSE copyright line is not in the expected form; refusing to edit it."
+            exit 1
+          fi
+          sed -i -E "s/^Copyright \(c\) 2019-[0-9]{4} University of Pittsburgh$/Copyright (c) 2019-${CURRENT_YEAR} University of Pittsburgh/" LICENSE
+          echo "LICENSE copyright year set to ${CURRENT_YEAR}"
+
+      - name: Commit and push VERSION and LICENSE
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add VERSION
+          git add VERSION LICENSE
           if git diff --cached --quiet; then
-            echo "VERSION already reads ${CLEAN_TAG}; nothing to commit."
+            echo "Nothing to commit: VERSION already reads ${CLEAN_TAG} and the LICENSE year is current."
             exit 0
           fi
-          git commit -m "Update VERSION to ${CLEAN_TAG}"
+          # Name only the files that actually changed — either may already be current.
+          PARTS=""
+          git diff --cached --quiet -- VERSION || PARTS="VERSION to ${CLEAN_TAG}"
+          if ! git diff --cached --quiet -- LICENSE; then
+            [ -n "${PARTS}" ] && PARTS="${PARTS}, "
+            PARTS="${PARTS}LICENSE copyright year to ${CURRENT_YEAR}"
+          fi
+          git commit -m "Update ${PARTS}"
           git push origin HEAD:main
