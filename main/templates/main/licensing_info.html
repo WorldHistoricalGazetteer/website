@@ -1,12 +1,53 @@
+{% comment %}
+Rights panel shown above download controls.
+
+Context:
+  item   the Dataset or Collection being downloaded, when there is exactly one.
+         Omit it where the panel covers a container of several items (a
+         collection group), and the generic per-source statement is rendered.
+
+WHG asserts no blanket licence over what it holds: each item carries its own
+terms, and WHG's overlay covers WHG's own curation alongside them, never
+instead of them. This panel previously claimed CC BY 4.0 over all public data
+while the export header and README claimed CC BY-NC-4.0 over the same records —
+see licensing/statements.py.
+{% endcomment %}
 <div id="dl_licensing">
     <p>
-        <sr>IMPORTANT LICENSING INFORMATION</sr>
-        : Data made public in WHG by its creators are available under the Creative Commons
-        Attribution 4.0 International (CC BY 4.0) License. They can be freely shared, re-used,
-        and adapted, but "you <b>must</b> give appropriate credit, provide a link to the
-        license, and indicate if changes were made." Please see <a
-            href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0
-        details</a>; and <a data-whg-modal="/license/">WHG policy.</a> Citations are provided
-        below. <b>By clicking download on this form, you are agreeing to those terms</b>.
+        <sr>IMPORTANT LICENSING INFORMATION</sr>:
+        {% if item and item.license %}
+            This {{ entity_type|default:"item" }} is made available by its contributor under the
+            <a href="{{ item.license.url|default:item.license.spdx_url }}" target="_blank" rel="noopener">{{ item.license.label }}</a>
+            ({{ item.license.spdx_id }}) licence. Those terms govern the records you are about to download, and they
+            travel with the data &mdash; if you redistribute these records, you must pass the same terms on.
+            {% if item.license.attribution_required %}
+                You <b>must</b> give appropriate credit, provide a link to the licence, and indicate if changes were made.
+            {% endif %}
+            {% if item.license.permits_commercial is False %}
+                This licence does <b>not</b> permit commercial use.
+            {% endif %}
+            {% if item.license.no_derivatives %}
+                This licence does <b>not</b> permit adaptations.
+            {% endif %}
+            {% if item.rights_statement %}
+                <br/><span class="small">Additional conditions stated by the rights holder: {{ item.rights_statement }}</span>
+            {% endif %}
+        {% elif item %}
+            No licence has been recorded in WHG for this item, so we assert no terms over its records on the
+            contributor's behalf. Their absence is <b>not</b> a grant of permission. If you wish to reuse this
+            material, please contact the contributor named in the metadata below.
+        {% else %}
+            Each dataset and collection in WHG carries the licence chosen by the person who contributed it, and that
+            licence travels with the data. Please check the terms shown on each item before reusing it; where no
+            licence is recorded, WHG asserts none on the contributor's behalf.
+        {% endif %}
+        {% if WHG_OVERLAY_LICENSE %}
+            Separately, where WHG has added to this material &mdash; reconciliation links to other gazetteers,
+            editorial content, and the aggregation itself &mdash; that WHG contribution is offered under
+            <a href="{{ WHG_OVERLAY_LICENSE.url }}" target="_blank" rel="noopener">{{ WHG_OVERLAY_LICENSE.label }}</a>
+            ({{ WHG_OVERLAY_LICENSE.spdx_id }}), which covers WHG's own work only and does not restrict the terms above.
+        {% endif %}
+        See also <a data-whg-modal="/license/">WHG policy</a>; citations are provided below.
+        <b>By clicking download on this form, you are agreeing to those terms</b>.
     </p>
 </div>
