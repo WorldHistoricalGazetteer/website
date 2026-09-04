@@ -37,6 +37,13 @@ def terms_for(obj):
     this item, which is a statement about our records, not about the item being
     unrestricted.
     """
+    # Refuse None outright. Every branch below makes a positive statement about
+    # somebody's rights, and "no object" would silently render as "no licence
+    # recorded" — an authoritative-sounding claim drawn from nothing. Callers
+    # that may not have an object must say so themselves.
+    if obj is None:
+        raise ValueError("terms_for() requires an object; rights cannot be stated for None")
+
     licence = getattr(obj, 'license', None)
     statement = (getattr(obj, 'rights_statement', '') or '').strip()
 
