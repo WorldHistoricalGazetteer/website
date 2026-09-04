@@ -105,13 +105,14 @@
   .effect-hd h2{font-family:var(--serif);font-size:17px;margin:0;font-weight:600}
   .effect-hd p{margin:3px 0 0;font-size:12.5px;color:var(--ink-3)}
 
-  .tiles{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid var(--rule)}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));border-bottom:1px solid var(--rule)}
   .tile{padding:13px 14px;border-right:1px solid var(--rule)}
   .tile:last-child{border-right:none}
   .tile .v{font-family:var(--mono);font-size:19px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.15}
   .tile .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-top:3px}
   .tile.good .v{color:var(--ok)}
   .tile.bad .v{color:var(--no)}
+  .tile.unk .v{color:var(--warn)}
 
   .tblwrap{max-height:420px;overflow:auto}
   table{width:100%;border-collapse:collapse;font-size:13px}
@@ -129,6 +130,10 @@
   .chip{display:inline-block;padding:1px 7px;border-radius:2px;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
   .chip.in{background:var(--ok-soft);color:var(--ok)}
   .chip.ex{background:var(--no-soft);color:var(--no)}
+  .chip.unk{background:var(--warn-soft);color:var(--warn)}
+  tbody tr.unk{background:var(--warn-soft)}
+  tbody tr.grp td{background:var(--sunk);padding:7px 12px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600;border-bottom:1px solid var(--rule-2)}
+  .why.unk{color:var(--warn)}
 
   .routed{padding:14px 18px;border-top:1px solid var(--rule);background:var(--brass-soft);font-size:13px;color:var(--ink-2)}
   .routed strong{color:var(--ink);display:block;font-size:13.5px;margin-bottom:3px}
@@ -193,7 +198,7 @@
   <header class="masthead">
     <p class="eyebrow">World Historical Gazetteer &middot; prototype</p>
     <h1>Declared Use Check</h1>
-    <p class="standfirst">WHG holds 51&nbsp;million place records drawn from 26 gazetteers under nine different licences. Before data leaves the platform we would ask what it is for, and release only those sources whose terms allow it. This is a working sketch of that exchange.</p>
+    <p class="standfirst">WHG holds 51&nbsp;million place records drawn from 26 authority gazetteers under nine different licences, plus 2.8&nbsp;million contributed by its own users. Before data leaves the platform we would ask what it is for, and release only those sources whose terms allow it. This is a working sketch of that exchange &mdash; and of where it breaks down.</p>
     <span class="draftflag">Draft for discussion &middot; not live</span>
   </header>
 
@@ -252,6 +257,7 @@
       <div class="tiles">
         <div class="tile good"><div class="v" id="t-in">&mdash;</div><div class="k" id="k-in">Sources released</div></div>
         <div class="tile bad"><div class="v" id="t-out">&mdash;</div><div class="k">Withheld</div></div>
+        <div class="tile unk"><div class="v" id="t-unk">&mdash;</div><div class="k">Terms unknown</div></div>
         <div class="tile"><div class="v" id="t-rec">&mdash;</div><div class="k" id="k-rec">Records available</div></div>
       </div>
       <div class="tblwrap">
@@ -261,6 +267,7 @@
         </table>
       </div>
       <div class="routed" id="routed" hidden><strong>Routed to a licensing enquiry</strong><span id="routed-d"></span></div>
+      <div class="routed" id="unknown-note" style="background:var(--warn-soft)"><strong>2,650,634 records whose terms we do not hold</strong>The gate works cleanly against the authority gazetteers, because each one's licence is recorded. It cannot work at all against most contributed material: 332 datasets and all 190 collections carry no licence, so there is nothing to check a declared use against, and the figure does not move however these questions are answered. Whether we may release material whose terms we cannot state is the open question, not a detail of this form.</div>
     </aside>
   </div>
 
@@ -310,6 +317,17 @@
 
 <script>
 const SOURCES = [{"ns":"osm","name":"OpenStreetMap","spdx":"ODbL-1.0","url":"https://opendatacommons.org/licenses/odbl/1-0/","comm":true,"sa":true,"nd":false,"n":20622228},{"ns":"gn","name":"GeoNames","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":13454817},{"ns":"wd","name":"Wikidata","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":11459393},{"ns":"tgn","name":"Getty TGN","spdx":"ODC-By-1.0","url":"https://opendatacommons.org/licenses/by/1-0/","comm":true,"sa":false,"nd":false,"n":2991143},{"ns":"gb","name":"GB1900","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":1174449},{"ns":"ohm","name":"OpenHistoricalMap","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":945156},{"ns":"chgis","name":"China Historical GIS","spdx":"custom-chgis-academic","url":"","comm":false,"sa":false,"nd":false,"n":81292},{"ns":"tm","name":"Trismegistos","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":64196},{"ns":"pl","name":"Pleiades","spdx":"CC-BY-3.0","url":"https://creativecommons.org/licenses/by/3.0/","comm":true,"sa":false,"nd":false,"n":25561},{"ns":"iv","name":"Index Villaris","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":24000},{"ns":"kain_par","name":"Ancient Parishes of England &amp; Wales","spdx":"custom-ukds-eul","url":"","comm":false,"sa":false,"nd":false,"n":23177},{"ns":"alc","name":"Alcedo","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":18223},{"ns":"ofs","name":"Ottoman NFS Gazetteer","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":16296},{"ns":"clio","name":"Cliopatria","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":15690},{"ns":"hgis","name":"HGIS de las Indias","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":14105},{"ns":"po","name":"PeriodO","spdx":"CC0-1.0","url":"https://creativecommons.org/publicdomain/zero/1.0/","comm":true,"sa":false,"nd":false,"n":9017},{"ns":"og","name":"Ottoman Gazetteer","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":6260},{"ns":"nl","name":"Native Land","spdx":"custom-nativeland-dst","url":"","comm":false,"sa":false,"nd":false,"n":4363},{"ns":"dgsd","name":"Digital Gazetteer of the Song Dynasty","spdx":"CC-BY-ND-4.0","url":"https://creativecommons.org/licenses/by-nd/4.0/","comm":true,"sa":false,"nd":true,"n":3828},{"ns":"dp","name":"D-PLACE","spdx":"CC-BY-NC-4.0","url":"https://creativecommons.org/licenses/by-nc/4.0/","comm":false,"sa":false,"nd":false,"n":2599},{"ns":"vob_lgd","name":"GBHGIS Local Government Districts","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":2056},{"ns":"vob_rd","name":"GBHGIS Registration Districts","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":674},{"ns":"un","name":"UN Countries","spdx":"CC-BY-4.0","url":"https://creativecommons.org/licenses/by/4.0/","comm":true,"sa":false,"nd":false,"n":247},{"ns":"ukhc","name":"UK Historic Counties","spdx":"custom-historic-counties","url":"","comm":true,"sa":false,"nd":false,"n":92},{"ns":"vob_cty","name":"GBHGIS Administrative Counties","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":65},{"ns":"vob_rc","name":"GBHGIS Registration Counties","spdx":"CC-BY-SA-4.0","url":"https://creativecommons.org/licenses/by-sa/4.0/","comm":true,"sa":true,"nd":false,"n":55}];
+
+// Material contributed to WHG by its users, grouped by what we actually hold.
+// Counts are places, from the production database on 4 September 2026. The
+// third and fourth rows are the point of including them at all: for 2.65m
+// records we hold no terms, so no declared use can be checked against them.
+const CONTRIB = [
+  {ns:'whg:contributed', name:'Contributed datasets (107)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:122121, grp:'contributed'},
+  {ns:'whg:contributed', name:'Contributed dataset (1)', spdx:'CC0-1.0', url:'https://creativecommons.org/publicdomain/zero/1.0/', comm:true, sa:false, nd:false, n:4, grp:'contributed'},
+  {ns:'whg:contributed', name:'Contributed datasets (332)', spdx:null, url:'', comm:null, sa:false, nd:false, n:2650634, grp:'contributed', unknown:true},
+  {ns:'whg:collections', name:'Place collections (190)', spdx:null, url:'', comm:null, sa:false, nd:false, n:null, grp:'contributed', unknown:true}
+];
 
 const COPY = {
   download: {
@@ -377,7 +395,12 @@ function radios(key, host, opts){
 
 function evaluate(){
   const treatCommercial = state.comm !== 'no';
-  return SOURCES.map(s => {
+  const all = SOURCES.map(s => ({...s, grp:'authority'})).concat(CONTRIB);
+  return all.map(s => {
+    // Nothing can be checked against terms we do not hold. This state is not a
+    // refusal and not a release; it is the honest answer, and it does not move
+    // however the questions are answered.
+    if (s.unknown) return {...s, in:false, unknown:true, why:'No terms recorded, so no declared use can be checked'};
     if (treatCommercial && !s.comm) return {...s, in:false, why:'Licence forbids commercial use'};
     if (state.adapt === 'yes' && s.nd) return {...s, in:false, why:'Licence forbids adaptations'};
     const ob = [];
@@ -418,7 +441,9 @@ function render(){
   $('sig-forwrap').hidden = solo;
 
   const rows = evaluate();
-  const kept = rows.filter(r => r.in), gone = rows.filter(r => !r.in);
+  const kept = rows.filter(r => r.in);
+  const unknown = rows.filter(r => r.unknown);
+  const gone = rows.filter(r => !r.in && !r.unknown);
   const sa = kept.filter(r => r.sa);
   const commercial = state.comm === 'yes';
 
@@ -431,17 +456,25 @@ function render(){
 
   $('t-in').textContent = kept.length;
   $('t-out').textContent = gone.length;
-  $('t-rec').textContent = fmt(kept.reduce((a,r)=>a+r.n,0));
+  $('t-unk').textContent = fmt(unknown.reduce((a,r)=>a+(r.n||0),0));
+  $('t-rec').textContent = fmt(kept.reduce((a,r)=>a+(r.n||0),0));
 
-  $('srcbody').innerHTML = rows.map(r =>
-    '<tr class="'+(r.in?'':'out')+'">'
+  const rowHtml = r =>
+    '<tr class="'+(r.unknown?'unk':(r.in?'':'out'))+'">'
     + '<td><span class="srcname">'+r.name+'</span><span class="srcns">'+r.ns+'</span>'
       + (r.in && r.oblig ? '<span class="oblig">'+r.oblig+'</span>' : '')
-      + (!r.in ? '<span class="why">'+r.why+'</span>' : '') + '</td>'
-    + '<td class="lic">'+(r.url ? '<a href="'+r.url+'" target="_blank" rel="noopener">'+r.spdx+'</a>' : r.spdx)+'</td>'
-    + '<td class="num">'+fmt(r.n)+'</td>'
-    + '<td><span class="chip '+(r.in?'in':'ex')+'">'+(r.in?(isToken?'reachable':'released'):'withheld')+'</span></td>'
-    + '</tr>').join('');
+      + (!r.in ? '<span class="why'+(r.unknown?' unk':'')+'">'+r.why+'</span>' : '') + '</td>'
+    + '<td class="lic">'+(r.spdx ? (r.url ? '<a href="'+r.url+'" target="_blank" rel="noopener">'+r.spdx+'</a>' : r.spdx) : '&mdash;')+'</td>'
+    + '<td class="num">'+(r.n === null ? '&mdash;' : fmt(r.n))+'</td>'
+    + '<td><span class="chip '+(r.unknown?'unk':(r.in?'in':'ex'))+'">'
+      + (r.unknown ? 'unknown' : (r.in ? (isToken?'reachable':'released') : 'withheld')) + '</span></td>'
+    + '</tr>';
+  const grpRow = t => '<tr class="grp"><td colspan="4">'+t+'</td></tr>';
+  $('srcbody').innerHTML =
+      grpRow('Authority gazetteers &mdash; licence recorded for each')
+    + rows.filter(r => r.grp === 'authority').map(rowHtml).join('')
+    + grpRow('Contributed to WHG by its users')
+    + rows.filter(r => r.grp === 'contributed').map(rowHtml).join('');
 
   const who = $('who').value.trim() || '[name]';
   const org = $('org').value.trim() || '[institution]';
@@ -454,6 +487,7 @@ function render(){
                   : '. <b>I have not confirmed that I may bind my institution, so this declaration binds me personally.</b>'));
 
   pts.push('I have read the terms of the ' + kept.length + ' sources set out beside this form.');
+  if (unknown.length) pts.push('I understand that some material held by WHG carries <b>no recorded terms</b>, that WHG asserts none on its contributors\u2019 behalf, and that its absence is not a grant of permission.');
 
   pts.push(commercial
     ? (isToken
@@ -511,7 +545,8 @@ function render(){
     ['Declared use', use],
     [isToken ? 'Reachable' : 'Released', kept.map(r=>r.ns).join(' ')],
     ['Withheld', gone.length ? gone.map(r=>r.ns).join(' ') : '(none)'],
-    ['Licences shown', [...new Set(rows.map(r=>r.spdx))].join(' ')]
+    ['Terms unknown', unknown.length ? unknown.map(r=>r.ns).join(' ') + ' (' + fmt(unknown.reduce((a,r)=>a+(r.n||0),0)) + ' records)' : '(none)'],
+    ['Licences shown', [...new Set(rows.map(r=>r.spdx).filter(Boolean))].join(' ')]
   ];
   if (isToken) recRows.push(['Expires', dfmt(expiry) + ' — re-declaration required']);
   $('recdl').innerHTML = recRows.map(([k,v]) => '<dt>'+k+'</dt><dd>'+v+'</dd>').join('');
