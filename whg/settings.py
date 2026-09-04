@@ -86,6 +86,25 @@ OLLAMA_NUM_THREAD = int(os.environ.get('OLLAMA_NUM_THREAD') or globals().get('OL
 # budget deliberating over a list of place names.
 OLLAMA_THINK = str(os.environ.get('OLLAMA_THINK') or globals().get('OLLAMA_THINK', '')).lower() == 'true'
 
+# Baserow dataset-submission workflow tool (external SaaS — runs outside this codebase).
+# Public "Submit Your Dataset to WHG" form, hosted in Palak's Baserow workspace; we only
+# link out to it from /contribute/. The default below is the live public form URL (not a
+# secret); override via env var or local_settings if it ever changes.
+BASEROW_SUBMIT_FORM_URL = (
+    os.environ.get('BASEROW_SUBMIT_FORM_URL')
+    or globals().get('BASEROW_SUBMIT_FORM_URL')
+    or 'https://baserow.io/form/VhZUnWUX7JXiP9BYX2VbBFc7tLCdZGWYKtSuoN7RxVU'
+)
+
+# Baserow service account (bot) for the licence-vocabulary sync. Credentials are
+# secrets — set BASEROW_BOT_EMAIL / BASEROW_BOT_PASSWORD in local_settings (local)
+# or env (deployed); never commit them. The table id points at the synced "Licences"
+# lookup table in the WHG Dataset & Project Tracker database.
+BASEROW_API_URL = os.environ.get('BASEROW_API_URL') or globals().get('BASEROW_API_URL', 'https://api.baserow.io')
+BASEROW_BOT_EMAIL = os.environ.get('BASEROW_BOT_EMAIL') or globals().get('BASEROW_BOT_EMAIL', '')
+BASEROW_BOT_PASSWORD = os.environ.get('BASEROW_BOT_PASSWORD') or globals().get('BASEROW_BOT_PASSWORD', '')
+BASEROW_LICENCES_TABLE_ID = int(os.environ.get('BASEROW_LICENCES_TABLE_ID') or globals().get('BASEROW_LICENCES_TABLE_ID', 1037619))
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -141,7 +160,6 @@ INSTALLED_APPS = [
     'collection.apps.CollectionConfig',  # "collections" (plural) is reserved in python
     'datasets.apps.DatasetsConfig',
     'elastic.apps.ElasticConfig',
-    'grace.apps.GraceConfig',  # editorial tracker: gazetteers, people, sources, outreach
     'ingestion.apps.IngestionConfig',
     'licensing.apps.LicensingConfig',
     'main.apps.MainConfig',
