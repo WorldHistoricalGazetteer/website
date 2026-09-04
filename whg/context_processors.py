@@ -55,3 +55,12 @@ def registry_version(request):
     except Exception:
         v = ''
     return {'registry_version': v}
+
+def overlay_license(request):
+    """WHG's own curation/aggregation licence, for surfaces that must name it.
+
+    Exposed so that no template hard-codes it: every place it appears has to
+    move together if it changes, and it is asserted ALONGSIDE a source's terms,
+    never instead of them (place#157/#158).
+    """
+    return {'WHG_OVERLAY_LICENSE': getattr(settings, 'WHG_OVERLAY_LICENSE', None)}

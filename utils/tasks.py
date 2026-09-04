@@ -182,16 +182,23 @@ def create_zipfile(data_dump_filename, dsid=None, collid=None):
         metadata = dataset_to_json(dsid) if dsid else collection_to_json(collid)
         pretty_metadata = json.dumps(metadata, indent=1, sort_keys=False)
         dl_class = "Dataset" if dsid else "Collection"
+        # The item's own terms, resolved from its record. This previously
+        # asserted "CC-BY 4.0 NC" — not a licence, and a NonCommercial claim
+        # over data whose contributors never granted one. See
+        # licensing.statements for why the two halves are kept apart.
+        from licensing.statements import terms_text
+        from datasets.models import Dataset
+        from collection.models import Collection
+        obj = (Dataset.objects.filter(pk=dsid).first() if dsid
+               else Collection.objects.filter(pk=collid).first())
+        licence_block = (terms_text(obj, kind=dl_class.lower()) if obj else
+                         'Rights for this download could not be resolved. Please '
+                         'consult the item page on whgazetteer.org before reusing it.')
         readme_content = (f'World Historical Gazetteer (WHG)\n{dl_class} Download\n'
                           f'data: {os.path.basename(data_dump_filename)}\n'
                           '********************************\n'
-                          'This dataset conforms to the CC-BY 4.0 NC license.\n\n'
-                          "This license enables reusers to distribute, remix, adapt, and build upon the material "
-                          "in any medium or format for noncommercial purposes only, and only so long as attribution "
-                          "is given to the creator. CC BY-NC includes the following elements:\n"
-                          "* Attribution — You must give appropriate credit, provide a link to the license, and indicate "
-                          "if changes were made.\n"
-                          "* NonCommercial — You may not use the material for commercial purposes.\n\n"
+                          'RIGHTS\n\n'
+                          + licence_block + '\n\n'
                           "***********************************\n"
                           "Metadata:\n" + pretty_metadata)
 

@@ -294,6 +294,7 @@ TEMPLATES = [
                 'whg.context_processors.app_version',
                 'whg.context_processors.asset_version',
                 'whg.context_processors.registry_version',
+                'whg.context_processors.overlay_license',
             ],
             'builtins': [
                 'whg.builtins',

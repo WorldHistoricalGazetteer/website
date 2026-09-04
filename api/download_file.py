@@ -288,13 +288,13 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 else:
                     yield from emit_chunk(',"citation":' + json.dumps(citation))
 
-            licence_text = (
-                "Unless specified otherwise, all content created for or uploaded to the World Historical Gazetteer — "
-                "including editorial content, documentation, images, and contributed datasets and collections — "
-                "is licensed under a Creative Commons Attribution-NonCommercial 4.0 International License. "
-                "Externally hosted datasets and content that are linked to by WHG remain under the copyrights "
-                "and licenses specified by their original contributors."
-            )
+            # This item's OWN terms, not a blanket. The previous text applied
+            # WHG's NonCommercial overlay to "contributed datasets and
+            # collections", which is a restriction their contributors never
+            # granted — and, for anything held under CC BY 4.0, one that licence
+            # forbids us from adding (§2(a)(5)(B)). See licensing.statements.
+            from licensing.statements import terms_text
+            licence_text = terms_text(obj, kind=obj_type)
             yield from emit_chunk(',"license":' + json.dumps(licence_text))
             yield from emit_chunk(',"features":[')
 
