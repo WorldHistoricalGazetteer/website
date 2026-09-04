@@ -208,7 +208,11 @@
       <button type="button" id="ctx-download" aria-pressed="true">Downloading data</button>
       <button type="button" id="ctx-token" aria-pressed="false">Requesting an API token</button>
     </div>
-    <p>The real form would be served according to context and would carry no switch. It is here so the two wordings can be compared: a download is one extraction of a known set, whereas a token is standing access to whatever is queried later, so the declaration has to reach further forward.</p>
+    <div class="seg" role="group" aria-label="How contributed data is treated">
+      <button type="button" id="gr-assumed" aria-pressed="true">Legacy grant holds</button>
+      <button type="button" id="gr-recorded" aria-pressed="false">As recorded today</button>
+    </div>
+    <p>Neither switch would appear on the real form. The first is here so the two wordings can be compared: a download is one extraction of a known set, whereas a token is standing access to whatever is queried later, so the declaration has to reach further forward. The second shows what turns on the legacy-grant question &mdash; whether 2.65&nbsp;million contributed records can be described at all.</p>
   </div>
 
   <div class="cols">
@@ -267,7 +271,7 @@
         </table>
       </div>
       <div class="routed" id="routed" hidden><strong>Routed to a licensing enquiry</strong><span id="routed-d"></span></div>
-      <div class="routed" id="unknown-note" style="background:var(--warn-soft)"><strong>2,650,634 records whose terms we do not hold</strong>The gate works cleanly against the authority gazetteers, because each one's licence is recorded. It cannot work at all against most contributed material: 332 datasets and all 190 collections carry no licence, so there is nothing to check a declared use against, and the figure does not move however these questions are answered. Whether we may release material whose terms we cannot state is the open question, not a detail of this form.</div>
+      <div class="routed" id="unknown-note" style="background:var(--warn-soft)"><strong id="un-t"></strong><span id="un-d"></span></div>
     </aside>
   </div>
 
@@ -322,12 +326,24 @@ const SOURCES = [{"ns":"osm","name":"OpenStreetMap","spdx":"ODbL-1.0","url":"htt
 // Counts are places, from the production database on 4 September 2026. The
 // third and fourth rows are the point of including them at all: for 2.65m
 // records we hold no terms, so no declared use can be checked against them.
-const CONTRIB = [
-  {ns:'whg:contributed', name:'Contributed datasets (107)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:122121, grp:'contributed'},
-  {ns:'whg:contributed', name:'Contributed dataset (1)', spdx:'CC0-1.0', url:'https://creativecommons.org/publicdomain/zero/1.0/', comm:true, sa:false, nd:false, n:4, grp:'contributed'},
-  {ns:'whg:contributed', name:'Contributed datasets (332)', spdx:null, url:'', comm:null, sa:false, nd:false, n:2650634, grp:'contributed', unknown:true},
-  {ns:'whg:collections', name:'Place collections (190)', spdx:null, url:'', comm:null, sa:false, nd:false, n:null, grp:'contributed', unknown:true}
-];
+const CONTRIB_SETS = {
+  // If the legacy grant holds — i.e. the pre-2024 displayed notice is accepted
+  // as a grant in the way the 2024-26 tickbox is. 440 datasets and every
+  // collection then carry terms we can state.
+  assumed: [
+    {ns:'whg:contributed', name:'Contributed datasets (439)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:2772755, grp:'contributed'},
+    {ns:'whg:contributed', name:'Contributed dataset (1)', spdx:'CC0-1.0', url:'https://creativecommons.org/publicdomain/zero/1.0/', comm:true, sa:false, nd:false, n:4, grp:'contributed'},
+    {ns:'whg:collections', name:'Place collections (190)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:null, grp:'contributed'}
+  ],
+  // What we actually hold today. Counts are places, from the production
+  // database on 4 September 2026.
+  recorded: [
+    {ns:'whg:contributed', name:'Contributed datasets (107)', spdx:'CC-BY-4.0', url:'https://creativecommons.org/licenses/by/4.0/', comm:true, sa:false, nd:false, n:122121, grp:'contributed'},
+    {ns:'whg:contributed', name:'Contributed dataset (1)', spdx:'CC0-1.0', url:'https://creativecommons.org/publicdomain/zero/1.0/', comm:true, sa:false, nd:false, n:4, grp:'contributed'},
+    {ns:'whg:contributed', name:'Contributed datasets (332)', spdx:null, url:'', comm:null, sa:false, nd:false, n:2650634, grp:'contributed', unknown:true},
+    {ns:'whg:collections', name:'Place collections (190)', spdx:null, url:'', comm:null, sa:false, nd:false, n:null, grp:'contributed', unknown:true}
+  ]
+};
 
 const COPY = {
   download: {
@@ -377,7 +393,7 @@ const CAPS = [
   {v:'solo', t:'In a personal capacity',      d:'An independent researcher, genealogist or local historian, answering for themselves.'}
 ];
 
-const state = {ctx:'download', cap:'org', comm:'no', redis:'no', adapt:'no'};
+const state = {ctx:'download', grant:'assumed', cap:'org', comm:'no', redis:'no', adapt:'no'};
 const fmt = n => n.toLocaleString('en-GB');
 const $ = id => document.getElementById(id);
 
@@ -395,7 +411,7 @@ function radios(key, host, opts){
 
 function evaluate(){
   const treatCommercial = state.comm !== 'no';
-  const all = SOURCES.map(s => ({...s, grp:'authority'})).concat(CONTRIB);
+  const all = SOURCES.map(s => ({...s, grp:'authority'})).concat(CONTRIB_SETS[state.grant]);
   return all.map(s => {
     // Nothing can be checked against terms we do not hold. This state is not a
     // refusal and not a release; it is the honest answer, and it does not move
@@ -453,6 +469,16 @@ function render(){
   $('sa-detail').textContent = sa.length + ' of the sources you would receive carry share-alike terms, '
     + fmt(sa.reduce((a,r)=>a+r.n,0)) + ' records in all, dominated by OpenStreetMap under ODbL. A database built on them and then published must carry the same terms.';
   $('routed').hidden = !commercial;
+
+  $('gr-assumed').setAttribute('aria-pressed', String(state.grant==='assumed'));
+  $('gr-recorded').setAttribute('aria-pressed', String(state.grant==='recorded'));
+  if (state.grant === 'assumed'){
+    $('un-t').textContent = 'Shown as if the legacy grant holds';
+    $('un-d').textContent = 'This view assumes the pre-2024 displayed notice is accepted as a grant, in the way the 2024-26 tickbox is: 439 contributed datasets and all 190 collections then carry CC BY 4.0, and the gate has something to work with throughout. Two caveats survive it. The one dataset contributed under CC0 is kept separate, because treating it as CC BY would add back an attribution requirement its contributor deliberately waived. And a collection may still contain records drawn from the authority gazetteers, which keep their own terms whatever is decided about contributed data.';
+  } else {
+    $('un-t').textContent = '2,650,634 records whose terms we do not hold';
+    $('un-d').textContent = 'The gate works cleanly against the authority gazetteers, because each one\u2019s licence is recorded. It cannot work at all against most contributed material: 332 datasets and all 190 collections carry no licence, so there is nothing to check a declared use against, and the figure does not move however these questions are answered. Whether we may release material whose terms we cannot state is the open question, not a detail of this form.';
+  }
 
   $('t-in').textContent = kept.length;
   $('t-out').textContent = gone.length;
@@ -581,6 +607,8 @@ $('go').addEventListener('click', () => {
 $('again').addEventListener('click', () => { $('done').hidden = true; $('act').hidden = false; });
 $('ctx-download').addEventListener('click', () => setCtx('download'));
 $('ctx-token').addEventListener('click', () => setCtx('token'));
+$('gr-assumed').addEventListener('click', () => { state.grant='assumed'; $('done').hidden=true; $('act').hidden=false; render(); });
+$('gr-recorded').addEventListener('click', () => { state.grant='recorded'; $('done').hidden=true; $('act').hidden=false; render(); });
 ['who','org'].forEach(id => $(id).addEventListener('input', render));
 $('auth').addEventListener('change', render);
 render();
