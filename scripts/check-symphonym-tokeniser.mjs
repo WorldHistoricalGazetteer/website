@@ -47,6 +47,37 @@ const failures = [];
 const label = (c) => `${JSON.stringify(c.name)}/${JSON.stringify(c.lang)} [${c.case}]`;
 const bad = (c, detail) => { failures.push(`${label(c)}: ${detail}`); console.log(`  FAIL  ${label(c)}\n          ${detail}`); };
 
+// ── 0. The anyascii lockstep ─────────────────────────────────────────────────
+// D1 romanises CJK/Kana through anyascii, so whg3's npm `any-ascii` and the gateway's PyPI
+// `anyascii` must be the same version. Their tables were verified byte-identical across 94,624
+// codepoints AT 0.3.3, spanning every romanised range; that guarantee does not survive a one-sided
+// bump, and `npm audit fix`, Dependabot and a routine `pip install -U` can all deliver one without
+// anyone deciding to.
+//
+// The fixture cases would not catch it. They romanise a handful of strings; a bump that changed any
+// other CJK codepoint would pass every one of them. So the version is asserted directly, and
+// package.json must pin it EXACTLY — a caret range on a 0.x version silently admits 0.3.4.
+//
+// This is a stamp, and a stamp is forgeable: someone can bump the dependency and edit the line
+// below. That is the point. It cannot be done by accident, and the failure message says what has
+// to be re-established before the number may change.
+const ANYASCII_VERIFIED = '0.3.3';
+const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+const declared = (pkg.dependencies || {})['any-ascii'];
+const installed = JSON.parse(fs.readFileSync(path.join(ROOT, 'node_modules', 'any-ascii', 'package.json'), 'utf8')).version;
+console.log(`\nanyascii lockstep (verified byte-identical to PyPI anyascii ${ANYASCII_VERIFIED} across 94,624 codepoints)`);
+if (declared !== ANYASCII_VERIFIED) {
+  failures.push(`package.json pins any-ascii as "${declared}", not exactly "${ANYASCII_VERIFIED}"`);
+  console.log(`  FAIL  package.json declares "${declared}" — must be exactly "${ANYASCII_VERIFIED}", no range`);
+} else if (installed !== ANYASCII_VERIFIED) {
+  failures.push(`any-ascii ${installed} is installed but only ${ANYASCII_VERIFIED} has been verified against PyPI anyascii`);
+  console.log(`  FAIL  installed ${installed}, verified ${ANYASCII_VERIFIED}\n`
+    + `          Re-verify the two tables across the romanised ranges and bump the PyPI side in the\n`
+    + `          same change before updating ANYASCII_VERIFIED. See scripts/fixtures/README-symphonym.md.`);
+} else {
+  console.log(`  ok    pinned and installed at ${installed}`);
+}
+
 // ── 1. Tokeniser: char_ids, script_id, lang_id ───────────────────────────────
 console.log(`\nSymphonym tokeniser vs golden fixture v${fixture.meta.fixture_version} `
   + `(${fixture.meta.source} @ ${(fixture.meta.git_commit || '?').slice(0, 8)})`);
