@@ -27,6 +27,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -46,6 +47,67 @@ const vocabs = {
 const failures = [];
 const label = (c) => `${JSON.stringify(c.name)}/${JSON.stringify(c.lang)} [${c.case}]`;
 const bad = (c, detail) => { failures.push(`${label(c)}: ${detail}`); console.log(`  FAIL  ${label(c)}\n          ${detail}`); };
+
+// ── 0. Which version of the canonical block this port targets ────────────────
+// whg3 does not vendor the canonical tokeniser, it PORTS it to JS — so the failure mode is not
+// local modification but going stale: the canonical moves and this copy holds still. That is
+// exactly what happened before 5 September 2026. whg3's pre-fix tokeniser reproduced indexing
+// `bb50f38` EXACTLY — same 20 script names, all 20 range lists byte-identical, break-on-first-match,
+// counts every character, raw char lookup, no lang strip, no empty guard. It was not a careless
+// port; it was a faithful one that nothing was watching.
+//
+// The indexing repo now stamps the block with its own sha256 (indexing `0cf0a88`), so "is our port
+// current?" is one string comparison. The convention is stated in the block itself and is
+// load-bearing — the same block has been hashed two different ways elsewhere with nothing comparing
+// them: sha256 over the block INCLUDING both marker lines and EXCLUDING every line beginning
+// "# CANONICAL-BLOCK".
+//
+// A MISMATCH IS NOT A BUG IN THIS REPO. It means the canonical has moved and the port, the fixtures
+// and this constant all need regenerating together — in that order.
+const CANONICAL_BLOCK_SHA256 = '9a879b4cc312902c2447baf6671fca9886fe5ba2d2584cc6ce16bc054405a47f';
+const CANONICAL_SOURCE = process.env.SYMPHONYM_CANONICAL
+  || path.join(process.env.HOME || '', 'PycharmProjects', 'indexing', 'hf', 'inference.py');
+{
+  console.log('\ncanonical block this port targets');
+  console.log(`  ${CANONICAL_BLOCK_SHA256.slice(0, 16)}… (indexing 0cf0a88)`);
+  if (!fs.existsSync(CANONICAL_SOURCE)) {
+    // SKIP, never pass. The indexing repo is not a dependency of whg3 and is usually absent; saying
+    // "ok" here would assert agreement with a file that was never opened.
+    console.log(`  SKIP  canonical source not on this machine — NOT verified-equal.\n`
+      + `          Looked in ${CANONICAL_SOURCE}; set SYMPHONYM_CANONICAL to check.`);
+  } else {
+    const src = fs.readFileSync(CANONICAL_SOURCE, 'utf8');
+    const BEGIN = '# --- BEGIN CANONICAL TOKENISER ---';
+    const END = '# --- END CANONICAL TOKENISER ---';
+    const a = src.indexOf(BEGIN);
+    const b = src.indexOf(END);
+    if (a < 0 || b < 0) {
+      failures.push(`could not find the canonical block markers in ${CANONICAL_SOURCE}`);
+      console.log('  FAIL  canonical block markers not found — has the block been renamed?');
+    } else {
+      const kept = src.slice(a, b + END.length).split('\n')
+        .filter((ln) => !ln.startsWith('# CANONICAL-BLOCK')).join('\n');
+      const actual = crypto.createHash('sha256').update(kept, 'utf8').digest('hex');
+      const declaredM = src.match(/# CANONICAL-BLOCK v1 sha256=([0-9a-f]{64})/);
+      const declared = declaredM && declaredM[1];
+      // Witness 1: upstream's stamp still describes upstream's block (their tripwire, re-run here).
+      if (declared && declared !== actual) {
+        failures.push('the canonical block\'s own stamp does not match the block it is in');
+        console.log(`  FAIL  upstream stamp is stale: declares ${declared.slice(0, 16)}…, block is ${actual.slice(0, 16)}…`);
+      }
+      // Witness 2: the block this port was made from is still the block upstream has.
+      if (actual !== CANONICAL_BLOCK_SHA256) {
+        failures.push(`the canonical tokeniser has moved (${actual.slice(0, 16)}…); this port targets ${CANONICAL_BLOCK_SHA256.slice(0, 16)}…`);
+        console.log(`  FAIL  THE CANONICAL HAS MOVED. upstream ${actual.slice(0, 16)}…, this port targets ${CANONICAL_BLOCK_SHA256.slice(0, 16)}…\n`
+          + '          Re-port recon-symphonym-preprocess.js, regenerate both fixtures from the new\n'
+          + '          canonical, then update CANONICAL_BLOCK_SHA256 — in that order. See\n'
+          + '          scripts/fixtures/README-symphonym.md.');
+      } else if (!failures.length || declared === actual) {
+        console.log(`  ok    matches ${CANONICAL_SOURCE.replace(process.env.HOME || '', '~')}`);
+      }
+    }
+  }
+}
 
 // ── 0a. The script table, compared BY NAME to the canonical 19 ───────────────
 // D7. GURMUKHI is absent from the canonical table, so Punjabi scores OTHER, and the index was
