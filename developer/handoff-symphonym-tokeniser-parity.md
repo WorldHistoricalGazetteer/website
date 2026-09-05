@@ -1,8 +1,9 @@
 # Handoff — the browser's Symphonym tokeniser now agrees with the gateway
 
-**Date:** 2026-09-05 · **State:** in the working tree, **not committed and not deployed** ·
-**Origin:** raised by the indexing repo after its own fix (`WorldHistoricalGazetteer/indexing`
-commit `97a8b31`)
+**Date:** 2026-09-05 · **State:** **shipped** — staging `0ec3cd42b`, main `02e508870` (source) +
+`24c0a8355` (bundles), both environments deployed and the served worker chunk verified byte-identical
+to the committed bundle · **Origin:** raised by the indexing repo after its own fix
+(`WorldHistoricalGazetteer/indexing` commit `97a8b31`, deployed to the CRC gateway the same day)
 
 ## What was wrong
 
@@ -65,9 +66,13 @@ quantiser clipped to `[-128,127]` where the index's writer does not clip, and us
 `static/webpack/symphonym/symphonym.onnx` is 8.36 MB and is a **dynamically quantised int8** export
 (not the 33.2 MB fp32 `model.safetensors`). **No note anywhere records which commit exported it or
 from which weights** — not in this repo, and the indexing repo does not know either. It is the file
-that decides what every browser query means. It cannot currently be rebuilt if lost, nor shown to
-correspond to the weights the index was embedded with; the fixture bound is the only evidence that
-it does. Worth establishing, and worth writing down when it is.
+that decides what every browser query means, and it cannot be rebuilt if lost.
+
+Be precise about what is missing. The fixture bound is genuine evidence that the asset **is** the v7
+model: it agrees with the fp32 reference to cos ≥ 0.99763, which a different model would not. What
+is unknown is specifically **which commit exported it**. The durable fix is to regenerate the ONNX
+from a known commit and record that — which belongs in Symphonym v8, alongside the frozen alpha
+table the indexing repo is adopting, rather than as a retrofit now.
 
 This is also why the vector check is a bound: a quantised int8 graph cannot reproduce fp32 torch
 bitwise. The indexing repo agrees that buying bitwise equality with a 4× asset-size fp32 export
@@ -101,26 +106,54 @@ practical exposure looks nil, but 72.7M documents is a lot of chances. The white
 identical across all three. Closing that gap is the indexing repo's, and implies a re-embed; it is
 raised there as a follow-up.
 
-## Decision needed: the interim
+## The interim: CLOSED by events — no decision needed
 
-**Recommendation: have the gateway ignore a client-supplied `query_vector` entirely — every script
-— until whg3 ships.** On prod this costs nothing:
+An earlier draft of this document asked for a decision: should the gateway ignore a client-supplied
+`query_vector` until whg3 shipped? **That question no longer has two sides.** The gateway fix
+deployed to prod on 2026-09-05 (`bb50f38..e03d4cc`, health 200 on the first attempt) on the same day
+as this change, and both sides are now canonical.
 
-- Phonetic matching is **opt-in and defaults to off** (`phoneticEnabled()`,
-  `reconciliation.js:4057`), so a vector is only sent when a user ticks the box in Map your Data.
+The indexing repo verified the deployed gateway against the same golden fixture — its vectors are
+now **byte-exact**, where before they were not:
+
+| | before | after |
+|---|---|---|
+| 北京 | −0.25889 | **+1.00000** |
+| 東京 | −0.30484 | **+1.00000** |
+| 서울 | +0.01371 | **+1.00000** |
+| New York | +0.96720 | **+1.00000** |
+| Bury St Edmunds | +0.94311 | **+1.00000** |
+| London, Q85423919 (D4), ﬁ (D5) | | **+1.00000** |
+
+The blanket ignore existed to bridge a window in which whg3 computed client vectors the old way and
+the gateway computed its own the new way. Both are now canonical and agree, so there is no window
+left to bridge. **Recommendation: no action.** Adding an ignore now would require another gateway
+restart, and a restart is not free — one earlier the same day exited 0, served nothing, and left the
+gateway down for 24 minutes. The risk of the deploy exceeds the risk it removes.
+
+The only residue is a browser still running the pre-deploy bundle, and the exposure there is nil in
+both directions:
+
 - Prod's `reconciliation.log` records full request payloads. Across its retained window
   (2026-09-03 → 2026-09-05, **2,069** reconcile queries) **zero** carried an `embedding`. The
   absence is meaningful rather than a logging gap: `limit` appears 1,701 times and `mode` 24 times
-  in the same lines, so an `embedding` key would have been recorded had one been sent.
-- Dev is the only place it is exercised: 50 such requests.
-- **Caveat:** the log retains roughly two days. This says nothing about a beta tester who used the
-  feature last month.
-
-A blanket ignore is cheaper than a per-script one, removes the whole class of client-side drift
-while whg3 waits, and takes nothing away from prod that is currently in use.
+  in the same lines, so an `embedding` key would have been recorded had one been sent. Dev is the
+  only place the feature is exercised: 50 such requests. (Caveat: the log retains roughly two days,
+  so this says nothing about a beta tester who used the feature last month.)
+- Phonetic matching is **opt-in and defaults to off** (`phoneticEnabled()`,
+  `reconciliation.js:4057`), so a vector is only sent when a user ticks the box in Map your Data.
+- Page HTML is served `no-cache, no-store, must-revalidate` and bundle URLs carry `?v=<deploy sha>`,
+  so **any page load after the deploy is on the new code**. The old worker chunk 404s, and
+  `reconciliation.js` catches a failed embed and falls back to text matching rather than sending
+  anything — so a browser with a stale bundle reference degrades, it does not send an old vector.
+- To be precise about the one remaining case: a tab *already open* across the deploy, which has the
+  old chunk in its HTTP cache, could still run the old worker until it reloads. Static assets carry
+  an ETag but no `Cache-Control`, so that is heuristic caching, not a guarantee either way. Given
+  zero prod usage of the feature, this is theoretical.
 
 ## Also open
 
+- **The ONNX provenance (above) is the only thing still genuinely open.**
 - The `ﬁ` → ARMENIAN behaviour is a defect both sides agree on, reproduced here deliberately because
   the index was written with it. Fixing it is a Symphonym v8 question with a re-embed attached.
 - **Closed.** Fixture v2's only D6 case (U+0870) documented the interpreter-Unicode disagreement but
