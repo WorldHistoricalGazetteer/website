@@ -105,6 +105,38 @@ digits, punctuation, all of Python's whitespace, U+FB00–FB17, fullwidth forms,
 and SMP CJK extensions, seed `20260905`. Keep the coverage: confirm any regenerated corpus still
 fails all three substitutions above.
 
+## Which canonical version this port targets
+
+    sha256  9a879b4cc312902c2447baf6671fca9886fe5ba2d2584cc6ce16bc054405a47f
+            (indexing 0cf0a88; the block declares its own stamp)
+
+whg3 does not vendor the canonical block — it **ports** it to JS. So the failure mode here is not
+local modification but **going stale**: the canonical moves and this copy holds still. That is
+exactly what happened before 5 September 2026. whg3's pre-fix tokeniser reproduced indexing
+`bb50f38` *exactly* — same 20 script names, all 20 range lists byte-identical, break-on-first-match,
+counts every character, raw char lookup, no lang strip, no empty guard. It was a faithful port that
+nothing was watching, not a careless one, and the distinction is why the remedy is a stamp rather
+than review.
+
+The convention is stated in the block itself and is load-bearing: **sha256 over the block INCLUDING
+both marker lines and EXCLUDING every line beginning `# CANONICAL-BLOCK`.** Recompute any other way
+and you get a different answer with no error — the same block really has been hashed two different
+ways elsewhere, by markers-included versus markers-excluded, with nothing ever comparing them.
+
+`npm run test:symphonym` checks this with two witnesses, when the indexing repo is on the machine:
+
+1. upstream's stamp still describes upstream's block (their tripwire, re-run here);
+2. the block this port was made from is still the block upstream has.
+
+Proven to fire in each mode: source absent → **SKIP**, worded "NOT verified-equal", never a pass
+(exit 0, because the indexing repo is not a whg3 dependency and is usually absent); block edited
+without re-stamping → both witnesses FAIL; block edited *and* correctly re-stamped upstream → witness
+1 goes silent and witness 2 alone catches it, which is the realistic case. Point it at a checkout
+with `SYMPHONYM_CANONICAL=/path/to/hf/inference.py`.
+
+**A mismatch is not a bug in this repo.** It means the canonical has moved, and the port, both
+fixtures and `CANONICAL_BLOCK_SHA256` need regenerating together, in that order.
+
 ## Deployment constraints
 
 These are not notes. Each one, violated, silently changes what every browser query means, with
