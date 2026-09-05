@@ -74,6 +74,26 @@ is unknown is specifically **which commit exported it**. The durable fix is to r
 from a known commit and record that — which belongs in Symphonym v8, alongside the frozen alpha
 table the indexing repo is adopting, rather than as a retrofit now.
 
+> **Precondition on that regeneration — read before replacing any file in
+> `static/webpack/symphonym/`.** The worker fetches all five assets by **fixed filename with no
+> version token** (`recon-symphonym.worker.js:16-38`), and prod serves them with an `ETag` and
+> `Last-Modified` but **no `Cache-Control`** (measured). That is heuristic caching: a browser can
+> serve a stale copy for days without revalidating. The model and the vocab files must correspond
+> to each other, so replacing one under the same name lets a browser mix a new vocab with a cached
+> old model — silently, and producing plausible vectors rather than an error.
+>
+> Nothing can trigger this today, because these five files have never been replaced. It goes live
+> the moment someone regenerates the ONNX. **Fingerprint the URLs in the same change** — a `?v=`
+> carrying the asset's own hash, or the deploy sha, appended in the worker — rather than trusting
+> revalidation. The class of bug is "the key describes the artefact, not its content"; the
+> London_Customs_Accounts session hit the same shape with a vector cache keyed on a glossary hash
+> that a tokeniser fix did not change.
+>
+> Note this is about the model assets only. whg3 caches **no vectors**: `embByKey`/`embByVariant`
+> are function-local and rebuilt on every reconciliation pass, and the project's IndexedDB store
+> holds workbook bytes, sync metadata and NER scratch — never embeddings. So there is no stale
+> vector anywhere to survive a tokeniser change. Checked, not assumed.
+
 This is also why the vector check is a bound: a quantised int8 graph cannot reproduce fp32 torch
 bitwise. The indexing repo agrees that buying bitwise equality with a 4× asset-size fp32 export
 would be a bad trade, since a real tokeniser regression shows up two orders of magnitude away
