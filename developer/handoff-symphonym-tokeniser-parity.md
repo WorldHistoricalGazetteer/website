@@ -16,7 +16,8 @@ Hangul the two were *anti*-correlated, leaving 3.9M documents effectively unreac
 rank-1 self-retrieval.
 
 The indexing repo has fixed the gateway and now measures 100% rank-1 in every stratum. **whg3 was
-the fourth implementation**, and it had none of the four corrections. Once the fixed gateway
+the fourth implementation**, and it had none of the corrections — because, as measured below, it was
+an exact copy of the implementation as it stood *before* them. Once the fixed gateway
 deploys, a whg3 vector built the old way would reintroduce the identical bug on the client side,
 where it would read as a server regression.
 
@@ -40,10 +41,37 @@ repo measured independently for the same name.)
 Five corrections, not four: preprocess-by-script (romanise CJK/Kana, decompose Hangul to Jamo, NFC
 everything else); `U+0020` → `<SPACE>` id 2 with all other whitespace dropped; language tag
 lowercased and stripped; script detection counting **only alphabetic** characters; and — found here,
-not supplied — the script range table itself, which whg3 had in a different and shorter form and
-scanned first-match-wins where the canonical Python is later-entry-wins. Two smaller ones: the
-quantiser clipped to `[-128,127]` where the index's writer does not clip, and used `Math.round`
-(half-up) where `np.round` is half-to-even.
+not supplied — the script range table itself, which scanned first-match-wins where the canonical
+Python is later-entry-wins. (Found here, but not *originated* here: see the diagnosis below.) Two smaller ones: the quantiser clipped to `[-128,127]` where the
+index's writer does not clip, and used `Math.round` (half-up) where `np.round` is half-to-even.
+
+### whg3 was not a careless port. It was a faithful one that went stale.
+
+This is the correct diagnosis and it is not the one this document originally gave. Measured against
+the pre-fix canonical implementation (`hf/inference.py` at indexing `bb50f38`), whg3's pre-fix
+tokeniser reproduced it exactly:
+
+| | legacy canonical @ `bb50f38` | whg3 pre-fix |
+|---|---|---|
+| script table | 20 scripts | **the same 20**, and all 20 range lists byte-identical |
+| script scan | `break` on first match | first match wins |
+| script vote | counts every character | counts every character |
+| char ids | `char_to_id.get(ch, unk)` over raw text | the same — no preprocess, no `<SPACE>` case |
+| lang id | `lang_to_id.get(lang, unk)` | the same — no lower, no strip |
+| empty input | no guard | no guard (the worker patched it) |
+
+So every one of D1–D5 and the empty guard was introduced **server-side on 5 September 2026**. whg3
+did not diverge from the canonical implementation; the canonical implementation moved and whg3 held
+still. It was the copy nobody updated, which is a different failure from the one "four disagreeing
+implementations" suggests — and it has a different fix.
+
+**The structural gap this leaves is that whg3 holds a port with nothing watching its source.** The
+golden fixture catches drift only when someone regenerates it from a changed canonical and sends it
+here; nothing in this repo notices on its own. The London_Customs_Accounts session, hitting the same
+problem, vendors the canonical block verbatim with an md5 stamp that three separate witnesses verify
+— that is the shape of the durable answer here too, and whg3 does not have it. Worth doing when the
+canonical next changes, rather than speculatively now: the fixtures record the commit they came
+from, so a mismatch is at least *visible* today, just not *asserted*.
 
 ## Verification
 
