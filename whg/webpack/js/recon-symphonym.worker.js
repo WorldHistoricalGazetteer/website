@@ -6,6 +6,7 @@
 
 import * as ort from 'onnxruntime-web/wasm';
 import { tokenise } from './recon-symphonym-preprocess.js';
+import { quantiseByte } from './recon-symphonym-quantise.js';
 
 const BASE = '/static/webpack/symphonym/';
 // The ESM loader is shipped with a .js extension: Django static serves .mjs as
@@ -39,12 +40,13 @@ async function init() {
   return ready;
 }
 
-const unkChar = () => (vocabs.charToId['<UNK>'] != null ? vocabs.charToId['<UNK>'] : 1);
-
 // Embed one (text, lang) → Float32Array(128), L2-normalised (batch=1; the LSTM export is batch-1).
+// `tokenise` guarantees at least one id (it emits [<UNK>] for whitespace-only or empty input), so
+// there is no zero-length sequence to guard against here — the guard now lives where the canonical
+// Python puts it, which is the only place it can also be tested against the golden fixture.
 async function embedOne(text, lang) {
   const t = tokenise(String(text || ''), lang || 'und', vocabs);
-  const ids = t.length ? t.charIds : new Int32Array([unkChar()]); // never feed a zero-length sequence
+  const ids = t.charIds;
   const len = ids.length;
   const charIds = BigInt64Array.from(ids, (v) => BigInt(v));
   const feeds = {
@@ -55,17 +57,6 @@ async function embedOne(text, lang) {
   };
   const out = await session.run(feeds);
   return out.embedding.data; // Float32Array(128)
-}
-
-// Quantise an fp32 L2-normalised embedding to int8 EXACTLY as the gateway does
-// (symphonym.quantize_to_byte): round(v*127) clipped to [-128,127]. The stored toponym vectors and
-// the server-side query vectors use this, so the client vector must match for KNN to be comparable.
-function quantiseByte(emb, out, off) {
-  for (let k = 0; k < 128; k++) {
-    let q = Math.round(emb[k] * 127);
-    if (q > 127) q = 127; else if (q < -128) q = -128;
-    out[off + k] = q;
-  }
 }
 
 // Embed a list of names → Int8Array(N*128), reporting progress.
