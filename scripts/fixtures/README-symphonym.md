@@ -115,9 +115,19 @@ nothing in the running system to report it.
 Both are **0.3.3**, and their transliteration tables were verified byte-identical across 94,624
 codepoints spanning every romanised range. That guarantee evaporates the moment either side moves
 alone: whg3 would romanise CJK/Kana differently from the code that wrote the index, which is
-divergence D1 all over again. Treat a bump on either side as a change requiring the other, plus a
-re-run of the 94,624-codepoint comparison. `npm audit fix`, Dependabot and a routine
-`pip install -U` are all capable of breaking this without anyone deciding to.
+divergence D1 all over again. `npm audit fix`, Dependabot and a routine `pip install -U` are all
+capable of breaking it without anyone deciding to.
+
+**This one is enforced, not just written down** — `npm run test:symphonym` asserts that
+`package.json` pins `any-ascii` *exactly* (a caret range on a 0.x version silently admits 0.3.4) and
+that the installed version is the verified one. Both halves were confirmed to fail by reintroducing
+the caret and by bumping the installed version. The fixtures alone would not catch this: they
+romanise a handful of strings, so a bump changing any other CJK codepoint passes all 35.
+
+`ANYASCII_VERIFIED` in the harness is a stamp, and a stamp is forgeable — someone can bump the
+dependency and edit the constant. That is deliberate: it cannot happen by accident, and the failure
+message says what has to be re-established first. Bump both sides in one change, re-run the
+codepoint comparison, then move the constant.
 
 ### The Unicode pin follows the GATEWAY, not the index writer
 
