@@ -82,6 +82,16 @@ export function loadAatVocab(opts = {}) {
                 const cached = await idbGet('aat_vocab');
                 if (cached && cached.version === version && cached.byId) { use(cached.byId); return cached.byId; }
             }
+            // WHY THIS GATE IS SAFE, AND WHAT WOULD MAKE IT UNSAFE. The version stamped below is the
+            // CURRENT one, applied to whatever this fetch returns — so if the response could come from
+            // an HTTP cache, stale bytes would be written under the new version and would then satisfy
+            // the gate until the NEXT bump. A version bump whose purpose was to deliver new data would
+            // deliver old data, once, permanently, and silently: the store is only rewritten when the
+            // gate misses. Measured 2026-09-05: /types/vocab/ carries no Cache-Control, no ETag and no
+            // Last-Modified (it does return Content-Length and Vary, so that is a real absence, not a
+            // failed request) — a browser has nothing to compute heuristic freshness from, so no such
+            // window exists. Put any freshness header on that endpoint, or front it with a CDN, and it
+            // does: fetch with `cache: 'no-cache'` here in the same change.
             const data = await fetch('/types/vocab/', { credentials: 'same-origin' }).then(r => r.json());
             use(data.byId);
             if (version && data.byId) {
