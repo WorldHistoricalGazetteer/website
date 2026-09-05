@@ -47,6 +47,51 @@ const failures = [];
 const label = (c) => `${JSON.stringify(c.name)}/${JSON.stringify(c.lang)} [${c.case}]`;
 const bad = (c, detail) => { failures.push(`${label(c)}: ${detail}`); console.log(`  FAIL  ${label(c)}\n          ${detail}`); };
 
+// ── 0a. The script table, compared BY NAME to the canonical 19 ───────────────
+// D7. GURMUKHI is absent from the canonical table, so Punjabi scores OTHER, and the index was
+// written that way — correct means identical. GUJARATI is present, which makes the absence read as
+// an oversight and invites a porter to "fix" it. whg3's pre-fix table did contain GURMUKHI.
+//
+// THIS IS A STRUCTURAL ASSERTION AND IT HAS TO BE, because no behavioural test can catch it here.
+// Measured: adding GURMUKHI back to the range table changes NOTHING observable — 0 mismatches over
+// 6,271 Gurmukhi-heavy cases generated from the canonical Python. `script_vocab.json` has no
+// GURMUKHI key, so `encodeScript` falls back to OTHER (19), and GURMUKHI is in neither
+// ROMANISE_SCRIPTS nor DECOMPOSE_SCRIPTS, so preprocessing is unchanged. The divergence only becomes
+// observable if the vocab ALSO gains the key (that variant: 1,437 mismatches). So a fixture of
+// Punjabi names asserting OTHER would pass whether or not the table were "fixed" — a case that
+// cannot fail. Comparing the tables by name is the only check that fires on the table alone.
+const CANONICAL_SCRIPTS = ['ARABIC', 'ARMENIAN', 'BENGALI', 'CJK', 'CYRILLIC', 'DEVANAGARI',
+  'GEORGIAN', 'GREEK', 'GUJARATI', 'HANGUL', 'HEBREW', 'HIRAGANA', 'KANNADA', 'KATAKANA', 'LATIN',
+  'MALAYALAM', 'TAMIL', 'TELUGU', 'THAI'];
+{
+  const src = fs.readFileSync(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-preprocess.js'), 'utf8');
+  const from = src.indexOf('const SCRIPT_UNICODE_RANGES');
+  const to = src.indexOf('const ROMANISE_SCRIPTS');
+  if (from < 0 || to < 0 || to < from) {
+    failures.push('could not locate SCRIPT_UNICODE_RANGES — has it been renamed?');
+    console.log('  FAIL  could not locate SCRIPT_UNICODE_RANGES in the tokeniser');
+  } else {
+    const found = [...src.slice(from, to).matchAll(/\['([A-Z]+)',/g)].map((m) => m[1]).sort();
+    const want = [...CANONICAL_SCRIPTS].sort();
+    const extra = found.filter((n) => !want.includes(n));
+    const missing = want.filter((n) => !found.includes(n));
+    console.log(`\nscript table vs the canonical ${want.length}`);
+    if (extra.length || missing.length) {
+      if (extra.length) {
+        failures.push(`script table has ${extra.join(', ')}, absent from the canonical table (D7)`);
+        console.log(`  FAIL  extra: ${extra.join(', ')} — absent from the canonical table. The index was\n`
+          + '          written without them, so adding one diverges every name in that script.');
+      }
+      if (missing.length) {
+        failures.push(`script table is missing ${missing.join(', ')}`);
+        console.log(`  FAIL  missing: ${missing.join(', ')}`);
+      }
+    } else {
+      console.log(`  ok    ${found.length} scripts, name-for-name (GURMUKHI absent, as the canonical table has it)`);
+    }
+  }
+}
+
 // ── 0. The anyascii lockstep ─────────────────────────────────────────────────
 // D1 romanises CJK/Kana through anyascii, so whg3's npm `any-ascii` and the gateway's PyPI
 // `anyascii` must be the same version. Their tables were verified byte-identical across 94,624
