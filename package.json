@@ -9,7 +9,8 @@
     "analyze": "ANALYZE=1 webpack",
     "build:prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && ENV_CONTEXT=whgazetteer-org webpack",
     "audit:licenses": "node scripts/audit-js-licenses.js",
-    "test:myd": "node scripts/check-myd-contracts.js"
+    "test:myd": "node scripts/check-myd-contracts.js",
+    "test:symphonym": "node scripts/check-symphonym-tokeniser.mjs"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",
@@ -19,6 +20,7 @@
     "@mapbox/mapbox-gl-draw": "^1.4.3",
     "@sentry/browser": "^10.23.0",
     "@turf/turf": "^6.5.0",
+    "any-ascii": "^0.3.3",
     "bootstrap": "~5.2.3",
     "canvas-toBlob": "^1.0.0",
     "canvg": "^4.0.1",

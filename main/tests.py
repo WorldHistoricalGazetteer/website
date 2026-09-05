@@ -85,3 +85,36 @@ class MydContractTests(SimpleTestCase):
             result.returncode, 0,
             'Map your Data contract checks failed:\n' + (result.stdout or '') + (result.stderr or ''),
         )
+
+
+class SymphonymTokeniserTests(SimpleTestCase):
+    """The browser's Symphonym query vector must be the one the CRC gateway would have computed.
+
+    whg3 embeds toponyms in the browser and posts the int8 vector to /api/reconcile as
+    ``query_vector`` (``api/crc_client.py``), where it is compared against 72.7M vectors written by
+    the canonical tokeniser in the indexing repo. Until 5 September 2026 four implementations of
+    that tokeniser disagreed: on 46,483,973 documents (63.9% of the index) a query vector did not
+    match that document's own stored vector, and for CJK/Kana/Hangul the two were *anti*-correlated
+    (cos -0.30), leaving 3.9M documents at 0.3% rank-1 self-retrieval. The server side is fixed;
+    whg3 was the fourth implementation, and a client that drifts again reintroduces the identical
+    bug where it reads as a server regression.
+
+    ``scripts/check-symphonym-tokeniser.mjs`` runs the shipped browser modules — not a copy —
+    against fixtures generated from the canonical Python, and against the real ONNX encoder that
+    ships to the browser. See ``scripts/fixtures/README-symphonym.md``.
+    """
+
+    JS_CHECKER = os.path.join(settings.BASE_DIR, 'scripts', 'check-symphonym-tokeniser.mjs')
+
+    def test_browser_tokeniser_matches_the_gateway(self):
+        node = shutil.which('node')
+        if not node:
+            self.skipTest('node is not available; run `npm run test:symphonym` where it is')
+        result = subprocess.run(
+            [node, self.JS_CHECKER], capture_output=True, text=True, timeout=300,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            'Symphonym tokeniser has drifted from the gateway:\n'
+            + (result.stdout or '') + (result.stderr or ''),
+        )
