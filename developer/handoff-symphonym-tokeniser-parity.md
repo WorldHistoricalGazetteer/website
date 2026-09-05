@@ -3,7 +3,8 @@
 **Date:** 2026-09-05 · **State:** **shipped** — staging `0ec3cd42b`, main `02e508870` (source) +
 `24c0a8355` (bundles), both environments deployed and the served worker chunk verified byte-identical
 to the committed bundle · **Origin:** raised by the indexing repo after its own fix
-(`WorldHistoricalGazetteer/indexing` commit `97a8b31`, deployed to the CRC gateway the same day)
+(`WorldHistoricalGazetteer/indexing` commit `97a8b31`, deployed to the CRC gateway the same day) ·
+**Issue:** place#243 (filed retrospectively, closed on filing)
 
 ## What was wrong
 
