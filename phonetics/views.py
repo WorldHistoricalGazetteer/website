@@ -569,8 +569,10 @@ def lint_queue(request):
                    'why': LINT_CODES.get(k, ('', ''))[1], 'count': v}
                   for k, v in sorted(tally.items(), key=lambda kv: -kv[1])],
         'selected': code or '',
+        # By rule set, not by code: a shipped list and its suggested replacement
+        # share a code and are two different files needing two different fixes.
         'files': (Rule.objects.filter(present_upstream=True).exclude(lint_codes=[])
-                  .values('ruleset__code').distinct().count()),
+                  .values('ruleset_id').distinct().count()),
         **_contribution_state(request),
     })
 

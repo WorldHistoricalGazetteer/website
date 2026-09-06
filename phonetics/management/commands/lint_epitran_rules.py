@@ -37,11 +37,13 @@ class Command(BaseCommand):
         tally = Counter()
         files = set()
         for rule in rules:
-            files.add(rule.ruleset.code)
+            # slug, not code: a shipped rule set and its draft share a code, and
+            # counting them as one file understates how many need attention.
+            files.add(rule.ruleset.slug)
             for code in rule.lint_codes:
                 tally[code] += 1
             self.stdout.write(
-                f'{rule.ruleset.code:14s} {rule.orth!r:>12s} → {rule.current_ipa!r:<12s} '
+                f'{rule.ruleset.slug:18s} {rule.orth!r:>12s} → {rule.current_ipa!r:<12s} '
                 f'{",".join(rule.lint_codes)}')
 
         self.stdout.write('')
