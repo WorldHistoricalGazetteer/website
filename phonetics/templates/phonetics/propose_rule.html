@@ -3,14 +3,14 @@
 {% block page_title %}Add a missing letter — {{ ruleset.slug }}{% endblock %}
 {% block phonetics_content %}
 
-<h5>Add a letter this rule set is missing</h5>
+<h5>Add a letter WHG is missing</h5>
 <p class="small text-muted">{{ ruleset.label }} <code>{{ ruleset.slug }}</code> ·
-  {{ row_count }} letters mapped so far</p>
+  {{ row_count }} letters covered so far</p>
 
 <p>
-  Most of the problems we have measured are <strong>missing letters</strong>, not wrong
-  ones. In several writing systems the consonants were mapped and the vowels were never
-  added. Adding what is missing is the most useful thing you can do here.
+  Most of the problems we have found are <strong>missing letters</strong>, not wrong ones.
+  In several writing systems the consonants were added and the vowels were forgotten.
+  Adding what is missing is the most useful thing you can do here.
 </p>
 
 <div class="card mb-4"><div class="card-body">
@@ -63,7 +63,7 @@
   show you which letters this rule set cannot read.
 </p>
 
-<h6 class="mt-4">Letters people have suggested adding</h6>
+<h6 class="mt-4">Letters people want to add</h6>
 {% if proposals %}
 <div class="table-responsive">
 <table class="table table-sm align-middle">

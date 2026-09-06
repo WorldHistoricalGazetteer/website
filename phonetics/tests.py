@@ -724,6 +724,36 @@ class NewRuleProposalTests(SyncBase):
         self.assertContains(response, 'add a rule')
 
 
+class CorpusSampleTests(SyncBase):
+    """The sandbox seed. It must be a nicety, never a dependency."""
+
+    def test_a_name_is_in_script_when_the_rules_spell_most_of_it(self):
+        from .corpus import _in_script
+        alphabet = set('ကရပ်ကွ')
+        self.assertTrue(_in_script('ကရပ်', alphabet))
+        # Same language, romanised — the rules do not cover it, so it is not a
+        # useful example for this rule set.
+        self.assertFalse(_in_script('Daw Thea', alphabet))
+        self.assertFalse(_in_script('', alphabet))
+        self.assertFalse(_in_script('123', alphabet))
+
+    def test_iso_639_3_maps_to_the_tag_the_index_uses(self):
+        from .corpus import alpha2
+        self.assertEqual(alpha2('mya'), 'my')
+        self.assertEqual(alpha2('sin'), 'si')
+
+    def test_an_unreachable_index_costs_nothing(self):
+        """A sample that cannot be fetched must not take the page down with it."""
+        from unittest import mock
+        from .corpus import sample_names
+        ruleset, _ = self.make_ruleset()
+        with mock.patch('phonetics.corpus._query', side_effect=RuntimeError('ES down')):
+            self.assertEqual(sample_names(ruleset), [])
+        # …and the sandbox still renders.
+        response = self.client.get(reverse('phonetics:sandbox', args=[ruleset.slug]))
+        self.assertIn(response.status_code, (200, 404))
+
+
 class PageRenderTests(SyncBase):
     """Every readable page renders, for a visitor with an account and without one.
 

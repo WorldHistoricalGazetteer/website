@@ -10,6 +10,7 @@
   font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", "DejaVu Sans", serif;
   font-size: 1.15rem;
 }
+.phonetics .grapheme-input { font-size: 1.6rem; line-height: 1.3; }
 .phonetics .residue { color: #b02a37; font-weight: 600; }
 .phonetics .terms-body { max-height: 22rem; overflow-y: auto; }
 .phonetics .columns-3 { column-count: 3; column-gap: 1.5rem; }

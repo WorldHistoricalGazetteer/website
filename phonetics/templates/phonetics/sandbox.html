@@ -21,7 +21,9 @@
   <label class="form-label" for="names">One place name per line</label>
   <textarea class="form-control mb-2" name="names" id="names" rows="6" lang="{{ ruleset.language_code }}">{{ names_text }}</textarea>
   <button class="btn btn-sm btn-primary">Transcribe</button>
-  {% if sample_count %}<span class="small text-muted ms-2">We have filled in {{ sample_count }} real example{{ sample_count|pluralize }} for you.</span>{% endif %}
+  {% if sample_count %}<span class="small text-muted ms-2">
+    We have filled in {{ sample_count }} real place name{{ sample_count|pluralize }}
+    {% if sampled %}taken at random from WHG{% endif %} to get you started.</span>{% endif %}
 </form>
 
 {% if results %}

@@ -32,6 +32,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from . import corpus
 from . import export as export_mod
 from . import routing
 from .forms import (AgreementForm, CompetenceForm, CreditForm, NewRuleForm,
@@ -449,14 +450,20 @@ def sandbox(request, slug):
     rules = list(Rule.objects.filter(ruleset=ruleset, present_upstream=True)
                  .order_by('row_index'))
     pairs = [(r.orth, r.current_ipa) for r in rules]
-    samples = []
-    seen = set()
+    # Worked examples from the indexing side first — they are measured. Only
+    # when there are none do we fall back to a random sample from the index, so
+    # the box is never empty and nobody has to invent a place name to begin.
+    samples, seen = [], set()
     for rule in rules:
         for example in (rule.examples or []):
             name = example.get('name')
             if name and name not in seen:
                 seen.add(name)
                 samples.append(name)
+    sampled = False
+    if not samples:
+        samples = corpus.sample_names(ruleset, size=8)
+        sampled = bool(samples)
     names = [n for n in (request.POST.get('names') or '').splitlines() if n.strip()]
     results = [transcribe(n.strip(), build_map(pairs)) | {'name': n.strip()} for n in names]
     # Every character no rule matched, with the name it came from. This is the
@@ -474,6 +481,7 @@ def sandbox(request, slug):
         'ruleset': ruleset, 'results': results, 'gaps': gaps,
         'names_text': request.POST.get('names') or '\n'.join(samples[:10]),
         'sample_count': len(samples),
+        'sampled': sampled,
         'complete': sum(1 for r in results if r['complete']),
     })
 
