@@ -3,8 +3,17 @@
 {% block title %}<title>WHG :: {% block page_title %}Phonetic rule review{% endblock %}</title>{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'phonetics/phonetics.css' %}">{% endblock %}
 
+{% block deferredScripts %}
+  var scripts = [
+    {
+      src: '{% static 'webpack/phonetics.bundle.js' %}',
+      type: 'module',
+    },
+  ]
+{% endblock %}
+
 {% block content %}
-<div class="container phonetics" style="max-width:1040px;">
+<div class="container phonetics" style="max-width:1040px;" data-phonetics-page="{% block page_key %}{% endblock %}">
 
   <nav class="d-flex flex-wrap align-items-baseline gap-3 mt-3 mb-2 pb-2 border-bottom">
     <a href="{% url 'phonetics:home' %}" class="h5 mb-0 text-decoration-none">Phonetic rule review</a>
@@ -12,7 +21,9 @@
     <a href="{% url 'phonetics:ruleset-list' %}" class="small">Rule sets</a>
     <a href="{% url 'phonetics:lint' %}" class="small">Broken rows</a>
     {% if user.is_authenticated %}<a href="{% url 'phonetics:competence' %}" class="small">My languages</a>{% endif %}
-    <span class="ms-auto badge text-bg-warning">Beta preview</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary ms-auto" id="phonetics-tour-button">
+      <i class="fas fa-circle-question me-1"></i>Show me how this works</button>
+    <span class="badge text-bg-warning">Beta preview</span>
   </nav>
 
   {% if messages %}{% for m in messages %}
@@ -39,5 +50,12 @@
   {% endif %}
 
   {% block phonetics_content %}{% endblock %}
+
+  <hr class="mt-4">
+  <p class="small text-muted">
+    If anything here does not work, or is hard to understand, please tell us using the
+    <a data-whg-modal="/contact_modal/" href="#">Contact</a> link at the bottom of the page.
+    This tool is new and we would rather hear about a problem than have you work around it.
+  </p>
 </div>
 {% endblock %}

@@ -19,7 +19,7 @@ Two things follow from that and are deliberate:
 import csv
 import io
 
-from .models import Rule, Verdict
+from .models import NewRuleProposal, Rule, Verdict
 
 
 def resolve(rule):
@@ -49,6 +49,33 @@ def resolve(rule):
     return rule.current_ipa, 'unchanged', f'{len(current)} accept(s)'
 
 
+def additions(ruleset):
+    """New graphemes with a single agreed proposal, ready to append.
+
+    Same rule as a correction: one distinct proposal and no competing one. Two
+    people proposing different sounds for a letter nobody has mapped is a
+    disagreement, and picking between them here would be arbitration by
+    algorithm.
+
+    Returns ``(rows, held_back)``.
+    """
+    proposals = (NewRuleProposal.objects
+                 .filter(ruleset=ruleset, is_latest=True, status=NewRuleProposal.OPEN)
+                 .select_related('proposer'))
+    by_orth = {}
+    for proposal in proposals:
+        by_orth.setdefault(proposal.orth, []).append(proposal)
+    rows, held = [], []
+    for orth, group in sorted(by_orth.items()):
+        values = {p.proposed_ipa for p in group}
+        if len(values) > 1:
+            held.append({'orth': group[0].orth_source or orth, 'reason': 'disputed',
+                         'detail': ' / '.join(sorted(values))})
+            continue
+        rows.append((group[0].orth_source or orth, group[0].proposed_ipa))
+    return rows, held
+
+
 def build(ruleset):
     """``(csv_text, report)`` for one rule set."""
     rules = (Rule.objects.filter(ruleset=ruleset, present_upstream=True)
@@ -56,8 +83,9 @@ def build(ruleset):
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator='\n')
     writer.writerow(['Orth', 'Phon'])
-    report = {'ruleset': ruleset.code, 'rows': 0, 'unchanged': 0, 'corrected': 0,
-              'disputed': 0, 'unsure': 0, 'changes': [], 'held_back': []}
+    report = {'ruleset': ruleset.slug, 'rows': 0, 'unchanged': 0, 'corrected': 0,
+              'disputed': 0, 'unsure': 0, 'added': 0, 'changes': [], 'held_back': [],
+              'additions': []}
     for rule in rules:
         ipa, decision, detail = resolve(rule)
         writer.writerow([rule.orth_source or rule.orth, ipa])
@@ -70,6 +98,17 @@ def build(ruleset):
             report['held_back'].append({'orth': rule.orth_source or rule.orth,
                                         'ipa': rule.current_ipa, 'reason': decision,
                                         'detail': detail})
+
+    # Proposed new rows are appended, because a missing row is the defect these
+    # rule sets mostly have. They go at the end rather than in sort order so a
+    # human reading the diff can see exactly what review added.
+    new_rows, held = additions(ruleset)
+    for orth, ipa in new_rows:
+        writer.writerow([orth, ipa])
+        report['rows'] += 1
+        report['added'] += 1
+        report['additions'].append({'orth': orth, 'ipa': ipa})
+    report['held_back'].extend(held)
     return buffer.getvalue(), report
 
 
@@ -91,10 +130,11 @@ def suggestions_payload(ruleset=None, since=None, include_applied=False):
     if not include_applied:
         qs = qs.filter(adopted_upstream_at__isnull=True)
     out = []
-    for review in qs.order_by('rule__ruleset__code', 'rule__row_index', '-created'):
+    for review in qs.order_by('rule__ruleset__slug', 'rule__row_index', '-created'):
         agreement = review.agreement
         out.append({
-            'ruleset': review.rule.ruleset.code,
+            'kind': 'correction',
+            'ruleset': review.rule.ruleset.slug,
             'posture': review.rule.ruleset.posture,
             'source_path': review.rule.ruleset.source_path,
             'orth': review.rule.orth_source or review.rule.orth,
@@ -112,5 +152,38 @@ def suggestions_payload(ruleset=None, since=None, include_applied=False):
             'licence': (agreement.terms.licence_spdx if agreement else None),
             'row_status': review.rule.status,
             'reviews_on_row': review.rule.review_count,
+        })
+
+    # New graphemes are the other half of what a reviewer can offer, and the half
+    # the measurements say matters most — a rule set missing its vowels is not
+    # improved by correcting the consonants. They are marked `kind: 'addition'`
+    # so an agent upstream can tell "change this row" from "add this row".
+    new_qs = (NewRuleProposal.objects
+              .filter(is_latest=True, status=NewRuleProposal.OPEN)
+              .select_related('ruleset', 'proposer', 'agreement'))
+    if ruleset:
+        new_qs = new_qs.filter(ruleset=ruleset)
+    if since:
+        new_qs = new_qs.filter(created__gte=since)
+    if not include_applied:
+        new_qs = new_qs.filter(adopted_upstream_at__isnull=True)
+    for proposal in new_qs.order_by('ruleset__slug', 'orth'):
+        agreement = proposal.agreement
+        out.append({
+            'kind': 'addition',
+            'ruleset': proposal.ruleset.slug,
+            'posture': proposal.ruleset.posture,
+            'source_path': proposal.ruleset.source_path,
+            'orth': proposal.orth_source or proposal.orth,
+            'current_ipa': None,
+            'proposed_ipa': proposal.proposed_ipa,
+            'confidence': proposal.confidence,
+            'competence': proposal.competence_level,
+            'comment': proposal.comment,
+            'example_name': proposal.example_name,
+            'created': proposal.created.isoformat(),
+            'credit': (agreement.credit_name if agreement and agreement.credit_public else None),
+            'licence': (agreement.terms.licence_spdx if agreement else None),
+            'competing': proposal.competing.count(),
         })
     return out

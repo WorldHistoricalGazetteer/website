@@ -41,7 +41,8 @@ from django.utils import timezone
 
 from .iso import language_name, script_name
 from .lint import lint_rows
-from .models import Posture, Review, Rule, RuleSet, RuleSetVersion, Verdict
+from .models import (NewRuleProposal, Posture, Review, Rule, RuleSet,
+                     RuleSetVersion, Verdict)
 from .validation import nfd
 
 logger = logging.getLogger(__name__)
@@ -76,8 +77,8 @@ def _get(url, **kwargs):
     return response
 
 
-def list_directory(repo, ref, path):
-    """``[{'name', 'sha', 'size'}, …]`` for the CSVs in one source directory.
+def list_directory(repo, ref, path, suffix='.csv'):
+    """``[{'name', 'sha', 'size'}, …]`` for the matching files in one source directory.
 
     A 404 is returned as an empty list rather than raised: a configured source
     that has not been pushed yet is a normal state, not a broken sync.
@@ -92,7 +93,7 @@ def list_directory(repo, ref, path):
         raise
     return [{'name': e['name'], 'sha': e['sha'], 'size': e.get('size', 0)}
             for e in response.json()
-            if e.get('type') == 'file' and e['name'].endswith('.csv')]
+            if e.get('type') == 'file' and e['name'].endswith(suffix)]
 
 
 def head_commit(repo, ref):
@@ -104,6 +105,28 @@ def head_commit(repo, ref):
 
 def fetch_csv(repo, ref, path, name):
     return _get(f'{RAW}/{repo}/{ref}/{path}/{name}').text
+
+
+def parse_notes(text):
+    """``orth<TAB>proposed_ipa<TAB>note`` → ``{orth (NFD): note}``.
+
+    The ``.NOTES.tsv`` companions cover only the rows a drafter newly wrote, and
+    say why each value was chosen. That reasoning is the most useful thing to put
+    in front of a reviewer, because it names what the drafter was unsure about —
+    so it is imported rather than left in a file nobody opens.
+
+    ``proposed_ipa`` is deliberately ignored: the CSV is the artefact, and taking
+    a value from the notes instead would let the two disagree silently.
+    """
+    notes = {}
+    reader = csv.reader(io.StringIO(text), delimiter='\t')
+    header = next(reader, None)
+    if not header or header[0].strip().lower() != 'orth':
+        raise SyncError(f'unexpected NOTES header {header!r}; expected orth<TAB>…')
+    for row in reader:
+        if len(row) >= 3 and row[0]:
+            notes[nfd(row[0])] = row[2].strip()
+    return notes
 
 
 def parse_csv(text):
@@ -126,15 +149,20 @@ def parse_csv(text):
 
 
 @transaction.atomic
-def apply_ruleset(code, rows, *, posture, repo, ref, path, blob_sha, commit_sha):
+def apply_ruleset(code, rows, *, posture, repo, ref, path, blob_sha, commit_sha,
+                  notes=None):
     """Bring one rule set's rows into line with a freshly fetched file.
+
+    Keyed on the slug, not the code: the same code exists shipped and drafted, and
+    they must not collapse into one another. See :class:`RuleSet`.
 
     Returns ``(ruleset, version, created_version)``.
     """
     language_code, _, script_code = code.partition('-')
     ruleset, _ = RuleSet.objects.update_or_create(
-        code=code,
+        slug=RuleSet.make_slug(code, posture),
         defaults={
+            'code': code,
             'language_code': language_code,
             'script_code': script_code,
             'language_name': language_name(language_code),
@@ -182,8 +210,12 @@ def apply_ruleset(code, rows, *, posture, repo, ref, path, blob_sha, commit_sha)
         rule.last_version = version
         rule.present_upstream = True
         rule.lint_codes = defects.get(index, [])
+        if notes and key in notes:
+            rule.draft_note = notes[key]
         rule.save()
         _reconcile_reviews(rule)
+        if created:
+            _reconcile_new_rule_proposals(rule)
 
     # Rows that vanished upstream keep their reviews; they are simply marked
     # absent. Deleting them would destroy the record of work done on a row
@@ -193,6 +225,20 @@ def apply_ruleset(code, rows, *, posture, repo, ref, path, blob_sha, commit_sha)
      .update(present_upstream=False, last_version=version))
 
     return ruleset, version, True
+
+
+def _reconcile_new_rule_proposals(rule):
+    """A grapheme somebody proposed has just appeared upstream.
+
+    Stamped adopted where the value matches too. Where the row was added with a
+    *different* value, the proposal is left open and the row now exists — so it
+    becomes an ordinary review question about a value that is in the file, which
+    is the right place for that disagreement to continue.
+    """
+    (NewRuleProposal.objects
+     .filter(ruleset=rule.ruleset, orth=rule.orth, is_latest=True,
+             proposed_ipa=rule.current_ipa, adopted_upstream_at__isnull=True)
+     .update(adopted_upstream_at=timezone.now()))
 
 
 def _reconcile_reviews(rule):
@@ -222,6 +268,7 @@ def sync_all(*, only=None):
         repo, ref, path = source['repo'], source.get('ref', 'main'), source['path']
         posture = source.get('posture', Posture.SHIPPED)
         entries = list_directory(repo, ref, path)
+        note_files = {e['name'] for e in list_directory(repo, ref, path, '.NOTES.tsv')}
         commit = head_commit(repo, ref)
         found = []
         for entry in entries:
@@ -235,13 +282,23 @@ def sync_all(*, only=None):
             except SyncError as exc:
                 summary['errors'].append(f'{code}: {exc}')
                 continue
+            notes = None
+            if f'{code}.NOTES.tsv' in note_files:
+                try:
+                    notes = parse_notes(fetch_csv(repo, ref, path, f'{code}.NOTES.tsv'))
+                except SyncError as exc:
+                    # A malformed companion must not cost us the rule set itself.
+                    summary['errors'].append(f'{code} notes: {exc}')
             _, _, changed = apply_ruleset(
                 code, rows, posture=posture, repo=repo, ref=ref, path=path,
-                blob_sha=entry['sha'], commit_sha=commit)
+                blob_sha=entry['sha'], commit_sha=commit, notes=notes)
             summary['rulesets'] += 1
             summary['changed'] += int(changed)
         if entries and not only:
-            (RuleSet.objects.filter(source_repo=repo, source_path__startswith=f'{path}/')
+            # Scoped to this source AND this posture: a shipped mya-Mymr must not
+            # be marked withdrawn because the drafts directory does not list it.
+            (RuleSet.objects.filter(source_repo=repo, posture=posture,
+                                    source_path__startswith=f'{path}/')
              .exclude(code__in=found).update(present_upstream=False))
         summary['sources'].append({'repo': repo, 'ref': ref, 'path': path,
                                    'posture': posture, 'files': len(entries),

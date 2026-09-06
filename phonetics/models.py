@@ -45,10 +45,22 @@ class Posture(models.TextChoices):
 
 
 class RuleSet(models.Model):
-    """One language+script rule set, e.g. ``mya-Mymr``."""
+    """One language+script rule set from one source, e.g. shipped ``mya-Mymr``.
 
-    code = models.CharField(max_length=32, unique=True,
-                            help_text="Epitran mode code, e.g. 'mya-Mymr'.")
+    ⚠ **A code is not unique.** ``mya-Mymr`` exists both as a shipped rule set and
+    as a WHG draft proposing to replace it, and they are different artefacts with
+    different postures and separate review histories. Keying on the code alone
+    would let a draft sync overwrite the live rows, flip their posture, and
+    silently re-point every review made against them onto values nobody had seen
+    — which is precisely the conflation the two postures exist to prevent. The
+    identity is therefore ``slug`` (``mya-Mymr`` / ``mya-Mymr.draft``), with
+    ``(code, posture)`` unique as a second line of defence.
+    """
+
+    slug = models.CharField(max_length=48, unique=True,
+                            help_text="URL key: the code, plus '.draft' for a proposed set.")
+    code = models.CharField(max_length=32, db_index=True,
+                            help_text="Epitran mode code, e.g. 'mya-Mymr'. NOT unique.")
     language_code = models.CharField(max_length=8, db_index=True, help_text='ISO 639-3.')
     script_code = models.CharField(max_length=8, db_index=True, help_text='ISO 15924.')
     language_name = models.CharField(max_length=128, blank=True)
@@ -79,12 +91,28 @@ class RuleSet(models.Model):
 
     class Meta:
         ordering = ['language_name', 'code']
+        unique_together = [('code', 'posture')]
 
     def __str__(self):
-        return self.code
+        return self.slug
 
     def get_absolute_url(self):
-        return reverse('phonetics:ruleset', args=[self.code])
+        return reverse('phonetics:ruleset', args=[self.slug])
+
+    @staticmethod
+    def make_slug(code, posture):
+        return code if posture == Posture.SHIPPED else f'{code}.draft'
+
+    @property
+    def counterpart(self):
+        """The same code under the other posture, where one exists.
+
+        A draft is a *proposal to replace* something live, and a reviewer judging
+        it should be one click from what it would replace. Where no counterpart
+        exists the draft is new coverage rather than a replacement, which is also
+        worth being able to see."""
+        return (RuleSet.objects.filter(code=self.code, present_upstream=True)
+                .exclude(pk=self.pk).first())
 
     @property
     def label(self):
@@ -167,6 +195,12 @@ class Rule(models.Model):
     corpus_frequency = models.PositiveIntegerField(null=True, blank=True)
     # [{'name': 'ကရပ်ကွက်', 'output': 'krpkwk', 'complete': false}, …]
     examples = models.JSONField(default=list, blank=True)
+
+    # Why this value was drafted, from the rule set's .NOTES.tsv companion. Only
+    # newly drafted rows have one, and it is the most useful thing on the page for
+    # a reviewer: it says what the drafter was reasoning from and where they were
+    # unsure, which is exactly where an expert's judgement is worth most.
+    draft_note = models.TextField(blank=True)
 
     # Machine-detectable defects, from phonetics.lint. Cached so the queue can
     # be ordered and filtered in SQL; recomputed on every sync.
@@ -300,6 +334,18 @@ class ReviewerCompetence(models.Model):
         scope = f'{self.language_code}-{self.script_code}' if self.script_code else self.language_code
         return f'{self.user} {scope} ({self.level})'
 
+    @property
+    def language_display(self):
+        from .iso import autonym, language_name
+        name = language_name(self.language_code)
+        own = autonym(self.language_code)
+        return f'{name} — {own}' if own else name
+
+    @property
+    def script_display(self):
+        from .iso import script_name
+        return script_name(self.script_code) if self.script_code else ''
+
     def matches(self, ruleset):
         return (self.language_code == ruleset.language_code
                 and self.script_code in ('', ruleset.script_code))
@@ -319,8 +365,14 @@ class ContributionTerms(models.Model):
     title = models.CharField(max_length=200)
     body = models.TextField(help_text='Shown in full at the point of contribution.')
     licence_spdx = models.CharField(
-        max_length=64, default='MIT',
-        help_text="Must be compatible with Epitran's own rules, which are MIT.")
+        max_length=64, default='CC-BY-4.0',
+        help_text="SPDX id, matching the licensing app's vocabulary. Must permit "
+                  "inclusion in the rule sets these corrections feed, which are MIT.")
+    licence = models.ForeignKey(
+        'licensing.License', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='phonetic_contribution_terms',
+        help_text="The row in WHG's licence vocabulary, so this page and /licenses/ "
+                  "cannot drift apart.")
     is_active = models.BooleanField(default=False)
     # False while the wording is a draft. The app will not go public on it.
     signed_off = models.BooleanField(default=False)
@@ -354,7 +406,11 @@ class ReviewerAgreement(models.Model):
     credit_name = models.CharField(max_length=200, blank=True,
                                    help_text='Name to credit, if the reviewer wants crediting.')
     credit_public = models.BooleanField(default=True)
-    orcid = models.CharField(max_length=32, blank=True)
+    # Canonical https://orcid.org/XXXX-XXXX-XXXX-XXXX. Prefilled from the account
+    # but stored here separately and deliberately: this is what the contributor
+    # asserted when they agreed, and a later profile edit must not rewrite the
+    # attribution on work already contributed.
+    orcid = models.URLField(max_length=64, blank=True)
 
     class Meta:
         unique_together = [('user', 'terms')]
@@ -436,6 +492,91 @@ class Review(models.Model):
         self.rule.recount()
 
 
+class NewRuleProposal(models.Model):
+    """A grapheme the rule set does not cover at all, and what it should produce.
+
+    This is the most valuable thing a reviewer can contribute, and for a while it
+    was the one thing this app could not accept. place#251's diagnosis of every
+    underperforming rule set is not that the values are wrong but that **rows are
+    missing** — "the consonants are mapped and the independent vowels are entirely
+    absent" — and drafting the absent vowels alone took Myanmar from 16.6% to
+    98.7%. A review tool that can only correct rows that already exist cannot
+    touch that.
+
+    Kept separate from :class:`Review` because it is a different act with a
+    different check. A review is judged against a value; a proposal is judged
+    against a gap, and it must additionally not collide with a grapheme the rule
+    set already defines — including one that only looks different because it is
+    spelled with a different normalisation.
+    """
+
+    OPEN = 'open'
+    DECLINED = 'declined'
+    STATUS_CHOICES = [(OPEN, 'Open'), (DECLINED, 'Declined')]
+
+    ruleset = models.ForeignKey(RuleSet, on_delete=models.CASCADE,
+                                related_name='new_rule_proposals')
+    proposer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                 related_name='phonetic_new_rules')
+    orth = models.CharField(max_length=64, help_text='Grapheme, NFD-normalised.')
+    orth_source = models.CharField(max_length=64, blank=True)
+    proposed_ipa = models.CharField(max_length=64, blank=True,
+                                    help_text='NFD-normalised; blank means "produces nothing".')
+    comment = models.TextField(blank=True)
+    confidence = models.CharField(max_length=16, choices=Confidence.choices,
+                                  default=Confidence.MEDIUM)
+    competence_level = models.CharField(max_length=16, blank=True)
+    agreement = models.ForeignKey(ReviewerAgreement, on_delete=models.PROTECT,
+                                  null=True, blank=True, related_name='new_rule_proposals')
+    # Where the proposer found the grapheme, if they came from the sandbox — a
+    # real name the current rules could not convert. Concrete evidence that the
+    # gap is real, rather than an assertion that it is.
+    example_name = models.CharField(max_length=200, blank=True)
+
+    panphon_version = models.CharField(max_length=32, blank=True)
+    ipa_all_sha256 = models.CharField(max_length=64, blank=True)
+
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=OPEN)
+    created = models.DateTimeField(auto_now_add=True)
+    is_latest = models.BooleanField(default=True)
+    # Set by the sync when the grapheme appears upstream with this value.
+    adopted_upstream_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created']
+        indexes = [models.Index(fields=['ruleset', 'orth'])]
+
+    def __str__(self):
+        return f'+{self.orth} → {self.proposed_ipa or "(blank)"} ({self.ruleset.slug})'
+
+    def save(self, *args, **kwargs):
+        self.orth = nfd(self.orth)
+        self.proposed_ipa = nfd(self.proposed_ipa)
+        if self._state.adding:
+            (NewRuleProposal.objects
+             .filter(ruleset=self.ruleset, orth=self.orth, proposer=self.proposer,
+                     is_latest=True)
+             .update(is_latest=False))
+        super().save(*args, **kwargs)
+
+    @property
+    def orth_codepoints(self):
+        return codepoints(self.orth)
+
+    @property
+    def competing(self):
+        """Other people's live proposals for the same grapheme.
+
+        Shown rather than blocked. Two experts proposing different values for a
+        letter nobody has mapped is the same signal as two disagreeing about one
+        that exists, and it is worth exactly as much.
+        """
+        return (NewRuleProposal.objects
+                .filter(ruleset=self.ruleset, orth=self.orth, is_latest=True,
+                        status=self.OPEN)
+                .exclude(pk=self.pk).exclude(proposer=self.proposer))
+
+
 class PolicyQuestion(models.Model):
     """A decision that changes many rows at once and cannot be asked row by row.
 
@@ -463,6 +604,13 @@ class PolicyQuestion(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                    null=True, blank=True, related_name='phonetic_questions')
     created = models.DateTimeField(auto_now_add=True)
+    # Questions that turn on the same underlying decision. Myanmar Q1 (register)
+    # and Q13 (the value for ရှ/ယှ) are one judgement asked twice; answered apart
+    # they can be answered inconsistently, which would be worse than not asking.
+    # symmetrical: a reviewer arriving at either question must be told about the
+    # other. An asymmetric link would warn one direction and not the other, which
+    # is the failure mode the link exists to prevent.
+    related = models.ManyToManyField('self', blank=True, symmetrical=True)
 
     class Meta:
         ordering = ['status', '-created']

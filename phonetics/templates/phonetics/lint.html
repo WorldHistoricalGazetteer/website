@@ -1,12 +1,14 @@
 {% extends "phonetics/_base.html" %}
 {% block page_title %}Rows that are simply broken{% endblock %}
 {% block phonetics_content %}
-<h5>Rows that are simply broken</h5>
-<p class="text-muted small">
-  {{ total }} row{{ total|pluralize }} across {{ files }} rule set{{ files|pluralize }} carry a defect a
-  machine can prove. <strong>These are not review questions.</strong> Nobody's linguistic judgement is
-  needed to know that ASCII <code>g</code> is not IPA <code>ɡ</code>, and asking a speaker about one
-  would waste the scarcest thing this project has. They are listed so they get fixed upstream.
+<h5>Rows that are clearly broken</h5>
+<p class="text-muted">
+  {{ total }} row{{ total|pluralize }} in {{ files }} language{{ files|pluralize }} have a fault a computer
+  can find on its own — for example a letter typed with the wrong character.
+</p>
+<p class="text-muted">
+  <strong>You do not need to answer these.</strong> They are not questions about any language.
+  We list them here so they get fixed, and keep them out of your way.
 </p>
 
 <div class="mb-3">
@@ -22,7 +24,7 @@
 {% endif %}{% endfor %}
 
 <table class="table table-sm align-middle">
-  <thead><tr><th>Rule set</th><th>Grapheme</th><th>Current IPA</th><th>Codepoints</th><th>Defect</th><th></th></tr></thead>
+  <thead><tr><th>Language</th><th>Letter</th><th>Sound now</th><th>Codepoints</th><th>Fault</th><th></th></tr></thead>
   <tbody>
   {% for rule in rules %}
   <tr>

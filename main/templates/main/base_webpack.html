@@ -322,6 +322,12 @@
                     <li>
                         <a class="dropdown-item" href="{% url 'submit-dataset' %}">Suggest a Source</a>
                     </li>
+                    {% if PHONETICS_VISIBLE %}{# hidden while the review UI is unlaunched; the page 404s to the same visitors #}
+                    <li>
+                        <a class="dropdown-item" href="{% url 'phonetics:home' %}">Review phonetic rules
+                            <span class="badge text-bg-warning">beta</span></a>
+                    </li>
+                    {% endif %}
                 </ul>
                 </li>
                     <!-- about -->

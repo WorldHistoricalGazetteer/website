@@ -4,22 +4,23 @@
 {% block phonetics_content %}
 
 <div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
-  <a href="{% url 'phonetics:ruleset' rule.ruleset.code %}" class="small">{{ rule.ruleset.label }}</a>
+  <a href="{% url 'phonetics:ruleset' rule.ruleset.slug %}" class="small">{{ rule.ruleset.label }}</a>
   <code class="small text-muted">{{ rule.ruleset.code }}</code>
   {% include "phonetics/_posture.html" with ruleset=rule.ruleset %}
   {% include "phonetics/_status.html" with rule=rule %}
 </div>
 
 {% if rule.ruleset.posture == 'proposed' %}
-<div class="alert alert-info py-2 px-3 small">
-  <strong>This is a draft, not installed.</strong> WHG drafted this value; nobody has confirmed it.
-  You are being asked <em>is this proposed value right?</em>
+<div class="alert alert-info py-2 px-3">
+  <strong>This is a suggestion, not in use yet.</strong> WHG wrote it. Nobody has checked it.
+  <br>The question is: <em>is this sound right?</em>
 </div>
 {% else %}
-<div class="alert alert-secondary py-2 px-3 small">
-  <strong>This value is in production now.</strong> It is presumed adequate only because nobody has
-  said otherwise. You are being asked <em>is this shipped value wrong?</em> — please do not accept
-  it unless you have actually looked at it.
+<div class="alert alert-secondary py-2 px-3">
+  <strong>WHG uses this sound right now.</strong> Nobody has checked it — it is in use only
+  because nobody has said it is wrong.
+  <br>The question is: <em>is this sound wrong?</em> Please answer “right” only if you have
+  really looked.
 </div>
 {% endif %}
 
@@ -38,18 +39,18 @@
       <div class="col">
         <div class="small text-muted">
           {% if rule.corpus_frequency is not None %}
-            Affects <strong>{{ rule.corpus_frequency }}</strong> place name{{ rule.corpus_frequency|pluralize }} in the corpus.
+            This letter appears in <strong>{{ rule.corpus_frequency }}</strong> place name{{ rule.corpus_frequency|pluralize }}.
           {% else %}
-            <span title="Not measured. That is not the same as affecting nothing.">Corpus reach not yet measured.</span>
+            <span title="We have not counted this yet. It does not mean zero.">We have not counted how many place names use this letter.</span>
           {% endif %}
         </div>
         {% if rule.lint_details %}
           <div class="mt-2">
           {% for defect in rule.lint_details %}
             <div class="alert alert-danger py-1 px-2 small mb-1">
-              <strong>Broken — {{ defect.label }}.</strong> {{ defect.why }}
-              This row is defective before any linguistic judgement enters into it, so it needs
-              fixing upstream rather than your opinion.
+              <strong>This row is broken: {{ defect.label }}.</strong> {{ defect.why }}
+              <br>You do not need to answer this one — it is a technical fault, not a question
+              about the language.
             </div>
           {% endfor %}
           </div>
@@ -59,10 +60,36 @@
   </div>
 </div>
 
+{% if rule.draft_note %}
+<div class="card border-info mb-3"><div class="card-body py-2">
+  <h6 class="mb-1">Why this value was drafted</h6>
+  <p class="small mb-0">{{ rule.draft_note }}</p>
+  <p class="small text-muted mb-0 mt-1">
+    These are the notes of the person who wrote it. If they sound unsure, that is exactly
+    where your help is worth most.
+  </p>
+</div></div>
+{% endif %}
+
+{% if counterpart_rule %}
+<div class="alert alert-secondary py-2 px-3 small">
+  <strong>What this would replace.</strong> The
+  {% if rule.ruleset.posture == 'proposed' %}version WHG uses today{% else %}WHG draft{% endif %}
+  gives this letter
+  {% if counterpart_rule.current_ipa %}<code class="ipa-inline">{{ counterpart_rule.current_ipa }}</code>{% else %}<em>a blank value</em>{% endif %}
+  (<a href="{% url 'phonetics:rule' counterpart_rule.pk %}">see it</a>).
+  {% if counterpart_rule.current_ipa == rule.current_ipa %}
+    The two agree, so this row is not a change.
+  {% else %}
+    So you are judging a <strong>change</strong>, not just a sound.
+  {% endif %}
+</div>
+{% endif %}
+
 {% if rule.examples %}
-<h6>Real names this row affects</h6>
+<h6>Real place names that use this letter</h6>
 <table class="table table-sm small">
-  <thead><tr><th>Name</th><th>What the current rules produce</th></tr></thead>
+  <thead><tr><th>Place name</th><th>What WHG hears today</th></tr></thead>
   <tbody>
   {% for ex in rule.examples %}
     <tr><td lang="{{ rule.ruleset.language_code }}">{{ ex.name }}</td>
@@ -72,14 +99,14 @@
   </tbody>
 </table>
 {% else %}
-<p class="small text-muted">No corpus examples loaded for this row yet —
-  <a href="{% url 'phonetics:sandbox' rule.ruleset.code %}">try the rule sheet on a name yourself</a>.</p>
+<p class="text-muted">We have no examples for this letter yet.
+  <a href="{% url 'phonetics:sandbox' rule.ruleset.slug %}">Try a place name yourself</a>.</p>
 {% endif %}
 
 {% if others %}
-<h6 class="mt-4">What other reviewers said</h6>
-<p class="small text-muted">Kept in full, including disagreement. Nothing here is resolved away or
-  overwritten — a minority answer is evidence, not noise.</p>
+<h6 class="mt-4">What other people said</h6>
+<p class="text-muted">We keep every answer, including ones that disagree. Nothing is deleted
+  or overruled.</p>
 <ul class="list-unstyled">
   {% for r in others %}
   <li class="border-start ps-2 mb-2">
@@ -100,19 +127,20 @@
 {% if not can_contribute %}
   <div class="alert alert-secondary py-2 px-3 small">
     {% if needs_login %}
-      <a href="{% url 'accounts:login' %}?next={{ request.path }}">Sign in</a> to suggest a correction to
-      this row. You can read every suggestion above without one.
+      <a href="{% url 'accounts:login' %}?next={{ request.path }}">Sign in</a> to suggest a change.
+      You can read everything above without signing in.
     {% else %}
       <a href="{% url 'phonetics:terms' %}?next={{ request.path }}">Read and agree the contribution terms</a>
       before recording a review.
     {% endif %}
   </div>
 {% else %}
-<h6 class="mt-4">{% if mine %}Change your review{% else %}Your review{% endif %}</h6>
+<h6 class="mt-4">{% if mine %}Change your answer{% else %}Your answer{% endif %}</h6>
 {% if mine %}
-<p class="small text-muted">You said <strong>{{ mine.get_verdict_display|lower }}</strong>
-  {% if mine.proposed_ipa %}(<code>{{ mine.proposed_ipa }}</code>){% endif %} on {{ mine.created|date:"j M Y" }}.
-  Submitting again records a new judgement and keeps the old one.</p>
+<p class="small text-muted">You answered on {{ mine.created|date:"j M Y" }}:
+  <strong>{{ mine.get_verdict_display|lower }}</strong>{% if mine.proposed_ipa %}
+  (<code>{{ mine.proposed_ipa }}</code>){% endif %}.
+  Answering again saves a new answer and keeps the old one.</p>
 {% endif %}
 
 <form method="post" id="review-form" novalidate>
@@ -129,13 +157,13 @@
   </div>
 
   <div id="correction-box" class="mb-3" hidden>
-    <label class="form-label small mb-1" for="id_proposed_ipa">Correct IPA value</label>
+    <label class="form-label small mb-1" for="id_proposed_ipa">The correct sound (IPA)</label>
     <input type="text" class="form-control ipa-input" name="proposed_ipa" id="id_proposed_ipa"
            value="{{ form.proposed_ipa.value|default:'' }}" autocomplete="off"
            data-current="{{ rule.current_ipa }}">
     <div class="form-text">
-      Leave blank to say this grapheme should produce nothing — that is a legitimate value and how
-      Epitran spells it. Checked live against PanPhon, which is what actually consumes these rules.
+      Leave this empty if the letter makes no sound of its own. That is a normal answer.
+      We check what you type as you go, so you cannot save something WHG cannot read.
     </div>
     {% for e in form.proposed_ipa.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
     <div id="ipa-feedback" class="small mt-1"></div>
@@ -143,7 +171,7 @@
   </div>
 
   <div class="mb-3">
-    <label class="form-label small mb-1" for="id_confidence">Confidence</label>
+    <label class="form-label small mb-1" for="id_confidence">How sure are you?</label>
     <select class="form-select form-select-sm w-auto" name="confidence" id="id_confidence">
       {% for value, label in form.fields.confidence.choices %}
         <option value="{{ value }}" {% if value == 'medium' %}selected{% endif %}>{{ label }}</option>
@@ -162,19 +190,19 @@
   {% else %}
     <a class="btn btn-link" href="{% url 'phonetics:queue' %}">Skip this row &rarr;</a>
   {% endif %}
-  <span class="small text-muted ms-2">Skipping records nothing. It is never read as agreement.</span>
+  <span class="small text-muted ms-2">Skipping saves nothing. We never treat it as agreement.</span>
 </form>
 {% endif %}
 
 {% if questions %}
 <div class="alert alert-light border mt-4 py-2 px-3 small">
-  <strong>This rule set has an open question that affects many rows:</strong>
+  <strong>There is a bigger question about this language:</strong>
   {% for q in questions %}<a href="{% url 'phonetics:question' q.slug %}">{{ q.title }}</a>{% if not forloop.last %}; {% endif %}{% endfor %}
 </div>
 {% endif %}
 
 {% if history %}
-<details class="mt-4"><summary class="small text-muted">Earlier judgements on this row ({{ history|length }})</summary>
+<details class="mt-4"><summary class="small text-muted">Earlier answers on this letter ({{ history|length }})</summary>
   <ul class="small mt-2">
     {% for r in history %}<li>{{ r.created|date:"j M Y" }} — {{ r.get_verdict_display|lower }}
       {% if r.proposed_ipa %}<code>{{ r.proposed_ipa }}</code>{% endif %} (superseded by a later review)</li>{% endfor %}
@@ -183,19 +211,10 @@
 {% endif %}
 
 <script id="phonetics-context" type="application/json">
-  {"ruleset": "{{ rule.ruleset.code }}", "orth": "{{ rule.orth|escapejs }}",
+  {"ruleset": "{{ rule.ruleset.slug }}", "orth": "{{ rule.orth|escapejs }}",
    "lang": "{{ rule.ruleset.language_code }}",
    "examples": {{ rule.examples|safe|default:"[]" }},
    "validateUrl": "{% url 'phonetics:api-validate' %}",
    "transcribeUrl": "{% url 'phonetics:api-transcribe' %}"}
 </script>
-{% endblock %}
-
-{% block deferredScripts %}
-  var scripts = [
-    {
-      src: '{% static 'webpack/phonetics.bundle.js' %}',
-      type: 'module',
-    },
-  ]
 {% endblock %}

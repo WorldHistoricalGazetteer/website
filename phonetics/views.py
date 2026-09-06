@@ -34,29 +34,26 @@ from django.views.decorators.http import require_POST
 
 from . import export as export_mod
 from . import routing
-from .forms import AgreementForm, CompetenceForm, PolicyAnswerForm, ReviewForm
-from .iso import language_name, script_name
+from .forms import (AgreementForm, CompetenceForm, CreditForm, NewRuleForm,
+                    PolicyAnswerForm, ReviewForm, canonical_orcid)
+from .iso import autonym, language_name, script_name
 from .lint import LINT_CODES
-from .models import (ContributionTerms, Posture, PolicyAnswer, PolicyQuestion,
-                     Review, ReviewerAgreement, ReviewerCompetence, Rule,
-                     RuleSet, Verdict, active_terms)
+from .models import (ContributionTerms, NewRuleProposal, Posture, PolicyAnswer,
+                     PolicyQuestion, Review, ReviewerAgreement,
+                     ReviewerCompetence, Rule, RuleSet, Verdict, active_terms)
 from .transcribe import build_map, compare, transcribe
 from .validation import codepoints, nfd, panphon_provenance, validate_ipa
+from .visibility import is_visible
 
 
 def _gate(request):
     """404 unless this visitor may see the app at all.
 
-    Once launched the answer is "everyone", including anonymous visitors —
-    reading is public and only contributing needs an account. Until then it is
-    staff and beta testers. Launch takes two things, not one: the flag *and*
-    contribution terms someone has actually signed off, so the app cannot go
-    live collecting work under wording nobody approved.
+    Delegates to :func:`phonetics.visibility.is_visible`, which the navigation
+    menu also calls. One predicate, two callers: a nav link computed separately
+    from the gate is a link that eventually 404s.
     """
-    terms = active_terms()
-    if getattr(settings, 'PHONETICS_PUBLIC', False) and terms and terms.signed_off:
-        return
-    if not request.user.is_authenticated or not getattr(request.user, 'can_access_beta', False):
+    if not is_visible(request.user):
         raise Http404()
 
 
@@ -135,6 +132,47 @@ def home(request):
     })
 
 
+def available_languages():
+    """One entry per language that has a rule set, with its scripts.
+
+    ⚠ One entry per LANGUAGE, not per rule set. A language written in one script
+    but held as both a shipped set and a draft used to appear twice in the picker
+    as two identical "mya" options, which is unusable — you cannot tell them
+    apart, and choosing either means the same thing.
+
+    Each carries its own name alongside the English one, and the scripts it is
+    actually written in, so the script list can be narrowed to what the chosen
+    language uses instead of offering all 226.
+    """
+    languages = {}
+    for ruleset in RuleSet.objects.filter(present_upstream=True).order_by('language_name'):
+        entry = languages.setdefault(ruleset.language_code, {
+            'code': ruleset.language_code,
+            'name': ruleset.language_name or ruleset.language_code,
+            'autonym': autonym(ruleset.language_code),
+            'scripts': [],
+        })
+        if not any(sc['code'] == ruleset.script_code for sc in entry['scripts']):
+            entry['scripts'].append({'code': ruleset.script_code,
+                                     'name': ruleset.script_name or ruleset.script_code})
+    return sorted(languages.values(), key=lambda entry: entry['name'].casefold())
+
+
+def script_options():
+    """Scripts, commonest first.
+
+    83 of the 115 rule sets are Latin. Sorting the list alphabetically puts Arabic
+    at the top and Latin two thirds of the way down, so almost everyone has to
+    scroll past scripts they will never pick.
+    """
+    counts = {}
+    for ruleset in RuleSet.objects.filter(present_upstream=True):
+        key = (ruleset.script_code, ruleset.script_name or ruleset.script_code)
+        counts[key] = counts.get(key, 0) + 1
+    return [{'code': code, 'name': name, 'count': count}
+            for (code, name), count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0][1]))]
+
+
 @login_required
 def competence(request):
     """Declare what you can judge. Self-declared, and recorded as such."""
@@ -154,15 +192,11 @@ def competence(request):
     else:
         form = CompetenceForm()
 
-    # Only offer languages that actually have a rule set to review; a picker of
-    # all 7,923 ISO codes would be a list of things this tool cannot do.
-    available = (RuleSet.objects.filter(present_upstream=True)
-                 .values('language_code', 'language_name', 'script_code', 'script_name', 'code')
-                 .order_by('language_name'))
     return render(request, 'phonetics/competence.html', {
         'form': form,
         'competences': request.user.phonetic_competences.all(),
-        'available': available,
+        'languages': available_languages(),
+        'scripts': script_options(),
         'suggested': routing.suggested_rulesets(request.META.get('HTTP_ACCEPT_LANGUAGE', '')),
         **_contribution_state(request),
     })
@@ -187,33 +221,52 @@ def terms(request):
         return render(request, 'phonetics/terms.html',
                       {'terms': None, **_contribution_state(request)})
     existing = ReviewerAgreement.objects.filter(user=request.user, terms=current).first()
-    if request.method == 'POST' and existing is None:
-        form = AgreementForm(request.POST)
+    # Prefilled from the account, because most WHG users signed in with ORCiD and
+    # retyping it would be busywork — but never silently: the fields are shown,
+    # editable, and labelled as coming from the profile. A byline is not the same
+    # thing as a login name, and some people will want a different one or none.
+    profile = {'credit_name': (getattr(request.user, 'name', '') or '').strip(),
+               'credit_public': True,
+               'orcid': canonical_orcid(getattr(request.user, 'orcid', '') or '')}
+    form_class = CreditForm if existing else AgreementForm
+
+    if request.method == 'POST':
+        form = form_class(request.POST)
         if form.is_valid():
-            ReviewerAgreement.objects.create(
-                user=request.user, terms=current,
-                credit_name=form.cleaned_data['credit_name'],
-                credit_public=form.cleaned_data['credit_public'],
-                orcid=form.cleaned_data['orcid'])
-            messages.success(request, 'Thank you — you can now record reviews.')
+            if existing:
+                existing.credit_name = form.cleaned_data['credit_name']
+                existing.credit_public = form.cleaned_data['credit_public']
+                existing.orcid = form.cleaned_data['orcid']
+                existing.save(update_fields=['credit_name', 'credit_public', 'orcid'])
+                messages.success(request, 'Updated how you are credited.')
+            else:
+                ReviewerAgreement.objects.create(
+                    user=request.user, terms=current,
+                    credit_name=form.cleaned_data['credit_name'],
+                    credit_public=form.cleaned_data['credit_public'],
+                    orcid=form.cleaned_data['orcid'])
+                messages.success(request, 'Thank you — you can now record reviews.')
             return redirect(request.GET.get('next') or 'phonetics:home')
     else:
-        initial = {'credit_name': (request.user.get_full_name() or '').strip(),
-                   'credit_public': True}
-        form = AgreementForm(initial=initial)
+        initial = ({'credit_name': existing.credit_name,
+                    'credit_public': existing.credit_public,
+                    'orcid': existing.orcid} if existing else profile)
+        form = form_class(initial=initial)
     # The terms page is where "needs_terms" gets fixed, so it must not also nag
     # the visitor to go there.
     state = {**_contribution_state(request), 'needs_terms': False}
     return render(request, 'phonetics/terms.html',
-                  {'terms': current, 'form': form, 'agreement': existing, **state})
+                  {'terms': current, 'form': form, 'agreement': existing,
+                   'profile_orcid': profile['orcid'],
+                   'profile_name': profile['credit_name'], **state})
 
 
 # ── Reviewing ────────────────────────────────────────────────────────────────
 
 def review_queue(request):
     _gate(request)
-    code = request.GET.get('ruleset') or ''
-    ruleset = RuleSet.objects.filter(code=code).first() if code else None
+    slug = request.GET.get('ruleset') or ''
+    ruleset = RuleSet.objects.filter(slug=slug).first() if slug else None
     signed_in = request.user.is_authenticated
     rules = routing.queue(
         user=request.user if (signed_in and not ruleset) else None,
@@ -292,6 +345,11 @@ def rule_detail(request, pk):
 
     siblings = (Rule.objects.filter(ruleset=rule.ruleset, present_upstream=True)
                 .order_by('row_index'))
+    # A draft row proposes to replace a live one. Showing what it would replace is
+    # the difference between judging a value and judging a change.
+    counterpart = rule.ruleset.counterpart
+    counterpart_rule = (Rule.objects.filter(ruleset=counterpart, orth=rule.orth).first()
+                        if counterpart else None)
     return render(request, 'phonetics/rule.html', {
         'rule': rule,
         'form': form,
@@ -301,6 +359,7 @@ def rule_detail(request, pk):
         'lint_codes': LINT_CODES,
         'next_rule': siblings.filter(row_index__gt=rule.row_index).first(),
         'questions': _questions_for(rule.ruleset),
+        'counterpart_rule': counterpart_rule,
         **_contribution_state(request),
         # Sample of the whole map, so the sandbox on this page can run without
         # a second round trip.
@@ -333,7 +392,8 @@ def ruleset_list(request):
     posture = request.GET.get('posture')
     if posture:
         rulesets = rulesets.filter(posture=posture)
-    rows = [{'ruleset': rs, 'progress': routing.ruleset_progress(rs)} for rs in rulesets]
+    rows = [{'ruleset': rs, 'progress': routing.ruleset_progress(rs),
+             'autonym': autonym(rs.language_code)} for rs in rulesets]
     return render(request, 'phonetics/ruleset_list.html', {
         'rows': rows, 'q': query, 'posture': posture or '',
         'postures': Posture.choices,
@@ -342,9 +402,9 @@ def ruleset_list(request):
     })
 
 
-def ruleset_detail(request, code):
+def ruleset_detail(request, slug):
     _gate(request)
-    ruleset = get_object_or_404(RuleSet, code=code)
+    ruleset = get_object_or_404(RuleSet, slug=slug)
     rules = (Rule.objects.filter(ruleset=ruleset).order_by('row_index')
              .prefetch_related('reviews__reviewer'))
     return render(request, 'phonetics/ruleset.html', {
@@ -354,6 +414,11 @@ def ruleset_detail(request, code):
         'version': ruleset.current_version,
         'questions': _questions_for(ruleset),
         'lint_codes': LINT_CODES,
+        'counterpart': ruleset.counterpart,
+        'new_rule_proposals': (NewRuleProposal.objects
+                               .filter(ruleset=ruleset, is_latest=True,
+                                       status=NewRuleProposal.OPEN)
+                               .select_related('proposer')),
         'my_competence': (next((c for c in request.user.phonetic_competences.all()
                                 if c.matches(ruleset)), None)
                           if request.user.is_authenticated else None),
@@ -361,7 +426,7 @@ def ruleset_detail(request, code):
     })
 
 
-def sandbox(request, code):
+def sandbox(request, slug):
     """Run the rule sheet over a name and see exactly what it does to it.
 
     ⚠ This applies the *map only* — no Epitran pre/post-processing — and says so
@@ -370,7 +435,7 @@ def sandbox(request, code):
     "16.6% of names convert" from a statistic into something you can look at.
     """
     _gate(request)
-    ruleset = get_object_or_404(RuleSet, code=code)
+    ruleset = get_object_or_404(RuleSet, slug=slug)
     rules = list(Rule.objects.filter(ruleset=ruleset, present_upstream=True)
                  .order_by('row_index'))
     pairs = [(r.orth, r.current_ipa) for r in rules]
@@ -384,29 +449,39 @@ def sandbox(request, code):
                 samples.append(name)
     names = [n for n in (request.POST.get('names') or '').splitlines() if n.strip()]
     results = [transcribe(n.strip(), build_map(pairs)) | {'name': n.strip()} for n in names]
+    # Every character no rule matched, with the name it came from. This is the
+    # shortest path from "the rules failed on my place name" to a usable
+    # contribution, and it is the contribution the measurements say matters most.
+    gaps, seen_gaps = [], set()
+    for result in results:
+        for character in result['residue']:
+            if character not in seen_gaps:
+                seen_gaps.add(character)
+                gaps.append({'orth': character, 'name': result['name'],
+                             'codepoints': codepoints(character)})
     return render(request, 'phonetics/sandbox.html', {
         **_contribution_state(request),
-        'ruleset': ruleset, 'results': results,
+        'ruleset': ruleset, 'results': results, 'gaps': gaps,
         'names_text': request.POST.get('names') or '\n'.join(samples[:10]),
         'sample_count': len(samples),
         'complete': sum(1 for r in results if r['complete']),
     })
 
 
-def export_csv(request, code):
+def export_csv(request, slug):
     """The proposed rule set, in the format the consumer eats."""
     _gate(request)
-    ruleset = get_object_or_404(RuleSet, code=code)
+    ruleset = get_object_or_404(RuleSet, slug=slug)
     text, _report = export_mod.build(ruleset)
     response = HttpResponse(text, content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="{ruleset.code}.csv"'
     return response
 
 
-def export_report(request, code):
+def export_report(request, slug):
     """What the export did and, more usefully, what it declined to do."""
     _gate(request)
-    ruleset = get_object_or_404(RuleSet, code=code)
+    ruleset = get_object_or_404(RuleSet, slug=slug)
     _text, report = export_mod.build(ruleset)
     return JsonResponse(report)
 
@@ -440,6 +515,7 @@ def policy_question(request, slug):
         form = PolicyAnswerForm(question=question)
     return render(request, 'phonetics/question.html', {
         'question': question,
+        'related': question.related.all(),
         'form': form,
         'tally': question.tally(),
         'answers': question.answers.filter(is_latest=True).select_related('user'),
@@ -481,6 +557,55 @@ def lint_queue(request):
     })
 
 
+def propose_rule(request, slug):
+    """Propose a grapheme the rule set does not cover.
+
+    Reachable from the sandbox, where an unmatched character in a real name is
+    the evidence that the gap exists — which is a far better prompt than an empty
+    form, and is how most of these should arrive.
+    """
+    _gate(request)
+    ruleset = get_object_or_404(RuleSet, slug=slug)
+    if request.method == 'POST':
+        if not request.user.is_authenticated:
+            return redirect(f"{settings.LOGIN_URL}?next={request.get_full_path()}")
+        redirect_response = _require_agreement(request)
+        if redirect_response is not None:
+            return redirect_response
+        form = NewRuleForm(request.POST, ruleset=ruleset)
+        if form.is_valid():
+            _, agreement = _agreement(request.user)
+            competence = next((c for c in request.user.phonetic_competences.all()
+                               if c.matches(ruleset)), None)
+            NewRuleProposal.objects.create(
+                ruleset=ruleset, proposer=request.user,
+                orth=form.cleaned_data['orth'],
+                orth_source=request.POST.get('orth', ''),
+                proposed_ipa=form.cleaned_data['proposed_ipa'],
+                comment=form.cleaned_data['comment'],
+                confidence=form.cleaned_data.get('confidence') or 'medium',
+                example_name=form.cleaned_data.get('example_name') or '',
+                competence_level=competence.level if competence else '',
+                agreement=agreement,
+                panphon_version=form.provenance.get('panphon_version', ''),
+                ipa_all_sha256=form.provenance.get('ipa_all_sha256', ''))
+            messages.success(request, 'Thank you — your suggested new rule is recorded.')
+            return redirect('phonetics:propose-rule', slug=ruleset.slug)
+    else:
+        form = NewRuleForm(ruleset=ruleset,
+                           initial={'orth': request.GET.get('orth', ''),
+                                    'example_name': request.GET.get('name', '')})
+    return render(request, 'phonetics/propose_rule.html', {
+        'ruleset': ruleset,
+        'form': form,
+        'proposals': (NewRuleProposal.objects
+                      .filter(ruleset=ruleset, is_latest=True, status=NewRuleProposal.OPEN)
+                      .select_related('proposer', 'agreement')),
+        'row_count': Rule.objects.filter(ruleset=ruleset, present_upstream=True).count(),
+        **_contribution_state(request),
+    })
+
+
 @login_required
 def suggestions_json(request):
     """Machine-readable feed of logged suggestions, for agents working upstream.
@@ -491,8 +616,8 @@ def suggestions_json(request):
     _gate(request)
     if not request.user.is_staff:
         raise Http404()
-    code = request.GET.get('ruleset')
-    ruleset = RuleSet.objects.filter(code=code).first() if code else None
+    slug = request.GET.get('ruleset')
+    ruleset = RuleSet.objects.filter(slug=slug).first() if slug else None
     days = request.GET.get('days')
     since = timezone.now() - timedelta(days=int(days)) if days and days.isdigit() else None
     return JsonResponse({
@@ -530,7 +655,7 @@ def api_transcribe(request):
         payload = json.loads(request.body or '{}')
     except ValueError:
         return HttpResponseBadRequest('bad json')
-    ruleset = RuleSet.objects.filter(code=payload.get('ruleset')).first()
+    ruleset = RuleSet.objects.filter(slug=payload.get('ruleset')).first()
     if ruleset is None:
         raise Http404()
     pairs = list(Rule.objects.filter(ruleset=ruleset, present_upstream=True)

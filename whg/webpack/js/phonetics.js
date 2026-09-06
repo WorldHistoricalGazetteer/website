@@ -171,7 +171,55 @@ async function showTeacherSignal(root, out, a, b) {
   } catch (e) { /* the score above stands on its own */ }
 }
 
+// ── Competence form ─────────────────────────────────────────────────────────
+
+// Narrow the writing-system list to the ones the chosen language is actually
+// written in. Offering all 226 when a language uses one is not a choice, it is a
+// haystack — and picking the wrong one silently routes you to no work at all.
+function initCompetenceForm() {
+  const language = document.getElementById('id_language_code');
+  const script = document.getElementById('id_script_code');
+  if (!language || !script) return;
+  const all = Array.from(script.options).map((o) => ({ value: o.value, text: o.text }));
+
+  const narrow = () => {
+    const chosen = language.selectedOptions[0];
+    const allowed = (chosen?.dataset.scripts || '').split(',').filter(Boolean);
+    const keep = allowed.length
+      ? all.filter((o) => !o.value || allowed.includes(o.value))
+      : all;
+    script.innerHTML = '';
+    keep.forEach((o) => script.add(new Option(o.text, o.value)));
+    // One writing system means there is nothing to choose; say so rather than
+    // presenting a select with a single option.
+    script.disabled = keep.length <= 2 && allowed.length === 1;
+    if (script.disabled) script.value = allowed[0];
+  };
+  language.addEventListener('change', narrow);
+  if (language.value) narrow();
+}
+
+// ── Guided tour ─────────────────────────────────────────────────────────────
+
+// Loaded lazily: driver.js and its stylesheet are dead weight for the many page
+// views by someone who has already taken the tour.
+async function initTour() {
+  const button = document.getElementById('phonetics-tour-button');
+  const onLandingPage = document.querySelector('.phonetics')?.dataset.phoneticsPage === 'home';
+  const tour = await import(/* webpackChunkName: "phonetics-tour" */ './phoneticsTour.js');
+
+  button?.addEventListener('click', () => tour.startPhoneticsTour());
+  // Auto-start on a first visit, and only from the landing page: dropping
+  // someone into a tour of the whole tool when they arrived at one row is
+  // an interruption, not an introduction.
+  if (onLandingPage && !tour.hasSeenPhoneticsTour()) {
+    setTimeout(() => tour.startPhoneticsTour(), 600);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initReviewForm();
   initMatchingDemo();
+  initCompetenceForm();
+  initTour();
 });

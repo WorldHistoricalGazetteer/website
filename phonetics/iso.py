@@ -28,6 +28,17 @@ def script_name(code):
     return _table()['scripts'].get(code, code)
 
 
+def autonym(code):
+    """The language's name in its own language, where that differs from English.
+
+    Empty where the two are the same, so a picker never shows
+    "Assyrian Neo-Aramaic — Assyrian Neo-Aramaic". Someone who reads Burmese but
+    little English should be able to find မြန်မာ without first knowing that
+    English calls it "Burmese".
+    """
+    return _table().get('autonyms', {}).get(code, '')
+
+
 def alpha3(code):
     """ISO 639-1 (or -3) → ISO 639-3, which is what the rule sets are keyed by."""
     code = (code or '').lower()

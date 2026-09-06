@@ -2,15 +2,15 @@
 {% block page_title %}Review queue{% endblock %}
 {% block phonetics_content %}
 
-<h5>Review queue</h5>
+<h5>Letters to check</h5>
 {% if ruleset %}
   <p class="small text-muted">{{ ruleset.label }} <code>{{ ruleset.code }}</code>
     {% include "phonetics/_posture.html" with ruleset=ruleset %}</p>
 {% elif not has_competence %}
   <div class="alert alert-warning py-2 px-3 small">
-    You have not declared a language yet, so there is nothing to route to you.
-    <a href="{% url 'phonetics:competence' %}">Declare one</a>, or
-    <a href="{% url 'phonetics:ruleset-list' %}">browse the rule sets</a>.
+    You have not told us which languages you read, so we do not know what to show you.
+    <a href="{% url 'phonetics:competence' %}">Add a language</a>, or
+    <a href="{% url 'phonetics:ruleset-list' %}">look at all the languages</a>.
   </div>
 {% endif %}
 
@@ -27,34 +27,32 @@
   </div>
   <div class="col-auto form-check">
     <input class="form-check-input" type="checkbox" name="lint" value="1" id="f-lint" {% if filters.lint %}checked{% endif %}>
-    <label class="form-check-label" for="f-lint">Broken rows only</label>
+    <label class="form-check-label" for="f-lint">Only clearly broken</label>
   </div>
   <div class="col-auto form-check">
     <input class="form-check-input" type="checkbox" name="unreviewed" value="1" id="f-unrev" {% if filters.unreviewed %}checked{% endif %}>
-    <label class="form-check-label" for="f-unrev">Never reviewed</label>
+    <label class="form-check-label" for="f-unrev">Nobody has looked yet</label>
   </div>
   <div class="col-auto form-check">
     <input class="form-check-input" type="checkbox" name="mine" value="1" id="f-mine" {% if filters.mine %}checked{% endif %}>
-    <label class="form-check-label" for="f-mine">Include rows I already reviewed</label>
+    <label class="form-check-label" for="f-mine">Include ones I answered</label>
   </div>
   <div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Apply</button></div>
 </form>
 
-<p class="small text-muted">
-  {{ remaining }} row{{ remaining|pluralize }} queued. Ordered by machine-detectable defects first
-  (they need no linguistic judgement), then by how many corpus names the row reaches, then by
-  whether anyone has looked at it. Rows with unmeasured reach come after measured ones and are
-  never treated as reaching nothing.
+<p class="text-muted">
+  {{ remaining }} letter{{ remaining|pluralize }} to look at. We show the clearly broken ones
+  first, then the ones that affect the most place names.
 </p>
 
 <table class="table table-sm align-middle">
   <thead><tr>
-    <th>Rule set</th><th>Grapheme</th><th>Current IPA</th><th class="text-end">Corpus reach</th><th>State</th><th></th>
+    <th>Language</th><th>Letter</th><th>Sound now</th><th class="text-end">Place names affected</th><th>State</th><th></th>
   </tr></thead>
   <tbody>
   {% for rule in rules %}
     <tr {% if rule.lint_codes %}class="table-danger"{% endif %}>
-      <td class="small"><a href="{% url 'phonetics:ruleset' rule.ruleset.code %}">{{ rule.ruleset.code }}</a>
+      <td class="small"><a href="{% url 'phonetics:ruleset' rule.ruleset.slug %}">{{ rule.ruleset.code }}</a>
         <div>{% include "phonetics/_posture.html" with ruleset=rule.ruleset %}</div></td>
       <td class="grapheme-sm" lang="{{ rule.ruleset.language_code }}">{{ rule.orth }}</td>
       <td class="ipa-inline">{% if rule.current_ipa %}{{ rule.current_ipa }}{% else %}<span class="text-muted fst-italic small">(blank)</span>{% endif %}</td>
@@ -63,7 +61,7 @@
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'phonetics:rule' rule.pk %}?next={{ request.get_full_path|urlencode }}">Review</a></td>
     </tr>
   {% empty %}
-    <tr><td colspan="6" class="text-muted small">Nothing queued under these filters.</td></tr>
+    <tr><td colspan="6" class="text-muted">Nothing to show with these filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>

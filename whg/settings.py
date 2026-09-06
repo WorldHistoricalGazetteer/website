@@ -320,6 +320,7 @@ TEMPLATES = [
                 'whg.context_processors.asset_version',
                 'whg.context_processors.registry_version',
                 'whg.context_processors.overlay_license',
+                'whg.context_processors.phonetics_visible',
             ],
             'builtins': [
                 'whg.builtins',

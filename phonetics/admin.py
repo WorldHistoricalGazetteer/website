@@ -1,16 +1,16 @@
 from django.contrib import admin
 
-from .models import (ContributionTerms, PolicyAnswer, PolicyQuestion, Review,
-                     ReviewerAgreement, ReviewerCompetence, Rule, RuleSet,
-                     RuleSetVersion)
+from .models import (ContributionTerms, NewRuleProposal, PolicyAnswer,
+                     PolicyQuestion, Review, ReviewerAgreement,
+                     ReviewerCompetence, Rule, RuleSet, RuleSetVersion)
 
 
 @admin.register(RuleSet)
 class RuleSetAdmin(admin.ModelAdmin):
-    list_display = ('code', 'language_name', 'script_name', 'posture',
+    list_display = ('slug', 'code', 'language_name', 'script_name', 'posture',
                     'corpus_name_count', 'conversion_rate', 'present_upstream')
     list_filter = ('posture', 'script_code', 'present_upstream')
-    search_fields = ('code', 'language_name', 'script_name')
+    search_fields = ('slug', 'code', 'language_name', 'script_name')
 
 
 @admin.register(RuleSetVersion)
@@ -40,6 +40,21 @@ class ReviewAdmin(admin.ModelAdmin):
     # Append-only by design: disagreement is the signal being collected, and an
     # edit here would resolve it invisibly.
     readonly_fields = tuple(f.name for f in Review._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+
+@admin.register(NewRuleProposal)
+class NewRuleProposalAdmin(admin.ModelAdmin):
+    list_display = ('ruleset', 'orth', 'proposed_ipa', 'proposer', 'confidence',
+                    'status', 'is_latest', 'adopted_upstream_at', 'created')
+    list_filter = ('status', 'is_latest', 'ruleset')
+    search_fields = ('orth', 'proposed_ipa', 'comment')
+    # `status` is the one editable field: declining a proposal is a decision
+    # someone makes, but the proposal itself is the contributor's words.
+    readonly_fields = tuple(f.name for f in NewRuleProposal._meta.fields
+                            if f.name != 'status')
 
     def has_add_permission(self, request):
         return False

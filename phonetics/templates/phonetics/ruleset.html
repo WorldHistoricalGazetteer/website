@@ -14,49 +14,77 @@
 </p>
 
 {% if ruleset.posture == 'proposed' %}
-<div class="alert alert-info py-2 px-3 small"><strong>Draft — not installed.</strong>
-  These values were drafted by WHG and are awaiting judgement.</div>
+<div class="alert alert-info py-2 px-3"><strong>WHG wrote these and is not using them yet.</strong>
+  They are waiting for someone who reads the language to check them.</div>
 {% else %}
-<div class="alert alert-secondary py-2 px-3 small"><strong>In production.</strong>
-  These values are live now and presumed adequate only because nobody has said otherwise.</div>
+<div class="alert alert-secondary py-2 px-3"><strong>WHG uses these now.</strong>
+  Nobody has checked them — they are in use only because nobody has said they are wrong.</div>
+{% endif %}
+
+{% if counterpart %}
+<p class="small">
+  {% if ruleset.posture == 'proposed' %}
+    This draft proposes to replace the rule set now in production:
+  {% else %}
+    A WHG draft proposes to replace this rule set:
+  {% endif %}
+  <a href="{% url 'phonetics:ruleset' counterpart.slug %}">{{ counterpart.slug }}</a>.
+  Answers are kept separately for each, because we are asking a different question about each.
+</p>
+{% elif ruleset.posture == 'proposed' %}
+<p class="text-muted">
+  WHG has no rules for this language yet, so these would be entirely new.
+</p>
 {% endif %}
 
 <div class="d-flex flex-wrap gap-3 small border-top border-bottom py-2 mb-3">
-  <span><strong>{{ progress.total }}</strong> rows</span>
-  <span class="text-muted"><strong>{{ progress.unreviewed }}</strong> never reviewed</span>
-  <span class="text-success"><strong>{{ progress.accepted }}</strong> accepted</span>
-  <span class="text-warning"><strong>{{ progress.corrected }}</strong> correction proposed</span>
-  <span class="text-danger"><strong>{{ progress.disputed }}</strong> disagreement</span>
-  <span class="text-info"><strong>{{ progress.unsure }}</strong> unsure</span>
-  {% if progress.lint %}<span class="text-danger"><strong>{{ progress.lint }}</strong> broken outright</span>{% endif %}
+  <span><strong>{{ progress.total }}</strong> letters</span>
+  <span class="text-muted"><strong>{{ progress.unreviewed }}</strong> nobody has looked</span>
+  <span class="text-success"><strong>{{ progress.accepted }}</strong> look right</span>
+  <span class="text-warning"><strong>{{ progress.corrected }}</strong> change suggested</span>
+  <span class="text-danger"><strong>{{ progress.disputed }}</strong> people disagree</span>
+  <span class="text-info"><strong>{{ progress.unsure }}</strong> not sure</span>
+  {% if progress.lint %}<span class="text-danger"><strong>{{ progress.lint }}</strong> clearly broken</span>{% endif %}
 </div>
 
 <p>
-  <a class="btn btn-sm btn-primary" href="{% url 'phonetics:queue' %}?ruleset={{ ruleset.code }}">Review these rows</a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'phonetics:sandbox' ruleset.code %}">Test on real names</a>
-  <a class="btn btn-sm btn-outline-secondary" href="{% url 'phonetics:export-csv' ruleset.code %}">Download proposed CSV</a>
-  <a class="btn btn-sm btn-link" href="{% url 'phonetics:export-report' ruleset.code %}">what the export changed</a>
+  <a class="btn btn-sm btn-primary" href="{% url 'phonetics:queue' %}?ruleset={{ ruleset.slug }}">Check these letters</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'phonetics:sandbox' ruleset.slug %}">Test on real names</a>
+  <a class="btn btn-sm btn-outline-warning" href="{% url 'phonetics:propose-rule' ruleset.slug %}">Add a missing letter</a>
+  <a class="btn btn-sm btn-outline-secondary" href="{% url 'phonetics:export-csv' ruleset.slug %}">Download</a>
 </p>
 <p class="small text-muted">
-  The download is a <em>proposal</em> in Epitran's <code>Orth,Phon</code> format. Rows nobody reviewed
-  are exported unchanged, and so are rows where reviewers disagree — picking a winner would resolve
-  by algorithm the very disagreement this is collecting.
+  The download shows what the rules <em>would</em> look like with everyone's suggestions applied.
+  Letters nobody has checked are left as they are. So are letters people disagree about — we do
+  not pick a winner for you.
 </p>
 
 {% if questions %}
 <div class="alert alert-light border py-2 px-3 small">
-  <strong>Open questions about this rule set:</strong>
+  <strong>Bigger questions about this language:</strong>
   {% for q in questions %}<a href="{% url 'phonetics:question' q.slug %}">{{ q.title }}</a>{% if not forloop.last %}; {% endif %}{% endfor %}
 </div>
 {% endif %}
 
 {% if user.is_authenticated and not my_competence %}
-<p class="small text-muted">You have not declared competence in this language.
-  <a href="{% url 'phonetics:competence' %}">Declare it</a> to have these rows routed to you.</p>
+<p class="text-muted">You have not told us that you read this language.
+  <a href="{% url 'phonetics:competence' %}">Add it</a> and we will send you this work.</p>
+{% endif %}
+
+{% if new_rule_proposals %}
+<h6 class="mt-4">Letters people want to add</h6>
+<ul class="small">
+  {% for p in new_rule_proposals %}
+  <li><span class="grapheme-sm" lang="{{ ruleset.language_code }}">{{ p.orth }}</span>
+      &rarr; <code class="ipa-inline">{{ p.proposed_ipa|default:"(no sound)" }}</code>
+      <span class="text-muted">{{ p.orth_codepoints }}</span>
+      {% if p.adopted_upstream_at %}<span class="badge text-bg-success">added</span>{% endif %}</li>
+  {% endfor %}
+</ul>
 {% endif %}
 
 <table class="table table-sm align-middle">
-  <thead><tr><th>#</th><th>Grapheme</th><th>Codepoints</th><th>IPA</th><th class="text-end">Reach</th><th>State</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>Letter</th><th>Codepoints</th><th>Sound</th><th class="text-end">Place names</th><th>State</th><th></th></tr></thead>
   <tbody>
   {% for rule in rules %}
   <tr {% if rule.lint_codes %}class="table-danger"{% endif %}{% if not rule.present_upstream %} class="text-muted"{% endif %}>
@@ -66,7 +94,7 @@
     <td class="ipa-inline">{% if rule.current_ipa %}{{ rule.current_ipa }}{% else %}<span class="text-muted fst-italic small">(blank)</span>{% endif %}</td>
     <td class="text-end small">{% if rule.corpus_frequency is not None %}{{ rule.corpus_frequency }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
     <td>{% include "phonetics/_status.html" with rule=rule %}
-        {% if not rule.present_upstream %}<span class="badge text-bg-dark">removed upstream</span>{% endif %}</td>
+        {% if not rule.present_upstream %}<span class="badge text-bg-dark">no longer in the file</span>{% endif %}</td>
     <td class="text-end"><a class="small" href="{% url 'phonetics:rule' rule.pk %}">review</a></td>
   </tr>
   {% endfor %}

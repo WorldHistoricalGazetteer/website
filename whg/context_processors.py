@@ -64,3 +64,14 @@ def overlay_license(request):
     never instead of them (place#157/#158).
     """
     return {'WHG_OVERLAY_LICENSE': getattr(settings, 'WHG_OVERLAY_LICENSE', None)}
+
+
+def phonetics_visible(request):
+    """Whether to offer the phonetic-rule-review link in the Data menu.
+
+    Asks the same predicate the view's gate uses, so the menu can never offer a
+    link that 404s — while unlaunched the app is staff/beta only, and its
+    existence is not disclosed to anyone else.
+    """
+    from phonetics.visibility import is_visible
+    return {'PHONETICS_VISIBLE': is_visible(getattr(request, 'user', None))}

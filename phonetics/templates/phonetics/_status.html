@@ -1,14 +1,14 @@
 {% if rule.status == 'unreviewed' %}
-  <span class="badge rounded-pill text-bg-light border text-muted" title="Nobody has looked at this row. That is not the same as agreement.">Not yet reviewed</span>
+  <span class="badge rounded-pill text-bg-light border text-muted" title="Nobody has looked at this yet. That is not the same as agreeing with it.">Nobody has looked</span>
 {% elif rule.status == 'disputed' %}
-  <span class="badge rounded-pill text-bg-danger" title="Reviewers disagree. Both answers are kept.">Disagreement ({{ rule.review_count }})</span>
+  <span class="badge rounded-pill text-bg-danger" title="People gave different answers. We keep them all.">People disagree ({{ rule.review_count }})</span>
 {% elif rule.status == 'correction_proposed' %}
-  <span class="badge rounded-pill text-bg-warning" title="A correction has been proposed.">Correction proposed ({{ rule.review_count }})</span>
+  <span class="badge rounded-pill text-bg-warning" title="Somebody has suggested a different sound.">Change suggested ({{ rule.review_count }})</span>
 {% elif rule.status == 'unsure' %}
-  <span class="badge rounded-pill text-bg-info" title="Flagged as uncertain, not corrected.">Unsure ({{ rule.review_count }})</span>
+  <span class="badge rounded-pill text-bg-info" title="Somebody looked but was not sure.">Not sure ({{ rule.review_count }})</span>
 {% else %}
-  <span class="badge rounded-pill text-bg-success" title="Every reviewer so far accepted this value.">Accepted ({{ rule.review_count }})</span>
+  <span class="badge rounded-pill text-bg-success" title="Everyone who looked said this is right.">Looks right ({{ rule.review_count }})</span>
 {% endif %}
 {% if rule.stale_review_count %}
-  <span class="badge rounded-pill text-bg-dark" title="{{ rule.stale_review_count }} review(s) were made against a value that has since changed upstream. They are evidence about the old value.">{{ rule.stale_review_count }} superseded</span>
+  <span class="badge rounded-pill text-bg-dark" title="{{ rule.stale_review_count }} answer(s) were about an older sound, which has since changed.">{{ rule.stale_review_count }} out of date</span>
 {% endif %}

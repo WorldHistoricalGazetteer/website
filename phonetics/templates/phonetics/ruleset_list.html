@@ -1,32 +1,33 @@
 {% extends "phonetics/_base.html" %}
 {% block page_title %}Rule sets{% endblock %}
 {% block phonetics_content %}
-<h5>Rule sets</h5>
+<h5>Languages</h5>
 {% if suggested %}
-<p class="small text-muted">Your browser suggests:
-  {% for rs in suggested %}<a href="{% url 'phonetics:ruleset' rs.code %}">{{ rs.label }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+<p class="text-muted">Do you read any of these?
+  {% for rs in suggested %}<a href="{% url 'phonetics:ruleset' rs.slug %}">{{ rs.label }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
 {% endif %}
 <form class="row g-2 mb-3 small" method="get">
   <div class="col-auto"><input class="form-control form-control-sm" type="search" name="q" value="{{ q }}" placeholder="language, script or code"></div>
   <div class="col-auto"><select class="form-select form-select-sm" name="posture">
-    <option value="">Both postures</option>
+    <option value="">All</option>
     {% for value, label in postures %}<option value="{{ value }}" {% if posture == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
   </select></div>
-  <div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Filter</button></div>
+  <div class="col-auto"><button class="btn btn-sm btn-outline-secondary">Search</button></div>
 </form>
 <table class="table table-sm align-middle">
-  <thead><tr><th>Language</th><th>Code</th><th>Posture</th><th class="text-end">Rows</th>
-    <th class="text-end">Reviewed</th><th class="text-end">Broken</th><th></th></tr></thead>
+  <thead><tr><th>Language</th><th>Code</th><th>Status</th><th class="text-end">Letters</th>
+    <th class="text-end">Checked</th><th class="text-end">Broken</th><th></th></tr></thead>
   <tbody>
   {% for row in rows %}
   <tr>
-    <td><a href="{% url 'phonetics:ruleset' row.ruleset.code %}">{{ row.ruleset.label }}</a></td>
+    <td><a href="{% url 'phonetics:ruleset' row.ruleset.slug %}">{{ row.ruleset.label }}</a>
+        {% if row.autonym %}<div class="small text-muted" lang="{{ row.ruleset.language_code }}">{{ row.autonym }}</div>{% endif %}</td>
     <td><code class="small">{{ row.ruleset.code }}</code></td>
     <td>{% include "phonetics/_posture.html" with ruleset=row.ruleset %}</td>
     <td class="text-end small">{{ row.progress.total }}</td>
     <td class="text-end small">{{ row.progress.reviewed_pct }}%</td>
     <td class="text-end small">{% if row.progress.lint %}<span class="badge text-bg-danger">{{ row.progress.lint }}</span>{% endif %}</td>
-    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'phonetics:queue' %}?ruleset={{ row.ruleset.code }}">Review</a></td>
+    <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'phonetics:queue' %}?ruleset={{ row.ruleset.slug }}">Review</a></td>
   </tr>
   {% endfor %}
   </tbody>

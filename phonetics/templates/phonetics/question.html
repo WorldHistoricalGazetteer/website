@@ -4,12 +4,21 @@
 
 <h5>{{ question.title }}</h5>
 <p class="small text-muted">
-  {% if question.ruleset %}<a href="{% url 'phonetics:ruleset' question.ruleset.code %}">{{ question.ruleset.label }}</a>{% endif %}
+  {% if question.ruleset %}<a href="{% url 'phonetics:ruleset' question.ruleset.slug %}">{{ question.ruleset.label }}</a>{% endif %}
   · a decision about the whole rule set, not one row
   {% if question.status == 'resolved' %}· <span class="badge text-bg-success">resolved</span>{% endif %}
 </p>
 
 <div class="card mb-3"><div class="card-body small">{{ question.body|linebreaks }}</div></div>
+
+{% if related %}
+<div class="alert alert-warning py-2 px-3 small">
+  <strong>Answer this together with:</strong>
+  {% for q in related %}<a href="{% url 'phonetics:question' q.slug %}">{{ q.title }}</a>{% if not forloop.last %}; {% endif %}{% endfor %}
+  — these turn on the same underlying decision, and answering them apart is how
+  they end up answered inconsistently.
+</div>
+{% endif %}
 
 {% if question.status == 'resolved' %}
   <div class="alert alert-success py-2 px-3 small">

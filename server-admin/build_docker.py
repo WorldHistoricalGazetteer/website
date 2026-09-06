@@ -103,6 +103,18 @@ def main():
     # Push the new version to Docker Hub if the push parameter is passed
     if push == "push":
         push_image(docker_image, new_version)
+        # Building the image is only half the job: the deployed sites keep running
+        # whatever tag env_template.py names, and a pushed image nobody pointed at
+        # is indistinguishable from no build at all until something ImportErrors.
+        # Print the exact next command rather than relying on anyone remembering it.
+        print("\n" + "─" * 72)
+        print("NOT DEPLOYED YET. Each site keeps its current image tag until moved:")
+        print(f"\n  ssh whg 'bash ~/sites/dev-whgazetteer-org/server-admin/deploy.sh "
+              f"dev restart --image={new_version} --celery'")
+        print(f"\n  ssh whg 'bash ~/sites/whgazetteer-org/server-admin/deploy.sh "
+              f"prod restart --image={new_version} --celery'")
+        print("\nAdd --migrate if there are pending migrations. See developer/build-image.md.")
+        print("─" * 72)
     else:
         print(f"Docker image built and tagged as {docker_image}:{new_version}, but not pushed to Docker Hub.")
 

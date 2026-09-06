@@ -3,30 +3,31 @@
 {% block page_title %}Test {{ ruleset.code }}{% endblock %}
 {% block phonetics_content %}
 
-<h5>Test the rule sheet on real names</h5>
+<h5>Try a real place name</h5>
 <p class="small text-muted">{{ ruleset.label }} <code>{{ ruleset.code }}</code></p>
 
-<div class="alert alert-warning py-2 px-3 small">
-  <strong>This applies the rule map and nothing else.</strong> Epitran also runs language-specific
-  pre- and post-processing, so this is “what these rules alone do to this name”, not what the
-  pipeline finally emits. It is here because of the brackets: every character in
-  <span class="residue">(round brackets)</span> is one that <em>no rule matched</em>. That residue is
-  the measurement behind the quality figures — a rule set that converts 16.6% of names looks fine in
-  the abstract and looks like this in use.
-</div>
+<p>
+  Type a place name and see what WHG hears. Any letter in
+  <span class="residue">(round brackets)</span> is one <strong>no rule covers</strong> — WHG
+  cannot read it at all.
+</p>
+<p class="small text-muted">
+  This uses only the letter rules shown on this page. The real system does a little more
+  besides, so the result here is close but not identical.
+</p>
 
 <form method="post" class="mb-3">
   {% csrf_token %}
-  <label class="form-label small" for="names">One name per line</label>
+  <label class="form-label" for="names">One place name per line</label>
   <textarea class="form-control mb-2" name="names" id="names" rows="6" lang="{{ ruleset.language_code }}">{{ names_text }}</textarea>
   <button class="btn btn-sm btn-primary">Transcribe</button>
-  {% if sample_count %}<span class="small text-muted ms-2">{{ sample_count }} corpus example{{ sample_count|pluralize }} available for this rule set.</span>{% endif %}
+  {% if sample_count %}<span class="small text-muted ms-2">We have filled in {{ sample_count }} real example{{ sample_count|pluralize }} for you.</span>{% endif %}
 </form>
 
 {% if results %}
-<p class="small"><strong>{{ complete }}</strong> of {{ results|length }} converted with no residue.</p>
+<p><strong>{{ complete }}</strong> of {{ results|length }} could be read completely.</p>
 <table class="table table-sm">
-  <thead><tr><th>Name</th><th>Output</th><th>Unmatched characters</th></tr></thead>
+  <thead><tr><th>Place name</th><th>What WHG hears</th><th>Letters it cannot read</th></tr></thead>
   <tbody>
   {% for r in results %}
     <tr class="{% if not r.complete %}table-warning{% endif %}">
@@ -40,15 +41,28 @@
 </table>
 {% endif %}
 
+{% if gaps %}
+<div class="card border-warning mb-4"><div class="card-body">
+  <h6 class="mb-1">These letters are missing</h6>
+  <p class="text-muted">
+    No rule covers them, so WHG throws them away. If you know what sound they make,
+    adding them is the most useful thing you can do here.
+  </p>
+  <ul class="list-inline mb-0">
+    {% for gap in gaps %}
+    <li class="list-inline-item mb-2">
+      <a class="btn btn-sm btn-outline-warning"
+         href="{% url 'phonetics:propose-rule' ruleset.slug %}?orth={{ gap.orth|urlencode }}&name={{ gap.name|urlencode }}">
+        <span class="grapheme-sm" lang="{{ ruleset.language_code }}">{{ gap.orth }}</span>
+        <span class="small">add a rule</span>
+      </a>
+      <div class="small text-muted font-monospace">{{ gap.codepoints }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+</div></div>
+{% endif %}
+
 <hr class="mt-4">
 {% include "phonetics/_matching_demo.html" with ruleset=ruleset %}
-{% endblock %}
-
-{% block deferredScripts %}
-  var scripts = [
-    {
-      src: '{% static 'webpack/phonetics.bundle.js' %}',
-      type: 'module',
-    },
-  ]
 {% endblock %}

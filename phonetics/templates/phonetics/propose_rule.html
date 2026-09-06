@@ -1,0 +1,97 @@
+{% extends "phonetics/_base.html" %}
+{% load static %}
+{% block page_title %}Add a missing letter — {{ ruleset.slug }}{% endblock %}
+{% block phonetics_content %}
+
+<h5>Add a letter this rule set is missing</h5>
+<p class="small text-muted">{{ ruleset.label }} <code>{{ ruleset.slug }}</code> ·
+  {{ row_count }} letters mapped so far</p>
+
+<p>
+  Most of the problems we have measured are <strong>missing letters</strong>, not wrong
+  ones. In several writing systems the consonants were mapped and the vowels were never
+  added. Adding what is missing is the most useful thing you can do here.
+</p>
+
+<div class="card mb-4"><div class="card-body">
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="example_name" value="{{ form.example_name.value|default:'' }}">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small mb-1" for="id_orth">Letter</label>
+        <input class="form-control grapheme-input" name="orth" id="id_orth"
+               lang="{{ ruleset.language_code }}" autocomplete="off"
+               value="{{ form.orth.value|default:'' }}" required>
+        <div class="form-text">One letter, or a group of letters that work together.</div>
+        {% for e in form.orth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small mb-1" for="id_proposed_ipa">Sound (IPA)</label>
+        <input type="text" class="form-control ipa-input" name="proposed_ipa" id="id_proposed_ipa"
+               value="{{ form.proposed_ipa.value|default:'' }}" autocomplete="off">
+        <div class="form-text">Leave empty if the letter makes no sound of its own.</div>
+        {% for e in form.proposed_ipa.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        <div id="ipa-feedback" class="small mt-1"></div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small mb-1" for="id_confidence">How sure are you?</label>
+        <select class="form-select" name="confidence" id="id_confidence">
+          {% for value, label in form.fields.confidence.choices %}
+            <option value="{{ value }}" {% if value == 'medium' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-12">
+        <label class="form-label small mb-1" for="id_comment">Anything you want to explain (optional)</label>
+        <textarea class="form-control" name="comment" id="id_comment" rows="2">{{ form.comment.value|default:'' }}</textarea>
+      </div>
+    </div>
+    {% if can_contribute %}
+      <button class="btn btn-primary mt-3">Suggest this rule</button>
+    {% else %}
+      <p class="small text-muted mt-3">
+        {% if needs_login %}<a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">Sign in</a> to suggest a rule.
+        {% else %}<a href="{% url 'phonetics:terms' %}?next={{ request.get_full_path|urlencode }}">Agree the contribution terms</a> first.{% endif %}
+      </p>
+    {% endif %}
+  </form>
+</div></div>
+
+<p class="small">
+  <a href="{% url 'phonetics:sandbox' ruleset.slug %}">Try a real place name first</a> — it will
+  show you which letters this rule set cannot read.
+</p>
+
+<h6 class="mt-4">Letters people have suggested adding</h6>
+{% if proposals %}
+<table class="table table-sm align-middle">
+  <thead><tr><th>Letter</th><th>Codepoints</th><th>Sound</th><th>Suggested by</th><th>Notes</th></tr></thead>
+  <tbody>
+  {% for p in proposals %}
+    <tr>
+      <td class="grapheme-sm" lang="{{ ruleset.language_code }}">{{ p.orth }}</td>
+      <td class="small font-monospace text-muted">{{ p.orth_codepoints }}</td>
+      <td class="ipa-inline">{% if p.proposed_ipa %}{{ p.proposed_ipa }}{% else %}<span class="text-muted small fst-italic">(no sound)</span>{% endif %}</td>
+      <td class="small">
+        {% if p.agreement and p.agreement.credit_public and p.agreement.credit_name %}{{ p.agreement.credit_name }}{% else %}a reviewer{% endif %}
+        {% if p.competence_level %}<span class="text-muted">({{ p.competence_level }})</span>{% endif %}
+        {% if p.adopted_upstream_at %}<span class="badge text-bg-success">added</span>{% endif %}
+      </td>
+      <td class="small">
+        {% if p.example_name %}<div class="text-muted">Found in <span lang="{{ ruleset.language_code }}">{{ p.example_name }}</span></div>{% endif %}
+        {{ p.comment }}
+        {% if p.competing %}<div class="text-danger">Someone else suggested a different sound for this letter — both are kept.</div>{% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="small text-muted">None yet.</p>
+{% endif %}
+
+<script id="phonetics-context" type="application/json">
+  {"validateUrl": "{% url 'phonetics:api-validate' %}"}
+</script>
+{% endblock %}

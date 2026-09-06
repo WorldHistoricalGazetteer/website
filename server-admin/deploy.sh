@@ -32,6 +32,10 @@ Action (default: restart):
 
 Options:
   --branch=<name>  Override the dev branch (default: staging; prod always uses main)
+  --image=<tag>    Point this site at a different Docker image tag before deploying.
+                   Needed after a requirements.txt change: build_docker.py pushes the
+                   image, this moves the site onto it. Edits DOCKER_IMAGE_TAG in
+                   /home/whgadmin/sites/env_template.py (backed up first).
   --celery    Also restart celery worker and beat (with 'restart')
   --migrate   Run Django migrations after deploy
   --collectstatic  Run Django collectstatic after deploy
@@ -45,6 +49,7 @@ Examples:
   deploy restart --celery             # dev, restart web + celery
   deploy prod recreate --migrate
   deploy prod recreate --collectstatic  # prod, recreate + collect static files
+  deploy --image=1.0.19 restart       # dev, move onto a freshly built image
   deploy --branch=api/crc-gateway     # dev, deploy a feature branch
   deploy pull --branch=api/crc-gateway  # dev, pull a feature branch only
 EOF
@@ -56,6 +61,7 @@ EOF
 ENV="dev"
 ACTION="restart"
 BRANCH_OVERRIDE=""
+IMAGE_TAG=""
 WITH_CELERY=false
 WITH_MIGRATE=false
 WITH_COLLECTSTATIC=false
@@ -66,6 +72,7 @@ for arg in "$@"; do
         dev|prod)     ENV="$arg" ;;
         pull|restart|full|recreate|status) ACTION="$arg" ;;
         --branch=*)   BRANCH_OVERRIDE="${arg#--branch=}" ;;
+        --image=*)    IMAGE_TAG="${arg#--image=}" ;;
         --celery)     WITH_CELERY=true ;;
         --migrate)    WITH_MIGRATE=true ;;
         --collectstatic) WITH_COLLECTSTATIC=true ;;
@@ -134,6 +141,15 @@ if [ "$ACTION" = "pull" ]; then
 fi
 
 # ─── Regenerate config ───────────────────────────────────────────────────────
+
+# The image tag lives in the server's env_template.py, which is not in the repo.
+# Bumping it here rather than by hand is the point: a pushed image whose tag never
+# moved leaves the site running the old one, with nothing to say so.
+if [ -n "$IMAGE_TAG" ]; then
+    echo "── Setting image tag to $IMAGE_TAG for $ENV_CONTEXT..."
+    sudo python3 ./server-admin/set_image_tag.py --site "$ENV_CONTEXT" --tag "$IMAGE_TAG"
+    echo ""
+fi
 
 echo "── Regenerating config..."
 sudo python3 ./server-admin/load_env.py

@@ -17,9 +17,10 @@ from django.urls import reverse
 from .export import build, resolve, suggestions_payload
 from .iso import parse_accept_language
 from .lint import lint_rows, lint_value
-from .models import (Confidence, ContributionTerms, PolicyAnswer, PolicyQuestion,
-                     Posture, Review, ReviewerAgreement, ReviewerCompetence,
-                     Rule, RuleSet, RuleSetVersion, Verdict, active_terms)
+from .models import (Confidence, ContributionTerms, NewRuleProposal, PolicyAnswer,
+                     PolicyQuestion, Posture, Review, ReviewerAgreement,
+                     ReviewerCompetence, Rule, RuleSet, RuleSetVersion, Verdict,
+                     active_terms)
 from .routing import queue, ruleset_progress, suggested_rulesets
 from .sync import apply_ruleset, parse_csv
 from .transcribe import build_map, compare, transcribe
@@ -192,11 +193,14 @@ class SyncBase(TestCase):
 
     ROWS = [('က', 'k'), ('ရ', 'r'), ('ဂ', 'g')]
 
-    def make_ruleset(self, code='mya-Mymr', rows=None, posture=Posture.SHIPPED, blob='a' * 40):
+    def make_ruleset(self, code='mya-Mymr', rows=None, posture=Posture.SHIPPED,
+                     blob='a' * 40, notes=None):
+        path = ('developer/epitran-drafts' if posture == Posture.PROPOSED
+                else 'zenodo/epitran_extensions')
         ruleset, version, _ = apply_ruleset(
             code, rows if rows is not None else self.ROWS, posture=posture,
-            repo='org/indexing', ref='main', path='zenodo/epitran_extensions',
-            blob_sha=blob, commit_sha='c' * 40)
+            repo='org/indexing', ref='main', path=path,
+            blob_sha=blob, commit_sha='c' * 40, notes=notes)
         return ruleset, version
 
 
@@ -225,6 +229,111 @@ class SyncTests(SyncBase):
         self.assertEqual(ruleset.rules.count(), 3)
         self.assertFalse(ruleset.rules.get(orth='ရ').present_upstream)
         self.assertTrue(ruleset.rules.get(orth='က').present_upstream)
+
+
+class SourceCollisionTests(SyncBase):
+    """A code exists in both sources, and the two must not collapse.
+
+    This is the bug the slug exists to prevent: `mya-Mymr` is both a shipped rule
+    set and a WHG draft proposing to replace it. Keyed on the code alone, syncing
+    the draft would overwrite the live rows in place — flipping their posture and
+    silently re-pointing every review made against them onto a value the reviewer
+    never saw.
+    """
+
+    def test_a_draft_does_not_overwrite_the_shipped_set_of_the_same_code(self):
+        shipped, _ = self.make_ruleset('mya-Mymr', posture=Posture.SHIPPED)
+        draft, _ = self.make_ruleset('mya-Mymr', rows=[('က', 'k'), ('ရ', 'j')],
+                                     posture=Posture.PROPOSED, blob='e' * 40)
+        self.assertNotEqual(shipped.pk, draft.pk)
+        self.assertEqual(shipped.slug, 'mya-Mymr')
+        self.assertEqual(draft.slug, 'mya-Mymr.draft')
+        shipped.refresh_from_db()
+        self.assertEqual(shipped.posture, Posture.SHIPPED)
+        self.assertEqual(shipped.rules.count(), 3)
+        self.assertEqual(shipped.rules.get(orth='ရ').current_ipa, 'r')
+        self.assertEqual(draft.rules.get(orth='ရ').current_ipa, 'j')
+
+    def test_reviews_stay_with_the_set_they_were_made_against(self):
+        shipped, version = self.make_ruleset('mya-Mymr', posture=Posture.SHIPPED)
+        rule = shipped.rules.get(orth='ရ')
+        ContributionTerms.objects.update(is_active=False)
+        terms = ContributionTerms.objects.create(version='t', title='t', body='b',
+                                                 is_active=True, signed_off=True)
+        user = make_user('c')
+        agreement = ReviewerAgreement.objects.create(user=user, terms=terms)
+        Review.objects.create(rule=rule, reviewer=user, verdict=Verdict.ACCEPT,
+                              reviewed_ipa=rule.current_ipa, reviewed_version=version,
+                              agreement=agreement)
+        self.make_ruleset('mya-Mymr', rows=[('ရ', 'j')], posture=Posture.PROPOSED,
+                          blob='e' * 40)
+        rule.refresh_from_db()
+        self.assertEqual(rule.current_ipa, 'r')          # untouched by the draft
+        self.assertEqual(rule.review_count, 1)
+        self.assertEqual(rule.stale_review_count, 0)     # and not falsely superseded
+
+    def test_each_set_can_see_what_the_other_says(self):
+        shipped, _ = self.make_ruleset('mya-Mymr', posture=Posture.SHIPPED)
+        draft, _ = self.make_ruleset('mya-Mymr', rows=[('ရ', 'j')],
+                                     posture=Posture.PROPOSED, blob='e' * 40)
+        self.assertEqual(draft.counterpart, shipped)
+        self.assertEqual(shipped.counterpart, draft)
+
+    def test_a_new_draft_with_no_shipped_equivalent_has_no_counterpart(self):
+        draft, _ = self.make_ruleset('zgh-Tfng', rows=[('ⴰ', 'a')],
+                                     posture=Posture.PROPOSED, blob='f' * 40)
+        self.assertIsNone(draft.counterpart)
+
+    def test_the_drafts_directory_does_not_withdraw_the_shipped_sets(self):
+        """The withdrawal sweep is scoped by posture as well as by source."""
+        shipped, _ = self.make_ruleset('sin-Sinh', rows=[('ක', 'k')],
+                                       posture=Posture.SHIPPED, blob='g' * 40)
+        from .models import RuleSet as RS
+        RS.objects.filter(posture=Posture.SHIPPED, source_path__startswith='zenodo/').exclude(
+            code__in=['mya-Mymr']).update(present_upstream=False)
+        shipped.refresh_from_db()
+        self.assertFalse(shipped.present_upstream)  # the sweep does work…
+        shipped.present_upstream = True
+        shipped.save()
+        # …and does not reach across postures.
+        self.make_ruleset('mya-Mymr', rows=[('ရ', 'j')], posture=Posture.PROPOSED,
+                          blob='h' * 40)
+        shipped.refresh_from_db()
+        self.assertTrue(shipped.present_upstream)
+
+
+class NotesAndOrcidTests(SyncBase):
+
+    def test_notes_are_imported_and_the_csv_stays_authoritative(self):
+        from .sync import parse_notes
+        notes = parse_notes('orth\tproposed_ipa\tnote\nက\tk\tLETTER KA — commonest\n')
+        self.assertEqual(notes, {'က': 'LETTER KA — commonest'})
+        ruleset, _ = self.make_ruleset('mya-Mymr', rows=[('က', 'k')],
+                                       posture=Posture.PROPOSED, blob='n' * 40,
+                                       notes=notes)
+        rule = ruleset.rules.get(orth='က')
+        self.assertEqual(rule.draft_note, 'LETTER KA — commonest')
+        # The value comes from the CSV, never from the notes column.
+        self.assertEqual(rule.current_ipa, 'k')
+
+    def test_a_malformed_notes_file_is_refused_rather_than_half_read(self):
+        from .sync import parse_notes, SyncError
+        with self.assertRaises(SyncError):
+            parse_notes('grapheme\tipa\twhy\nက\tk\tx\n')
+
+    def test_orcid_is_canonicalised_from_any_accepted_spelling(self):
+        from .forms import canonical_orcid
+        for given in ['0000-0002-1825-0097',
+                      'https://orcid.org/0000-0002-1825-0097',
+                      'http://sandbox.orcid.org/0000-0002-1825-0097',
+                      '  0000-0002-1825-0097  ']:
+            with self.subTest(given=given):
+                self.assertEqual(canonical_orcid(given),
+                                 'https://orcid.org/0000-0002-1825-0097')
+        self.assertEqual(canonical_orcid('0000-0002-1825-009X'),
+                         'https://orcid.org/0000-0002-1825-009X')
+        for bad in ['', 'not-an-orcid', '0000-0002-1825', 'https://example.org/x']:
+            self.assertEqual(canonical_orcid(bad), '')
 
 
 class ReviewTests(SyncBase):
@@ -335,7 +444,50 @@ class ExportTests(ReviewTests):
         self.assertEqual(len(payload), 1)
         self.assertEqual(payload[0]['proposed_ipa'], 'j')
         self.assertEqual(payload[0]['reviewed_ipa'], 'r')
-        self.assertEqual(payload[0]['licence'], 'MIT')
+        # The plumbing, not the vocabulary choice: the feed reports whatever
+        # licence the contributor actually agreed to.
+        self.assertEqual(payload[0]['licence'], self.terms.licence_spdx)
+
+
+class SeededTermsTests(TestCase):
+
+    def test_the_shipped_terms_are_cc_by_4_0_and_anchored_to_the_licence_vocabulary(self):
+        terms = ContributionTerms.objects.get(version='2026-09-draft')
+        self.assertEqual(terms.licence_spdx, 'CC-BY-4.0')
+        self.assertIsNotNone(terms.licence, 'not linked to the licensing app vocabulary')
+        self.assertEqual(terms.licence.spdx_id, 'CC-BY-4.0')
+        self.assertIn('Creative Commons Attribution 4.0', terms.body)
+        # It says how a CC BY row can live inside Epitran's MIT package, because
+        # that is the one question the choice actually raises.
+        self.assertIn('MIT', terms.body)
+
+    @override_settings(PHONETICS_PUBLIC=True)
+    def test_draft_terms_cannot_open_the_app_to_the_public(self):
+        from .visibility import is_visible
+        from django.contrib.auth.models import AnonymousUser
+        terms = ContributionTerms.objects.get(version='2026-09-draft')
+        self.assertFalse(terms.signed_off)
+        self.assertFalse(is_visible(AnonymousUser()))
+        # …and signing them off is the only thing that changes it.
+        terms.signed_off = True
+        terms.save()
+        self.assertTrue(is_visible(AnonymousUser()))
+
+
+class MyanmarQuestionTests(TestCase):
+
+    def test_q13_is_linked_to_the_register_question(self):
+        q13 = PolicyQuestion.objects.get(slug='mya-ha-hto-sonorants')
+        q1 = PolicyQuestion.objects.get(slug='mya-register')
+        self.assertIn(q1, q13.related.all())
+        # Symmetrical, so a reviewer arriving at either one is told about the other.
+        self.assertIn(q13, q1.related.all())
+
+    def test_linking_two_questions_links_them_both_ways(self):
+        a = PolicyQuestion.objects.create(slug='a', title='A', body='b', options=[])
+        b = PolicyQuestion.objects.create(slug='b', title='B', body='b', options=[])
+        a.related.add(b)
+        self.assertIn(a, b.related.all())
 
 
 class RoutingTests(SyncBase):
@@ -443,7 +595,7 @@ class FormAndViewTests(SyncBase):
         self.assertTrue(ok['ok'])
 
     def test_the_export_view_serves_a_loadable_csv(self):
-        response = self.client.get(reverse('phonetics:export-csv', args=[self.ruleset.code]))
+        response = self.client.get(reverse('phonetics:export-csv', args=[self.ruleset.slug]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(parse_csv(response.content.decode()), self.ROWS)
 
@@ -459,6 +611,117 @@ class FormAndViewTests(SyncBase):
         self.terms.signed_off = True
         self.terms.save()
         self.assertEqual(self.client.get(reverse('phonetics:home')).status_code, 200)
+
+
+class NewRuleProposalTests(SyncBase):
+    """Adding a letter the rule set does not cover.
+
+    The measurements in place#251 say this is the contribution that matters most:
+    every underperforming rule set is missing rows rather than holding wrong ones,
+    and drafting the missing Myanmar vowels alone moved it from 16.6% to 98.7%.
+    """
+
+    def setUp(self):
+        self.ruleset, self.version = self.make_ruleset()
+        ContributionTerms.objects.update(is_active=False)
+        self.terms = ContributionTerms.objects.create(
+            version='t1', title='t', body='b', is_active=True, signed_off=True)
+        self.user = make_user('adder', is_staff=True)
+        self.agreement = ReviewerAgreement.objects.create(user=self.user, terms=self.terms)
+        self.client.force_login(self.user)
+
+    def url(self):
+        return reverse('phonetics:propose-rule', args=[self.ruleset.slug])
+
+    def test_a_missing_letter_can_be_proposed(self):
+        response = self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'ʔi',
+                                                 'confidence': 'high'})
+        self.assertEqual(response.status_code, 302)
+        proposal = NewRuleProposal.objects.get()
+        self.assertEqual(proposal.orth, 'ဣ')
+        self.assertEqual(proposal.proposed_ipa, 'ʔi')
+        self.assertEqual(proposal.panphon_version, '0.22.0')
+
+    def test_a_duplicate_grapheme_cannot_be_created(self):
+        response = self.client.post(self.url(), {'orth': 'ရ', 'proposed_ipa': 'j'})
+        self.assertEqual(NewRuleProposal.objects.count(), 0)
+        self.assertContains(response, 'already has')
+
+    def test_an_nfd_equivalent_duplicate_cannot_be_created_either(self):
+        """The Gurmukhi failure, in the one place a user could cause it.
+
+        The two spellings render identically and NFC will not merge them, so
+        without an NFD comparison this is how a rule set that will not load
+        gets made.
+        """
+        # Written as escapes deliberately: the two spellings are visually
+        # identical, so a literal in the source cannot show which is which — and
+        # a copy-paste that collapses them would silently defeat this test.
+        precomposed = '\u0A36'                 # GURMUKHI LETTER SHA
+        decomposed = '\u0A38\u0A3C'            # SA + NUKTA
+        self.assertNotEqual(precomposed, decomposed)
+        self.assertEqual(unicodedata.normalize('NFD', precomposed), decomposed)
+        # Composition exclusion: NFC does NOT put them back together, which is
+        # why an NFC-based duplicate check reports a clean file.
+        self.assertNotEqual(unicodedata.normalize('NFC', decomposed), precomposed)
+        ruleset, _ = self.make_ruleset('pan-Guru', rows=[(decomposed, 'ʃ')], blob='p' * 40)
+        response = self.client.post(
+            reverse('phonetics:propose-rule', args=[ruleset.slug]),
+            {'orth': precomposed, 'proposed_ipa': 'ʂ'})
+        self.assertEqual(NewRuleProposal.objects.count(), 0)
+        self.assertContains(response, 'already has')
+        # …and a genuinely new letter in the same rule set still goes through.
+        self.client.post(reverse('phonetics:propose-rule', args=[ruleset.slug]),
+                         {'orth': '\u0A15', 'proposed_ipa': 'k'})  # GURMUKHI KA
+        self.assertEqual(NewRuleProposal.objects.count(), 1)
+
+    def test_an_unusable_value_is_refused_here_too(self):
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'dʒʰ'})
+        self.assertEqual(NewRuleProposal.objects.count(), 0)
+        # A blank value is legitimate: some letters produce nothing.
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': ''})
+        self.assertEqual(NewRuleProposal.objects.count(), 1)
+
+    def test_an_agreed_addition_is_appended_to_the_export(self):
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'ʔi'})
+        text, report = build(self.ruleset)
+        self.assertEqual(report['added'], 1)
+        self.assertIn(('ဣ', 'ʔi'), parse_csv(text))
+        self.assertEqual(parse_csv(text)[-1], ('ဣ', 'ʔi'))  # appended, not interleaved
+
+    def test_two_different_proposals_for_one_letter_are_held_back(self):
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'ʔi'})
+        other = make_user('other', is_staff=True)
+        ReviewerAgreement.objects.create(user=other, terms=self.terms)
+        self.client.force_login(other)
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'i'})
+        text, report = build(self.ruleset)
+        self.assertEqual(report['added'], 0)
+        self.assertEqual(len(report['held_back']), 1)
+        self.assertNotIn('ဣ', [orth for orth, _ in parse_csv(text)])
+        self.assertEqual(NewRuleProposal.objects.filter(is_latest=True).count(), 2)
+
+    def test_the_feed_distinguishes_an_addition_from_a_correction(self):
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'ʔi'})
+        payload = suggestions_payload()
+        self.assertEqual([p['kind'] for p in payload], ['addition'])
+        self.assertIsNone(payload[0]['current_ipa'])
+
+    def test_adoption_is_detected_when_the_letter_appears_upstream(self):
+        self.client.post(self.url(), {'orth': 'ဣ', 'proposed_ipa': 'ʔi'})
+        proposal = NewRuleProposal.objects.get()
+        self.assertIsNone(proposal.adopted_upstream_at)
+        self.make_ruleset(rows=self.ROWS + [('ဣ', 'ʔi')], blob='z' * 40)
+        proposal.refresh_from_db()
+        self.assertIsNotNone(proposal.adopted_upstream_at)
+
+    def test_the_sandbox_offers_the_letters_it_could_not_read(self):
+        response = self.client.post(
+            reverse('phonetics:sandbox', args=[self.ruleset.slug]),
+            {'names': 'ကရဣ'})
+        gaps = [g['orth'] for g in response.context['gaps']]
+        self.assertEqual(gaps, ['ဣ'])           # the unmapped one, and only it
+        self.assertContains(response, 'add a rule')
 
 
 class PageRenderTests(SyncBase):
@@ -481,14 +744,14 @@ class PageRenderTests(SyncBase):
                                       ruleset=self.ruleset, options=[{'key': 'a', 'label': 'A'}])
 
     def paths(self):
-        code = self.ruleset.code
         return [
             reverse('phonetics:home'),
             reverse('phonetics:queue'),
             reverse('phonetics:ruleset-list'),
-            reverse('phonetics:ruleset', args=[code]),
+            reverse('phonetics:ruleset', args=[self.ruleset.slug]),
             reverse('phonetics:rule', args=[self.rule.pk]),
-            reverse('phonetics:sandbox', args=[code]),
+            reverse('phonetics:sandbox', args=[self.ruleset.slug]),
+            reverse('phonetics:propose-rule', args=[self.ruleset.slug]),
             reverse('phonetics:lint'),
             reverse('phonetics:question', args=['q1']),
         ]

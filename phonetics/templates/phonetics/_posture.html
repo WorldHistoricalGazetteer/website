@@ -4,7 +4,7 @@
   approves production values they never examined — so the frame differs.
 {% endcomment %}
 {% if ruleset.posture == 'proposed' %}
-  <span class="badge text-bg-info" title="Drafted by WHG and not installed. The question is: is this proposed value right?">Proposed draft</span>
+  <span class="badge text-bg-info" title="WHG wrote this and is not using it yet. Is it right?">Suggested — not in use</span>
 {% else %}
-  <span class="badge text-bg-secondary" title="Currently in production. The question is: is this shipped value wrong?">In production</span>
+  <span class="badge text-bg-secondary" title="WHG uses this today. Is it wrong?">In use now</span>
 {% endif %}
