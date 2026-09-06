@@ -37,18 +37,17 @@
 
 <div class="card"><div class="card-body">
   <h6 class="mb-3">Add a language</h6>
-  <form method="post" class="row g-3 align-items-end" id="competence-form">
+  <form method="post" class="row g-3 align-items-start" id="competence-form">
     {% csrf_token %}
     <div class="col-md-4">
       <label class="form-label small mb-1" for="id_language_code">Language</label>
       <select class="form-select" name="language_code" id="id_language_code" required>
         <option value="">Choose…</option>
         {% for lang in languages %}
-          <option value="{{ lang.code }}" data-scripts="{% for s in lang.scripts %}{{ s.code }}{% if not forloop.last %},{% endif %}{% endfor %}">
-            {{ lang.name }}{% if lang.autonym %} — {{ lang.autonym }}{% endif %}
-          </option>
+          <option value="{{ lang.code }}" data-scripts="{% for s in lang.scripts %}{{ s.code }}{% if not forloop.last %},{% endif %}{% endfor %}">{{ lang.name }}{% if lang.autonym %} — {{ lang.autonym }}{% endif %}</option>
         {% endfor %}
       </select>
+      <div class="form-text">&nbsp;</div>
     </div>
     <div class="col-md-4">
       <label class="form-label small mb-1" for="id_script_code">Writing system</label>
@@ -62,9 +61,10 @@
     </div>
     <div class="col-md-4">
       <label class="form-label small mb-1" for="id_level">How well do you know it?</label>
-      <select class="form-select" name="level" id="id_level">
-        {% for value, label in form.fields.level.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      <select class="form-select" name="level" id="id_level" required>
+        {% for value, label in levels %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
       </select>
+      <div class="form-text">&nbsp;</div>
     </div>
     <div class="col-12"><button class="btn btn-primary">Add</button></div>
     {% if form.errors %}<div class="col-12 small text-danger">{{ form.errors }}</div>{% endif %}

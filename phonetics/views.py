@@ -39,7 +39,8 @@ from .forms import (AgreementForm, CompetenceForm, CreditForm, NewRuleForm,
                     PolicyAnswerForm, ReviewForm, canonical_orcid)
 from .iso import autonym, language_name, script_name
 from .lint import LINT_CODES
-from .models import (ContributionTerms, NewRuleProposal, Posture, PolicyAnswer,
+from .models import (CompetenceLevel, ContributionTerms, NewRuleProposal, Posture,
+                     PolicyAnswer,
                      PolicyQuestion, Review, ReviewerAgreement,
                      ReviewerCompetence, Rule, RuleSet, Verdict, active_terms)
 from .transcribe import build_map, compare, transcribe
@@ -204,6 +205,9 @@ def competence(request):
         'competences': request.user.phonetic_competences.all(),
         'languages': available_languages(),
         'scripts': script_options(),
+        # From the enum, not the bound field: a ModelForm choice field with no
+        # default renders a leading blank option, which showed as "---------".
+        'levels': CompetenceLevel.choices,
         'suggested': routing.suggested_rulesets(request.META.get('HTTP_ACCEPT_LANGUAGE', '')),
         **_contribution_state(request),
     })
