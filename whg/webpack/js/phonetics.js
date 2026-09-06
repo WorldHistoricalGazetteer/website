@@ -217,9 +217,18 @@ async function initTour() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+// ⚠ NOT a bare DOMContentLoaded listener. base_webpack.html injects entry
+// bundles from executeDeferredScripts(), which runs after the document is
+// already interactive — so a listener registered here would never fire and
+// every one of these would silently do nothing. (It did: the correction box on
+// the review form never opened, and nothing errored.) Same idiom as
+// reconciliation.js.
+function start() {
   initReviewForm();
   initMatchingDemo();
   initCompetenceForm();
   initTour();
-});
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+else start();
