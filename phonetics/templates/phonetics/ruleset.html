@@ -1,5 +1,5 @@
 {% extends "phonetics/_base.html" %}
-{% block page_title %}{{ ruleset.code }}{% endblock %}
+{% block page_title %}{{ ruleset.label }}{% if ruleset.is_proposed %} (suggested){% endif %}{% endblock %}
 {% block phonetics_content %}
 
 <div class="d-flex flex-wrap align-items-baseline gap-2">

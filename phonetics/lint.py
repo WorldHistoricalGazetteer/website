@@ -12,7 +12,8 @@ The three classes below were measured across the 115 shipped rule sets:
 :mod:`phonetics.validation` for why "did it parse?" is not one of the checks.
 """
 
-from .validation import CONFUSABLES, EMPTY_SET, nfd, segment
+from .validation import (CONFUSABLES, EMPTY_SET, LIGATURES, is_modifier_only,
+                         nfd, segment)
 
 # code → (short label, why it matters)
 LINT_CODES = {
@@ -20,6 +21,11 @@ LINT_CODES = {
         'ASCII g',
         "Uses ASCII 'g' (U+0067) where IPA requires 'ɡ' (U+0261). The two render "
         "identically and the consumer rejects the first outright.",
+    ),
+    'ligature': (
+        'Withdrawn ligature',
+        'Uses a tie-bar ligature the IPA withdrew in 1989 (ʤ, ʧ, …). The consumer does '
+        'not recognise it; it has to be written as two characters.',
     ),
     'confusable': (
         'Look-alike character',
@@ -39,7 +45,9 @@ LINT_CODES = {
     ),
     'unparseable': (
         'Not recognised',
-        'The consumer finds no IPA segment here, so the row contributes nothing.',
+        'The consumer finds no IPA segment here, so the row contributes nothing. '
+        '(A value that is only a modifier — a length mark, a nasal tilde — is fine, '
+        'and is not counted here: it attaches to the sound before it.)',
     ),
     'duplicate_grapheme': (
         'Duplicate grapheme',
@@ -64,6 +72,8 @@ def lint_value(ipa):
         if wrong != 'g' and wrong in ipa:
             codes.append('confusable')
             break
+    if any(ligature in ipa for ligature in LIGATURES):
+        codes.append('ligature')
     if codes:
         # A look-alike character already explains the failure; running the
         # segmenter would only add 'unparseable' on top and bury the fix.
@@ -71,6 +81,12 @@ def lint_value(ipa):
     _, segs = segment(ipa)
     rebuilt = ''.join(segs)
     if rebuilt != ipa:
+        if not segs and is_modifier_only(ipa):
+            # A length mark, a nasal tilde or a palatalisation on its own is a
+            # correct rule, not a broken one: it modifies the preceding sound.
+            # 22 shipped rows are this, and flagging them would hand reviewers
+            # 22 non-questions. See validation.is_modifier_only.
+            return codes
         codes.append('unparseable' if not segs else 'lossy')
     return codes
 

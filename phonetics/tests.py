@@ -97,6 +97,13 @@ class ValidationTests(TestCase):
         # …and the right character passes, so this is not a test that rejects everything.
         self.assertEqual(validate_ipa('ɡ')[1], [])
 
+    def test_withdrawn_ligatures_are_named_and_expanded(self):
+        """Two shipped rows use ʤ. "Not recognised" would not tell anyone what to do."""
+        _, errors, _ = validate_ipa('ʤ')
+        self.assertEqual([e['code'] for e in errors], ['ligature'])
+        self.assertIn('dʒ', errors[0]['message'])
+        self.assertEqual(validate_ipa('dʒ')[1], [])
+
     def test_the_empty_set_glyph_is_rejected_but_a_blank_value_is_not(self):
         self.assertEqual([e['code'] for e in validate_ipa('∅')[1]], ['empty_set_glyph'])
         # Blank is how Epitran spells "produces nothing"; 37 shipped rows use it.
@@ -141,6 +148,26 @@ class LintTests(TestCase):
                 self.assertEqual(len(composed), 1)  # genuinely precomposed
                 self.assertEqual(lint_value(composed), [])
         # …while a real defect in the same shape is still caught.
+        self.assertEqual(lint_value('dʒʰ'), ['lossy'])
+
+    def test_a_modifier_on_its_own_is_a_correct_rule(self):
+        """PanPhon finds no segment in these, and that is not a defect.
+
+        A length mark, a nasal tilde or a palatalisation modifies the sound
+        before it. 22 rows across the shipped rule sets are exactly this —
+        Sinhala anusvara, Tatar soft sign, Burmese visarga — and flagging them
+        would hand 22 non-questions to people whose time we are asking for.
+        """
+        from .validation import is_modifier_only
+        for value in ['ː', '̃', 'ʲ', 'ʰ', 'ʷ']:
+            with self.subTest(value=value):
+                self.assertTrue(is_modifier_only(value))
+                self.assertEqual(lint_value(value), [])
+                self.assertEqual(validate_ipa(value)[1], [])
+        # …while a base segment losing its modifier is still a defect, which is
+        # the distinction the exemption has to preserve.
+        self.assertFalse(is_modifier_only('zʰ'))
+        self.assertEqual(lint_value('zʰ'), ['lossy'])
         self.assertEqual(lint_value('dʒʰ'), ['lossy'])
 
     def test_nfd_equivalent_duplicates_are_caught_where_nfc_would_miss_them(self):

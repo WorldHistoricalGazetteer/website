@@ -55,6 +55,39 @@ CONFUSABLES = {
                          "'ʔ' (U+0294)."),
 }
 
+# The affricate ligatures the IPA withdrew in 1989. They look exactly like what
+# they mean and the consumer rejects every one of them, so left as a generic
+# "not recognised" they tell a reviewer nothing they can act on. Two shipped rows
+# use 'ʤ' where 'dʒ' is wanted.
+LIGATURES = {
+    'ʤ': 'dʒ', 'ʧ': 'tʃ', 'ʥ': 'dʑ', 'ʨ': 'tɕ', 'ʣ': 'dz', 'ʦ': 'ts',
+}
+
+
+# Unicode general categories for characters that MODIFY a neighbouring sound
+# rather than being one: modifier letters (ʰ ʲ ʷ ː), non-spacing marks (the
+# nasal tilde), and modifier symbols.
+MODIFIER_CATEGORIES = {'Lm', 'Mn', 'Sk', 'Me'}
+
+
+def is_modifier_only(value):
+    """True if every character modifies a neighbouring segment instead of being one.
+
+    ⚠ This is the difference between a defect and a correct rule, and getting it
+    wrong costs reviewer attention rather than saving it. PanPhon finds no
+    segment in ``ː`` or ``̃`` on its own, because on its own it is not a segment —
+    it lengthens or nasalises whatever the previous rule emitted. 22 rows across
+    the shipped rule sets are exactly this (Sinhala anusvara → ``̃``, Tatar soft
+    sign → ``ʲ``, Burmese visarga → ``ː``), and calling them broken would send 22
+    non-questions to people who read the language.
+
+    Applies only when the WHOLE value is modifiers. ``zʰ`` is a base segment plus
+    an aspiration PanPhon then discards, which is a real defect and stays one.
+    """
+    value = nfd(value)
+    return bool(value) and all(
+        unicodedata.category(ch) in MODIFIER_CATEGORIES for ch in value)
+
 
 def nfd(value):
     """Canonical decomposition — the one normal form used throughout this app.
@@ -153,6 +186,15 @@ def validate_ipa(value, allow_empty=True):
                            'message': f'{explanation} Did you mean “'
                                       f'{value.replace(wrong, right)}”?'})
 
+    for ligature, expansion in LIGATURES.items():
+        if ligature in value:
+            errors.append({
+                'code': 'ligature',
+                'message': f'“{ligature}” is a tie-bar ligature the IPA withdrew in 1989 '
+                           f'and the consumer does not recognise it. Write it as two '
+                           f'characters: “{value.replace(ligature, expansion)}”.',
+            })
+
     if errors:
         # A confusable or a stray '∅' fully explains the failure and names the
         # fix. Appending "PanPhon recognises no IPA segment here" on top of that
@@ -168,6 +210,10 @@ def validate_ipa(value, allow_empty=True):
     rebuilt = ''.join(segments)
     if rebuilt != value:
         if not segments:
+            if is_modifier_only(value):
+                # Not a defect: it attaches to the sound before it. Reported as
+                # information so the reviewer knows what they have written.
+                return value, errors, segments
             errors.append({
                 'code': 'unparseable',
                 'message': 'PanPhon recognises no IPA segment in this value, so the '
