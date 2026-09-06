@@ -104,8 +104,13 @@ def home(request):
         request.META.get('HTTP_ACCEPT_LANGUAGE', ''))
         if not any(c.matches(rs) for c in competences)]
 
+    live = RuleSet.objects.filter(present_upstream=True)
     totals = {
-        'rulesets': RuleSet.objects.filter(present_upstream=True).count(),
+        # Distinct LANGUAGES, not rule sets. One language can have a rule list in
+        # use and a suggested replacement, and counting those as two languages
+        # overstates our coverage to the person deciding whether to help.
+        'languages': live.values('language_code').distinct().count(),
+        'rulesets': live.count(),
         'rules': Rule.objects.filter(present_upstream=True).count(),
         'lint': Rule.objects.filter(present_upstream=True).exclude(lint_codes=[]).count(),
         'reviews': Review.objects.filter(is_latest=True).count(),
@@ -118,7 +123,8 @@ def home(request):
         'competences': competences,
         'my_rulesets': mine,
         'suggested_rulesets': suggested,
-        'open_questions': PolicyQuestion.objects.filter(status=PolicyQuestion.OPEN)[:10],
+        'open_questions': (PolicyQuestion.objects.filter(status=PolicyQuestion.OPEN)
+                           .order_by('created')[:10]),
         'totals': totals,
         'my_reviews': (Review.objects.filter(reviewer=request.user, is_latest=True)
                        .select_related('rule', 'rule__ruleset')[:10]
@@ -368,9 +374,10 @@ def rule_detail(request, pk):
 
 
 def _questions_for(ruleset):
-    return PolicyQuestion.objects.filter(
-        status=PolicyQuestion.OPEN).filter(
-        models_q(ruleset)).distinct()
+    # Oldest first: Q1 (which register?) has to be read before Q13, which is a
+    # consequence of it. Newest-first put the consequence above the premise.
+    return (PolicyQuestion.objects.filter(status=PolicyQuestion.OPEN)
+            .filter(models_q(ruleset)).distinct().order_by('created'))
 
 
 def models_q(ruleset):
@@ -415,6 +422,9 @@ def ruleset_detail(request, slug):
         'questions': _questions_for(ruleset),
         'lint_codes': LINT_CODES,
         'counterpart': ruleset.counterpart,
+        # An entire column of "not counted" tells the reader nothing and costs
+        # them a third of the table's width. Show it once there is something in it.
+        'show_frequency': rules.filter(corpus_frequency__isnull=False).exists(),
         'new_rule_proposals': (NewRuleProposal.objects
                                .filter(ruleset=ruleset, is_latest=True,
                                        status=NewRuleProposal.OPEN)

@@ -1,5 +1,5 @@
 {% extends "phonetics/_base.html" %}
-{% block page_title %}Rows that are simply broken{% endblock %}
+{% block page_title %}Rows that are clearly broken{% endblock %}
 {% block phonetics_content %}
 <h5>Rows that are clearly broken</h5>
 <p class="text-muted">
@@ -23,6 +23,7 @@
   <p class="small text-muted"><strong>{{ t.label }}:</strong> {{ t.why }}</p>
 {% endif %}{% endfor %}
 
+<div class="table-responsive">
 <table class="table table-sm align-middle">
   <thead><tr><th>Language</th><th>Letter</th><th>Sound now</th><th>Codepoints</th><th>Fault</th><th></th></tr></thead>
   <tbody>
@@ -38,4 +39,5 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

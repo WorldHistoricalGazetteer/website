@@ -116,9 +116,27 @@ class RuleSet(models.Model):
 
     @property
     def label(self):
+        """e.g. "Burmese — မြန်မာ · Myanmar script".
+
+        Not "Burmese (Myanmar (Burmese))", which is what naive nesting produced:
+        several ISO script names already contain a parenthesis, so wrapping them
+        in another one reads as a typing error. The language's own name is shown
+        alongside the English one because someone who reads Burmese should not
+        have to know what English calls it first.
+        """
+        from .iso import autonym
         name = self.language_name or self.language_code
+        own = autonym(self.language_code)
         script = self.script_name or self.script_code
-        return f'{name} ({script})'
+        # "Myanmar (Burmese)" → "Myanmar"; the language is already named.
+        script = script.split(' (')[0]
+        head = f'{name} — {own}' if own else name
+        return f'{head} · {script} script'
+
+    @property
+    def autonym(self):
+        from .iso import autonym
+        return autonym(self.language_code)
 
     @property
     def is_proposed(self):

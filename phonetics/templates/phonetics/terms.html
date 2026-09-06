@@ -69,7 +69,24 @@
   <details class="mt-3"><summary class="small">Change how you are credited</summary>
     <form method="post" class="mt-2 col-md-8">
       {% csrf_token %}
-      {{ form.as_p }}
+      <div class="mb-3">
+        <label class="form-label" for="id_credit_name">Name to credit</label>
+        <input type="text" class="form-control" name="credit_name" id="id_credit_name"
+               value="{{ form.credit_name.value|default:'' }}" maxlength="200">
+        <div class="form-text">Leave this empty to help without being named.</div>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="credit_public" id="id_credit_public"
+               {% if form.credit_public.value %}checked{% endif %}>
+        <label class="form-check-label" for="id_credit_public">Show my name publicly</label>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_orcid">ORCiD <span class="text-muted">(optional)</span></label>
+        <input type="text" class="form-control" name="orcid" id="id_orcid"
+               value="{{ form.orcid.value|default:'' }}" maxlength="64"
+               placeholder="0000-0002-1825-0097">
+        {% for e in form.orcid.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
       <button class="btn btn-sm btn-outline-primary">Save</button>
     </form>
   </details>
@@ -84,7 +101,31 @@
     {% endif %}
     <form method="post" class="col-md-8">
       {% csrf_token %}
-      {{ form.as_p }}
+      <div class="mb-3">
+        <label class="form-label" for="id_credit_name">Name to credit</label>
+        <input type="text" class="form-control" name="credit_name" id="id_credit_name"
+               value="{{ form.credit_name.value|default:'' }}" maxlength="200">
+        <div class="form-text">Leave this empty to help without being named.</div>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="credit_public" id="id_credit_public"
+               {% if form.credit_public.value %}checked{% endif %}>
+        <label class="form-check-label" for="id_credit_public">Show my name publicly</label>
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_orcid">ORCiD <span class="text-muted">(optional)</span></label>
+        <input type="text" class="form-control" name="orcid" id="id_orcid"
+               value="{{ form.orcid.value|default:'' }}" maxlength="64"
+               placeholder="0000-0002-1825-0097">
+        {% for e in form.orcid.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="accept" id="id_accept" required>
+        <label class="form-check-label" for="id_accept">
+          I have read the four points above and I agree.
+        </label>
+        {% for e in form.accept.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
       <button class="btn btn-primary">Agree and start</button>
     </form>
   </div></div>

@@ -7,11 +7,18 @@
   <code class="small">{{ ruleset.code }}</code>
   {% include "phonetics/_posture.html" with ruleset=ruleset %}
 </div>
-<p class="small text-muted mb-2">
-  {{ ruleset.source_repo }} · <code>{{ ruleset.source_path }}</code> @ {{ ruleset.source_ref }}
-  {% if version %}· fetched {{ version.fetched_at|date:"j M Y H:i" }} · blob <code>{{ version.blob_sha|slice:":8" }}</code>{% endif %}
-  {% if ruleset.conversion_rate is not None %}· <strong>{{ ruleset.conversion_rate }}%</strong> of sampled corpus names convert completely{% endif %}
-</p>
+{% if ruleset.conversion_rate is not None %}
+<p class="mb-2">WHG can currently read <strong>{{ ruleset.conversion_rate }}%</strong> of place
+  names written this way, all the way through.</p>
+{% endif %}
+<details class="small text-muted mb-3">
+  <summary>Where this list comes from</summary>
+  <div class="mt-1">
+    {{ ruleset.source_repo }} · <code>{{ ruleset.source_path }}</code> @ {{ ruleset.source_ref }}
+    {% if version %}<br>Last fetched {{ version.fetched_at|date:"j M Y H:i" }} ·
+    version <code>{{ version.blob_sha|slice:":8" }}</code>{% endif %}
+  </div>
+</details>
 
 {% if ruleset.posture == 'proposed' %}
 <div class="alert alert-info py-2 px-3"><strong>WHG wrote these and is not using them yet.</strong>
@@ -83,8 +90,16 @@
 </ul>
 {% endif %}
 
+{% if progress.lint %}
+<p class="small text-muted"><span class="badge text-bg-danger">&nbsp;</span>
+  Rows shaded red have a technical fault. You do not need to answer those.</p>
+{% endif %}
+
+<div class="table-responsive">
 <table class="table table-sm align-middle">
-  <thead><tr><th>#</th><th>Letter</th><th>Codepoints</th><th>Sound</th><th class="text-end">Place names</th><th>State</th><th></th></tr></thead>
+  <thead><tr><th>#</th><th>Letter</th><th>Codepoints</th><th>Sound</th>
+    {% if show_frequency %}<th class="text-end">Place names</th>{% endif %}
+    <th>State</th><th></th></tr></thead>
   <tbody>
   {% for rule in rules %}
   <tr {% if rule.lint_codes %}class="table-danger"{% endif %}{% if not rule.present_upstream %} class="text-muted"{% endif %}>
@@ -92,7 +107,7 @@
     <td class="grapheme-sm" lang="{{ ruleset.language_code }}">{{ rule.orth }}</td>
     <td class="small font-monospace text-muted">{{ rule.orth_codepoints }}</td>
     <td class="ipa-inline">{% if rule.current_ipa %}{{ rule.current_ipa }}{% else %}<span class="text-muted fst-italic small">(blank)</span>{% endif %}</td>
-    <td class="text-end small">{% if rule.corpus_frequency is not None %}{{ rule.corpus_frequency }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+    {% if show_frequency %}<td class="text-end small">{% if rule.corpus_frequency is not None %}{{ rule.corpus_frequency }}{% else %}<span class="text-muted" title="Not counted yet. This is not zero.">not counted</span>{% endif %}</td>{% endif %}
     <td>{% include "phonetics/_status.html" with rule=rule %}
         {% if not rule.present_upstream %}<span class="badge text-bg-dark">no longer in the file</span>{% endif %}</td>
     <td class="text-end"><a class="small" href="{% url 'phonetics:rule' rule.pk %}">review</a></td>
@@ -100,4 +115,5 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

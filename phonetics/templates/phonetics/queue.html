@@ -17,9 +17,9 @@
 <form class="row g-2 align-items-end mb-3 small" method="get">
   {% if ruleset %}<input type="hidden" name="ruleset" value="{{ ruleset.code }}">{% endif %}
   <div class="col-auto">
-    <label class="form-label mb-0" for="f-posture">Posture</label>
+    <label class="form-label mb-0" for="f-posture">Show</label>
     <select class="form-select form-select-sm" name="posture" id="f-posture">
-      <option value="">Both</option>
+      <option value="">Everything</option>
       {% for value, label in postures %}
         <option value="{{ value }}" {% if filters.posture == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
@@ -45,9 +45,11 @@
   first, then the ones that affect the most place names.
 </p>
 
+{% if rules %}
+<div class="table-responsive">
 <table class="table table-sm align-middle">
   <thead><tr>
-    <th>Language</th><th>Letter</th><th>Sound now</th><th class="text-end">Place names affected</th><th>State</th><th></th>
+    <th>Language</th><th>Letter</th><th>Sound now</th><th class="text-end">Place names</th><th>State</th><th></th>
   </tr></thead>
   <tbody>
   {% for rule in rules %}
@@ -56,13 +58,15 @@
         <div>{% include "phonetics/_posture.html" with ruleset=rule.ruleset %}</div></td>
       <td class="grapheme-sm" lang="{{ rule.ruleset.language_code }}">{{ rule.orth }}</td>
       <td class="ipa-inline">{% if rule.current_ipa %}{{ rule.current_ipa }}{% else %}<span class="text-muted fst-italic small">(blank)</span>{% endif %}</td>
-      <td class="text-end small">{% if rule.corpus_frequency is not None %}{{ rule.corpus_frequency }}{% else %}<span class="text-muted" title="Not measured — not the same as zero.">—</span>{% endif %}</td>
+      <td class="text-end small">{% if rule.corpus_frequency is not None %}{{ rule.corpus_frequency }}{% else %}<span class="text-muted" title="Not counted yet. This is not zero.">not counted</span>{% endif %}</td>
       <td>{% include "phonetics/_status.html" with rule=rule %}</td>
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{% url 'phonetics:rule' rule.pk %}?next={{ request.get_full_path|urlencode }}">Review</a></td>
     </tr>
-  {% empty %}
-    <tr><td colspan="6" class="text-muted">Nothing to show with these filters.</td></tr>
   {% endfor %}
   </tbody>
 </table>
+</div>
+{% else %}
+<p class="text-muted">Nothing to show with these filters.</p>
+{% endif %}
 {% endblock %}

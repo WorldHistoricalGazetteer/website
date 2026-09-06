@@ -65,6 +65,7 @@
 
 <h6 class="mt-4">Letters people have suggested adding</h6>
 {% if proposals %}
+<div class="table-responsive">
 <table class="table table-sm align-middle">
   <thead><tr><th>Letter</th><th>Codepoints</th><th>Sound</th><th>Suggested by</th><th>Notes</th></tr></thead>
   <tbody>
@@ -87,6 +88,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% else %}
 <p class="small text-muted">None yet.</p>
 {% endif %}

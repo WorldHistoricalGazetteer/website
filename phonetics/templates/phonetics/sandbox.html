@@ -1,6 +1,6 @@
 {% extends "phonetics/_base.html" %}
 {% load static %}
-{% block page_title %}Test {{ ruleset.code }}{% endblock %}
+{% block page_title %}Try a place name — {{ ruleset.code }}{% endblock %}
 {% block phonetics_content %}
 
 <h5>Try a real place name</h5>
@@ -26,6 +26,7 @@
 
 {% if results %}
 <p><strong>{{ complete }}</strong> of {{ results|length }} could be read completely.</p>
+<div class="table-responsive">
 <table class="table table-sm">
   <thead><tr><th>Place name</th><th>What WHG hears</th><th>Letters it cannot read</th></tr></thead>
   <tbody>
@@ -39,6 +40,7 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
 {% if gaps %}
