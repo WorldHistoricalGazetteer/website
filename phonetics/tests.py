@@ -461,6 +461,66 @@ class FormAndViewTests(SyncBase):
         self.assertEqual(self.client.get(reverse('phonetics:home')).status_code, 200)
 
 
+class PageRenderTests(SyncBase):
+    """Every readable page renders, for a visitor with an account and without one.
+
+    It also asserts the shared banner context is present on each. That is not
+    decoration: the banner is how an anonymous visitor is told that reading is
+    free and contributing needs an account, and a view that forgets to supply it
+    still returns 200 — Django resolves the missing variable to nothing and the
+    invitation silently disappears. Three views had exactly that bug.
+    """
+
+    def setUp(self):
+        self.ruleset, _ = self.make_ruleset()
+        self.rule = self.ruleset.rules.first()
+        ContributionTerms.objects.update(is_active=False)
+        ContributionTerms.objects.create(version='t1', title='t', body='b',
+                                         is_active=True, signed_off=True)
+        PolicyQuestion.objects.create(slug='q1', title='t', body='b',
+                                      ruleset=self.ruleset, options=[{'key': 'a', 'label': 'A'}])
+
+    def paths(self):
+        code = self.ruleset.code
+        return [
+            reverse('phonetics:home'),
+            reverse('phonetics:queue'),
+            reverse('phonetics:ruleset-list'),
+            reverse('phonetics:ruleset', args=[code]),
+            reverse('phonetics:rule', args=[self.rule.pk]),
+            reverse('phonetics:sandbox', args=[code]),
+            reverse('phonetics:lint'),
+            reverse('phonetics:question', args=['q1']),
+        ]
+
+    @override_settings(PHONETICS_PUBLIC=True)
+    def test_anonymous_visitors_can_read_everything_and_are_told_how_to_contribute(self):
+        for path in self.paths():
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.context['needs_login'])
+                self.assertFalse(response.context['can_contribute'])
+                self.assertContains(response, 'Sign in')
+
+    def test_a_signed_in_reviewer_sees_every_page_including_the_ones_needing_an_account(self):
+        user = make_user('reader', is_staff=True)
+        self.client.force_login(user)
+        for path in self.paths() + [reverse('phonetics:terms'),
+                                    reverse('phonetics:competence')]:
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertIn('needs_login', response.context)
+                self.assertFalse(response.context['needs_login'])
+
+    def test_the_gate_is_shut_before_launch(self):
+        # Same pages, same anonymous visitor, PHONETICS_PUBLIC left at its default.
+        for path in self.paths():
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+
+
 class ContributionGateTests(SyncBase):
 
     def test_no_review_can_be_recorded_without_active_terms(self):

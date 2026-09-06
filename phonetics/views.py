@@ -184,7 +184,8 @@ def terms(request):
     _gate(request)
     current = active_terms()
     if current is None:
-        return render(request, 'phonetics/terms.html', {'terms': None})
+        return render(request, 'phonetics/terms.html',
+                      {'terms': None, **_contribution_state(request)})
     existing = ReviewerAgreement.objects.filter(user=request.user, terms=current).first()
     if request.method == 'POST' and existing is None:
         form = AgreementForm(request.POST)
@@ -200,8 +201,11 @@ def terms(request):
         initial = {'credit_name': (request.user.get_full_name() or '').strip(),
                    'credit_public': True}
         form = AgreementForm(initial=initial)
+    # The terms page is where "needs_terms" gets fixed, so it must not also nag
+    # the visitor to go there.
+    state = {**_contribution_state(request), 'needs_terms': False}
     return render(request, 'phonetics/terms.html',
-                  {'terms': current, 'form': form, 'agreement': existing})
+                  {'terms': current, 'form': form, 'agreement': existing, **state})
 
 
 # ── Reviewing ────────────────────────────────────────────────────────────────
@@ -333,6 +337,7 @@ def ruleset_list(request):
     return render(request, 'phonetics/ruleset_list.html', {
         'rows': rows, 'q': query, 'posture': posture or '',
         'postures': Posture.choices,
+        **_contribution_state(request),
         'suggested': routing.suggested_rulesets(request.META.get('HTTP_ACCEPT_LANGUAGE', '')),
     })
 
@@ -380,6 +385,7 @@ def sandbox(request, code):
     names = [n for n in (request.POST.get('names') or '').splitlines() if n.strip()]
     results = [transcribe(n.strip(), build_map(pairs)) | {'name': n.strip()} for n in names]
     return render(request, 'phonetics/sandbox.html', {
+        **_contribution_state(request),
         'ruleset': ruleset, 'results': results,
         'names_text': request.POST.get('names') or '\n'.join(samples[:10]),
         'sample_count': len(samples),
