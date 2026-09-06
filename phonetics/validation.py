@@ -32,8 +32,12 @@ project (place#251):
 
 import functools
 import hashlib
+import logging
 import os
+import threading
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 # The literal EMPTY SET glyph. Epitran's own 139 native rule sets use it zero
 # times; the convention for "this grapheme produces nothing" is an empty field.
@@ -136,6 +140,36 @@ def panphon_provenance():
     with open(path, 'rb') as fh:
         digest = hashlib.sha256(fh.read()).hexdigest()
     return {'panphon_version': release, 'ipa_all_sha256': digest}
+
+
+_warming = threading.Lock()
+
+
+def warm():
+    """Build the PanPhon table in the background, before anyone waits on it.
+
+    Measured on dev: the first validation call takes **4.1s**, the second 1.8s
+    (a second gunicorn worker), and every one after that 0.2s. That cost is
+    PanPhon reading a 350KB CSV and compiling a large alternation regex, once per
+    worker process — and it lands on a reviewer who has just typed the first
+    character of their first correction and sees nothing happen.
+
+    Called from the pages that lead to a validation, so the work happens while
+    the reviewer is reading the row. Non-blocking: the page never waits for it,
+    and if it fails the next real call simply builds the table itself.
+
+    Not done in ``AppConfig.ready()`` on purpose — that would add the same
+    seconds to every management command, ``migrate`` included.
+    """
+    if _warming.locked():
+        return
+    def _build():
+        try:
+            with _warming:
+                feature_table()
+        except Exception:  # noqa: BLE001 - warming is best-effort by definition
+            logger.debug('phonetics: PanPhon warm-up failed; the next call will retry')
+    threading.Thread(target=_build, daemon=True, name='panphon-warm').start()
 
 
 def segment(value):

@@ -44,7 +44,8 @@ from .models import (CompetenceLevel, ContributionTerms, NewRuleProposal, Postur
                      PolicyQuestion, Review, ReviewerAgreement,
                      ReviewerCompetence, Rule, RuleSet, Verdict, active_terms)
 from .transcribe import build_map, compare, transcribe
-from .validation import codepoints, nfd, panphon_provenance, validate_ipa
+from .validation import (codepoints, nfd, panphon_provenance, validate_ipa,
+                         warm as warm_panphon)
 from .visibility import is_visible
 
 
@@ -306,6 +307,10 @@ def review_queue(request):
 def rule_detail(request, pk):
     """One row: the unit of work. Judgeable in seconds, or skippable in one."""
     _gate(request)
+    # Start building PanPhon while the reviewer reads the row: the first
+    # validation call in a worker otherwise takes seconds, and it lands exactly
+    # when they type their first character. See validation.warm.
+    warm_panphon()
     rule = get_object_or_404(
         Rule.objects.select_related('ruleset').prefetch_related('reviews__reviewer',
                                                                 'reviews__agreement'),
@@ -589,6 +594,7 @@ def propose_rule(request, slug):
     form, and is how most of these should arrive.
     """
     _gate(request)
+    warm_panphon()
     ruleset = get_object_or_404(RuleSet, slug=slug)
     if request.method == 'POST':
         if not request.user.is_authenticated:
