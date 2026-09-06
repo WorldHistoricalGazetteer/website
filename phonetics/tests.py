@@ -806,6 +806,36 @@ class CorpusSampleTests(SyncBase):
         self.assertIn(response.status_code, (200, 404))
 
 
+class CleanLintIsNotApprovalTests(SyncBase):
+    """A row passing every automatic check must not look like a row that is right.
+
+    Burmese ha-hto is the case: ``ှ → ʰ`` passes — a lone modifier is legitimate —
+    and is wrong, because ha-hto on a sonorant marks devoicing, not aspiration. It
+    affects 9,647 names. The row that most needed a human was the row the machine
+    passed.
+    """
+
+    def setUp(self):
+        self.ruleset, _ = self.make_ruleset()
+        ContributionTerms.objects.update(is_active=False)
+        ContributionTerms.objects.create(version='t', title='t', body='b',
+                                         is_active=True, signed_off=True)
+        self.client.force_login(make_user('looker', is_staff=True))
+
+    def test_a_clean_row_says_the_check_proves_nothing_about_correctness(self):
+        clean = self.ruleset.rules.get(orth='က')
+        self.assertEqual(clean.lint_codes, [])
+        response = self.client.get(reverse('phonetics:rule', args=[clean.pk]))
+        self.assertContains(response, 'does not mean the sound is right')
+
+    def test_a_broken_row_says_it_needs_no_answer_instead(self):
+        broken = self.ruleset.rules.get(orth='ဂ')
+        self.assertEqual(broken.lint_codes, ['ascii_g'])
+        response = self.client.get(reverse('phonetics:rule', args=[broken.pk]))
+        self.assertContains(response, 'This row is broken')
+        self.assertNotContains(response, 'does not mean the sound is right')
+
+
 class PageRenderTests(SyncBase):
     """Every readable page renders, for a visitor with an account and without one.
 

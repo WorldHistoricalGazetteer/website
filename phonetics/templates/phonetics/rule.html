@@ -54,6 +54,21 @@
             </div>
           {% endfor %}
           </div>
+        {% else %}
+          {% comment %}
+            A clean machine check must not read as reassurance. The clearest case
+            we have found is Burmese ha-hto: ှ → ʰ passes every automatic test,
+            because a lone modifier is a legitimate value — and it is wrong, since
+            ha-hto on a sonorant marks devoicing rather than aspiration. It affects
+            9,647 names. The row that most needed a human was the row the machine
+            passed, so the page says so rather than leaving silence to be read as
+            approval.
+          {% endcomment %}
+          <div class="small text-muted mt-2">
+            Our automatic checks found nothing wrong with this row.
+            <strong>That does not mean the sound is right</strong> — a computer can only see
+            that the value is usable, not whether it is correct for this letter.
+          </div>
         {% endif %}
       </div>
     </div>
