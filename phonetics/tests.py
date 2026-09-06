@@ -363,6 +363,31 @@ class NotesAndOrcidTests(SyncBase):
             self.assertEqual(canonical_orcid(bad), '')
 
 
+class RelintTests(SyncBase):
+    """Changing the lint rules must be able to reach rows already stored.
+
+    The sync is content-addressed, so a file whose bytes have not moved is never
+    re-read and its cached verdicts never change. That is right for the data and
+    wrong for the verdicts: when 22 rows stopped being defects, nothing would
+    have told the database.
+    """
+
+    def test_recompute_moves_a_stale_verdict(self):
+        from django.core.management import call_command
+        from io import StringIO
+        ruleset, _ = self.make_ruleset()
+        rule = ruleset.rules.get(orth='က')
+        self.assertEqual(rule.lint_codes, [])
+        # Simulate a verdict cached under an older lint.
+        Rule.objects.filter(pk=rule.pk).update(lint_codes=['unparseable'])
+        call_command('lint_epitran_rules', '--recompute', stdout=StringIO())
+        rule.refresh_from_db()
+        self.assertEqual(rule.lint_codes, [])
+        # …and a row that IS defective keeps its verdict, so this is not just
+        # a function that clears the column.
+        self.assertEqual(ruleset.rules.get(orth='ဂ').lint_codes, ['ascii_g'])
+
+
 class ReviewTests(SyncBase):
 
     def setUp(self):
