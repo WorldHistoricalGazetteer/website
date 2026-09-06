@@ -1,0 +1,201 @@
+{% extends "phonetics/_base.html" %}
+{% load static %}
+{% block page_title %}{{ rule.ruleset.code }} · {{ rule.orth }}{% endblock %}
+{% block phonetics_content %}
+
+<div class="d-flex flex-wrap align-items-baseline gap-2 mb-1">
+  <a href="{% url 'phonetics:ruleset' rule.ruleset.code %}" class="small">{{ rule.ruleset.label }}</a>
+  <code class="small text-muted">{{ rule.ruleset.code }}</code>
+  {% include "phonetics/_posture.html" with ruleset=rule.ruleset %}
+  {% include "phonetics/_status.html" with rule=rule %}
+</div>
+
+{% if rule.ruleset.posture == 'proposed' %}
+<div class="alert alert-info py-2 px-3 small">
+  <strong>This is a draft, not installed.</strong> WHG drafted this value; nobody has confirmed it.
+  You are being asked <em>is this proposed value right?</em>
+</div>
+{% else %}
+<div class="alert alert-secondary py-2 px-3 small">
+  <strong>This value is in production now.</strong> It is presumed adequate only because nobody has
+  said otherwise. You are being asked <em>is this shipped value wrong?</em> — please do not accept
+  it unless you have actually looked at it.
+</div>
+{% endif %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row align-items-center g-3">
+      <div class="col-auto text-center">
+        <div class="grapheme">{{ rule.orth }}</div>
+        <div class="small text-muted font-monospace">{{ rule.orth_codepoints }}</div>
+      </div>
+      <div class="col-auto display-6 text-muted">&rarr;</div>
+      <div class="col-auto text-center">
+        <div class="ipa">{% if rule.current_ipa %}{{ rule.current_ipa }}{% else %}<span class="text-muted fst-italic">(blank — produces nothing)</span>{% endif %}</div>
+        <div class="small text-muted font-monospace">{{ rule.ipa_codepoints }}</div>
+      </div>
+      <div class="col">
+        <div class="small text-muted">
+          {% if rule.corpus_frequency is not None %}
+            Affects <strong>{{ rule.corpus_frequency }}</strong> place name{{ rule.corpus_frequency|pluralize }} in the corpus.
+          {% else %}
+            <span title="Not measured. That is not the same as affecting nothing.">Corpus reach not yet measured.</span>
+          {% endif %}
+        </div>
+        {% if rule.lint_details %}
+          <div class="mt-2">
+          {% for defect in rule.lint_details %}
+            <div class="alert alert-danger py-1 px-2 small mb-1">
+              <strong>Broken — {{ defect.label }}.</strong> {{ defect.why }}
+              This row is defective before any linguistic judgement enters into it, so it needs
+              fixing upstream rather than your opinion.
+            </div>
+          {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if rule.examples %}
+<h6>Real names this row affects</h6>
+<table class="table table-sm small">
+  <thead><tr><th>Name</th><th>What the current rules produce</th></tr></thead>
+  <tbody>
+  {% for ex in rule.examples %}
+    <tr><td lang="{{ rule.ruleset.language_code }}">{{ ex.name }}</td>
+        <td class="font-monospace">{{ ex.output }}
+          {% if ex.complete is False %}<span class="badge text-bg-warning">incomplete</span>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="small text-muted">No corpus examples loaded for this row yet —
+  <a href="{% url 'phonetics:sandbox' rule.ruleset.code %}">try the rule sheet on a name yourself</a>.</p>
+{% endif %}
+
+{% if others %}
+<h6 class="mt-4">What other reviewers said</h6>
+<p class="small text-muted">Kept in full, including disagreement. Nothing here is resolved away or
+  overwritten — a minority answer is evidence, not noise.</p>
+<ul class="list-unstyled">
+  {% for r in others %}
+  <li class="border-start ps-2 mb-2">
+    <span class="badge text-bg-{% if r.verdict == 'accept' %}success{% elif r.verdict == 'correct' %}warning{% else %}info{% endif %}">{{ r.get_verdict_display }}</span>
+    {% if r.proposed_ipa %}<code class="ipa-inline">{{ r.proposed_ipa }}</code>{% endif %}
+    <span class="small text-muted">
+      {% if r.agreement and r.agreement.credit_public and r.agreement.credit_name %}{{ r.agreement.credit_name }}{% else %}a reviewer{% endif %}{% if r.competence_level %}, self-declared {{ r.competence_level }}{% endif %},
+      {{ r.confidence }} confidence, {{ r.created|date:"j M Y" }}
+    </span>
+    {% if r.is_stale %}<span class="badge text-bg-dark" title="Made against “{{ r.reviewed_ipa }}”, which is not what the rule says now.">about a superseded value</span>{% endif %}
+    {% if r.adopted_upstream_at %}<span class="badge text-bg-success">adopted upstream</span>{% endif %}
+    {% if r.comment %}<div class="small">{{ r.comment }}</div>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% if not can_contribute %}
+  <div class="alert alert-secondary py-2 px-3 small">
+    {% if needs_login %}
+      <a href="{% url 'accounts:login' %}?next={{ request.path }}">Sign in</a> to suggest a correction to
+      this row. You can read every suggestion above without one.
+    {% else %}
+      <a href="{% url 'phonetics:terms' %}?next={{ request.path }}">Read and agree the contribution terms</a>
+      before recording a review.
+    {% endif %}
+  </div>
+{% else %}
+<h6 class="mt-4">{% if mine %}Change your review{% else %}Your review{% endif %}</h6>
+{% if mine %}
+<p class="small text-muted">You said <strong>{{ mine.get_verdict_display|lower }}</strong>
+  {% if mine.proposed_ipa %}(<code>{{ mine.proposed_ipa }}</code>){% endif %} on {{ mine.created|date:"j M Y" }}.
+  Submitting again records a new judgement and keeps the old one.</p>
+{% endif %}
+
+<form method="post" id="review-form" novalidate>
+  {% csrf_token %}
+  <input type="hidden" name="next" value="{{ request.GET.next }}">
+  {% if form.non_field_errors %}<div class="alert alert-danger py-2 px-3 small">{{ form.non_field_errors }}</div>{% endif %}
+
+  <div class="btn-group mb-3" role="group">
+    {% for value, label in form.fields.verdict.choices %}
+      <input type="radio" class="btn-check" name="verdict" id="v-{{ value }}" value="{{ value }}"
+             {% if form.verdict.value == value %}checked{% endif %} required>
+      <label class="btn btn-outline-{% if value == 'accept' %}success{% elif value == 'correct' %}warning{% else %}info{% endif %}" for="v-{{ value }}">{{ label }}</label>
+    {% endfor %}
+  </div>
+
+  <div id="correction-box" class="mb-3" hidden>
+    <label class="form-label small mb-1" for="id_proposed_ipa">Correct IPA value</label>
+    <input type="text" class="form-control ipa-input" name="proposed_ipa" id="id_proposed_ipa"
+           value="{{ form.proposed_ipa.value|default:'' }}" autocomplete="off"
+           data-current="{{ rule.current_ipa }}">
+    <div class="form-text">
+      Leave blank to say this grapheme should produce nothing — that is a legitimate value and how
+      Epitran spells it. Checked live against PanPhon, which is what actually consumes these rules.
+    </div>
+    {% for e in form.proposed_ipa.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+    <div id="ipa-feedback" class="small mt-1"></div>
+    <div id="ipa-preview" class="small mt-2"></div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label small mb-1" for="id_confidence">Confidence</label>
+    <select class="form-select form-select-sm w-auto" name="confidence" id="id_confidence">
+      {% for value, label in form.fields.confidence.choices %}
+        <option value="{{ value }}" {% if value == 'medium' %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label small mb-1" for="id_comment">Comment (optional)</label>
+    <textarea class="form-control" name="comment" id="id_comment" rows="3">{{ form.comment.value|default:'' }}</textarea>
+  </div>
+
+  <button class="btn btn-primary" type="submit">Record</button>
+  {% if next_rule %}
+    <a class="btn btn-link" href="{% url 'phonetics:rule' next_rule.pk %}">Skip this row &rarr;</a>
+  {% else %}
+    <a class="btn btn-link" href="{% url 'phonetics:queue' %}">Skip this row &rarr;</a>
+  {% endif %}
+  <span class="small text-muted ms-2">Skipping records nothing. It is never read as agreement.</span>
+</form>
+{% endif %}
+
+{% if questions %}
+<div class="alert alert-light border mt-4 py-2 px-3 small">
+  <strong>This rule set has an open question that affects many rows:</strong>
+  {% for q in questions %}<a href="{% url 'phonetics:question' q.slug %}">{{ q.title }}</a>{% if not forloop.last %}; {% endif %}{% endfor %}
+</div>
+{% endif %}
+
+{% if history %}
+<details class="mt-4"><summary class="small text-muted">Earlier judgements on this row ({{ history|length }})</summary>
+  <ul class="small mt-2">
+    {% for r in history %}<li>{{ r.created|date:"j M Y" }} — {{ r.get_verdict_display|lower }}
+      {% if r.proposed_ipa %}<code>{{ r.proposed_ipa }}</code>{% endif %} (superseded by a later review)</li>{% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+<script id="phonetics-context" type="application/json">
+  {"ruleset": "{{ rule.ruleset.code }}", "orth": "{{ rule.orth|escapejs }}",
+   "lang": "{{ rule.ruleset.language_code }}",
+   "examples": {{ rule.examples|safe|default:"[]" }},
+   "validateUrl": "{% url 'phonetics:api-validate' %}",
+   "transcribeUrl": "{% url 'phonetics:api-transcribe' %}"}
+</script>
+{% endblock %}
+
+{% block deferredScripts %}
+  var scripts = [
+    {
+      src: '{% static 'webpack/phonetics.bundle.js' %}',
+      type: 'module',
+    },
+  ]
+{% endblock %}

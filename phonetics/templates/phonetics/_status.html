@@ -1,0 +1,14 @@
+{% if rule.status == 'unreviewed' %}
+  <span class="badge rounded-pill text-bg-light border text-muted" title="Nobody has looked at this row. That is not the same as agreement.">Not yet reviewed</span>
+{% elif rule.status == 'disputed' %}
+  <span class="badge rounded-pill text-bg-danger" title="Reviewers disagree. Both answers are kept.">Disagreement ({{ rule.review_count }})</span>
+{% elif rule.status == 'correction_proposed' %}
+  <span class="badge rounded-pill text-bg-warning" title="A correction has been proposed.">Correction proposed ({{ rule.review_count }})</span>
+{% elif rule.status == 'unsure' %}
+  <span class="badge rounded-pill text-bg-info" title="Flagged as uncertain, not corrected.">Unsure ({{ rule.review_count }})</span>
+{% else %}
+  <span class="badge rounded-pill text-bg-success" title="Every reviewer so far accepted this value.">Accepted ({{ rule.review_count }})</span>
+{% endif %}
+{% if rule.stale_review_count %}
+  <span class="badge rounded-pill text-bg-dark" title="{{ rule.stale_review_count }} review(s) were made against a value that has since changed upstream. They are evidence about the old value.">{{ rule.stale_review_count }} superseded</span>
+{% endif %}

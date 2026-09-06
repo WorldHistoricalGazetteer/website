@@ -1,0 +1,20 @@
+/* Grapheme review UI (place#252).
+   The one non-cosmetic rule here is the size of .grapheme: a reviewer is being
+   asked to distinguish characters that differ by a combining mark, and at body
+   size some of those differences are simply not visible. */
+.phonetics .grapheme { font-size: 3.5rem; line-height: 1.1; }
+.phonetics .grapheme-sm { font-size: 1.4rem; line-height: 1.2; }
+.phonetics .ipa { font-size: 2.2rem; line-height: 1.2; }
+.phonetics .ipa-inline,
+.phonetics .ipa-input {
+  font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", "DejaVu Sans", serif;
+  font-size: 1.15rem;
+}
+.phonetics .residue { color: #b02a37; font-weight: 600; }
+.phonetics .terms-body { max-height: 22rem; overflow-y: auto; }
+.phonetics .columns-3 { column-count: 3; column-gap: 1.5rem; }
+@media (max-width: 767px) { .phonetics .columns-3 { column-count: 1; } }
+.phonetics .seg { display: inline-block; padding: 0 .25rem; margin-right: .15rem;
+                  border: 1px solid var(--bs-border-color); border-radius: .2rem; }
+.phonetics .score-bar { height: .6rem; background: var(--bs-secondary-bg); border-radius: .3rem; overflow: hidden; }
+.phonetics .score-bar > span { display: block; height: 100%; background: var(--bs-primary); }

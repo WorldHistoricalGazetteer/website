@@ -1,0 +1,43 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+{% block title %}<title>WHG :: {% block page_title %}Phonetic rule review{% endblock %}</title>{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'phonetics/phonetics.css' %}">{% endblock %}
+
+{% block content %}
+<div class="container phonetics" style="max-width:1040px;">
+
+  <nav class="d-flex flex-wrap align-items-baseline gap-3 mt-3 mb-2 pb-2 border-bottom">
+    <a href="{% url 'phonetics:home' %}" class="h5 mb-0 text-decoration-none">Phonetic rule review</a>
+    <a href="{% url 'phonetics:queue' %}" class="small">Review queue</a>
+    <a href="{% url 'phonetics:ruleset-list' %}" class="small">Rule sets</a>
+    <a href="{% url 'phonetics:lint' %}" class="small">Broken rows</a>
+    {% if user.is_authenticated %}<a href="{% url 'phonetics:competence' %}" class="small">My languages</a>{% endif %}
+    <span class="ms-auto badge text-bg-warning">Beta preview</span>
+  </nav>
+
+  {% if messages %}{% for m in messages %}
+    <div class="alert alert-{{ m.tags|default:'info' }} py-2 px-3 small">{{ m }}</div>
+  {% endfor %}{% endif %}
+
+  {% if needs_login %}
+    <div class="alert alert-light border py-2 px-3 small">
+      Anyone can read all of this. <strong>Suggesting a correction needs an account</strong>,
+      because a suggestion carries your name, your stated competence and the licence you offered it
+      under — none of which we can record for an anonymous visitor.
+      <a href="{% url 'accounts:login' %}?next={{ request.get_full_path|urlencode }}">Sign in</a>.
+    </div>
+  {% elif needs_terms %}
+    <div class="alert alert-primary py-2 px-3 small">
+      Before you can record anything, please
+      <a href="{% url 'phonetics:terms' %}?next={{ request.get_full_path|urlencode }}">read and agree the contribution terms</a>.
+    </div>
+  {% elif terms_closed %}
+    <div class="alert alert-danger py-2 px-3 small">
+      <strong>Contributions are closed.</strong> No contribution terms are active, so there is
+      nothing you could be agreeing to. Reading is unaffected.
+    </div>
+  {% endif %}
+
+  {% block phonetics_content %}{% endblock %}
+</div>
+{% endblock %}

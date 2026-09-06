@@ -1,0 +1,72 @@
+{% extends "phonetics/_base.html" %}
+{% block page_title %}{{ question.title }}{% endblock %}
+{% block phonetics_content %}
+
+<h5>{{ question.title }}</h5>
+<p class="small text-muted">
+  {% if question.ruleset %}<a href="{% url 'phonetics:ruleset' question.ruleset.code %}">{{ question.ruleset.label }}</a>{% endif %}
+  · a decision about the whole rule set, not one row
+  {% if question.status == 'resolved' %}· <span class="badge text-bg-success">resolved</span>{% endif %}
+</p>
+
+<div class="card mb-3"><div class="card-body small">{{ question.body|linebreaks }}</div></div>
+
+{% if question.status == 'resolved' %}
+  <div class="alert alert-success py-2 px-3 small">
+    <strong>Resolved: {{ question.resolved_label }}</strong>
+    {{ question.resolution|linebreaks }}
+  </div>
+{% endif %}
+
+<h6>Answers so far</h6>
+<ul class="list-unstyled small">
+  {% for t in tally %}
+  <li class="mb-1">
+    <strong>{{ t.count }}</strong> — {{ t.label }}
+    {% if t.detail %}<span class="text-muted">{{ t.detail }}</span>{% endif %}
+    {% if t.count == 0 %}<span class="text-muted fst-italic">(nobody has chosen this)</span>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+
+{% if question.status == 'open' and not can_contribute %}
+  <p class="small text-muted mt-3">
+    {% if needs_login %}<a href="{% url 'accounts:login' %}?next={{ request.path }}">Sign in</a> to answer.
+    {% else %}<a href="{% url 'phonetics:terms' %}?next={{ request.path }}">Agree the contribution terms</a> to answer.{% endif %}
+  </p>
+{% elif question.status == 'open' %}
+<form method="post" class="mt-3">
+  {% csrf_token %}
+  {% for opt in question.options %}
+  <div class="form-check">
+    <input class="form-check-input" type="radio" name="option_key" id="opt-{{ opt.key }}" value="{{ opt.key }}"
+           {% if mine and mine.option_key == opt.key %}checked{% endif %} required>
+    <label class="form-check-label" for="opt-{{ opt.key }}">
+      <strong>{{ opt.label }}</strong>
+      {% if opt.detail %}<div class="small text-muted">{{ opt.detail }}</div>{% endif %}
+    </label>
+  </div>
+  {% endfor %}
+  <div class="mt-2">
+    <label class="form-label small mb-0" for="id_comment">Comment</label>
+    <textarea class="form-control" name="comment" id="id_comment" rows="3"></textarea>
+  </div>
+  <button class="btn btn-sm btn-primary mt-2">Record answer</button>
+  {% if mine %}<span class="small text-muted ms-2">You answered on {{ mine.created|date:"j M Y" }}; this replaces it and keeps the old one.</span>{% endif %}
+  {% if form.errors %}<div class="small text-danger mt-1">{{ form.errors }}</div>{% endif %}
+</form>
+{% endif %}
+
+{% if answers %}
+<h6 class="mt-4">What people said</h6>
+<ul class="list-unstyled small">
+  {% for a in answers %}
+  <li class="border-start ps-2 mb-2">
+    <strong>{{ a.option_label }}</strong>
+    <span class="text-muted">{% if a.competence_level %}self-declared {{ a.competence_level }} · {% endif %}{{ a.created|date:"j M Y" }}</span>
+    {% if a.comment %}<div>{{ a.comment }}</div>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

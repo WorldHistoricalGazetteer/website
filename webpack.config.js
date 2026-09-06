@@ -51,6 +51,7 @@ module.exports = {
 		gallery: './whg/webpack/js/gallery.js',
 		home: './whg/webpack/js/home.js',
 		mapAndTable: './whg/webpack/js/mapAndTable.js',
+		phonetics: './whg/webpack/js/phonetics.js',
 		places: './whg/webpack/js/places.js',
 		portal: './whg/webpack/js/portal.js',
 		profile: './whg/webpack/js/profile.js',

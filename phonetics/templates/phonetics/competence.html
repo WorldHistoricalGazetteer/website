@@ -1,0 +1,56 @@
+{% extends "phonetics/_base.html" %}
+{% block page_title %}My languages{% endblock %}
+{% block phonetics_content %}
+<h5>Languages you can judge</h5>
+<p class="small text-muted">
+  Self-declared, and recorded as such — nobody is vetted here. What you declare routes work to you;
+  it is not treated as authority, and where reviewers disagree the disagreement is kept rather than
+  settled by who claimed more.
+</p>
+
+{% if suggested %}
+<p class="small text-muted">From your browser's language settings, you might read:
+  {% for rs in suggested %}<code>{{ rs.code }}</code> {{ rs.label }}{% if not forloop.last %} · {% endif %}{% endfor %}.</p>
+{% endif %}
+
+<ul class="list-group mb-3">
+{% for c in competences %}
+  <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+    <span>{{ c.language_code }}{% if c.script_code %}-{{ c.script_code }}{% endif %}
+      — <strong>{{ c.get_level_display }}</strong>
+      {% if c.note %}<span class="small text-muted">{{ c.note }}</span>{% endif %}</span>
+    <form method="post" action="{% url 'phonetics:competence-delete' c.pk %}">{% csrf_token %}
+      <button class="btn btn-sm btn-outline-danger">Remove</button></form>
+  </li>
+{% empty %}
+  <li class="list-group-item small text-muted">Nothing declared yet.</li>
+{% endfor %}
+</ul>
+
+<form method="post" class="row g-2 align-items-end">
+  {% csrf_token %}
+  <div class="col-md-3">
+    <label class="form-label small mb-0" for="id_language_code">Language (ISO 639-3)</label>
+    <input class="form-control form-control-sm" name="language_code" id="id_language_code" list="langs" required>
+    <datalist id="langs">{% for a in available %}<option value="{{ a.language_code }}">{{ a.language_name }}</option>{% endfor %}</datalist>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label small mb-0" for="id_script_code">Script (optional, ISO 15924)</label>
+    <input class="form-control form-control-sm" name="script_code" id="id_script_code" list="scripts">
+    <datalist id="scripts">{% for a in available %}<option value="{{ a.script_code }}">{{ a.script_name }}</option>{% endfor %}</datalist>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label small mb-0" for="id_level">Level</label>
+    <select class="form-select form-select-sm" name="level" id="id_level">
+      {% for value, label in form.fields.level.choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3"><button class="btn btn-sm btn-primary">Add</button></div>
+  {% if form.errors %}<div class="col-12 small text-danger">{{ form.errors }}</div>{% endif %}
+</form>
+
+<h6 class="mt-4">Rule sets waiting for a reviewer</h6>
+<ul class="small columns-3">
+  {% for a in available %}<li><code>{{ a.code }}</code> {{ a.language_name }} ({{ a.script_name }})</li>{% endfor %}
+</ul>
+{% endblock %}
