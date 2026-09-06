@@ -1,0 +1,39 @@
+{% extends "phonetics/_base.html" %}
+{% block page_title %}Rows that are simply broken{% endblock %}
+{% block phonetics_content %}
+<h5>Rows that are simply broken</h5>
+<p class="text-muted small">
+  {{ total }} row{{ total|pluralize }} across {{ files }} rule set{{ files|pluralize }} carry a defect a
+  machine can prove. <strong>These are not review questions.</strong> Nobody's linguistic judgement is
+  needed to know that ASCII <code>g</code> is not IPA <code>ɡ</code>, and asking a speaker about one
+  would waste the scarcest thing this project has. They are listed so they get fixed upstream.
+</p>
+
+<div class="mb-3">
+  <a class="btn btn-sm btn-{% if not selected %}primary{% else %}outline-secondary{% endif %}" href="{% url 'phonetics:lint' %}">All</a>
+  {% for t in tally %}
+    <a class="btn btn-sm btn-{% if selected == t.code %}primary{% else %}outline-secondary{% endif %}"
+       href="?code={{ t.code }}" title="{{ t.why }}">{{ t.label }} ({{ t.count }})</a>
+  {% endfor %}
+</div>
+
+{% for t in tally %}{% if not selected or selected == t.code %}
+  <p class="small text-muted"><strong>{{ t.label }}:</strong> {{ t.why }}</p>
+{% endif %}{% endfor %}
+
+<table class="table table-sm align-middle">
+  <thead><tr><th>Rule set</th><th>Grapheme</th><th>Current IPA</th><th>Codepoints</th><th>Defect</th><th></th></tr></thead>
+  <tbody>
+  {% for rule in rules %}
+  <tr>
+    <td class="small"><code>{{ rule.ruleset.code }}</code></td>
+    <td class="grapheme-sm" lang="{{ rule.ruleset.language_code }}">{{ rule.orth }}</td>
+    <td class="ipa-inline">{{ rule.current_ipa }}</td>
+    <td class="small font-monospace text-muted">{{ rule.ipa_codepoints }}</td>
+    <td class="small">{% for d in rule.lint_details %}<span class="badge text-bg-danger" title="{{ d.why }}">{{ d.label }}</span> {% endfor %}</td>
+    <td class="text-end"><a class="small" href="{% url 'phonetics:rule' rule.pk %}">open</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

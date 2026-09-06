@@ -91,6 +91,17 @@ oauthlib==3.2.2
 odfpy==1.4.1
 openpyxl==3.0.9
 ordered-set==4.1.0
+# PanPhon is what actually consumes the Epitran rule sets reviewed at /phonetics/
+# (place#252), so proposed IPA is validated against it rather than against a regex.
+# 0.22.0 IS THE PIN AND NOT AN ARBITRARY ONE: 0.22.1+ call DataFrame.map, added in
+# pandas 2.1, and this project is on pandas 1.4.1. 0.22.0 ships a byte-identical
+# ipa_all.csv to the 0.22.2 the indexing host installs and segments all 453 distinct
+# values in the shipped corpus identically, so the pin costs no parity with the
+# consumer — phonetics/tests.py asserts exactly that and will fail if it ever does.
+panphon==0.22.0
+editdistance==0.8.1   # panphon
+munkres==1.1.4        # panphon
+regex==2026.9.3       # panphon
 pandas==1.4.1
 parameterized==0.7.4
 petl==1.7.12

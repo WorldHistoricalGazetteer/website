@@ -1,0 +1,39 @@
+{% extends "phonetics/_base.html" %}
+{% block page_title %}Contribution terms{% endblock %}
+{% block phonetics_content %}
+<h5>Contribution terms</h5>
+
+{% if not terms %}
+  <div class="alert alert-danger py-2 px-3">
+    <strong>Contributions are closed.</strong> No contribution terms are active, so there is nothing
+    you could be agreeing to — and collecting your work under wording nobody has settled would be
+    worse than collecting nothing. Please come back once the terms are published.
+  </div>
+{% else %}
+  {% if not terms.signed_off %}
+    <div class="alert alert-warning py-2 px-3 small">
+      <strong>These terms are a draft.</strong> They are shown so the tool can be exercised in beta.
+      The review UI cannot be opened to the public while they are unsigned.
+    </div>
+  {% endif %}
+  <div class="card mb-3"><div class="card-body">
+    <h6>{{ terms.title }}</h6>
+    <p class="small text-muted mb-2">Version {{ terms.version }} · licence <code>{{ terms.licence_spdx }}</code></p>
+    <div class="terms-body small">{{ terms.body|linebreaks }}</div>
+  </div></div>
+
+  {% if agreement %}
+    <p class="small">You accepted these terms on {{ agreement.accepted_at|date:"j M Y" }}.
+      {% if agreement.credit_public and agreement.credit_name %}
+        You are credited as <strong>{{ agreement.credit_name }}</strong>.
+      {% else %}You have asked not to be publicly credited.{% endif %}</p>
+    <a class="btn btn-sm btn-primary" href="{% url 'phonetics:queue' %}">Start reviewing</a>
+  {% else %}
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="btn btn-primary">Agree and continue</button>
+    </form>
+  {% endif %}
+{% endif %}
+{% endblock %}

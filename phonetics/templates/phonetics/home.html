@@ -1,0 +1,99 @@
+{% extends "phonetics/_base.html" %}
+{% block page_title %}Phonetic rule review{% endblock %}
+{% block phonetics_content %}
+
+<p class="text-muted">
+  WHG converts place names to IPA so that it can match them across writing systems. That conversion
+  is driven by grapheme&rarr;IPA rule sets — one per language and script — and their quality varies
+  enormously. Where the rules fail, matching on those scripts performs no better than chance, while
+  methods that know no phonetics at all still work. It is a gap we can close, and closing it needs
+  people who read the languages.
+</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body py-2">
+    <div class="h4 mb-0">{{ totals.rulesets }}</div><div class="small text-muted">rule sets</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body py-2">
+    <div class="h4 mb-0">{{ totals.rules }}</div><div class="small text-muted">rows</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card h-100"><div class="card-body py-2">
+    <div class="h4 mb-0">{{ totals.reviewed_rules }}</div><div class="small text-muted">rows reviewed</div></div></div></div>
+  <div class="col-6 col-md-3"><div class="card h-100 border-warning"><div class="card-body py-2">
+    <div class="h4 mb-0">{{ totals.lint }}</div><div class="small text-muted"><a href="{% url 'phonetics:lint' %}">rows broken outright</a></div></div></div></div>
+</div>
+
+{% if user.is_authenticated %}
+<h5 class="mt-4">Languages you have declared</h5>
+{% if competences %}
+  <ul class="list-unstyled mb-2">
+    {% for c in competences %}
+      <li class="mb-1">
+        <strong>{{ c.get_level_display }}</strong> &mdash; {{ c.language_code }}{% if c.script_code %}-{{ c.script_code }}{% endif %}
+        <span class="small text-muted">(self-declared)</span>
+      </li>
+    {% endfor %}
+  </ul>
+  {% if my_rulesets %}
+  <p><a class="btn btn-sm btn-primary" href="{% url 'phonetics:queue' %}">Start reviewing &rarr;</a></p>
+  <ul class="list-inline small">
+    {% for rs in my_rulesets %}<li class="list-inline-item">
+      <a href="{% url 'phonetics:ruleset' rs.code %}">{{ rs.label }}</a></li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="small text-muted">No rule set matches what you have declared yet.</p>
+  {% endif %}
+{% else %}
+  <p class="small text-muted">
+    None yet. Declaring a language routes work to you — a Burmese speaker is not a Sinhala expert,
+    and there is no point offering you rows you cannot judge.
+    <a href="{% url 'phonetics:competence' %}">Declare a language</a>.
+  </p>
+{% endif %}
+
+{% if suggested_rulesets %}
+<div class="alert alert-light border py-2 px-3 small">
+  <strong>Your browser suggests you may read:</strong>
+  {% for rs in suggested_rulesets %}<a href="{% url 'phonetics:ruleset' rs.code %}">{{ rs.label }}</a>{% if not forloop.last %} &middot; {% endif %}{% endfor %}.
+  That is a guess from your browser's language settings, not a claim about you — reviewing still
+  means <a href="{% url 'phonetics:competence' %}">declaring competence</a> yourself.
+</div>
+{% endif %}
+
+{% if open_questions %}
+<h5 class="mt-4">Open questions about whole rule sets</h5>
+<p class="small text-muted">Some decisions change hundreds of rows at once and cannot be asked row by row.</p>
+<ul>
+  {% for q in open_questions %}
+    <li><a href="{% url 'phonetics:question' q.slug %}">{{ q.title }}</a>
+      {% if q.ruleset %}<span class="small text-muted">— {{ q.ruleset.label }}</span>{% endif %}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+{% endif %}
+
+{% if my_review_count %}
+<h5 class="mt-4">Your contribution</h5>
+<p class="small">
+  {{ my_review_count }} review{{ my_review_count|pluralize }} recorded.
+  {% if my_adopted_count %}<strong>{{ my_adopted_count }}</strong> of your corrections
+  {{ my_adopted_count|pluralize:"has,have" }} since been adopted into the rule sets upstream —
+  detected by comparing the files, not self-reported.{% endif %}
+</p>
+<ul class="small">
+  {% for r in my_reviews %}
+    <li><a href="{% url 'phonetics:rule' r.rule.pk %}">{{ r.rule.ruleset.code }} · {{ r.rule.orth }}</a>
+      — {{ r.get_verdict_display|lower }}{% if r.proposed_ipa %}: <code>{{ r.proposed_ipa }}</code>{% endif %}
+      {% if r.adopted_upstream_at %}<span class="badge text-bg-success">adopted upstream</span>{% endif %}
+      {% if r.is_stale %}<span class="badge text-bg-dark" title="The rule has changed upstream since you reviewed it.">superseded</span>{% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<hr class="mt-4">
+<p class="small text-muted mb-0">
+  Nothing here edits a rule set. The files live in the <code>indexing</code> repository and are
+  changed there; what you record is a proposal, kept with your name against it if you want it, for
+  someone to act on deliberately.
+</p>
+{% endblock %}

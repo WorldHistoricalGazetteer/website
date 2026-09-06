@@ -1,0 +1,10 @@
+{% comment %}
+  The two review postures are shown differently everywhere they appear. A
+  reviewer handed a shipped value in the same visual frame as a proposed one
+  approves production values they never examined — so the frame differs.
+{% endcomment %}
+{% if ruleset.posture == 'proposed' %}
+  <span class="badge text-bg-info" title="Drafted by WHG and not installed. The question is: is this proposed value right?">Proposed draft</span>
+{% else %}
+  <span class="badge text-bg-secondary" title="Currently in production. The question is: is this shipped value wrong?">In production</span>
+{% endif %}

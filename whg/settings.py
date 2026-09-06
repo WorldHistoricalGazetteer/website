@@ -86,6 +86,30 @@ OLLAMA_NUM_THREAD = int(os.environ.get('OLLAMA_NUM_THREAD') or globals().get('OL
 # budget deliberating over a list of place names.
 OLLAMA_THINK = str(os.environ.get('OLLAMA_THINK') or globals().get('OLLAMA_THINK', '')).lower() == 'true'
 
+# Grapheme→IPA rule review (place#252). The rule sets under review are NOT held here: they live in
+# the `indexing` repo and are changed there, including by agents processing what reviewers record.
+# Django mirrors them on a schedule (`manage.py sync_epitran_rules`, or the `phonetics.sync_rulesets`
+# Celery task) and never writes back. Fetching per page load was rejected deliberately — a review
+# has to name the exact value it was made against, and a file re-read on every request can change
+# under a reviewer between the page rendering and their verdict posting.
+PHONETICS_SOURCES = globals().get('PHONETICS_SOURCES', [
+    # The 115 shipped rule sets: live in production, presumed adequate until someone says otherwise.
+    {'repo': 'WorldHistoricalGazetteer/indexing', 'ref': 'main',
+     'path': 'zenodo/epitran_extensions', 'posture': 'shipped'},
+    # WHG's drafts: not installed, awaiting judgement. A missing directory is not an error — this
+    # one is not pushed yet — so the sync logs it and carries on.
+    {'repo': 'WorldHistoricalGazetteer/indexing', 'ref': 'main',
+     'path': 'developer/epitran-drafts', 'posture': 'proposed'},
+])
+# Optional; falls back to GITHUB_SNAG_TOKEN. Only needed to lift the anonymous API rate limit —
+# file bodies come from raw.githubusercontent.com, so a sync is two API calls plus changed files.
+PHONETICS_GITHUB_TOKEN = os.environ.get('PHONETICS_GITHUB_TOKEN') or globals().get('PHONETICS_GITHUB_TOKEN', '')
+# While False, only staff/beta users can reach the review UI at all; everyone else gets a 404.
+# Flipping it to True is NOT sufficient on its own: going public also requires contribution terms
+# marked signed_off, checked in phonetics.views._gate. Non-negotiable 6 of place#252 says the
+# licensing has to be settled before launch, so it is enforced rather than remembered.
+PHONETICS_PUBLIC = str(os.environ.get('PHONETICS_PUBLIC') or globals().get('PHONETICS_PUBLIC', '')).lower() == 'true'
+
 DATABASES['default']['CONN_MAX_AGE'] = 600  # 10 minutes
 
 if 'test' in sys.argv:
@@ -147,6 +171,7 @@ INSTALLED_APPS = [
     'main.apps.MainConfig',
     'periods.apps.PeriodsConfig',
     'persons.apps.PersonsConfig',
+    'phonetics.apps.PhoneticsConfig',  # grapheme→IPA rule review (place#252)
     'placetypes.apps.TypesConfig',
     'places.apps.PlacesConfig',
     'regions.apps.RegionsConfig',

@@ -1,0 +1,42 @@
+{% comment %}
+  Why the matching model runs here at all.
+
+  This is what the rules are *for*: the whole point of converting a name to IPA
+  is to let the matcher recognise it written in another script. Someone asked to
+  spend an hour on a consonant table deserves to see the thing their hour buys,
+  and to see it fail where it currently fails, rather than take our word for it.
+
+  ⚠ The honest part, which is stated on the page and not only here. The model in
+  the browser is a trained encoder: it reads characters, not the rules under
+  review. The rules shaped the IPA it was *trained* against, so correcting one
+  improves the training signal for the next model — it does not change what this
+  encoder outputs today. Implying otherwise would be a demo that lies, and the
+  first contributor to notice would be right to stop trusting the tool.
+{% endcomment %}
+<h6>Does the matching actually work on this script?</h6>
+<p class="small text-muted">
+  Type a place name and a version of it in another script — the same place, written differently.
+  The similarity score below is computed in your browser by the Symphonym encoder WHG uses for
+  cross-script matching. Nothing is sent anywhere.
+</p>
+
+<div class="row g-2 align-items-end mb-2" id="match-demo"
+     data-lang="{{ ruleset.language_code }}" data-ruleset="{{ ruleset.code }}"
+     data-transcribe-url="{% url 'phonetics:api-transcribe' %}">
+  <div class="col-md-4">
+    <label class="form-label small mb-0" for="m-a">Name in {{ ruleset.script_name }}</label>
+    <input class="form-control form-control-sm" id="m-a" lang="{{ ruleset.language_code }}" autocomplete="off">
+  </div>
+  <div class="col-md-4">
+    <label class="form-label small mb-0" for="m-b">The same place, another script</label>
+    <input class="form-control form-control-sm" id="m-b" autocomplete="off">
+  </div>
+  <div class="col-md-auto"><button class="btn btn-sm btn-outline-primary" id="m-go" type="button">Compare</button></div>
+</div>
+<div id="m-out" class="small"></div>
+<p class="small text-muted mt-2 mb-0">
+  <strong>What this shows and what it does not.</strong> The encoder reads characters; it does not
+  read these rules at run time. The rules produced the IPA it was <em>trained</em> against, so
+  correcting them improves the signal the next model learns from — it will not change the score you
+  see today. What the score does show, honestly, is where matching currently stands on this script.
+</p>

@@ -83,6 +83,7 @@ urlpatterns = [
                   path('grace/admin/', grace_admin_site.urls),
                   path('grace/', include('grace.urls')),
                   path('main/', include('main.urls')),  # utility urls/views
+                  path('phonetics/', include('phonetics.urls')),
                   path('places/', include('places.urls')),
                   path('resources/', include('resources.urls')),
                   path('search/', include('search.urls')),
