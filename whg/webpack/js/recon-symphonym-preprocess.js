@@ -1,8 +1,10 @@
 // recon-symphonym-preprocess.js
 // The Symphonym tokeniser, ported character-for-character from the CANONICAL implementation:
 // `hf/inference.py` in the indexing repo, between its `--- BEGIN/END CANONICAL TOKENISER ---`
-// markers (commit 97a8b31, 5 September 2026). Verified case-by-case against a golden fixture
-// generated from that file — `npm run test:symphonym`.
+// markers. The block carries its own sha256 and this port records the one it targets
+// (`CANONICAL_BLOCK_SHA256` in scripts/check-symphonym-tokeniser.mjs, currently 74fb6176… — the
+// Symphonym v8 block). Verified case-by-case against fixtures generated from that file —
+// `npm run test:symphonym`.
 //
 // WHY THIS FILE IS A PORT AND NOT AN INTERPRETATION. Until 5 September 2026 there were four
 // implementations of this tokeniser and they disagreed. The gateway tokenised a query differently
@@ -56,9 +58,9 @@ export const SCRIPT_OTHER = 'OTHER';
 // THE PRECEDENCE RULE REPRODUCES A KNOWN DEFECT, DELIBERATELY. Exactly one block overlaps:
 // U+FB00–FB17, Hebrew presentation forms shadowed by the Armenian ligatures, with the consequence
 // that the Latin ligature 'ﬁ' (U+FB01) scores as ARMENIAN. That is wrong, and the indexing repo
-// agrees it is wrong — but the 72.7M-document index was written with it, so here "correct" means
-// "identical". Fixing it is a Symphonym v8 question with a full re-embed attached. Do not
-// "improve" this scan.
+// agrees it is wrong — but the index was written with it, so here "correct" means "identical".
+// It was NOT fixed in v8: the v8 canonical block still carries the overlap, the v8 re-embed was
+// done with it, and the golden fixture still pins 'ﬁ' → ARMENIAN. Do not "improve" this scan.
 const SCRIPT_UNICODE_RANGES = [
   ['LATIN', [[0x0000, 0x007F], [0x0080, 0x00FF], [0x0100, 0x017F],
              [0x0180, 0x024F], [0x0250, 0x02AF], [0x1D00, 0x1D7F],
@@ -88,6 +90,35 @@ const SCRIPT_UNICODE_RANGES = [
            [0xF900, 0xFAFF]]],
   ['HIRAGANA', [[0x3040, 0x309F], [0x1B000, 0x1B0FF]]],
   ['KATAKANA', [[0x30A0, 0x30FF], [0x31F0, 0x31FF], [0xFF65, 0xFF9F]]],
+  // ── Added for Symphonym v8 (place#285) ────────────────────────────────────────────────────
+  // Ported verbatim from the canonical `_SCRIPT_UNICODE_RANGES`, order preserved, because order is
+  // load-bearing (later entry wins) and these are appended AFTER the original 19 — so none of the
+  // v7 classifications can move.
+  //
+  // NOT optional, and not "lost upside". Under the v7 20-entry script_vocab.json a script named
+  // here still resolved to OTHER, so omitting them cost nothing. Under v8's 37-entry vocab the
+  // canonical returns the REAL id, so an unextended port would send script_id=OTHER(19) for a name
+  // the index embedded as GURMUKHI(21) — query and document conditioned differently, which is the
+  // v7-against-v8 defect again, narrowed to 3,168 codepoints. Measured before porting:
+  //   Amritsar 19 vs 21, Yangon 19 vs 20, Lhasa 19 vs 22, Addis Ababa 19 vs 27,
+  //   Vientiane 19 vs 29, Phnom Penh 19 vs 24.
+  ['MYANMAR', [[0x1000, 0x109F], [0xA9E0, 0xA9FF], [0xAA60, 0xAA7F]]],
+  ['GURMUKHI', [[0x0A00, 0x0A7F]]],
+  ['TIBETAN', [[0x0F00, 0x0FFF]]],
+  ['SINHALA', [[0x0D80, 0x0DFF]]],
+  ['KHMER', [[0x1780, 0x17FF], [0x19E0, 0x19FF]]],
+  ['OL_CHIKI', [[0x1C50, 0x1C7F]]],
+  ['TIFINAGH', [[0x2D30, 0x2D7F]]],
+  ['ETHIOPIC', [[0x1200, 0x137F], [0x1380, 0x139F], [0x2D80, 0x2DDF], [0xAB00, 0xAB2F]]],
+  ['ORIYA', [[0x0B00, 0x0B7F]]],
+  ['LAO', [[0x0E80, 0x0EFF]]],
+  ['MONGOLIAN', [[0x1800, 0x18AF]]],
+  ['CANADIAN_ABORIGINAL', [[0x1400, 0x167F], [0x18B0, 0x18FF]]],
+  ['BOPOMOFO', [[0x3100, 0x312F], [0x31A0, 0x31BF]]],
+  ['THAANA', [[0x0780, 0x07BF]]],
+  ['NKO', [[0x07C0, 0x07FF]]],
+  ['SYRIAC', [[0x0700, 0x074F], [0x0860, 0x086F]]],
+  ['COPTIC', [[0x2C80, 0x2CFF]]],
 ];
 
 // Romanised via anyascii; decomposed to Jamo. Both sets are what the index was built with —

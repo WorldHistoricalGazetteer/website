@@ -6,13 +6,13 @@
 // uses a client vector only if this names the generation it has loaded; otherwise it discards the
 // vector and embeds server-side — correct results, no offload. Check it from outside at
 // /api/health -> stores.symphonym.{version, client_vectors}.
-export const SYMPHONYM_GENERATION = "v7";
+export const SYMPHONYM_GENERATION = "v8";
 
 export const SYMPHONYM_ASSETS = {
-  "symphonym.onnx": { sha256: '0a3feb6375fd204b1839f8576ffd7d4c1df0b3973aa3606fcb3ec664159c16c2', bytes: 8361303, verify: true },
-  "char_vocab.json": { sha256: 'f8c2fb83ebbc0b84e02f7ea1a4da2e6701ca559dc20c72eefdf9e4635e2e5580', bytes: 2106541, verify: true },
-  "script_vocab.json": { sha256: '0917304fd581fff4c5fcd04e452372ac7c5a9200d82fdf70f97e241e157b93bb', bytes: 404, verify: true },
-  "lang_vocab.json": { sha256: 'df3ee5ad6d7a32d27961baf1bdc893c8a072952e7909740f5026ad72c5560405', bytes: 35581, verify: true },
+  "symphonym.onnx": { sha256: 'b674453fc9d5cc4e5f1a723dba246e0840982d2ab40c575760e3246cee43ddd3', bytes: 8472929, verify: true },
+  "char_vocab.json": { sha256: 'a5a2da8c9161b0d455d437fcedd00e45d96cee72947a8a9d0bbbe1dac1ad9ab9', bytes: 2137210, verify: true },
+  "script_vocab.json": { sha256: '9be9f820e7abdc498b307ea56ffadddb5e37149e89f7cef037ff3929644dec4b', bytes: 731, verify: true },
+  "lang_vocab.json": { sha256: 'cf92fe8a476a4788f0bf3a597ada04a67f593928a84858852817bc05683f6c4b', bytes: 45324, verify: true },
   "ort-wasm-simd-threaded.wasm": { sha256: 'd1ab1b94b16a65b29d710d0b587b29e7bed336827577623913479b8afe8113e6', bytes: 13479978, verify: false },
   "ort-wasm-simd-threaded.mjs.js": { sha256: '0a1e718d99c41b22c21f2520ff4f9e883a6b5533856e398d21816ee8eb8185d3', bytes: 24180, verify: false },
 };

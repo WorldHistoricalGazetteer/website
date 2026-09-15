@@ -20,6 +20,23 @@
     "CJK": 16,
     "HIRAGANA": 17,
     "KATAKANA": 18,
+    "MYANMAR": 20,
+    "GURMUKHI": 21,
+    "TIBETAN": 22,
+    "SINHALA": 23,
+    "KHMER": 24,
+    "OL_CHIKI": 25,
+    "TIFINAGH": 26,
+    "ETHIOPIC": 27,
+    "ORIYA": 28,
+    "LAO": 29,
+    "MONGOLIAN": 30,
+    "CANADIAN_ABORIGINAL": 31,
+    "BOPOMOFO": 32,
+    "THAANA": 33,
+    "NKO": 34,
+    "SYRIAC": 35,
+    "COPTIC": 36,
     "OTHER": 19
   }
 }
