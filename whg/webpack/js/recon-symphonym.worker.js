@@ -7,14 +7,18 @@
 import * as ort from 'onnxruntime-web/wasm';
 import { tokenise } from './recon-symphonym-preprocess.js';
 import { quantiseByte } from './recon-symphonym-quantise.js';
+import { assetUrl, fetchVerified } from './symphonym-fetch.js';
 
-const BASE = '/static/webpack/symphonym/';
+const decoder = new TextDecoder();
+const asJson = (buf) => JSON.parse(decoder.decode(buf));
+
 // The ESM loader is shipped with a .js extension: Django static serves .mjs as
 // application/octet-stream, which browsers refuse to import() as a module. .js is served as
 // application/javascript. The .wasm is served correctly (application/wasm).
+// Versioned but NOT integrity-checked: ORT fetches these itself, so their bytes never reach us.
 ort.env.wasm.wasmPaths = {
-  wasm: BASE + 'ort-wasm-simd-threaded.wasm',
-  mjs: BASE + 'ort-wasm-simd-threaded.mjs.js',
+  wasm: assetUrl('ort-wasm-simd-threaded.wasm'),
+  mjs: assetUrl('ort-wasm-simd-threaded.mjs.js'),
 };
 ort.env.wasm.numThreads = 1;        // single-threaded: no SAB, works without COOP/COEP headers
 
@@ -25,18 +29,25 @@ let ready = null;
 async function init() {
   if (ready) return ready;
   ready = (async () => {
-    const [cv, sv, lv] = await Promise.all([
-      fetch(BASE + 'char_vocab.json').then((r) => r.json()),
-      fetch(BASE + 'script_vocab.json').then((r) => r.json()),
-      fetch(BASE + 'lang_vocab.json').then((r) => r.json()),
+    const [cvBuf, svBuf, lvBuf, onnxBuf] = await Promise.all([
+      fetchVerified('char_vocab.json'),
+      fetchVerified('script_vocab.json'),
+      fetchVerified('lang_vocab.json'),
+      fetchVerified('symphonym.onnx'),
     ]);
+    const cv = asJson(cvBuf), sv = asJson(svBuf), lv = asJson(lvBuf);
     vocabs = {
       charToId: cv.char_to_id || cv,
       scriptToId: sv.script_to_id || sv,
       langToId: lv.lang_to_id || lv,
     };
-    session = await ort.InferenceSession.create(BASE + 'symphonym.onnx', { executionProviders: ['wasm'] });
+    // Created from the VERIFIED bytes, not re-fetched by URL — so the graph that runs is provably
+    // the one that was hashed.
+    session = await ort.InferenceSession.create(new Uint8Array(onnxBuf), { executionProviders: ['wasm'] });
   })();
+  // A failed init must not be memoised as a permanent poisoned promise: a transient network error
+  // would otherwise disable phonetic matching for the life of the page.
+  ready.catch(() => { ready = null; });
   return ready;
 }
 
