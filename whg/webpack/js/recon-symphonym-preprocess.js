@@ -198,11 +198,33 @@ export function encodeLang(lang, langToId) {
   return id == null ? LANG_UNK_ID : id;
 }
 
-// Script name → id, falling back to OTHER and then to 0.
+// Script name → id, falling back to OTHER — and REFUSING if OTHER itself is missing.
+//
+// The fallback to OTHER is legitimate and load-bearing: a script this port cannot name (every
+// script the JS ranges do not cover, which under v8's 37-entry vocab is 17 of them) must reach the
+// model as OTHER, exactly as the canonical Python does. That path is exercised by the Gurmukhi
+// fixture below.
+//
+// What is NOT legitimate is the old second fallback, `return other == null ? 0 : other`. **Id 0 is
+// LATIN.** A vocab that loads without an `OTHER` key — truncated fetch, wrong file, a future vocab
+// that renames it — silently conditioned every name in every script as Latin, and still returned a
+// perfectly well-formed 128-d vector, so nothing downstream could tell. Unlike `encodeChars`, which
+// can degrade an unknown character to <UNK> because <UNK> means "unknown", there is no safe id to
+// invent here: every script id names a real script and asserts something specific about the input.
+//
+// So this raises. A vocabulary with no OTHER is not a usable vocabulary, and the encoder must stop
+// rather than emit confident nonsense. See place#282, and place#283 for the init-time hash check
+// that catches the same class of corruption before a single name is encoded.
 export function encodeScript(script, scriptToId) {
   if (Object.prototype.hasOwnProperty.call(scriptToId, script)) return scriptToId[script];
   const other = scriptToId[SCRIPT_OTHER];
-  return other == null ? 0 : other;
+  if (other == null) {
+    throw new Error(
+      `Symphonym script vocabulary has no '${SCRIPT_OTHER}' entry — refusing to encode. ` +
+      'Falling back to id 0 would silently condition every name as LATIN. ' +
+      'The vocabulary is corrupt or mispaired with the model.');
+  }
+  return other;
 }
 
 // (text, lang) → the four ONNX inputs. The single entry point every caller should use.
