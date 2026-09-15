@@ -33,7 +33,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
 const ASSETS = path.join(ROOT, 'static', 'webpack', 'symphonym');
 
-const { tokenise } = await import(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-preprocess.js'));
+const { tokenise, detectScript } = await import(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-preprocess.js'));
 const { quantiseByte } = await import(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-quantise.js'));
 
 const fixture = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures', 'symphonym_golden.json'), 'utf8'));
@@ -422,6 +422,70 @@ if (diffBad) {
   const u = assetUrl('char_vocab.json');
   if (/\?v=[0-9a-f]{16}$/.test(u)) console.log('  ok    asset URL carries the content version');
   else { console.log(`  FAIL  asset URL is unversioned: ${u}`); failures.push('integrity guard: asset URL carries no version'); }
+}
+
+// ── Every script the range table names is exercised by a case (place#285) ────
+// Comparing the two TABLES by name proves the port matches the canonical. It does NOT prove any
+// case ever reaches those ranges, and until 2026-09-15 most never did: 17 of 36 named scripts had
+// no case in either fixture, SIX of them (the Indic set) present since v7. Anyone could have
+// changed the BENGALI range and nothing here would have failed.
+//
+// That is the same shape as the defects fixed alongside it - a fixture keyed to a population the
+// change does not touch, so it regenerates identically whether or not the work was done. It is
+// exactly why golden v4 added six cases in the newly split scripts; this assertion is the part
+// that stops it depending on anyone remembering, because a script added without a case is now a
+// test failure rather than a silent blind spot.
+//
+// Asserted over the UNION of both fixtures: the differential carries the breadth, the golden
+// carries scripts the differential does not, and the requirement is that the table is exercised
+// somewhere - not that it is exercised twice.
+{
+  console.log('\nevery named script is exercised by a fixture case');
+  const src = fs.readFileSync(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-preprocess.js'), 'utf8');
+  const from = src.indexOf('const SCRIPT_UNICODE_RANGES');
+  const to = src.indexOf('const ROMANISE_SCRIPTS');
+  const named = [...src.slice(from, to).matchAll(/\['([A-Z_]+)',/g)].map((m) => m[1]);
+  // Guard the CALL SITE, never detectScript itself - that is the ported canonical and must stay
+  // byte-identical. A renamed key yields undefined, and detectScript would throw "text is not
+  // iterable": loud, but a stack trace instead of the diagnosis the control below exists to give.
+  const classify = (cases, key) => new Set(
+    cases.map((c) => (typeof c[key] === 'string' ? detectScript(c[key]) : null))
+      .filter((x) => x !== null));
+  const seenG = classify(fixture.cases, 'name');
+  const seenD = classify(diff.cases, 't');
+  const seen = new Set([...seenG, ...seenD]);
+  // POSITIVE CONTROL, PER FIXTURE - and the per-fixture part is the point. Classification here
+  // depends on a case-object key (`name` in the golden, `t` in the differential), and a renamed key
+  // makes that fixture contribute NOTHING while the other still classifies fine. The union then
+  // looks merely thin rather than broken, and the check reports a pile of "uncovered" scripts that
+  // are in fact covered - a catastrophic number, which is the one that reads as an important
+  // finding. That exact bug (reading `script_id` where the key is `s`) was hit by the indexing
+  // session on this very fixture and scored 0 of 15,853 cases.
+  //
+  // A union-level control cannot catch it: the surviving fixture keeps LATIN present and the set
+  // non-empty. So require EACH fixture to have classified a plausible number on its own. The
+  // thresholds are floors far below current coverage (16 and 31), not targets.
+  const thin = [];
+  if (seenG.size < 4) thin.push(`golden classified only ${seenG.size} scripts`);
+  if (seenD.size < 8) thin.push(`differential classified only ${seenD.size} scripts`);
+  if (!seen.has('LATIN')) thin.push('LATIN absent from both');
+  if (thin.length) {
+    failures.push(`script-coverage check could not classify a fixture (case key renamed?) - ${thin.join('; ')}`);
+    console.log(`  FAIL  ${thin.join('; ')}.\n`
+      + '          A fixture that classifies nothing makes every script look uncovered.\n'
+      + '          Reporting nothing further - fix the reader before reading the result.');
+  } else {
+    const uncovered = named.filter((n) => !seen.has(n));
+    if (uncovered.length) {
+      failures.push(`no fixture case reaches ${uncovered.length} named script(s): ${uncovered.join(', ')}`);
+      console.log(`  FAIL  no case reaches: ${uncovered.join(', ')}\n`
+        + '          A script in the range table with no case is an untested range. Add a case in\n'
+        + '          that script - generate it from the canonical block, never by hand.');
+    } else {
+      console.log(`  ok    all ${named.length} named scripts reached by a case `
+        + `(classified: golden ${seenG.size}, differential ${seenD.size}, union ${seen.size} — includes the OTHER fallback, which is not in the table)`);
+    }
+  }
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
