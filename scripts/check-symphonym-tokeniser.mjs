@@ -318,6 +318,99 @@ if (diffBad) {
   console.log(`  ${diff.cases.length}/${diff.cases.length} differential cases exact`);
 }
 
+// ── Asset manifest is in step with the files on disk (place#283) ─────────────
+// The worker versions its asset URLs by sha256 and re-hashes what it receives. Both depend on
+// symphonym-assets.js describing the files actually shipped, so a manifest that has drifted must
+// be a TEST failure here and not a refusal in a user's browser. Regenerate with:
+//     node scripts/gen-symphonym-manifest.mjs
+{
+  console.log('\nasset manifest vs static/webpack/symphonym/');
+  const manifestPath = path.join(ROOT, 'whg', 'webpack', 'js', 'symphonym-assets.js');
+  if (!fs.existsSync(manifestPath)) {
+    failures.push('symphonym-assets.js is missing — run node scripts/gen-symphonym-manifest.mjs');
+    console.log('  FAIL  symphonym-assets.js is missing');
+  } else {
+    const { SYMPHONYM_ASSETS, SYMPHONYM_GENERATION } = await import(manifestPath);
+    const names = Object.keys(SYMPHONYM_ASSETS);
+    // Positive control: an empty or truncated manifest would otherwise agree with everything it
+    // does not mention, which is the shape of check this suite exists to refuse.
+    const REQUIRED = ['symphonym.onnx', 'char_vocab.json', 'script_vocab.json', 'lang_vocab.json'];
+    const absent = REQUIRED.filter((n) => !names.includes(n));
+    if (absent.length) {
+      failures.push(`asset manifest does not mention ${absent.join(', ')}`);
+      console.log(`  FAIL  manifest does not mention ${absent.join(', ')}`);
+    }
+    let bad = 0;
+    for (const name of names) {
+      const a = SYMPHONYM_ASSETS[name];
+      const f = path.join(ROOT, 'static', 'webpack', 'symphonym', name);
+      if (!fs.existsSync(f)) {
+        failures.push(`asset manifest lists ${name}, which is not on disk`);
+        console.log(`  FAIL  ${name} listed but absent`); bad++; continue;
+      }
+      const buf = fs.readFileSync(f);
+      const sha = crypto.createHash('sha256').update(buf).digest('hex');
+      if (sha !== a.sha256 || buf.length !== a.bytes) {
+        failures.push(`asset manifest is stale for ${name} — run node scripts/gen-symphonym-manifest.mjs`);
+        console.log(`  FAIL  ${name} manifest ${a.sha256.slice(0, 16)}…/${a.bytes}B, on disk ${sha.slice(0, 16)}…/${buf.length}B`);
+        bad++;
+      }
+    }
+    if (!bad && !absent.length) {
+      console.log(`  ok    ${names.length} assets match the manifest (generation ${SYMPHONYM_GENERATION})`);
+    }
+  }
+}
+
+// ── The integrity guard itself, driven through its failure modes (place#283) ──
+// A guard whose job is to fire rarely is exactly the one that must be proven to fire. Tests the
+// REAL fetchVerified — not a copy of its logic — by injecting a fetch that reads from disk.
+{
+  console.log('\nasset integrity guard (symphonym-fetch.js)');
+  const { fetchVerified, assetUrl } = await import(path.join(ROOT, 'whg', 'webpack', 'js', 'symphonym-fetch.js'));
+  const DIR = path.join(ROOT, 'static', 'webpack', 'symphonym');
+  const diskFetch = (mutate) => async (u) => {
+    const name = u.split('?')[0].split('/').pop();
+    const f = path.join(DIR, name);
+    if (!fs.existsSync(f)) return { ok: false, status: 404 };
+    let buf = fs.readFileSync(f);
+    if (mutate) buf = mutate(Buffer.from(buf));
+    return { ok: true, status: 200, arrayBuffer: async () => buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) };
+  };
+  const expectThrow = async (label, fn, needle) => {
+    try { await fn(); console.log(`  FAIL  ${label}: did not throw`); failures.push(`integrity guard: ${label} did not throw`); }
+    catch (e) {
+      if (String(e.message).includes(needle)) console.log(`  ok    ${label}`);
+      else { console.log(`  FAIL  ${label}: wrong error — ${e.message.slice(0, 80)}`); failures.push(`integrity guard: ${label} threw the wrong error`); }
+    }
+  };
+  // POSITIVE CONTROL first. Without it every "it threw" below is satisfied by a guard that
+  // throws unconditionally, which would pass this section while verifying nothing.
+  try {
+    const buf = await fetchVerified('script_vocab.json', { fetchImpl: diskFetch(null) });
+    console.log(`  ok    intact asset verifies and returns ${buf.byteLength} bytes`);
+  } catch (e) {
+    console.log(`  FAIL  intact asset did not verify: ${e.message.slice(0, 90)}`);
+    failures.push('integrity guard: rejects an INTACT asset — the guard is broken, not the asset');
+  }
+  await expectThrow('one flipped byte is refused',
+    () => fetchVerified('script_vocab.json', { fetchImpl: diskFetch((b) => { b[10] ^= 0x01; return b; }) }),
+    'does not match the manifest');
+  await expectThrow('a truncated asset is refused',
+    () => fetchVerified('script_vocab.json', { fetchImpl: diskFetch((b) => b.subarray(0, b.length - 1)) }),
+    'does not match the manifest');
+  await expectThrow('a missing asset is refused',
+    () => fetchVerified('char_vocab.json', { fetchImpl: async () => ({ ok: false, status: 404 }) }),
+    'HTTP 404');
+  await expectThrow('an asset absent from the manifest is refused',
+    () => fetchVerified('not-a-real-asset.json', { fetchImpl: diskFetch(null) }),
+    'not in the manifest');
+  // The cache-busting half: the URL must carry the version, or a changed asset reuses a cached URL.
+  const u = assetUrl('char_vocab.json');
+  if (/\?v=[0-9a-f]{16}$/.test(u)) console.log('  ok    asset URL carries the content version');
+  else { console.log(`  FAIL  asset URL is unversioned: ${u}`); failures.push('integrity guard: asset URL carries no version'); }
+}
+
 // ── Result ───────────────────────────────────────────────────────────────────
 if (failures.length) {
   console.log(`\n${failures.length} failure(s):`);
