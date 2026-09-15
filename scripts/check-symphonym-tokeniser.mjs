@@ -64,7 +64,7 @@ const bad = (c, detail) => { failures.push(`${label(c)}: ${detail}`); console.lo
 //
 // A MISMATCH IS NOT A BUG IN THIS REPO. It means the canonical has moved and the port, the fixtures
 // and this constant all need regenerating together — in that order.
-const CANONICAL_BLOCK_SHA256 = '74fb6176adfae9b44e2a591fee4daab973ba7fc68b7a33fd4411dedba28e6685';
+const CANONICAL_BLOCK_SHA256 = 'db9cefd56b145b3ce73d32313e4f2e7175c9b6fa0e6960712e8eec2ebfc122f8';
 const CANONICAL_SOURCE = process.env.SYMPHONYM_CANONICAL
   || path.join(process.env.HOME || '', 'PycharmProjects', 'indexing', 'hf', 'inference.py');
 {
@@ -88,7 +88,10 @@ const CANONICAL_SOURCE = process.env.SYMPHONYM_CANONICAL
       const kept = src.slice(a, b + END.length).split('\n')
         .filter((ln) => !ln.startsWith('# CANONICAL-BLOCK')).join('\n');
       const actual = crypto.createHash('sha256').update(kept, 'utf8').digest('hex');
-      const declaredM = src.match(/# CANONICAL-BLOCK v1 sha256=([0-9a-f]{64})/);
+      // v\d+, not v1: the block's own stamp line was bumped to v2, and a hardcoded version made
+      // this witness match NOTHING and skip silently — it stops witnessing on precisely the event
+      // it exists to observe. A witness that can only be absent is not a witness.
+      const declaredM = src.match(/# CANONICAL-BLOCK v\d+ sha256=([0-9a-f]{64})/);
       const declared = declaredM && declaredM[1];
       // Witness 1: upstream's stamp still describes upstream's block (their tripwire, re-run here).
       if (declared && declared !== actual) {
