@@ -12,6 +12,7 @@ import '../css/reconciliation.css';
 import TypeTreeWidget from './typeTreeWidget.js';
 import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
+import { SYMPHONYM_GENERATION } from './symphonym-assets.js';
 import { clusterHits, cosineByte, DEFAULT_PARAMS } from './clustering.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
@@ -8267,7 +8268,14 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       // dataset-wide scope — in one list, shared with the review card's hand search (place#208). Kept
       // on the unit so the results loop below can re-apply the client-side half of it.
       u.parts = queryConstraints(colIndex, row, v.country);
-      if (embByKey && embByKey[key]) q.embedding = embByKey[key]; // phonetic (vector) matching
+      if (embByKey && embByKey[key]) {
+        q.embedding = embByKey[key];                    // phonetic (vector) matching
+        // Declare WHICH Symphonym generation built it. The gateway uses a client vector only if
+        // this names the generation it has loaded, and otherwise discards it and embeds
+        // server-side. Read from the asset manifest rather than hardcoded, so it cannot claim a
+        // generation the shipped model is not (place#285).
+        q.query_vector_model = SYMPHONYM_GENERATION;
+      }
       // Name variants (alt_names): alternative spellings tried alongside the primary toponym — only for
       // the place-name column (variants of a container's own value aren't a modelled concept). Their
       // in-browser embeddings ride along positionally, so the gateway can skip the server-side embed;
@@ -8278,7 +8286,7 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
           q.variants = vars;
           if (embByVariant) {
             const vecs = vars.map((s) => embByVariant[s] || null);
-            if (vecs.some(Boolean)) q.variant_vectors = vecs;
+            if (vecs.some(Boolean)) { q.variant_vectors = vecs; q.query_vector_model = SYMPHONYM_GENERATION; }
           }
         }
       }

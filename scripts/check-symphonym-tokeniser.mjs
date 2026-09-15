@@ -64,7 +64,7 @@ const bad = (c, detail) => { failures.push(`${label(c)}: ${detail}`); console.lo
 //
 // A MISMATCH IS NOT A BUG IN THIS REPO. It means the canonical has moved and the port, the fixtures
 // and this constant all need regenerating together — in that order.
-const CANONICAL_BLOCK_SHA256 = '9a879b4cc312902c2447baf6671fca9886fe5ba2d2584cc6ce16bc054405a47f';
+const CANONICAL_BLOCK_SHA256 = '74fb6176adfae9b44e2a591fee4daab973ba7fc68b7a33fd4411dedba28e6685';
 const CANONICAL_SOURCE = process.env.SYMPHONYM_CANONICAL
   || path.join(process.env.HOME || '', 'PycharmProjects', 'indexing', 'hf', 'inference.py');
 {
@@ -122,9 +122,17 @@ const CANONICAL_SOURCE = process.env.SYMPHONYM_CANONICAL
 // observable if the vocab ALSO gains the key (that variant: 1,437 mismatches). So a fixture of
 // Punjabi names asserting OTHER would pass whether or not the table were "fixed" — a case that
 // cannot fail. Comparing the tables by name is the only check that fires on the table alone.
-const CANONICAL_SCRIPTS = ['ARABIC', 'ARMENIAN', 'BENGALI', 'CJK', 'CYRILLIC', 'DEVANAGARI',
-  'GEORGIAN', 'GREEK', 'GUJARATI', 'HANGUL', 'HEBREW', 'HIRAGANA', 'KANNADA', 'KATAKANA', 'LATIN',
-  'MALAYALAM', 'TAMIL', 'TELUGU', 'THAI'];
+//
+// ⚠ UPDATED FOR v8 (place#285). GURMUKHI and sixteen others are now IN the canonical table, so the
+// paragraph above describes v7 and is kept only to explain why the check exists. Under v7's
+// 20-entry script_vocab.json adding them changed nothing observable; under v8's 37-entry vocab the
+// canonical returns the REAL id, so an unported table sends OTHER(19) where the index embedded
+// GURMUKHI(21). The D7 fixture cases are the ones that fire on it.
+const CANONICAL_SCRIPTS = ['ARABIC', 'ARMENIAN', 'BENGALI', 'BOPOMOFO', 'CANADIAN_ABORIGINAL',
+  'CJK', 'COPTIC', 'CYRILLIC', 'DEVANAGARI', 'ETHIOPIC', 'GEORGIAN', 'GREEK', 'GUJARATI',
+  'GURMUKHI', 'HANGUL', 'HEBREW', 'HIRAGANA', 'KANNADA', 'KATAKANA', 'KHMER', 'LAO', 'LATIN',
+  'MALAYALAM', 'MONGOLIAN', 'MYANMAR', 'NKO', 'OL_CHIKI', 'ORIYA', 'SINHALA', 'SYRIAC', 'TAMIL',
+  'TELUGU', 'THAANA', 'THAI', 'TIBETAN', 'TIFINAGH'];
 {
   const src = fs.readFileSync(path.join(ROOT, 'whg', 'webpack', 'js', 'recon-symphonym-preprocess.js'), 'utf8');
   const from = src.indexOf('const SCRIPT_UNICODE_RANGES');
@@ -133,7 +141,9 @@ const CANONICAL_SCRIPTS = ['ARABIC', 'ARMENIAN', 'BENGALI', 'CJK', 'CYRILLIC', '
     failures.push('could not locate SCRIPT_UNICODE_RANGES — has it been renamed?');
     console.log('  FAIL  could not locate SCRIPT_UNICODE_RANGES in the tokeniser');
   } else {
-    const found = [...src.slice(from, to).matchAll(/\['([A-Z]+)',/g)].map((m) => m[1]).sort();
+    // [A-Z_]+, not [A-Z]+: OL_CHIKI and CANADIAN_ABORIGINAL carry underscores, and the narrower
+    // class silently failed to match them — reporting them MISSING from a table that has them.
+    const found = [...src.slice(from, to).matchAll(/\['([A-Z_]+)',/g)].map((m) => m[1]).sort();
     const want = [...CANONICAL_SCRIPTS].sort();
     const extra = found.filter((n) => !want.includes(n));
     const missing = want.filter((n) => !found.includes(n));
@@ -149,7 +159,7 @@ const CANONICAL_SCRIPTS = ['ARABIC', 'ARMENIAN', 'BENGALI', 'CJK', 'CYRILLIC', '
         console.log(`  FAIL  missing: ${missing.join(', ')}`);
       }
     } else {
-      console.log(`  ok    ${found.length} scripts, name-for-name (GURMUKHI absent, as the canonical table has it)`);
+      console.log(`  ok    ${found.length} scripts, name-for-name`);
     }
   }
 }

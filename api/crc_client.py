@@ -342,6 +342,24 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     if isinstance(embedding, (list, tuple)) and len(embedding) == 128:
         body["query_vector"] = list(embedding)
         body["mode"] = "phonetic"
+        # Which Symphonym generation produced these vectors. The gateway honours a client vector
+        # ONLY if this names the generation it has loaded; otherwise it discards the vector, logs a
+        # warning and embeds server-side — correct results, no offload. That guard exists because a
+        # v7 browser encoder against a v8 index produced meaningless cosines with nothing raising
+        # anywhere (place#285).
+        #
+        # It is a property of the shipped assets, not a constant: the browser sends what its own
+        # manifest says it holds, so the two can never drift apart in the one direction that
+        # matters. Do NOT hardcode it here, and do not "helpfully" default it — an absent field is
+        # correctly treated as a mismatch, which is the safe outcome.
+        #
+        # Check from outside at /api/health -> stores.symphonym: `version` is the server's
+        # generation, and client_vectors {accepted, discarded, last_client_model} says whether ours
+        # are being used. If `discarded` climbs after a deploy, the offload is off and that counter
+        # is the only thing that knows.
+        model = raw.get("query_vector_model")
+        if isinstance(model, str) and model.strip():
+            body["query_vector_model"] = model.strip()
 
     # Name variants (alt_names, issue #143): alternative spellings for this row, forwarded so the gateway
     # tries them alongside the primary toponym when ranking candidates. Accept a list or ';'-delimited

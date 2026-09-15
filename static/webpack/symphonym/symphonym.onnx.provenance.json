@@ -1,0 +1,114 @@
+{
+ "artefact": "symphonym-v8.onnx",
+ "artefact_md5": "afc74f102d9ab98e92382dcaed93628c",
+ "artefact_bytes": 8472929,
+ "exported_utc": "2026-09-15T08:22:10.049265+00:00",
+ "source_model_dir": "/vast/ishi/models/phonetic/symphonym-v8-hf",
+ "source_weights_md5": "e255c5bcb5c5cc517f032aaa945b2798",
+ "vocab_md5": {
+  "char_vocab.json": "16a4d41e868fecc16e1b701363e1bda8",
+  "lang_vocab.json": "17ce7fe69a836ddd32c9577cdd60f389",
+  "script_vocab.json": "18fd9410e1c543429ec8327a29ee3225"
+ },
+ "config": {
+  "model_type": "symphonym",
+  "architectures": [
+   "UniversalEncoder"
+  ],
+  "version": "v8",
+  "vocab_size": 114845,
+  "num_scripts": 37,
+  "num_langs": 2438,
+  "num_length_buckets": 16,
+  "char_embed_dim": 64,
+  "script_embed_dim": 16,
+  "lang_embed_dim": 16,
+  "length_embed_dim": 8,
+  "hidden_dim": 128,
+  "embed_dim": 128,
+  "num_layers": 2,
+  "num_attention_heads": 2,
+  "dropout": 0.2,
+  "lang_dropout": 0.5,
+  "max_toponym_len": 50,
+  "teacher": {
+   "architectures": [
+    "PhoneticEncoder"
+   ],
+   "phonetic_feat_dim": 192,
+   "hidden_dim": 128,
+   "embed_dim": 128,
+   "num_layers": 2,
+   "num_attention_heads": 2,
+   "dropout": 0.2,
+   "note": "PanPhon192: 8-bin positional pooling of 24-dim articulatory features"
+  },
+  "training": {
+   "phase1_epochs": 50,
+   "phase2_epochs": 50,
+   "phase3_epochs": 30,
+   "phase1_val_loss": 0.0056,
+   "phase2_student_teacher_cosine": 0.942,
+   "phase3_val_loss": 0.021217376736320875,
+   "triplet_margin": 0.3,
+   "phase1_lr": 0.0001,
+   "phase2_lr": 0.0005,
+   "phase3_lr": 5e-05,
+   "phase1_batch_size": 2048,
+   "phase2_batch_size": 1024,
+   "phase3_batch_size": 1024,
+   "weight_decay": 1e-05,
+   "warmup_epochs": 2,
+   "noise_prob": 0.3,
+   "mse_weight": 1.0,
+   "cosine_weight": 1.0,
+   "phase2_alpha": 0.5,
+   "phase2_loss": "alpha * MSE(student, teacher) + (1 - alpha) * (1 - cosine(student, teacher))",
+   "phase3_loss": "triplet_margin(anchor, positive, hard_negative, margin=0.3)"
+  },
+  "g2p": {
+   "backends": [
+    "epitran",
+    "phonikud",
+    "charsiu_g2p"
+   ],
+   "epitran_extensions": 102,
+   "scripts_covered": 20,
+   "ipa_coverage": 0.54,
+   "panphon_bins": 8,
+   "panphon_feat_dim": 24,
+   "panphon192_dim": 192
+  },
+  "index": {
+   "quantization": "int8",
+   "ann_backend": "elasticsearch_hnsw",
+   "_note": "total_toponyms, embedding_coverage, as_of and measured_from are DERIVED FROM THE LIVE INDEX by hf/upload_to_hf.py at publish time and are absent here deliberately. A hard-coded count is stale from the next re-ingest onwards: this file carried 66924548 at 100% coverage against a live 72703777."
+  }
+ },
+ "git_commit": "c33dd8709fef2784309c6a2d9ccc619f73817a1d",
+ "tool_versions": {
+  "torch": "2.9.1+cu128",
+  "onnx": "1.22.0",
+  "onnxruntime": "1.30.0",
+  "python": "3.11.13"
+ },
+ "verification": {
+  "cases": 8,
+  "worst_cosine_vs_torch": 0.999488,
+  "tolerance": 0.999
+ },
+ "interface": {
+  "inputs": {
+   "char_ids": "INT64 [1, seq]",
+   "script_id": "INT64 [1]",
+   "lang_id": "INT64 [1]",
+   "length": "INT64 [1] (id count)"
+  },
+  "output": {
+   "embedding": "FLOAT [1, 128], L2-normalised"
+  },
+  "batch": 1,
+  "padding": "none \u2014 seq is the true id count"
+ },
+ "pairing_warning": "These vocab md5s are part of the artefact. A model served with a different vocabulary does not raise; it embeds plausible nonsense. Check them at load time."
+}
