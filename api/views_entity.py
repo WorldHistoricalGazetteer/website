@@ -13,7 +13,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import TemplateView
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotAuthenticated
+from rest_framework.exceptions import APIException, NotAuthenticated
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer, StaticHTMLRenderer
 from rest_framework.response import Response
@@ -49,6 +49,59 @@ def _fetch_crc_place(place_id: str, user=None,
                               allow_anonymous=allow_anonymous,
                               meta=meta)
     return result.get(place_id)
+
+
+class SourceNotRedistributable(APIException):
+    """451 for a record whose source we may index but may not re-serve (place#269).
+
+    `/entity/place:<id>/api` is the citable, w3id-published representation of an
+    authority record, and since place#271 it answers anonymous linked-data
+    clients. That makes it a **redistribution** surface, not merely a search one —
+    so a source held under terms that forbid re-hosting must not be served through
+    it, however freely we may index and search it.
+
+    🛑 The distinction the registry already draws (place#136): indexing, search and
+    reconciliation run server-side and never expose raw source data, and are
+    permitted for every authority regardless. `redistributable` governs whether WHG
+    may hand the source's own content to a third party. This endpoint does exactly
+    that.
+
+    ⚠️ **451, not 403.** The refusal is a legal constraint on the content, not a
+    permission failure of the caller — no credential would change the answer, and
+    403 invites a client to retry with one. 451 also carries a documented
+    `Link: rel="blocked-by"` convention, so the rights holder is nameable.
+
+    The body names the source and its terms, because a consumer who cannot have the
+    data can still legitimately need to know whose it is and where to get it.
+    """
+
+    status_code = 451
+    default_code = "source_not_redistributable"
+
+    def __init__(self, namespace="", attribution=None):
+        a = attribution or {}
+        name = a.get("name") or namespace or "this source"
+        detail = {
+            "detail": (
+                f"{name} is indexed and searchable through WHG, but its terms do not "
+                f"permit WHG to redistribute its records. Obtain the data from the "
+                f"source under its own terms."
+            ),
+            "namespace": namespace,
+            "source": {
+                "name": a.get("name"),
+                "rights_holder": a.get("rights_holder"),
+                "source_url": a.get("source_url"),
+                "license": a.get("license__spdx_id") or a.get("license__label"),
+                "license_url": a.get("license__url") or a.get("license_url"),
+            },
+        }
+        super().__init__(detail)
+
+
+def _namespace_of(crc_place, obj_id):
+    return (crc_place or {}).get("namespace") or (
+        obj_id.split(":", 1)[0] if ":" in obj_id else "")
 
 
 def _crc_timespans_to_when(timespans_raw) -> dict:
@@ -532,20 +585,33 @@ class EntityFeatureView(PublicEntityReadAPIView):
             # types, geometries, relations, links, descriptions) — the LPF
             # conversion renames them (names[].toponym, …), which is why the
             # popup previously showed only the type chip. Default → LPF.
+            # place#269 — resolved ONCE for both variants. The registry row carries the
+            # licence AND `redistributable`, so the gate and the credit come from the
+            # same lookup; splitting them is how one ships without the other.
+            from api.attribution import registry_attribution
+            ns = _namespace_of(crc_place, obj_id)
+            attribution = registry_attribution(ns)
+
+            # 🛑 Refuse before rendering anything. This endpoint HANDS OVER the source's
+            # own content — it is the citable representation, served anonymously since
+            # place#271 — so a source we may index but may not re-serve must be refused
+            # here even though searching it is permitted.
+            if attribution and attribution.get("redistributable") is False:
+                raise SourceNotRedistributable(namespace=ns, attribution=attribution)
+
             if request.GET.get('variant') == 'popup':
-                # Attach the source authority's attribution (registry,
-                # per-namespace) so the popup can render a licence badge —
-                # same shape as the Atlas portal modal (search.views.atlas_place).
-                from api.attribution import registry_attribution
-                ns = crc_place.get("namespace") or (
-                    obj_id.split(":", 1)[0] if ":" in obj_id else "")
-                attribution = registry_attribution(ns)
                 if attribution:
                     crc_place["attribution"] = attribution
                 return Response(crc_place, status=status.HTTP_200_OK)
             if filetype != 'lpf':
                 raise Http404("TSV export is not available for CRC places.")
             lpf = _crc_place_to_lpf(crc_place, request=request)
+            # ⚠️ The LPF path carried NO attribution at all — and it is the half that is
+            # published through w3id and read by machines, i.e. the one where an unattributed
+            # record is most likely to be copied onward without its terms. The popup had it
+            # since place#121; this is the same block on the representation that matters.
+            if attribution:
+                lpf["attribution"] = attribution
             return Response(lpf, status=status.HTTP_200_OK)
 
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
