@@ -279,6 +279,26 @@ by accident and is not a defended invariant.
 Similarly, an empty `result` beside `scope.applied: false` means *"we could not apply your region"* — the
 query **fails closed** rather than answering with unscoped results.
 
+#### 🛑 `error` — that query was rejected and never run
+
+A query we could not accept — an invalid `bbox`, a malformed parameter — comes back with an `error`
+string and `result: []`. **The batch still returns HTTP 200**: one bad query does not fail the others, so
+a client must check per query rather than trusting the status code.
+
+#### 🛑 An empty `result` has four distinct meanings
+
+Only the accompanying keys separate them:
+
+| `result` is `[]` and… | means |
+|---|---|
+| nothing else present | genuinely **no match** |
+| `error` present | the query was **rejected and never run** — fix the query |
+| `gateway` present | we **could not ask** — retry; do not cache as unmatched |
+| `scope.applied: false` | your **region could not be applied** |
+
+⚠️ A client that treats all four as "not found" will record rejected input, service outages and unusable
+containers as absence of data — which is the failure this whole section exists to prevent.
+
 #### Candidate fields
 
 **Reconciliation Service API v0.2 — contractual:**
