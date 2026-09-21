@@ -316,5 +316,72 @@ function checkChainOrder() {
 }
 checkChainOrder();
 
+// ── 7. The container warning (place#260) ─────────────────────────────────────
+// `has_geom` was sent to the browser and read by nothing, so a reviewer confirming a container had no
+// signal that their choice could not scope the level below. The real function is evaluated here with a
+// stubbed `project`, because the bug was not in the logic — there was no logic.
+function loadContainerWarning(role) {
+  const grab = (re, what) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`${what} not found in reconciliation.js — has it been renamed?`);
+    return m[0];
+  };
+  const colOf = grab(/^function reviewColOf\([\s\S]*?\n/m, 'reviewColOf');
+  const fn = grab(/^function containerWarningHTML\([\s\S]*?^\}/m, 'containerWarningHTML');
+  // eslint-disable-next-line no-new-func
+  return new Function('role', `
+    // Column 0 carries the role under test; column 1 never does, so a function that
+    // ignored reviewColOf() and always read columns[0] would fail the last case below.
+    const project = { columns: [{ role }, { role: 'other' }] };
+    ${colOf}
+    ${fn}
+    return containerWarningHTML;`)(role);
+}
+
+function checkContainerWarning() {
+  let warnContains, warnName;
+  try {
+    warnContains = loadContainerWarning('contains');   // a column that FEEDS the hierarchy
+    warnName = loadContainerWarning('name');           // the final level — flag is irrelevant there
+  } catch (e) { bad('container warning: parse', e.message); return; }
+
+  const CASES = [
+    // [fn, candidate, must warn?, why]
+    [warnContains, { has_geom: false }, true,  'a container column with no boundary must warn'],
+    [warnContains, { has_geom: true },  false, 'a container that HAS a boundary must not warn'],
+    [warnName,     { has_geom: false }, false, 'the final level never scopes anything — no noise there'],
+    // ⚠ Absent is NOT false. An older cached match, or a gateway that did not send the flag, must not
+    // be reported as having no boundary — that would warn on every historical project on first open.
+    [warnContains, {},                  false, 'an ABSENT flag must not be treated as false'],
+    [warnContains, { has_geom: null },   false, 'null is not false either'],
+  ];
+
+  const wrong = [];
+  for (const [fn, cand, wantWarn, why] of CASES) {
+    const got = fn(cand, '0:17') !== '';
+    if (got !== wantWarn) wrong.push(`${why} — warned=${got}, expected ${wantWarn}`);
+  }
+  // The wording must hedge: ~5% of has_geom=false containers DO resolve via linked-polygon, so an
+  // absolute claim would be false for them.
+  const html = warnContains({ has_geom: false }, '0:17');
+  if (/\bcannot be used\b|\bwill fail\b/.test(html)) {
+    wrong.push('wording is absolute; ~5% of these DO work via linked-polygon, so it must hedge');
+  }
+  // 🛑 The function being correct is not the same as the function being CALLED. Deleting the call site
+  // left every case above green — the exact failure this harness's own header warns about, reproduced
+  // by mutation rather than argued about. So assert the wiring in the source, not just the behaviour.
+  if (!/containerWarningHTML\(c, meta\.key\)/.test(src)) {
+    wrong.push('containerWarningHTML is never called from the candidate list — the badge cannot render');
+  }
+  // 🛑 The column index must actually be read. If containerWarningHTML ignored the key and always
+  // looked at columns[0], every case above would still pass — so assert a DIFFERENT column too.
+  if (warnContains({ has_geom: false }, '1:17') !== '') {
+    wrong.push('the key\'s column index is not being read — column 1 is role "other" and must not warn');
+  }
+  if (wrong.length) bad('container warning', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok(`container warning (${CASES.length} cases + wording)`);
+}
+checkContainerWarning();
+
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');

@@ -6459,6 +6459,39 @@ function searchConstraintsHTML(parts) {
     + `${chips}${all}</div>`;
 }
 
+// ── Can this candidate act as a containment region? (place#260) ───────────────
+// `has_geom` is the gateway's per-candidate flag: true iff the place has a full POLYGON, and therefore
+// can itself be used as a `contained_in` region for the level below. It has been sent to the browser
+// since place#144 and nothing here read it — so a reviewer confirming a container had no way to know
+// their choice would break every level beneath it. A beta tester confirmed a Getty TGN candidate for
+// his admin1/admin2 columns and found out two stages later, as a fail-closed scope error phrased in
+// terms of an id he had no reason to connect to the choice he had made.
+//
+// ⚠ Only warned for a column whose match is USED as a container — role 'contains'. On the final level
+// the flag is irrelevant and the badge would be pure noise.
+//
+// 🛑 The issue worried this would over-warn, because a point-only container can still resolve via
+// `linked-polygon` by borrowing a co-referent's boundary. MEASURED on the population that matters
+// (admin-level names, the kind that land in a hierarchy column): of 40 has_geom=false candidates tried
+// as real containers, 38 failed with scope.mode 'none' and only 2 were rescued — and just 1 of 54 `gn`
+// candidates. So the flag predicts "cannot scope" ~95% of the time and the warning is worth its noise.
+//
+// Corpus-wide, the reason it matters so much: `gn` has 0 polygons of 13,454,817 records and `tgn` 0 of
+// 2,991,143 — 16.4M records that can never scope — and `gn` is usually the top-ranked candidate. The
+// naive pick therefore fails most of the time, silently.
+//
+// The strictly correct signal is the gateway's own scope determination per candidate, which the client
+// cannot compute; `has_geom` is the interim approximation and the wording hedges accordingly ("may not"
+// rather than "cannot"), so the ~5% that do work do not make the warning a liar.
+function containerWarningHTML(cand, key) {
+  const col = project.columns[reviewColOf(key)];
+  if (!col || col.role !== 'contains') return '';
+  if (cand.has_geom !== false) return '';
+  return '<span class="badge bg-warning text-dark ms-1" title="This record has no boundary of its own, '
+    + 'so it may not be usable to narrow the search at the next level down — matches below it can fail. '
+    + 'Prefer a candidate without this warning where one fits.">no boundary</span>';
+}
+
 function renderReviewCard() {
   const card = el('recon-review-card');
   if (!card || !reviewMeta.length) { if (card) card.innerHTML = ''; return; }
@@ -6478,6 +6511,7 @@ function renderReviewCard() {
          <span class="recon-cand-name">${truncate(c.name, 60)}</span>` +
     (c.match ? '<span class="badge bg-success ms-1">exact</span>' : '') +
     (c.found_by ? `<span class="badge bg-secondary ms-1" title="Found by your search for “${esc(c.found_by)}” — not returned by the reconciliation run">searched</span>` : '') +
+    containerWarningHTML(c, meta.key) +
     `<span class="recon-cand-ns ms-1">${esc(nsName(c.id))}</span>` +
     `<span class="text-muted small ms-1">${truncate(c.description || '', 36)}</span>` +
     (c.alt_names && c.alt_names.length
