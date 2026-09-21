@@ -21,6 +21,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from api.authentication import AuthenticatedAPIView
 from api.crc_client import crc_fetch_places
+from api.gateway_errors import GatewayUnavailable, raise_if_gateway_failed
 from api.download_file import (
     FileCache, stream_live, stream_from_file,
     build_streaming_download_response,
@@ -32,15 +33,21 @@ logger = logging.getLogger('reconciliation')
 
 
 def _fetch_crc_place(place_id: str, user=None,
-                     allow_anonymous: bool = False) -> dict | None:
+                     allow_anonymous: bool = False,
+                     meta: dict | None = None) -> dict | None:
     """Fetch a single CRC place from the gateway, or return None.
 
     ``allow_anonymous`` is passed through to ``crc_client._is_enabled``, which
     otherwise refuses an unauthenticated caller outright. Set it only for
     persistent-identifier resolution — see ``PublicEntityReadAPIView``.
+
+    ``meta`` is populated in place with ``error`` when the gateway failed. Pass
+    it and call ``raise_if_gateway_failed()`` before treating ``None`` as
+    "no such record" — see that function for why (place#272).
     """
     result = crc_fetch_places([place_id], user=user,
-                              allow_anonymous=allow_anonymous)
+                              allow_anonymous=allow_anonymous,
+                              meta=meta)
     return result.get(place_id)
 
 
@@ -510,10 +517,14 @@ class EntityFeatureView(PublicEntityReadAPIView):
 
         # CRC places — fetch from gateway.
         if obj_type == "place" and is_crc_place_id(obj_id):
+            crc_meta: dict = {}
             crc_place = _fetch_crc_place(
                 obj_id, user=request.user,
-                allow_anonymous=not request.user.is_authenticated)
+                allow_anonymous=not request.user.is_authenticated,
+                meta=crc_meta)
             if not crc_place:
+                # 503 first: only a gateway that ANSWERED can support a 404.
+                raise_if_gateway_failed(crc_meta, place_id=obj_id)
                 raise Http404(f"CRC place not found: {obj_id}")
             # variant=popup → return the RAW gateway PlaceDetail dict. The Atlas
             # gazetteer-feature popup (whg/webpack/js/gazetteerInteraction.js)
@@ -587,8 +598,19 @@ class EntityPreviewView(AuthenticatedAPIView):
 
         # CRC places — fetch from gateway and render preview from dict
         if obj_type == "place" and is_crc_place_id(id):
-            crc_place = _fetch_crc_place(id, user=request.user)
+            crc_meta: dict = {}
+            crc_place = _fetch_crc_place(id, user=request.user, meta=crc_meta)
             if not crc_place:
+                # HTML preview: same distinction as the API path (place#272), but
+                # rendered rather than raised, since this endpoint returns markup.
+                if crc_meta.get("error"):
+                    return HttpResponse(
+                        "The gazetteer service did not answer, so this record "
+                        "could not be retrieved. It has not been shown to be "
+                        "absent — please try again shortly.",
+                        status=503,
+                        headers={"Retry-After": "30"},
+                    )
                 return HttpResponse(f"CRC place not found: {id}", status=404)
             preview_data = _crc_place_to_preview(crc_place)
             html = render_to_string(

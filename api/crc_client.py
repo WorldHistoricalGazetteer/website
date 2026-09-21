@@ -526,7 +526,8 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
 
 
 def crc_fetch_places(place_ids: list[str], user=None,
-                     allow_anonymous: bool = False) -> dict[str, dict]:
+                     allow_anonymous: bool = False,
+                     meta: dict | None = None) -> dict[str, dict]:
     """
     Fetch full place data from the CRC gateway by namespaced IDs.
 
@@ -537,13 +538,27 @@ def crc_fetch_places(place_ids: list[str], user=None,
         user: Django User instance.
         allow_anonymous: Serve the request even when ``user`` is anonymous.
             Set ONLY by persistent-identifier resolution — see ``_is_enabled``.
+        meta: Optional dict, populated in place. On any gateway failure this
+            records ``meta["error"]`` as ``timeout`` / ``connection`` / ``http`` /
+            ``unexpected``, and ``meta["disabled"] = True`` when the gateway was
+            never called at all.
 
     Returns:
         Dict mapping each place_id to its data dict (with keys like
         ``title``, ``names``, ``ccodes``, ``geometries``, etc.).
         Missing/errored IDs are omitted.  Returns ``{}`` on any error.
+
+    🛑 An empty return is AMBIGUOUS and callers must not read it as "absent".
+    It means any of: the id does not exist, the gateway timed out, the gateway
+    refused, or the gateway was never asked. Only ``meta`` distinguishes them —
+    without it, a transient upstream failure is indistinguishable from a
+    definitive "no such record", which is how ``/entity/`` came to answer 404
+    under load (place#272). The reconcile path learned this the same way
+    (place#262); this is the same contract on the fetch path.
     """
     if not _is_enabled(user, allow_anonymous=allow_anonymous):
+        if meta is not None:
+            meta["disabled"] = True
         return {}
 
     if not place_ids:
@@ -563,15 +578,23 @@ def crc_fetch_places(place_ids: list[str], user=None,
         data = resp.json()
     except requests.Timeout:
         logger.warning("CRC gateway /api/places timeout after %ss", _timeout())
+        if meta is not None:
+            meta["error"] = "timeout"
         return {}
     except requests.ConnectionError as e:
         logger.warning("CRC gateway /api/places connection error: %s", e)
+        if meta is not None:
+            meta["error"] = "connection"
         return {}
     except requests.HTTPError as e:
         logger.warning("CRC gateway /api/places HTTP error: %s — extend unavailable for CRC entities", e)
+        if meta is not None:
+            meta["error"] = "http"
         return {}
     except Exception as e:
         logger.warning("CRC gateway /api/places unexpected error: %s", e)
+        if meta is not None:
+            meta["error"] = "unexpected"
         return {}
 
     # Expected response: {"places": [{"place_id": "gn:745044", "title": ..., ...}, ...]}
