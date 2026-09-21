@@ -2,7 +2,8 @@
 
 **Written** 2026-09-21 by the `whg3-6d` session, jointly with the `indexing-79` session.
 **Scope** every `WorldHistoricalGazetteer/place` issue numbered #214 or higher: 72 issues, of which
-42 were open when this pass began.
+42 were open when this pass began. **Seven closed; 35 remain open.**
+**Revised** later the same day, after the `indexing` session settled #261, #266 and #285.
 **Mandate** assess and sort only. No fixes were attempted. Issues answered by code that has since
 shipped were closed with evidence.
 
@@ -36,7 +37,7 @@ tab.
 
 ---
 
-## 2. Closed in this pass — six issues, all on evidence
+## 2. Closed in this pass — seven issues, all on evidence
 
 | # | why it closed | evidence |
 |---|---|---|
@@ -46,6 +47,7 @@ tab.
 | **#284** | `PY_IS_ALPHA` repinned to 14.0.0, header retracted in place | `0e6f51c83` |
 | **#257** | `panphon_embedding` gone from the mapping; v7 index deleted | live cluster, `indexing-79` |
 | **#250** | `is_script_mismatch` fixed *and* the index rebuilt after it | indexing `2f093c4` (6 Sep) + v8 build (14 Sep); `tgn` now carries 649,953 Latn-family docs against 0 |
+| **#261** | the fix is **in the running gateway process** | deployed tree `a08313d` is a descendant of `b0e0179`; watchdog reflog at 11:28:02, process start 11:28:04 — pull-then-restart, two seconds apart |
 
 **The unlock for four of those was a single measurement.** #282/#283/#284/#285 each ended with *"production
 deploy not yet run"*. Prod `asset_version` is `aa70a1891` — the v8 bundle rebuild on `main` — so the
@@ -61,20 +63,40 @@ closed on that alone.
 * **#250 likewise.** Its 1,166,572 counts *source rows*; the store holds *deduplicated* toponyms. The
   two can never match and putting them side by side would invent a shortfall.
 
-### Held open deliberately, pending one runtime check each
+### The two runtime checks — both settled, and one of them taught us something
 
-Neither of these is a code question. Both are "is the running process the one we pushed", which is a
-different question from "is the fix merged", and this project has been caught by that distinction
-before.
+Both were "is the running process the one we pushed", which is a different question from "is the fix
+merged". Both were answered by the `indexing` session; they landed in opposite directions.
 
-* **#261** (IoGuard inner waits) — fix `b0e0179` is pushed. Wanted: the **rider rate** since 10 Sep
-  (fail-closed scope reports carrying the "hard-link store is currently unresponsive" rider vs all
-  scope-not-applied reports). The issue's baseline is 3060/10042, 1234/2833, 32/160. A collapse is
-  evidence from behaviour; the tree is not.
-* **#285** (ship the v8 encoder) — the whg3 half is verified on prod. Wanted: `/api/health` →
-  `stores.symphonym.client_vectors` showing `accepted > 0` and `last_client_model: "v8"`.
-  ⚠️ **That counter is per-worker — poll repeatedly.** A single `accepted: 0, last_client_model: null`
-  is an ordinary reading on a working system. Closing on one poll would be wrong in either direction.
+**#261 — CLOSED, but not by the check this Plan first proposed.** 🛑 **That check was uncomputable, and
+would have produced a confident wrong answer.** The rider rate (fail-closed scope reports carrying the
+"hard-link store is currently unresponsive" rider) cannot be computed at all, for two independent
+reasons:
+
+1. **the rider string is never logged** — `grep -c` across all six gateway logs returns `0` six times.
+   It is a response-body field assembled in `build_scope_info` (`spatial.py:1180`), not a log line. This
+   issue's own 3060/10042 table came from somewhere else, most likely a consumer-side response capture;
+2. **retention does not reach back before the deploy** — logs start 15 Sep 02:56, the fix deployed
+   10 Sep. There is no "before" side.
+
+⚠️ **So a low rider count since 10 Sep would have been largely an artefact of the log rotation, reported
+as the fix working.** A check whose subject is absent cannot fail. It closed instead on direct evidence:
+deployed tree `a08313d` is a descendant of `b0e0179`, the watchdog reflog fast-forwarded at 11:28:02 and
+the process started at 11:28:04, and the derived-timeout code is on disk in that tree. Supporting: 4
+breaker opens in six days, all four within one three-second window and all reading `thread(s) still
+stuck` — a genuine hang, i.e. the guard working, not the spurious contention trip #261 described.
+
+**#285 — STAYS OPEN, and this is the more interesting outcome.** The acceptance criterion as written
+*is* satisfied: `accepted=1, discarded=0, last_client_model="v8"`, stable across 15 polls.
+⚠️ The per-worker caveat was load-bearing — the view flaps between `1/"v8"` and `0/null` depending on
+which worker answers, so one poll would have misled **in either direction**.
+
+🛑 **But `accepted` is 1 against 569 `POST /api/reconcile` over 5 d 18 h, and that one is most plausibly
+our own test.** Two different claims, and only the first is established: *a v8 vector can be accepted
+and the generation handshake is correct* (✅), versus *the offload is operating on real traffic* (❌).
+The second is what the issue's own title is about. **Re-poll in 3–4 days.** If `accepted` is still 1 the
+offload is off in practice, and the follow-on is a whg3 question — why the browser is not producing
+vectors on real runs — which is a different defect and should be filed as one.
 
 ---
 
@@ -87,13 +109,29 @@ Urgency here means *live harm at a measured rate*, not age and not difficulty.
 | # | owner | why now |
 |---|---|---|
 | **#274** | website | one `POST /reconcile` holds **one of four** gunicorn workers for its whole fan-out — up to 70 s at the advertised batch of 50. Gateway slowness becomes **site-wide 503s**. This is the only issue in the range whose blast radius is the entire platform. |
-| **#267** | indexing | `fclasses` + any spatial constraint returns **0**. The one issue with a **named external project blocked on it** (EDOPS needs P/S-classed records). `sev:major` added. |
+| **#267** | indexing | `fclasses` returns **0 unconditionally** — ⚠️ the spatial constraint in the original title is a **red herring**, retitled 2026-09-21. `types.label` is mapped `text` with no `.keyword`, and `es_helpers.py:1179-1183` runs a `terms` query against it, so the documented uppercase letters have never matched. The one issue with a **named external project blocked on it** (EDOPS needs P/S-classed records). `sev:major` added. |
 | **#272** | website | `/entity/` answers **404** on a gateway timeout, so "does not exist" and "we could not ask" are byte-identical — and the failure rate rises with load, so a client sampling metadata records absences **biased toward whenever it was going fastest**. 28 of 718 in a busy period. |
 | **#275** | website | queries above 50 are discarded behind a **200**. Silent input loss is the defect class hardest to attribute afterwards. |
 
 **#274, #275 and #268 are three facts about one number** (`batch_size = 50`): it is silently truncated
 above, it pins a worker for ~70 s at its maximum, and nothing rate-limits the fan-out it authorises.
 Fix them as one change or the fix for each will contradict the others.
+
+🛑 **#267's P0 commitment is the one-line unblock only, and the Plan must not be read as promising more.**
+There are two fixes and they are not the same size:
+
+1. **lowercase the `fclasses` input** before building the `terms` clause — genuinely a one-liner, correct
+   for the documented contract (GeoNames classes are single letters and survive the standard analyser as
+   single lowercase tokens). **This is what unblocks EDOPS.** ⚠️ It works by relying on analyser
+   behaviour and is correct **only for single-token labels** — a `terms` query can never match
+   `historic county` whatever the case — so it fixes `fclasses`, not "filtering on `types.label`";
+2. **add a `keyword` subfield to `types.label`** — a mapping change, and ⚠️ **adding a subfield does not
+   populate it for existing documents**, so it needs a reindex or `_update_by_query` over **51.2M docs**,
+   plus a decision on whether top-level `fclasses` should exist at all (it is absent from the live mapping
+   and `exists: fclasses` is **0 for `gn`** as well as `whg` — corpus-wide, not a `whg` gap).
+
+**(2) is a separate item, not P0.** Stated here because a Plan that ranks (1) at P0 and leaves (2) implicit
+is a Plan promising a quick win with a 51.2M-document reindex behind it.
 
 ### P1 — wrong answers at a measured rate
 
@@ -104,12 +142,17 @@ Fix them as one change or the fix for each will contradict the others.
   over **a sixth of England's historic parishes pass vacuously**. `sev:major` added. ⚠️ The "index the
   riding names as variants" option on #204 **makes this worse, not better** — the string would resolve
   and the test would still run against all 15,753 km². Only the riding split is a fix.
+* **#266** — **promoted from P2 on 2026-09-21**, because it was confirmed and its trigger turned out
+  not to be what the title said. A multi-container `contained_in` **silently drops the H3 ancestor
+  clause at 4 containers** — while the term count is still under the cap, so the only number anyone
+  would check looks fine — and truncates arbitrarily at 6. Retitled; `bug` + `sev:major` added.
 * **#216** — cataloguing placeholders (`Oknoname NNNNNN`) returned as top name-match candidates.
 * **#256 → #246** — see §5. The hazard, not the defect, is what makes this P1.
 
 ### P2 — correctness infrastructure
 
-#214, #217, #218, #259, #260, #265, #266, #269, #270, #276, #249, #258, #255, #263.
+#214, #217, #218, #259, #260, #265, #269, #270, #276, #249, #258, #255, #263.
+(#266 moved up to P1; #261 closed.)
 
 ### P3 — programme work, properly scoped and not urgent
 
@@ -125,7 +168,7 @@ Worth doing out of priority order precisely because they are cheap:
 | **#263** | website | set the `django.template` logger to `INFO`. ⚠️ Confirmed **not yet done** — no such logger constraint exists on `staging` or `main`. Severity is genuinely low (the records are DEBUG, so they reach neither GlitchTip nor the repo), but it is one line. |
 | **#260** | website | `has_geom` is already computed and already sent to the browser (`api/crc_client.py:788`) and `grep has_geom whg/webpack/js/*.js` returns nothing. Warn with it. |
 | **#278** | website | emit no relation when `parent_id` is absent, so a contributor is not asked for an identifier they do not have. |
-| **#266** | indexing | filed **UNVERIFIED** by code reading alone. Settle it. It should not sit unmeasured while #265/#276/#277 are worked around it. |
+| **#266** | indexing | ~~settle the UNVERIFIED question~~ — **done 2026-09-21, and it is real, so this is no longer a quick win.** It has moved to P1. ✅ What it *did* hand us for free is an acceptance test needing no oracle and no live index: **the term count is non-monotonic in region size** (3 containers → 3,620 terms, 4 containers → 3,399, while the region grows). Any test asserting monotonicity fails today and passes after a fix. |
 
 ---
 
@@ -175,8 +218,31 @@ mechanism is used for its stated purpose, which is the worst possible moment to 
 **#266 → #265 · #276 · #277** · **#259 + #270** · **#269** · **#260**
 All `repo:indexing` except **#260** (`repo:website`).
 
-Order: **#266 first**, because if the H3 terms cap truncates in practice then #265's and #277's
-measurements were taken through a lossy pre-filter and mean something different.
+Order: **#266 first — confirmed, and the conditional is now discharged.** When this Plan was first
+written the justification read *"if the cap truncates in practice, then #265's and #277's measurements
+were taken through a lossy pre-filter"*. **It does truncate. So they were** — whenever those measurements
+used a multi-container scope. 🛑 **Ask whoever took them how many containers they used**; at 4 the ancestor
+clause is already gone.
+
+ Measured 2026-09-21 with
+the shipped `_es_h3_terms` imported directly. ⚠️ **The trigger is a multi-container `contained_in`, not
+a large region** — no single container reaches the cap, because `_pick_polyfill_resolution` scales cell
+size to the bbox (Kazakhstan 1,312 terms, 33% of cap; Russia *fewer* cells than Kazakhstan). Anyone who
+tests this with one big country will conclude it is not real. The issue has been retitled for that
+reason.
+
+🛑 **Two defects, and the first is earlier and quieter than the issue described.** At **4** containers
+the ancestor clause is dropped entirely while the count is still *under* the cap (3,399 of 4,000), so
+nothing looks wrong; the ancestor clause is the one that "catches large candidates spanning the region",
+so it vanishes exactly when the region is largest. At **6+** the cover is cut to an arbitrary 4,000 of a
+`set` — hash order, no spatial logic, not stable across runs. **Neither sets `approximate`**, so it is
+invisible in `scope`: the same class as place#262, a partial answer presenting as a whole one.
+
+⚠️ **This changes #276's requirements, so #276 must not be built first.** #276 asks the scope report to
+state the container's size. A scope that has silently lost its ancestor clause is precisely a scope whose
+reported size would be a **lie** — it would report the area asked for while querying a recall clause that
+no longer covers spanning candidates. Fixing #266 first, or #276 adds a confident number on top of a
+silent degradation.
 
 **#259 and #270 are one problem from two ends** and must be scoped together: TGN has zero usable
 co-reference edges (#259) *and* the Wikidata extractor reads one identifier property, P1566, so every
@@ -221,10 +287,30 @@ by the machinery being measured.
 ### `unit:phonetics` — rules, review, lexicon
 **#251** (indexing) · **#252** (website) · **#253** (both) · **#245** (indexing)
 
-⚠️ **Read #251's ceiling before scoping any tranche of rule work.** All rule work ever tops out at
-**69.53%** of the 72.7M rows. `no_lang` is **25.51%** and needs *language identification* — worth ~26
-points against all rule work's 1.1, twenty times the return, and a different project. Label those
-numbers ceilings, not yields.
+⚠️ **Read #251's ceiling before scoping any tranche of rule work — using the CORRECTED figures.** The
+69.53% / 25.51% pair that circulated on that issue was measured on the **pre-top-up denominator of
+72,703,552**; the corpus is **73,479,069**, and `developer/plan-symphonym-v8.md` §16.1 supersedes them
+explicitly. Current set:
+
+| lever | points | what it costs |
+|---|---|---|
+| **lift the `ceb`/`war`/`min`/`vo`/`mul` quarantine** | **4.643** | a **policy decision. No code.** |
+| language identification (`no_lang`, 25.24%) | ~25 | a different research project |
+| **all remaining rule work — this is #251** | **1.188** (67.771% achieved → 68.959% ceiling) | linguistics, per script |
+
+🛑 **The quarantine lever is the correction that matters**, and it was missing from the two-term
+comparison everyone was quoting: **3,411,436 names, 3.9× everything all rule work could ever deliver, and
+it needs no engineering at all.** A Plan that told the next reader to weigh a 1.2-point project against a
+26-point research programme while omitting a 4.6-point lever sitting behind an unasked decision would be
+omitting the single most actionable fact in the area.
+
+⚠️ **The achieved baseline FELL while the work succeeded** — 68.43% → 67.771% — because the added rows are
+overwhelmingly unroutable romanisations, so a larger denominator lowers the share while raising the count.
+Quote both terms or a reader takes it for damage.
+
+✅ **These remain ceilings, not yields**, and the source is emphatic about it: nobody has measured that a
+newly identified language would then *route* (it may have no Epitran mode). That caveat binds the two
+large numbers and **not** the 1.188 — a point in the rule work's favour that the raw comparison hides.
 
 **#252 gates a release**: v8-beta trains on `proposed` values, full release after contributor
 corrections arrive through the UI. It is on `staging` and running on dev at `/phonetics/`; #254 (the
@@ -255,7 +341,7 @@ something readable while retrieval is gated for licensing and anti-bot reasons, 
 limiting behind it, which is the combination its own comment warns against.
 
 ### `unit:platform-safety`
-**#255** (indexing) · **#263** (website). (#257, #261 resolved/pending §2.)
+**#255** (indexing) · **#263** (website). (#257 and #261 closed — see §2.)
 
 **#255 is half done.** `5e66a43` added the `CHECKPOINT` before the promoting copy. The half that
 remains is the durable one: **no stage asserts free space.** What exists is a check in the *submission
