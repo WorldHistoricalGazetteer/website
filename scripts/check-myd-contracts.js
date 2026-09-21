@@ -68,6 +68,9 @@ const ROLE_CASES = [
   // Administrative levels, including ones outside western Europe.
   ['county', 'container'], ['parish', 'container'], ['district', 'container'], ['province', 'container'],
   ['oblast', 'container'], ['rayon', 'container'], ['viloyat', 'container'], ['aimag', 'container'],
+  // Ecclesiastical containers (place#279). Every CCEd location carries a diocese — 19,500 of 19,501 —
+  // and until these were added the download page had to tell volunteers to set them by hand.
+  ['diocese', 'container'], ['archdeaconry', 'container'], ['deanery', 'container'],
   // Dates: a capture date describes the geometry, a plain date describes the place.
   ['acquisition_date', 'geom_date'], ['geometry_date', 'geom_date'], ['capture_date', 'geom_date'],
   ['image_date', 'geom_date'], ['survey_date', 'geom_date'],
@@ -258,5 +261,60 @@ checkIndexingContract(required);
 checkCitationRoundTrip();
 checkFeatureRoundTrip();
 checkValueClustering();
+// ── 6. Containment chain order (place#279) ───────────────────────────────────
+// Detecting a column as a container is only half of it: `initChain()` orders the chain by ADMIN_RANK,
+// and an unrecognised header ranks 100+idx — i.e. AFTER every known level.
+//
+// place#279 claimed that was "the correct coarse-to-fine position for both terms in practice". It is
+// not. Measured on CCEd's own four columns before the fix, the chain built as:
+//     county(20) > parish(45) > diocese(102) > archdeaconry(103)
+// which has a PARISH containing a DIOCESE, and would reconcile parishes unscoped by their diocese and
+// then scope the diocese by the parish. Adding the headers to the hint table alone would have shipped
+// that. So the ordering is asserted here, not just the detection.
+function loadAdminRank() {
+  const grab = (re, what) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`${what} not found in reconciliation.js — has it been renamed?`);
+    return m[0];
+  };
+  const table = grab(/^const ADMIN_RANK = \[[\s\S]*?^\];/m, 'ADMIN_RANK');
+  const fn = grab(/^function adminRank\([\s\S]*?^\}/m, 'adminRank');
+  // eslint-disable-next-line no-new-func
+  return new Function(`${table}\n${fn}\nreturn adminRank;`)();
+}
+
+function checkChainOrder() {
+  let adminRank;
+  try { adminRank = loadAdminRank(); } catch (e) { bad('chain order: parse', e.message); return; }
+  const order = (cols) => cols
+    .map((c, i) => ({ c, r: adminRank(c, i) }))
+    .sort((a, b) => a.r - b.r)
+    .map((x) => x.c);
+
+  const CASES = [
+    // [columns as they appear in the file, the order the chain must build]
+    [['county', 'parish', 'diocese', 'archdeaconry'],
+     ['county', 'diocese', 'archdeaconry', 'parish']],          // CCEd's actual shape
+    [['archdeaconry', 'diocese'], ['diocese', 'archdeaconry']], // coarse first regardless of column order
+    [['parish', 'diocese'], ['diocese', 'parish']],             // the inversion the old code produced
+    // must-not-regress: the civil levels keep their existing relative order
+    [['parish', 'county', 'country'], ['country', 'county', 'parish']],
+    [['hundred', 'county'], ['county', 'hundred']],
+  ];
+
+  const wrong = [];
+  for (const [cols, want] of CASES) {
+    const got = order(cols);
+    if (got.join('>') !== want.join('>')) wrong.push(`[${cols}] → ${got.join(' > ')} (expected ${want.join(' > ')})`);
+  }
+  // An unknown header must still sort last — that behaviour is relied on and must not be lost.
+  if (adminRank('quux', 0) < adminRank('parish', 9)) {
+    wrong.push('an unrecognised header no longer sorts after the known levels');
+  }
+  if (wrong.length) bad('containment chain order', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok(`containment chain order (${CASES.length} chains)`);
+}
+checkChainOrder();
+
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');

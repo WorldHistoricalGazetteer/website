@@ -86,7 +86,7 @@ const ROLE_HINTS = [
   ['alt_names', /^(alt.?names?|alternat(e|ive).?names?|name.?variants?|variant.?names?|variants?|aka|also.?known.?as|aliases?)$/i],
   // `oblast` and its neighbours are administrative levels like any other; without them a Central
   // Asian dataset's most important column is left unmapped (place#225).
-  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough|riding|barony|arrondissement|oblast|rayon|raion|viloyat|velayat|aimag|aimak|okrug|krai|krai|governorate|subdistrict|sub.?district)$/i],
+  ['container', /^(county|counties|adm\d|admin\d|region|parish|province|state|district|department|prefecture|municipality|commune|canton|shire|hundred|wapentake|borough|riding|barony|arrondissement|oblast|rayon|raion|viloyat|velayat|aimag|aimak|okrug|krai|krai|governorate|subdistrict|sub.?district|diocese|archdeaconry|deanery)$/i],
   // `ccodes` (plural) is the spelling LPF itself uses — matching only the singular meant every LPF
   // import left its country column unmapped, and the containment reconciled to the wrong country.
   ['country', /^(country|countries|ccode|ccodes|iso|iso\d*|nation)$/i],
@@ -119,6 +119,14 @@ const ADMIN_RANK = [
   [/^(county|counties|shire|department|canton|prefecture|riding|barony)$/i, 20],
   [/^(district|borough|municipality|commune|adm\d|admin\d)$/i, 30],
   [/^(hundred|wapentake)$/i, 40],
+  // Ecclesiastical levels (place#279). These are a PARALLEL hierarchy to the civil one, not a nesting
+  // within it — an English diocese may span several counties — so any single ordering is approximate
+  // and the user can override it. What must not happen is the default we had: unrecognised headers
+  // rank 100+, which put diocese and archdeaconry AFTER parish and had a parish containing a diocese.
+  // Ranked here so the one relationship that is never in doubt holds — diocese > archdeaconry > parish.
+  [/^(diocese)$/i, 42],
+  [/^(archdeaconry)$/i, 43],
+  [/^(deanery|rural.?deanery)$/i, 44],
   [/^(parish)$/i, 45],
 ];
 function adminRank(columnName, fallbackIdx) {

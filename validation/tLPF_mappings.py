@@ -61,6 +61,22 @@ def safe_float_conversion(x):
         return None
 
 
+def _has_value(x):
+    """True when a cell actually holds something (place#278).
+
+    `str_x` stringifies before testing, so `None` and `float('nan')` survive it as
+    the literal strings 'None' and 'nan'. Anything relying on `str_x(x) or None`
+    to mean "empty" is therefore wrong for a missing cell. Tested explicitly rather
+    than assumed, because the strings are truthy and pass the `pd.notna` guard
+    applied downstream.
+    """
+    if x is None:
+        return False
+    if isinstance(x, float) and x != x:   # NaN is the only value unequal to itself
+        return False
+    return True
+
+
 def str_x(x, split=False):
     """
     Convert to string and remove '.0' if it's a float ending with .0.
@@ -132,9 +148,30 @@ tLPF_mappings = {
         'lpf': 'additional_types',
         'converter': lambda x: [{'label': item.strip()} for item in str_x(x, True) if item.strip()] or None
     },
+    # place#278 — `parent_name` alone must NOT emit a relation.
+    #
+    # `relations[]` requires BOTH `relationType` and `relationTo` (lpf_v2.0.jsonld,
+    # definitions.relations.items.allOf[1].required). Emitting the label without a
+    # `relationTo` produced a file that failed validation naming `relationTo` — a
+    # field the contributor had never filled in — so the error pointed at a column
+    # they had not used and the natural reading was that something else was wrong.
+    #
+    # A contributor with a parent NAME and no stable parent IDENTIFIER is the normal
+    # case for historical data: the name is what the source records. So the coupling
+    # is resolved in their favour — the relation is emitted only when `parent_id`
+    # supplies the `relationTo` that makes it valid.
+    #
+    # The label is carried to `parent_name_unresolved` instead of being discarded, so
+    # the value survives into the record rather than being silently dropped. Prefer
+    # MyD's containment chain, which handles arbitrary depth as plain columns.
     'parent_name': {
-        'lpf': 'relations.0',
-        'converter': lambda x: {'relationType': 'gvp:broaderPartitive', 'label': str_x(x)} if str_x(x) else None
+        'lpf': 'properties.parent_name_unresolved',
+        # ⚠️ Guarded rather than relying on `str_x` alone: `str_x` is `str(x).strip()`,
+        # so a missing cell becomes the LITERAL string 'None' or 'nan' — truthy, and
+        # non-null to the `pd.notna` guard at the assignment site, so it would be
+        # written into the record as if the contributor had typed it. Scoped to this
+        # column; `str_x` is shared by many others and is not changed here.
+        'converter': lambda x: (str_x(x) or None) if _has_value(x) else None
     },
     'parent_id': {
         'lpf': 'relations.0.relationTo',
