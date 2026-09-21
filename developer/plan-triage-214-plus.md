@@ -182,7 +182,7 @@ Worth doing out of priority order precisely because they are cheap:
 | **#263** | website | set the `django.template` logger to `INFO`. ⚠️ Confirmed **not yet done** — no such logger constraint exists on `staging` or `main`. Severity is genuinely low (the records are DEBUG, so they reach neither GlitchTip nor the repo), but it is one line. |
 | **#260** | website | `has_geom` is already computed and already sent to the browser (`api/crc_client.py:788`) and `grep has_geom whg/webpack/js/*.js` returns nothing. Warn with it. |
 | **#278** | website | emit no relation when `parent_id` is absent, so a contributor is not asked for an identifier they do not have. |
-| **#266** | indexing | ~~settle the UNVERIFIED question~~ — **done 2026-09-21, and it is real, so this is no longer a quick win.** It has moved to P1. ✅ What it *did* hand us for free is an acceptance test needing no oracle and no live index: **the term count is non-monotonic in region size** (3 containers → 3,620 terms, 4 containers → 3,399, while the region grows). Any test asserting monotonicity fails today and passes after a fix. |
+| **#266** | indexing | ~~settle the UNVERIFIED question~~ — **done 2026-09-21, and it is real**, so no longer a quick win; moved to P1, then **fixed the same day**. 🛑 **The "assert monotonicity" acceptance test recorded here earlier was WRONG — see §4's containment entry.** Use coverage + ancestor-closure instead. |
 
 ---
 
@@ -249,14 +249,54 @@ reason.
 the ancestor clause is dropped entirely while the count is still *under* the cap (3,399 of 4,000), so
 nothing looks wrong; the ancestor clause is the one that "catches large candidates spanning the region",
 so it vanishes exactly when the region is largest. At **6+** the cover is cut to an arbitrary 4,000 of a
-`set` — hash order, no spatial logic, not stable across runs. **Neither sets `approximate`**, so it is
-invisible in `scope`: the same class as place#262, a partial answer presenting as a whole one.
+`set` — hash order, no spatial logic, not stable across runs.
 
-⚠️ **This changes #276's requirements, so #276 must not be built first.** #276 asks the scope report to
-state the container's size. A scope that has silently lost its ancestor clause is precisely a scope whose
-reported size would be a **lie** — it would report the area asked for while querying a recall clause that
-no longer covers spanning candidates. Fixing #266 first, or #276 adds a confident number on top of a
-silent degradation.
+✅ **FIXED 2026-09-21** (indexing, awaiting push): when the term set would exceed the cap, **coarsen
+instead of truncating** — lift the finest resolution group into its parents and rebuild until it fits. A
+parent contains all its children, so coarsening cannot lose coverage; it only widens. Widening is free
+because `h3_terms` is **only a prefilter**: one branch of a `should`, with `hit_matches` re-testing every
+survivor against the true `region.cover_by_res`. Too wide costs a little work and changes no answer; too
+narrow drops places silently. Measured 26 ms on a 24,571-cell cover, 72 ms on a 67,951-cell one.
+
+## 🛑 The acceptance test recorded in an earlier version of this file was WRONG
+
+That version said: *"the term count is non-monotonic in region size … any test asserting monotonicity
+fails today and passes after a fix."* **The first half is true; the second is false, and a test built on
+it would reject the correct fix.** On the fix, 3 containers → 3,620 terms and 4 → 2,180: still
+non-monotonic, and legitimately so, because coarsening *reduces* the term count while *increasing* what
+it matches — one parent stands in for up to seven children. **Monotonicity was a property of the broken
+implementation's accident, not of correctness.**
+
+✅ **Use these two invariants instead.** Both offline, no live index, no oracle, no threshold:
+
+1. **Coverage** — every region cell is represented in the term set, by itself or by an ancestor.
+2. **Ancestor-closure** — if a term is present, so is every one of its ancestors.
+
+| containers | OLD uncovered cells | OLD terms lacking ancestors |
+|---|---|---|
+| 3 | 0 | 0 |
+| 4 | 0 | **3,399** ← silent onset, count still under cap |
+| 5 | 0 | 3,834 |
+| 6 | 187 | 4,000 ← visible truncation begins |
+| 12 | 1,201 | 4,000 |
+
+With the fix: **0 and 0 at every step.** ⚠️ **Closure is the invariant that matters** — it fires at 4
+containers where coverage still reads clean and the count is under the cap. Coverage alone would have
+missed exactly the case the original issue was blind to.
+
+### ⚠️ And there is now nothing for #276 to report here
+
+An earlier version of this file said #266 changes #276's requirements because a scope that lost its
+ancestor clause would report a size that was a lie. **That was true of the old behaviour and is not true
+of the fix.** Coarsening degrades only the prefilter and the refine step restores precision, so the
+answer is **not** approximate and setting `scope.approximate=true` would now be wrong. Fixing the
+mechanism dissolved the silence problem rather than requiring a new field. #276 is no longer gated on
+#266; it is an ordinary enhancement again.
+
+⚠️ Narrower than first stated, in fairness: the bbox branch of the `should` still admitted anything whose
+`repr_point` lay inside the region's bounding box, so what the old truncation *uniquely* lost was
+candidates whose repr_point falls **outside** the bbox but whose geometry reaches in — large candidates.
+A real silent false negative, but not "the region stopped being filtered".
 
 **#259 and #270 are one problem from two ends** and must be scoped together: TGN has zero usable
 co-reference edges (#259) *and* the Wikidata extractor reads one identifier property, P1566, so every

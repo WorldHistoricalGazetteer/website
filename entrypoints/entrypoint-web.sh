@@ -35,6 +35,27 @@ wait_for_db
 #echo "Running migrations..."
 #sudo /py/bin/python manage.py migrate
 
+# place#274 — THREADED workers, so one slow request cannot occupy a whole worker.
+#
+# Previously 4 SYNCHRONOUS workers. A single POST /reconcile holds its worker for
+# the entire fan-out, not for one gateway call: process_queries fans out to
+# RECON_FANOUT (8) concurrent gateway calls at CRC_GATEWAY_TIMEOUT (10s) each, so
+# a batch of N runs as ceil(N/8) waves and the worker is held for all of them —
+# up to ~70s at the advertised maximum of 50. With only 4 workers, a slow gateway
+# therefore took the WHOLE SITE down with 503s rather than merely slowing
+# reconciliation. --timeout 1200 meant gunicorn never reaped them either.
+#
+# gthread rather than more sync workers, for a measured reason: the prod host runs
+# at ~11 of 15 GB with WordPress, GlitchTip and ollama also resident, and each
+# sync worker is a whole Django process. The work being waited on is pure network
+# I/O against the gateway, which is exactly what threads fix, at ~no memory cost.
+#
+# 🛑 This raises in-flight gateway calls from 4x8=32 to 16x8=128, so it AMPLIFIES
+# gateway saturation on its own. It ships in the same change as place#268's
+# query-rate limiter deliberately: the brake must not arrive after the amplifier.
+# Do not raise GUNICORN_THREADS without checking RECON_QUERY_RATE.
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-4}"
-echo "Starting Gunicorn server with ${GUNICORN_WORKERS} workers..."
-exec gunicorn whg.wsgi:application --bind 0.0.0.0:${APP_PORT} --timeout 1200 -w ${GUNICORN_WORKERS}
+GUNICORN_THREADS="${GUNICORN_THREADS:-4}"
+echo "Starting Gunicorn server with ${GUNICORN_WORKERS} workers x ${GUNICORN_THREADS} threads (gthread)..."
+exec gunicorn whg.wsgi:application --bind 0.0.0.0:${APP_PORT} --timeout 1200 \
+     -w ${GUNICORN_WORKERS} -k gthread --threads ${GUNICORN_THREADS}

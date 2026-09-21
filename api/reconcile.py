@@ -51,6 +51,8 @@ from .schemas import reconcile_schema, propose_properties_schema, suggest_entity
     authority_datasets_schema
 from .serializers_api import PeriodPreviewSerializer
 
+from api.throttling import consume_query_budget, throttle_message
+
 logger = logging.getLogger('reconciliation')
 
 LOG_MAX_LEN = 2000  # max characters per logged payload/response
@@ -330,6 +332,22 @@ class ReconciliationView(APIView):
                     f"processed.",
                     status=400,
                 )
+
+            # place#268 — charge QUERIES, not requests, against a per-minute budget.
+            #
+            # Applied here, after the batch-size check and before any work, so the
+            # charge is the number of queries actually accepted. A rejected
+            # oversized batch is not charged, and nothing is part-charged.
+            #
+            # Emits 429 with Retry-After. Our published client guidance already
+            # tells integrators to retry on 429 and we have never emitted one, so
+            # a client that implemented correct backoff had nothing to back off
+            # against: an overloaded service was indistinguishable from a slow one.
+            allowed, retry_after = consume_query_budget(request.user, len(queries))
+            if not allowed:
+                response = json_error(throttle_message(retry_after), status=429)
+                response["Retry-After"] = str(retry_after)
+                return response
 
             if entity_type == "period":
 
