@@ -1,3 +1,4 @@
+import {setTooltipText} from './tooltipHygiene';
 import {lch} from 'd3-color';
 
 export function showChooser(type) {
@@ -668,4 +669,80 @@ export function formatYear(y) {
 // reads as a mistake rather than as a moment.
 export function formatYearWindow(from, to) {
 	return from === to ? formatYear(from) : `${formatYear(from)}\u2013${formatYear(to)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Place identifier (place#271)
+// ---------------------------------------------------------------------------
+//
+// A place's pid is a stable, citable identifier — `/entity/place:<pid>/` is what
+// an external tool needs in order to reference this record — but it used to be
+// visible only to the dataset's owner, in the management table. These helpers
+// surface the resolvable URI (not the bare integer, which invites guessing at
+// the wrong URL shape) wherever a place is shown publicly.
+//
+// NOTE for anyone reading this next to the issue: for a WHG-hosted (contributed)
+// place this URI does NOT resolve anonymously at all — measured 2026-09-11 on dev,
+// `/entity/place:8187126/` returns 401 for both `Accept: text/html` and
+// `application/ld+json`, as does `/api`. `anonymous_resolution_allowed()` in
+// api/views_entity.py opens unauthenticated access to AUTHORITY place ids
+// (`gn:`, `clio:`, …) only, and a WHG pid is a bare integer. Displaying the
+// identifier is therefore necessary but NOT sufficient for the EDOPS use case:
+// it is correct and citable, but an anonymous client following it gets 401.
+// Opening that up is a separate decision — the Postgres-backed querysets behind
+// these ids are not owner-scoped, so it cannot simply be widened.
+
+export function placeUri(pid) {
+	return `${window.location.origin}/entity/place:${pid}/`;
+}
+
+// Markup for the identifier line. `compact` drops the visible URI text and shows
+// just the pid plus a copy control, for surfaces with little room (map popups).
+// What resolving a place identifier actually gets you (place#271).
+//
+// The identifier is public and citable, but what it resolves to is NOT uniform, and the asymmetry is
+// invisible from the URI: an authority record (`place:gn:13274771`) answers `/api` anonymously, while a
+// WHG-hosted record (`place:81010`) returns 401. Measured on prod 2026-09-21. Saying so here is cheaper
+// than letting an integrator discover it, which is how place#271 came to be filed in the first place.
+//
+// It also names the licence, because a resolvable identifier that quietly distributes contributed data
+// under no stated terms is the licensing half of that issue — the identifier is ours to publish, the data
+// it reaches is its contributor's.
+//
+// 🛑 Duplicated in places/templates/places/place_detail.html, which is server-rendered and cannot import
+// this. `api/tests_place_uri_tooltip.py` asserts the two do not drift — a claim kept in two places drifts,
+// and this project has had that happen with an fclasses caveat living in two files where only one got
+// corrected.
+export const PLACE_URI_TOOLTIP =
+	'Opens this record&#39;s public page. Append /api for Linked Places Format — returned under the source&#39;s own licence, and for WHG-hosted records that machine-readable view needs an API token.';
+
+export function placeUriHTML(pid, {label = 'WHG URI', compact = false} = {}) {
+	if (pid === undefined || pid === null || pid === '') return '';
+	const uri = placeUri(pid);
+	const shown = compact ? `place:${pid}` : uri;
+	return `<div class="place-uri">${label}: ` +
+		`<a href="${uri}" target="_blank" rel="noopener" data-bs-toggle="tooltip" ` +
+		`title="${PLACE_URI_TOOLTIP}">${shown}</a> ` +
+		`<a href="#" class="clip-place-uri" data-uri="${uri}" data-bs-toggle="tooltip" ` +
+		`title="copy identifier to clipboard"><i class="fas fa-clipboard linky"></i></a></div>`;
+}
+
+// Bind the copy control. ClipboardJS delegates from `document` when given a
+// SELECTOR, so this is called once per page and still catches identifier lines
+// injected later (portal source boxes, the dataset row-detail panel) — unlike
+// the `.clippy` handler in initUtils(), which binds over the DOM as it stands.
+export function initPlaceUriClipboard() {
+	if (typeof ClipboardJS === 'undefined') return; // clipboard.min.js not on this page
+	new ClipboardJS('.clip-place-uri', {
+		text: trigger => trigger.getAttribute('data-uri'),
+	})
+		.on('success', e => {
+			e.clearSelection();
+			e.preventDefault?.();
+			setTooltipText(e.trigger, 'Copied!');
+			setTimeout(() => setTooltipText(e.trigger, 'copy identifier to clipboard'), 2000);
+		})
+		.on('error', e => console.error('Failed to copy identifier:', e.trigger));
+	// The control is an <a href="#">; without this the page jumps to the top on copy.
+	$(document).on('click', '.clip-place-uri', e => e.preventDefault());
 }

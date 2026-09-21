@@ -14,6 +14,8 @@ import { loadAatVocab, aatLabel } from './aatVocab.js';
 import { wireLicenseControl } from './licensePicker.js';
 import { SYMPHONYM_GENERATION } from './symphonym-assets.js';
 import { clusterHits, cosineByte, DEFAULT_PARAMS } from './clustering.js';
+// placeUri: the resolvable WHG URI a match reference carries (place#240).
+import { placeUri } from './utilities.js';
 
 // Load the shared AAT vocab (version-gated IndexedDB cache, shared with Atlas +
 // the Workbench — place#134) so chosen concepts can show a Getty label for a
@@ -3437,6 +3439,11 @@ function buildLPF(data) {
         const link = { type: 'closeMatch', identifier: barePlaceId(x.id), certainty: certaintyFor(x) };
         const score = Number(x.score);
         if (Number.isFinite(score)) link.whg_match_score = score;
+        // The reference, not the geometry (place#240). A consumer can follow this to the source and
+        // obtain its data under the source's own terms; nothing of the source travels in this file.
+        link.whg_match_uri = matchUriFor(x.id);
+        const lic = matchLicenceFor(x.id);
+        if (lic) link.whg_match_licence = lic;
         // The reviewer's own words about this identification. `certainty` says how
         // sure; this says why — the part no vocabulary can carry (place#180).
         if (rec.note) link.whg_match_note = rec.note;
@@ -6459,6 +6466,48 @@ function searchConstraintsHTML(parts) {
     + `${chips}${all}</div>`;
 }
 
+// ── Ship the references, not the geometry (place#240) ────────────────────────
+// A match against a restricted source is a genuine, citable identification, and the intellectual
+// content of it is OUR matching decision rather than the source's data. So the export carries the
+// reference — id, licence, resolvable URL — and never the source's geometry. That distributes a join
+// key, not the joined data: anyone wanting the boundary obtains it from the source under the source's
+// own terms, so nothing is laundered and nothing is circumvented. It works even for no-derivatives
+// sources, where adoption could not be offered at all.
+//
+// 🛑 The proposal this implements is explicit that it only holds "if the coordinates really are
+// absent — a reference next to an adopted centroid is the adoption again with a citation attached."
+// MyD's export satisfies that: it never copies a candidate's geometry. The Workbench record editor
+// DOES adopt a candidate's `repr_point`, and that is handled separately, by recording provenance on
+// the adopted point rather than by removing a useful feature — a bare coordinate is a fact, and the
+// issue's own analysis puts it at "very likely free".
+const _matchLicences = {};   // namespace -> SPDX string (or '' when the source declares none)
+
+function rememberMatchLicences(data) {
+  const sources = data && data.attribution && data.attribution.sources;
+  if (!sources || typeof sources !== 'object') return;
+  Object.keys(sources).forEach((ns) => {
+    const lic = sources[ns] && sources[ns].license;
+    if (typeof lic === 'string' && lic) _matchLicences[ns] = lic;
+  });
+}
+
+// The licence a reference to `id` must carry, or '' when the source declares none.
+// ⚠️ '' is NOT "permissive" — it means unstated, and the export says so rather than implying freedom.
+function matchLicenceFor(id) {
+  const bare = barePlaceId(id);
+  const ns = bare.indexOf(':') > 0 ? bare.slice(0, bare.indexOf(':')) : '';
+  return _matchLicences[ns] || '';
+}
+
+// A URL that resolves to the identification. WHG's own entity URI is used because it is always
+// constructible and always resolves; the SOURCE's own record URL would be preferable per the
+// proposal, but `web_item` is empty for several namespaces including `osm` — the most restrictively
+// licensed one, i.e. exactly where a reader most needs to reach the source. The WHG record names the
+// source and links out to it (place#121), so the route exists; it is one hop longer.
+function matchUriFor(id) {
+  return placeUri(barePlaceId(id));
+}
+
 // ── Can this candidate act as a containment region? (place#260) ───────────────
 // `has_geom` is the gateway's per-candidate flag: true iff the place has a full POLYGON, and therefore
 // can itself be used as a `contained_in` region for the level below. It has been sent to the browser
@@ -8343,6 +8392,11 @@ async function reconcilePass(colIndex, parentCol, csrf, passNo, passTotal) {
       stopRequested = true;
       break;
     }
+    // The SPDX licence of each source searched (place#240). ⚠️ It is ONLY here: `/api/sources/`
+    // carries `redistributable`/`downloadable` but no SPDX field, and the candidate objects carry
+    // none either — so if this response is not read, the licence is simply not available to the
+    // export, and the reference we ship is a bare id with no terms attached.
+    rememberMatchLicences(data);
     slice.forEach((u, j) => {
       const qd = data['q' + j] || {};
       // The gateway never answered this query. Presence of the key IS the failure (the server emits

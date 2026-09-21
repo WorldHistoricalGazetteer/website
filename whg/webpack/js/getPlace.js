@@ -1,4 +1,4 @@
-import { minmaxer } from './utilities';
+import { minmaxer, placeUriHTML } from './utilities';
 import debounce from 'lodash/debounce';
 import './toggle-truncate.js';
 import './enlarge.js';
@@ -151,6 +151,10 @@ function parsePlace(data) {
 	    descrip += `<p><b>Source year${data.attestation_years.length == 1 ? '' : 's'}</b>: ` + data.attestation_years.join(', ') + '</p>';
 	}
 	
+	// place#271: the record's citable identifier, for anyone wanting to reference
+	// this place from outside WHG. Last in the panel — reference matter, not content.
+	if (data.id) descrip += placeUriHTML(data.id, {label: 'Identifier'});
+
 	$("#detail").html(`<div><p><b>Title</b>: <a href="/places/portal/${data.id}" target="_blank" data-bs-toggle="tooltip" title="View WHG record(s) for this place."><span id="row_title" class="larger text-danger">${data.title} <i class="fas fa-external-link-alt linky"></i></span></a></p>${descrip}</div>`);
 }
 

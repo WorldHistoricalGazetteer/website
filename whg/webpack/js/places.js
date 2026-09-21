@@ -1,6 +1,6 @@
 // /whg/webpack/places.js
 
-import { geomsGeoJSON } from './utilities';
+import { geomsGeoJSON, initPlaceUriClipboard } from './utilities';
 
 import '../css/places.css';
 
@@ -160,6 +160,8 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 				$("#ds_cards").stopSpin();
 			})
 		})
+
+		initPlaceUriClipboard(); // place#271 identifier copy control
 
 		new ClipboardJS('#a_clipgeom')
 		.on('success', function(e) {

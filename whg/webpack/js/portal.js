@@ -1,7 +1,7 @@
 // /whg/webpack/portal.js
 
 import throttle from 'lodash/throttle';
-import {attributionString, deepCopy, geomsGeoJSON} from './utilities';
+import {attributionString, deepCopy, geomsGeoJSON, initPlaceUriClipboard, placeUriHTML} from './utilities';
 import Historygram from './historygram';
 import {popupFeatureHTML} from './getPlace.js';
 import './toggle-truncate.js';
@@ -320,6 +320,7 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
 		            ${coordinates ? `<div>${Array.isArray(JSON.parse(coordinates)) ? 'Coordinates' : 'Geometry'}: <a class="clip-coordinates" data-coordinates="${coordinates}" data-bs-toggle="tooltip" title="copy to clipboard"><i class="fas fa-clipboard linky"></i></a></div>` : ''}
 		            ${place.types.length > 0 ? `<div>Type${place.types.length > 1 ? 's' : ''}: ${place.types.map(type => type.label).join(', ')}</div>` : ''}
 	    			${place.timespans.length > 0 ? `<div>Chronology: ${place.timespans.reverse().map(timespan => timespan.join('-')).join(', ')}</div>` : ''}
+	    			${placeUriHTML(place.place_id)}
 	    			${(window.WHGSuggest && window.WHGSuggest.canSuggest) ? `<div class="source-suggest mt-1">${window.WHGSuggest.buttonHTML(place.place_id)} ${window.WHGSuggest.insetHTML(place.place_id)}</div>` : ''}
     			</div>
 	        `;
@@ -484,6 +485,8 @@ Promise.all([waitMapLoad(), waitDocumentReady()])
         // place#170: the #permalinkButton ClipboardJS handler was removed with the button.
         // The page still declares <link rel="canonical">, which is now for consumers and
         // search engines rather than for a copy affordance.
+
+        initPlaceUriClipboard();
 
         new ClipboardJS('.clip-coordinates', {
             text: function (trigger) {

@@ -6,7 +6,7 @@ import '../css/mapAndTableAdditional.css';
 import {init_mapControls} from './mapControls';
 import {initDownloadLinks, initObservers, initOverlays, initPopups, recenterMap} from './mapFunctions';
 import {toggleFilters} from './mapFilters';
-import {arrayColors, colorTable, deepCopy, initInfoOverlay, initUtils} from './utilities';
+import {arrayColors, colorTable, deepCopy, initInfoOverlay, initPlaceUriClipboard, initUtils} from './utilities';
 import {initialiseTable} from './tableFunctions';
 import {init_collection_listeners} from './collections';
 import SequenceArcs from './mapSequenceArcs';
@@ -526,6 +526,7 @@ async function completeLoading() {
     }
 
     initUtils(whg_map); // Tooltips, ClipboardJS, clearlines, help-matches
+    initPlaceUriClipboard(); // place#271 identifier copy control (delegated, for injected rows)
 
     init_collection_listeners(checked_rows);
 

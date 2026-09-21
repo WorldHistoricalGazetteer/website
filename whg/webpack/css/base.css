@@ -142,3 +142,16 @@ footer {
     padding: 8px!important;
     border: 1px solid black!important;
 }
+/* Place identifier line (place#271) — shown on the Place portal, the public
+   dataset row-detail panel, and the place detail page. A full URI is long and
+   these containers are narrow, so let it wrap mid-string rather than force a
+   horizontal scrollbar on the panel. */
+.place-uri {
+    font-size: 0.85em;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.place-uri .clip-place-uri {
+    white-space: nowrap; /* keep the copy icon off a line of its own */
+}

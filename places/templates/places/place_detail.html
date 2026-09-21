@@ -97,6 +97,20 @@
                                             record <i class="fas fa-external-link-alt linky"></i></a>
                                     {% endif %}</td>
                             </tr>
+                            {% comment %}
+                              place#271: the record's citable identifier. Previously visible only
+                              to the dataset owner, in the management table, though it is what an
+                              external tool needs in order to reference this place.
+                            {% endcomment %}
+                            <tr>
+                                <td>Identifier:</td>
+                                <td><a href="/entity/place:{{ object.id }}/" target="_blank" rel="noopener"
+                                       data-bs-toggle="tooltip" title="Opens this record&#39;s public page. Append /api for Linked Places Format — returned under the source&#39;s own licence, and for WHG-hosted records that machine-readable view needs an API token.">{{ request.scheme }}://{{ request.get_host }}/entity/place:{{ object.id }}/</a>
+                                    <a href="#" class="clip-place-uri" data-uri="{{ request.scheme }}://{{ request.get_host }}/entity/place:{{ object.id }}/"
+                                       data-bs-toggle="tooltip" title="copy identifier to clipboard"><i
+                                            class="fas fa-clipboard linky"></i></a></td>
+                            </tr>
+
                             <tr>
                                 <td>Variants:</td>
                                 <td>{% for n in object.names.all %}
