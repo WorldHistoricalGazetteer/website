@@ -94,9 +94,23 @@ which worker answers, so one poll would have misled **in either direction**.
 🛑 **But `accepted` is 1 against 569 `POST /api/reconcile` over 5 d 18 h, and that one is most plausibly
 our own test.** Two different claims, and only the first is established: *a v8 vector can be accepted
 and the generation handshake is correct* (✅), versus *the offload is operating on real traffic* (❌).
-The second is what the issue's own title is about. **Re-poll in 3–4 days.** If `accepted` is still 1 the
-offload is off in practice, and the follow-on is a whg3 question — why the browser is not producing
-vectors on real runs — which is a different defect and should be filed as one.
+The second is what the issue's own title is about.
+
+🛑 **The gate is a CONDITION, not a date — deliberately.** An earlier draft of this file said "re-poll in
+3–4 days", and that was a promise with nothing to execute it: no session that wrote it will exist then,
+and a discrete intention arms nothing. So the trigger is stated on the issue instead, as a precondition
+of closing it:
+
+> **Before closing #285, poll `/api/health` → `stores.symphonym.client_vectors` (repeatedly — per-worker).
+> If `service.accepted` is still 1, do not close it.**
+
+That makes the issue **self-gating**: whoever next touches #285 runs the check, whenever that is, and no
+timer has to have been set by anyone. ✅ The check needs no context from this pass — it is one request
+against the gateway's health endpoint — which is a virtue, not a shortcoming: anybody can run it.
+
+If `accepted` is still 1 the offload is off in practice, and the follow-on is a **whg3** question — why
+the browser is not producing vectors on real runs — which is a different defect and should be filed as
+one rather than dragged into #285.
 
 ---
 
@@ -308,9 +322,20 @@ omitting the single most actionable fact in the area.
 overwhelmingly unroutable romanisations, so a larger denominator lowers the share while raising the count.
 Quote both terms or a reader takes it for damage.
 
-✅ **These remain ceilings, not yields**, and the source is emphatic about it: nobody has measured that a
-newly identified language would then *route* (it may have no Epitran mode). That caveat binds the two
-large numbers and **not** the 1.188 — a point in the rule work's favour that the raw comparison hides.
+✅ **All three are ceilings, not yields.** The source's own split: the measured lines stop at the rule-work
+ceiling; the language-identification and un-quarantine lines *additionally* assume every such row would
+then route, which nobody has measured (a newly identified language may have no Epitran mode at all).
+
+⚠️ **So the two large numbers carry an extra assumption the 1.188 does not — but 1.188 is still a ceiling,
+just a far more tractable one.** Its inputs are measured (866,948 `no_route` rows); "all of them would
+route once the rules exist" is the assumption. **Keep the word "ceiling" on it**, or it becomes the one
+apparent *yield* in a table of ceilings, which is precisely how 69.53% hardened into fact.
+
+🛑 **And do not attach the quality argument to this number.** Rule work is the only one of the three levers
+that improves the *transcriptions* rather than the count of rows that have one, and that is a real point in
+its favour — but **1.188 does not measure it.** 1.188 is a coverage share, like the other two; the quality
+benefit is a separate axis nobody has quantified. Make the argument on its own terms or the next reader
+cites 1.188 as evidence of a quality gain it says nothing about.
 
 **#252 gates a release**: v8-beta trains on `proposed` values, full release after contributor
 corrections arrive through the UI. It is on `staging` and running on dev at `/phonetics/`; #254 (the
