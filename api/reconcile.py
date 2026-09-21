@@ -158,6 +158,34 @@ def json_error(message, status=400):
     return JsonResponse({"error": f"{message} See documentation: {DOCS_URL}"}, status=status)
 
 
+def _interleave_by_rank(candidates):
+    """Merge independently-scored candidate lists fairly (place#214 defect 2).
+
+    Draws round-robin by `source_rank` — every source's best, then every source's second — so the
+    merged order reflects each source's own judgement of its own results and never compares two
+    scores that are on different scales.
+
+    Candidates with no `score_scale` (nothing sets one today, but a future path might) are treated as
+    their own source rather than silently grouped with the legacy list, so an unmarked candidate can
+    never inherit a scale it was not normalised on.
+    """
+    from collections import OrderedDict
+    buckets = OrderedDict()
+    for c in candidates:
+        buckets.setdefault(c.get("score_scale", "unmarked"), []).append(c)
+    for b in buckets.values():
+        b.sort(key=lambda x: (x.get("source_rank", 0), -float(x.get("score", 0) or 0)))
+    out, depth = [], 0
+    while True:
+        drawn = False
+        for b in buckets.values():
+            if depth < len(b):
+                out.append(b[depth]); drawn = True
+        if not drawn:
+            return out
+        depth += 1
+
+
 @method_decorator(csrf_exempt, name="dispatch")
 @reconcile_schema()
 class ReconciliationView(APIView):
@@ -799,6 +827,10 @@ class SuggestEntityView(AuthenticatedAPIView):
 
                 for hit in place_hits:
                     candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
+                    # place#214 defect 2 — which scale this score is on. Normalised against the
+                    # LEGACY maximum; the gateway list below is normalised against a different one.
+                    candidate["score_scale"] = "legacy"
+                    candidate["source_rank"] = len(place_candidates)
                     place_candidates.append(candidate)
 
             # --- 2b. CRC gateway search (new places/toponyms indexes) ---
@@ -815,9 +847,13 @@ class SuggestEntityView(AuthenticatedAPIView):
                     crc_max_score = crc_hits[0].get("_score", 1.0)
                     # Deduplicate against existing candidates by name
                     existing_names = {c["name"].lower() for c in place_candidates}
+                    crc_rank = 0
                     for hit in crc_hits:
                         candidate = make_candidate(hit, prefix, crc_max_score, SCHEMA_SPACE)
                         if candidate["name"].lower() not in existing_names:
+                            candidate["score_scale"] = "gateway"
+                            candidate["source_rank"] = crc_rank
+                            crc_rank += 1
                             place_candidates.append(candidate)
                             existing_names.add(candidate["name"].lower())
 
@@ -879,10 +915,24 @@ class SuggestEntityView(AuthenticatedAPIView):
                 })
 
         # --- 4. Combine and Sort Results ---
-        combined_candidates = place_candidates + period_candidates
-
-        # Sort primarily by score (descending), then alphabetically by name (ascending)
-        combined_candidates.sort(key=lambda x: (x.get('score', 0), x.get('name', '')), reverse=True)
+        #
+        # place#214 defect 2 — the legacy and gateway lists are normalised against DIFFERENT maxima
+        # (`max_score` and `crc_max_score` above), so both their top entries read 100 by construction
+        # and a cross-list comparison of `score` is meaningless. Sorting the concatenation by score
+        # therefore produced an order decided by list position and float ties, not by quality: a
+        # mediocre gateway hit normalised to 100 outranked a good legacy hit at 85.
+        #
+        # 🛑 There is no comparable quantity to sort by. `confidence` is absolute but the legacy path
+        # emits none, so it cannot rank the merged list either. So rather than compute a false
+        # ordering, the two lists are INTERLEAVED by their within-source rank: best-of-each first,
+        # then second-of-each, and so on. That is fair, deterministic, and claims nothing it cannot
+        # support. Periods keep their own tail, as before.
+        #
+        # ⚠️ This changes the merged order. It is not a regression: the previous order was arbitrary by
+        # construction, so there was no meaningful ordering to preserve. Each candidate now carries
+        # `score_scale` and `source_rank` so a consumer can see which scale a score is on instead of
+        # inferring a comparison that was never valid.
+        combined_candidates = _interleave_by_rank(place_candidates) + period_candidates
 
         # --- 5. Apply Cursor and Limit (Pagination) ---
         start_index = cursor
