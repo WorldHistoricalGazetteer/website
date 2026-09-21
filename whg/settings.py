@@ -441,6 +441,29 @@ LOGGING = {
             'level': LOGGING_LEVELS.get(ENV_CONTEXT, 'DEBUG'),
             'propagate': False,  # Ensure logs do not propagate to root logger
         },
+        # place#263 — keep the template-variable debug path out of the log files.
+        #
+        # `django.template.base._resolve_lookup` raises and logs `VariableDoesNotExist`
+        # at DEBUG whenever a template resolves a key that is absent — `request.META.HTTP_REFERER`
+        # is the common one. The log record interpolates the WHOLE dictionary being searched,
+        # which for `request.META` is the entire WSGI environ, headers included. Any header
+        # carrying a credential is then written verbatim into the application log and retained
+        # through rotation.
+        #
+        # `django` above runs at DEBUG on dev, so these records were reaching the file handlers.
+        # They are diagnostics about missing template variables and have no operational value,
+        # so the logger is pinned at INFO in every environment: this removes the exposure at
+        # source rather than relying on each template to defend itself.
+        #
+        # Severity is log hygiene, not credential exposure — the records are DEBUG, so the
+        # Sentry/GlitchTip LoggingIntegration captures them at neither breadcrumb (INFO) nor
+        # event (ERROR) level, `send_default_pii` is unset, and `/whg/logs` is gitignored.
+        # Nothing carried this off the host. Fixing it at the logger is still the cheap half.
+        'django.template': {
+            'handlers': ['django_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         'celery': {
             'handlers': ['celery_file', 'console'],
             'level': 'INFO',

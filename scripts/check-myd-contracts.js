@@ -68,6 +68,9 @@ const ROLE_CASES = [
   // Administrative levels, including ones outside western Europe.
   ['county', 'container'], ['parish', 'container'], ['district', 'container'], ['province', 'container'],
   ['oblast', 'container'], ['rayon', 'container'], ['viloyat', 'container'], ['aimag', 'container'],
+  // Ecclesiastical containers (place#279). Every CCEd location carries a diocese — 19,500 of 19,501 —
+  // and until these were added the download page had to tell volunteers to set them by hand.
+  ['diocese', 'container'], ['archdeaconry', 'container'], ['deanery', 'container'],
   // Dates: a capture date describes the geometry, a plain date describes the place.
   ['acquisition_date', 'geom_date'], ['geometry_date', 'geom_date'], ['capture_date', 'geom_date'],
   ['image_date', 'geom_date'], ['survey_date', 'geom_date'],
@@ -258,5 +261,127 @@ checkIndexingContract(required);
 checkCitationRoundTrip();
 checkFeatureRoundTrip();
 checkValueClustering();
+// ── 6. Containment chain order (place#279) ───────────────────────────────────
+// Detecting a column as a container is only half of it: `initChain()` orders the chain by ADMIN_RANK,
+// and an unrecognised header ranks 100+idx — i.e. AFTER every known level.
+//
+// place#279 claimed that was "the correct coarse-to-fine position for both terms in practice". It is
+// not. Measured on CCEd's own four columns before the fix, the chain built as:
+//     county(20) > parish(45) > diocese(102) > archdeaconry(103)
+// which has a PARISH containing a DIOCESE, and would reconcile parishes unscoped by their diocese and
+// then scope the diocese by the parish. Adding the headers to the hint table alone would have shipped
+// that. So the ordering is asserted here, not just the detection.
+function loadAdminRank() {
+  const grab = (re, what) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`${what} not found in reconciliation.js — has it been renamed?`);
+    return m[0];
+  };
+  const table = grab(/^const ADMIN_RANK = \[[\s\S]*?^\];/m, 'ADMIN_RANK');
+  const fn = grab(/^function adminRank\([\s\S]*?^\}/m, 'adminRank');
+  // eslint-disable-next-line no-new-func
+  return new Function(`${table}\n${fn}\nreturn adminRank;`)();
+}
+
+function checkChainOrder() {
+  let adminRank;
+  try { adminRank = loadAdminRank(); } catch (e) { bad('chain order: parse', e.message); return; }
+  const order = (cols) => cols
+    .map((c, i) => ({ c, r: adminRank(c, i) }))
+    .sort((a, b) => a.r - b.r)
+    .map((x) => x.c);
+
+  const CASES = [
+    // [columns as they appear in the file, the order the chain must build]
+    [['county', 'parish', 'diocese', 'archdeaconry'],
+     ['county', 'diocese', 'archdeaconry', 'parish']],          // CCEd's actual shape
+    [['archdeaconry', 'diocese'], ['diocese', 'archdeaconry']], // coarse first regardless of column order
+    [['parish', 'diocese'], ['diocese', 'parish']],             // the inversion the old code produced
+    // must-not-regress: the civil levels keep their existing relative order
+    [['parish', 'county', 'country'], ['country', 'county', 'parish']],
+    [['hundred', 'county'], ['county', 'hundred']],
+  ];
+
+  const wrong = [];
+  for (const [cols, want] of CASES) {
+    const got = order(cols);
+    if (got.join('>') !== want.join('>')) wrong.push(`[${cols}] → ${got.join(' > ')} (expected ${want.join(' > ')})`);
+  }
+  // An unknown header must still sort last — that behaviour is relied on and must not be lost.
+  if (adminRank('quux', 0) < adminRank('parish', 9)) {
+    wrong.push('an unrecognised header no longer sorts after the known levels');
+  }
+  if (wrong.length) bad('containment chain order', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok(`containment chain order (${CASES.length} chains)`);
+}
+checkChainOrder();
+
+// ── 7. The container warning (place#260) ─────────────────────────────────────
+// `has_geom` was sent to the browser and read by nothing, so a reviewer confirming a container had no
+// signal that their choice could not scope the level below. The real function is evaluated here with a
+// stubbed `project`, because the bug was not in the logic — there was no logic.
+function loadContainerWarning(role) {
+  const grab = (re, what) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`${what} not found in reconciliation.js — has it been renamed?`);
+    return m[0];
+  };
+  const colOf = grab(/^function reviewColOf\([\s\S]*?\n/m, 'reviewColOf');
+  const fn = grab(/^function containerWarningHTML\([\s\S]*?^\}/m, 'containerWarningHTML');
+  // eslint-disable-next-line no-new-func
+  return new Function('role', `
+    // Column 0 carries the role under test; column 1 never does, so a function that
+    // ignored reviewColOf() and always read columns[0] would fail the last case below.
+    const project = { columns: [{ role }, { role: 'other' }] };
+    ${colOf}
+    ${fn}
+    return containerWarningHTML;`)(role);
+}
+
+function checkContainerWarning() {
+  let warnContains, warnName;
+  try {
+    warnContains = loadContainerWarning('contains');   // a column that FEEDS the hierarchy
+    warnName = loadContainerWarning('name');           // the final level — flag is irrelevant there
+  } catch (e) { bad('container warning: parse', e.message); return; }
+
+  const CASES = [
+    // [fn, candidate, must warn?, why]
+    [warnContains, { has_geom: false }, true,  'a container column with no boundary must warn'],
+    [warnContains, { has_geom: true },  false, 'a container that HAS a boundary must not warn'],
+    [warnName,     { has_geom: false }, false, 'the final level never scopes anything — no noise there'],
+    // ⚠ Absent is NOT false. An older cached match, or a gateway that did not send the flag, must not
+    // be reported as having no boundary — that would warn on every historical project on first open.
+    [warnContains, {},                  false, 'an ABSENT flag must not be treated as false'],
+    [warnContains, { has_geom: null },   false, 'null is not false either'],
+  ];
+
+  const wrong = [];
+  for (const [fn, cand, wantWarn, why] of CASES) {
+    const got = fn(cand, '0:17') !== '';
+    if (got !== wantWarn) wrong.push(`${why} — warned=${got}, expected ${wantWarn}`);
+  }
+  // The wording must hedge: ~5% of has_geom=false containers DO resolve via linked-polygon, so an
+  // absolute claim would be false for them.
+  const html = warnContains({ has_geom: false }, '0:17');
+  if (/\bcannot be used\b|\bwill fail\b/.test(html)) {
+    wrong.push('wording is absolute; ~5% of these DO work via linked-polygon, so it must hedge');
+  }
+  // 🛑 The function being correct is not the same as the function being CALLED. Deleting the call site
+  // left every case above green — the exact failure this harness's own header warns about, reproduced
+  // by mutation rather than argued about. So assert the wiring in the source, not just the behaviour.
+  if (!/containerWarningHTML\(c, meta\.key\)/.test(src)) {
+    wrong.push('containerWarningHTML is never called from the candidate list — the badge cannot render');
+  }
+  // 🛑 The column index must actually be read. If containerWarningHTML ignored the key and always
+  // looked at columns[0], every case above would still pass — so assert a DIFFERENT column too.
+  if (warnContains({ has_geom: false }, '1:17') !== '') {
+    wrong.push('the key\'s column index is not being read — column 1 is role "other" and must not warn');
+  }
+  if (wrong.length) bad('container warning', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok(`container warning (${CASES.length} cases + wording)`);
+}
+checkContainerWarning();
+
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');
