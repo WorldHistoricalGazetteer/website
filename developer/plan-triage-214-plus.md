@@ -46,7 +46,7 @@ tab.
 | **#283** | versioned + hash-checked assets, live | `5cdbbbbae`; all four prod assets hash to the manifest **and** to the model's own `provenance.json` |
 | **#284** | `PY_IS_ALPHA` repinned to 14.0.0, header retracted in place | `0e6f51c83` |
 | **#257** | `panphon_embedding` gone from the mapping; v7 index deleted | live cluster, `indexing-79` |
-| **#250** | `is_script_mismatch` fixed *and* the index rebuilt after it | indexing `2f093c4` (6 Sep) + v8 build (14 Sep); `tgn` now carries 649,953 Latn-family docs against 0 |
+| **#250** | `is_script_mismatch` fixed *and* the index rebuilt after it | indexing `2f093c4` (6 Sep) + v8 build (14 Sep); **`tgn`** now carries 649,953 Latn-family docs against 0 — namespace-scoped, NOT a whole-index figure (`Latn` 379,161 + `Latn-pinyin-x-notone` 270,531 + wadegile/hanyu tails). ⚠️ Quoted without its scope on 21 Sep it was unreproducible to a peer measuring whole-index `lang`×`script` totals (769,921 across 8 tags) and rightly rejected |
 | **#261** | the fix is **in the running gateway process** | deployed tree `a08313d` is a descendant of `b0e0179`; watchdog reflog at 11:28:02, process start 11:28:04 — pull-then-restart, two seconds apart |
 
 **The unlock for four of those was a single measurement.** #282/#283/#284/#285 each ended with *"production
@@ -160,6 +160,34 @@ identical in a diff and are not the same finding.
 🛑 **#269 does not settle the `kain_par` licensing question.** The public tileset still serves the full
 polygons behind nothing but an `Origin` check, so the boundary set remains reassemblable. The per-record
 API was the smaller half.
+
+### #245 remeasured 2026-09-21 — 18.0% → 24.0%, and it settles less than it looks like
+
+**24 of 100** sampled `ccode=CN` places, against **18 of 100** on 5 Sep. Same 100 places, not a fresh
+sample (CN sample hash `4106109371657cda`, reproduced from two independently written selections;
+probe and DB sha256-identical to the cluster copy). Instrument: `process/probe_reachability.py` in the
+**GOTW** repo — *not* indexing — n=100/country, seed 7, MATCH_KM=25, exact then phonetic, size 20.
+
+⚠️ **The denominator is not what the issue's prose suggests.** It is the share of sampled Chinese places
+whose 1856 printed coordinate has *some* returned candidate within 25 km. It is **not** a share of indexed
+places and **not** "Latin-script reachability" — I briefed it that way and was wrong. Controls in the same
+invocation: **IN 50→50, RU 25→25, GB 76→75.** Three flat while CN moves +6 is the evidence that the
+instrument did not drift; that control profile, not the interval, is the argument.
+
+🛑 **+6.0 points is inside the noise of two unpaired n=100 samples**, and no paired interval can be
+computed because the 5 Sep run recorded only the aggregate, so discordant pairs are unrecoverable and
+McNemar is impossible. Fixed going forward: per-place outcomes are now kept
+(`/vast/ishi/gotw/data/cn_paired_20260921.json`). **Quote the +6 only with that caveat attached.**
+
+**Confounded, deliberately unattributed.** Between the two runs the served index also took Symphonym v8
+(15 Sep), the CJK-IPA re-extract, and gateway fixes #267/#266/#273 — and the probe runs in `phonetic`
+mode, so v8 is a more plausible mover than #250. Reported as a confounded before/after; no attribution
+claimed. #245 stays **open**: 24% is still the finding, not a fix.
+
+The run's own negative controls are worth copying: 0 gateway errors in 200 queries, 103 non-empty pools
+against 97 empty, and a nonsense query at 0 before and after — because `_post` swallows failures into
+`{"_error": …}`, so a **dead gateway would have reported a clean 0.0%**. The docstring's cautionary
+example is an "after" of 24% from a fresh sample proving nothing, and 24% is what came back.
 
 ### Method note — promoting from a SHARED working tree
 
