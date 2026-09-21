@@ -584,6 +584,26 @@ now be a false close.
 * **Do not quote a magnitude across a change of denominator.** Source rows vs deduplicated toponyms
   (#250); a `df` read after a delete (#257); exposure vs realised counts (#265, where a 3× ratio
   compared an upper bound against a realised count and bounded nothing).
+* 🛑 **Two sessions can both be right about the same field name and disagree completely — check which
+  LAYER each measured.** On #294, whg3's `/reconcile` returns
+  `namespaces_searched: ['gn','iv','osm','wd','whg']` while the gateway's own meta returns `[]` for the
+  identical query: the gateway's field means *the explicit positive scope*, and whg3 **constructs its own**
+  from `whg` plus the gateway's `namespaces` (present-in-results). Each session measured its own side and
+  reported a flat contradiction.
+  ⚠️ **The fix depended on resolving it.** Under the wrong reading — a list of consulted sources with `gb`
+  quietly missing — the obvious remedy is to add `gb` to `namespaces_searched`, which would break the
+  "queried but matched nothing" signal that field carries for #157's attribution. Under the right one it is
+  a **missing field**, and the fix is additive. ✅ *A correct-sounding fix aimed at a misdescribed defect is
+  the expensive kind.*
+
+* ✅ **Cross-checking works when each side re-MEASURES rather than re-reads.** Same pass: one session
+  overstated `gb` as unreachable (it is reachable two ways — explicit positive scope, or
+  `exclude_namespaces: []`), the other reported a wrong value for `namespaces_searched`. Both corrections
+  held, and **neither session was checking its own claim.** Note the proposed *explanation* for the second
+  error was also wrong — "you misread the adjacent `namespaces` field" — and could be falsified in one
+  line, because whg3's response has no `namespaces` key at all. **Verify the correction, not just the
+  claim.**
+
 * 🛑 **`_update_by_query` DOES re-run an index's `default_pipeline` — settled 2026-09-21, and it was
   recorded as unverified here for most of the day.** Measured on a throwaway index with a pipeline that
   *increments a counter*, so the answer was a number: `pipeline_runs` 1 → 2 with no `?pipeline=` given, and
