@@ -476,7 +476,40 @@ retention.
 
 ## 5. 🛑 The one ordering constraint that must not be broken
 
-> **#256 must be resolved before #246 is actioned. Same work unit, that order, no exceptions.**
+> ~~**#256 must be resolved before #246 is actioned.**~~ ✅ **GATE CLEARED 2026-09-21** — #256 is fixed
+> (indexing `0cb0ac1`), the `blocked-by-order` label is removed, and Stephen has approved the cost, so
+> #246 may proceed. The account below is kept because it is why the gate existed and what it prevented.
+
+### 🛑 And a second blocker nobody knew about: #246 would have crashed in its first minute
+
+While fixing #256 the indexing session found that **the OSM/OHM ingest could not run at all.** Both
+handlers called `.with_locations(idx='flex_mem')`; **pyosmium 4.x renamed that parameter to `storage`**,
+measured on the CRC `whg` env (4.2.0) and on 4.3.1:
+
+```
+idx= keyword  ->  TypeError: unexpected keyword argument 'idx'
+```
+
+`apply_file` raised on its **first statement**. Every other call site in the repo passes it positionally
+and was unaffected; only the two authority scripts used the keyword. Fixed in the same commit.
+
+⚠️ **The re-ingest this Plan spent a paragraph sequencing had never been possible**, and nobody knew
+because the July augmentation pass (place#145) put the polygons in without the ingest, so nothing
+exercised the path for months. **An unexercised code path carries no evidence of working** — a more
+general lesson than the rename, and a fifth member of the family in
+`developer/postmortem-ingestion-faults.md`.
+
+✅ Loud rather than silent, so the better failure mode. But note the shape: #246's own two standing
+warnings are about a *finished* fix silently not being finished. This was the fix being unable to start,
+which neither warning could have caught.
+
+### The cost that was approved
+
+The planet ingest is now **two passes over the 92 GB PBF** plus osmium's area assembly, where it was one.
+One pass cannot work: osmium emits areas only *after* every way, and the emit-both-and-let-the-later-row-win
+alternative fails because `write_staged_place_doc` **appends** — both rows survive into `places.jsonl`, so
+the winning geometry would depend on row ordering through four downstream stages. The reference pass
+already does two passes in production, which is what made the cost known rather than speculative.
 
 #246 asks for date ingestion to be fixed and the corrected data re-tiled for `osm` and `tgn`. Acting
 on it means re-ingesting OSM/OHM. But `osm-places.py:305` and `ohm-places.py:313` still build **every**
@@ -551,6 +584,71 @@ now be a false close.
 * **Do not quote a magnitude across a change of denominator.** Source rows vs deduplicated toponyms
   (#250); a `df` read after a delete (#257); exposure vs realised counts (#265, where a 3× ratio
   compared an upper bound against a realised count and bounded nothing).
+* 🛑 **Two sessions can both be right about the same field name and disagree completely — check which
+  LAYER each measured.** On #294, whg3's `/reconcile` returns
+  `namespaces_searched: ['gn','iv','osm','wd','whg']` while the gateway's own meta returns `[]` for the
+  identical query: the gateway's field means *the explicit positive scope*, and whg3 **constructs its own**
+  from `whg` plus the gateway's `namespaces` (present-in-results). Each session measured its own side and
+  reported a flat contradiction.
+  ⚠️ **The fix depended on resolving it.** Under the wrong reading — a list of consulted sources with `gb`
+  quietly missing — the obvious remedy is to add `gb` to `namespaces_searched`, which would break the
+  "queried but matched nothing" signal that field carries for #157's attribution. Under the right one it is
+  a **missing field**, and the fix is additive. ✅ *A correct-sounding fix aimed at a misdescribed defect is
+  the expensive kind.*
+
+* ✅ **Cross-checking works when each side re-MEASURES rather than re-reads.** Same pass: one session
+  overstated `gb` as unreachable (it is reachable two ways — explicit positive scope, or
+  `exclude_namespaces: []`), the other reported a wrong value for `namespaces_searched`. Both corrections
+  held, and **neither session was checking its own claim.** Note the proposed *explanation* for the second
+  error was also wrong — "you misread the adjacent `namespaces` field" — and could be falsified in one
+  line, because whg3's response has no `namespaces` key at all. **Verify the correction, not just the
+  claim.**
+
+* 🛑 **`_update_by_query` DOES re-run an index's `default_pipeline` — settled 2026-09-21, and it was
+  recorded as unverified here for most of the day.** Measured on a throwaway index with a pipeline that
+  *increments a counter*, so the answer was a number: `pipeline_runs` 1 → 2 with no `?pipeline=` given, and
+  3 with one (the control, proving the counter was not stuck). **So an in-place update to `places` is not a
+  read-only act** — every document touched goes back through `extract_namespace`, which carries #249's
+  `<2 characters` rule, and the write reports a full count and zero errors while discarding names.
+  ⚠️ **The control was the load-bearing part:** a probe showing "the name is still null afterwards" would
+  have proved nothing, because it was already null. This is what blocked #246's last item and #286's AAT
+  projection, and it rules out the cheap route for both.
+
+* 🛑 **A verification that reads the wrong field reports failure on correct data — and looks exactly like
+  the known bug.** On #246's retile, the first scan found 0 of 241,602 features with a real start year,
+  matching the 7 August failure signature precisely. Two causes: `limit 6000` on an mbtiles is a
+  *contiguous geographic slice* in rowid order, not a sample (globally scattered dated places can be missed
+  entirely — `order by random()` changed the answer); and `doc_temporal_bounds` is unbounded whenever any
+  timespan lacks an outer edge, so `start = -9999` is **correct by design** for nearly every `tgn` place.
+  The dates are in `start_def`/`end_def`. ✅ **Any retile check that reads `start` alone will fail a correct
+  `tgn` tileset**, which is the next trap after "read the tileset, not the index".
+
+* 🛑 **A shipped API change with no documentation change is a distinct, recurring failure — and it has
+  its own name now.** Named by `documentation-6f` on #288 after **three instances surfaced in one day**:
+
+  | instance | live | documented |
+  |---|---|---|
+  | #262's `gateway` presence-means-failure key | 8 Sep | 21 Sep |
+  | five candidate fields (`confidence`, `repr_point`, `ccodes`, `place_types`, `wikipedia`) | long before | 21 Sep |
+  | #288's `source_year` | not yet | **to be done in the same pass** |
+
+  ⚠️ **The middle one is the worst of the three**, because `confidence` is the field a caller is *told* to
+  threshold on and the table listed nine of fourteen fields — so the omission read as "these are all the
+  fields", not as "some are missing". An undocumented field is not a gap a reader can see.
+
+  ✅ **The rule: a contract change and its documentation ship in the same pass.** Since 2026-09-21 there is
+  a dedicated session in the `documentation` repo — so the practical form is *tell it, in the same breath
+  as the commit*. The cost of not doing so is not a missing paragraph; it is an integrator building against
+  a shape that was never true, which is how #217 came to exist.
+
+* 🛑 **Match the strength of a claim to the strength of the action it justifies.** Withholding, deferring,
+  asking and flagging all run on uncertainty alone and need no diagnosis; a diagnosis is only owed when
+  something will be *changed* on the strength of it. `documentation-6f` withheld the `temporal_extent`
+  column (right) and justified it as *"these values are wrong"* (not established — `kain_par [1851, 1851]`
+  is a correct snapshot year, and PeriodO's −4,567,998,050 ≈ 4.568 Ga is plausibly a real geological
+  bound). Its own conclusion is the transferable one: **the cheapest fix is not measuring harder before
+  withholding, it is not upgrading "I can't interpret this" into "this is broken."**
+
 * 🛑 **The dominant failure in this pass was not arithmetic — it was provenance failing to travel with a
   number.** Three separate substitutions, all with correctly transcribed figures: a superseded ceiling
   (69.53%, corrected two sections below where it was stated, in the same document); coverage share used as
@@ -558,3 +656,7 @@ now be a false close.
   case the arithmetic was right and the subject was wrong**, and in two of the three the correction was
   already written down somewhere the quoter had read. **Before quoting a figure, state which population it
   was measured over and which question it answers.** If you cannot, you do not have the figure yet.
+  ⚠️ **And check you are quoting the denominator that answers the question asked.** `gn_fcodes` on
+  "309 of 58,996 concepts" is 0.5% of the **vocabulary** and potentially most of the **records**, because
+  those 309 are the head of the distribution. Quoted the first way it makes the work look pointless;
+  quoted the second it makes it obviously worth shipping partial. Same numerator, opposite conclusion.

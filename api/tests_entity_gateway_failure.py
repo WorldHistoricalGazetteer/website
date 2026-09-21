@@ -192,3 +192,89 @@ class EntityFeatureViewStatusTests(SimpleTestCase):
         self.assertNotEqual(failed.status_code, missing.status_code)
         self.assertIn("gateway", failed.data)
         self.assertNotIn("gateway", missing.data or {})
+
+
+class RedistributionAndAttributionTests(SimpleTestCase):
+    """`/entity/` must credit its source, and refuse one it may not re-serve (place#269).
+
+    This endpoint is the **citable** representation — published through w3id and,
+    since place#271, answered for anonymous linked-data clients. So it *hands over*
+    the source's own content, which is a different act from indexing or searching
+    it. The registry draws that line with `redistributable` (place#136): indexing,
+    search and reconciliation run server-side and never expose raw source data, and
+    are permitted for every authority; redistribution is not.
+
+    🛑 Two gaps, both found by checking rather than assuming: the LPF path carried
+    **no attribution at all** (the popup variant had it since place#121), and
+    `redistributable` was **never consulted** anywhere in this view.
+    """
+
+    def _get(self, attribution, variant=None):
+        from api.views_entity import EntityFeatureView
+        url = "/entity/place:clio:x/api" + (f"?variant={variant}" if variant else "")
+        request = APIRequestFactory().get(url)
+
+        def _fetch(place_ids, user=None, allow_anonymous=False, meta=None):
+            return {"clio:x": {"place_id": "clio:x", "title": "Somewhere",
+                               "namespace": "clio", "names": [], "geometries": []}}
+
+        with patch("api.views_entity.crc_fetch_places", side_effect=_fetch), \
+                patch("api.attribution.registry_attribution", return_value=attribution):
+            return EntityFeatureView.as_view()(request, entity_id="place:clio:x")
+
+    OK_SOURCE = {"name": "Cliopatria", "redistributable": True,
+                 "license__spdx_id": "CC-BY-4.0", "rights_holder": "Seshat"}
+    BLOCKED = {"name": "Locked Gazetteer", "redistributable": False,
+               "license__spdx_id": "NoDerivatives", "rights_holder": "Somebody",
+               "source_url": "https://example.org/", "license__url": "https://example.org/terms"}
+
+    def test_the_lpf_path_now_carries_attribution(self):
+        """The gap that mattered most: this is the machine-read representation, so
+        an unattributed record here is the one most likely to be copied onward
+        without its terms."""
+        response = self._get(self.OK_SOURCE)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attribution", response.data)
+        self.assertEqual(response.data["attribution"]["name"], "Cliopatria")
+
+    def test_the_popup_variant_still_carries_it(self):
+        """The companion — it had attribution before this change and must keep it."""
+        response = self._get(self.OK_SOURCE, variant="popup")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attribution", response.data)
+
+    def test_a_non_redistributable_source_is_refused_with_451(self):
+        """🛑 451, not 403: the refusal is a property of the CONTENT, not of the
+        caller's credentials. No token would change the answer, and 403 invites a
+        client to retry with one."""
+        response = self._get(self.BLOCKED)
+        self.assertEqual(response.status_code, 451)
+
+    def test_the_refusal_names_the_source_and_where_to_get_it(self):
+        """A consumer who may not have the data can still legitimately need to know
+        whose it is — refusing without saying that just looks broken."""
+        response = self._get(self.BLOCKED)
+        body = response.data
+        self.assertEqual(body["source"]["name"], "Locked Gazetteer")
+        self.assertEqual(body["source"]["rights_holder"], "Somebody")
+        self.assertEqual(body["source"]["source_url"], "https://example.org/")
+        self.assertIn("do not permit", body["detail"])
+
+    def test_the_popup_variant_is_refused_too(self):
+        """🛑 Both variants, or the gate is a formality: the popup returns the raw
+        gateway record, which is MORE of the source's content, not less."""
+        self.assertEqual(self._get(self.BLOCKED, variant="popup").status_code, 451)
+
+    def test_an_unknown_namespace_is_served_not_refused(self):
+        """⚠️ FAIL OPEN on absence. `registry_attribution` returns None for a
+        namespace with no authority row — notably WHG-hosted places. Treating that
+        as non-redistributable would refuse the site's own records."""
+        response = self._get(None)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("attribution", response.data)
+
+    def test_redistributable_true_is_required_to_be_explicitly_false_to_refuse(self):
+        """A row that simply omits the flag must not be refused — only an explicit
+        False blocks. `is False` rather than falsy, so None/missing serves."""
+        response = self._get({"name": "Partial", "redistributable": None})
+        self.assertEqual(response.status_code, 200)
