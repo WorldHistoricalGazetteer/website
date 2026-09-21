@@ -158,6 +158,59 @@ def json_error(message, status=400):
     return JsonResponse({"error": f"{message} See documentation: {DOCS_URL}"}, status=status)
 
 
+# ── Embargoed namespaces must not reach the reconciliation API (place#218) ────
+# The place#162 embargo hid a gazetteer from every DISCOVERY surface — `/api/sources/`, the Atlas
+# offcanvas and layer picker, the coverage endpoint, all four via `visible_to()` — and left it fully
+# queryable through `POST /reconcile` and `GET /suggest/entity`, which return candidates carrying its
+# name and identifiers. `/api/attribution/` would then resolve that namespace to its licence and
+# rights holder.
+#
+# 🛑 Resolved ONCE per request and applied to BOTH arms. The reconcile path is a hybrid: a gateway
+# search plus a legacy ES search, merged. Filtering only one of them still leaks.
+#
+# ⚠️ Cached per request via the request object where one is available, because the alternative — a
+# registry query per candidate — is how a correctness fix becomes a performance incident.
+def hidden_namespaces(user, request=None):
+    """Namespaces this caller must not see results from. Empty set in the normal case."""
+    if request is not None:
+        cached = getattr(request, "_whg_hidden_namespaces", None)
+        if cached is not None:
+            return cached
+    try:
+        from api.models import GazetteerRegistryEntry
+        hidden = GazetteerRegistryEntry.objects.hidden_namespaces_for(user)
+    except Exception as exc:  # pragma: no cover — registry unavailable
+        # 🛑 FAIL CLOSED is wrong here and fail-open is wrong too, so pick deliberately:
+        # returning an empty set (fail OPEN) keeps reconciliation working if the registry query
+        # fails, at the cost of the embargo not being enforced during that failure. The embargo is
+        # a publication courtesy; reconciliation is the service. Logged so it is not silent.
+        logger.warning("reconcile: could not resolve embargoed namespaces, not enforcing: %s", exc)
+        hidden = set()
+    if request is not None:
+        request._whg_hidden_namespaces = hidden
+    return hidden
+
+
+def apply_namespace_embargo(namespaces, hidden):
+    """Subtract `hidden` from a caller's requested `namespaces`.
+
+    Returns `(effective_namespaces, was_narrowed)`.
+
+    ⚠️ `None` means "all sources" and must become an explicit exclusion set rather than staying
+    `None`, or an embargoed namespace is searched precisely when the caller asked for everything —
+    which is the common case.
+    """
+    if not hidden:
+        return namespaces, False
+    if namespaces is None:
+        # Caller asked for everything. We cannot express "all but these" upstream, so nothing is
+        # narrowed here; the hit-level filter below removes them. Reported as narrowed so the
+        # `namespaces_searched` suppression still applies.
+        return None, True
+    effective = {ns for ns in namespaces if ns not in hidden}
+    return effective, effective != set(namespaces)
+
+
 def _interleave_by_rank(candidates):
     """Merge independently-scored candidate lists fairly (place#214 defect 2).
 
@@ -795,6 +848,10 @@ class SuggestEntityView(AuthenticatedAPIView):
         mode = request.GET.get("mode", "all").lower()
         type = request.GET.get("type", "all").lower()
         namespaces = parse_namespaces(request.GET.get("namespaces"))
+        # place#218 — the suggest endpoint has the same hybrid shape and the same leak, so it gets the
+        # same treatment: resolved once, applied to both arms, and never named in the response.
+        _suggest_hidden = hidden_namespaces(request.user, request)
+        namespaces, _ = apply_namespace_embargo(namespaces, _suggest_hidden)
         ccodes = parse_delimited_param(request.GET.get("countries"), upper=True)
         fclasses = parse_delimited_param(request.GET.get("fclasses"), upper=True)
         types = parse_delimited_param(request.GET.get("types"))
@@ -825,6 +882,9 @@ class SuggestEntityView(AuthenticatedAPIView):
                 # Max score is used for normalizing subsequent scores
                 max_score = place_hits[0].get("_score", 1.0) if place_hits else 1.0
 
+                if _suggest_hidden:
+                    place_hits = [h for h in place_hits
+                                  if (h.get("_source") or {}).get("namespace") not in _suggest_hidden]
                 for hit in place_hits:
                     candidate = make_candidate(hit, query["query_text"], max_score, SCHEMA_SPACE)
                     # place#214 defect 2 — which scale this score is on. Normalised against the
@@ -843,6 +903,9 @@ class SuggestEntityView(AuthenticatedAPIView):
                 crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user,
                                               namespaces=crc_namespaces, ccodes=ccodes,
                                               fclasses=fclasses, types=types)
+                if _suggest_hidden:
+                    crc_hits = [h for h in crc_hits
+                                if (h.get("_source") or {}).get("namespace") not in _suggest_hidden]
                 if crc_hits:
                     crc_max_score = crc_hits[0].get("_score", 1.0)
                     # Deduplicate against existing candidates by name
@@ -1467,6 +1530,11 @@ def reconcile_place_es(query, user=None):
     """
     namespaces = query.get("namespaces")  # None ⇒ all
 
+    # place#218 — an embargoed gazetteer must not be reachable here. Resolved once, applied to BOTH
+    # the gateway request and the legacy hits: this is a hybrid path and filtering one arm still leaks.
+    _hidden_ns = hidden_namespaces(user)
+    namespaces, _embargo_narrowed = apply_namespace_embargo(namespaces, _hidden_ns)
+
     # A `contained_in` region scope is a HARD constraint (issue #143). The legacy WHG index cannot
     # enforce it — containment targets are gateway-resident place ids with no counterpart here, and the
     # legacy `build_es_query` has no containment field to filter on — so unfiltered legacy hits would
@@ -1498,6 +1566,11 @@ def reconcile_place_es(query, user=None):
     legacy_hits = []
     if (namespaces is None or WHG_NAMESPACE in namespaces) and not suppress_legacy:
         legacy_hits = es_search(query=query)
+        # place#218 — the legacy arm. `filter_hits_by_namespace` is the caller-driven safety net; this
+        # is the registry-driven one, and it must run even when the caller named no namespaces.
+        if _hidden_ns:
+            legacy_hits = [h for h in legacy_hits
+                           if (h.get("_source") or {}).get("namespace") not in _hidden_ns]
     elif suppress_legacy:
         logger.info("reconcile: suppressing legacy hits — spatial scope is enforced gateway-side only")
 
@@ -1509,6 +1582,12 @@ def reconcile_place_es(query, user=None):
     # (or when no namespace filter was given at all).
     if gateway_in_play:
         crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces, meta=crc_meta)
+        # place#218 — the gateway arm. When the caller asked for everything we could not express
+        # "all but these" in the request, so the exclusion happens here. Belt and braces even when we
+        # could: the gateway is a separate service and this must not depend on it honouring the list.
+        if _hidden_ns:
+            crc_hits = [h for h in crc_hits
+                        if (h.get("_source") or {}).get("namespace") not in _hidden_ns]
 
     # The gateway fails CLOSED on an explicitly scoped query it cannot constrain: rather than
     # answering with unscoped results it returns none and reports scope.applied = False. Legacy hits
@@ -1599,6 +1678,13 @@ def reconcile_place_es(query, user=None):
         # Present-in-results, a subset of the above but authoritative when the
         # request was unrestricted and the gateway echoed `[]` for `searched`.
         searched.update(crc_meta["namespaces"])
+    # place#218 — never name an embargoed namespace here. Reporting it as searched discloses its
+    # existence, which is exactly what the embargo is for: a caller who cannot see the gazetteer in
+    # `/api/sources/` must not learn of it from a reconciliation response. This also keeps the root
+    # `attribution` block honest, since it is built FROM this set (place#157) and would otherwise
+    # resolve the namespace to its name, licence and rights holder.
+    if _hidden_ns:
+        searched -= _hidden_ns
     if searched:
         extra["namespaces_searched"] = sorted(searched)
 
