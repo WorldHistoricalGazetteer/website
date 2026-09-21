@@ -184,6 +184,26 @@ McNemar is impossible. Fixed going forward: per-place outcomes are now kept
 mode, so v8 is a more plausible mover than #250. Reported as a confounded before/after; no attribution
 claimed. #245 stays **open**: 24% is still the finding, not a fix.
 
+**Retrieval mechanism, bounded (same sample, exact-only driver).** Of the 24 that reached, **2 reached in
+`exact` mode and 22 only in `phonetic`** — so of the +6 gained, **at most 2 can be lexical and at least 4
+must be phonetic-only**. Supportable claim: *lexical matching accounts for at most 2 of 24; Chinese
+reachability runs almost entirely through the phonetic path.* That is a design fact about the retrieval
+stack and worth having.
+
+🛑 **It is NOT a #250-vs-v8 separation, and cannot be made into one.** Our 1856 spellings do not match
+TGN's Wade-Giles character for character, so **#250's own contribution lands in the phonetic column too** —
+both `-fu` cases were phonetic-only. The split bounds *retrieval mechanism*, never *document provenance*.
+My caveat to `gotw-3d` said only that exact mode cannot identify which change supplied a lexical form;
+the true position is stronger, and it closes the separation off in principle rather than in practice.
+
+**The `-fu` hypothesis is REFUTED, and how it was refuted is the valuable part.** In-sample: 3 of 24
+reached were `-fu` against 1 of 76 not reached, Fisher two-sided **p = 0.042**. Out of sample, on the
+1,066 CN places seed 7 never selected: `-fu` reached **41 of 132 (31.1%)** against a held-out non-`-fu`
+group at **32 of 132 (24.2%)**, **p = 0.27**. Dead.
+
+⚠️ **Do not quote the held-out group's 24.2% against 18.0%.** It is close to the sample's 24.0% and about
+a different population. Third figure today that would have travelled correctly and meant something else.
+
 The run's own negative controls are worth copying: 0 gateway errors in 200 queries, 103 non-empty pools
 against 97 empty, and a nonsense query at 0 before and after — because `_post` swallows failures into
 `{"_error": …}`, so a **dead gateway would have reported a clean 0.0%**. The docstring's cautionary
@@ -644,7 +664,12 @@ now be a false close.
   `-fu` headwords among the **76 that did NOT reach** were never counted, and without that base rate
   the observation has no content at all. Small n was the lesser problem. The general form — *pull a
   pattern out of the winners, never look at the losers* — will pass any review that only checks
-  whether the cited cases are real, because they are.
+  whether the cited cases are real, because they are. 🛑 **Worse: the in-sample test MANUFACTURES
+  significance.** Tested on the same 100 places the hypothesis was read off, `-fu` gave Fisher
+  **p = 0.042** — not weak evidence but evidence-shaped noise, because the test inherits the selection.
+  Out of sample it was **p = 0.27**. A conventionally significant p from the generating sample is the
+  strongest-looking and least sound number available, and an out-of-sample arm is the ONLY thing that
+  catches it. Cost: two minutes.
 * **A hint placed among measured figures is read as a measured figure.** The same aside originally sat
   at the end of a comment whose whole argument was that numbers must be quoted with their weight
   attached. Placement is an argument nobody can disagree with, so it survives review that prose would
