@@ -44,8 +44,8 @@
 >
 > * `GOTW` — **closed.** #245 remeasured; results on the issue, artefacts in `/vast/ishi/gotw/data/`.
 > * `documentation-6f` — place#269's docs pushed (`8dd1044`, `4326c30`) after Stephen cleared them.
-> * `indexing-79` — idle; a handover status was requested and **had not arrived when this was
->   written**. ⚠️ Ask it before assuming anything about the Symphonym v8 backfill or #256's live state.
+> * `indexing-79` — reported in full, **re-measured rather than recalled**. Details in §2b below.
+>   Nothing is running; nothing is locked; its side has no unpushed work.
 >
 > ### Traps that cost time today — all of them will recur
 >
@@ -302,6 +302,92 @@ branch-switching in the primary checkout was unsafe ([[feedback_shared_working_t
    passed.** A failure that appears only in the new environment is evidence about the environment.
    Beware the swallowing `except` generally: it converts a missing settings file into a missing
    setting, far from the cause.
+
+---
+
+## 2b. Indexing-side handover — measured 2026-09-21 by `indexing-79`
+
+**Nothing is running.** All Slurm jobs terminal, `squeue -u $USER` empty, no `index_namespace` /
+`backfill_embeddings` / census process on pitt, and `origin/main == HEAD == 5830875` in the indexing
+repo. ⚠️ Job `11411572` (`tgn-idset`) shows **FAILED and that is expected and handled** — it was the
+id-set gate submitted to a compute node, which cannot reach `:9200`; it was re-run successfully on
+pitt. **A fresh session must not retry it.**
+
+**Symphonym v8 backfill: COMPLETE.** `embedding_version` is a single bucket — **v8 → 73,544,149**, no
+v7 contamination — and toponyms without an embedding are **0** (was 65,080). Behavioural check:
+`Lanka-dvipa`, a romanisation appearing nowhere in the index, returns Sri Lanka top.
+
+**Gateway state, established by ancestry and timing rather than exit code** (`do_restart()` exits 0
+on a failed pull, so an exit code proves nothing): deployed HEAD `5830875`; `0cb0ac1`, `7fa4325`,
+`2cb28d0` all ancestors; reflog `pull --ff-only` at 13:25:02; process PID 793612 started 13:25:05 —
+three seconds after the pull.
+
+### 🛑 A category error in how this Plan asked about #256 — corrected
+
+I asked whether #256 was "live on the gateway". **It cannot be, and the question invites a fabricated
+answer.** #256 changes `authorities/osm-places.py` and `ohm-places.py`, which the gateway **never
+imports**. It is pushed (`0cb0ac1`) and present in the deployed tree, and it takes effect at the
+**next OSM/OHM planet run and nowhere else**. There is no running-process check to perform. A fresh
+session that goes looking for one will either invent a result or wrongly conclude #256 was skipped.
+
+The general form, worth carrying: *"is it live?" is meaningless for code that only executes inside a
+batch run.* Ask what would exercise it, and if the answer is "the next re-ingest", say so.
+
+### Live AND independently re-measured
+
+| issue | commit | what was re-measured |
+|---|---|---|
+| #267 fclasses | `2cb28d0` | gn-scoped P→1, S→11, partitioning the 12 control exactly; ZZ→0 |
+| #266 H3 terms | `7fa4325` | 4,140 true false negatives recovered; coverage + ancestor-closure invariants hold |
+| #273 gaps 1–2 | `5830875` | live reconcile returns `types`; a **hotel** still outranks Dorchester, settlement at rank 2 |
+| #246 backfill | data | 73,544,149 all v8, 0 without embedding |
+| #246 tgn retile | tiles | 554 real `start_def` values decoded from the **served** `.mbtiles` |
+
+### Live but NOT re-measured — the distinction that matters
+
+* **#256** — 9 tests, 4 failing on revert, but **no planet run has exercised it**. The supportable
+  claim is "the handler now emits polygons through osmium's assembler", **not** "a planet run has
+  produced polygons". #246's eventual re-ingest is that test.
+
+### Blocked, and blocked on a human rather than a permission
+
+* **#246's last 6 dated places.** `extract_namespace`'s dedup discards the dated variant when a
+  qualified name normalises onto a bare one (`Mysore, State of@und` → `Mysore@und`, keeping the
+  undated row). Writing the 6 changed nothing — 51 toponyms before and after, `dated=0`. Blast radius
+  measured: **34 dated entries across 27 places, 6 losing all dates.** Needs #249's rule fixed or a
+  reindex, because `_update_by_query` re-runs `default_pipeline` (§7).
+* **#249's per-script single-character question** — needs someone who **reads** CJK / Hangul / Kana /
+  the abugidas. Deliberately untouched, and it should stay untouched. It gates the 6 places and #286.
+* **#216's frequency question** — how often placeholders actually surface as top candidates in real
+  traffic is unmeasured. Needs query logs, or a decision to accept the risk unquantified.
+
+### ⚠️ Do not disturb, and one measurement trap
+
+* **`/vast/ishi/pyenv/`** — Python 3.11.16 + venv on pitt, installed so `processing.*` can run on the
+  ES host at all (pitt ships 3.9). Deleting it re-blocks `index_namespace` on pitt.
+* **Dirty files in the indexing checkout** (`article/pdf/symphonym.*`, untracked `bench_sheets.py`,
+  `make_font_testset_v2.py`) **pre-date that session and are not its work. Do not reset the tree.**
+* **`/vast/ishi` quota: 245 GiB free of 1,024.** 🛑 `df -h /vast` reports the *root* filesystem (61 G)
+  and cannot see the quota — use `os.statvfs("/vast/ishi")`. **ES goes read-only at ~51 GB free.**
+* **#291 must not be "fixed" by repointing the `hf/` symlinks.** That would change what the *gateway*
+  loads. `SYMPHONYM_MODEL_DIR` already points production at a real v8 directory, and `--model-dir`
+  achieved the same end touching nothing. Repointing is a deliberate decision for SG, not a tidy-up.
+
+### The one method #245 still has available — per-hit, not corpus-level
+
+#250 and v8 both landed in `toponyms_v8-20260914t120000z`, so **no A/B index exists** and corpus-level
+attribution is impossible. But attribution *per successful match* is: for each CN place that now
+matches and previously did not, look at **which toponym did the matching**.
+
+* A **`tgn` Latn-family row** (`lang_variant` `Latn*`: `Latn` 379,161, `Latn-pinyin-x-notone` 270,531,
+  plus wadegile/hanyu tails) exists only because #250 restored it → **#250's credit**.
+* A toponym that pre-dates #250 (native script, any non-`Latn` row) was always in the inventory, so
+  the change is in the *matching* → **v8's credit**.
+
+⚠️ It separates *restored inventory* from *improved matching*, which is not the same as separating v8
+from every other cause — but #266/#267 are spatial and fclass filters and cannot plausibly move a
+Chinese name test, so in practice it reduces to the two that matter. The n=100 sample is probably too
+small to survive the split; the method needs a larger redraw and **no new index**.
 
 ---
 
