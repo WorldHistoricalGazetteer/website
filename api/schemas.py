@@ -148,6 +148,15 @@ Restrict results to ISO 3166-1 alpha-2 country codes. Format: `["US","GB"]`.
 GeoJSON geometry collection for spatial restriction. Ignored if circular search parameters are provided.
 Example: `{"type":"Polygon","coordinates":[[[lon,lat],[lon,lat],...]]})`
 
+**`bbox`** *(array | string)*
+Shorthand for the commonest case of `bounds`: `[west, south, east, north]`, converted server-side to the
+equivalent Polygon. Accepts `[7,44,14,47]` or `"7,44,14,47"`. Send **either** `bbox` or `bounds`, not
+both — a request carrying two different boxes is rejected rather than silently preferring one.
+A box crossing the antimeridian (`west > east`) is **rejected**: it is ambiguous, and building it anyway
+produces an inside-out ring that quietly matches almost the whole globe. Send two boxes as a
+`MultiPolygon` in `bounds` instead. Zero-width or zero-height boxes are rejected too — they match nothing,
+and an empty result reads as "no such place" rather than "your box has no area".
+
 **`contained_in`** *(array | string)*
 Restrict results to places spatially inside the region formed by the union of
 one or more existing places' geometries (e.g. a country `un:ita`, or any
@@ -197,10 +206,127 @@ Include results with no spatial metadata (default: true).
 **`undated`** *(boolean)*  
 Include results with no temporal metadata (default: true).
 
+### Reaching these filters from an OpenRefine-style client
+
+The Reconciliation Service API's query object has no slot for most of the above, so a client that speaks
+only the standard protocol can pass them as `properties` inside a query:
+
+```json
+{"queries": {"q1": {"query": "Bego", "properties": [
+   {"pid": "whg:contained_in", "v": "un:syr"},
+   {"pid": "whg:within_bbox",  "v": "7,44,14,47"},
+   {"pid": "whg:within_radius","v": "45.44,12.33,200"}
+]}}}
+```
+
+| `pid` | equivalent top-level parameter |
+|---|---|
+| `whg:namespaces` | `namespaces` |
+| `whg:countries_codes` | `countries` |
+| `whg:classes_codes` | `fclasses` |
+| `whg:types_objects` | `types` |
+| `whg:contained_in` | `contained_in` |
+| `whg:within_bbox` | `bbox` |
+| `whg:within_radius` | `lat` + `lng` + `radius`, as `"lat,lng,radius_km"` |
+
+A top-level parameter always wins over the equivalent property. An unrecognised `pid` is ignored, so a
+client sending properties for another service is unaffected. `whg:within_radius` must supply all three
+values — a partial circle is an error rather than a silently unscoped query.
+
+*These `pid`s are deliberately distinct from the **extend** (output) properties used by `/reconcile` data
+extension: `whg:geometry_bbox` there means "return the matched place's bounding box", which is the
+opposite of a filter.*
+
 ### Response Control
 
 **`size`** *(integer)*  
 Maximum results per query (default: 100, max: 1000).
+"""
+
+
+# ── The response, and how to read it (place#217 items 1 / §2–§5) ─────────────────────────────────
+# Written because the integrator whose run produced place#214–#219 could not discover any of this from
+# what we published: 41 of the 61 results he could check came back in the wrong country, and the reason
+# was never that the service misbehaved.
+#
+# 🛑 The v0.2 / WHG-extension split is marked explicitly. A conformant Reconciliation Service API client
+# ignores everything in the second group, and everything in the second group is ours to change — a caller
+# needs to know which promises are the protocol's and which are ours.
+RESPONSE_SHAPE = """
+### The Response
+
+Each query id you send comes back as a key carrying `result`, plus per-query metadata **beside** it:
+
+```
+{"q1": {"result": [ /* candidates */ ],
+        "namespaces_searched": ["gn","osm"],
+        "variants_used": [], "derived_forms": [],
+        "scope": {"applied": true, "mode": "polygon", ...},   // only when a region was requested
+        "gateway": {"answered": false, "error": "timeout"}},  // ONLY on failure — see below
+ "attribution": { /* licence terms, keyed by namespace */ }}
+```
+
+`attribution` is at the **response root**, not inside a query. Everything else above is per query.
+A client iterating response keys as query ids must skip `attribution` (and `messages`, if present).
+
+#### 🛑 `gateway` — presence means failure
+
+If a query's upstream call failed, that query carries `gateway` and an **empty `result`**. An empty
+`result` *with* `gateway` is **not** evidence the place is absent — retry it, and do not cache it as
+unmatched. Do **not** use the absence of `variants_used`/`derived_forms` as a liveness test; that worked
+by accident and is not a defended invariant.
+
+Similarly, an empty `result` beside `scope.applied: false` means *"we could not apply your region"* — the
+query **fails closed** rather than answering with unscoped results.
+
+#### Candidate fields
+
+**Reconciliation Service API v0.2 — contractual:**
+
+| Field | Notes |
+|---|---|
+| `id` | Carries a `place:` prefix, e.g. `place:gn:1004740`. Can be fed straight back into `contained_in`, with or without the prefix. |
+| `name` | |
+| `score` | ⚠️ **Normalised per query against the best candidate in that query**, so the top hit reads ~100 whether the match is perfect or the best of a bad lot. Scores are **not comparable across queries** in a batch. Threshold on `confidence`, not this. |
+| `match` | `true` when the service considers this an exact name match. |
+| `type` | |
+| `description` | Typically `"Country: XX"`. |
+
+**WHG extensions — a conformant client ignores these, and we may change them:**
+
+| Field | Notes |
+|---|---|
+| `confidence` | **Absolute** match quality, 0–100, comparable between queries. ⚠️ **Measures the NAME match only and carries no geographic term** — it cannot tell you this is the right *place*. **Omitted entirely when unmeasured**, so test for presence before thresholding. |
+| `namespace` | Source gazetteer (`gn`, `osm`, `whg`, …). Look it up in root `attribution` for its licence. |
+| `ccodes` | Country codes as the source recorded them. |
+| `repr_point` | ⚠️ **`[lng, lat]`** — longitude first, GeoJSON order. Guaranteed to lie inside the candidate's own geometry, so it is a cheap post-filter when a containment scope is coarser than you want. |
+| `has_geom` | `true` iff the place has a full **polygon** and can itself serve as a `contained_in` region. ⚠️ Check this before adopting a candidate as a parent: `gn` and `tgn` records have **no** polygons, and `gn` is often top-ranked. |
+| `alt_names` | Variant toponyms, any language. |
+| `place_types`, `wikipedia` | Frequently `[]`. |
+
+#### Detecting an ambiguous match from fields already above
+
+This is the rule Map your Data uses on its own results; it needs nothing the response does not already
+carry. Accept the top candidate only when **all** of these hold:
+
+1. `match` is `true`, **or** `score` clears your own threshold;
+2. **absolute quality passes** — if `confidence` is present, require `confidence >= 30`; if it is absent,
+   fall back to your own string similarity between what you asked for and `name`/`alt_names`;
+3. **no distinct rival ties the top score.** Walk the candidates while `score >= result[0].score`:
+   * an **inexact** name is no rival to an **exact** one, however the scores tie — searching *Sherborne*
+     turns up *Sherborne railway station* at the same 100 and relevance scoring cannot separate them;
+   * otherwise, if a rival's `name` **or** `description` differs, treat the match as **ambiguous**;
+   * identical `name` **and** `description` is the same place from two sources — deduplication, not
+     ambiguity.
+
+⚠️ Why 30: measured against the live service, `confidence` ~100 is an exact spelling, 87–91 a derived
+head-word match, ~32 lexically near, and 22–26 noise or phonetic-only matches. 30 sits in the observed
+gap. It is calibrated, not fundamental.
+
+🛑 **A perfect `score` is the trap, not the safe case.** A lake, an airfield and a sewage works are all
+named after the settlement they serve, so the string is genuinely identical and a string-identity measure
+correctly reports 100. Use a container (`contained_in`) to establish *which place*; `confidence` only
+tells you about the name.
 """
 
 
@@ -349,6 +475,7 @@ def reconcile_schema():
                     "Submit reconciliation queries to match place or period names against the WHG+PeriodO database. "
                     "Supports batch queries and implements the Reconciliation Service API v0.2."
                     f"\n\n{QUERY_PARAMETERS}"
+                    f"\n\n{RESPONSE_SHAPE}"
                 ),
                 "parameters": [
                     OpenApiParameter(

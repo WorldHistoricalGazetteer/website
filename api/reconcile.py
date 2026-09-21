@@ -1170,6 +1170,93 @@ def _attribution_for_results(results):
     )
 
 
+# OpenRefine-style `properties` a caller may send INSIDE a query to reach a filter that has no slot in
+# the Reconciliation Service API's own query object (place#217 item 3).
+#
+# ⚠️ Deliberately distinct pids from `PROPERTY_FIELD_MAP` in `api/reconcile_helpers.py`, which are
+# EXTEND (output) properties. That map already defines `whg:geometry_bbox` meaning "return the matched
+# place's bounding box" — the opposite of "restrict to this bounding box". Three pids
+# (`whg:countries_codes`, `whg:classes_codes`, `whg:types_objects`) are shared between input and output
+# already, and that is tolerable because the field means the same thing in both directions; a bbox does
+# not, so it gets its own name rather than a second meaning.
+#
+# 🛑 Additive only. A conformant Reconciliation Service API v0.2 client that ignores these behaves
+# exactly as it does today — no change to `score`, `match` or ordering.
+PROPERTY_FILTER_MAP = {
+    "whg:namespaces": "namespaces",
+    "whg:countries_codes": "countries",
+    "whg:classes_codes": "fclasses",
+    "whg:types_objects": "types",
+    # Spatial and containment (place#217 item 3). Until these existed, an OpenRefine-style caller could
+    # not reach `contained_in` or any spatial filter AT ALL — so the one constraint that most reliably
+    # disambiguates a place name was unavailable to exactly the audience most likely to need it.
+    "whg:contained_in": "contained_in",
+    "whg:within_bbox": "bbox",
+}
+
+# Handled separately because it sets THREE params from one property value.
+PROPERTY_FILTER_RADIUS_PID = "whg:within_radius"
+
+
+def bbox_to_polygon(bbox):
+    """`[west, south, east, north]` → the GeoJSON Polygon that `bounds` already takes (place#217 item 4).
+
+    A shorthand, because a bounding box is the commonest spatial constraint a caller has and making them
+    hand-write a five-point ring for it is a needless source of error. Accepts a list/tuple or a
+    comma-separated string, so it works as a query-string parameter as well as in JSON.
+
+    🛑 Antimeridian crossing is REJECTED rather than accommodated. `west > east` is ambiguous: it means
+    "across the Pacific" to a human and "an inside-out box" to every geometry library, and a Polygon with
+    a ring wound the wrong way is not an error anywhere downstream — it is a valid shape covering almost
+    the entire globe, so the query would silently return everything and look like it worked. A caller who
+    genuinely wants to straddle 180° can send two boxes as a MultiPolygon through `bounds`, which is
+    explicit about what it means. The error says so rather than just refusing.
+
+    ⚠️ Degenerate boxes (zero width or height) are rejected too. They are almost always a transposed or
+    duplicated coordinate, and a zero-area polygon matches nothing — an empty result that looks like
+    "no such place" rather than "your box has no area", which is the failure class place#262 and
+    place#272 were both about.
+    """
+    if isinstance(bbox, str):
+        bbox = [p for p in (x.strip() for x in bbox.split(",")) if p]
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        raise ValueError(
+            "bbox must be four numbers, [west, south, east, north] — e.g. bbox=[7,44,14,47]."
+        )
+    try:
+        west, south, east, north = (float(v) for v in bbox)
+    except (TypeError, ValueError):
+        raise ValueError("bbox values must be numeric, in the order [west, south, east, north].")
+
+    if not (-180 <= west <= 180 and -180 <= east <= 180):
+        raise ValueError("bbox longitudes (west, east) must be between -180 and 180.")
+    if not (-90 <= south <= 90 and -90 <= north <= 90):
+        raise ValueError("bbox latitudes (south, north) must be between -90 and 90.")
+    if south > north:
+        raise ValueError(
+            f"bbox south ({south}) is north of north ({north}) — the order is "
+            f"[west, south, east, north]."
+        )
+    if west > east:
+        raise ValueError(
+            f"bbox west ({west}) is east of east ({east}). If you meant a box crossing the "
+            f"antimeridian, send two boxes as a GeoJSON MultiPolygon in `bounds` instead — a "
+            f"single bbox cannot express it unambiguously."
+        )
+    if west == east or south == north:
+        raise ValueError(
+            "bbox has zero width or height, so it can never match anything. Check for a "
+            "transposed or repeated coordinate."
+        )
+
+    return {
+        "type": "Polygon",
+        "coordinates": [[
+            [west, south], [east, south], [east, north], [west, north], [west, south],
+        ]],
+    }
+
+
 def normalise_query_params(params):
     """
     Validate and normalise a single reconcile query dict.
@@ -1188,22 +1275,32 @@ def normalise_query_params(params):
     # --- Extract OpenRefine-style properties into top-level params ---
     or_props = params.get("properties", [])
     if or_props and isinstance(or_props, list):
-        PROPERTY_FILTER_MAP = {
-            "whg:namespaces": "namespaces",
-            "whg:countries_codes": "countries",
-            "whg:classes_codes": "fclasses",
-            "whg:types_objects": "types",
-        }
         for prop in or_props:
             if not isinstance(prop, dict):
                 continue
             pid = prop.get("pid") or prop.get("p") or prop.get("id")
             val = prop.get("v") if "v" in prop else prop.get("value")
-            if pid and val is not None and pid in PROPERTY_FILTER_MAP:
+            if not pid or val is None:
+                continue
+            if pid in PROPERTY_FILTER_MAP:
                 target_key = PROPERTY_FILTER_MAP[pid]
                 # Only set if not already explicitly provided at top level
                 if target_key not in params:
                     params[target_key] = val
+            elif pid == PROPERTY_FILTER_RADIUS_PID:
+                # One property carrying three parameters, because OpenRefine's `properties` array has
+                # no way to express a grouped value. Set all three or none: a partial circle silently
+                # falls through to an unscoped query, which is the failure class place#262 was about.
+                if not all(k in params for k in ("lat", "lng", "radius")):
+                    try:
+                        parts = [x.strip() for x in str(val).split(",")]
+                        lat_s, lng_s, rad_s = parts
+                    except ValueError:
+                        raise ValueError(
+                            f"`{PROPERTY_FILTER_RADIUS_PID}` must be \"lat,lng,radius_km\" — "
+                            f"three comma-separated numbers, e.g. \"45.44,12.33,200\"."
+                        )
+                    params["lat"], params["lng"], params["radius"] = lat_s, lng_s, rad_s
 
     query_text = params.get("query", "").strip() or None
     size = int(params.get("limit", params.get("size", 100)))
@@ -1233,8 +1330,17 @@ def normalise_query_params(params):
     if has_nearby:
         bounds = circle_to_polygon(lat, lng, radius)
     else:
+        # `bbox` shorthand (place#217 item 4). Rejected alongside `bounds` rather than silently
+        # preferring one: a caller who sent both has a bug, and picking a winner hides it.
+        if "bbox" in params and "bounds" in params:
+            raise ValueError(
+                "Send either `bbox` or `bounds`, not both — `bbox` is a shorthand for the same "
+                "constraint and two different boxes cannot both be honoured."
+            )
+        if "bbox" in params:
+            bounds = bbox_to_polygon(params["bbox"])
         # Bounds (GeoJSON geometry)
-        if "bounds" in params:
+        elif "bounds" in params:
             try:
                 raw_bounds = params["bounds"]
                 if isinstance(raw_bounds, str):
