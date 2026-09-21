@@ -698,13 +698,31 @@ export function placeUri(pid) {
 
 // Markup for the identifier line. `compact` drops the visible URI text and shows
 // just the pid plus a copy control, for surfaces with little room (map popups).
+// What resolving a place identifier actually gets you (place#271).
+//
+// The identifier is public and citable, but what it resolves to is NOT uniform, and the asymmetry is
+// invisible from the URI: an authority record (`place:gn:13274771`) answers `/api` anonymously, while a
+// WHG-hosted record (`place:81010`) returns 401. Measured on prod 2026-09-21. Saying so here is cheaper
+// than letting an integrator discover it, which is how place#271 came to be filed in the first place.
+//
+// It also names the licence, because a resolvable identifier that quietly distributes contributed data
+// under no stated terms is the licensing half of that issue — the identifier is ours to publish, the data
+// it reaches is its contributor's.
+//
+// 🛑 Duplicated in places/templates/places/place_detail.html, which is server-rendered and cannot import
+// this. `api/tests_place_uri_tooltip.py` asserts the two do not drift — a claim kept in two places drifts,
+// and this project has had that happen with an fclasses caveat living in two files where only one got
+// corrected.
+export const PLACE_URI_TOOLTIP =
+	'Opens this record&#39;s public page. Append /api for Linked Places Format — returned under the source&#39;s own licence, and for WHG-hosted records that machine-readable view needs an API token.';
+
 export function placeUriHTML(pid, {label = 'WHG URI', compact = false} = {}) {
 	if (pid === undefined || pid === null || pid === '') return '';
 	const uri = placeUri(pid);
 	const shown = compact ? `place:${pid}` : uri;
 	return `<div class="place-uri">${label}: ` +
 		`<a href="${uri}" target="_blank" rel="noopener" data-bs-toggle="tooltip" ` +
-		`title="Resolve this identifier in a new tab">${shown}</a> ` +
+		`title="${PLACE_URI_TOOLTIP}">${shown}</a> ` +
 		`<a href="#" class="clip-place-uri" data-uri="${uri}" data-bs-toggle="tooltip" ` +
 		`title="copy identifier to clipboard"><i class="fas fa-clipboard linky"></i></a></div>`;
 }

@@ -383,5 +383,53 @@ function checkContainerWarning() {
 }
 checkContainerWarning();
 
+// ── 8. Ship the references, not the geometry (place#240) ─────────────────────
+// A match against a restricted source is a citable identification; the source's DATA is not ours to
+// redistribute. So the export carries the reference — id, resolvable URL, licence — and never the
+// source's geometry. Asserted at source level because the licence arrives only in the reconcile
+// response's root `attribution` (neither /api/sources/ nor the candidate objects carry SPDX), so a
+// refactor that stops reading it would silently ship bare ids with no terms attached.
+function checkMatchReferences() {
+  const wrong = [];
+
+  // The response's attribution must actually be read — it is the ONLY source of the licence.
+  // ⚠ The semicolon matters: `function rememberMatchLicences(data) {` also contains
+  // "rememberMatchLicences(data)", so a regex without it matches the DEFINITION and passes while the
+  // call site is deleted. That mistake was made here and caught by mutation — the third source-level
+  // check today to match a definition instead of a use.
+  if (!/rememberMatchLicences\(data\);/.test(src)) {
+    wrong.push('rememberMatchLicences(data); is never called — the licence cannot reach the export');
+  }
+  if (!/data\.attribution\s*&&\s*data\.attribution\.sources/.test(src)) {
+    wrong.push('the response root `attribution.sources` is not read');
+  }
+  // Each emitted closeMatch must carry the reference.
+  if (!/link\.whg_match_uri\s*=\s*matchUriFor\(/.test(src)) {
+    wrong.push('links do not carry whg_match_uri — the reference is not resolvable');
+  }
+  if (!/link\.whg_match_licence\s*=\s*lic/.test(src)) {
+    wrong.push('links do not carry whg_match_licence');
+  }
+  // 🛑 An unstated licence must NOT be emitted as if it were a value. '' means "the source declares
+  // none", and shipping `whg_match_licence: ""` would read as a positive claim about terms.
+  if (!/if \(lic\) link\.whg_match_licence/.test(src)) {
+    wrong.push('an empty licence is emitted rather than omitted — absence must not look like a value');
+  }
+  // 🛑 The proposal holds only if the coordinates really are absent: "a reference next to an adopted
+  // centroid is the adoption again with a citation attached." MyD's export must never copy a
+  // candidate's geometry into the record.
+  if (/rec\.geometry\s*=\s*\{[^}]*repr_point/.test(src)) {
+    wrong.push('MyD copies a candidate repr_point into the record — that is adoption, not a reference');
+  }
+  // placeUri must be imported, or matchUriFor throws at runtime and no syntax check sees it.
+  if (!/import \{[^}]*placeUri[^}]*\} from '\.\/utilities\.js'/.test(src)) {
+    wrong.push('placeUri is used but not imported from utilities.js');
+  }
+
+  if (wrong.length) bad('match references', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok('match references (licence + resolvable URI, no geometry)');
+}
+checkMatchReferences();
+
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');
