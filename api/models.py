@@ -201,6 +201,45 @@ class GazetteerRegistryEntryQuerySet(models.QuerySet):
             visible |= models.Q(status='embargoed')
         return self.filter(visible)
 
+    def hidden_namespaces_for(self, user):
+        """Namespaces under an embargo this ``user`` may not see (place#218).
+
+        The embargo mechanism (place#162) hid embargoed gazetteers from every
+        *discovery* surface but not from the reconciliation API, so an embargoed
+        source stayed fully queryable and returned candidates carrying its name
+        and identifiers. This is the set the reconciliation path must subtract.
+
+        🛑 **Derived FROM ``visible_to()``, not reimplemented beside it.** The
+        beta rule, the lazy auto-release and the release-date comparison all live
+        there; a second copy of that logic would drift, and drifting *open* is a
+        silent leak of the thing the embargo exists to hold back.
+
+        ⚠️ **Restricted to ``embargoed`` rows, so it FAILS OPEN by construction.**
+        A naive complement — every namespace minus the visible ones — would also
+        hide ``draft``, ``submitted``, ``rejected`` and ``pending`` rows, which
+        ``visible_to`` excludes because they gate the separate contributor
+        workflow rather than an embargo. Production carries a ``pending`` row
+        today, so that mistake would have silently stopped returning candidates
+        from a namespace nobody had embargoed.
+
+        A namespace with no registry row at all — notably the ``whg``
+        pseudo-namespace for legacy places — is never hidden, for the same reason:
+        it cannot appear in a filter over ``embargoed`` rows.
+        """
+        embargoed = set(
+            self.filter(status='embargoed')
+            .exclude(namespace='')
+            .values_list('namespace', flat=True)
+        )
+        if not embargoed:
+            return set()
+        visible = set(
+            self.visible_to(user)
+            .exclude(namespace='')
+            .values_list('namespace', flat=True)
+        )
+        return embargoed - visible
+
 
 class GazetteerRegistryEntry(models.Model):
     """Per-gazetteer / per-WHG-dataset registry row pushed by the ingest
