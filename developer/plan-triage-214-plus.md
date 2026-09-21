@@ -584,6 +584,25 @@ now be a false close.
 * **Do not quote a magnitude across a change of denominator.** Source rows vs deduplicated toponyms
   (#250); a `df` read after a delete (#257); exposure vs realised counts (#265, where a 3× ratio
   compared an upper bound against a realised count and bounded nothing).
+* 🛑 **`_update_by_query` DOES re-run an index's `default_pipeline` — settled 2026-09-21, and it was
+  recorded as unverified here for most of the day.** Measured on a throwaway index with a pipeline that
+  *increments a counter*, so the answer was a number: `pipeline_runs` 1 → 2 with no `?pipeline=` given, and
+  3 with one (the control, proving the counter was not stuck). **So an in-place update to `places` is not a
+  read-only act** — every document touched goes back through `extract_namespace`, which carries #249's
+  `<2 characters` rule, and the write reports a full count and zero errors while discarding names.
+  ⚠️ **The control was the load-bearing part:** a probe showing "the name is still null afterwards" would
+  have proved nothing, because it was already null. This is what blocked #246's last item and #286's AAT
+  projection, and it rules out the cheap route for both.
+
+* 🛑 **A verification that reads the wrong field reports failure on correct data — and looks exactly like
+  the known bug.** On #246's retile, the first scan found 0 of 241,602 features with a real start year,
+  matching the 7 August failure signature precisely. Two causes: `limit 6000` on an mbtiles is a
+  *contiguous geographic slice* in rowid order, not a sample (globally scattered dated places can be missed
+  entirely — `order by random()` changed the answer); and `doc_temporal_bounds` is unbounded whenever any
+  timespan lacks an outer edge, so `start = -9999` is **correct by design** for nearly every `tgn` place.
+  The dates are in `start_def`/`end_def`. ✅ **Any retile check that reads `start` alone will fail a correct
+  `tgn` tileset**, which is the next trap after "read the tileset, not the index".
+
 * 🛑 **A shipped API change with no documentation change is a distinct, recurring failure — and it has
   its own name now.** Named by `documentation-6f` on #288 after **three instances surfaced in one day**:
 
