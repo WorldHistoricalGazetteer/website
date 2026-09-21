@@ -337,6 +337,22 @@ its favour — but **1.188 does not measure it.** 1.188 is a coverage share, lik
 benefit is a separate axis nobody has quantified. Make the argument on its own terms or the next reader
 cites 1.188 as evidence of a quality gain it says nothing about.
 
+🛑 **And when you make it on its own terms, do not reach for a residue figure either.** I did, on #251, one
+paragraph after writing the warning above — offering `mya-Mymr` 16.6% → 98.7% and `sin-Sinh` 71.7% → 100.0%
+as quality evidence. **Both are residue** ("did a rule fire?"), and the usability figures sit in a comment on
+that same issue: `mya-Mymr` is **62.7%**, not 98.7%. A 36-point gap, withdrawn.
+
+⚠️ **Read that as a property of this topic, not as one session's slip — it is the third instance of the same
+substitution in one day.** Coverage→quality, then residue→usability, in consecutive paragraphs. Every figure
+involved was transcribed correctly; what failed to travel was **which population it was measured over and
+which question it answers.**
+
+✅ **So the rule for this area: quote a PanPhon-usability figure with its denominator, or make the argument
+with no number at all.** The strongest version needs none — a wrong shipped value is worse than an absent
+one, because it is confidently wrong and nothing downstream can tell. `ှ → ʰ` parsed cleanly, passed every
+lint, and asserted aspiration where Burmese has devoicing. **Coverage share cannot express that: a row with
+a wrong transcription counts as covered.**
+
 **#252 gates a release**: v8-beta trains on `proposed` values, full release after contributor
 corrections arrive through the UI. It is on `staging` and running on dev at `/phonetics/`; #254 (the
 image rebuild) is resolved, so the `panphon==0.22.0` blocker is gone. Still beta-gated and requires
@@ -443,3 +459,10 @@ runtime behaviour, take the second.
 * **Do not quote a magnitude across a change of denominator.** Source rows vs deduplicated toponyms
   (#250); a `df` read after a delete (#257); exposure vs realised counts (#265, where a 3× ratio
   compared an upper bound against a realised count and bounded nothing).
+* 🛑 **The dominant failure in this pass was not arithmetic — it was provenance failing to travel with a
+  number.** Three separate substitutions, all with correctly transcribed figures: a superseded ceiling
+  (69.53%, corrected two sections below where it was stated, in the same document); coverage share used as
+  quality evidence; and residue used as usability (98.7% where the usable figure was 62.7%). ⚠️ **In every
+  case the arithmetic was right and the subject was wrong**, and in two of the three the correction was
+  already written down somewhere the quoter had read. **Before quoting a figure, state which population it
+  was measured over and which question it answers.** If you cannot, you do not have the figure yet.
