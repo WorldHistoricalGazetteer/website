@@ -1,5 +1,79 @@
 # Triage Plan — `place` issues #214 and above
 
+> ## 🛑 RESUME HERE — handover written 2026-09-21, Stephen away a few days
+>
+> **Read this section, then §2a (Progress), then §3 (Priority). Do not start from the issue list:
+> the Plan groups issues into units that are cheaper done together, and working the list numerically
+> was explicitly corrected once already.**
+>
+> ### State of the tree
+>
+> * `staging` and `main` are **identical in source**. The only diffs are this file (main is behind —
+>   read it on `staging`) and `server-admin/test-baseline.txt`, which is **staging-only and must stay
+>   that way**: it is branch-scoped, and `smoke_test.sh` refuses cross-branch compares.
+> * Production is `f89292a7f`, deployed and verified 2026-09-21T20:11:50Z. Working tree clean.
+> * **50 of the 80 issues at #214+ are closed. 30 open.** Every whg3-side fix from this pass is on prod.
+>
+> ### Four things waiting on Stephen — nothing else is blocked
+>
+> 1. **place#295** — should a w3id PID resolve for `Accept: */*` (curl's default), or keep the
+>    deliberate 404? Labelled `needs-decision`. ⚠️ I first filed this as a *bug of unknown origin*;
+>    it is intentional, documented in `reference_w3id_whg_resolver` and implemented in SG's fork
+>    `docuracy/w3id.org`, `whg/.htaccess`. The issue body carries the correction.
+> 2. **place#296** — a `/reconcile` consumer cannot predict which candidates will 451, because the
+>    root attribution block omits `redistributable`. Looks like a one-line additive fix.
+> 3. **Rotate the production `elastic` password?** Prudent hygiene, **not urgent** — see below.
+> 4. **`MEMORY.md`** is 20,944 bytes / 181 lines, under the byte limit with every one of the 181
+>    memory files still indexed. A hook asks for <140 lines, which needs retiring ~41 entries. That
+>    is deleting his memories, so it needs his sanction and a proposed list.
+>
+> ### On the credential, so nobody re-panics or under-reacts
+>
+> A production `elastic` password was sent to a peer session on Stephen's instruction, which wrote it
+> to plaintext session JSONL. The peer refused it — correctly, since it could not verify the
+> authorisation from inside its own session, and a peer cannot grant an escalation. **Measured
+> afterwards:** `stephen` is the only non-system account with a shell on this machine, the transcript
+> directory is `drwx------`, and `.env/.env` — which has held the same password in plaintext all
+> along — is **mode 664**. So the credential's new location is *better* protected than its existing
+> one, and marginal exposure here is nil. **What would change that: a transcript leaving the machine**
+> (attached to a bug report, synced, or shared). Rotation is worth doing on that trigger or as
+> routine hygiene, not as an incident. Related: place#289, closed won't-fix, same credential,
+> different channel (CRC process table).
+>
+> ### Peers
+>
+> * `GOTW` — **closed.** #245 remeasured; results on the issue, artefacts in `/vast/ishi/gotw/data/`.
+> * `documentation-6f` — place#269's docs pushed (`8dd1044`, `4326c30`) after Stephen cleared them.
+> * `indexing-79` — idle; a handover status was requested and **had not arrived when this was
+>   written**. ⚠️ Ask it before assuming anything about the Symphonym v8 backfill or #256's live state.
+>
+> ### Traps that cost time today — all of them will recur
+>
+> * **Several sessions share this checkout.** Never `git add -A` or `-u`, never `--amend`, never
+>   rebase; stage explicit paths. Do not switch branches here.
+> * **Promote by source-only diff, never a merge.** `git diff --stat origin/main origin/staging --
+>   . ':(exclude)static/webpack'` shows the real payload; without the exclude a 3-file promotion looks
+>   like 93. Rebuild bundles on `main` **only if webpack source changed**.
+> * **A worktree is not a working environment.** It needs three untracked files symlinked in:
+>   `whg/local_settings.py`, `.env/.env` (+`.pitt`), and `whg/local_settings_autocontext.py` — the
+>   last is imported inside `try/except ImportError: pass`, so its absence silently drops
+>   `CELERY_BROKER_URL` and looks exactly like a defect on `main`. Running the same test in the
+>   primary checkout settles it in one command.
+> * **Read the project memory before re-deriving anything.** #295 was filed wrong because a note from
+>   eleven days earlier already answered it. Measuring afresh establishes *what happens* and tells you
+>   nothing about *whether it is intended*.
+> * **Three figures went wrong today, all the same way:** a number detached from its denominator
+>   (#245's 18.0%, #250's 649,953, and a held-out 24.2% that must never be quoted against 18.0%).
+>   §7 carries the method notes, including the sharpest one — an in-sample test inherits its selection
+>   and can manufacture a conventionally significant p (`-fu`: p=0.042 in-sample, p=0.27 out).
+>
+> ### Where to start work
+>
+> §3's P0/P1, honouring §5's ordering constraints. Four issues are open **with the fix already live**
+> (#274, #273, #240, #276/#277) — those need a *measurement*, not a commit, and closing them without
+> one is the mistake this Plan exists to prevent.
+
+
 **Written** 2026-09-21 by the `whg3-6d` session, jointly with the `indexing-79` session.
 **Scope** every `WorldHistoricalGazetteer/place` issue numbered #214 or higher: 72 issues, of which
 42 were open when this pass began. **Seven closed; 35 remain open.**
