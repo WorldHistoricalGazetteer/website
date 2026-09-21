@@ -114,6 +114,39 @@ one rather than dragged into #285.
 
 ---
 
+## 2a. Progress — 2026-09-21, after the triage pass
+
+**Closed: 9.** #250, #257, #261, #262, #266, #267, #282, #283, #284.
+**Fixed and live on dev, awaiting prod promotion: 4.** #272, #274, #275, #268.
+**Open: 31.**
+
+| # | state | where |
+|---|---|---|
+| #272 | gateway failure → 503, real miss → 404 | staging `8787f7594`, dev `988b92207` |
+| #275 | oversized batch → 400, nothing processed | staging `0bb0345b4` |
+| #274 | gthread workers (`-k gthread --threads 4`) | staging `988b92207` |
+| #268 | query-rate limiter, 600/min, 429 + `Retry-After` | staging `988b92207` |
+| #267 | `fclasses` lowercase | indexing `2cb28d0`, **on the gateway** |
+| #266 | coarsen instead of truncate | indexing `7fa4325`, **on the gateway** |
+
+🛑 **#274 and #268 shipped in ONE commit and must be promoted together.** #274 raises in-flight gateway
+calls from 32 to 128; #268 is the only thing bounding them. Promoting the amplifier without the brake would
+make gateway saturation worse than before the fix.
+
+⚠️ **All four whg3 fixes are on `staging` only.** Promotion to `main` is by **cherry-pick, never a merge**
+(a merge would ship GRACE), and `whg/settings.py` must **never** be promoted wholesale — the `CACHES`
+`throttle` alias and `RECON_QUERY_RATE` must be re-applied by hand. `entrypoints/entrypoint-web.sh` is
+**mounted, not baked**, so a `restart` is enough for the worker change; no rebuild, no migrations, no
+`--collectstatic`. `--celery` is prudent because `settings.py` changed.
+
+### Still not established, and not claimed
+
+**#274's own symptom has not been re-observed.** What is verified is that the worker model changed and that
+one request can no longer monopolise a worker; the site-wide 503 behaviour under a slow gateway has **not**
+been reproduced or re-measured. That is why #274 stays open with the fix live.
+
+---
+
 ## 3. Priority — what is doing damage now
 
 Urgency here means *live harm at a measured rate*, not age and not difficulty.
