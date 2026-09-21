@@ -611,7 +611,29 @@ CACHES = {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         },
     },
+    # Query-rate counters for the reconciliation limiter (place#268). MUST be
+    # Redis: `default` is file-based and has no atomic increment, so under
+    # concurrent workers two threads read the same value and one write is lost —
+    # a limiter that silently undercounts, which is worse than none because it
+    # reports itself as working. db 2 (0 = Celery, 1 = property_cache).
+    'throttle': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://redis:6379/2',
+        'TIMEOUT': 120,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            # Never let a Redis outage raise into a request: api.throttling
+            # fails OPEN by design, and this makes the client cooperate.
+            'IGNORE_EXCEPTIONS': True,
+        },
+    },
 }
+
+# Queries per minute per API identity (place#268). Counts QUERIES, not requests:
+# a request-rate limiter would throttle the batching our own client guidance asks
+# for (2 req/min x 50 = 100 queries/min) while ignoring the wasteful shape
+# (20 req/min x 1 = 20). Falsy means unlimited, matching UserAPIProfile.daily_limit.
+RECON_QUERY_RATE = int(os.environ.get('RECON_QUERY_RATE') or 600)
 
 SITEMAP_CACHE = 'sitemap_cache'
 
