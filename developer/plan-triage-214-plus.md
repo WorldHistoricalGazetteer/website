@@ -476,7 +476,40 @@ retention.
 
 ## 5. 🛑 The one ordering constraint that must not be broken
 
-> **#256 must be resolved before #246 is actioned. Same work unit, that order, no exceptions.**
+> ~~**#256 must be resolved before #246 is actioned.**~~ ✅ **GATE CLEARED 2026-09-21** — #256 is fixed
+> (indexing `0cb0ac1`), the `blocked-by-order` label is removed, and Stephen has approved the cost, so
+> #246 may proceed. The account below is kept because it is why the gate existed and what it prevented.
+
+### 🛑 And a second blocker nobody knew about: #246 would have crashed in its first minute
+
+While fixing #256 the indexing session found that **the OSM/OHM ingest could not run at all.** Both
+handlers called `.with_locations(idx='flex_mem')`; **pyosmium 4.x renamed that parameter to `storage`**,
+measured on the CRC `whg` env (4.2.0) and on 4.3.1:
+
+```
+idx= keyword  ->  TypeError: unexpected keyword argument 'idx'
+```
+
+`apply_file` raised on its **first statement**. Every other call site in the repo passes it positionally
+and was unaffected; only the two authority scripts used the keyword. Fixed in the same commit.
+
+⚠️ **The re-ingest this Plan spent a paragraph sequencing had never been possible**, and nobody knew
+because the July augmentation pass (place#145) put the polygons in without the ingest, so nothing
+exercised the path for months. **An unexercised code path carries no evidence of working** — a more
+general lesson than the rename, and a fifth member of the family in
+`developer/postmortem-ingestion-faults.md`.
+
+✅ Loud rather than silent, so the better failure mode. But note the shape: #246's own two standing
+warnings are about a *finished* fix silently not being finished. This was the fix being unable to start,
+which neither warning could have caught.
+
+### The cost that was approved
+
+The planet ingest is now **two passes over the 92 GB PBF** plus osmium's area assembly, where it was one.
+One pass cannot work: osmium emits areas only *after* every way, and the emit-both-and-let-the-later-row-win
+alternative fails because `write_staged_place_doc` **appends** — both rows survive into `places.jsonl`, so
+the winning geometry would depend on row ordering through four downstream stages. The reference pass
+already does two passes in production, which is what made the cost known rather than speculative.
 
 #246 asks for date ingestion to be fixed and the corrected data re-tiled for `osm` and `tgn`. Acting
 on it means re-ingesting OSM/OHM. But `osm-places.py:305` and `ohm-places.py:313` still build **every**
