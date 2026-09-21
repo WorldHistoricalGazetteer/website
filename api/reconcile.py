@@ -302,9 +302,36 @@ class ReconciliationView(APIView):
 
             # Period reconciliation
             batch_size = SERVICE_METADATA.get("batch_size", 50)
+
+            # place#275 — REJECT an oversized batch; never truncate behind a 200.
+            #
+            # Until now a client sending 100 queries got a successful-looking
+            # response containing 50 results and lost the other half with nothing
+            # in the STATUS to say so. The `messages` field was unusable as a
+            # contract for three separate reasons: it is omitted entirely when
+            # empty (so absence is the normal case and presence cannot be tested
+            # for), it sits at the top level alongside the query ids (so a client
+            # iterating response keys treats it as a query result), and the period
+            # path appended nothing at all.
+            #
+            # Silently discarding user input behind a 200 is the failure mode
+            # hardest to attribute afterwards: the response looks plausible, the
+            # rows are simply not there, and nothing records that they were sent.
+            #
+            # Measured on prod before changing this (reconciliation.log, 12-21 Sep
+            # 2026): 325 POSTs, max batch 25, ZERO above 50 and none at exactly 50.
+            # So no observed client is relying on truncation.
+            if len(queries) > batch_size:
+                logger.info("POST /reconcile rejected: %d queries exceeds batch_size %d",
+                            len(queries), batch_size)
+                return json_error(
+                    f"Too many queries: {len(queries)} received, limit is {batch_size} "
+                    f"per request. Split the batch and retry — no queries were "
+                    f"processed.",
+                    status=400,
+                )
+
             if entity_type == "period":
-                if len(queries) > batch_size:
-                    queries = dict(list(queries.items())[:batch_size])
 
                 results = {}
                 for key, params in queries.items():
@@ -1026,7 +1053,12 @@ def process_queries(queries, batch_size=50, user=None):
     messages = []
 
     if len(queries) > batch_size:
-        # Slice rather than reject
+        # Defensive backstop only. The HTTP path REJECTS an oversized batch with
+        # 400 before reaching here (place#275), so this is unreachable from
+        # /reconcile. It is kept for the in-process caller — workbench/views.py
+        # sizes its own batch to NER_RECON_MAX and passes that as batch_size, so
+        # truncation there is a bound it has already applied to itself, not
+        # silent data loss on a user's request.
         queries = dict(list(queries.items())[:batch_size])
         messages.append(f"Batch size limit exceeded; processing first {batch_size} queries.")
         logger.info("process_queries: batch limit exceeded, truncated to %d", batch_size)

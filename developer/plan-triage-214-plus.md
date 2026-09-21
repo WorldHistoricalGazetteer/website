@@ -437,12 +437,31 @@ Stated so that a future reader can date any claim in this file.
 |---|---|---|
 | `whg3` prod | `asset_version` = **`aa70a1891`** | `main` HEAD was `01e74571f` (two test-only commits ahead) |
 | `whg3` dev | branch `staging`, `c59bf2130` | |
-| `indexing` | **`origin/main` = `de22578`** | ⚠️ a cron watchdog on `pitt` pulls `origin/main` and restarts the gateway, so **pushed ≈ deployed** with nobody deciding to deploy |
+| `indexing` | `origin/main` = **`2cb28d0`** (was `de22578`) | see the correction below — a push does **not** deploy |
 
-⚠️ **That watchdog is why §2 holds #261 open.** On the gateway side a merge reaches production without
-a deploy step, which is convenient and also means *nothing records the moment it happened*. "It is
-pushed" is a claim about a tree; "the rider rate collapsed" is a claim about the running process. For a
-runtime behaviour, take the second.
+### 🛑 CORRECTED 2026-09-21: pushing does NOT deploy the gateway
+
+An earlier version of this file said a cron watchdog pulls `origin/main` and restarts the gateway, so
+**"pushed ≈ deployed"**. **That is wrong, and it is the kind of wrong that manufactures false closes.**
+
+`gateway_watchdog.sh` is a **liveness** watchdog: it probes `/openapi.json` and acts only on a non-200.
+**A healthy gateway is never restarted.** A push therefore *arms* the next restart; it does not cause
+one. Measured on #267 — after the push landed, the deployed tree **stayed at `a08313d`** and the process
+kept its 5 d 19 h uptime. Several pushes had gone by over those five days without deploying.
+
+Deploying is an explicit act: `gaz_request.sh gateway-restart`, which pulls then restarts.
+
+⚠️ **And a successful restart is not evidence that new code is running.** `do_restart()` treats a failed
+pull as **non-fatal** and restarts on the old code while still reporting `EXIT: 0`. So neither the push
+nor the exit code can be read as a deploy.
+
+✅ **Check ancestry and timing instead** — the shape used on #261 and #267: deployed `HEAD`,
+`git merge-base --is-ancestor <fix> HEAD`, the reflog entry dating the pull, and the process start time
+against it. On #267: reflog pull at `07:26:03`, PID 778070 started `07:26:06`, three seconds later.
+
+**#261's close is unaffected**, and for a reason worth keeping: it was closed on exactly this direct
+evidence rather than on the "pushed ≈ deployed" inference. Had it been closed on the inference, it would
+now be a false close.
 
 ---
 
