@@ -637,6 +637,20 @@ now be a false close.
 
 ## 7. Method notes for whoever runs the next pass
 
+* **An observation drawn from the cases that succeeded is selection, not measurement.** 🛑 Caught by
+  `gotw-3d` on itself, on the #245 remeasurement. Two of the 24 reached Chinese places matched
+  administrative `-fu` titles (`Shaou-Wu-Fu → Shaowu Fu`, `Hoo-Choo-Fu → Huzhou Fu`), which looks like
+  evidence that TGN's romanisation material rather than v8 phonetics did the work. It is not: the
+  `-fu` headwords among the **76 that did NOT reach** were never counted, and without that base rate
+  the observation has no content at all. Small n was the lesser problem. The general form — *pull a
+  pattern out of the winners, never look at the losers* — will pass any review that only checks
+  whether the cited cases are real, because they are.
+* **A hint placed among measured figures is read as a measured figure.** The same aside originally sat
+  at the end of a comment whose whole argument was that numbers must be quoted with their weight
+  attached. Placement is an argument nobody can disagree with, so it survives review that prose would
+  not. Moving it to its own comment, with `n=2` in the first line, is the fix; so is contradicting a
+  retracted claim in writing rather than deleting it, because the next reader only ever sees the page.
+
 * **Check whether the deploy happened before believing an issue's last comment.** Four issues sat open
   solely because each said "production deploy not yet run" and none had been revisited. One
   `asset_version` read closed three of them.
