@@ -431,5 +431,80 @@ function checkMatchReferences() {
 }
 checkMatchReferences();
 
+// ── 9. The candidate's type is displayed (place#273) ─────────────────────────
+// `place_types` was always [] until indexing 5830875 and nothing in the UI showed it. A CCEd run
+// type-checked its 2,200 accepted matches and 366 (16.6%) were not places — lakes, airfields, a sewage
+// works, war memorials — with 21 of the first 35 scoring 100.0 on the NAME, because a lake named after
+// the settlement it serves is a string-identical match. The reviewer had nothing on screen to tell them
+// apart. The real functions are evaluated here, not reimplemented.
+function loadTypeRenderers() {
+  const grab = (re, what) => {
+    const m = src.match(re);
+    if (!m) throw new Error(`${what} not found in reconciliation.js — has it been renamed?`);
+    return m[0];
+  };
+  const words = grab(/^const FCLASS_WORDS = \{[\s\S]*?^\};/m, 'FCLASS_WORDS');
+  const label = grab(/^function typeLabelOf\([\s\S]*?^\}/m, 'typeLabelOf');
+  const html = grab(/^function candidateTypeHTML\([\s\S]*?^\}/m, 'candidateTypeHTML');
+  // eslint-disable-next-line no-new-func
+  return new Function(`
+    const esc = (x) => String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    ${words}\n${label}\n${html}
+    return { typeLabelOf, candidateTypeHTML };`)();
+}
+
+function checkCandidateTypes() {
+  let R;
+  try { R = loadTypeRenderers(); } catch (e) { bad('candidate types: parse', e.message); return; }
+  const wrong = [];
+
+  // A GeoNames class letter must become a WORD — the raw codes are illegible, and the coarse class is
+  // what separates every error in the measured set from a settlement.
+  const CASES = [
+    [{ identifier: 'HTL',   label: 'S' }, 'building or site'],
+    [{ identifier: 'PPLA2', label: 'P' }, 'populated place'],
+    [{ identifier: 'LK',    label: 'H' }, 'water feature'],
+    [{ identifier: 'ADM2',  label: 'A' }, 'administrative area'],
+    // An AAT-backed record already carries a word; use it rather than expanding anything.
+    [{ identifier: 'aat:300132316', label: 'bay' }, 'bay'],
+    // ⚠ An unrecognised class letter must still render SOMETHING, not vanish.
+    [{ identifier: 'XYZ', label: 'Q' }, 'Q'],
+    // A bare AAT id with no label is not readable — must produce nothing rather than "aat:300…".
+    [{ identifier: 'aat:300132316' }, ''],
+  ];
+  for (const [t, want] of CASES) {
+    const got = R.typeLabelOf(t);
+    if (got !== want) wrong.push(`typeLabelOf(${JSON.stringify(t)}) -> ${JSON.stringify(got)} (expected ${JSON.stringify(want)})`);
+  }
+
+  // 🛑 The two Dorchesters, which is the whole point: hotel and town must render DIFFERENTLY.
+  const hotel = R.candidateTypeHTML({ place_types: [{ identifier: 'HTL', label: 'S' }] });
+  const town  = R.candidateTypeHTML({ place_types: [{ identifier: 'PPLA2', label: 'P' }] });
+  if (!hotel || !town) wrong.push('a candidate with a type rendered nothing');
+  if (hotel === town) wrong.push('a hotel and a town render identically — the display cannot do its job');
+  if (!/HTL/.test(hotel)) wrong.push('the precise source code is not available in the tooltip');
+
+  // A candidate with no types must render nothing at all — no empty chip.
+  for (const empty of [{}, { place_types: [] }, { place_types: null }]) {
+    if (R.candidateTypeHTML(empty) !== '') wrong.push(`an untyped candidate rendered a chip: ${JSON.stringify(empty)}`);
+  }
+  // ⚠ The discriminating case for the "no readable words" guard: a type that EXISTS but yields no
+  // readable label (a bare AAT id). The three cases above are caught by the earlier array check, so
+  // without this one the guard is untested — mutation showed exactly that.
+  if (R.candidateTypeHTML({ place_types: [{ identifier: 'aat:300132316' }] }) !== '') {
+    wrong.push('a type with no readable label rendered an empty chip instead of nothing');
+  }
+
+  // 🛑 The renderer must be CALLED. A correct function nothing invokes is the place#260 failure, and a
+  // regex without the argument list would match the definition instead of the call.
+  if (!/candidateTypeHTML\(c\) \+/.test(src)) {
+    wrong.push('candidateTypeHTML is never called from the candidate list — nothing renders');
+  }
+
+  if (wrong.length) bad('candidate types', `${wrong.length} wrong:\n          ` + wrong.join('\n          '));
+  else ok(`candidate types (${CASES.length} labels + hotel/town distinction + wiring)`);
+}
+checkCandidateTypes();
+
 if (failures.length) { console.error(`\n${failures.length} contract(s) broken.`); process.exit(1); }
 console.log('\nAll contracts hold.');

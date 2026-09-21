@@ -6508,6 +6508,55 @@ function matchUriFor(id) {
   return placeUri(barePlaceId(id));
 }
 
+// ── What the candidate IS (place#273) ────────────────────────────────────────
+// A reconcile candidate now carries `place_types` — source-vocabulary types from the index, e.g.
+// `[{identifier: "HTL", label: "S"}]` for a hotel or `[{identifier: "PPLA2", label: "P"}]` for a town.
+// Until indexing 5830875 it was always `[]`, and nothing in this UI showed it.
+//
+// 🛑 The cost of that, measured on a real run: a CCEd reconciliation type-checked its 2,200 accepted
+// matches and 366 — 16.6% — were NOT PLACES. Lakes, airfields, a sewage works, two war memorials, a
+// weir, an inn, two libraries. 21 of the first 35 scored 100.0 on the NAME, because a lake named after
+// the settlement it serves is a genuinely string-identical match. A reviewer with no type on screen
+// cannot tell them apart, and that is what this renders.
+//
+// ⚠️ The raw codes are not legible — `HTL`, `PPLA2`, `ADM2` mean nothing to a reviewer — so the class
+// letter is expanded to a word. That is deliberately the coarse end: EVERY error in the measured set
+// differs from a settlement at CLASS level (S, H, L), so the coarse signal is the one that does the
+// work. The precise code goes in the tooltip for anyone who wants it.
+const FCLASS_WORDS = {
+  A: 'administrative area', H: 'water feature', L: 'area', P: 'populated place',
+  R: 'road or railway', S: 'building or site', T: 'landform', U: 'undersea', V: 'vegetation',
+};
+
+// A readable label for one type entry, or '' when there is nothing worth showing.
+function typeLabelOf(t) {
+  if (!t || typeof t !== 'object') return '';
+  const label = String(t.label || '').trim();
+  // A multi-character label is already a word — AAT-backed records carry e.g. "bay", "mountain".
+  if (label.length > 1) return label;
+  // A single character is a GeoNames feature CLASS. Expand it; fall back to the raw letter so an
+  // unrecognised class still shows something rather than vanishing.
+  if (label) return FCLASS_WORDS[label.toUpperCase()] || label;
+  const ident = String(t.identifier || '').trim();
+  return ident.startsWith('aat:') ? '' : ident;   // a bare AAT id is not readable; drop it
+}
+
+function candidateTypeHTML(cand) {
+  const types = (cand && cand.place_types) || [];
+  if (!Array.isArray(types) || !types.length) return '';
+  const words = [];
+  const codes = [];
+  types.forEach((t) => {
+    const w = typeLabelOf(t);
+    if (w && !words.includes(w)) words.push(w);
+    const c = t && t.identifier ? String(t.identifier) : '';
+    if (c && !codes.includes(c)) codes.push(c);
+  });
+  if (!words.length) return '';
+  const tip = codes.length ? `Source type: ${esc(codes.join(', '))}` : 'Type as the source records it';
+  return `<span class="recon-cand-type ms-1" data-bs-toggle="tooltip" title="${tip}">${esc(words.slice(0, 2).join(', '))}</span>`;
+}
+
 // ── Can this candidate act as a containment region? (place#260) ───────────────
 // `has_geom` is the gateway's per-candidate flag: true iff the place has a full POLYGON, and therefore
 // can itself be used as a `contained_in` region for the level below. It has been sent to the browser
@@ -6562,6 +6611,7 @@ function renderReviewCard() {
     (c.found_by ? `<span class="badge bg-secondary ms-1" title="Found by your search for “${esc(c.found_by)}” — not returned by the reconciliation run">searched</span>` : '') +
     containerWarningHTML(c, meta.key) +
     `<span class="recon-cand-ns ms-1">${esc(nsName(c.id))}</span>` +
+    candidateTypeHTML(c) +
     `<span class="text-muted small ms-1">${truncate(c.description || '', 36)}</span>` +
     (c.alt_names && c.alt_names.length
       ? `<span class="recon-cand-alt">also: ${c.alt_names.slice(0, 8).map((n) => truncate(n, 28)).join(', ')}${c.alt_names.length > 8 ? '…' : ''}</span>`
