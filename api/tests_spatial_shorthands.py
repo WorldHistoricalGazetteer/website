@@ -218,3 +218,71 @@ class OpenRefineNoBehaviourChangeTests(SimpleTestCase):
                          ("whg:types_objects", "types")):
             with self.subTest(pid=pid):
                 self.assertEqual(PROPERTY_FILTER_MAP[pid], key)
+
+
+class BatchRejectionContractTests(SimpleTestCase):
+    """A rejected query errors WITHOUT failing the batch (verified on prod 2026-09-21).
+
+    The unit tests above assert `bbox_to_polygon` raises. That is not the public
+    contract — `process_queries` catches `ValueError` per query, so the request
+    returns **200** with an `error` key on the offending query and `result: []`.
+
+    ✅ That is the right design for a batch endpoint: one bad query must not fail
+    49 good ones. 🛑 But it is only honest if the error is VISIBLE, and an empty
+    `result` now has four meanings (nothing / `error` / `gateway` /
+    `scope.applied: false`) that only the accompanying keys separate. This class
+    pins the one this change introduced.
+    """
+
+    def _post(self, queries):
+        import json as _json
+        from unittest.mock import patch as _patch
+        from rest_framework.test import APIRequestFactory, force_authenticate
+        from api.reconcile import ReconciliationView
+
+        request = APIRequestFactory().post(
+            "/reconcile", data=_json.dumps({"queries": queries}),
+            content_type="application/json")
+
+        class _U:
+            is_authenticated = True
+            is_anonymous = False
+            is_active = True
+            pk = 55
+            id = 55
+            username = "batch-probe"
+
+            def __str__(self):
+                return self.username
+        force_authenticate(request, user=_U())
+
+        with _patch("api.reconcile.reconcile_place_es",
+                    side_effect=lambda *a, **k: {"result": [], "geojson": None}):
+            response = ReconciliationView.as_view()(request)
+        return response.status_code, _json.loads(response.content)
+
+    def test_a_bad_bbox_errors_that_query_only(self):
+        status, body = self._post({
+            "good": {"query": "Venice", "mode": "fuzzy", "bbox": [7, 44, 14, 47]},
+            "anti": {"query": "Venice", "mode": "fuzzy", "bbox": [170, -10, -170, 10]},
+        })
+        self.assertEqual(status, 200, "one bad query must not fail the batch")
+        self.assertIn("error", body["anti"])
+        self.assertEqual(body["anti"].get("result"), [])
+        self.assertNotIn("error", body["good"], "the good query must be unaffected")
+
+    def test_the_error_message_is_actionable(self):
+        _, body = self._post({
+            "anti": {"query": "Venice", "mode": "fuzzy", "bbox": [170, -10, -170, 10]},
+        })
+        msg = str(body["anti"]["error"])
+        self.assertIn("antimeridian", msg)
+        self.assertIn("MultiPolygon", msg, "must name the workaround, not just refuse")
+
+    def test_an_empty_result_with_no_error_is_a_genuine_miss(self):
+        """🛑 The companion. Without this, a change that attached `error` to every
+        empty result would pass the tests above while making a real miss
+        indistinguishable from a rejection."""
+        _, body = self._post({"q1": {"query": "Nowhereville", "mode": "fuzzy"}})
+        self.assertEqual(body["q1"].get("result"), [])
+        self.assertNotIn("error", body["q1"])
