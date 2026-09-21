@@ -551,6 +551,32 @@ now be a false close.
 * **Do not quote a magnitude across a change of denominator.** Source rows vs deduplicated toponyms
   (#250); a `df` read after a delete (#257); exposure vs realised counts (#265, where a 3× ratio
   compared an upper bound against a realised count and bounded nothing).
+* 🛑 **A shipped API change with no documentation change is a distinct, recurring failure — and it has
+  its own name now.** Named by `documentation-6f` on #288 after **three instances surfaced in one day**:
+
+  | instance | live | documented |
+  |---|---|---|
+  | #262's `gateway` presence-means-failure key | 8 Sep | 21 Sep |
+  | five candidate fields (`confidence`, `repr_point`, `ccodes`, `place_types`, `wikipedia`) | long before | 21 Sep |
+  | #288's `source_year` | not yet | **to be done in the same pass** |
+
+  ⚠️ **The middle one is the worst of the three**, because `confidence` is the field a caller is *told* to
+  threshold on and the table listed nine of fourteen fields — so the omission read as "these are all the
+  fields", not as "some are missing". An undocumented field is not a gap a reader can see.
+
+  ✅ **The rule: a contract change and its documentation ship in the same pass.** Since 2026-09-21 there is
+  a dedicated session in the `documentation` repo — so the practical form is *tell it, in the same breath
+  as the commit*. The cost of not doing so is not a missing paragraph; it is an integrator building against
+  a shape that was never true, which is how #217 came to exist.
+
+* 🛑 **Match the strength of a claim to the strength of the action it justifies.** Withholding, deferring,
+  asking and flagging all run on uncertainty alone and need no diagnosis; a diagnosis is only owed when
+  something will be *changed* on the strength of it. `documentation-6f` withheld the `temporal_extent`
+  column (right) and justified it as *"these values are wrong"* (not established — `kain_par [1851, 1851]`
+  is a correct snapshot year, and PeriodO's −4,567,998,050 ≈ 4.568 Ga is plausibly a real geological
+  bound). Its own conclusion is the transferable one: **the cheapest fix is not measuring harder before
+  withholding, it is not upgrading "I can't interpret this" into "this is broken."**
+
 * 🛑 **The dominant failure in this pass was not arithmetic — it was provenance failing to travel with a
   number.** Three separate substitutions, all with correctly transcribed figures: a superseded ceiling
   (69.53%, corrected two sections below where it was stated, in the same document); coverage share used as
@@ -558,3 +584,7 @@ now be a false close.
   case the arithmetic was right and the subject was wrong**, and in two of the three the correction was
   already written down somewhere the quoter had read. **Before quoting a figure, state which population it
   was measured over and which question it answers.** If you cannot, you do not have the figure yet.
+  ⚠️ **And check you are quoting the denominator that answers the question asked.** `gn_fcodes` on
+  "309 of 58,996 concepts" is 0.5% of the **vocabulary** and potentially most of the **records**, because
+  those 309 are the head of the distribution. Quoted the first way it makes the work look pointless;
+  quoted the second it makes it obviously worth shipping partial. Same numerator, opposite conclusion.
