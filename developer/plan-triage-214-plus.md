@@ -114,36 +114,72 @@ one rather than dragged into #285.
 
 ---
 
-## 2a. Progress — 2026-09-21, after the triage pass
+## 2a. Progress — 2026-09-21, end of day
 
-**Closed: 9.** #250, #257, #261, #262, #266, #267, #282, #283, #284.
-**Fixed and live on dev, awaiting prod promotion: 4.** #272, #274, #275, #268.
-**Open: 31.**
+**Closed: 50 of the 80 issues numbered #214+. Open: 30.**
 
-| # | state | where |
+Everything the whg3 side fixed in this pass is **now on production**. `main` and `staging` no longer
+diverge in source at all — the only differences are the webpack bundles (rebuilt per branch) and
+`server-admin/test-baseline.txt`, which is **staging-only and must stay that way**
+([[reference_smoke_test_baseline_guard]]: it is branch-scoped and refuses cross-branch compares).
+
+| promoted as | issues | on prod |
 |---|---|---|
-| #272 | gateway failure → 503, real miss → 404 | staging `8787f7594`, dev `988b92207` |
-| #275 | oversized batch → 400, nothing processed | staging `0bb0345b4` |
-| #274 | gthread workers (`-k gthread --threads 4`) | staging `988b92207` |
-| #268 | query-rate limiter, 600/min, 429 + `Retry-After` | staging `988b92207` |
-| #267 | `fclasses` lowercase | indexing `2cb28d0`, **on the gateway** |
-| #266 | coarsen instead of truncate | indexing `7fa4325`, **on the gateway** |
+| `9256b4104` | #272 gateway-vs-miss, #275 oversized batch → 400, #274 gthread workers, #268 rate limiter | ✅ |
+| `089258558` | #279 diocese/archdeaconry columns, #278 `parent_name` relation, #263 environ logging, #260 container warning | ✅ |
+| `bd74a8e9c` + `49ca8e3e7` | #217 query model + `error` key, #240 match references, #271 citable identifier | ✅ |
+| `f1d00f4df` | #214 two incomparable score scales in `/suggest/entity` | ✅ |
+| `12c58d4ad` | #218 embargo enforced on reconciliation | ✅ |
+| `c048de566` | #273 candidate type in the MyD review card | ✅ |
+| `f89292a7f` | #269 attribution on the LPF path, 451 for a non-redistributable source | ✅ |
 
-🛑 **#274 and #268 shipped in ONE commit and must be promoted together.** #274 raises in-flight gateway
-calls from 32 to 128; #268 is the only thing bounding them. Promoting the amplifier without the brake would
-make gateway saturation worse than before the fix.
+Gateway/indexing side: #267 (`fclasses` lowercase, indexing `2cb28d0`) and #266 (coarsen instead of
+truncate, indexing `7fa4325`) are live on the gateway. #256 has shipped.
 
-⚠️ **All four whg3 fixes are on `staging` only.** Promotion to `main` is by **cherry-pick, never a merge**
-(a merge would ship GRACE), and `whg/settings.py` must **never** be promoted wholesale — the `CACHES`
-`throttle` alias and `RECON_QUERY_RATE` must be re-applied by hand. `entrypoints/entrypoint-web.sh` is
-**mounted, not baked**, so a `restart` is enough for the worker change; no rebuild, no migrations, no
-`--collectstatic`. `--celery` is prudent because `settings.py` changed.
+### Open with the fix already live — the issue is the *unverified claim*, not the code
+
+These four are deliberately still open, and closing them needs a **measurement**, not a commit:
+
+- **#274** — the worker model changed and one request can no longer monopolise a worker. The
+  site-wide 503 behaviour under a slow gateway has **not** been reproduced or re-measured.
+- **#273** — the display shipped. The 16.6%-of-confident-matches figure that motivated it has not
+  been re-measured against the new card.
+- **#240** — the references shipped; the licensing question about *adopting* a source geometry is
+  untouched and is the part that matters.
+- **#276 / #277** — #277 needs no ingest (ridings exist in `vob_cty`/`vob_rc` with polygons and
+  working scope queries — it is a *selection* defect), which makes **#276 the user-facing fix**.
 
 ### Still not established, and not claimed
 
-**#274's own symptom has not been re-observed.** What is verified is that the worker model changed and that
-one request can no longer monopolise a worker; the site-wide 503 behaviour under a slow gateway has **not**
-been reproduced or re-measured. That is why #274 stays open with the fix live.
+**#269 closed a live exposure, not a latent one.** Three registry rows carry `redistributable = False`
+on production — `kain_par`, `nl`, `chgis` — so the entity API had been serving all three. That is the
+opposite of #218, where the embargo mechanism had 0 rows and the leak was genuinely latent. Worth
+keeping the distinction: "the mechanism was never used" and "the mechanism was never enforced" look
+identical in a diff and are not the same finding.
+
+🛑 **#269 does not settle the `kain_par` licensing question.** The public tileset still serves the full
+polygons behind nothing but an `Origin` check, so the boundary set remains reassemblable. The per-record
+API was the smaller half.
+
+### Method note — promoting from a SHARED working tree
+
+Three Claude sessions occupied `/home/stephen/Documents/GitHub/whg3` during this promotion, so
+branch-switching in the primary checkout was unsafe ([[feedback_shared_working_tree]]). What worked:
+
+1. `git diff --stat origin/main origin/staging -- . ':(exclude)static/webpack'` to see the **real**
+   payload. 90 bundle files differed and **no webpack source did** — so no rebuild was needed, and
+   main's own bundles had to be left alone. Diffing without excluding bundles makes a 3-file promotion
+   look like a 93-file one.
+2. A `git worktree` on `main`, files copied in explicitly, `git add <paths>` — never `-A`, never `-u`.
+3. ⚠️ **A worktree is not a working environment.** Three needed files are untracked and had to be
+   symlinked in: `whg/local_settings.py`, `.env/.env` (+`.pitt`) and — the one that cost time —
+   **`whg/local_settings_autocontext.py`**, which `settings.py` imports *first* inside a
+   `try/except ImportError: pass`. Its absence silently dropped `CELERY_BROKER_URL`, and the
+   resulting `AttributeError` during app loading looked exactly like a defect on `main`.
+   **What settled it in one command was running the same test in the primary checkout, where it
+   passed.** A failure that appears only in the new environment is evidence about the environment.
+   Beware the swallowing `except` generally: it converts a missing settings file into a missing
+   setting, far from the cause.
 
 ---
 
