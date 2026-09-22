@@ -16,16 +16,31 @@
 >
 > ### Four things waiting on Stephen — nothing else is blocked
 >
-> 1. **place#295** — should a w3id PID resolve for `Accept: */*` (curl's default), or keep the
->    deliberate 404? Labelled `needs-decision`. ⚠️ I first filed this as a *bug of unknown origin*;
->    it is intentional, documented in `reference_w3id_whg_resolver` and implemented in SG's fork
->    `docuracy/w3id.org`, `whg/.htaccess`. The issue body carries the correction.
-> 2. **place#296** — a `/reconcile` consumer cannot predict which candidates will 451, because the
->    root attribution block omits `redistributable`. Looks like a one-line additive fix.
-> 3. **Rotate the production `elastic` password?** Prudent hygiene, **not urgent** — see below.
-> 4. **`MEMORY.md`** is 20,944 bytes / 181 lines, under the byte limit with every one of the 181
->    memory files still indexed. A hook asks for <140 lines, which needs retiring ~41 entries. That
->    is deleting his memories, so it needs his sanction and a proposed list.
+> **Three of the four were answered on 2026-09-22. Only #295 and the `MEMORY.md` question remain.**
+>
+> 1. **place#295 — AWAITING SG.** Recommendation posted: resolve `Accept: */*` to `/entity/$1/api`,
+>    keep every other 404. The behaviour is *deliberate*, not a bug — I filed it wrongly and corrected
+>    the issue in place. ⚠️ **And the location took three attempts to establish.** The live rules are
+>    upstream at **`perma-id/w3id.org` → `ids/whg/.htaccess`**, moved there 2026-09-04. They are NOT at
+>    the fork path this Plan and the project memory both gave; the fork's `rewt-namespace` copy is
+>    stale and at a dead path, so editing it changes nothing. Changes go upstream by PR.
+> 2. **place#296 — FIXED (`350d70eea`), on dev, NOT on prod.** `redistributable` now appears per source
+>    in the root attribution block. 8 DB-backed tests, mutation-verified (hardcoding `True` kills 3),
+>    and checked against the real registry on dev: `gn` True, `chgis` False, `kain_par` False.
+>    🛑 **Deliberately not promoted to prod unattended.** It is additive and low-risk, but nobody would
+>    be watching for days. One `deploy.sh prod restart` on his return — and ⚠️ **the `documentation`
+>    repo must be updated with it** (standing instruction: docs agree with ALL API operational
+>    changes). That could not be briefed: `documentation-6f` had ended.
+> 3. **`elastic` password — SG will NOT rotate it. Decided, do not re-raise.** Consistent with the
+>    measurement: the transcripts are `drwx------` while `.env/.env` has held the same password at mode
+>    **664** all along, so rotation would not have reduced exposure here. The only trigger that should
+>    reopen it is a transcript leaving the machine.
+> 4. **`gpu-l40s-s-invest` — SG said no.** Not for the customs-accounts work. Recorded in
+>    `reference_crc_slurm_jobs` so the lever is not rediscovered and pulled as a tuning trick; any
+>    `-invest` QOS is an allocation decision, not a scheduling one.
+> 5. **`MEMORY.md` — still open.** 181 entries, under the byte limit, every file indexed. Going under
+>    the <140-line hook means retiring ~41 entries, which is deleting his memories. Nothing is being
+>    lost meanwhile, so it can wait.
 >
 > ### On the credential, so nobody re-panics or under-reacts
 >
