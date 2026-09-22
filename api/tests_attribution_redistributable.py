@@ -27,11 +27,21 @@ from api.attribution import attribution_block, attribution_for
 
 
 def _entry(namespace, *, redistributable=True, name=None, status='published'):
-    """A minimal authority row. ``entry_class='authority'`` matters: the function
-    filters on it, so a row created without it is invisible and every assertion
-    below would pass vacuously against an empty dict."""
+    """A minimal authority row.
+
+    ``entry_class='authority'`` matters: the function filters on it, so a row created
+    without it is invisible and every assertion below would pass vacuously against an
+    empty dict.
+
+    ⚠️ ``id`` is an explicit ``CharField`` primary key, not an AutoField. Omitting it
+    yields ``''`` for every row, so the second ``create()`` in a single test dies on
+    ``duplicate key ... Key (id)=()``. Caught by the multi-source test, which is the
+    only one here that inserts twice — a reminder that a fixture helper is a place
+    where one wrong assumption fails uniformly and therefore invisibly.
+    """
     from api.models import GazetteerRegistryEntry
     return GazetteerRegistryEntry.objects.create(
+        id=f'test:{namespace}',
         namespace=namespace,
         name=name or namespace.upper(),
         entry_class='authority',
