@@ -1,5 +1,94 @@
 # Triage Plan — `place` issues #214 and above
 
+> ## 🛑 RESUME HERE — handover written 2026-09-21, Stephen away a few days
+>
+> **Read this section, then §2a (Progress), then §3 (Priority). Do not start from the issue list:
+> the Plan groups issues into units that are cheaper done together, and working the list numerically
+> was explicitly corrected once already.**
+>
+> ### State of the tree
+>
+> * `staging` and `main` are **identical in source**. The only diffs are this file (main is behind —
+>   read it on `staging`) and `server-admin/test-baseline.txt`, which is **staging-only and must stay
+>   that way**: it is branch-scoped, and `smoke_test.sh` refuses cross-branch compares.
+> * Production is `f89292a7f`, deployed and verified 2026-09-21T20:11:50Z. Working tree clean.
+> * **50 of the 80 issues at #214+ are closed. 30 open.** Every whg3-side fix from this pass is on prod.
+>
+> ### Four things waiting on Stephen — nothing else is blocked
+>
+> **Three of the four were answered on 2026-09-22. Only #295 and the `MEMORY.md` question remain.**
+>
+> 1. **place#295 — AWAITING SG.** Recommendation posted: resolve `Accept: */*` to `/entity/$1/api`,
+>    keep every other 404. The behaviour is *deliberate*, not a bug — I filed it wrongly and corrected
+>    the issue in place. ⚠️ **And the location took three attempts to establish.** The live rules are
+>    upstream at **`perma-id/w3id.org` → `ids/whg/.htaccess`**, moved there 2026-09-04. They are NOT at
+>    the fork path this Plan and the project memory both gave; the fork's `rewt-namespace` copy is
+>    stale and at a dead path, so editing it changes nothing. Changes go upstream by PR.
+> 2. **place#296 — FIXED (`350d70eea`), on dev, NOT on prod.** `redistributable` now appears per source
+>    in the root attribution block. 8 DB-backed tests, mutation-verified (hardcoding `True` kills 3),
+>    and checked against the real registry on dev: `gn` True, `chgis` False, `kain_par` False.
+>    🛑 **Deliberately not promoted to prod unattended.** It is additive and low-risk, but nobody would
+>    be watching for days. One `deploy.sh prod restart` on his return — and ⚠️ **the `documentation`
+>    repo must be updated with it** (standing instruction: docs agree with ALL API operational
+>    changes). That could not be briefed: `documentation-6f` had ended.
+> 3. **`elastic` password — SG will NOT rotate it. Decided, do not re-raise.** Consistent with the
+>    measurement: the transcripts are `drwx------` while `.env/.env` has held the same password at mode
+>    **664** all along, so rotation would not have reduced exposure here. The only trigger that should
+>    reopen it is a transcript leaving the machine.
+> 4. **`gpu-l40s-s-invest` — SG said no.** Not for the customs-accounts work. Recorded in
+>    `reference_crc_slurm_jobs` so the lever is not rediscovered and pulled as a tuning trick; any
+>    `-invest` QOS is an allocation decision, not a scheduling one.
+> 5. **`MEMORY.md` — still open.** 181 entries, under the byte limit, every file indexed. Going under
+>    the <140-line hook means retiring ~41 entries, which is deleting his memories. Nothing is being
+>    lost meanwhile, so it can wait.
+>
+> ### On the credential, so nobody re-panics or under-reacts
+>
+> A production `elastic` password was sent to a peer session on Stephen's instruction, which wrote it
+> to plaintext session JSONL. The peer refused it — correctly, since it could not verify the
+> authorisation from inside its own session, and a peer cannot grant an escalation. **Measured
+> afterwards:** `stephen` is the only non-system account with a shell on this machine, the transcript
+> directory is `drwx------`, and `.env/.env` — which has held the same password in plaintext all
+> along — is **mode 664**. So the credential's new location is *better* protected than its existing
+> one, and marginal exposure here is nil. **What would change that: a transcript leaving the machine**
+> (attached to a bug report, synced, or shared). Rotation is worth doing on that trigger or as
+> routine hygiene, not as an incident. Related: place#289, closed won't-fix, same credential,
+> different channel (CRC process table).
+>
+> ### Peers
+>
+> * `GOTW` — **closed.** #245 remeasured; results on the issue, artefacts in `/vast/ishi/gotw/data/`.
+> * `documentation-6f` — place#269's docs pushed (`8dd1044`, `4326c30`) after Stephen cleared them.
+> * `indexing-79` — reported in full, **re-measured rather than recalled**. Details in §2b below.
+>   Nothing is running; nothing is locked; its side has no unpushed work.
+>
+> ### Traps that cost time today — all of them will recur
+>
+> * **Several sessions share this checkout.** Never `git add -A` or `-u`, never `--amend`, never
+>   rebase; stage explicit paths. Do not switch branches here.
+> * **Promote by source-only diff, never a merge.** `git diff --stat origin/main origin/staging --
+>   . ':(exclude)static/webpack'` shows the real payload; without the exclude a 3-file promotion looks
+>   like 93. Rebuild bundles on `main` **only if webpack source changed**.
+> * **A worktree is not a working environment.** It needs three untracked files symlinked in:
+>   `whg/local_settings.py`, `.env/.env` (+`.pitt`), and `whg/local_settings_autocontext.py` — the
+>   last is imported inside `try/except ImportError: pass`, so its absence silently drops
+>   `CELERY_BROKER_URL` and looks exactly like a defect on `main`. Running the same test in the
+>   primary checkout settles it in one command.
+> * **Read the project memory before re-deriving anything.** #295 was filed wrong because a note from
+>   eleven days earlier already answered it. Measuring afresh establishes *what happens* and tells you
+>   nothing about *whether it is intended*.
+> * **Three figures went wrong today, all the same way:** a number detached from its denominator
+>   (#245's 18.0%, #250's 649,953, and a held-out 24.2% that must never be quoted against 18.0%).
+>   §7 carries the method notes, including the sharpest one — an in-sample test inherits its selection
+>   and can manufacture a conventionally significant p (`-fu`: p=0.042 in-sample, p=0.27 out).
+>
+> ### Where to start work
+>
+> §3's P0/P1, honouring §5's ordering constraints. Four issues are open **with the fix already live**
+> (#274, #273, #240, #276/#277) — those need a *measurement*, not a commit, and closing them without
+> one is the mistake this Plan exists to prevent.
+
+
 **Written** 2026-09-21 by the `whg3-6d` session, jointly with the `indexing-79` session.
 **Scope** every `WorldHistoricalGazetteer/place` issue numbered #214 or higher: 72 issues, of which
 42 were open when this pass began. **Seven closed; 35 remain open.**
@@ -46,7 +135,7 @@ tab.
 | **#283** | versioned + hash-checked assets, live | `5cdbbbbae`; all four prod assets hash to the manifest **and** to the model's own `provenance.json` |
 | **#284** | `PY_IS_ALPHA` repinned to 14.0.0, header retracted in place | `0e6f51c83` |
 | **#257** | `panphon_embedding` gone from the mapping; v7 index deleted | live cluster, `indexing-79` |
-| **#250** | `is_script_mismatch` fixed *and* the index rebuilt after it | indexing `2f093c4` (6 Sep) + v8 build (14 Sep); `tgn` now carries 649,953 Latn-family docs against 0 |
+| **#250** | `is_script_mismatch` fixed *and* the index rebuilt after it | indexing `2f093c4` (6 Sep) + v8 build (14 Sep); **`tgn`** now carries 649,953 Latn-family docs against 0 — namespace-scoped, NOT a whole-index figure (`Latn` 379,161 + `Latn-pinyin-x-notone` 270,531 + wadegile/hanyu tails). ⚠️ Quoted without its scope on 21 Sep it was unreproducible to a peer measuring whole-index `lang`×`script` totals (769,921 across 8 tags) and rightly rejected |
 | **#261** | the fix is **in the running gateway process** | deployed tree `a08313d` is a descendant of `b0e0179`; watchdog reflog at 11:28:02, process start 11:28:04 — pull-then-restart, two seconds apart |
 
 **The unlock for four of those was a single measurement.** #282/#283/#284/#285 each ended with *"production
@@ -114,36 +203,206 @@ one rather than dragged into #285.
 
 ---
 
-## 2a. Progress — 2026-09-21, after the triage pass
+## 2a. Progress — 2026-09-21, end of day
 
-**Closed: 9.** #250, #257, #261, #262, #266, #267, #282, #283, #284.
-**Fixed and live on dev, awaiting prod promotion: 4.** #272, #274, #275, #268.
-**Open: 31.**
+**Closed: 50 of the 80 issues numbered #214+. Open: 30.**
 
-| # | state | where |
+Everything the whg3 side fixed in this pass is **now on production**. `main` and `staging` no longer
+diverge in source at all — the only differences are the webpack bundles (rebuilt per branch) and
+`server-admin/test-baseline.txt`, which is **staging-only and must stay that way**
+([[reference_smoke_test_baseline_guard]]: it is branch-scoped and refuses cross-branch compares).
+
+| promoted as | issues | on prod |
 |---|---|---|
-| #272 | gateway failure → 503, real miss → 404 | staging `8787f7594`, dev `988b92207` |
-| #275 | oversized batch → 400, nothing processed | staging `0bb0345b4` |
-| #274 | gthread workers (`-k gthread --threads 4`) | staging `988b92207` |
-| #268 | query-rate limiter, 600/min, 429 + `Retry-After` | staging `988b92207` |
-| #267 | `fclasses` lowercase | indexing `2cb28d0`, **on the gateway** |
-| #266 | coarsen instead of truncate | indexing `7fa4325`, **on the gateway** |
+| `9256b4104` | #272 gateway-vs-miss, #275 oversized batch → 400, #274 gthread workers, #268 rate limiter | ✅ |
+| `089258558` | #279 diocese/archdeaconry columns, #278 `parent_name` relation, #263 environ logging, #260 container warning | ✅ |
+| `bd74a8e9c` + `49ca8e3e7` | #217 query model + `error` key, #240 match references, #271 citable identifier | ✅ |
+| `f1d00f4df` | #214 two incomparable score scales in `/suggest/entity` | ✅ |
+| `12c58d4ad` | #218 embargo enforced on reconciliation | ✅ |
+| `c048de566` | #273 candidate type in the MyD review card | ✅ |
+| `f89292a7f` | #269 attribution on the LPF path, 451 for a non-redistributable source | ✅ |
 
-🛑 **#274 and #268 shipped in ONE commit and must be promoted together.** #274 raises in-flight gateway
-calls from 32 to 128; #268 is the only thing bounding them. Promoting the amplifier without the brake would
-make gateway saturation worse than before the fix.
+Gateway/indexing side: #267 (`fclasses` lowercase, indexing `2cb28d0`) and #266 (coarsen instead of
+truncate, indexing `7fa4325`) are live on the gateway. #256 has shipped.
 
-⚠️ **All four whg3 fixes are on `staging` only.** Promotion to `main` is by **cherry-pick, never a merge**
-(a merge would ship GRACE), and `whg/settings.py` must **never** be promoted wholesale — the `CACHES`
-`throttle` alias and `RECON_QUERY_RATE` must be re-applied by hand. `entrypoints/entrypoint-web.sh` is
-**mounted, not baked**, so a `restart` is enough for the worker change; no rebuild, no migrations, no
-`--collectstatic`. `--celery` is prudent because `settings.py` changed.
+### Open with the fix already live — the issue is the *unverified claim*, not the code
+
+These four are deliberately still open, and closing them needs a **measurement**, not a commit:
+
+- **#274** — the worker model changed and one request can no longer monopolise a worker. The
+  site-wide 503 behaviour under a slow gateway has **not** been reproduced or re-measured.
+- **#273** — the display shipped. The 16.6%-of-confident-matches figure that motivated it has not
+  been re-measured against the new card.
+- **#240** — the references shipped; the licensing question about *adopting* a source geometry is
+  untouched and is the part that matters.
+- **#276 / #277** — #277 needs no ingest (ridings exist in `vob_cty`/`vob_rc` with polygons and
+  working scope queries — it is a *selection* defect), which makes **#276 the user-facing fix**.
 
 ### Still not established, and not claimed
 
-**#274's own symptom has not been re-observed.** What is verified is that the worker model changed and that
-one request can no longer monopolise a worker; the site-wide 503 behaviour under a slow gateway has **not**
-been reproduced or re-measured. That is why #274 stays open with the fix live.
+**#269 closed a live exposure, not a latent one.** Three registry rows carry `redistributable = False`
+on production — `kain_par`, `nl`, `chgis` — so the entity API had been serving all three. That is the
+opposite of #218, where the embargo mechanism had 0 rows and the leak was genuinely latent. Worth
+keeping the distinction: "the mechanism was never used" and "the mechanism was never enforced" look
+identical in a diff and are not the same finding.
+
+🛑 **#269 does not settle the `kain_par` licensing question.** The public tileset still serves the full
+polygons behind nothing but an `Origin` check, so the boundary set remains reassemblable. The per-record
+API was the smaller half.
+
+### #245 remeasured 2026-09-21 — 18.0% → 24.0%, and it settles less than it looks like
+
+**24 of 100** sampled `ccode=CN` places, against **18 of 100** on 5 Sep. Same 100 places, not a fresh
+sample (CN sample hash `4106109371657cda`, reproduced from two independently written selections;
+probe and DB sha256-identical to the cluster copy). Instrument: `process/probe_reachability.py` in the
+**GOTW** repo — *not* indexing — n=100/country, seed 7, MATCH_KM=25, exact then phonetic, size 20.
+
+⚠️ **The denominator is not what the issue's prose suggests.** It is the share of sampled Chinese places
+whose 1856 printed coordinate has *some* returned candidate within 25 km. It is **not** a share of indexed
+places and **not** "Latin-script reachability" — I briefed it that way and was wrong. Controls in the same
+invocation: **IN 50→50, RU 25→25, GB 76→75.** Three flat while CN moves +6 is the evidence that the
+instrument did not drift; that control profile, not the interval, is the argument.
+
+🛑 **+6.0 points is inside the noise of two unpaired n=100 samples**, and no paired interval can be
+computed because the 5 Sep run recorded only the aggregate, so discordant pairs are unrecoverable and
+McNemar is impossible. Fixed going forward: per-place outcomes are now kept
+(`/vast/ishi/gotw/data/cn_paired_20260921.json`). **Quote the +6 only with that caveat attached.**
+
+**Confounded, deliberately unattributed.** Between the two runs the served index also took Symphonym v8
+(15 Sep), the CJK-IPA re-extract, and gateway fixes #267/#266/#273 — and the probe runs in `phonetic`
+mode, so v8 is a more plausible mover than #250. Reported as a confounded before/after; no attribution
+claimed. #245 stays **open**: 24% is still the finding, not a fix.
+
+**Retrieval mechanism, bounded (same sample, exact-only driver).** Of the 24 that reached, **2 reached in
+`exact` mode and 22 only in `phonetic`** — so of the +6 gained, **at most 2 can be lexical and at least 4
+must be phonetic-only**. Supportable claim: *lexical matching accounts for at most 2 of 24; Chinese
+reachability runs almost entirely through the phonetic path.* That is a design fact about the retrieval
+stack and worth having.
+
+🛑 **It is NOT a #250-vs-v8 separation, and cannot be made into one.** Our 1856 spellings do not match
+TGN's Wade-Giles character for character, so **#250's own contribution lands in the phonetic column too** —
+both `-fu` cases were phonetic-only. The split bounds *retrieval mechanism*, never *document provenance*.
+My caveat to `gotw-3d` said only that exact mode cannot identify which change supplied a lexical form;
+the true position is stronger, and it closes the separation off in principle rather than in practice.
+
+**The `-fu` hypothesis is REFUTED, and how it was refuted is the valuable part.** In-sample: 3 of 24
+reached were `-fu` against 1 of 76 not reached, Fisher two-sided **p = 0.042**. Out of sample, on the
+1,066 CN places seed 7 never selected: `-fu` reached **41 of 132 (31.1%)** against a held-out non-`-fu`
+group at **32 of 132 (24.2%)**, **p = 0.27**. Dead.
+
+⚠️ **Do not quote the held-out group's 24.2% against 18.0%.** It is close to the sample's 24.0% and about
+a different population. Third figure today that would have travelled correctly and meant something else.
+
+The run's own negative controls are worth copying: 0 gateway errors in 200 queries, 103 non-empty pools
+against 97 empty, and a nonsense query at 0 before and after — because `_post` swallows failures into
+`{"_error": …}`, so a **dead gateway would have reported a clean 0.0%**. The docstring's cautionary
+example is an "after" of 24% from a fresh sample proving nothing, and 24% is what came back.
+
+### Method note — promoting from a SHARED working tree
+
+Three Claude sessions occupied `/home/stephen/Documents/GitHub/whg3` during this promotion, so
+branch-switching in the primary checkout was unsafe ([[feedback_shared_working_tree]]). What worked:
+
+1. `git diff --stat origin/main origin/staging -- . ':(exclude)static/webpack'` to see the **real**
+   payload. 90 bundle files differed and **no webpack source did** — so no rebuild was needed, and
+   main's own bundles had to be left alone. Diffing without excluding bundles makes a 3-file promotion
+   look like a 93-file one.
+2. A `git worktree` on `main`, files copied in explicitly, `git add <paths>` — never `-A`, never `-u`.
+3. ⚠️ **A worktree is not a working environment.** Three needed files are untracked and had to be
+   symlinked in: `whg/local_settings.py`, `.env/.env` (+`.pitt`) and — the one that cost time —
+   **`whg/local_settings_autocontext.py`**, which `settings.py` imports *first* inside a
+   `try/except ImportError: pass`. Its absence silently dropped `CELERY_BROKER_URL`, and the
+   resulting `AttributeError` during app loading looked exactly like a defect on `main`.
+   **What settled it in one command was running the same test in the primary checkout, where it
+   passed.** A failure that appears only in the new environment is evidence about the environment.
+   Beware the swallowing `except` generally: it converts a missing settings file into a missing
+   setting, far from the cause.
+
+---
+
+## 2b. Indexing-side handover — measured 2026-09-21 by `indexing-79`
+
+**Nothing is running.** All Slurm jobs terminal, `squeue -u $USER` empty, no `index_namespace` /
+`backfill_embeddings` / census process on pitt, and `origin/main == HEAD == 5830875` in the indexing
+repo. ⚠️ Job `11411572` (`tgn-idset`) shows **FAILED and that is expected and handled** — it was the
+id-set gate submitted to a compute node, which cannot reach `:9200`; it was re-run successfully on
+pitt. **A fresh session must not retry it.**
+
+**Symphonym v8 backfill: COMPLETE.** `embedding_version` is a single bucket — **v8 → 73,544,149**, no
+v7 contamination — and toponyms without an embedding are **0** (was 65,080). Behavioural check:
+`Lanka-dvipa`, a romanisation appearing nowhere in the index, returns Sri Lanka top.
+
+**Gateway state, established by ancestry and timing rather than exit code** (`do_restart()` exits 0
+on a failed pull, so an exit code proves nothing): deployed HEAD `5830875`; `0cb0ac1`, `7fa4325`,
+`2cb28d0` all ancestors; reflog `pull --ff-only` at 13:25:02; process PID 793612 started 13:25:05 —
+three seconds after the pull.
+
+### 🛑 A category error in how this Plan asked about #256 — corrected
+
+I asked whether #256 was "live on the gateway". **It cannot be, and the question invites a fabricated
+answer.** #256 changes `authorities/osm-places.py` and `ohm-places.py`, which the gateway **never
+imports**. It is pushed (`0cb0ac1`) and present in the deployed tree, and it takes effect at the
+**next OSM/OHM planet run and nowhere else**. There is no running-process check to perform. A fresh
+session that goes looking for one will either invent a result or wrongly conclude #256 was skipped.
+
+The general form, worth carrying: *"is it live?" is meaningless for code that only executes inside a
+batch run.* Ask what would exercise it, and if the answer is "the next re-ingest", say so.
+
+### Live AND independently re-measured
+
+| issue | commit | what was re-measured |
+|---|---|---|
+| #267 fclasses | `2cb28d0` | gn-scoped P→1, S→11, partitioning the 12 control exactly; ZZ→0 |
+| #266 H3 terms | `7fa4325` | 4,140 true false negatives recovered; coverage + ancestor-closure invariants hold |
+| #273 gaps 1–2 | `5830875` | live reconcile returns `types`; a **hotel** still outranks Dorchester, settlement at rank 2 |
+| #246 backfill | data | 73,544,149 all v8, 0 without embedding |
+| #246 tgn retile | tiles | 554 real `start_def` values decoded from the **served** `.mbtiles` |
+
+### Live but NOT re-measured — the distinction that matters
+
+* **#256** — 9 tests, 4 failing on revert, but **no planet run has exercised it**. The supportable
+  claim is "the handler now emits polygons through osmium's assembler", **not** "a planet run has
+  produced polygons". #246's eventual re-ingest is that test.
+
+### Blocked, and blocked on a human rather than a permission
+
+* **#246's last 6 dated places.** `extract_namespace`'s dedup discards the dated variant when a
+  qualified name normalises onto a bare one (`Mysore, State of@und` → `Mysore@und`, keeping the
+  undated row). Writing the 6 changed nothing — 51 toponyms before and after, `dated=0`. Blast radius
+  measured: **34 dated entries across 27 places, 6 losing all dates.** Needs #249's rule fixed or a
+  reindex, because `_update_by_query` re-runs `default_pipeline` (§7).
+* **#249's per-script single-character question** — needs someone who **reads** CJK / Hangul / Kana /
+  the abugidas. Deliberately untouched, and it should stay untouched. It gates the 6 places and #286.
+* **#216's frequency question** — how often placeholders actually surface as top candidates in real
+  traffic is unmeasured. Needs query logs, or a decision to accept the risk unquantified.
+
+### ⚠️ Do not disturb, and one measurement trap
+
+* **`/vast/ishi/pyenv/`** — Python 3.11.16 + venv on pitt, installed so `processing.*` can run on the
+  ES host at all (pitt ships 3.9). Deleting it re-blocks `index_namespace` on pitt.
+* **Dirty files in the indexing checkout** (`article/pdf/symphonym.*`, untracked `bench_sheets.py`,
+  `make_font_testset_v2.py`) **pre-date that session and are not its work. Do not reset the tree.**
+* **`/vast/ishi` quota: 245 GiB free of 1,024.** 🛑 `df -h /vast` reports the *root* filesystem (61 G)
+  and cannot see the quota — use `os.statvfs("/vast/ishi")`. **ES goes read-only at ~51 GB free.**
+* **#291 must not be "fixed" by repointing the `hf/` symlinks.** That would change what the *gateway*
+  loads. `SYMPHONYM_MODEL_DIR` already points production at a real v8 directory, and `--model-dir`
+  achieved the same end touching nothing. Repointing is a deliberate decision for SG, not a tidy-up.
+
+### The one method #245 still has available — per-hit, not corpus-level
+
+#250 and v8 both landed in `toponyms_v8-20260914t120000z`, so **no A/B index exists** and corpus-level
+attribution is impossible. But attribution *per successful match* is: for each CN place that now
+matches and previously did not, look at **which toponym did the matching**.
+
+* A **`tgn` Latn-family row** (`lang_variant` `Latn*`: `Latn` 379,161, `Latn-pinyin-x-notone` 270,531,
+  plus wadegile/hanyu tails) exists only because #250 restored it → **#250's credit**.
+* A toponym that pre-dates #250 (native script, any non-`Latn` row) was always in the inventory, so
+  the change is in the *matching* → **v8's credit**.
+
+⚠️ It separates *restored inventory* from *improved matching*, which is not the same as separating v8
+from every other cause — but #266/#267 are spatial and fclass filters and cannot plausibly move a
+Chinese name test, so in practice it reduces to the two that matter. The n=100 sample is probably too
+small to survive the split; the method needs a larger redraw and **no new index**.
 
 ---
 
@@ -572,6 +831,25 @@ now be a false close.
 ---
 
 ## 7. Method notes for whoever runs the next pass
+
+* **An observation drawn from the cases that succeeded is selection, not measurement.** 🛑 Caught by
+  `gotw-3d` on itself, on the #245 remeasurement. Two of the 24 reached Chinese places matched
+  administrative `-fu` titles (`Shaou-Wu-Fu → Shaowu Fu`, `Hoo-Choo-Fu → Huzhou Fu`), which looks like
+  evidence that TGN's romanisation material rather than v8 phonetics did the work. It is not: the
+  `-fu` headwords among the **76 that did NOT reach** were never counted, and without that base rate
+  the observation has no content at all. Small n was the lesser problem. The general form — *pull a
+  pattern out of the winners, never look at the losers* — will pass any review that only checks
+  whether the cited cases are real, because they are. 🛑 **Worse: the in-sample test MANUFACTURES
+  significance.** Tested on the same 100 places the hypothesis was read off, `-fu` gave Fisher
+  **p = 0.042** — not weak evidence but evidence-shaped noise, because the test inherits the selection.
+  Out of sample it was **p = 0.27**. A conventionally significant p from the generating sample is the
+  strongest-looking and least sound number available, and an out-of-sample arm is the ONLY thing that
+  catches it. Cost: two minutes.
+* **A hint placed among measured figures is read as a measured figure.** The same aside originally sat
+  at the end of a comment whose whole argument was that numbers must be quoted with their weight
+  attached. Placement is an argument nobody can disagree with, so it survives review that prose would
+  not. Moving it to its own comment, with `n=2` in the first line, is the fix; so is contradicting a
+  retracted claim in writing rather than deleting it, because the next reader only ever sees the page.
 
 * **Check whether the deploy happened before believing an issue's last comment.** Four issues sat open
   solely because each said "production deploy not yet run" and none had been revisited. One
