@@ -72,7 +72,7 @@ def attribution_for(namespaces):
                 .filter(namespace__in=codes, entry_class='authority')
                 .values('namespace', 'name', 'description', 'citation_text',
                         'rights_holder', 'source_url', 'license_url',
-                        'record_count', *_LICENSE_FIELDS)):
+                        'record_count', 'redistributable', *_LICENSE_FIELDS)):
         # Prefer the structured ``citation_text`` (populated by the Phase 4
         # inventory push) over the legacy ``description`` blob, which older
         # rows crammed the citation into. Falls back to ``description`` for
@@ -84,6 +84,23 @@ def attribution_for(namespaces):
             'rights_holder': row['rights_holder'] or '',
             'source_url': row['source_url'] or '',
             'license': _license_object(row, url_override=row['license_url']),
+            # 🛑 Whether WHG may hand this source's own records to a third party
+            # (place#296). Since place#269, `/entity/place:<id>/api` answers **451**
+            # for a source where this is False — and a reconcile consumer had no way
+            # to see that coming: it could match a batch, read an attribution block
+            # naming the source and its licence, conclude the terms were workable,
+            # and then be refused on every dereference.
+            #
+            # ⚠️ The licence is NOT a substitute signal. `custom-ukds-eul` does not
+            # tell a client that **WHG specifically** will not re-serve the record;
+            # that is what this flag encodes, and only this flag.
+            #
+            # Deliberately NOT `downloadable` as well: that governs the bulk-download
+            # affordance, is routinely False for reasons of volume alone
+            # (`download_blocked_reason: volume-exceeds-cap`), and predicts nothing
+            # about this endpoint. Two flags here would invite exactly the conflation
+            # place#136 drew them apart to prevent.
+            'redistributable': row['redistributable'],
         }
     return out
 
