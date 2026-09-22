@@ -16,31 +16,33 @@
 >
 > ### Four things waiting on Stephen — nothing else is blocked
 >
-> **Three of the four were answered on 2026-09-22. Only #295 and the `MEMORY.md` question remain.**
+> **All four answered on 2026-09-22, and both fixes are shipped. Only `MEMORY.md` remains.**
 >
-> 1. **place#295 — AWAITING SG.** Recommendation posted: resolve `Accept: */*` to `/entity/$1/api`,
->    keep every other 404. The behaviour is *deliberate*, not a bug — I filed it wrongly and corrected
->    the issue in place. ⚠️ **And the location took three attempts to establish.** The live rules are
->    upstream at **`perma-id/w3id.org` → `ids/whg/.htaccess`**, moved there 2026-09-04. They are NOT at
->    the fork path this Plan and the project memory both gave; the fork's `rewt-namespace` copy is
->    stale and at a dead path, so editing it changes nothing. Changes go upstream by PR.
-> 2. **place#296 — FIXED (`350d70eea`), on dev, NOT on prod.** `redistributable` now appears per source
->    in the root attribution block. 8 DB-backed tests, mutation-verified (hardcoding `True` kills 3),
->    and checked against the real registry on dev: `gn` True, `chgis` False, `kain_par` False.
->    🛑 **Deliberately not promoted to prod unattended.** It is additive and low-risk, but nobody would
->    be watching for days. One `deploy.sh prod restart` on his return — and ⚠️ **the `documentation`
->    repo must be updated with it** (standing instruction: docs agree with ALL API operational
->    changes). That could not be briefed: `documentation-6f` had ended.
-> 3. **`elastic` password — SG will NOT rotate it. Decided, do not re-raise.** Consistent with the
->    measurement: the transcripts are `drwx------` while `.env/.env` has held the same password at mode
->    **664** all along, so rotation would not have reduced exposure here. The only trigger that should
->    reopen it is a transcript leaving the machine.
-> 4. **`gpu-l40s-s-invest` — SG said no.** Not for the customs-accounts work. Recorded in
->    `reference_crc_slurm_jobs` so the lever is not rediscovered and pulled as a tuning trick; any
->    `-invest` QOS is an allocation decision, not a scheduling one.
-> 5. **`MEMORY.md` — still open.** 181 entries, under the byte limit, every file indexed. Going under
->    the <140-line hook means retiring ~41 entries, which is deleting his memories. Nothing is being
->    lost meanwhile, so it can wait.
+> 1. **place#295 — APPROVED and submitted upstream: perma-id/w3id.org#6734.** One rule in
+>    `ids/whg/.htaccess` resolving `Accept: */*` (and an absent Accept) to `/entity/$1/api`, scoped to
+>    `^id/(.+)$`. Purely additive: 6 RewriteRules → 7, one inserted block. It cannot shadow the
+>    negotiated cases because of **ordering** — browsers always state `text/html` and both preceding
+>    rules terminate with `[L]` — which is also why a loose `\*/\*` is safe and catches `*/*;q=0.8`.
+>    🛑 **Awaiting upstream merge.** When it lands, re-verify with a negative control:
+>    `place:gn:13274771` → 200, `place:kain_par:100` → **451 not 404**, `place:nosuchthing:1` → not
+>    200. Without the third, "the fix worked" and "the rule now matches everything" look identical.
+>    The fork was 174 commits behind and was fast-forwarded before branching; `rewt-namespace` is
+>    deleted (`ahead_by=0`, its PR #6623 merged). ⚠️ It was **not** a stale edit, as this Plan
+>    previously said — being 174 behind, its `whg/` was simply inherited from a pre-move master.
+>    The trap was our own note naming the fork as source of truth, never the branch.
+> 2. **place#296 — SHIPPED TO PROD (`bfba41e62`) and CLOSED.** `redistributable` now appears per
+>    source in the root attribution block. Verified live: `chgis`/`kain_par`/`nl` False,
+>    `gn`/`wd` True, envelope nested not flattened. 8 DB-backed tests, mutation-verified (hardcoding
+>    `True` kills 3), run on dev — **never in the prod container**. Documented in `documentation`
+>    `7bf2479`: the shape, the response-root table, and a subsection making the *check before you
+>    fetch* point plus the two things the flag is **not**.
+> 3. **`elastic` password — SG will NOT rotate it. Decided; do not re-raise** unless a transcript
+>    leaves the machine. The measurement supports it: transcripts are `drwx------` while `.env/.env`
+>    has held the same password at mode **664** all along.
+> 4. **`gpu-l40s-s-invest` — SG said no.** Recorded in `reference_crc_slurm_jobs` so the lever is not
+>    rediscovered and pulled; any `-invest` QOS is an allocation decision, never a scheduling one.
+> 5. **`MEMORY.md` — still open, and not urgent.** 181 entries, under the byte limit, every file
+>    indexed. The <140-line hook would need ~41 entries retired, i.e. deleting memories.
 >
 > ### On the credential, so nobody re-panics or under-reacts
 >
