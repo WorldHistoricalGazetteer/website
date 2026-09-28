@@ -1,10 +1,10 @@
 # Plan: reassess the move to ArangoDB for WHG v4
 
 Recorded 2026-09-28; revised the same day with SG's answers (see "Decisions from SG").
-Status: **EXECUTED 2026-09-28.** Recommendation: stay on PostgreSQL/PostGIS + ES, with PLATO RDF
+Status: **EXECUTED 2026-09-28; tracked as place#301.** Recommendation: stay on PostgreSQL/PostGIS + ES, with PLATO RDF
 for interchange and a generated SPARQL endpoint. Do not open an ArangoDB licence negotiation. Results
 are in "Findings so far" below; the addendum is drafted into documentation `database.md`
-(uncommitted). Harness, controls and raw results: `/mnt/salvage/whg-bench/harness/`. Licence sources:
+(documentation `1b5df8f`). Tracking: place#301. Harness, controls and raw results: `/mnt/salvage/whg-bench/harness/`. Licence sources:
 `/mnt/salvage/whg-bench/licences/`. Databases: `/mnt/salvage/whg-bench/{pg,oxi,arango,arango-scale}`.
 Brief received from peer session whg3-6a (a starting point to verify, not findings).
 
@@ -436,10 +436,10 @@ None outstanding.
 ### Step 6: deliverable
 
 A dated addendum has been drafted into `documentation/content/v4/architecture/database.md`
-(uncommitted). Follow-on doc corrections and the `place` issue are drafted, pending SG.
+(committed as documentation `1b5df8f`). Follow-on doc corrections are tracked in place#301.
 
 
-## Draft `place` issue (NOT filed; awaiting SG)
+## Tracking issue: filed as place#301 (2026-09-28)
 
 **Title:** v4 store: retire the ArangoDB plan; PostgreSQL/PostGIS + ES, PLATO RDF for publication
 
