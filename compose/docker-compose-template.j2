@@ -39,7 +39,7 @@ services:
     environment:
       - DJANGO_SETTINGS_MODULE=whg.settings
     ports:
-      - "{{ APP_PORT }}:{{ APP_PORT }}"
+      - "127.0.0.1:{{ APP_PORT }}:{{ APP_PORT }}"
     user: "1000:1000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -117,7 +117,7 @@ services:
     mem_limit: {{ MEM_LIMIT_REDIS }}
     {% endif %}
     ports:
-      - "{{ REDIS_PORT }}:6379"
+      - "127.0.0.1:{{ REDIS_PORT }}:6379"
     {% if not ENV_CONTEXT == 'local' %}
     volumes:
       - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
@@ -200,7 +200,7 @@ services:
     mem_limit: {{ MEM_LIMIT_FLOWER }}
     {% endif %}
     ports:
-      - "{{ FLOWER_PORT }}:5555"
+      - "127.0.0.1:{{ FLOWER_PORT }}:5555"
     volumes:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-flower.sh:/entrypoint.sh
