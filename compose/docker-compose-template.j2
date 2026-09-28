@@ -146,22 +146,13 @@ services:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh
       - shared-tmp:/var/tmp
-    {% if ENV_CONTEXT == 'local' %}
-      - /etc/docker/certs:/certs
-    {% else %}
+    {% if ENV_CONTEXT != 'local' %}
       - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
       - /home/whgadmin/sites/data_dumps:/app/data_dumps
-      - /home/whgadmin/docker-certs/ca/ca.pem:/certs/ca.pem:ro
-      - /home/whgadmin/docker-certs/client/client-cert.pem:/certs/client-cert.pem:ro
-      - /home/whgadmin/docker-certs/client/client-key.pem:/certs/client-key.pem:ro
     {% endif %}
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
       - DJANGO_SETTINGS_MODULE=whg.settings
-      - DOCKER_HOST=tcp://{{ DOCKER_HOST_IP }}
-      - DOCKER_TLS_VERIFY=1
-      - DOCKER_CERT_PATH=/certs
     depends_on:
       - redis
       - {{ DB_HOST }}
