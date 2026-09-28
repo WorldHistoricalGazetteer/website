@@ -128,8 +128,9 @@ multi-hop identity outside a search. The last global run gives its scale: 20.58M
 nodes, 16.81M edges and 7.31M components, a mean of about 2.8 per component (retired
 run, 2026-03-25). **Get the maximum component size**, because one giant component is
 the only way this query becomes expensive. (Side note, not for this plan:
-`CLUSTERING_GUIDE.md` §3–4 still describes the retired index and has no "superseded"
-banner, unlike `CLUSTERS.md`.)
+`CLUSTERING_GUIDE.md` §3–4 describe the retired index. *Corrected 2026-09-28: the guide does carry
+a "SUPERSEDED (2026-07-12)" banner at line 3. An earlier version of this note said it did not,
+having read only its headings.*)
 
 **Decisive set:** Q1-with-time (containment), Q3 (provenance with retraction), Q4
 (succession) and Q6 (the assessment's own 4-hop showcase). **Q2 was dropped (SG
@@ -456,6 +457,6 @@ Follow-ups:
 - [ ] `data-model/rdf-representation.md:131, 496, 696-698`: drop "internal ArangoDB" and the
       GeometryCollection split guidance.
 - [ ] `deployment/secrets/V4-SERVER-UPGRADE.md` line 3 and §8.5: remove the ArangoDB reservation.
-- [ ] indexing `CLUSTERING_GUIDE.md` §4.2: the "V4 (ArangoDB)" migration path is moot, and §3–4
-      describe the retired index.
+- [ ] indexing `CLUSTERING_GUIDE.md`: the "V4 note (ArangoDB migration)" (line 15) and §4.2 are moot.
+      (The guide already has a SUPERSEDED banner.)
 - [ ] Design the per-unit, per-epoch descendant count, plus paged children lists, for large regions.
