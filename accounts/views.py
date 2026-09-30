@@ -192,16 +192,6 @@ class CustomPasswordResetDoneView(auth_views.PasswordResetDoneView):
 class CustomPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
     template_name = 'register/password_reset_confirm.html'
 
-    def form_valid(self, form):
-        # This method is called when the form is successfully submitted and valid
-        response = super().form_valid(form)
-        # Here, `form.user` is accessible because it's typically set in `PasswordResetConfirmView`
-        user = form.user
-        if hasattr(user, 'must_reset_password'):
-            user.must_reset_password = False
-            user.save()
-        return response
-
     def get_success_url(self):
         return reverse('accounts:password_reset_complete')
 

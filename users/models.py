@@ -165,9 +165,6 @@ class User(AbstractUser, PermissionsMixin):
         max_length=39, blank=True, default="", validators=[github_username_validator]
     )
 
-    # Legacy fields - keep for migration period
-    must_reset_password = models.BooleanField(default=False)
-
     # Keep these fields, which nullify the default fields from AbstractUser
     first_name = None
     last_name = None
