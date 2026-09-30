@@ -251,6 +251,23 @@ export function initInfoOverlay() {
 
 }
 
+// HTML-escape text before it goes anywhere rendered as HTML. Used for MapLibre source
+// `attribution`, which MapLibre inserts as HTML through a sanitiser that can be bypassed
+// (maplibre-gl GHSA-jrc7-96c5-q579; the advisory's workaround is to escape attribution text).
+export function escapeHtml(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Attribution for the legacy `ds.ds_id` branch of Map.newSource(). `data.attribution` and
+// `data.citation` there are raw, user-entered dataset/collection text, so the result is
+// escaped HERE (the single escape point for this path). The mapdata branch of newSource()
+// does NOT come through here: its `metadata.attribution` is escaped server-side by
+// utils/mapdata.py attribution_from_csl() and must not be escaped twice.
 export function attributionString(data) {
     let attributionParts = [];
     if (!!data && data.attribution) {
@@ -265,7 +282,7 @@ export function attributionString(data) {
     let attributionStringParts = [];
     if (!!data) attributionStringParts.push(data.attribution || data.citation || attribution);
 
-    return attributionStringParts.join(' | ');
+    return escapeHtml(attributionStringParts.join(' | '));
 }
 
 export function initUtils(whg_map) {

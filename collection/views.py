@@ -565,7 +565,10 @@ class ListDatasetView(View):
     @staticmethod
     def get(request):
         # coll = Collection.objects.get(id=request.GET['coll_id'])
-        ds = Dataset.objects.get(id=request.GET['ds_id'])
+        ds = Dataset.objects.filter(id=request.GET['ds_id']).first()
+        # Private datasets are private: 404 unless the requester may view it.
+        if ds is None or not ds.user_can_view(request.user):
+            raise Http404("No Dataset matches the given query.")
         # coll.datasets.add(ds)
         result = {
             "id": ds.id,

@@ -44,6 +44,7 @@ from api.serializers import (
 from areas.models import Area
 from collection.models import Collection
 from datasets.models import Dataset
+from datasets.utils import get_viewable_dataset_or_404
 from main.choices import FEATURE_CLASSES
 from main.models import Log
 from datasets.tasks import get_bounds_filter
@@ -1420,6 +1421,9 @@ class GeomViewSet(viewsets.ModelViewSet):
             try:
                 # Ensure the dataset exists
                 ds = Dataset.objects.get(label=dslabel)
+                # Private datasets are private: answer exactly as for a missing dataset.
+                if not ds.user_can_view(self.request.user):
+                    return qs
                 # Directly get the place IDs for the given dataset
                 dsPlaceIds = Place.objects.filter(dataset=ds).values_list('id', flat=True)
                 if not dsPlaceIds:
@@ -1462,7 +1466,7 @@ class GeoJSONAPIView(generics.ListAPIView):
     def get_queryset(self, format=None, *args, **kwargs):
         if 'id' in self.request.GET:
             dsid = self.request.GET.get('id')
-            dslabel = get_object_or_404(Dataset, pk=dsid).label
+            dslabel = get_viewable_dataset_or_404(self.request.user, pk=dsid).label
             dsPlaceIds = Place.objects.values('id').filter(dataset=dslabel)
             qs = PlaceGeom.objects.filter(place_id__in=dsPlaceIds)
         elif 'coll' in self.request.GET:
@@ -1496,7 +1500,7 @@ class featureCollectionAPIView(generics.ListAPIView):
 
         if 'id' in self.request.GET:
             dsid = self.request.GET.get('id')
-            datacollection = get_object_or_404(Dataset, pk=dsid)
+            datacollection = get_viewable_dataset_or_404(self.request.user, pk=dsid)
             pass
         elif 'coll' in self.request.GET:
             cid = self.request.GET.get('coll')
@@ -1541,7 +1545,8 @@ class PlaceTableViewSet(viewsets.ModelViewSet):
     """
 
     def get_queryset(self):
-        ds = get_object_or_404(Dataset, label=self.request.GET.get('ds'))
+        # Private datasets are private: 404 unless the requester may view it.
+        ds = get_viewable_dataset_or_404(self.request.user, label=self.request.GET.get('ds'))
         # qs = ds.places.all().order_by('place_id')
         qs = ds.places.all().order_by('id')
         # qs = ds.places.all()

@@ -7,7 +7,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import GEOSGeometry
 from django.db import transaction
 from django.db.models import Q, Count, Exists, OuterRef
-from django.http import HttpResponseRedirect
+from django.contrib.auth.decorators import login_required
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django_celery_results.models import TaskResult
 
@@ -734,18 +735,26 @@ def recon_complete(ds):
 
 
 # kwargs = json.loads(task.task_kwargs.replace("'", '"'))
+@login_required
 def write_wd_pass0(request, tid):
     """
       write_wd_pass0(taskid)
       called from dataset_detail>status tab
       accepts all pass0 wikidata matches, writes geoms and links
+
+      Owners, collaborators and staff/admins of the task's dataset only
+      (``Dataset.user_can_edit``); otherwise the same 404 as a missing task. Before
+      2026-09-30 anyone, logged in or not, could trigger this for any task id.
     """
     task = get_object_or_404(TaskResult, task_id=tid)
     try:
         kwargs = ast.literal_eval(task.task_kwargs.strip('"'))
-    except (ValueError, SyntaxError) as e:
-        logger.exception(f"Error evaluating task_kwargs: {e}")
-        # return  # Handle the error appropriately
+        ds_for_gate = Dataset.objects.get(id=kwargs['ds'])
+    except (ValueError, SyntaxError, TypeError, KeyError, AttributeError, Dataset.DoesNotExist) as e:
+        logger.warning(f"write_wd_pass0: no dataset resolvable for task {tid}: {e}")
+        raise Http404("No task matches the given query.")
+    if not ds_for_gate.user_can_edit(request.user):
+        raise Http404("No task matches the given query.")
 
     # kwargs_str = task.task_kwargs.replace("'", '"')
     # kwargs = json.loads(kwargs_str)

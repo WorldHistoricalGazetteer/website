@@ -2,6 +2,7 @@
 
 from django.urls import path
 from django.conf.urls.static import static
+from django.contrib.admin.views.decorators import staff_member_required
 from django.conf import settings
 from django.views.generic.base import TemplateView
 
@@ -20,7 +21,10 @@ urlpatterns = [
     path('alt_parents/', alt_parents, name='place-alt-parents'),
 
     # remove all traces of dataset from whg index
-    path('remove_dataset/<int:dsid>', removeDatasetFromIndex, name='remove-dataset'),
+    # Staff only (2026-09-30): it was open to anonymous GETs, and it deletes the dataset's index
+    # docs, WHG hits and latest align_idx task. Wrapped here, not decorated at the definition,
+    # because tasks.py and the deindex_dataset command call removeDatasetFromIndex() directly.
+    path('remove_dataset/<int:dsid>', staff_member_required(removeDatasetFromIndex), name='remove-dataset'),
 
 ]
 if settings.DEBUG is True:

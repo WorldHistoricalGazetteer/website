@@ -9,6 +9,7 @@ from urllib.parse import unquote_plus
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
+from django.contrib.auth.decorators import login_required
 from django.contrib.gis.db.models.aggregates import Union
 from django.contrib.gis.db.models.functions import Centroid, Envelope
 from django.core.serializers import serialize
@@ -33,10 +34,15 @@ from elastic.es_utils import findPortalPlaces, findPortalPIDs
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
+@login_required
 def defer_review(request, pid, auth, last):
     logger.debug('defer_review() pid: %s, auth: %s, last: %s', pid, auth, last)
     p = get_object_or_404(Place, pk=pid)
-    
+    # Reconciliation review work: owners, collaborators, staff/admins of the place's dataset
+    # (Dataset.user_can_edit); otherwise the same 404 as a missing place. No check before 2026-09-30.
+    if not p.dataset.user_can_edit(request.user):
+        raise Http404("No Place matches the given query.")
+
     if auth in ['whg', 'idx']:
         p.review_whg = 2
     elif auth.startswith('wd'):

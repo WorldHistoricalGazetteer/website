@@ -48,6 +48,10 @@ maplibregl.Map.prototype.newSource = function(ds, fc = null) {
 			map.addSource(`${ds.metadata.ds_type}_${ds.metadata.id}_${layer}`, {
 				'type': 'geojson',
 				'data': ds[layer],
+				// Already HTML-escaped server-side (utils/mapdata.py attribution_from_csl;
+				// maplibre GHSA-jrc7-96c5-q579). Do NOT escape again here: that is the one
+				// escape point for this path. (The ds_id branch above escapes client-side
+				// in attributionString() instead, because its text arrives raw.)
 				'attribution': ds.metadata.attribution,
 			});
 		});

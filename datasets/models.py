@@ -384,6 +384,56 @@ class Dataset(models.Model):
             return False
         return bool(user.is_staff or self.owners.filter(id=user.id).exists())
 
+    def user_can_view(self, user):
+        """True if ``user`` may see this dataset's content (places, map data, citation, files).
+
+        A public dataset is visible to everyone, including anonymous users. A non-public
+        (``public=False``) dataset is visible only to its owner(s), its collaborators (the
+        existing ``collaborators`` notion, which includes the ``whg_team`` group), and staff /
+        admins (``is_superuser``, ``is_staff``, or the ``whg_admins`` group used by
+        ``DatasetContextMixin._is_admin``). Callers should answer "no" with a 404, not a 403,
+        so a private dataset's id or label is not confirmed to exist (decision 2026-09-30).
+        """
+        if self.public:
+            return True
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if user.is_superuser or user.is_staff:
+            return True
+        if self.owner_id is not None and self.owner_id == user.id:
+            return True
+        if user.groups.filter(name="whg_admins").exists():
+            return True
+        if self.owners.filter(id=user.id).exists():
+            return True
+        return self.collaborators.filter(id=user.id).exists()
+
+    def user_can_manage(self, user):
+        """True if ``user`` may take destructive/administrative actions on this dataset
+        (e.g. delete it): its owner(s) and staff/admins only — NOT collaborators, and never
+        anonymous users. Callers should answer "no" with a 404, as for ``user_can_view``."""
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        if user.is_superuser or user.is_staff:
+            return True
+        if self.owner_id is not None and self.owner_id == user.id:
+            return True
+        if user.groups.filter(name="whg_admins").exists():
+            return True
+        return self.owners.filter(id=user.id).exists()
+
+    def user_can_edit(self, user):
+        """True if ``user`` may do the reconciliation work collaborators legitimately do
+        (start tasks, review hits, undo a match, accept pass-0 hits, edit the metadata form):
+        everyone ``user_can_manage`` allows, plus collaborators (the existing ``collaborators``
+        notion, which includes the ``whg_team`` group). Never anonymous users. Callers answer
+        "no" with a 404, as for ``user_can_view``."""
+        if self.user_can_manage(user):
+            return True
+        if not user or not getattr(user, "is_authenticated", False):
+            return False
+        return self.collaborators.filter(id=user.id).exists()
+
     # list of dataset place_id values
     @property
     def placeids(self):
