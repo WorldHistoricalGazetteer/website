@@ -17,6 +17,7 @@ from django.db.models.signals import post_save, post_delete
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.html import escape
 from django_redis import get_redis_connection
 from shapely.geometry.geo import shape, mapping
 
@@ -33,6 +34,15 @@ PENDING_REFRESH_KEY = "mapdata:pending_refresh"
 
 
 def mapdata(request, category, id, refresh=False, carousel=False):
+    # Private datasets are private (decision 2026-09-30). This check MUST run before
+    # generate_mapdata(): that function serves from a file-based cache shared by every
+    # requester, so a gate placed after it (or inside it) would be bypassed on a cache hit.
+    # A dataset the requester may not view gets the same 404 as one that does not exist,
+    # so ids are not confirmed. Collections stay viewable by link and are not gated here.
+    if category == "datasets":
+        ds = Dataset.objects.filter(pk=id).first()
+        if ds is None or not ds.user_can_view(request.user):
+            return JsonResponse({'error': 'Not found'}, status=404)
     try:
         data = generate_mapdata(category, id, refresh)
         if carousel:
@@ -875,6 +885,13 @@ def attribution_from_csl(citation, max_title_length=60):
     """
     Returns a condensed attribution string from a CSL citation dict.
     Format: "Author(s), Year – Title"
+
+    The result is placed verbatim into a MapLibre source ``attribution``, which MapLibre
+    renders as HTML (and whose sanitiser is bypassable: GHSA-jrc7-96c5-q579). Every part
+    here is user-entered (dataset/collection title, creator names, issued date), so each is
+    HTML-escaped HERE, after truncation (so an entity is never cut in half). The result is a
+    plain, already-escaped string: the client (whg_maplibre.js newSource, mapdata branch)
+    passes ``metadata.attribution`` through unchanged and must NOT escape it again.
     """
     authors = []
     for author in citation.get("author", []):
@@ -907,6 +924,12 @@ def attribution_from_csl(citation, max_title_length=60):
     title = citation.get("title", "")
     if len(title) > max_title_length:
         title = title[: max_title_length - 1] + "…"
+
+    # Escape the user-derived pieces (see docstring). The f-string below builds a plain str
+    # from escape()'s SafeString pieces, so the output stays an ordinary string.
+    author_str = escape(author_str)
+    year = escape(year)
+    title = escape(title)
 
     return f"{author_str}, {year} – {title}" if title else f"{author_str}, {year}"
 

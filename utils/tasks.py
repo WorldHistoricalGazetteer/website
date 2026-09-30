@@ -50,6 +50,9 @@ def downloader(request, *args, **kwargs):
             # Block downloads of datasets flagged non-downloadable.
             if dsid:
                 ds = Dataset.objects.filter(id=dsid).first()
+                # Private datasets are private: 404 unless the requester may view it.
+                if ds and not ds.user_can_view(user):
+                    return HttpResponse(status=404, content='Not found.')
                 if ds and not ds.downloadable:
                     return HttpResponse(
                         status=403,

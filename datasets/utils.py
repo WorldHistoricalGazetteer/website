@@ -14,6 +14,7 @@ import simplejson as json
 from django.conf import settings
 from django.http import FileResponse, JsonResponse, HttpResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_POST
 from django.views.generic import View
 
 from datasets.models import Dataset, Hit, DatasetFile
@@ -61,8 +62,55 @@ __all__ = [
     'getQ', 'post_recon_update', 'aat_lookup', 'classy',
     'roundy', 'fixName', 'parsedates_tsv',
     'volunteer_offer', 'toggle_volunteers', 'download_file',
-    'download_dataset', 'aliasIt', 'UpdateCountsView'
+    'download_dataset', 'aliasIt', 'UpdateCountsView',
+    'get_viewable_dataset_or_404', 'get_editable_dataset_or_404',
+    'get_manageable_dataset_or_404', 'ajax_dataset_gate',
 ]
+
+
+def get_viewable_dataset_or_404(user, **lookup):
+    """Fetch a Dataset by ``lookup`` and 404 unless ``user`` may view it.
+
+    Private datasets are private (decision 2026-09-30): see ``Dataset.user_can_view``.
+    A dataset that exists but may not be viewed raises the same Http404 as one that does
+    not exist, so a private dataset's id/label is not confirmed.
+    """
+    ds = get_object_or_404(Dataset, **lookup)
+    if not ds.user_can_view(user):
+        raise Http404("No Dataset matches the given query.")
+    return ds
+
+
+def get_editable_dataset_or_404(user, **lookup):
+    """As ``get_viewable_dataset_or_404``, but 404 unless ``user`` may edit (owners,
+    collaborators, staff/admins: ``Dataset.user_can_edit``). Never true for anonymous users."""
+    ds = get_object_or_404(Dataset, **lookup)
+    if not ds.user_can_edit(user):
+        raise Http404("No Dataset matches the given query.")
+    return ds
+
+
+def get_manageable_dataset_or_404(user, **lookup):
+    """As ``get_viewable_dataset_or_404``, but 404 unless ``user`` may manage (owners and
+    staff/admins, NOT collaborators: ``Dataset.user_can_manage``)."""
+    ds = get_object_or_404(Dataset, **lookup)
+    if not ds.user_can_manage(user):
+        raise Http404("No Dataset matches the given query.")
+    return ds
+
+
+def ajax_dataset_gate(request, getter, **lookup):
+    """For AJAX write endpoints: return ``(dataset, None)`` if the requester passes ``getter``
+    (one of the ``get_*_dataset_or_404`` functions), else ``(None, JsonResponse)``: 401 for an
+    anonymous requester (a login redirect would reach jQuery as a 200 "success"), and the same
+    404 for "not permitted" as for "does not exist", so a private dataset is not confirmed."""
+    if not getattr(request.user, "is_authenticated", False):
+        return None, JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
+    try:
+        return getter(request.user, **lookup), None
+    except (Http404, ValueError, TypeError):
+        # ValueError/TypeError: a missing or non-numeric id in the POST body.
+        return None, JsonResponse({'status': 'error', 'message': 'Dataset not found'}, status=404)
 
 
 def volunteer_offer(request, ds):
@@ -119,9 +167,11 @@ def volunteer_offer(request, ds):
     return 'volunteer offer for ' + ds
 
 
+@require_POST
 def toggle_volunteers(request):
     """
-    Toggle volunteer acceptance for a dataset.
+    Toggle volunteer acceptance for a dataset. Owners and staff/admins only (it had no
+    check at all before 2026-09-30): 401 JSON if anonymous, 404 JSON if not permitted.
 
     Args:
         request: POST request with is_checked and dataset_id
@@ -129,13 +179,13 @@ def toggle_volunteers(request):
     Returns:
         JsonResponse: Success status
     """
-    if request.method == 'POST':
-        is_checked = request.POST.get('is_checked') == 'true'
-        dataset_id = request.POST.get('dataset_id')
-        dataset = Dataset.objects.get(id=dataset_id)
-        dataset.volunteers = is_checked
-        dataset.save()
-        return JsonResponse({'status': 'success'})
+    dataset, denied = ajax_dataset_gate(
+        request, get_manageable_dataset_or_404, id=request.POST.get('dataset_id'))
+    if denied:
+        return denied
+    dataset.volunteers = request.POST.get('is_checked') == 'true'
+    dataset.save()
+    return JsonResponse({'status': 'success'})
 
 
 def download_file(request, *args, **kwargs):
@@ -149,7 +199,7 @@ def download_file(request, *args, **kwargs):
     Returns:
         FileResponse: File download response
     """
-    ds = get_object_or_404(Dataset, pk=kwargs['id'])
+    ds = get_viewable_dataset_or_404(request.user, pk=kwargs['id'])
     if not ds.downloadable:
         return HttpResponse(
             'This dataset is not available for download; '
@@ -180,6 +230,9 @@ def download_dataset(request, file_id):
     """
     try:
         fileobj = get_object_or_404(DatasetFile, pk=file_id)
+        # Private datasets are private: same 404 as a missing file (handled below).
+        if not fileobj.dataset_id.user_can_view(request.user):
+            raise Http404
         if not fileobj.dataset_id.downloadable:
             return HttpResponse(
                 'This dataset is not available for download; '
@@ -249,7 +302,8 @@ class UpdateCountsView(View):
         Returns:
             JsonResponse: Dict of task counts
         """
-        ds = get_object_or_404(Dataset, id=request.GET.get('ds_id'))
+        # Private datasets are private: same 404 as a missing dataset.
+        ds = get_viewable_dataset_or_404(request.user, id=request.GET.get('ds_id'))
 
         def defcountfunc(taskname, pids):
             """Count deferred places by task type"""

@@ -24,6 +24,7 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Prefetch, Q
 from django.forms import modelformset_factory
 from django.http import (
+    Http404,
     HttpResponseRedirect,
     HttpResponseNotFound,
     JsonResponse, HttpResponseForbidden
@@ -68,6 +69,8 @@ from .services import _get_task_details, _get_hit_counts, _filter_unreviewed_pla
     _process_matching_decisions
 from .tasks import *
 from .utils import *
+from .utils import (get_viewable_dataset_or_404, get_editable_dataset_or_404,
+                    get_manageable_dataset_or_404, ajax_dataset_gate)
 
 es = settings.ES_CONN
 User = get_user_model()
@@ -331,6 +334,19 @@ class TaskPassCounterMixin:
 # VALIDATION VIEW
 # ============================================================================
 
+class EditOnPostMixin:
+    """For the dataset UpdateViews: their GET is view-gated (``get_object``), but a POST saves
+    ``DatasetDetailModelForm`` (owner, title, public, ...) onto the dataset, so it needs more
+    than view access — before 2026-09-30 any logged-in user could POST it to a PUBLIC dataset.
+    Owners, collaborators and staff/admins (``Dataset.user_can_edit``) keep the access the
+    templates give them; anyone else gets the same 404 as a missing dataset."""
+
+    def post(self, request, *args, **kwargs):
+        if not self.get_object().user_can_edit(request.user):
+            raise Http404("No Dataset matches the given query.")
+        return super().post(request, *args, **kwargs)
+
+
 class DatasetValidate(CreateView, FileHandlingMixin):
     """Validate and upload dataset files."""
 
@@ -504,7 +520,7 @@ class DatasetGalleryView(ListView):
         return context
 
 
-class DatasetStatusView(LoginRequiredMixin, UpdateView, DatasetContextMixin,
+class DatasetStatusView(LoginRequiredMixin, EditOnPostMixin, UpdateView, DatasetContextMixin,
                         ReviewStatusMixin, AugmentationCountsMixin, TaskPassCounterMixin):
     """Dataset owner summary/status page."""
 
@@ -514,7 +530,8 @@ class DatasetStatusView(LoginRequiredMixin, UpdateView, DatasetContextMixin,
     template_name = 'datasets/ds_status.html'
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -574,7 +591,8 @@ class DatasetStatusView(LoginRequiredMixin, UpdateView, DatasetContextMixin,
         return context
 
 
-class DatasetMetadataView(LoginRequiredMixin, UpdateView, DatasetContextMixin, AugmentationCountsMixin):
+class DatasetMetadataView(LoginRequiredMixin, EditOnPostMixin, UpdateView, DatasetContextMixin,
+                          AugmentationCountsMixin):
     """Dataset owner metadata page."""
 
     login_url = '/accounts/login/'
@@ -599,7 +617,8 @@ class DatasetMetadataView(LoginRequiredMixin, UpdateView, DatasetContextMixin, A
         return super().form_invalid(form)
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -651,7 +670,8 @@ class DatasetBrowseView(LoginRequiredMixin, DetailView, DatasetContextMixin):
     template_name = 'datasets/ds_browse.html'
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -687,7 +707,8 @@ class DatasetPlacesView(DetailView, DatasetContextMixin):
     unavailable_template_name = "main/503.html"
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get(self, request, *args, **kwargs):
         ds = self.get_object()
@@ -729,7 +750,8 @@ class DatasetReconcileView(LoginRequiredMixin, DetailView, ReviewStatusMixin):
     template_name = 'datasets/ds_reconcile.html'
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -770,7 +792,8 @@ class DatasetCollabView(LoginRequiredMixin, DetailView, DatasetContextMixin):
     template_name = 'datasets/ds_collab.html'
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -792,7 +815,8 @@ class DatasetAddTaskView(LoginRequiredMixin, DetailView):
     template_name = 'datasets/ds_addtask.html'
 
     def get_object(self):
-        dataset = get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        dataset = get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
         self.logger.debug('Retrieved dataset object: %s', dataset)
         return dataset
 
@@ -899,7 +923,8 @@ class DatasetLogView(LoginRequiredMixin, DetailView, DatasetContextMixin):
     template_name = 'datasets/ds_log.html'
 
     def get_object(self):
-        return get_object_or_404(Dataset, id=self.kwargs.get("id"))
+        # Private datasets are private: 404 unless owner/collaborator/staff/admin.
+        return get_viewable_dataset_or_404(self.request.user, id=self.kwargs.get("id"))
 
     def get_context_data(self, *args, **kwargs):
         context = super().get_context_data(*args, **kwargs)
@@ -1009,23 +1034,30 @@ class DatasetCreateEmptyView(LoginRequiredMixin, CreateView, FileHandlingMixin):
         return redirect(f'/datasets/{dsobj.id}/summary')
 
 
-class DatasetDeleteView(DeleteView):
-    """Delete dataset with cleanup."""
+class DatasetDeleteView(LoginRequiredMixin, DeleteView):
+    """Delete dataset with cleanup. Owner(s) and staff/admins only.
+
+    Before 2026-09-30 this view had no login or ownership check at all, so anyone could
+    delete any dataset by id. Also, since Django 4.0 DeleteView handles POST through
+    ``form_valid()``, so the old overridden ``delete()`` never ran on a normal submit and the
+    file/index cleanup was skipped; the cleanup now lives in ``form_valid()``.
+    """
 
     template_name = 'datasets/dataset_delete.html'
     model = Dataset
 
-    def delete(self, request, *args, **kwargs):
-        self.object = self.get_object()
+    def get_object(self, queryset=None):
+        obj = super().get_object(queryset)
+        if not obj.user_can_manage(self.request.user):
+            raise Http404("No dataset found matching the query")
+        return obj
 
-        # Custom deletion logic
-        dataset_file_delete(self.object)
-
-        if self.object.ds_status == 'indexed':
-            pids = list(self.object.placeids)
-            removePlacesFromIndex(es, 'whg', pids)
-
-        self.object.delete()
+    def form_valid(self, form):
+        ds = self.object  # set (and permission-checked) by BaseDeleteView.post()
+        dataset_file_delete(ds)
+        if ds.ds_status == 'indexed':
+            removePlacesFromIndex(es, 'whg', list(ds.placeids))
+        ds.delete()
         return HttpResponseRedirect(self.get_success_url())
 
     def get_context_data(self, **kwargs):
@@ -1041,14 +1073,20 @@ class DatasetDeleteView(DeleteView):
 # FUNCTIONAL VIEWS (Reconciliation, Review, Updates)
 # ============================================================================
 
+@login_required
 def review(request, dsid, tid, passnum):
     """
     Handle reconciliation review for Wikidata or WHG index.
     GET: Returns review page
     POST: Processes user matching decisions
+
+    Owners, collaborators and staff/admins only (``Dataset.user_can_edit``), and the task
+    must belong to the dataset; otherwise 404. Before 2026-09-30 there was no check at all.
     """
     pid = request.GET.get("pid")
-    ds = get_object_or_404(Dataset, id=dsid)
+    ds = get_editable_dataset_or_404(request.user, id=dsid)
+    if not ds.tasks.filter(task_id=tid).exists():
+        raise Http404("No task matches the given query.")
     task, auth, authname, kwargs, test = _get_task_details(tid)
     record_list, current_passnum = _filter_unreviewed_places(ds, tid, passnum, auth)
     review_page, review_field = _get_review_page_and_field(auth)
@@ -1176,12 +1214,14 @@ def review(request, dsid, tid, passnum):
     return render(request, f"datasets/{review_page}", context=context)
 
 
+@login_required
 def ds_recon(request, pk):
     """
     Initiate Celery reconciliation task.
     Runs align_[wdlocal|wd|idx] against Elasticsearch indexes.
+    Owners, collaborators and staff/admins only (``Dataset.user_can_edit``); otherwise 404.
     """
-    ds = get_object_or_404(Dataset, id=pk)
+    ds = get_editable_dataset_or_404(request.user, id=pk)
     user = request.user
 
     if request.method != 'POST':
@@ -1260,17 +1300,30 @@ def ds_recon(request, pk):
         return redirect(f'/datasets/{ds.id}/reconcile')
 
 
+@require_POST
 def task_delete(request, tid, scope="task"):
-    """Initiate background deletion of reconciliation task results."""
+    """Initiate background deletion of reconciliation task results.
+
+    POST only (it was a state-changing GET), and only by those who manage the task's
+    dataset (owners, staff/admins: ``Dataset.user_can_manage``). Anonymous: 401 JSON. A task
+    the requester may not manage gets the same 404 JSON as a task that does not exist.
+    Before 2026-09-30 anyone, logged in or not, could delete any task by id.
+    """
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
+
+    not_found = JsonResponse({
+        'status': 'error',
+        'message': f'Task with ID {tid} does not exist'
+    }, status=404)
     try:
         tr = TaskResult.objects.get(task_id=tid)
-    except TaskResult.DoesNotExist:
-        return JsonResponse({
-            'status': 'error',
-            'message': f'Task with ID {tid} does not exist'
-        }, status=404)
-
-    dsid = int(tr.task_args[2:-3])
+        dsid = int(tr.task_args[2:-3])
+    except (TaskResult.DoesNotExist, TypeError, ValueError):
+        return not_found
+    ds, denied = ajax_dataset_gate(request, get_manageable_dataset_or_404, id=dsid)
+    if denied:
+        return not_found
 
     if scope == 'task':
         tr.status = 'ARCHIVED'
@@ -1329,17 +1382,27 @@ def task_archive(tid, prior):
             PlaceGeom.objects.filter(task_id=tid).delete()
 
 
+@login_required
 def match_undo(request, ds, tid, pid):
     """
     Undo last review match action.
     - Delete any geoms or links created
     - Reset flags for hit.reviewed and place.review_xxx
+
+    Owners, collaborators and staff/admins only (``Dataset.user_can_edit``); the task and the
+    place must both belong to dataset ``ds`` (before 2026-09-30 there was no check, and tid/pid
+    were not tied to ``ds`` at all). Otherwise 404, before anything is deleted.
     """
+    dataset = get_editable_dataset_or_404(request.user, id=ds)
+    task = dataset.tasks.filter(task_id=tid).first()
+    if task is None:
+        raise Http404("No task matches the given query.")
+    place = get_object_or_404(Place, pk=pid, dataset_id=dataset.label)
+
     PlaceGeom.objects.filter(task_id=tid, place_id=pid).delete()
     PlaceLink.objects.filter(task_id=tid, place_id=pid).delete()
 
-    tasktype = TaskResult.objects.get(task_id=tid).task_name[6:]
-    place = Place.objects.get(pk=pid)
+    tasktype = task.task_name[6:]
     place.defer_comments.delete()
 
     if tasktype.startswith('wd'):
@@ -1364,15 +1427,13 @@ def collab_add(request, dsid, v):
     username = request.POST.get("username")
     role = request.POST.get("role", "member")
 
+    # Owners and staff/admins only (Dataset.user_can_manage); otherwise the same 404 as a
+    # missing dataset. (Was superuser-or-owners with a 403.)
+    dataset = get_manageable_dataset_or_404(request.user, id=dsid)
+
     if not username:
         messages.info(request, "Username is required.")
         return HttpResponseRedirect(request.META.get("HTTP_REFERER"))
-
-    dataset = get_object_or_404(Dataset, id=dsid)
-
-    # Permission check
-    if not (request.user.is_superuser or request.user in dataset.owners.all()):
-        return HttpResponseForbidden("Not allowed")
 
     try:
         user = User.objects.get(username=username)
@@ -1402,8 +1463,12 @@ def collab_add(request, dsid, v):
     return redirect(f"/datasets/{dsid}/collab") if v == "1" else HttpResponseRedirect(request.META.get("HTTP_REFERER"))
 
 
+@login_required
 def collab_delete(request, uid, dsid, v):
-    """Remove collaborator from dataset."""
+    """Remove collaborator from dataset. Owners and staff/admins only
+    (``Dataset.user_can_manage``); otherwise 404. Before 2026-09-30 anyone could remove any
+    collaborator. (The UI offers no self-removal, so collaborators get no exception.)"""
+    get_manageable_dataset_or_404(request.user, id=dsid)
     get_object_or_404(DatasetUser, user_id_id=uid, dataset_id_id=dsid).delete()
     return redirect(f'/datasets/{dsid}/collab') if v == '1' else HttpResponseRedirect(
         request.META.get('HTTP_REFERER')
@@ -1425,6 +1490,8 @@ def dataset_file_delete(ds):
 
 def ds_list(request, label):
     """Fetch places in specified dataset (utility for place collections)."""
+    # Private datasets are private: 404 (not an empty list) unless the requester may view it.
+    get_viewable_dataset_or_404(request.user, label=label)
     qs = Place.objects.filter(dataset=label)
     geoms = [
         {
@@ -1439,9 +1506,13 @@ def ds_list(request, label):
 
 @require_POST
 def update_vis_parameters(request, *args, **kwargs):
-    """Update visualization parameters on ds_status page."""
+    """Update visualization parameters on ds_status page. Owners and staff/admins only
+    (``Dataset.user_can_manage``): 401 JSON if anonymous, 404 JSON if not permitted."""
+    dataset, denied = ajax_dataset_gate(
+        request, get_manageable_dataset_or_404, pk=request.POST.get('ds_id'))
+    if denied:
+        return denied
     try:
-        ds_id = request.POST.get('ds_id')
         checked = request.POST.get('checked') == 'true'
 
         if checked:
@@ -1457,7 +1528,6 @@ def update_vis_parameters(request, *args, **kwargs):
                 'max': {'tabulate': False, 'temporal_control': 'none', 'trail': False}
             }
 
-        dataset = get_object_or_404(Dataset, pk=ds_id)
         dataset.vis_parameters = vis_parameters
         dataset.save()
 
@@ -1469,25 +1539,27 @@ def update_vis_parameters(request, *args, **kwargs):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@csrf_exempt
+@require_POST
 def update_volunteers_text(request):
-    """Update volunteers request text on ds_status page."""
-    if request.method == 'POST':
-        dataset_id = request.POST.get('dataset_id')
-        volunteers_text = request.POST.get('volunteers_text')
-        reset = request.POST.get('reset', 'false') == 'true'
+    """Update volunteers request text on ds_status page. Owners and staff/admins only
+    (``Dataset.user_can_manage``): 401 JSON if anonymous, 404 JSON if not permitted.
+    No longer @csrf_exempt: its only caller (builders-dataset-status.js) sends X-CSRFToken."""
+    dataset, denied = ajax_dataset_gate(
+        request, get_manageable_dataset_or_404, id=request.POST.get('dataset_id'))
+    if denied:
+        return denied
+    volunteers_text = request.POST.get('volunteers_text')
+    reset = request.POST.get('reset', 'false') == 'true'
+    dataset.volunteers_text = None if reset else volunteers_text
+    dataset.save()
 
-        dataset = get_object_or_404(Dataset, id=dataset_id)
-        dataset.volunteers_text = None if reset else volunteers_text
-        dataset.save()
-
-        return JsonResponse({'status': 'success'})
+    return JsonResponse({'status': 'success'})
 
 
 def dataset_citation(request, id):
     """Return dataset citation in CSL format."""
     try:
-        dataset = get_object_or_404(Dataset, id=id)
+        dataset = get_viewable_dataset_or_404(request.user, id=id)
         citation_data = json.loads(dataset.citation_csl)
         return JsonResponse(citation_data, safe=False)
     except Dataset.DoesNotExist:
@@ -1685,8 +1757,11 @@ def ds_update(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=400)
 
-    dsid = request.POST['dsid']
-    ds = get_object_or_404(Dataset, id=dsid)
+    # Owners and staff/admins only (Dataset.user_can_manage); before 2026-09-30 anyone could
+    # replace any dataset's file and rewrite its places. 401/404 JSON as for the other AJAX writes.
+    ds, denied = ajax_dataset_gate(request, get_manageable_dataset_or_404, id=request.POST.get('dsid'))
+    if denied:
+        return denied
     file_format = request.POST['format']
 
     # Keep previous recon/review results?
@@ -1698,6 +1773,17 @@ def ds_update(request):
     compare_result = compare_data['compare_result']
     tempfn = compare_data['tempfn']
     filename_new = compare_data['filename_new']
+
+    # Both paths come from the client: the source must be a temp file and the destination
+    # must stay inside media/, or this is an arbitrary file copy (e.g. settings into media/).
+    tmp_root = os.path.realpath(tempfile.gettempdir())
+    media_root = os.path.realpath('media')
+    src_real = os.path.realpath(str(tempfn))
+    dst_real = os.path.realpath(os.path.join('media', str(filename_new)))
+    if (os.path.commonpath([src_real, tmp_root]) != tmp_root
+            or os.path.commonpath([dst_real, media_root]) != media_root
+            or dst_real == media_root):
+        return JsonResponse({'error': 'Invalid file reference'}, status=400)
 
     dsfobj_cur = ds.files.order_by('-rev').first()
     rev_num = dsfobj_cur.rev
