@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from django.core.mail import BadHeaderError
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpResponse, JsonResponse, HttpResponseRedirect, HttpResponseServerError, Http404
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse_lazy
@@ -1883,49 +1884,66 @@ def is_url(url):
 """
 
 
+# create_link attaches a Link to one of these; the permission each needs.
+LINKABLE_MODELS = {'Collection': 'user_can_edit', 'CollectionGroup': 'user_can_manage'}
+
+
+@require_POST
 def create_link(request, *args, **kwargs):
-    if request.method == 'POST':
-        model = request.POST['model']
-        objectid = request.POST['objectid']
+    # A collection's links: collection editors (Collection.user_can_edit). A group's links:
+    # its manager (CollectionGroup.user_can_manage). 401 JSON if anonymous; 404 JSON if not
+    # permitted, not found, or ``model`` is not one of LINKABLE_MODELS (it used to be fed
+    # straight to apps.get_model, so any collection-app model name was accepted).
+    if not request.user.is_authenticated:
+        return JsonResponse({'status': 'error', 'message': 'Login required'}, status=401)
+    model = request.POST.get('model')
+    predicate = LINKABLE_MODELS.get(model)
+    not_found = JsonResponse({'status': 'error', 'message': 'Not found'}, status=404)
+    if predicate is None:
+        return not_found
+    try:
+        target = apps.get_model(f"collection.{model}").objects.get(id=request.POST.get('objectid'))
+    except (ObjectDoesNotExist, ValueError, TypeError):
+        return not_found
+    if not getattr(target, predicate)(request.user):
+        return not_found
 
-        uri = request.POST['uri']
-        if not is_url(uri):
-            return JsonResponse({'status': 'failed', 'result': 'bad uri'}, safe=False)
+    uri = request.POST['uri']
+    if not is_url(uri):
+        return JsonResponse({'status': 'failed', 'result': 'bad uri'}, safe=False)
 
-        label = request.POST['label']
-        link_type = request.POST['link_type']
-        # license = request.POST['license']
+    label = request.POST['label']
+    link_type = request.POST['link_type']
+    # license = request.POST['license']
 
-        # Collection or CollectionGroup
-        # from django.apps import apps
-        Model = apps.get_model(f"collection.{model}")
-        model_str = model.lower() if model == 'Collection' else 'collection_group'
-        obj = Model.objects.get(id=objectid)
-        gotlink = obj.related_links.filter(uri=uri)
-        # gotlink = obj.links.filter(uri=uri)
-        status, msg = ['', '']
-        # columns in Links table
-        # collection_id, collection_group_id, trace_annotation_id, place_id
-        if not gotlink:
-            try:
-                link = Link.objects.create(
-                    **{model_str: obj},  # instance identifier
-                    uri=uri,
-                    label=label,
-                    link_type=link_type
-                )
-                result = {'uri': link.uri, 'label': link.label,
-                          'link_type': link.link_type,
-                          'link_icon': link.get_link_type_display(),
-                          'id': link.id}
-                status = "ok"
-            except:
-                logger.debug(f'failed: {sys.exc_info()}')
-                status = "failed"
-                result = "Link *not* created...why?"
-        else:
-            result = 'dupe'
-        return JsonResponse({'status': status, 'result': result}, safe=False)
+    # Collection or CollectionGroup
+    model_str = model.lower() if model == 'Collection' else 'collection_group'
+    obj = target
+    gotlink = obj.related_links.filter(uri=uri)
+    # gotlink = obj.links.filter(uri=uri)
+    status, msg = ['', '']
+    # columns in Links table
+    # collection_id, collection_group_id, trace_annotation_id, place_id
+    if not gotlink:
+        try:
+            link = Link.objects.create(
+                **{model_str: obj},  # instance identifier
+                uri=uri,
+                label=label,
+                link_type=link_type
+            )
+            result = {'uri': link.uri, 'label': link.label,
+                      'link_type': link.link_type,
+                      'link_icon': link.get_link_type_display(),
+                      'id': link.id}
+            status = "ok"
+        except:
+            logger.debug(f'failed: {sys.exc_info()}')
+            status = "failed"
+            result = "Link *not* created...why?"
+    else:
+        result = 'dupe'
+    return JsonResponse({'status': status, 'result': result}, safe=False)
 
 
 def remove_link(request, *args, **kwargs):

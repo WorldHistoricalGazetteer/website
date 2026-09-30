@@ -69,7 +69,8 @@ urlpatterns = [
     path('update_vis_parameters/', views.update_vis_parameters, name='update-vis-parameters'),
 
     # function-based views to process a trace annotation
-    path('<int:id>/annotate', csrf_exempt(annotate), name="collection-annotate"),
+    # CSRF enforced (was csrf_exempt): the anno form now renders {% csrf_token %}.
+    path('<int:id>/annotate', annotate, name="collection-annotate"),
     path('annoform/', get_form, name="get_form"),
 
     # switch off active bit

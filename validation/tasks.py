@@ -208,13 +208,35 @@ def cleanup(task_id):
     logger.debug(f"Cleanup completed for task {task_id}.")
 
 
+def _task_owner_id(redis_client, task_id, status):
+    """The uploader's user id: ``owner_id`` on the task hash (``status``, decoded; written by
+    validate_file), else in ``{task_id}_metadata`` (where DatasetValidate.form_valid puts it;
+    covers tasks started before owner_id was put on the task hash, until create_dataset
+    deletes the metadata). None if absent or unparseable."""
+    raw = status.get('owner_id') or redis_client.hget(f"{task_id}_metadata", 'owner_id')
+    try:
+        return int(raw.decode('utf-8') if isinstance(raw, bytes) else raw)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def get_task_status(request, task_id):
+    """Poll (and, once finished, clean up) a validation task. This READS AND WRITES the
+    task's Redis state and can revoke its cleanup task, so it is limited to the uploader
+    (``_task_owner_id``) and staff/superusers: 401 JSON if anonymous,
+    and the same 404 JSON as a missing task if the task is someone else's."""
+    if not getattr(request.user, 'is_authenticated', False):
+        return JsonResponse({"status": "error", "message": "Login required"}, status=401)
+    not_found = JsonResponse({"status": "not_found", "message": "Task ID not found"}, status=404)
     current_time = timezone.now()
     redis_client = get_redis_client()
     status = redis_client.hgetall(task_id)
     if not status:
-        return JsonResponse({"status": "not_found", "message": "Task ID not found"}, status=404)
+        return not_found
     status = {k.decode('utf-8'): v.decode('utf-8') for k, v in status.items()}
+    if not (request.user.is_staff or request.user.is_superuser
+            or _task_owner_id(redis_client, task_id, status) == request.user.id):
+        return not_found
 
     # Calculate remaining features
     total_features = int(status.get('total_features', 0))

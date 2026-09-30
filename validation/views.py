@@ -473,6 +473,10 @@ def validate_file(request, dataset_metadata):
         'uploaded_filename': uploaded_filename,
         'label': dataset_metadata.get('label'),
         'cleanup_task_id': cleanup_task_id,
+        # The uploader, so get_task_status can refuse everyone else. Kept on the task hash
+        # (not only in {task_id}_metadata, which create_dataset deletes while the uploader
+        # is still polling for the dataset URL and map-data progress).
+        'owner_id': dataset_metadata.get('owner_id', ''),
     })
     redis_client.hset(f"{task_id}_metadata", mapping=dataset_metadata)
     logger.debug(f"Dataset metadata saved to redis: {dataset_metadata}")

@@ -12,6 +12,7 @@
 <!-- submits to traces.views.annotate() -->
 <form id="anno_form" data-action="{% url 'collection:collection-annotate' collection.id %}"
       enctype="multipart/form-data">
+	{% csrf_token %}
 	<input type="hidden" name="owner" value="{{ collection.owner_id }}"/>
 	<input type="hidden" name="place" value="{{ place.id }}"/>
 	<input type="hidden" name="collection" value="{{ collection.id }}"/>

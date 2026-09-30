@@ -28,8 +28,16 @@ from django.contrib.gis.db.models.functions import Centroid
 
 from elastic.es_utils import findPortalPIDs
 
+from .access import (
+    ajax_gate, login_required_json, not_found_json,
+    get_editable_collection_or_404, get_manageable_collection_or_404,
+    get_reviewable_collection_or_404, get_manageable_group_or_404,
+)
+from datasets.utils import get_viewable_dataset_or_404
 from .forms import CollectionModelForm, CollectionGroupModelForm
 from .models import *
+from django.core.exceptions import PermissionDenied
+from main.choices import STATUS_COLL
 from places.models import PlaceGeom, Place, CloseMatch
 from main.models import Log, Link
 from traces.forms import TraceAnnotationModelForm
@@ -52,7 +60,12 @@ def collection_citation(request, id):
         return JsonResponse({'error': 'Collection not found'}, status=404)
 
 
+@require_POST
 def join_group(request, *args, **kwargs):
+    # Joining needs a user to join (anonymous requests used to 500 on the create).
+    denied = login_required_json(request)
+    if denied:
+        return denied
     entered_code = request.POST.get('join_code', None)
     if entered_code is None:
         return JsonResponse({'msg': 'No code provided'}, safe=False)
@@ -124,8 +137,12 @@ def generate_unique_join_code(request):
 """ collection group join code setter """
 
 
+@require_POST
 def set_joincode(request, *args, **kwargs):
-    cg = CollectionGroup.objects.get(id=kwargs['cgid'])
+    # Group leader (manager) or staff only.
+    cg, denied = ajax_gate(request, get_manageable_group_or_404, what='Group', id=kwargs['cgid'])
+    if denied:
+        return denied
     cg.join_code = kwargs['join_code']
     cg.save()
     return JsonResponse({'join_code': cg.join_code})
@@ -134,8 +151,13 @@ def set_joincode(request, *args, **kwargs):
 """ sets collection to inactive, removing from lists """
 
 
+@require_POST
 def inactive(request, *args, **kwargs):
-    coll = Collection.objects.get(id=request.POST['id'])
+    # Collection managers only. (NB: Collection has no ``active`` field, so this is a no-op
+    # write; the only caller is commented out. Gated anyway.)
+    coll, denied = ajax_gate(request, get_manageable_collection_or_404, id=request.POST.get('id'))
+    if denied:
+        return denied
     coll.active = False
     coll.save()
     result = {"msg": "collection " + coll.title + '(' + str(coll.id) + ') flagged inactive'}
@@ -145,10 +167,21 @@ def inactive(request, *args, **kwargs):
 """ removes dataset from collection, refreshes page"""
 
 
+@login_required
 def remove_link(request, *args, **kwargs):
-    # print('kwargs', kwargs)
-    link = Link.objects.get(id=kwargs['id'])
-    # link = CollectionLink.objects.get(id=kwargs['id'])
+    # A collection's links: collection editors. A group's links: the group's manager.
+    # Anything else (place / annotation links): staff/admins only. Not permitted -> 404.
+    # Still a GET (plain <a href> in three templates); see report.
+    link = get_object_or_404(Link, id=kwargs['id'])
+    if link.collection_id:
+        allowed = link.collection.user_can_edit(request.user)
+    elif link.collection_group_id:
+        allowed = link.collection_group.user_can_manage(request.user)
+    else:
+        u = request.user
+        allowed = bool(u.is_superuser or u.is_staff or u.groups.filter(name='whg_admins').exists())
+    if not allowed:
+        raise Http404("No Link matches the given query.")
     link.delete()
     return HttpResponseRedirect(request.META.get('HTTP_REFERER'))
 
@@ -158,9 +191,23 @@ def remove_link(request, *args, **kwargs):
 """
 
 
+# Statuses a group leader may set from the group page (reviewed <-> group). Staff may set any
+# valid status.
+REVIEWER_STATUSES = ('group', 'reviewed')
+
+
+@require_POST
 def status_update(request, *args, **kwargs):
-    status = request.POST['status']
-    coll = Collection.objects.get(id=request.POST['coll'])
+    # Leader of the collection's group, or staff (Collection.user_can_review).
+    coll, denied = ajax_gate(request, get_reviewable_collection_or_404, id=request.POST.get('coll'))
+    if denied:
+        return denied
+    status = request.POST.get('status')
+    u = request.user
+    is_admin = bool(u.is_superuser or u.is_staff or u.groups.filter(name='whg_admins').exists())
+    allowed = [c[0] for c in STATUS_COLL] if is_admin else REVIEWER_STATUSES
+    if status not in allowed:
+        return JsonResponse({'status': 'error', 'message': 'Invalid status'}, status=400)
 
     coll.status = status
     coll.save()
@@ -169,9 +216,13 @@ def status_update(request, *args, **kwargs):
                         json_dumps_params={'ensure_ascii': False, 'indent': 2})
 
 
+@require_POST
 def nominator(request, *args, **kwargs):
-    nominated = True if request.POST['nominated'] == 'true' else False
-    coll = Collection.objects.get(id=request.POST['coll'])
+    # Leader of the collection's group, or staff (Collection.user_can_review).
+    coll, denied = ajax_gate(request, get_reviewable_collection_or_404, id=request.POST.get('coll'))
+    if denied:
+        return denied
+    nominated = True if request.POST.get('nominated') == 'true' else False
     if nominated:
         coll.nominated = True
         coll.status = 'nominated'
@@ -213,10 +264,23 @@ def nominator(request, *args, **kwargs):
 """
 
 
+@require_POST
 def group_connect(request, *args, **kwargs):
-    action = request.POST['action']
-    coll = Collection.objects.get(id=request.POST['coll'])
-    cg = CollectionGroup.objects.get(id=request.POST['group'])
+    # Submitting/withdrawing a collection is a manage action on the collection; submitting
+    # additionally needs the requester to be in the target group (a member, or its leader /
+    # staff), matching the builder's group dropdown (groups the user is a member of).
+    coll, denied = ajax_gate(request, get_manageable_collection_or_404, id=request.POST.get('coll'))
+    if denied:
+        return denied
+    action = request.POST.get('action')
+    try:
+        cg = CollectionGroup.objects.get(id=request.POST.get('group'))
+    except (CollectionGroup.DoesNotExist, ValueError, TypeError):
+        return not_found_json('Group')
+    if action == 'submit' and not (
+            cg.user_can_manage(request.user)
+            or CollectionGroupUser.objects.filter(collectiongroup=cg, user=request.user).exists()):
+        return not_found_json('Group')
     if action == 'submit':
         cg.collections.add(coll)
         coll.status = 'group'
@@ -239,8 +303,20 @@ def group_connect(request, *args, **kwargs):
 """
 
 
+# Roles the builder's sharing form offers ("Member", "Co-owner").
+COLLAB_ROLES = ('member', 'owner')
+
+
+@require_POST
 def collab_add(request, cid):
-    username = request.POST['username']
+    # Collection managers only (owner, co-owners, staff/admins) -- the builder shows the
+    # add form to ``user.is_superuser or is_owner``.
+    coll, denied = ajax_gate(request, get_manageable_collection_or_404, id=cid)
+    if denied:
+        return denied
+    username = request.POST.get('username', '')
+    if request.POST.get('role') not in COLLAB_ROLES:
+        return JsonResponse({'status': 'Invalid role'})
     response_data = {}
     try:
         user = get_object_or_404(User, username=username)
@@ -272,10 +348,28 @@ def collab_add(request, cid):
 """
 
 
+@require_POST
 def collab_remove(request, uid, cid):
+    # Collection managers only.
+    coll, denied = ajax_gate(request, get_manageable_collection_or_404, id=cid)
+    if denied:
+        return denied
     get_object_or_404(CollectionUser, user=uid, collection=cid).delete()
     response_data = {"status": "ok", "uid": uid}
     return JsonResponse(response_data)
+
+
+def _viewable_places_or_none(user, place_ids):
+    """The Place objects for ``place_ids`` if every one exists and its dataset is viewable by
+    ``user`` (Dataset.user_can_view), else None -- so a private dataset's places cannot be
+    pulled into a collection, and one bad id rejects the whole request before any write."""
+    places = {p.id: p for p in Place.objects.filter(id__in=place_ids).select_related('dataset')}
+    if len(places) != len(set(place_ids)):
+        return None
+    for p in places.values():
+        if p.dataset is not None and not p.dataset.user_can_view(user):
+            return None
+    return [places[i] for i in place_ids]
 
 
 def seq(coll):
@@ -303,39 +397,47 @@ def seq(coll):
 
 
 # TODO: essentially same as add_dataset(); needs refactor
+@require_POST
 def add_places(request, *args, **kwargs):
-    if request.method == 'POST':
-        user = request.user
-        status, msg = ['', '']
-        dupes = []
-        added = []
-        # print('add_places request', request.POST)
-        coll = Collection.objects.get(id=request.POST['collection'])
-        place_list = [int(i) for i in request.POST['place_list'].split(',')]
-        for p in place_list:
-            place = Place.objects.get(id=p)
-            gotplace = TraceAnnotation.objects.filter(collection=coll, place=place, archived=False)
-            if not gotplace:
-                t = TraceAnnotation.objects.create(
-                    place=place,
-                    src_id=place.src_id,
-                    collection=coll,
-                    motivation='locating',
-                    owner=user,
-                    anno_type='place',
-                    saved=0
-                )
-                # coll.places.add(p)
-                CollPlace.objects.create(
-                    collection=coll,
-                    place=place,
-                    sequence=seq(coll)
-                )
-                added.append(p)
-            else:
-                dupes.append(place.title)
-            msg = {"added": added, "dupes": dupes}
-        return JsonResponse({'status': status, 'msg': msg}, safe=False)
+    # Collection editors only; every place's dataset must be viewable by the requester.
+    coll, denied = ajax_gate(request, get_editable_collection_or_404, id=request.POST.get('collection'))
+    if denied:
+        return denied
+    try:
+        place_list = [int(i) for i in request.POST.get('place_list', '').split(',')]
+    except ValueError:
+        return not_found_json('Place')
+    places = _viewable_places_or_none(request.user, place_list)
+    if places is None:
+        return not_found_json('Place')
+    user = request.user
+    status, msg = ['', '']
+    dupes = []
+    added = []
+    for place in places:
+        p = place.id
+        gotplace = TraceAnnotation.objects.filter(collection=coll, place=place, archived=False)
+        if not gotplace:
+            t = TraceAnnotation.objects.create(
+                place=place,
+                src_id=place.src_id,
+                collection=coll,
+                motivation='locating',
+                owner=user,
+                anno_type='place',
+                saved=0
+            )
+            # coll.places.add(p)
+            CollPlace.objects.create(
+                collection=coll,
+                place=place,
+                sequence=seq(coll)
+            )
+            added.append(p)
+        else:
+            dupes.append(place.title)
+        msg = {"added": added, "dupes": dupes}
+    return JsonResponse({'status': status, 'msg': msg}, safe=False)
 
 
 """
@@ -353,6 +455,11 @@ def add_collection_places(request):
     response_data = {'status': 'success', 'msg': '', 'added_places': [], 'existing_places': [],
                      'payload_received': payload}
 
+    # Logged-in users only: a new collection needs an owner, an existing one needs edit rights.
+    denied = login_required_json(request)
+    if denied:
+        return denied
+
     # Perform data processing and database operations
     try:
         collection_id = payload.get('collection')
@@ -365,6 +472,16 @@ def add_collection_places(request):
 
         title = payload.get('title')
         include_all = payload.get('includeAll')
+
+        # The place's dataset must be viewable (private datasets stay private); an existing
+        # collection must be editable by the requester. Both checked before any write.
+        if _viewable_places_or_none(request.user, [place_id]) is None:
+            return not_found_json('Place')
+        if collection_id != -1:
+            try:
+                get_editable_collection_or_404(request.user, id=collection_id)
+            except Http404:
+                return not_found_json()
 
         if collection_id == -1:
             # Create a new collection
@@ -440,34 +557,44 @@ def add_collection_places(request):
 """
 
 
+@require_POST
 def archive_traces(request, *args, **kwargs):
-    if request.method == 'POST':
-        coll = Collection.objects.get(id=request.POST['collection'])
-        place_list = [int(i) for i in request.POST['place_list'].split(',')]
-        # remove CollPlace, archive TraceAnnotation
-        for pid in place_list:
-            place = Place.objects.get(id=pid)
-            if place in coll.places.all():
-                # print('collection place', place)
-                coll.places.remove(place)
-            if place.traces:
-                # can be only one but .update only works on filter
-                TraceAnnotation.objects.filter(collection=coll, place=place).update(archived=True)
-        # reset sequence after removals (fill in the gaps)
-        coll_places = CollPlace.objects.filter(collection=coll).order_by('sequence')
-        for new_sequence, coll_place in enumerate(coll_places):
-            coll_place.sequence = new_sequence
-            coll_place.save()
-        return JsonResponse({'result': str(len(place_list)) + ' places removed, we think'}, safe=False)
+    # Collection editors only.
+    coll, denied = ajax_gate(request, get_editable_collection_or_404, id=request.POST.get('collection'))
+    if denied:
+        return denied
+    try:
+        place_list = [int(i) for i in request.POST.get('place_list', '').split(',')]
+    except ValueError:
+        return not_found_json('Place')
+    # remove CollPlace, archive TraceAnnotation
+    for pid in place_list:
+        place = Place.objects.get(id=pid)
+        if place in coll.places.all():
+            # print('collection place', place)
+            coll.places.remove(place)
+        if place.traces:
+            # can be only one but .update only works on filter
+            TraceAnnotation.objects.filter(collection=coll, place=place).update(archived=True)
+    # reset sequence after removals (fill in the gaps)
+    coll_places = CollPlace.objects.filter(collection=coll).order_by('sequence')
+    for new_sequence, coll_place in enumerate(coll_places):
+        coll_place.sequence = new_sequence
+        coll_place.save()
+    return JsonResponse({'result': str(len(place_list)) + ' places removed, we think'}, safe=False)
 
 
 """ update sequence of annotated places """
 
 
+@require_POST
 def update_sequence(request, *args, **kwargs):
+    # Collection editors only.
+    coll, denied = ajax_gate(request, get_editable_collection_or_404, id=request.POST.get('coll_id'))
+    if denied:
+        return denied
     new_sequence = json.loads(request.POST['seq'])
-    # print('new_sequence', new_sequence)
-    cid = request.POST['coll_id']
+    cid = coll.id
     for cp in CollPlace.objects.filter(collection=cid):
         cp.sequence = new_sequence[str(cp.place_id)]
         cp.save()
@@ -479,17 +606,21 @@ create place collection on the fly; return id for adding place(s) to it
 """
 
 
+@require_POST
 def flash_collection_create(request, *args, **kwargs):
-    if request.method == 'POST':
-        collobj = Collection.objects.create(
-            owner=request.user,
-            title=request.POST['title'],
-            collection_class='place',
-            description='new collection',
-            # keywords = '{replace, these, please}'
-        )
-        collobj.save()
-        result = {"id": collobj.id, 'title': collobj.title}
+    # A new collection needs an owner (anonymous requests used to 500).
+    denied = login_required_json(request)
+    if denied:
+        return denied
+    collobj = Collection.objects.create(
+        owner=request.user,
+        title=request.POST['title'],
+        collection_class='place',
+        description='new collection',
+        # keywords = '{replace, these, please}'
+    )
+    collobj.save()
+    result = {"id": collobj.id, 'title': collobj.title}
     return JsonResponse(result, safe=False)
 
 
@@ -591,9 +722,13 @@ class ListDatasetView(View):
 
 
 # TODO: essentially same as add_places(); needs refactor
+@login_required
 def add_dataset_places(request, *args, **kwargs):
-    coll = Collection.objects.get(id=kwargs['coll_id'])
-    ds = Dataset.objects.get(id=kwargs['ds_id'])
+    # Collection editors only, and the dataset must be viewable by the requester (a private
+    # dataset cannot be pulled into a collection). Not permitted -> 404. Still a GET: the
+    # caller is document.location.href in the builders-collection-place bundle.
+    coll = get_editable_collection_or_404(request.user, id=kwargs['coll_id'])
+    ds = get_viewable_dataset_or_404(request.user, id=kwargs['ds_id'])
     user = request.user
     status, msg = ['', '']
     dupes = []
@@ -634,8 +769,15 @@ def add_dataset_places(request, *args, **kwargs):
 
 
 def add_dataset(request, *args, **kwargs):
-    coll = Collection.objects.get(id=kwargs['coll_id'])
-    ds = Dataset.objects.get(id=kwargs['ds_id'])
+    # AJAX (GET, from the builders-collection-dataset bundle). Collection editors only, and
+    # the dataset must be viewable by the requester. 401 JSON anon, 404 JSON otherwise.
+    coll, denied = ajax_gate(request, get_editable_collection_or_404, id=kwargs['coll_id'])
+    if denied:
+        return denied
+    try:
+        ds = get_viewable_dataset_or_404(request.user, id=kwargs['ds_id'])
+    except Http404:
+        return not_found_json('Dataset')
 
     if not coll.datasets.filter(id=ds.id).exists():
         coll.datasets.add(ds)
@@ -713,12 +855,16 @@ def save_component_data(coll, component, headword, geometry, place_types):
 """
 
 
+@login_required
 def remove_dataset(request, *args, **kwargs):
-    coll = Collection.objects.get(id=kwargs['coll_id'])
-    ds = Dataset.objects.get(id=kwargs['ds_id'])
+    # Collection editors only; not permitted -> 404. No view check on the dataset: removing
+    # a dataset from a collection you can edit must stay possible even if it became private.
+    coll = get_editable_collection_or_404(request.user, id=kwargs['coll_id'])
+    ds = get_object_or_404(Dataset, id=kwargs['ds_id'])
 
-    # remove CollPlace records
-    CollPlace.objects.filter(place_id__in=ds.placeids).delete()
+    # remove CollPlace records -- of THIS collection only. (It used to filter on place ids
+    # alone, deleting that dataset's places from every collection that held them.)
+    CollPlace.objects.filter(collection=coll, place_id__in=ds.placeids).delete()
     # remove dataset from collections_dataset
     coll.datasets.remove(ds)
     # archive any non-blank trace annotations
@@ -756,8 +902,12 @@ def create_collection_group(request, *args, **kwargs):
 
 @require_POST
 def update_vis_parameters(request, *args, **kwargs):
+    # Collection editors only.
+    collection, denied = ajax_gate(request, get_editable_collection_or_404, id=request.POST.get('coll_id'))
+    if denied:
+        return denied
     try:
-        coll_id = request.POST.get('coll_id')
+        coll_id = collection.id
         checked = bool(request.POST.get('checked') == 'true')
 
         if checked:
@@ -773,8 +923,7 @@ def update_vis_parameters(request, *args, **kwargs):
                 'max': {'tabulate': False, 'temporal_control': 'none', 'trail': False}
             }
 
-        # Update the vis_parameters field of the collection
-        collection = get_object_or_404(Collection, id=coll_id)
+        # Update the vis_parameters field of the (gated) collection
         collection.vis_parameters = vis_parameters
         collection.save()
 
@@ -804,6 +953,9 @@ class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
 
     def get_form_kwargs(self, **kwargs):
         kwargs = super(PlaceCollectionCreateView, self).get_form_kwargs()
+        # Only lets the form refuse datasets the requester may not view (see
+        # CollectionModelForm.clean_datasets); does not change the group dropdown.
+        kwargs['viewer'] = self.request.user
         return kwargs
 
     def get_context_data(self, *args, **kwargs):
@@ -832,6 +984,8 @@ class PlaceCollectionCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         context = self.get_context_data()
+        # The creator owns the collection, whatever ``owner`` the POST carried.
+        form.instance.owner = self.request.user
         self.object = form.save()
 
         # TODO: write log entry
@@ -875,27 +1029,29 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
 
     def get_form_kwargs(self, **kwargs):
         kwargs = super(PlaceCollectionUpdateView, self).get_form_kwargs()
-        kwargs.update({'user': self.request.user})
+        kwargs.update({'user': self.request.user, 'viewer': self.request.user})
         return kwargs
 
     def get_object(self):
+        # Collection editors only (Collection.user_can_edit); 404 otherwise, GET and POST.
         id_ = self.kwargs.get("id")
-        return get_object_or_404(Collection, id=id_)
+        return get_editable_collection_or_404(self.request.user, id=id_)
 
     def form_invalid(self, form):
         context = {'form': form}
         return self.render_to_response(context=context)
 
     def form_valid(self, form):
-        context = self.get_context_data()
-        if not context['is_owner'] and not context['is_member'] and not context['whgteam']:
-            # messages.error(self.request, 'You do not have permission to save the form.')
-            return redirect('/collections/' + str(self.object.id) + '/update_pl')
+        # Permission is enforced in get_object (user_can_edit), for GET and POST alike.
         data = form.cleaned_data
         id_ = self.kwargs.get("id")
+        original_owner_id = Collection.objects.filter(id=self.object.id).values_list('owner_id', flat=True).first()
 
         try:
             obj = form.save(commit=False)
+            # Ownership is not transferable through the builder form (it posts the current
+            # owner back as a hidden field); keep the stored owner.
+            obj.owner_id = original_owner_id
             if obj.group:
                 obj.status = 'group'
                 obj.submit_date = date.today()
@@ -943,6 +1099,8 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         context['is_member'] = True if user in coll.owners or user in coll.collaborators else False
         context['whgteam'] = True if user.groups.filter(name__in=['whg_team', 'editorial']).exists() else False
         context['whg_admins'] = True if user.groups.filter(name__in=['whg_admins', 'editorial']).exists() else False
+        context['can_edit'] = coll.user_can_edit(user)
+        context['can_manage'] = coll.user_can_manage(user)
         context['collabs'] = CollectionUser.objects.filter(collection=coll.id)
         context['mygroups'] = CollectionGroupUser.objects.filter(user_id=user)
         context['in_class'] = in_class
@@ -1035,10 +1193,17 @@ COLLECTION GROUPS
 """
 
 
-class CollectionGroupCreateView(CreateView):
+class CollectionGroupCreateView(LoginRequiredMixin, CreateView):
     form_class = CollectionGroupModelForm
     template_name = 'collection/collection_group_create.html'
     queryset = CollectionGroup.objects.all()
+
+    def dispatch(self, request, *args, **kwargs):
+        # Group leaders (group_leaders group / group_leader role) and staff/admins only --
+        # the people the dashboards offer "create group" to. Anonymous -> login page first.
+        if request.user.is_authenticated and not CollectionGroup.user_can_create(request.user):
+            raise PermissionDenied("Only group leaders can create collection groups.")
+        return super().dispatch(request, *args, **kwargs)
 
     #
     def get_form_kwargs(self, **kwargs):
@@ -1061,6 +1226,8 @@ class CollectionGroupCreateView(CreateView):
     def form_valid(self, form):
         context = {}
         if form.is_valid():
+            # The creator leads the group, whatever ``owner`` the POST carried.
+            form.instance.owner = self.request.user
             self.object = form.save()
             return HttpResponseRedirect(self.get_success_url())
         # else:
@@ -1104,12 +1271,15 @@ class CollectionGroupDetailView(DetailView):
         return context
 
 
-class CollectionGroupDeleteView(DeleteView):
+class CollectionGroupDeleteView(LoginRequiredMixin, DeleteView):
     template_name = 'collection/collection_group_delete.html'
 
     def get_object(self):
+        # Group manager (owner/leader) or staff/admins; 404 otherwise, GET and POST.
+        # (Django 4 DeleteView deletes in form_valid via self.object.delete(); there is no
+        # custom delete() cleanup here to migrate.)
         id_ = self.kwargs.get("id")
-        return get_object_or_404(CollectionGroup, id=id_)
+        return get_manageable_group_or_404(self.request.user, id=id_)
 
     def get_success_url(self):
         return reverse('dashboard-user')
@@ -1121,7 +1291,7 @@ class CollectionGroupDeleteView(DeleteView):
 """
 
 
-class CollectionGroupUpdateView(UpdateView):
+class CollectionGroupUpdateView(LoginRequiredMixin, UpdateView):
     form_class = CollectionGroupModelForm
     template_name = 'collection/collection_group_create.html'
 
@@ -1130,13 +1300,19 @@ class CollectionGroupUpdateView(UpdateView):
         return kwargs
 
     def get_object(self):
+        # Group manager (owner/leader) or staff/admins; 404 otherwise, GET and POST.
         id_ = self.kwargs.get("id")
-        return get_object_or_404(CollectionGroup, id=id_)
+        return get_manageable_group_or_404(self.request.user, id=id_)
 
     def form_valid(self, form):
         id_ = self.kwargs.get("id")
         if form.is_valid():
+            original_owner_id = CollectionGroup.objects.filter(id=self.object.id).values_list(
+                'owner_id', flat=True).first()
             obj = form.save(commit=False)
+            # The form posts owner=<the editing user> as a hidden field, which silently handed
+            # the group to whichever staff member saved it. Keep the stored leader.
+            obj.owner_id = original_owner_id
             obj.save()
             return redirect('/collections/group/' + str(id_) + '/update')
         else:
@@ -1215,6 +1391,7 @@ class DatasetCollectionCreateView(LoginRequiredMixin, CreateView):
     #
     def get_form_kwargs(self, **kwargs):
         kwargs = super(DatasetCollectionCreateView, self).get_form_kwargs()
+        kwargs['viewer'] = self.request.user
         return kwargs
 
     def form_invalid(self, form):
@@ -1224,6 +1401,8 @@ class DatasetCollectionCreateView(LoginRequiredMixin, CreateView):
 
     def form_valid(self, form):
         context = {}
+        # The creator owns the collection, whatever ``owner`` the POST carried.
+        form.instance.owner = self.request.user
         return super().form_valid(form)
 
     def get_context_data(self, *args, **kwargs):
@@ -1248,13 +1427,22 @@ class DatasetCollectionCreateView(LoginRequiredMixin, CreateView):
 """
 
 
-class DatasetCollectionUpdateView(UpdateView):
+class DatasetCollectionUpdateView(LoginRequiredMixin, UpdateView):
     form_class = CollectionModelForm
     template_name = 'collection/ds_collection_build.html'
 
+    def get_form_kwargs(self, **kwargs):
+        kwargs = super().get_form_kwargs()
+        kwargs['viewer'] = self.request.user
+        return kwargs
+
     def get_object(self):
-        id_ = self.kwargs.get("id")
-        return get_object_or_404(Collection, id=id_)
+        # Collection editors only (Collection.user_can_edit); 404 otherwise, GET and POST.
+        # Memoised: get_context_data calls it again.
+        if getattr(self, '_gated_object', None) is None:
+            id_ = self.kwargs.get("id")
+            self._gated_object = get_editable_collection_or_404(self.request.user, id=id_)
+        return self._gated_object
 
     def get_success_url(self):
         id_ = self.kwargs.get("id")
@@ -1262,7 +1450,11 @@ class DatasetCollectionUpdateView(UpdateView):
 
     def form_valid(self, form):
         if form.is_valid():
+            original_owner_id = Collection.objects.filter(id=self.object.id).values_list(
+                'owner_id', flat=True).first()
             obj = form.save(commit=False)
+            # Ownership is not transferable through the builder form; keep the stored owner.
+            obj.owner_id = original_owner_id
             obj.save()
             Log.objects.create(
                 # category, logtype, "timestamp", subtype, note, dataset_id, collection_id, user_id
@@ -1302,6 +1494,8 @@ class DatasetCollectionUpdateView(UpdateView):
         context['is_member'] = True if user in coll.owners or user in coll.collaborators else False
         context['is_admin'] = True if user.groups.filter(name__in=['whg_admins']).exists() else False
         context['whgteam'] = True if user.groups.filter(name__in=['whg_team', 'editorial']).exists() else False
+        context['can_edit'] = coll.user_can_edit(user)
+        context['can_manage'] = coll.user_can_manage(user)
         context['collabs'] = CollectionUser.objects.filter(collection=coll.id)
 
         vis_parameters = coll.vis_parameters
@@ -1405,12 +1599,15 @@ class DatasetCollectionBrowseView(DetailView):
 #     context['beta_or_better'] = True if self.request.user.groups.filter(name__in=['beta', 'whg_admins']).exists() else False
 #     return context
 
-class CollectionDeleteView(DeleteView):
+class CollectionDeleteView(LoginRequiredMixin, DeleteView):
     template_name = 'collection/collection_delete.html'
 
     def get_object(self):
+        # Collection managers only (owner, co-owners, staff/admins); 404 otherwise, GET and
+        # POST. (Django 4 DeleteView deletes in form_valid via self.object.delete(); there is
+        # no custom delete() cleanup here to migrate.)
         id_ = self.kwargs.get("id")
-        return get_object_or_404(Collection, id=id_)
+        return get_manageable_collection_or_404(self.request.user, id=id_)
 
     def get_success_url(self):
         return reverse('dashboard')
