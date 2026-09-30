@@ -51,7 +51,7 @@ class AttributionHelperTests(TestCase):
     def test_block_has_whg_overlay(self):
         block = attribution_block(['gn'])
         self.assertIn('sources', block)
-        self.assertEqual(block['whg']['spdx_id'], 'CC-BY-NC-4.0')
+        self.assertEqual(block['whg']['spdx_id'], 'CC-BY-4.0')
 
     # ── place#157: the aggregated block must state TERMS, not just names ──
 
@@ -98,7 +98,7 @@ class AttributionHelperTests(TestCase):
         """Attribution is supplementary — it must never break a result payload."""
         block = safe_attribution_block(namespaces=object())   # not iterable of str
         self.assertEqual(block['sources'], {})
-        self.assertEqual(block['whg']['spdx_id'], 'CC-BY-NC-4.0')
+        self.assertEqual(block['whg']['spdx_id'], 'CC-BY-4.0')
 
 
 class AttributionEndpointTests(TestCase):
