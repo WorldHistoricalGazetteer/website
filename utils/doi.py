@@ -297,7 +297,7 @@ def doi(type, id, event='publish'):
         'authorization': f"Basic {settings.DOI_ENCODED_CREDENTIALS}"
     }
 
-    logger.info(f"Headers: {headers}")
+    # Never log `headers`: the authorization header carries the DataCite credentials.
     logger.info(f"Attributes: {attributes}")
 
     # Send the request to DataCite API: POST for draft, PUT for update
