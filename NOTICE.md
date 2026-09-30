@@ -16,13 +16,16 @@ not create.
 
 - **WHG's curation and aggregation layer:** the linkage, reconciliation and editorial
   work WHG contributes on top of the sources it ingests is licensed
-  [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). This is an *overlay*.
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). This is an *overlay*.
   It is asserted **alongside** each source's own terms and **never instead of them**, and
   it does not extend to the underlying records. It is defined once, as
   `WHG_OVERLAY_LICENSE` in `whg/settings.py`, and applied through `licensing/statements.py`.
 
 - **WHG's own editorial content:** site pages, documentation and images created by WHG
-  are likewise [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
+  are likewise [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+  Both were CC BY-NC 4.0 until 30 September 2026. Material already distributed under that
+  licence keeps it; everything from that date is CC BY 4.0.
 
 - **Contributed datasets and collections:** licensed **individually by the contributor**,
   not by WHG, and not under any site-wide licence. The licence a contributor selected is

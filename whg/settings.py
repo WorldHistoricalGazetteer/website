@@ -728,12 +728,14 @@ DOI_ENCODED_CREDENTIALS = base64.b64encode(f"{DOI_USER_ID}:{DOI_PASSWORD}".encod
 
 # WHG's own curation/aggregation licence. Asserted ALONGSIDE each source's
 # rights (never instead of them) — source licences live on the licensing.License
-# model. Consumed by the DOI/download/render paths in later phases; defined here
-# so the overlay is a single source of truth.
+# model. Defined here so the overlay is a single source of truth.
+# CC BY 4.0 since 2026-09-30 (SG), previously CC BY-NC 4.0: WHG has nothing it could
+# realistically commercialise, and an NC layer over contributions granted under
+# CC BY 4.0 conflicted with that licence's §2(a)(5)(B).
 WHG_OVERLAY_LICENSE = {
-    "spdx_id": "CC-BY-NC-4.0",
-    "label": "Creative Commons Attribution-NonCommercial 4.0 International",
-    "url": "https://creativecommons.org/licenses/by-nc/4.0/",
+    "spdx_id": "CC-BY-4.0",
+    "label": "Creative Commons Attribution 4.0 International",
+    "url": "https://creativecommons.org/licenses/by/4.0/",
 }
 
 # Page-specific settings
