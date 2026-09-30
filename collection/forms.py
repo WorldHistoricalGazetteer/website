@@ -93,6 +93,9 @@ class CollectionModelForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         self.user = kwargs.pop('user', None)
+        # The requester, for clean_datasets. Separate from ``user`` so passing it does not
+        # change the group dropdown on views that never passed ``user``.
+        self.viewer = kwargs.pop('viewer', None)
         super(CollectionModelForm, self).__init__(*args, **kwargs)
         user_groups = CollectionGroup.objects.filter(members__user=self.user)
         self.fields['group'].queryset = user_groups
@@ -106,6 +109,22 @@ class CollectionModelForm(forms.ModelForm):
         from licensing.forms import clean_contributor_license
         return clean_contributor_license(
             self.cleaned_data.get('license'), context="Collection builder")
+
+    def clean_datasets(self):
+        """Refuse to ADD a dataset the requester may not view (private datasets are private,
+        decision 2026-09-30), so the builder form cannot pull one into a collection. Datasets
+        already in the collection are left alone. Only enforced when the view passes
+        ``viewer``."""
+        datasets = self.cleaned_data.get('datasets')
+        if self.viewer is None or not datasets:
+            return datasets
+        existing = set()
+        if self.instance and self.instance.pk:
+            existing = set(self.instance.datasets.values_list('id', flat=True))
+        for ds in datasets:
+            if ds.id not in existing and not ds.user_can_view(self.viewer):
+                raise forms.ValidationError("Select a valid choice. That choice is not one of the available choices.")
+        return datasets
 
     def save(self, commit=True):
         """Resolve the chosen SPDX id to the ``License`` FK.

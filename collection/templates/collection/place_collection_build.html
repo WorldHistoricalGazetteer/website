@@ -11,7 +11,7 @@
 
 {% block content %}
 <div class="container container-md" style="height: calc(100vh);">
-  {% if action == 'update' and not is_member and not whgteam %}
+  {% if action == 'update' and not can_edit %}
     <p>Access to this page is limited to the collection owner <b>{{ object.owner.name }}</b>
       ({{ object.owner.id }}) and designated collaborators.</p>
   {% else %}

@@ -17,19 +17,42 @@ from datasets.models import Dataset
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 
 
+@require_POST
 def annotate(request, *args, **kwargs):
+    """Save a trace annotation on a collection place. Collection editors only
+    (Collection.user_can_edit): 401 JSON if anonymous, 404 JSON if not permitted. CSRF is
+    enforced (no longer csrf_exempt): get_form renders {% csrf_token %} into the form, and
+    the builder posts FormData(#anno_form), which carries it."""
+    from collection.access import ajax_gate, get_editable_collection_or_404, not_found_json
     cid = kwargs.get('id')
+    coll, denied = ajax_gate(request, get_editable_collection_or_404, id=cid)
+    if denied:
+        return denied
     pid = request.POST.get('place')
     anno_id = request.POST.get('anno_id')
     saved = request.POST.get('saved')
-    coll = get_object_or_404(Collection, id=cid)
     context = {}
+
+    # The annotation must belong to THIS collection (the form body also carries
+    # ``collection`` and ``place`` fields, which must not redirect the write elsewhere).
+    if str(request.POST.get('collection', coll.id)) != str(coll.id):
+        return not_found_json()
+    try:
+        place = Place.objects.select_related('dataset').get(id=pid)
+    except (Place.DoesNotExist, ValueError, TypeError):
+        return not_found_json('Place')
+    if place.dataset is not None and not place.dataset.user_can_view(request.user):
+        return not_found_json('Place')
 
     if anno_id:
         # form with instance
-        traceanno = TraceAnnotation.objects.get(id=anno_id)
+        try:
+            traceanno = TraceAnnotation.objects.get(id=anno_id, collection=coll)
+        except (TraceAnnotation.DoesNotExist, ValueError, TypeError):
+            return not_found_json('Annotation')
         form = TraceAnnotationModelForm(request.POST, request.FILES, instance=traceanno)
         traceanno.saved = True
         traceanno.save()
@@ -133,5 +156,6 @@ def get_form(request):
         "existing": existing[0].id if existing else None
         # "existing": existing[0].id or None
     }
-    template = render_to_string('../templates/traceanno_form.html', context=context)
+    # request= so {% csrf_token %} renders: annotate() is no longer csrf_exempt.
+    template = render_to_string('../templates/traceanno_form.html', context=context, request=request)
     return JsonResponse({"form": template})

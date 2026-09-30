@@ -59,6 +59,16 @@ def user_directory_path(instance, filename):
     return 'user_{0}/{1}'.format(instance.owner.id, filename)
 
 
+def _is_authenticated(user):
+    return bool(user) and bool(getattr(user, 'is_authenticated', False))
+
+
+def _is_whg_admin(user):
+    """Staff/admins, as for Dataset.user_can_manage: superuser, staff, or ``whg_admins``."""
+    return bool(user.is_superuser or user.is_staff
+                or user.groups.filter(name='whg_admins').exists())
+
+
 def default_relations():
     return 'locale'.split(', ')
 
@@ -319,6 +329,51 @@ class Collection(models.Model):
             return True
         return self.owners.filter(id=user.id).exists() or self.collaborators.filter(id=user.id).exists()
 
+    # --- Write permissions (decision 2026-09-30) -------------------------------------------
+    # Collections stay VIEWABLE BY LINK: there is deliberately no user_can_view. Writes are
+    # restricted, modelled on Dataset.user_can_manage / user_can_edit. Callers answer "no"
+    # with a 404 (or 404 JSON), as for datasets, and 401 JSON for anonymous AJAX requests.
+
+    def user_can_manage(self, user):
+        """True if ``user`` may take administrative actions on this collection: delete it,
+        add/remove collaborators, submit it to a group, set its links' group state. That is
+        its owner (``owner`` FK), co-owners (``CollectionUser`` role 'owner', i.e. ``owners``)
+        and staff/admins (``is_superuser``, ``is_staff``, ``whg_admins``). NOT members, and
+        never anonymous users. A group leader does NOT manage a student's collection; the
+        leader's review actions are ``user_can_review``."""
+        if not _is_authenticated(user):
+            return False
+        if _is_whg_admin(user):
+            return True
+        if self.owner_id is not None and self.owner_id == user.id:
+            return True
+        return self.owners.filter(id=user.id).exists()
+
+    def user_can_edit(self, user):
+        """True if ``user`` may edit this collection's content (metadata form, places,
+        datasets, annotations, sequence, links, display options): everyone
+        ``user_can_manage`` allows, plus collaborators in any role (the builder page says
+        "Members can add places and annotate them") and the ``whg_team`` / ``editorial``
+        groups (already allowed by PlaceCollectionUpdateView). Never anonymous users."""
+        if self.user_can_manage(user):
+            return True
+        if not _is_authenticated(user):
+            return False
+        if user.groups.filter(name__in=['whg_team', 'editorial']).exists():
+            return True
+        return self.collaborators.filter(id=user.id).exists()
+
+    def user_can_review(self, user):
+        """True if ``user`` may set this collection's review state within its teaching group
+        (status 'reviewed', nomination for the gallery): the leader (manager) of the group
+        the collection is attached to, and staff/admins. The collection's own owner may NOT
+        review or nominate their own collection."""
+        if not _is_authenticated(user):
+            return False
+        if _is_whg_admin(user):
+            return True
+        return bool(self.group_id) and self.group.user_can_manage(user)
+
     @property
     def places_ds(self):
         dses = self.datasets.all()
@@ -416,6 +471,29 @@ class CollectionGroup(models.Model):
     gallery_required = models.BooleanField(null=False, default=False)
     collaboration = models.BooleanField(null=False, default=False)
     join_code = models.CharField(null=True, unique=True, max_length=20)
+
+    def user_can_manage(self, user):
+        """True if ``user`` may edit/delete this group, set its join code, link to it, and
+        review its members' collections: the group owner (leader) and staff/admins. Never
+        anonymous users."""
+        if not _is_authenticated(user):
+            return False
+        if _is_whg_admin(user):
+            return True
+        return self.owner_id is not None and self.owner_id == user.id
+
+    @staticmethod
+    def user_can_create(user):
+        """True if ``user`` may create a group: the same people the dashboards offer the
+        "create group" link to (``group_leaders`` Django group, the ``group_leader`` user
+        role) plus staff/admins."""
+        if not _is_authenticated(user):
+            return False
+        if _is_whg_admin(user):
+            return True
+        if getattr(user, 'role', None) == 'group_leader':
+            return True
+        return user.groups.filter(name='group_leaders').exists()
 
     def __str__(self):
         return self.title
