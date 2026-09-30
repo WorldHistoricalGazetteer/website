@@ -11,7 +11,7 @@ logger = logging.getLogger("email_access")
 class UserAdmin(admin.ModelAdmin):
     list_display = ('email', 'username', 'id', 'name', 'affiliation', 'role',)
     fields = ('id', 'username', 'email', 'name', 'affiliation', 'role', 'date_joined',
-              'must_reset_password', 'groups', ('is_staff', 'is_active', 'is_superuser'))
+              'groups', ('is_staff', 'is_active', 'is_superuser'))
     readonly_fields = ('id', 'date_joined', 'last_login')
     list_filter = ('role',)
 
