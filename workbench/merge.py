@@ -11,14 +11,19 @@ Two granularities:
     sides is a conflict (server value kept, key reported).
   * STRUCT_FIELDS — structural/scalar fields compared whole. Diverged-on-both is a single conflict
     for that field. Row/cell edits stay coarse here on purpose; Yjs (Phase 2) makes them granular.
+    Every top-level key not in KEYED_MAPS is merged this way, listed or not (place#313).
 
 Non-conflicting merges are applied automatically. Conflicts are returned for a manual keep-mine /
 keep-theirs decision on the client; the merged result always keeps the server ("theirs") value so a
 conflicting push is never silently lost.
 """
 
-KEYED_MAPS = ['matches', 'decisions', 'geom', 'rowTypes']
+KEYED_MAPS = ['matches', 'decisions', 'geom', 'rowTypes', 'notes', 'flags', 'excludedRows']
 STRUCT_FIELDS = ['columns', 'rows', 'scope', 'submissionTypes', 'coordFormat', 'title']
+# Every OTHER top-level key is merged as a whole field too (place#313). Starting from ``theirs`` and
+# merging only the named lists silently dropped a stale client's edits to any field not listed —
+# notes, flags, citation, row filters, exclusions — with no conflict reported. The lists above
+# choose a field's GRANULARITY; they must never decide whether it is merged at all.
 
 
 def merge_snapshots(base, mine, theirs):
@@ -57,7 +62,8 @@ def merge_snapshots(base, mine, theirs):
             # else: no change on my side, or identical change → keep theirs (already in out)
         merged[field] = out
 
-    for field in STRUCT_FIELDS:
+    keyed = set(KEYED_MAPS)
+    for field in sorted((set(base) | set(mine) | set(theirs)) - keyed):
         _merge_field(field, base, mine, theirs, merged, conflicts)
 
     return merged, conflicts
@@ -68,7 +74,10 @@ def _merge_field(field, base, mine, theirs, merged, conflicts):
     mine_changed = mv != bv
     theirs_changed = tv != bv
     if mine_changed and not theirs_changed:
-        merged[field] = mv
+        if field in mine:
+            merged[field] = mv
+        else:
+            merged.pop(field, None)  # deleted on my side, untouched on theirs
     elif mine_changed and theirs_changed and mv != tv:
         conflicts.append({'kind': 'field', 'key': field})  # keep theirs (already in merged)
     # else: keep theirs
