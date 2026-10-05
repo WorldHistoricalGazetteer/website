@@ -68,6 +68,36 @@ class MergeTests(TestCase):
         self.assertEqual(conflicts, [])
         self.assertEqual(merged['scope'], {'where': ['GB']})
 
+    def test_unlisted_field_edit_survives_stale_push(self):
+        # place#313: a field in neither list (here `citation`) was silently dropped on a stale push.
+        base = {'citation': {'title': 'old'}, 'rows': [[1]]}
+        mine = {'citation': {'title': 'new'}, 'rows': [[1]]}
+        theirs = {'citation': {'title': 'old'}, 'rows': [[1]], 'matches': {'0:0': {'id': 'x'}}}
+        merged, conflicts = merge_snapshots(base, mine, theirs)
+        self.assertEqual(conflicts, [])
+        self.assertEqual(merged['citation'], {'title': 'new'})
+        self.assertEqual(merged['matches'], {'0:0': {'id': 'x'}})
+
+    def test_unlisted_field_divergence_conflicts(self):
+        base, mine, theirs = {'keepStatuses': ['accepted']}, {'keepStatuses': []}, {'keepStatuses': ['accepted', 'rejected']}
+        merged, conflicts = merge_snapshots(base, mine, theirs)
+        self.assertEqual(conflicts, [{'kind': 'field', 'key': 'keepStatuses'}])
+        self.assertEqual(merged['keepStatuses'], ['accepted', 'rejected'])  # server kept
+
+    def test_unlisted_field_deleted_on_my_side(self):
+        merged, _ = merge_snapshots({'rowFilters': {'a': 1}}, {}, {'rowFilters': {'a': 1}})
+        self.assertNotIn('rowFilters', merged)
+
+    def test_notes_and_exclusions_merge_per_key(self):
+        # Two people annotating / excluding DIFFERENT rows must not conflict.
+        base = {'notes': {}, 'excludedRows': {}}
+        mine = {'notes': {'0:1': 'mine'}, 'excludedRows': {'3': True}}
+        theirs = {'notes': {'0:2': 'theirs'}, 'excludedRows': {'4': True}}
+        merged, conflicts = merge_snapshots(base, mine, theirs)
+        self.assertEqual(conflicts, [])
+        self.assertEqual(merged['notes'], {'0:1': 'mine', '0:2': 'theirs'})
+        self.assertEqual(merged['excludedRows'], {'3': True, '4': True})
+
     def test_struct_field_conflict(self):
         base = snap(title='x')
         mine = snap(title='mine')

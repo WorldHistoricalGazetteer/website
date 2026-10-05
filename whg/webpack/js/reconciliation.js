@@ -4585,7 +4585,9 @@ async function doPush() {
 function fieldLabel(k) {
   return ({ columns: 'Column setup', rows: 'Table data', scope: 'Scope filter', title: 'Project title',
             submissionTypes: 'Place types', coordFormat: 'Coordinate format',
-            decisions: 'Match decision', matches: 'Candidates', geom: 'Geometry', rowTypes: 'Row place-type' })[k] || k;
+            decisions: 'Match decision', matches: 'Candidates', geom: 'Geometry', rowTypes: 'Row place-type',
+            notes: 'Note', flags: 'Flag', excludedRows: 'Row exclusion', citation: 'Citation',
+            rowFilters: 'Row filter', keepStatuses: 'Keep on re-run' })[k] || k;
 }
 function conflictValueHTML(v) {
   if (v == null) return '<em class="text-muted">(none)</em>';
