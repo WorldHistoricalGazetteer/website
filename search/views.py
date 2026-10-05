@@ -212,8 +212,11 @@ def _authority_download(row):
             tip = ('Not available for download. '
                    'Available for search & reconciliation.')
     else:
-        tip = ('Bulk download of this authority isn’t offered here yet — its '
-               'records are available for search & reconciliation.')
+        # Its licence would allow a download, but no authority export exists yet:
+        # deferred to place#312 (a PLATO conversion per authority would become the download).
+        tip = ('Bulk download of this authority isn’t offered here yet. Its records '
+               'are available for search & reconciliation, and the data itself can be '
+               'obtained from the source under its own licence (see Source).')
     return {'enabled': False, 'entity': '', 'filetypes': [], 'tip': tip}
 
 
