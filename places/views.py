@@ -121,7 +121,7 @@ class PlacePortalView(TemplateView):
         # recompute the (N+1) .matches query on the multi-match path.
         pid = kwargs.get('pid')
         if pid is not None:
-            self._portal_matches = Place.objects.get(id=pid).matches
+            self._portal_matches = get_object_or_404(Place, id=pid).matches
             if len(self._portal_matches) == 1:
                 return redirect(f'/places/{pid}/detail')
 
@@ -158,7 +158,7 @@ class PlacePortalView(TemplateView):
         if pid:
             portal_data = getattr(self, '_portal_matches', None)
             if portal_data is None:
-                portal_data = Place.objects.get(id=pid).matches
+                portal_data = get_object_or_404(Place, id=pid).matches
             place_ids = [place.id for place in portal_data]
         elif whg_id:
             place_ids = findPortalPlaces(whg_id)
