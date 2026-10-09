@@ -989,6 +989,7 @@ Promise.all([
         openPortal: openAtlasPortal,
         showPanelView: showPanelView,
         getCsrf: () => csrfToken,
+        canUseGateway: isBetaUser,              // gated endpoints: ask only when the answer can be 200
         onGatewayStatus: setGatewayAvailable,   // report gateway up/down from list fetches
         onPlaceFocused: updatePlaceUrl,         // reflect the opened place in the URL
         copyLink: copyPlaceLink,                // row share button → clipboard

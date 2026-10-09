@@ -329,7 +329,6 @@ const PlaceList = {
 
         const seq = reset ? ++this.reqSeq : this.reqSeq;
         const offset = reset ? 0 : this.hits.length;
-        this.loading = true;
         if (reset) {
             this.hits = [];
             this.aatLabels = {};
@@ -337,6 +336,17 @@ const PlaceList = {
             this.els.rows.style.height = '0px';
             this.els.scroll.scrollTop = 0;
         }
+        // /atlas/search/ is beta-gated: for anyone else it answers 403, which
+        // left a console error on every Explore deep link and nothing else to
+        // show for it. The page already knows who can use the gateway, so say
+        // "beta feature" straight away and make no request (place#316).
+        if (this.cfg.canUseGateway && !this.cfg.canUseGateway()) {
+            this.loading = false;
+            this.hasMore = false;
+            this._setStatusHtml(failureHtml('beta', 'This list'));
+            return;
+        }
+        this.loading = true;
         this._setStatus(reset ? 'Loading…' : 'Loading more…');
 
         // Base filters (temporal / type) from atlas.js, then scope + browse.
@@ -618,6 +628,12 @@ const PlaceList = {
             return;
         }
         // Not on this page — resolve the record to decide popup vs modal.
+        // /atlas/place/ is beta-gated like the search: a caller who cannot use
+        // it goes straight to the portal rather than collecting a 403 first.
+        if (this.cfg.canUseGateway && !this.cfg.canUseGateway()) {
+            this.cfg.openPortal(placeId);
+            return;
+        }
         fetch('/atlas/place/?id=' + encodeURIComponent(placeId), { credentials: 'same-origin' })
             .then(r => (r.ok ? r.json() : null))
             .then(place => {
