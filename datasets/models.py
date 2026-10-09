@@ -396,6 +396,14 @@ class Dataset(models.Model):
         """
         if self.public:
             return True
+        return self.user_has_private_access(user)
+
+    def user_has_private_access(self, user):
+        """The non-public half of ``user_can_view``: True if ``user`` is inside this
+        dataset's circle — owner, co-owner, collaborator (incl. ``whg_team``), staff,
+        superuser or ``whg_admins`` — regardless of ``public``. A caller that must treat a
+        public dataset as withheld (an embargoed registry row, place#319) asks this instead
+        of ``user_can_view``, so the circle is defined in exactly one place."""
         if not user or not getattr(user, "is_authenticated", False):
             return False
         if user.is_superuser or user.is_staff:

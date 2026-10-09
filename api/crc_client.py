@@ -151,14 +151,17 @@ def crc_places(ids: list, user=None, meta: dict | None = None) -> dict | None:
 
 
 def crc_geometry(place_id: str, user=None, meta: dict | None = None,
-                 max_bytes: int | None = None, tolerance: float | None = None) -> dict | None:
+                 max_bytes: int | None = None, tolerance: float | None = None,
+                 headers: dict | None = None) -> dict | None:
     """Call the CRC gateway ``GET /api/geometry/<place_id>`` and return its body.
 
     One place's authoritative geometry from the geom store (indexing plan
     §5.3), for the Atlas area selection — the alternative is unioning tile
     fragments in the browser, which truncates any region larger than the
-    viewport. Returns ``None`` when the gateway is unconfigured, refused, or
-    could not be asked; ``meta`` says which:
+    viewport. ``headers`` are sent in addition to the usual ones: the
+    contributed-data grant (``api.dataset_access.GRANT_HEADER``, place#319)
+    travels this way. Returns ``None`` when the gateway is unconfigured,
+    refused, or could not be asked; ``meta`` says which:
 
     * ``meta["status"]`` = 404 with ``meta["body"]`` — the gateway ANSWERED:
       either ``error: "not found"`` (no such place) or ``error: "no geometry"``
@@ -191,7 +194,8 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
     try:
         from urllib.parse import quote
         url = f"{_gateway_url()}/api/geometry/{quote(place_id, safe=':')}"
-        resp = requests.get(url, params=params or None, headers=_headers(), timeout=_timeout())
+        resp = requests.get(url, params=params or None, headers={**_headers(), **(headers or {})},
+                            timeout=_timeout())
         if 200 <= resp.status_code < 300:
             return resp.json()
         detail = None

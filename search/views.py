@@ -586,6 +586,22 @@ def atlas_place(request):
     if not pid:
         return JsonResponse({"error": "missing id"}, status=400)
 
+    # 🛑 Contributed data (`whg:<dataset>:<id>`) is in the gateway index whether
+    # or not its dataset is still public — the index is rebuilt from a snapshot,
+    # the Dataset row changes live — and the `whg` registry row says nothing
+    # about one dataset. So the dataset's own visibility decides, BEFORE the
+    # gateway is asked (place#310 rule, place#319): a stranger gets the same
+    # 404 as for a place that does not exist. The record is served with the
+    # dataset's own attribution, licence recorded or not, as every other
+    # surface serves contributed records; the licence gate is the geometry
+    # endpoint's (`atlas_geometry`), which hands out an adaptation.
+    contributed = None
+    if pid.split(":", 1)[0].lower() in CONTRIBUTED_NAMESPACES:
+        from api.dataset_access import dataset_visibility
+        contributed = dataset_visibility(pid, request.user)
+        if not contributed.allowed:
+            return JsonResponse(contributed.body, status=contributed.status)
+
     from api.crc_client import crc_places
     meta: dict = {}
     data = crc_places([pid], user=request.user, meta=meta)
@@ -600,6 +616,10 @@ def atlas_place(request):
             return _gateway_failure_response(meta.get("error") or "disabled", id=pid)
         return JsonResponse({"error": "not found", "id": pid}, status=404)
     place = places[0]
+
+    if contributed is not None:
+        place["attribution"] = contributed.attribution
+        return JsonResponse(place)
 
     # Enrich with the source authority's attribution (registry, per-namespace).
     ns = place.get("namespace") or (pid.split(":", 1)[0] if ":" in pid else "")
@@ -661,6 +681,12 @@ def atlas_geometry(request):
     exactly as on ``/atlas/place/``, checked against the registry BEFORE the
     gateway is asked and honoured again if the gateway itself withholds;
     503/504 when the gateway could not be asked (place#272 pattern).
+
+    Contributed data (``whg:<dataset>:<id>``) is decided per dataset
+    (``api.dataset_access``, place#319): 404 unless the dataset is visible to
+    this user and not embargoed, 451 unless it carries a licence permitting
+    redistribution, and otherwise fetched under a signed grant the gateway
+    requires for any ``whg:`` id.
     """
     if not (request.user.is_authenticated and request.user.can_access_beta):
         return JsonResponse({"error": "beta access required"}, status=403)
@@ -676,32 +702,51 @@ def atlas_geometry(request):
         return JsonResponse({"error": "missing or unnamespaced id"}, status=400)
     ns = pid.split(":", 1)[0]
 
-    from api.attribution import registry_attribution
-    attribution = None if ns in CONTRIBUTED_NAMESPACES else registry_attribution(ns)
-    if not attribution:
-        # Contributed data (`whg:<dataset>:<id>`), or a namespace with no
-        # authority row. The `whg` registry row IS an authority row (the
-        # umbrella seeded by api/migrations/0004), but it says nothing about
-        # the dataset the place belongs to: its polygons are in the gateway's
-        # store, and neither the store nor the index knows the dataset's
-        # visibility, embargo or licence, so a private or no-derivatives
-        # dataset would be served like a public one. Withheld (451; the
-        # gateway says the same, since `whg` is not in its AUTHORITIES) until
-        # a per-dataset lookup exists — place#319 follow-up.
-        return JsonResponse({
-            "error": "source licence not determined",
-            "detail": (f"'{ns}' is not a registered authority, so the terms and visibility "
-                       f"of its geometry cannot be determined here; it is withheld rather "
-                       f"than served on an assumption."),
-            "id": pid,
-            "namespace": ns,
-        }, status=451)
-    if attribution.get("redistributable") is False:
-        return _not_redistributable_response(pid, ns, attribution, what="its geometry")
+    headers = None
+    if ns in CONTRIBUTED_NAMESPACES:
+        # Contributed data (`whg:<dataset>:<id>`). The `whg` registry row IS an
+        # authority row (the umbrella seeded by api/migrations/0004) but says
+        # nothing about the dataset the place belongs to, so the decision is
+        # made per dataset here — visibility (404, the place#310 rule, embargo
+        # included) then licence (451) — and carried to the gateway as a
+        # signed grant it verifies before touching its store
+        # (api/dataset_access.py; indexing gateway/geometry.py). The gateway
+        # refuses `whg:` without the grant, so neither layer can serve a
+        # contributed outline on its own say-so.
+        from api.dataset_access import GRANT_HEADER, contributed_geometry_decision, sign_geometry_grant
+        decision = contributed_geometry_decision(pid, request.user)
+        if not decision.allowed:
+            return JsonResponse(decision.body, status=decision.status)
+        attribution = decision.attribution
+        grant = sign_geometry_grant(pid)
+        if grant is None:
+            # No shared secret on this host: the gateway would refuse anyway.
+            # A configuration failure, said as one — not "not found", and not
+            # a 451 that would read as a determination about the data.
+            logger.error("atlas_geometry: CRC_GATEWAY_API_KEY unset; cannot sign a grant for %s", pid)
+            return _gateway_failure_response("unconfigured", id=pid)
+        headers = {GRANT_HEADER: grant}
+    else:
+        from api.attribution import registry_attribution
+        attribution = registry_attribution(ns)
+        if not attribution:
+            # A namespace with no authority row: withheld (451), not served on
+            # an assumption. The gateway says the same for anything outside its
+            # AUTHORITIES.
+            return JsonResponse({
+                "error": "source licence not determined",
+                "detail": (f"'{ns}' is not a registered authority, so the terms and visibility "
+                           f"of its geometry cannot be determined here; it is withheld rather "
+                           f"than served on an assumption."),
+                "id": pid,
+                "namespace": ns,
+            }, status=451)
+        if attribution.get("redistributable") is False:
+            return _not_redistributable_response(pid, ns, attribution, what="its geometry")
 
     from api.crc_client import crc_geometry
     meta: dict = {}
-    data = crc_geometry(pid, user=request.user, meta=meta)
+    data = crc_geometry(pid, user=request.user, meta=meta, headers=headers)
     if data is None:
         if meta.get("status") in (404, 413, 451) and meta.get("body"):
             body = dict(meta["body"])
