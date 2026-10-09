@@ -169,8 +169,22 @@ def build_streaming_download_response(request, obj_type, obj, filetype='lpf'):
     cache_path = FileCache.get_cache_path(obj_type, obj_id, filetype=filetype)
     filename = f"whg_{obj_type}_{obj_id}.{filetype}"
 
+    # place#310: a collection holding places from a dataset outside this
+    # requester's circle is streamed live for them with those places withheld,
+    # and never from (or into) the shared file cache, which is one file per
+    # collection for every requester.
+    viewer = None
+    if obj_type == 'collection' and hasattr(obj, 'withheld_dataset_pks'):
+        if obj.withheld_dataset_pks(getattr(request, 'user', None)):
+            viewer = request.user
+
+    if viewer is not None:
+        logger.debug(f"Streaming filtered {filetype.upper()} for {obj_type}:{obj_id} (uncached)")
+        response = StreamingHttpResponse(
+            stream_live(obj_type, obj, request, filetype=filetype, viewer=viewer),
+            content_type=content_type)
     # Stream from cache if available.
-    if FileCache.is_cached(obj_type, obj_id, filetype=filetype):
+    elif FileCache.is_cached(obj_type, obj_id, filetype=filetype):
         logger.debug(f"Serving cached {filetype.upper()} for {obj_type}:{obj_id}")
         response = StreamingHttpResponse(
             stream_from_file(cache_path), content_type=content_type)
@@ -202,10 +216,19 @@ def build_streaming_download_response(request, obj_type, obj, filetype='lpf'):
     return response
 
 
-def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
+def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None, viewer=None):
     """
     Generic streaming generator for LPF or TSV
+
+    ``viewer``: when set, a place collection's members from datasets outside
+    this user's circle are withheld (place#310); the caller must not cache the
+    result (``cache_filepath`` is ignored).
     """
+    if viewer is not None:
+        cache_filepath = None
+
+    def _collection_places():
+        return obj.visible_thru_places(viewer) if viewer is not None else obj.places.all()
     cache_file = None
     if cache_filepath:
         # open a .tmp file while streaming so partial outputs never replace the final file
@@ -305,7 +328,7 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 yield from emit_chunk('],"error":{"message":"Dataset collections may not be downloaded. Please download each constituent dataset individually."}}')
                 return
             elif obj_type == "collection" and obj.collection_class == "place":
-                qs = obj.places.all()
+                qs = _collection_places()
             else:
                 yield from emit_chunk('],"error":{"message":"LPF export by streaming is only supported for datasets and place collections."}}')
                 return
@@ -344,7 +367,7 @@ def stream_live(obj_type, obj, request, filetype='lpf', cache_filepath=None):
                 yield from emit_chunk('Error: Dataset collections may not be downloaded. Please download each constituent dataset individually.\n')
                 return
             elif obj_type == "collection" and obj.collection_class == "place":
-                qs = obj.places.all()
+                qs = _collection_places()
             else:
                 yield from emit_chunk('Error: TSV export by streaming is only supported for datasets and place collections.\n')
                 return

@@ -3,13 +3,21 @@ from django.contrib.gis.geos import Polygon, MultiPolygon
 from collection.models import Collection
 
 
-def compute_collection_bbox(collection):
+def compute_collection_bbox(collection, withheld_dataset_pks=()):
+    """The collection's bounding box; with ``withheld_dataset_pks`` (place#310),
+    members from those datasets are left out, so a viewer who may not see them
+    is not shown where they are."""
+    withheld = set(withheld_dataset_pks or ())
     if collection.collection_class == "place":
-        bboxes = [
-            Polygon.from_bbox(place.extent) for place in collection.places.all() if place.extent
-        ]
+        places = collection.places.all()
+        if withheld:
+            places = places.exclude(dataset__id__in=withheld)
+        bboxes = [Polygon.from_bbox(place.extent) for place in places if place.extent]
     elif collection.collection_class == "dataset":
-        bboxes = [dataset.bbox for dataset in collection.datasets.all() if dataset.bbox]
+        datasets = collection.datasets.all()
+        if withheld:
+            datasets = datasets.exclude(id__in=withheld)
+        bboxes = [dataset.bbox for dataset in datasets if dataset.bbox]
     else:
         bboxes = []
 

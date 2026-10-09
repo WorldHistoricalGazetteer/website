@@ -9,7 +9,7 @@ import simplejson as json
 # from sklearn.metrics import calinski_harabasz_score
 from sklearn.cluster import KMeans
 
-def clustered_geometries(caller, min_clusters=7, max_clusters=10):    
+def clustered_geometries(caller, min_clusters=7, max_clusters=10, user=None):    
     # Detect the class of the caller
     caller_class = type(caller)
     caller_class = caller_class.__name__   
@@ -41,7 +41,8 @@ def clustered_geometries(caller, min_clusters=7, max_clusters=10):
                 coords = GEOSGeometry(geom.geom).tuple
                 coordinates.extend(flatten_coordinates(coords))
     else: # caller_class == 'Collection'
-        places = caller.places_all
+        # place#310: a viewer is named ⇒ withhold members of datasets outside their circle
+        places = caller.visible_places(user) if user is not None else caller.places_all
         if not places:
             return clustered_geometries
         for place in places:

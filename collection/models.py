@@ -400,6 +400,52 @@ class Collection(models.Model):
         else:
             return self.places.all().count()
 
+    # ------------------------------------------------------------------
+    # place#310: a collection stays viewable by link, but the places it holds
+    # from a dataset outside the viewer's circle (non-public, or embargoed)
+    # are withheld from that viewer on every read surface. The viewer-aware
+    # forms below sit beside the unfiltered properties, which remain for
+    # internal use (cache regeneration, counts for the owner's own pages).
+    # ------------------------------------------------------------------
+
+    def member_dataset_pks(self):
+        """Ids of every dataset represented in this collection: the attached
+        datasets and the datasets of the attached places. Two small queries."""
+        pks = set(self.datasets.values_list('id', flat=True))
+        pks.update(self.places.values_list('dataset__id', flat=True).distinct())
+        return pks
+
+    def withheld_dataset_pks(self, user):
+        """Member datasets ``user`` may NOT see (``api.dataset_access.hidden_datasets``
+        intersected with the members). Empty for most viewers of most collections, so
+        a caller can tell the common case (serve the shared, cached view) from the
+        rare one (serve a filtered, uncached view) without a per-place query."""
+        from api.dataset_access import hidden_datasets
+        hidden = hidden_datasets(user)
+        if not hidden:
+            return frozenset()
+        return frozenset(hidden.pks & self.member_dataset_pks())
+
+    def visible_places(self, user):
+        """``places_all`` less the places of datasets ``user`` may not see."""
+        from api.dataset_access import visible_places_q
+        return self.places_all.filter(visible_places_q(user))
+
+    def visible_thru_places(self, user):
+        """``self.places`` (the through-table members, place collections) the
+        viewer may see, as a queryset."""
+        from api.dataset_access import visible_places_q
+        return self.places.filter(visible_places_q(user))
+
+    def visible_ds_list(self, user):
+        withheld = self.withheld_dataset_pks(user)
+        return [d for d in (self.ds_list or []) if d['id'] not in withheld]
+
+    def visible_num_places(self, user):
+        if self.collection_class == "dataset":
+            return self.visible_places(user).count()
+        return self.visible_thru_places(user).count()
+
     @property
     def numrows(self):
         # Added for consistency with Dataset model

@@ -39,12 +39,23 @@ def mapdata(request, category, id, refresh=False, carousel=False):
     # requester, so a gate placed after it (or inside it) would be bypassed on a cache hit.
     # A dataset the requester may not view gets the same 404 as one that does not exist,
     # so ids are not confirmed. Collections stay viewable by link and are not gated here.
+    withheld = None
     if category == "datasets":
         ds = Dataset.objects.filter(pk=id).first()
         if ds is None or not ds.user_can_view(request.user):
             return JsonResponse({'error': 'Not found'}, status=404)
+    else:
+        # place#310: a collection stays viewable by link, but members from datasets
+        # outside this requester's circle are withheld. The shared cache holds the
+        # unfiltered view, so a requester with anything withheld is served a filtered
+        # view generated for them and never cached (rare: most viewers of most
+        # collections have nothing withheld, and take the cached path as before).
+        coll = Collection.objects.filter(pk=id).first()
+        if coll is None:
+            return JsonResponse({'error': 'Not found'}, status=404)
+        withheld = coll.withheld_dataset_pks(request.user) or None
     try:
-        data = generate_mapdata(category, id, refresh)
+        data = generate_mapdata(category, id, refresh, withheld_dataset_pks=withheld)
         if carousel:
             data.pop('table', None)
         return JsonResponse(data, safe=False, json_dumps_params={'ensure_ascii': False})
@@ -145,7 +156,7 @@ def delete_mapdata_cache(category, id, refresh=10):
         return {"status": "error", "category": category, "id": id, "error": str(e)}
 
 
-def generate_mapdata(category, id, refresh=False):
+def generate_mapdata(category, id, refresh=False, withheld_dataset_pks=None):
     # TODO: Fix use of <category>/<id>/refresh/full to bypass geometry reduction in PLACE branch
 
     maxNoCacheTime = 0.3  # Cache if generation time is greater than this (seconds)
@@ -153,20 +164,26 @@ def generate_mapdata(category, id, refresh=False):
     ds_id = f"{category}_{id}"
     logger.debug(f"Mapdata requested for {ds_id} (refresh={refresh}).")
 
-    redis_client = get_redis_client()
-    refresh_was_scheduled = redis_client.srem(PENDING_REFRESH_KEY, ds_id)
+    # place#310: a filtered (per-requester) view neither reads nor writes the
+    # shared cache, and does not consume a scheduled refresh of the shared view.
+    filtered = bool(withheld_dataset_pks) and category != "datasets"
 
-    # Check if cached data exists and return it if found
-    if not refresh and not refresh_was_scheduled:
-        cached_data = cache.get(ds_id)
-        if cached_data is not None:
-            logger.debug("Found cached mapdata.")
-            return cached_data
+    if not filtered:
+        redis_client = get_redis_client()
+        refresh_was_scheduled = redis_client.srem(PENDING_REFRESH_KEY, ds_id)
 
-    cache.delete(ds_id)
+        # Check if cached data exists and return it if found
+        if not refresh and not refresh_was_scheduled:
+            cached_data = cache.get(ds_id)
+            if cached_data is not None:
+                logger.debug("Found cached mapdata.")
+                return cached_data
+
+        cache.delete(ds_id)
     start_time = time.time()
 
-    mapdata = mapdata_dataset(id) if category == "datasets" else mapdata_collection(id)
+    mapdata = (mapdata_dataset(id) if category == "datasets"
+               else mapdata_collection(id, withheld_dataset_pks=withheld_dataset_pks if filtered else None))
 
     # As a concept, `granularity` is a measure of the precision of the geometry. In LPF this is represented as
     # `approximation` with a `type` of either:
@@ -456,7 +473,9 @@ def generate_mapdata(category, id, refresh=False):
     response_time = time.time() - start_time
     logger.debug(f"Mapdata generation time: {response_time:.2f} seconds")
 
-    if response_time > maxNoCacheTime:
+    if filtered:
+        logger.debug("Filtered mapdata (place#310): not cached.")
+    elif response_time > maxNoCacheTime:
         logger.debug("Caching mapdata.")
         cache.set(ds_id, mapdata_result)
     else:
@@ -569,10 +588,16 @@ def mapdata_dataset(id, task_id=None, chunk_size=1000):
     }
 
 
-def mapdata_collection(id):
+def mapdata_collection(id, withheld_dataset_pks=None):
     collection = get_object_or_404(Collection, id=id)
+    withheld = frozenset(withheld_dataset_pks or ())
 
-    bbox = collection.bbox or compute_collection_bbox(collection)
+    # place#310: the stored bbox covers every member; a filtered view gets a
+    # bbox of the members it shows.
+    if withheld:
+        bbox = compute_collection_bbox(collection, withheld_dataset_pks=withheld)
+    else:
+        bbox = collection.bbox or compute_collection_bbox(collection)
 
     feature_collection = {
         "title": collection.title,
@@ -587,13 +612,19 @@ def mapdata_collection(id):
     }
 
     if collection.collection_class == 'place':
-        return mapdata_collection_place(collection, feature_collection)
+        return mapdata_collection_place(collection, feature_collection, withheld)
     else:
-        return mapdata_collection_dataset(collection, feature_collection)
+        return mapdata_collection_dataset(collection, feature_collection, withheld)
 
 
-def mapdata_collection_place(collection, feature_collection):
+def mapdata_collection_place(collection, feature_collection, withheld=frozenset()):
     traces = collection.traces.filter(archived=False).select_related('place')
+    withheld_labels = set()
+    if withheld:  # place#310
+        traces = traces.exclude(place__dataset__id__in=withheld)
+        # ...and a visible place must not borrow its geometry from a close match
+        # that sits in a withheld dataset (include_matches below).
+        withheld_labels = set(Dataset.objects.filter(id__in=withheld).values_list('label', flat=True))
     reduce_geometry = any(facet.get("trail") for facet in collection.vis_parameters.values())
     feature_collection["relations"] = collection.rel_keywords
 
@@ -608,7 +639,11 @@ def mapdata_collection_place(collection, feature_collection):
         first_anno_sequence = place.annos.first().sequence if place.annos.exists() else None
         if first_anno_sequence is not None:
             seq_values.append(first_anno_sequence)
-        reference_place = place.matches[0] if trace.include_matches and place.matches else place
+        reference_place = place
+        if trace.include_matches:
+            matches = [m for m in place.matches if m.dataset_id not in withheld_labels]
+            if matches:
+                reference_place = matches[0]
 
         geometry_collection = None
         if reference_place.geoms.exists():
@@ -661,13 +696,16 @@ def mapdata_collection_place(collection, feature_collection):
     return feature_collection
 
 
-def mapdata_collection_dataset(collection, feature_collection):
+def mapdata_collection_dataset(collection, feature_collection, withheld=frozenset()):
     '''
     Construct families of matched places within collection
     '''
 
     # Prefetch geoms for all places in collection
-    collection_places_all = collection.places_all.prefetch_related('geoms')
+    collection_places_all = collection.places_all
+    if withheld:  # place#310
+        collection_places_all = collection_places_all.exclude(dataset__id__in=withheld)
+    collection_places_all = collection_places_all.prefetch_related('geoms')
 
     # Get close matches in one query
     close_matches = CloseMatch.objects.filter(
@@ -776,7 +814,9 @@ def mapdata_collection_dataset(collection, feature_collection):
         if v[0] is not None and v[1] is not None
     ])
 
-    feature_collection["datasets"] = list(collection.datasets.values("id", "title"))
+    feature_collection["datasets"] = list(
+        collection.datasets.exclude(id__in=withheld).values("id", "title") if withheld
+        else collection.datasets.values("id", "title"))
 
     return feature_collection
 

@@ -38,7 +38,9 @@ def fetch(request):
     if request.method == 'POST':
         pid = request.POST['pid']
         user = request.user
-        place = Place.objects.get(pk=pid)
+        # place#310: a place outside the requester's circle is "not found".
+        from api.dataset_access import get_visible_place_or_404
+        place = get_visible_place_or_404(user, pk=pid)
         # pid = 81228 (parent), 81229 (child)
 
         # database record

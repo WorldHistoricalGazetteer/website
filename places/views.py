@@ -30,6 +30,7 @@ from datasets.models import Dataset
 from places.models import Place, PlaceGeom
 from places.utils import attribListFromSet
 from elastic.es_utils import findPortalPlaces, findPortalPIDs
+from api.dataset_access import get_visible_place_or_404, visible_places_q
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -77,7 +78,8 @@ class PlaceDetailView(DetailView):
     template_name = 'places/place_detail.html'
 
     def get_object(self):
-        return get_object_or_404(Place.objects.select_related('dataset'), pk=self.kwargs.get('pk'))
+        # place#310: a place of a dataset outside the viewer's circle is "not found".
+        return get_visible_place_or_404(self.request.user, pk=self.kwargs.get('pk'))
 
     def get_success_url(self):
         pid = self.kwargs.get("id")
@@ -121,7 +123,8 @@ class PlacePortalView(TemplateView):
         # recompute the (N+1) .matches query on the multi-match path.
         pid = kwargs.get('pid')
         if pid is not None:
-            self._portal_matches = get_object_or_404(Place, id=pid).matches
+            self._portal_matches = self._visible_matches(
+                get_visible_place_or_404(request.user, id=pid), request.user)
             if len(self._portal_matches) == 1:
                 return redirect(f'/places/{pid}/detail')
 
@@ -158,7 +161,8 @@ class PlacePortalView(TemplateView):
         if pid:
             portal_data = getattr(self, '_portal_matches', None)
             if portal_data is None:
-                portal_data = get_object_or_404(Place, id=pid).matches
+                portal_data = self._visible_matches(
+                    get_visible_place_or_404(self.request.user, id=pid), self.request.user)
             place_ids = [place.id for place in portal_data]
         elif whg_id:
             place_ids = findPortalPlaces(whg_id)
@@ -204,12 +208,24 @@ class PlacePortalView(TemplateView):
         context.update(self._get_portal_data(place_ids, me))
         return context
 
+    @staticmethod
+    def _visible_matches(place, user):
+        """``place.matches`` (the place and its close matches) less any match the
+        viewer may not see (place#310) — one query, however many matches."""
+        matches = place.matches
+        visible = set(Place.objects.filter(id__in=[p.id for p in matches])
+                      .filter(visible_places_q(user)).values_list('id', flat=True))
+        return [p for p in matches if p.id in visible]
+
     def _get_portal_data(self, place_ids, user):
         context = {'payload': [], 'traces': [], 'allts': []}
         alltitles, allvariants = set(), []
 
         try:
-            qs = Place.objects.filter(id__in=place_ids)
+            # place#310: whatever route supplied the ids (a pid's matches, a whg_id's
+            # index bundle, a typed list, the session), only places the viewer may see
+            # are rendered; a list that is private throughout is "not found".
+            qs = Place.objects.filter(id__in=place_ids).filter(visible_places_q(user))
             if not qs.exists():
                 raise Http404("No such place found.")
             qs = sorted(qs, key=lambda place: (place.links.count(), place.id), reverse=True)
@@ -242,7 +258,10 @@ class PlacePortalView(TemplateView):
             raise Http404("Invalid place ID format")
 
         if all_geoms:
-            unioned_geometry = PlaceGeom.objects.filter(place_id__in=place_ids).aggregate(union=Union('geom'))['union']
+            # place#310: the extent and centroid are those of the places rendered, not of
+            # every id asked for — a withheld member must not shape them either.
+            unioned_geometry = (PlaceGeom.objects.filter(place_id__in=[p.id for p in qs])
+                                .aggregate(union=Union('geom'))['union'])
             context['extent'] = list(wkt.loads(unioned_geometry.envelope.wkt).bounds)
             context['centroid'] = list(unioned_geometry.centroid.tuple)
         else:

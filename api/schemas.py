@@ -35,6 +35,8 @@ TYPE_MAP = {
     "dataset": {
         "model": Dataset,
         "detail_url": "datasets:ds_places",
+        # place#310: the LPF/TSV stream of a whole dataset is gated like the rest.
+        "feature_queryset": dataset_owner_or_public_queryset,
         "preview_serializer": DatasetPreviewSerializer,
         "preview_queryset": dataset_owner_or_public_queryset,
     },

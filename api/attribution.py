@@ -221,16 +221,21 @@ def namespaces_from_ids(ids):
     return {get_namespace(str(i)) for i in ids if i}
 
 
-def datasets_from_place_ids(place_ids):
+def datasets_from_place_ids(place_ids, user=None):
     """Map WHG place ids to the labels of the datasets that contributed them, so
     ``whg``-namespace results can be attributed to a real source rather than only
     to the WHG overlay. Gateway ids (``gn:…``) are ignored.
 
     ``whg:<dataset_id>:<src_id>`` names its dataset outright, so those need no
     place lookup at all; ``whg:<place_pk>`` and the bare numeric form predate
-    namespacing and are still resolved through Place. Two queries at most."""
+    namespacing and are still resolved through Place. Two queries at most.
+
+    ``user`` (place#310): when given — pass the request user, anonymous
+    included — a dataset outside that user's circle is not named, whichever
+    form of id reached here, so the answer is the one an absent id gets."""
     from datasets.models import Dataset
     from places.models import Place
+    from api.dataset_access import visible_datasets_q, visible_places_q
 
     dataset_pks, place_pks = set(), set()
     for raw in place_ids:
@@ -244,11 +249,15 @@ def datasets_from_place_ids(place_ids):
 
     labels = set()
     if dataset_pks:
-        labels |= {label for label in (Dataset.objects.filter(pk__in=dataset_pks)
-                                       .values_list('label', flat=True)) if label}
+        qs = Dataset.objects.filter(pk__in=dataset_pks)
+        if user is not None:
+            qs = qs.filter(visible_datasets_q(user))
+        labels |= {label for label in qs.values_list('label', flat=True) if label}
     if place_pks:
-        labels |= {label for label in (Place.objects.filter(pk__in=place_pks)
-                                       .values_list('dataset__label', flat=True)) if label}
+        qs = Place.objects.filter(pk__in=place_pks)
+        if user is not None:
+            qs = qs.filter(visible_places_q(user))
+        labels |= {label for label in qs.values_list('dataset__label', flat=True) if label}
     return labels
 
 

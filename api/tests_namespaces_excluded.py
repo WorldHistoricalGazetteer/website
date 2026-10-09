@@ -15,6 +15,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from api.reconcile import normalise_query_params, reconcile_place_es
+from api.dataset_access import _NOTHING_HIDDEN
 
 
 def _query(**params):
@@ -32,7 +33,8 @@ def _gateway(hits=(), **meta_updates):
 
 
 def _run(**meta):
-    with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)):
+    with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)), \
+            patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN):
         return reconcile_place_es(_query(namespaces='ukhc'))
 
 

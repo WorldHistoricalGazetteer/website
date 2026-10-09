@@ -2253,7 +2253,10 @@ def handle_comment(request):
 
         else:
 
-            place = get_object_or_404(Place, id=place_id)
+            # place#310: no comment on (and no confirmation of) a place outside the
+            # requester's circle.
+            from api.dataset_access import get_visible_place_or_404
+            place = get_visible_place_or_404(request.user, id=place_id)
 
             comment = Comment.objects.create(user=request.user, note=comment_text, tag=tag, place_id=place)
 

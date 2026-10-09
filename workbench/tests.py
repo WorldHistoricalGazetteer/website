@@ -441,7 +441,10 @@ def make_place(title, label='wb-test-ds'):
     from places.models import Place
     ds, _ = Dataset.objects.get_or_create(
         label=label, defaults={'owner': User.objects.filter(is_superuser=False).first(),
-                               'title': 'WB test ds', 'description': 'x'})
+                               'title': 'WB test ds', 'description': 'x',
+                               # place#310: only a place the publisher may see can be added
+                               # to a collection; these fixtures stand for public ones.
+                               'public': True})
     return Place.objects.create(title=title, src_id='', dataset=ds, ccodes=[])
 
 

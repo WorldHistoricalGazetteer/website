@@ -398,7 +398,8 @@ def project_checkout(request, pid):
     else:
         return _err('this kind of collection cannot be checked out yet', 400)
     try:
-        snapshot, base_version = loader(coll)
+        snapshot, base_version = (loader(coll, user=request.user) if doc_type == 'place_collection'
+                                  else loader(coll))
     except CheckoutError as e:
         return _err(str(e))
     team = _resolve_target_team(request.user, _body(request).get('team'))
@@ -425,8 +426,11 @@ def project_checkout_place(request, pid):
     directly. The direct-apply authorisation is enforced at publish time (see ``project_publish``), so
     widening check-out here doesn't let a non-owner apply their own working copy."""
     from places.models import Place
+    from api.dataset_access import visible_places_q
     from .checkout import checkout_place_record, CheckoutError
-    place = get_object_or_404(Place.objects.select_related('dataset'), pk=pid)
+    # place#310: a place outside the requester's circle is "not found".
+    place = get_object_or_404(Place.objects.select_related('dataset').filter(visible_places_q(request.user)),
+                              pk=pid)
     try:
         snapshot, base_version = checkout_place_record(place)
     except CheckoutError as e:
@@ -578,8 +582,11 @@ def suggestions_for_place(request, pid):
     """Pending-suggestions inset data for one place (plan §1d/§1e): count always; items + review
     controls only for staff / gazetteer owner / the proposer."""
     from places.models import Place
+    from api.dataset_access import visible_places_q
     from . import suggestions as S
-    place = get_object_or_404(Place.objects.select_related('dataset'), pk=pid)
+    # place#310: a place outside the requester's circle is "not found".
+    place = get_object_or_404(Place.objects.select_related('dataset').filter(visible_places_q(request.user)),
+                              pk=pid)
     return JsonResponse(S.inset_for_place(place, request.user))
 
 

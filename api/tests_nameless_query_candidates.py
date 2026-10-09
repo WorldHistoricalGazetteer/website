@@ -23,6 +23,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from api.reconcile import normalise_query_params, reconcile_place_es
+from api.dataset_access import _NOTHING_HIDDEN
 from api.reconcile_helpers import make_candidate
 
 SCHEMA_SPACE = 'http://example.org/schema'
@@ -67,7 +68,8 @@ class NamelessSpatialQueryTests(SimpleTestCase):
             return list(hits)
         params = {'query': '', 'namespaces': 'kain_par', 'contained_in': ['ukhc:DVN'],
                   'containment': 'fuzzy', 'relation': 'intersects'}
-        with patch('api.reconcile.crc_reconcile_search', _fake):
+        with patch('api.reconcile.crc_reconcile_search', _fake), \
+                patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN):
             return reconcile_place_es(normalise_query_params(params))
 
     def test_enumerating_a_container_that_holds_places_does_not_raise(self):

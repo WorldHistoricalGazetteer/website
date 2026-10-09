@@ -75,12 +75,16 @@ def _local_place_pk(pid):
     return int(last) if namespace in ('whg', 'place') else None
 
 
-def _resolve_places(place_refs):
+def _resolve_places(place_refs, user=None, keep_pks=()):
     """Map snapshot place refs → (resolved:[(Place, ref)], unresolved:[id str]).
 
     ``place_refs`` is the snapshot ``places`` list: ``[{id, note?, relation?[], seq?, when?}, …]``.
     Only refs resolving to a local WHG ``places.Place`` pk (``whg:``/bare-digit ids) can become a
-    CollPlace; CRC-namespaced ids (``gn:…``) and unknown ids are returned as ``unresolved``."""
+    CollPlace; CRC-namespaced ids (``gn:…``) and unknown ids are returned as ``unresolved``.
+
+    place#310: with ``user`` given, a place of a dataset outside the user's circle resolves only
+    if it is in ``keep_pks`` (already a member of the collection being republished — keeping it
+    is not an addition); otherwise it is ``unresolved``, as if it did not exist."""
     from places.models import Place
     resolved, unresolved, want = [], [], {}
     for ref in place_refs:
@@ -90,7 +94,12 @@ def _resolve_places(place_refs):
         else:
             unresolved.append(str(ref.get('id')))       # CRC-gateway / non-local id — can't FK
     if want:
-        found = {p.id: p for p in Place.objects.filter(id__in=list(want.keys()))}
+        qs = Place.objects.filter(id__in=list(want.keys()))
+        if user is not None:
+            from django.db.models import Q
+            from api.dataset_access import visible_places_q
+            qs = qs.filter(visible_places_q(user) | Q(id__in=list(keep_pks)))
+        found = {p.id: p for p in qs}
         for pk, refs in want.items():
             place = found.get(pk)
             for ref in refs:
@@ -136,6 +145,7 @@ def publish_place_collection(project, user, sequenced=False):
     Returns a summary dict: ``{collection_id, added, unresolved:[…], sequenced}``.
     """
     from collection.models import Collection, CollPlace
+    from places.models import Place
     from traces.models import TraceAnnotation
 
     snap = project.snapshot or {}
@@ -143,9 +153,11 @@ def publish_place_collection(project, user, sequenced=False):
     if errs:
         raise PublishError('; '.join(errs))
 
-    resolved, unresolved = _resolve_places(snap.get('places') or [])
-
     coll = project.published_collection
+    keep = (CollPlace.objects.filter(collection=coll).values_list('place_id', flat=True)
+            if coll is not None else ())
+    resolved, unresolved = _resolve_places(snap.get('places') or [], user=user, keep_pks=list(keep))
+
     if coll is not None:
         _check_no_conflict(project, coll)                       # optimistic-lock (publish-back)
     if coll is None:
@@ -155,16 +167,28 @@ def publish_place_collection(project, user, sequenced=False):
     _apply_scope(coll, snap)
     coll.save()
 
+    # place#310: a member the publisher may not see (kept through _resolve_places because it was
+    # already a member) carried no title, note or relation in their snapshot. Its membership and
+    # sequence are rewritten like any other, but the publisher's own annotation on it is left
+    # exactly as it was — a republish must not blank what they could not read.
+    from api.dataset_access import visible_places_q
+    visible_pks = set(Place.objects.filter(id__in=[p.id for p, _ in resolved])
+                      .filter(visible_places_q(user)).values_list('id', flat=True))
+    withheld_pks = {p.id for p, _ in resolved} - visible_pks
+
     # Rebuild membership from the snapshot (publish-back is authoritative for this collection's set).
     # Only touch rows we own the shape of — CollPlace + the locating TraceAnnotations we create.
     CollPlace.objects.filter(collection=coll).delete()
-    TraceAnnotation.objects.filter(collection=coll, owner=user, anno_type='place').delete()
+    (TraceAnnotation.objects.filter(collection=coll, owner=user, anno_type='place')
+     .exclude(place_id__in=withheld_pks).delete())
 
     added = 0
     for i, (place, ref) in enumerate(resolved):
         seq = ref.get('seq')
         sequence = seq if isinstance(seq, int) else (i if sequenced else 0)
         CollPlace.objects.create(collection=coll, place=place, sequence=sequence)
+        if place.id in withheld_pks:
+            continue
         relation = ref.get('relation')
         TraceAnnotation.objects.create(
             collection=coll, place=place, owner=user, anno_type='place', motivation='locating',
@@ -203,10 +227,16 @@ def publish_gazetteer_group(project, user):
         did = g.get('dataset_id')
         if str(did).isdigit():
             ids.append(int(did))
-    found = {d.id: d for d in Dataset.objects.filter(id__in=ids)}
+    coll = project.published_collection
+    # place#310: a dataset outside the user's circle may stay attached (it already
+    # was) but cannot be added; it is reported as unresolved, as if it did not exist.
+    from django.db.models import Q
+    from api.dataset_access import visible_datasets_q
+    keep = list(coll.datasets.values_list('id', flat=True)) if coll is not None else []
+    found = {d.id: d for d in Dataset.objects.filter(id__in=ids)
+             .filter(visible_datasets_q(user) | Q(id__in=keep))}
     unresolved = [str(i) for i in ids if i not in found]
 
-    coll = project.published_collection
     if coll is not None:
         _check_no_conflict(project, coll)                       # optimistic-lock (publish-back)
     if coll is None:
