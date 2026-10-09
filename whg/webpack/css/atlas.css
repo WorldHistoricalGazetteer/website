@@ -2782,3 +2782,98 @@ body.atlas-demo-mode {
     border: none !important;
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════
+   Beta-push additions (Lane B): keyboard focus, planned controls,
+   cluster-card licence footer, mobile pass
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Keyboard focus: cluster heads, members and result rows are role="button" divs. */
+#atlas_search_results .cluster-head:focus-visible,
+#atlas_search_results .cluster-member:focus-visible,
+#atlas_search_results .result:focus-visible {
+    outline: 2px solid #2980b9;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+#gazetteers_offcanvas .gaz-meta-toggle:focus-visible {
+    outline: 2px solid #2980b9;
+    outline-offset: 1px;
+}
+
+/* "planned" controls: visible, visibly disabled, tagged. */
+.whg-planned-tag {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 0 5px;
+    border-radius: 8px;
+    border: 1px dashed currentColor;
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    line-height: 1.5;
+    vertical-align: middle;
+    opacity: 0.8;
+}
+#gazetteers_offcanvas .gaz-planned,
+.whg-attest-btn.whg-attest-off {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+/* Viewport button: say why it is off, in text (touch screens have no hover). */
+.viewport-off-hint {
+    display: none;
+    margin-left: 4px;
+    font-size: 0.65rem;
+    font-weight: 400;
+    opacity: 0.8;
+}
+#atlas_viewport_btn:disabled .viewport-off-hint { display: inline; }
+
+/* Source & licence footer on a cluster card. */
+.cluster-licence {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px;
+    margin-top: 6px; padding-top: 5px; border-top: 1px dashed #e3e6e9;
+    font-size: 0.7rem; color: #6b7177;
+}
+.cluster-licence-label { text-transform: uppercase; letter-spacing: .3px; font-size: 0.62rem; }
+.cluster-licence-item { display: inline-flex; align-items: center; gap: 4px; }
+.cluster-licence-src { font-weight: 600; color: #4a4f54; }
+.cluster-licence-withheld { color: #922b21; font-size: 0.65rem; }
+.cluster-licence .whg-licence-badge {
+    display: inline-flex; align-items: center; padding: 0 6px; border-radius: 10px;
+    font-size: 0.6rem; font-weight: 600; line-height: 1.5; text-decoration: none;
+    border: 1px solid transparent; white-space: nowrap;
+}
+.cluster-licence .whg-licence-badge.lic-open        { background: #d5f5e3; color: #1e6b3a; }
+.cluster-licence .whg-licence-badge.lic-attribution { background: #fdebd0; color: #7e5109; }
+.cluster-licence .whg-licence-badge.lic-restrictive { background: #fadbd8; color: #922b21; }
+.cluster-licence .whg-licence-badge.lic-unknown     { background: #eaecee; color: #5d6d7e; }
+
+/* ── Mobile pass (375px / 768px) ── */
+@media (max-width: 768px) {
+    /* Time slider fills the search column and has finger-sized thumbs. */
+    #temporal_control { width: 100%; box-sizing: border-box; }
+    .temporal-header { flex-wrap: wrap; }
+    .temporal-slider-wrap input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+    .temporal-slider-wrap input[type="range"]::-moz-range-thumb { width: 22px; height: 22px; }
+    /* Cluster / weight sliders: allow wrapping, single-row labels. */
+    .cluster-controls { flex-wrap: wrap; }
+    .cluster-controls input[type="range"] { min-width: 120px; flex-basis: 100%; }
+    .weight-grid { grid-template-columns: 4.5em 1fr 2.4em; }
+    /* Basemap menu: span the viewport width instead of hanging off the button. */
+    .atlas-basemap-switcher { position: static; }
+    .atlas-basemap-menu {
+        position: fixed; left: 8px; right: 8px; top: auto;
+        min-width: 0; max-width: none; max-height: 60vh; overflow-y: auto;
+    }
+    /* Overlays centred on the (now full-width) map, not offset for a side panel. */
+    #atlas_coverage_hint { left: 50%; max-width: calc(100% - 24px); white-space: normal; text-align: center; }
+    .atlas-welcome { max-height: calc(100% - 24px); overflow-y: auto; padding: 20px 18px 16px; }
+    /* The guided tour is skipped below 768px (driver.js popovers do not fit). */
+    .atlas-tour-btn, .atlas-welcome-tour-link { display: none !important; }
+}
+@media (max-width: 400px) {
+    .atlas-welcome-title { font-size: 1.15rem; }
+}
