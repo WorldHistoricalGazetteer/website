@@ -610,24 +610,109 @@ def atlas_place(request):
     # over the source's own content, so it is a redistribution surface even
     # behind the beta gate. The body still says whose it is and where to get it.
     if attribution and attribution.get("redistributable") is False:
-        name = attribution.get("name") or ns or "this source"
-        return JsonResponse({
-            "error": "source not redistributable",
-            "detail": (f"{name} is indexed and searchable through WHG, but its terms do "
-                       f"not permit WHG to redistribute its records. Obtain the data "
-                       f"from the source under its own terms."),
-            "id": pid,
-            "namespace": ns,
-            "source": {
-                "name": attribution.get("name"),
-                "rights_holder": attribution.get("rights_holder"),
-                "source_url": attribution.get("source_url"),
-                "license": attribution.get("license__spdx_id") or attribution.get("license__label"),
-            },
-        }, status=451)
+        return _not_redistributable_response(pid, ns, attribution)
     if attribution:
         place["attribution"] = attribution
     return JsonResponse(place)
+
+
+def _not_redistributable_response(pid: str, ns: str, attribution: dict,
+                                  what: str = "its records") -> JsonResponse:
+    """451 for a source whose registry row says ``redistributable = False``
+    (place#269). Names the source and where to get it; carries none of it."""
+    name = attribution.get("name") or ns or "this source"
+    return JsonResponse({
+        "error": "source not redistributable",
+        "detail": (f"{name} is indexed and searchable through WHG, but its terms do "
+                   f"not permit WHG to redistribute {what}. Obtain the data "
+                   f"from the source under its own terms."),
+        "id": pid,
+        "namespace": ns,
+        "source": {
+            "name": attribution.get("name"),
+            "rights_holder": attribution.get("rights_holder"),
+            "source_url": attribution.get("source_url"),
+            "license": attribution.get("license__spdx_id") or attribution.get("license__label"),
+        },
+    }, status=451)
+
+
+# Namespaces whose registry row is an umbrella, not a per-record licence and
+# visibility determination: a place id under them belongs to a contributed
+# dataset (`whg:<dataset_id>:<id>`) whose terms must be looked up per dataset.
+CONTRIBUTED_NAMESPACES = frozenset({"whg"})
+
+
+def atlas_geometry(request):
+    """One place's authoritative geometry for the Atlas area selection, proxied
+    from the CRC gateway ``GET /api/geometry/<place_id>`` (geom store).
+
+    The Areas panel used to turn a selected boundary into a search constraint
+    by unioning its vector-tile fragments in the browser (place#156): a region
+    larger than the viewport was silently truncated, and the outline was the
+    zoom's own simplification. The client now asks here first and keeps the
+    tile union as its fallback, so this view may ship before or after the
+    gateway gains the route. BETA-gated like the other Atlas endpoints.
+
+    Answers: 200 with ``geometry`` (GeoJSON), ``bounds``, ``simplified``,
+    ``tolerance``, ``vertex_count``; 404 ``error: "not found"`` or
+    ``error: "no geometry"`` (point-only place); 451 when the source may not be
+    redistributed — geometry is source content, so the place#269 rule applies
+    exactly as on ``/atlas/place/``, checked against the registry BEFORE the
+    gateway is asked and honoured again if the gateway itself withholds;
+    503/504 when the gateway could not be asked (place#272 pattern).
+    """
+    if not (request.user.is_authenticated and request.user.can_access_beta):
+        return JsonResponse({"error": "beta access required"}, status=403)
+    pid = (request.GET.get("id") or request.GET.get("pid") or "").strip()
+    # The Reconciliation API's entity form ("place:kain_par:7") must be
+    # reduced BEFORE the licence check, or the registry is asked about a
+    # namespace called "place" and the withheld source slips through to the
+    # gateway (which strips the prefix itself and would then refuse — but the
+    # registry gate must not depend on it).
+    if pid.startswith("place:"):
+        pid = pid[len("place:"):]
+    if not pid or ":" not in pid:
+        return JsonResponse({"error": "missing or unnamespaced id"}, status=400)
+    ns = pid.split(":", 1)[0]
+
+    from api.attribution import registry_attribution
+    attribution = None if ns in CONTRIBUTED_NAMESPACES else registry_attribution(ns)
+    if not attribution:
+        # Contributed data (`whg:<dataset>:<id>`), or a namespace with no
+        # authority row. The `whg` registry row IS an authority row (the
+        # umbrella seeded by api/migrations/0004), but it says nothing about
+        # the dataset the place belongs to: its polygons are in the gateway's
+        # store, and neither the store nor the index knows the dataset's
+        # visibility, embargo or licence, so a private or no-derivatives
+        # dataset would be served like a public one. Withheld (451; the
+        # gateway says the same, since `whg` is not in its AUTHORITIES) until
+        # a per-dataset lookup exists — place#319 follow-up.
+        return JsonResponse({
+            "error": "source licence not determined",
+            "detail": (f"'{ns}' is not a registered authority, so the terms and visibility "
+                       f"of its geometry cannot be determined here; it is withheld rather "
+                       f"than served on an assumption."),
+            "id": pid,
+            "namespace": ns,
+        }, status=451)
+    if attribution.get("redistributable") is False:
+        return _not_redistributable_response(pid, ns, attribution, what="its geometry")
+
+    from api.crc_client import crc_geometry
+    meta: dict = {}
+    data = crc_geometry(pid, user=request.user, meta=meta)
+    if data is None:
+        if meta.get("status") in (404, 413, 451) and meta.get("body"):
+            body = dict(meta["body"])
+            body.setdefault("id", pid)
+            return JsonResponse(body, status=meta["status"])
+        return _gateway_failure_response(meta.get("error") or ("disabled" if meta.get("disabled") else "error"),
+                                         id=pid)
+    data["gateway"] = True
+    if attribution:
+        data["attribution"] = attribution
+    return JsonResponse(data)
 
 
 def atlas_boundaries(request):

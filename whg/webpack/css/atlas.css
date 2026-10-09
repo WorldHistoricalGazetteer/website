@@ -196,6 +196,10 @@
    explanation on a disabled download or attest button) are exempt: they convey
    why something is unavailable, so the toggle must not suppress them. */
 body.atlas-tooltips-off .tooltip:not(.tt-advisory) { display: none !important; }
+/* An informational tooltip must never take a click meant for the control next
+   to it: the Areas mode tip opens to the right, over the Places button, and a
+   quick click during its fade landed on the tip instead (place#321). */
+.tooltip.tt-nopointer { pointer-events: none; }
 
 /* ═══════════════════════════════════════════════════════════════════
    Container-constrained hero map layout

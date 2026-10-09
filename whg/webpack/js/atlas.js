@@ -12,7 +12,7 @@ import { geomsGeoJSON, formatYear, formatYearWindow } from './utilities';
 import CountryParents from './countryParents';
 import TypeTreeWidget from './typeTreeWidget';
 import filterState from './filterState';
-import heroMap from './heroMap';
+import heroMap, { isDebugEnabled } from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
@@ -773,6 +773,26 @@ function waitDocumentReady() {
     return new Promise((resolve) => $(document).ready(() => resolve()));
 }
 
+// Readiness flag for automation (scripts/atlas_smoke.py). Set as the LAST
+// statement of the boot below, so a harness can wait on the Atlas's own
+// "booted" rather than on MapLibre state: on a plain /atlas/ load the globe
+// spins until the first interaction (heroMap.startSpin), which keeps
+// map.loaded() false and `idle` from ever firing, so library readiness is the
+// wrong signal for this page. Behind the same debug gate as
+// window.heroMapInstance; nothing is set otherwise. A harness that enables the
+// gate with an injected localStorage value (not ?debug) is immune to the
+// replaceState URL rewrites this page performs.
+function markAtlasBooted(error) {
+    if (!isDebugEnabled()) return;
+    try {
+        window.__whgAtlas = {
+            booted: !error,
+            error: error ? String(error) : null,
+            t: Math.round(performance.now()),
+        };
+    } catch (e) { /* */ }
+}
+
 // ── Welcome panel ──────────────────────────────────────────────────────────
 // Persisted opt-out (mirrors atlasTour.js's TOUR_SEEN_KEY): once the user
 // clicks "Don't show this again" the panel never returns, and the first-visit
@@ -898,12 +918,17 @@ Promise.all([
         if (searchMode !== 'areas') return;
         const detail = e.detail;
         if (!detail || !detail.geometry) return;
+        const regionId = `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`;
+        // The tile-fragment union is shown at once; the authoritative polygon
+        // replaces it when /atlas/geometry/ answers (or never, if it cannot).
         addRegionSelection({
-            id: `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`,
+            id: regionId,
             label: detail.name || 'Unnamed',
             namespace: detail.namespace || 'osm',
+            place_id: detail.place_id || null,
             geometry: detail.geometry,
         });
+        upgradeRegionGeometry(regionId, detail.place_id);
     });
 
     // ── Search mode toggle ──
@@ -1099,7 +1124,12 @@ Promise.all([
                 if (!el.getAttribute('data-bs-title')) el.setAttribute('data-bs-title', t);
                 el.removeAttribute('title');
             }
-            bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' });
+            // tt-nopointer: an informational tip must never take a click meant
+            // for the control beside it (the Areas tip sits over Places, place#321).
+            // Advisory tips keep their own custom class from the markup.
+            const cfg = { trigger: 'hover' };
+            if (!el.getAttribute('data-bs-custom-class')) cfg.customClass = 'tt-nopointer';
+            bs.Tooltip.getOrCreateInstance(el, cfg);
         });
         return true;
     };
@@ -1489,9 +1519,35 @@ Promise.all([
     }
 
     // ── Auto-start tour on first visit ──
-    if (!hasSeenAtlasTour() && !isWelcomeDismissed() && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+    // Not when the URL already carries Atlas state (a shared link into
+    // Explore, a place, a panel): the tour's cleanup would reset it under the
+    // visitor (place#320). Same treatment as a pre-populated toponym.
+    const urlHasAtlasState = (() => {
+        try {
+            const p = new URLSearchParams(location.search);
+            return ['gazetteer', 'place', 'panel', 'gmode'].some(k => p.has(k));
+        } catch (e) { return false; }
+    })();
+    if (!hasSeenAtlasTour() && !isWelcomeDismissed() && !urlHasAtlasState
+        && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+        // And not once the visitor has started using the search bar during the
+        // delay: typing or a mode click means they are busy, and the tour stays
+        // a click away on its bottom-left button (place#320). The map itself is
+        // deliberately not watched: spinning the globe is not "busy".
+        let busy = false;
+        const noteBusy = () => { busy = true; };
+        const fs = document.getElementById('floating_search');
+        if (fs) {
+            fs.addEventListener('pointerdown', noteBusy, { capture: true, once: true });
+            fs.addEventListener('keydown', noteBusy, { capture: true, once: true });
+        }
         // Delay slightly to let the map finish rendering
         setTimeout(() => {
+            if (fs) {
+                fs.removeEventListener('pointerdown', noteBusy, { capture: true });
+                fs.removeEventListener('keydown', noteBusy, { capture: true });
+            }
+            if (busy) return;
             const wp = document.getElementById('atlas_welcome');
             if (wp) {
                 wp.classList.add('atlas-welcome-hidden');
@@ -1512,9 +1568,12 @@ Promise.all([
         }
     });
 
+    // Last statement of the boot on purpose (see markAtlasBooted).
+    markAtlasBooted();
 }).catch(error => {
     console.error('Atlas init error:', error);
     atlasNotice('The map did not finish loading, so some Atlas controls may not work. Reloading the page usually fixes this.', { level: 'danger', delay: 15000 });
+    markAtlasBooted(error);
 });
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2319,30 +2378,136 @@ function selectAreaResult(index) {
 }
 
 /**
- * Fly to a boundary search hit and turn it into a region selection.
+ * Turn a boundary search hit into a region selection.
  *
- * The map has to be at the hit's own zoom band before its feature exists in the
- * tiles, and the tiles then have to arrive, so this waits for the map to settle
- * before looking. If the feature still is not there — a level the tileset drops
- * at this zoom, say — the map is left framed on it and the user is told to
- * click, which is the old behaviour rather than a silent failure.
+ * First choice is the authoritative polygon from /atlas/geometry/, which needs
+ * no tiles at all. Failing that (the gateway is down, has not yet got the
+ * route, or withholds the source), fall back to the tiles: the map has to be
+ * at the hit's own zoom band before its feature exists in them, and the tiles
+ * then have to arrive, so this waits for the map to settle before looking. If
+ * the feature still is not there — a level the tileset drops at this zoom,
+ * say — the map is left framed on it and the user is told to click, which is
+ * the old behaviour rather than a silent failure.
  */
-function resolveBoundaryFromTiles(item) {
+async function resolveBoundaryFromTiles(item) {
     const source = item.namespace || 'osm';
     const zoom = zoomForAdminLevel(item.boundary);
     // Put the level picker on the tier that draws this region, or the polygon
     // would be neither visible nor clickable when we get there.
     if (layerPalette) layerPalette.setActiveSource(source);
 
+    // Fly first, then ask: the map must move the moment the result is picked,
+    // not after a gateway round trip. The exact polygon re-fits the view when
+    // it arrives; otherwise the tiles at this zoom are what we pick from.
     try {
         heroMap.map.flyTo({ center: item.repr_point, zoom, duration: 900 });
     } catch (e) {
         return;
     }
-    heroMap.map.once('idle', () => {
+    const exact = await fetchExactGeometry(item.place_id);
+    if (exact) {
+        // Same id the map-click path builds, so a click on the same region
+        // afterwards is recognised as already selected.
+        addRegionSelection({
+            id: `boundary:${source}:${item.place_id}`,
+            label: item.label,
+            namespace: source,
+            place_id: item.place_id,
+            geometry: exact.geometry,
+            exact: true,
+        });
+        return;
+    }
+
+    const onIdle = () => {
         if (heroMap.selectBoundaryByPlaceId(source, item.place_id)) return;
         showCopyToast(`Showing ${item.label} — click its outline to use it as an area filter.`);
+    };
+    // The flight (and its tiles) may already have settled while we waited on
+    // the gateway, in which case `idle` has been and gone.
+    let settled = false;
+    try { settled = !heroMap.map.isMoving() && heroMap.map.areTilesLoaded(); } catch (e) { /* */ }
+    if (settled) onIdle();
+    else heroMap.map.once('idle', onIdle);
+}
+
+/* ── Exact region geometry (indexing plan §5.3) ──
+   A selected boundary used to become a search constraint by unioning its tile
+   fragments in the browser (place#156). Only fragments in loaded tiles are
+   found, so a region larger than the viewport was silently truncated, and the
+   outline was the current zoom's simplification. /atlas/geometry/ serves the
+   geom store's polygon; the fragment union stays as the fallback so the Atlas
+   works before the gateway gains the route and whenever it cannot answer. */
+
+/**
+ * The authoritative geometry for a place, or null when it cannot be had.
+ * Never throws and never notifies: a fallback to the tiles is not a failure
+ * the user needs to hear about (the reason is logged to the console).
+ *
+ * @param {string} placeId — e.g. ``osm:r62149``
+ * @returns {Promise<Object|null>} the /atlas/geometry/ body, or null
+ */
+async function fetchExactGeometry(placeId) {
+    if (!placeId) return null;
+    const { kind, status, data } = await fetchJSON(
+        '/atlas/geometry/?id=' + encodeURIComponent(placeId), { timeoutMs: 20000 });
+    if (kind === 'ok' && data && data.geometry) return data;
+    const why = (data && (data.error || data.failure)) || kind;
+    console.debug(`Atlas: exact geometry not available for ${placeId} (${status || kind}: ${why}); using tile fragments`);
+    return null;
+}
+
+/**
+ * Replace a selected region's tile-fragment geometry with the exact polygon,
+ * once it arrives. No-op if the region was dismissed meanwhile. The overlay,
+ * the search constraint and the gazetteer coverage filter all read
+ * ``selectedRegions``, so one swap updates all three. The viewport is only
+ * re-fitted when the exact extent reaches beyond what the fragments showed,
+ * i.e. when the region really was truncated.
+ */
+function upgradeRegionGeometry(regionId, placeId) {
+    if (!placeId) return;
+    const current = selectedRegions.find(r => r.id === regionId);
+    if (!current || current.exact) return;   // not selected, or already exact
+    fetchExactGeometry(placeId).then((data) => {
+        if (!data) return;
+        const region = selectedRegions.find(r => r.id === regionId);
+        if (!region || region.exact) return;
+        const before = region.geometry;
+        region.geometry = data.geometry;
+        region.place_id = region.place_id || placeId;
+        region.exact = true;
+        renderSelectionChips();   // also re-applies the coverage filter
+        updateSelectionOverlay();
+        if (!bboxCovers(geometryBBox(before), geometryBBox(data.geometry))) {
+            heroMap.fitTo({ type: 'Feature', geometry: data.geometry, properties: {} });
+        }
+        // A search already run against the fragments answered a different
+        // question; re-ask it with the real constraint (as the temporal
+        // re-query does), keeping the user's facet and θ choices.
+        if (gatewayData) initiateToponymSearch({ preserveFacets: true });
     });
+}
+
+/** [west, south, east, north] of a GeoJSON geometry, or null. */
+function geometryBBox(geometry) {
+    const turf = window.turf;
+    if (!geometry || !turf || !turf.bbox) return null;
+    try {
+        const bb = turf.bbox({ type: 'Feature', geometry, properties: {} });
+        return bb.every(Number.isFinite) ? bb : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** Whether ``outer`` contains ``inner`` to within 1% of its own span. If
+ *  either is unknown the answer is "no", so the caller re-fits. */
+function bboxCovers(outer, inner) {
+    if (!outer || !inner) return false;
+    const tol = 0.01 * Math.max(outer[2] - outer[0], outer[3] - outer[1], 1e-6);
+    return inner[0] >= outer[0] - tol && inner[1] >= outer[1] - tol
+        && inner[2] <= outer[2] + tol && inner[3] <= outer[3] + tol;
 }
 
 /* ── Region selections ── */
@@ -2740,6 +2905,24 @@ function initiateGatewaySearch(options) {
         gatewaySearchCtrl = null;
         if (kind === 'ok' && data) {
             setGatewayAvailable(data.gateway !== false);
+            // `contained_in` names the selected places; the gateway builds the
+            // region from their index entries, which can fail where
+            // /atlas/geometry/ did not (a stored geometry the index does not
+            // class as an area, or carries no H3 cover). It then fails CLOSED —
+            // `scope.applied: false`, no hits — so ask once more with the
+            // polygon we already hold, which is what the fragment path sent.
+            if (options.contained_in && data.scope && data.scope.applied === false && !options._boundsRetry) {
+                console.warn('Atlas: gateway could not apply contained_in', options.contained_in,
+                    data.scope.message || '', '— retrying with the selected polygons as bounds');
+                gatewaySearchCtrl = null;
+                initiateGatewaySearch({
+                    ...options,
+                    contained_in: undefined, containment: undefined, relation: undefined,
+                    bounds: selectedRegionsCollection(),
+                    _boundsRetry: true,
+                });
+                return;
+            }
             gatewayData = data;
             seedClusterControls(data.clustering_params);
             renderClusters();
@@ -2998,12 +3181,22 @@ function setSearchMatchMode(mode) {
     });
 }
 
+/** The selected regions' geometries as one GeometryCollection (the `bounds`
+ *  form of the area constraint; empty when nothing is selected). */
+function selectedRegionsCollection() {
+    return {
+        type: 'GeometryCollection',
+        geometries: selectedRegions.filter(r => r.geometry).map(r => r.geometry),
+    };
+}
+
 function gatherToponymOptions(qstr) {
     const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
 
     // Build spatial constraint: viewport takes precedence over area selections
     let bounds;
     let spatialMode;
+    let containedIn;
 
     if (useViewport && !heroMap.isGlobeMode()) {
         // Viewport constraint: use current map viewport as a bounding polygon
@@ -3025,17 +3218,29 @@ function gatherToponymOptions(qstr) {
             spatialMode = 'none';
         }
     } else {
-        // Area-selection constraint
-        const regionGeometries = selectedRegions
-            .filter(r => r.geometry)
-            .map(r => r.geometry);
-        bounds = regionGeometries.length > 0
-            ? { type: 'GeometryCollection', geometries: regionGeometries }
-            : { type: 'GeometryCollection', geometries: [] };
-        spatialMode = regionGeometries.length > 0 ? 'region' : 'none';
+        // Area-selection constraint. When every selected region is a
+        // gateway-served exact polygon, send the place ids (`contained_in`,
+        // exact containment, intersects — the same relation `bounds` applies)
+        // instead of the polygons: the gateway resolves them from its geom
+        // store in a worker thread, rather than receiving up to 1 MB of
+        // GeoJSON per search and polyfilling it on its event loop. Any region
+        // still on tile fragments has no id the gateway could resolve to that
+        // geometry, so a mixed selection falls back to sending all the shapes.
+        const withGeometry = selectedRegions.filter(r => r.geometry);
+        const allExact = withGeometry.length > 0 && withGeometry.every(r => r.exact && r.place_id);
+        if (allExact) {
+            containedIn = withGeometry.map(r => r.place_id);
+            bounds = { type: 'GeometryCollection', geometries: [] };
+        } else {
+            bounds = selectedRegionsCollection();
+        }
+        spatialMode = withGeometry.length > 0 ? 'region' : 'none';
     }
 
     return {
+        contained_in: containedIn,
+        containment: containedIn ? 'exact' : undefined,
+        relation: containedIn ? 'intersects' : undefined,
         qstr: qstr,
         idx: eswhg,
         fclasses: treeIds.join(','),

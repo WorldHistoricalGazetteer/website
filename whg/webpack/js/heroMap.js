@@ -66,7 +66,9 @@ function writeGlobeDisabled(disabled) {
 // ``localStorage['whg.debug'] = '1'``. When on, the MapLibre map is exposed as
 // ``window.heroMapInstance`` for console/automation access (queryRenderedFeatures,
 // project, etc.). Off by default so nothing leaks the map into the global scope.
-function isDebugEnabled() {
+// Exported so atlas.js can gate its own readiness flag (window.__whgAtlas) on
+// the same switch; see scripts/atlas_smoke.py.
+export function isDebugEnabled() {
     try { if (localStorage.getItem('whg.debug') === '1') return true; } catch (e) { /* */ }
     try { return /[?&]debug\b/.test(window.location.search); } catch (e) { /* */ }
     return false;
