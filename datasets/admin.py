@@ -1,10 +1,12 @@
 from django.contrib import admin
+from .forms import DatasetAdminForm
 from .models import Dataset, DatasetFile, Hit
 from guardian.admin import GuardedModelAdmin
 from persons.admin import ContributionInline
 
 # class DatasetAdmin(GuardedModelAdmin):
 class DatasetAdmin(admin.ModelAdmin):
+    form = DatasetAdminForm  # place#322: refuses making an accessioned dataset private
     list_display = ('title', 'label', 'id', 'ds_status', 'public', 'downloadable', 'authority', 'create_date')
     list_filter = ('ds_status', 'authority', 'downloadable')
     list_editable = ('downloadable',)

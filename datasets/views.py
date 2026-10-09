@@ -1088,6 +1088,11 @@ def review(request, dsid, tid, passnum):
     if not ds.tasks.filter(task_id=tid).exists():
         raise Http404("No task matches the given query.")
     task, auth, authname, kwargs, test = _get_task_details(tid)
+    if request.method == "POST" and task.task_name == "align_idx" and not ds.public:
+        # place#322: accession writes to the shared whg index, so the launch gate in
+        # ds_recon ("must be public") is re-checked at each review decision too.
+        messages.error(request, "Dataset must be public before its places can be accessioned.")
+        return redirect(f"/datasets/{dsid}/review/{tid}/{passnum}")
     record_list, current_passnum = _filter_unreviewed_places(ds, tid, passnum, auth)
     review_page, review_field = _get_review_page_and_field(auth)
 

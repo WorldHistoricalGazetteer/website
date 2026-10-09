@@ -179,6 +179,29 @@ class DatasetFileModelForm(forms.ModelForm):
                 fieldname=field.label)}
 
 
+ACCESSIONED_PRIVATE_MESSAGE = (
+    'This dataset has places accessioned to the WHG index, so it cannot be made private. '
+    'Contact the WHG editorial team to have it de-accessioned first.')
+
+
+def refuse_private_if_accessioned(instance, public):
+    """place#322: an accessioned dataset may not go public -> private. Its places live in the
+    shared ``whg`` index and their names are merged into other datasets' parent records,
+    which a visibility flag cannot withdraw; de-accessioning is a deliberate editorial step."""
+    if instance.pk and instance.public and not public and instance.has_accessioned_places:
+        raise forms.ValidationError(ACCESSIONED_PRIVATE_MESSAGE)
+    return public
+
+
+class DatasetAdminForm(forms.ModelForm):
+    class Meta:
+        model = Dataset
+        fields = '__all__'
+
+    def clean_public(self):
+        return refuse_private_if_accessioned(self.instance, self.cleaned_data.get('public'))
+
+
 class DatasetDetailModelForm(forms.ModelForm):
     class Meta:
         model = Dataset
@@ -208,6 +231,9 @@ class DatasetDetailModelForm(forms.ModelForm):
         if ' ' in label:
             raise forms.ValidationError('label cannot contain any space')
         return label
+
+    def clean_public(self):
+        return refuse_private_if_accessioned(self.instance, self.cleaned_data.get('public'))
 
     file = forms.FileField(required=False)
 
