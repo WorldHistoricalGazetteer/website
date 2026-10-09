@@ -1814,5 +1814,10 @@ class SourceGazetteersView(APIView):
             'downloadable': e.downloadable,
             'redistributable': e.redistributable,
             'download_blocked_reason': e.download_blocked_reason or '',
+            # Offered as a boundary Source in the Atlas Regions panel. Read
+            # by the indexing tile verifier (place#166) to assert that every
+            # region source's tileset actually publishes shapes; the flag
+            # itself is admin-curated and already visible in the Atlas page.
+            'region_source': e.region_source,
         } for e in qs]
         return Response({'sources': sources})
