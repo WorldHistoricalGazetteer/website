@@ -228,21 +228,24 @@ export default class LayerSourcesPalette {
         const select = this._panel.querySelector('#boundary_level_select');
         if (select) {
             select.addEventListener('change', () => {
+                // A manual pick switches auto off FIRST: _updateBoundaryFilter
+                // re-labels the options through _syncSelect, and with auto
+                // still on it would stamp the user's own choice "Auto: …".
+                this._autoAdmin = false;
+                const autoCheck = this._panel.querySelector('#admin_auto_zoom');
+                if (autoCheck) autoCheck.checked = false;
                 const tier = tierByValue(select.value);
                 if (!tier || !tier.levels) {
                     this._currentTier = null;
                     this._boundariesVisible = false;
                     heroMap.hideBoundaries();
                     this._setStatus('');
+                    this._syncSelect();
                 } else {
                     this._currentTier = tier;
                     this._boundariesVisible = true;
                     this._updateBoundaryFilter();
                 }
-                // Disable auto when user manually picks
-                this._autoAdmin = false;
-                const autoCheck = this._panel.querySelector('#admin_auto_zoom');
-                if (autoCheck) autoCheck.checked = false;
             });
         }
 

@@ -466,6 +466,19 @@ def scenario_boundary_tier(browser, R, opts, url_for):
             R.add(S, "auto_tier_labelled_auto",
                   booted and ok and t["label"] == label and bool(re.search(r"\d+ regions here", t["status"] or "")),
                   f"option text {t['label']!r} (want {label!r}); status {t['status']!r}")
+            if S == "boundary_tier":
+                # The converse: a tier the VISITOR picks is theirs, so it must
+                # not be stamped "Auto: " (auto is switched off by the pick) —
+                # and the auto-chosen label must have been there to lose.
+                page.evaluate("""() => { const s = document.getElementById('boundary_level_select');
+                    s.value = 'state'; s.dispatchEvent(new Event('change')); }""")
+                page.wait_for_timeout(300)
+                u = page.evaluate(TIER_JS)
+                R.add(S, "manual_pick_not_labelled_auto",
+                      ok and t["label"].startswith("Auto: ") and u["value"] == "state"
+                      and u["label"] == "State / province (3–4)" and u["auto"] is False,
+                      f"after picking 'state' by hand: option text {u['label']!r}, Auto by zoom {u['auto']} "
+                      f"(was {t['label']!r})")
             snapshot(page, opts, S)
         finally:
             ctx.close()

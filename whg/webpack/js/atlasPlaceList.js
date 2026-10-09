@@ -344,6 +344,16 @@ const PlaceList = {
             this.loading = false;
             this.hasMore = false;
             this._setStatusHtml(failureHtml('beta', 'This list'));
+            // A ?place= deep link is normally consumed once the first page is
+            // in; there is no page here, so hand it to the portal (which shows
+            // the beta notice) rather than dropping it on the floor.
+            if (this._pendingFocus) {
+                const p = this._pendingFocus;
+                this._pendingFocus = null;
+                this._pendingZoom = null;
+                if (this.cfg.onPlaceFocused) this.cfg.onPlaceFocused(p);
+                this.cfg.openPortal(p);
+            }
             return;
         }
         this.loading = true;
