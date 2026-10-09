@@ -4,7 +4,7 @@
     /usr/bin/python3 scripts/atlas_smoke.py https://dev.whgazetteer.org
     /usr/bin/python3 scripts/atlas_smoke.py https://whgazetteer.org --json out.json
     /usr/bin/python3 scripts/atlas_smoke.py https://dev.whgazetteer.org --prove-it-fails
-    /usr/bin/python3 scripts/atlas_smoke.py https://dev.whgazetteer.org --bundle static/webpack/atlas.bundle.js
+    /usr/bin/python3 scripts/atlas_smoke.py https://dev.whgazetteer.org --bundle static/webpack
 
 Anonymous only. It drives Playwright's own bundled Chromium (never the user's
 Chrome, never a visible window) through the scenarios below, each in a fresh
@@ -26,8 +26,10 @@ browser context so no check inherits state from another:
   mobile_768     control off-screen, no tour. Controls must be FOUND for the
                  off-screen check to mean anything.
   places_typing  switch to Places and type: the text stays (tour marked seen,
-                 so the mode switch is tested on its own). Also the
-                 tooltip-over-sibling defect, place#321 (see KNOWN_FAILURES).
+                 so the mode switch is tested on its own); a tour started by
+                 hand gives the text and mode back when closed (place#320).
+                 Also the tooltip-over-sibling defect, place#321 (see
+                 KNOWN_FAILURES).
   first_visit /  the same two actions with NOTHING in localStorage, as a new
   first_visit_link
                  visitor: the tour auto-starts 1.5 s after boot and resets the
@@ -70,6 +72,7 @@ create content: it only ever reads.
 """
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -222,9 +225,16 @@ def new_context(browser, opts, first_visit=False, **kw):
     ctx = browser.new_context(**kw)
     ctx.add_init_script(INIT_DEBUG if first_visit else INIT_QUIET)
     if opts.bundle:
-        bundle_bytes = open(opts.bundle, "rb").read()
-        ctx.route("**/static/webpack/atlas.bundle.js*",
-                  lambda route: route.fulfill(status=200, content_type="application/javascript", body=bundle_bytes))
+        # A file: just atlas.bundle.js. A directory (webpack's output path):
+        # atlas.bundle.js and atlas.bundle.css, so a CSS fix is exercised too.
+        files = ([("atlas.bundle.js", "application/javascript", opts.bundle)] if os.path.isfile(opts.bundle) else
+                 [("atlas.bundle.js", "application/javascript", os.path.join(opts.bundle, "atlas.bundle.js")),
+                  ("atlas.bundle.css", "text/css", os.path.join(opts.bundle, "atlas.bundle.css"))])
+        def serve(body, ctype):
+            # Playwright calls the handler as (route, request); bind by closure.
+            return lambda route, request=None: route.fulfill(status=200, content_type=ctype, body=body)
+        for name, ctype, path in files:
+            ctx.route(f"**/static/webpack/{name}*", serve(open(path, "rb").read(), ctype))
     return ctx
 
 
@@ -455,6 +465,24 @@ def scenario_places_typing(browser, R, opts, url_for):
             R.add(S, "text_retained_after_mode_switch", "mode-toponyms" in mode and v0 == "Jerusalem" and v1 == "Jerusalem",
                   f"mode {mode!r}; value immediately {v0!r}, after 2 s {v1!r}")
 
+            # A tour started by hand while the visitor has typed something must
+            # give the text and the mode back when it closes (place#320).
+            page.evaluate("document.getElementById('atlas_tour_btn').click()")
+            started, secs = bounded_wait(page, "!!document.querySelector('.driver-popover')", opts.tour_timeout)
+            during = page.input_value("#atlas_search_input")
+            # driver.js records the active step only when its 400 ms highlight
+            # animation ends; a close before that destroys the tour WITHOUT
+            # firing onDestroyed (so nothing can restore anything). Close the
+            # way a person would, a moment after the popover is up.
+            page.wait_for_timeout(1000)
+            page.evaluate("const b = document.querySelector('.driver-popover-close-btn'); if (b) b.click();")
+            closed, _ = bounded_wait(page, "!document.querySelector('.driver-popover')", 10)
+            page.wait_for_timeout(300)
+            v2 = page.input_value("#atlas_search_input")
+            mode3 = page.evaluate("document.getElementById('floating_search').className")
+            R.add(S, "tour_restores_state_on_close", started and closed and v2 == "Jerusalem" and "mode-toponyms" in mode3,
+                  f"tour started {started} ({secs:.1f}s), text during tour {during!r}, closed {closed}; after: value {v2!r}, mode {mode3!r}")
+
             # Real-mouse path: rest on Areas (its tooltip opens to the RIGHT, over
             # Places), move to Places and click within the tooltip's fade.
             page.evaluate("document.querySelector('.search-mode-toggle .btn[data-search-mode=\"areas\"]').click()")
@@ -558,7 +586,7 @@ def main():
                     help="run against a subject that cannot satisfy the checks and require every check to fail")
     ap.add_argument("--legacy-ready", action="store_true", help="accept the pre-flag readiness signal (labelled LEGACY)")
     ap.add_argument("--no-gl-flags", action="store_true", help="launch Chromium without the software-GL flags")
-    ap.add_argument("--bundle", help="serve this local atlas.bundle.js in place of the deployed one (pre-deploy check)")
+    ap.add_argument("--bundle", help="serve a local atlas.bundle.js (file) or atlas.bundle.js+css (webpack output dir) in place of the deployed ones")
     ap.add_argument("--storage-state", help="Playwright storage-state JSON of a logged-in beta session; enables the beta scenario")
     ap.add_argument("--json", help="write the results and run metadata here")
     ap.add_argument("--shots", help="directory for one screenshot per scenario (to look at, never to compare)")
