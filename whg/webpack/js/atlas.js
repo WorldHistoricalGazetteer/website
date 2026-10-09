@@ -1454,7 +1454,7 @@ Promise.all([
                                     cb.checked = true;
                                     cb.dispatchEvent(new Event('change', { bubbles: true }));
                                 }
-                                showCopyToast(`${label} can't be browsed in Explore mode. It is selected as a search filter instead.`);
+                                atlasNotice(`${label} can't be browsed in Explore mode. It is selected as a search filter instead.`, { level: 'info' });
                             } else if (radio && radio.type === 'radio') {
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1465,7 +1465,7 @@ Promise.all([
                             } else if (++tries < 20) {
                                 setTimeout(pick, 100);
                             } else {
-                                showCopyToast(`The gazetteer "${wantGazetteer}" was not found in this registry.`);
+                                atlasNotice(`The gazetteer "${wantGazetteer}" was not found in this registry.`, { level: 'info' });
                             }
                         };
                         pick();
@@ -2556,6 +2556,15 @@ function openAtlasPortal(pid) {
         // 404 now means the gateway ANSWERED and has no such place; a timeout or
         // outage is 504/503 (or a client timeout / network failure) and must not
         // read as "not found" (place#272).
+        if (kind === 'withheld') {
+            // 451 (place#269): indexed and searchable, but its terms forbid WHG
+            // re-serving the record. Say whose it is and where to get it.
+            const src = (data && data.source) || {};
+            let h = `<div class="p-3 text-body"><p><i class="fas fa-lock"></i> ${escapeHtml((data && data.detail) || 'This source does not permit WHG to redistribute its records.')}</p>`;
+            if (src.source_url) h += `<p><a href="${escapeHtml(src.source_url)}" target="_blank" rel="noopener">Go to ${escapeHtml(src.name || 'the source')}</a></p>`;
+            body.innerHTML = h + '</div>';
+            return;
+        }
         if (kind === 'unavailable') setGatewayAvailable(false);
         const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
         body.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'This place')}</div>`;
@@ -2790,6 +2799,14 @@ function licenceInfoFor(ns) {
     if (!key) return null;
     if (_licenceCache[key] !== undefined) return _licenceCache[key];
     let info = null;
+    // 'whg' is shared by EVERY contributed dataset, each under its own licence,
+    // so any one row's pill would be wrong for the others. No badge here: the
+    // record's own licence is shown in its portal.
+    if (key === 'whg') {
+        info = { badge: '<span class="text-muted small">licence per dataset (see Details)</span>', restricted: false };
+        _licenceCache[key] = info;
+        return info;
+    }
     const row = document.querySelector(`#gazetteers_offcanvas .authority-item[data-namespace="${CSS.escape(key)}"]`);
     if (row) {
         const badge = row.querySelector('.whg-licence-badge');

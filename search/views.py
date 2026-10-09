@@ -605,6 +605,26 @@ def atlas_place(request):
     ns = place.get("namespace") or (pid.split(":", 1)[0] if ":" in pid else "")
     from api.attribution import registry_attribution
     attribution = registry_attribution(ns)
+    # 🛑 Same rule as /entity/<id>/api (place#269): a source we may index and
+    # search but may not re-serve gets 451, not its record. The portal hands
+    # over the source's own content, so it is a redistribution surface even
+    # behind the beta gate. The body still says whose it is and where to get it.
+    if attribution and attribution.get("redistributable") is False:
+        name = attribution.get("name") or ns or "this source"
+        return JsonResponse({
+            "error": "source not redistributable",
+            "detail": (f"{name} is indexed and searchable through WHG, but its terms do "
+                       f"not permit WHG to redistribute its records. Obtain the data "
+                       f"from the source under its own terms."),
+            "id": pid,
+            "namespace": ns,
+            "source": {
+                "name": attribution.get("name"),
+                "rights_holder": attribution.get("rights_holder"),
+                "source_url": attribution.get("source_url"),
+                "license": attribution.get("license__spdx_id") or attribution.get("license__label"),
+            },
+        }, status=451)
     if attribution:
         place["attribution"] = attribution
     return JsonResponse(place)

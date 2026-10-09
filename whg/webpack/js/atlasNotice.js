@@ -124,6 +124,7 @@ export function classifyStatus(status) {
     if (status >= 200 && status < 300) return 'ok';
     if (status === 403) return 'beta';
     if (status === 404) return 'notfound';
+    if (status === 451) return 'withheld';
     if (status === 504) return 'timeout';
     if (status >= 500) return 'unavailable';
     return 'error';

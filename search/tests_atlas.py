@@ -208,6 +208,36 @@ class PortalFailureVsMissTests(AtlasTestBase):
         self.assertEqual(resp.json()["failure"], "disabled")
 
 
+class PortalRedistributionTests(AtlasTestBase):
+    """/atlas/place/ applies place#269: a non-redistributable source is 451."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.beta)
+
+    def _with_attribution(self, redistributable):
+        attr = {"name": "Test Source", "redistributable": redistributable,
+                "source_url": "https://example.org/src", "license__spdx_id": "CC-BY-NC-4.0"}
+        return patch("api.attribution.registry_attribution", return_value=attr)
+
+    def test_non_redistributable_source_is_451_without_the_record(self):
+        with patch(POST, side_effect=_fake_gateway) as post, self._with_attribution(False):
+            resp = self.place()
+        post.assert_called_once()
+        self.assertEqual(resp.status_code, 451)
+        body = resp.json()
+        self.assertEqual(body["source"]["source_url"], "https://example.org/src")
+        self.assertNotIn("names", body)
+        self.assertNotIn(PLACE["title"], json.dumps(body))
+
+    def test_redistributable_source_is_served_with_attribution(self):
+        with patch(POST, side_effect=_fake_gateway), self._with_attribution(True):
+            resp = self.place()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["title"], PLACE["title"])
+        self.assertEqual(resp.json()["attribution"]["name"], "Test Source")
+
+
 class BoundariesFailureTests(AtlasTestBase):
     """/atlas/boundaries/: an outage is not "No matching areas found"."""
 
