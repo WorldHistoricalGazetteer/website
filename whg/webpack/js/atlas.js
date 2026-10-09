@@ -2851,6 +2851,24 @@ function initiateGatewaySearch(options) {
         gatewaySearchCtrl = null;
         if (kind === 'ok' && data) {
             setGatewayAvailable(data.gateway !== false);
+            // `contained_in` names the selected places; the gateway builds the
+            // region from their index entries, which can fail where
+            // /atlas/geometry/ did not (a stored geometry the index does not
+            // class as an area, or carries no H3 cover). It then fails CLOSED —
+            // `scope.applied: false`, no hits — so ask once more with the
+            // polygon we already hold, which is what the fragment path sent.
+            if (options.contained_in && data.scope && data.scope.applied === false && !options._boundsRetry) {
+                console.warn('Atlas: gateway could not apply contained_in', options.contained_in,
+                    data.scope.message || '', '— retrying with the selected polygons as bounds');
+                gatewaySearchCtrl = null;
+                initiateGatewaySearch({
+                    ...options,
+                    contained_in: undefined, containment: undefined, relation: undefined,
+                    bounds: selectedRegionsCollection(),
+                    _boundsRetry: true,
+                });
+                return;
+            }
             gatewayData = data;
             seedClusterControls(data.clustering_params);
             renderClusters();
@@ -3109,6 +3127,15 @@ function setSearchMatchMode(mode) {
     });
 }
 
+/** The selected regions' geometries as one GeometryCollection (the `bounds`
+ *  form of the area constraint; empty when nothing is selected). */
+function selectedRegionsCollection() {
+    return {
+        type: 'GeometryCollection',
+        geometries: selectedRegions.filter(r => r.geometry).map(r => r.geometry),
+    };
+}
+
 function gatherToponymOptions(qstr) {
     const treeIds = typeTree ? typeTree.getSelectedIdentifiers() : [];
 
@@ -3151,10 +3178,7 @@ function gatherToponymOptions(qstr) {
             containedIn = withGeometry.map(r => r.place_id);
             bounds = { type: 'GeometryCollection', geometries: [] };
         } else {
-            const regionGeometries = withGeometry.map(r => r.geometry);
-            bounds = regionGeometries.length > 0
-                ? { type: 'GeometryCollection', geometries: regionGeometries }
-                : { type: 'GeometryCollection', geometries: [] };
+            bounds = selectedRegionsCollection();
         }
         spatialMode = withGeometry.length > 0 ? 'region' : 'none';
     }
