@@ -287,6 +287,13 @@ def es_apply_visibility(body: dict, user=None, hidden: Optional[HiddenDatasets] 
         flt = []
     elif isinstance(flt, dict):
         flt = [flt]
+    # A bool whose only clauses are ``should`` requires one of them to match;
+    # the moment it gains a ``must`` or ``filter``, Elasticsearch's default
+    # minimum_should_match falls from 1 to 0 and the shoulds become optional
+    # boosts — so adding the visibility clause would turn "this bundle" into
+    # "every visible document". Pin the semantics the query had before.
+    if b.get("should") and not b.get("must") and not flt and "minimum_should_match" not in b:
+        b["minimum_should_match"] = 1
     if clause not in flt:
         flt.append(clause)
     b["filter"] = flt

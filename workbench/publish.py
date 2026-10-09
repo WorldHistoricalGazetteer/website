@@ -145,6 +145,7 @@ def publish_place_collection(project, user, sequenced=False):
     Returns a summary dict: ``{collection_id, added, unresolved:[…], sequenced}``.
     """
     from collection.models import Collection, CollPlace
+    from places.models import Place
     from traces.models import TraceAnnotation
 
     snap = project.snapshot or {}
@@ -166,16 +167,28 @@ def publish_place_collection(project, user, sequenced=False):
     _apply_scope(coll, snap)
     coll.save()
 
+    # place#310: a member the publisher may not see (kept through _resolve_places because it was
+    # already a member) carried no title, note or relation in their snapshot. Its membership and
+    # sequence are rewritten like any other, but the publisher's own annotation on it is left
+    # exactly as it was — a republish must not blank what they could not read.
+    from api.dataset_access import visible_places_q
+    visible_pks = set(Place.objects.filter(id__in=[p.id for p, _ in resolved])
+                      .filter(visible_places_q(user)).values_list('id', flat=True))
+    withheld_pks = {p.id for p, _ in resolved} - visible_pks
+
     # Rebuild membership from the snapshot (publish-back is authoritative for this collection's set).
     # Only touch rows we own the shape of — CollPlace + the locating TraceAnnotations we create.
     CollPlace.objects.filter(collection=coll).delete()
-    TraceAnnotation.objects.filter(collection=coll, owner=user, anno_type='place').delete()
+    (TraceAnnotation.objects.filter(collection=coll, owner=user, anno_type='place')
+     .exclude(place_id__in=withheld_pks).delete())
 
     added = 0
     for i, (place, ref) in enumerate(resolved):
         seq = ref.get('seq')
         sequence = seq if isinstance(seq, int) else (i if sequenced else 0)
         CollPlace.objects.create(collection=coll, place=place, sequence=sequence)
+        if place.id in withheld_pks:
+            continue
         relation = ref.get('relation')
         TraceAnnotation.objects.create(
             collection=coll, place=place, owner=user, anno_type='place', motivation='locating',

@@ -86,16 +86,64 @@ def _must_not_dataset_labels(body):
 
 
 class FakeES:
-    """Serves ``docs`` (legacy ``whg``-index documents) minus those whose
-    ``dataset`` the body excludes. Records every body it was given."""
+    """Serves ``docs`` (legacy ``whg``-index documents) that satisfy the body's
+    ``bool`` query under Elasticsearch's own semantics — ``must`` / ``filter``
+    all match, ``must_not`` none, and ``should`` at least ``minimum_should_match``
+    of them, which ES defaults to 1 when the bool has no ``must``/``filter`` and
+    to 0 once it has. That last rule is the one a visibility clause can trip
+    over: adding a ``filter`` to a should-only bool silently turns the shoulds
+    into optional boosts. Records every body it was given."""
 
     def __init__(self, docs):
         self.docs = docs
         self.bodies = []
 
+    @staticmethod
+    def _as_list(x):
+        return x if isinstance(x, list) else ([x] if x else [])
+
+    def _clause(self, clause, doc):
+        src = doc["_source"]
+        if "bool" in clause:
+            return self._bool(clause["bool"], doc)
+        if "match" in clause:
+            (field, val), = clause["match"].items()
+            if field == "_id":
+                return doc["_id"] == val
+            return str(val).lower() in str(src.get(field, "")).lower()
+        if "parent_id" in clause:
+            return (src.get("relation") or {}).get("parent") == clause["parent_id"]["id"]
+        if "exists" in clause:
+            return clause["exists"]["field"] in src
+        if "terms" in clause:
+            (field, vals), = clause["terms"].items()
+            have = src.get(field)
+            return bool(set(have) & set(vals)) if isinstance(have, list) else have in vals
+        if "multi_match" in clause:
+            q = str(clause["multi_match"]["query"]).lower()
+            return (q in str(src.get("title", "")).lower()
+                    or any(q in str(n.get("toponym", "")).lower() for n in src.get("names", [])))
+        return True  # match_all, geo_shape, has_child: not under test here
+
+    def _bool(self, b, doc):
+        musts = self._as_list(b.get("must"))
+        filters = self._as_list(b.get("filter"))
+        if any(not self._clause(c, doc) for c in musts + filters):
+            return False
+        if any(self._clause(c, doc) for c in self._as_list(b.get("must_not"))):
+            return False
+        shoulds = self._as_list(b.get("should"))
+        if shoulds:
+            msm = b.get("minimum_should_match")
+            if msm is None:
+                msm = 0 if (musts or filters) else 1
+            if sum(self._clause(c, doc) for c in shoulds) < int(msm):
+                return False
+        return True
+
     def _select(self, body):
-        excluded = _must_not_dataset_labels(body)
-        return [d for d in self.docs if d["_source"]["dataset"] not in excluded]
+        query = (body or {}).get("query") or body or {}
+        return [d for d in self.docs if self._clause(query, d)]
 
     def search(self, index=None, body=None, size=None, **kw):
         self.bodies.append(body)
@@ -665,9 +713,6 @@ class LegacyIndexSurfaceTests(VisibilityMatrixBase):
     def test_api_index_by_name(self):
         self.run_matrix(lambda: self.client.get("/api/index/", {"name": "Placeville"}), "/api/index/?name")
 
-    def test_api_index_by_whgid(self):
-        self.run_matrix(lambda: self.client.get("/api/index/", {"whgid": "wpub"}), "/api/index/?whgid")
-
     def test_search_context(self):
         self.run_matrix(lambda: self.client.get("/search/context/", {
             "idx": "whg", "doc_type": "place", "task": "features",
@@ -787,3 +832,131 @@ class GatewaySurfaceTests(VisibilityMatrixBase):
             return any(row["id"] == f"whg:{self.datasets[k].pk}" for row in r.context["specialist_gazetteers"])
         # (the pub row's released embargo was replaced by a published row above)
         self.check_matrix(sees, keys=("pub", "priv"), surface="/atlas/ specialist gazetteers")
+
+
+# ---------------------------------------------------------------------------
+# Pre-ship review of f0965975a: four more places the rule had to reach
+# ---------------------------------------------------------------------------
+
+class ReviewFixTests(VisibilityMatrixBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from collection.models import Collection, CollPlace
+        from traces.models import TraceAnnotation
+        from django.contrib.gis.geos import Polygon
+        with patch("datasets.signals.doi"):
+            cls.pl_coll = Collection.objects.create(
+                owner=cls.users["owner"], title="Place coll", collection_class="place",
+                status="sandbox", keywords=["k"],
+                bbox=Polygon.from_bbox((-1.2, 51.0, -1.0, 51.2)))  # stored over ALL members
+            for i, p in enumerate(cls.places.values()):
+                CollPlace.objects.create(collection=cls.pl_coll, place=p, sequence=i)
+                TraceAnnotation.objects.create(collection=cls.pl_coll, place=p, owner=cls.users["owner"],
+                                               anno_type="place", motivation="locating",
+                                               relation=["waypoint"], saved=True)
+
+    def legacy_docs(self):
+        base = LegacyIndexSurfaceTests.docs(self)
+        # a second PUBLIC doc: the one a should-less bundle query must NOT return
+        other = json.loads(json.dumps(base[0]))
+        other.update({"_id": "wother"})
+        other["_source"].update({"place_id": 999999, "title": "Otherville", "whg_id": "wother",
+                                 "names": [{"toponym": "Otherville"}], "searchy": ["Otherville"]})
+        return base + [other]
+
+    def test_api_index_whgid_bundle_is_the_asked_bundle_only(self):
+        """A visibility filter added to a should-only bool must not turn the
+        shoulds into optional boosts (ES minimum_should_match 1 → 0): the
+        response is the asked parent and its children, never other visible docs."""
+        fake = FakeES(self.legacy_docs())
+        with override_settings(ES_CONN=fake):
+            wrong = []
+            for who in WHO:
+                self.login(who)
+                for k in DATASETS:
+                    r = self.client.get("/api/index/", {"whgid": f"w{k}"})
+                    self.assertEqual(r.status_code, 200, (who, k, r.content[:200]))
+                    titles = {f["properties"]["title"] for f in r.json()["features"]}
+                    want = {self.title(k)} if expected(who, k) else set()
+                    if titles != want:
+                        wrong.append(f"{who}/{k}: got {sorted(titles)}, expected {sorted(want)}")
+            self.assertEqual(wrong, [], "\n".join(wrong))
+
+    def test_portal_extent_and_centroid_cover_visible_members_only(self):
+        ids = ",".join(str(self.places[k].id) for k in DATASETS)
+        self.login("beta")
+        r = self.client.get(f"/places/portal/{ids}/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["extent"], [-1.0, 51.0, -1.0, 51.0])
+        self.assertEqual(r.context["centroid"], [-1.0, 51.0])
+        self.login("owner")
+        r = self.client.get(f"/places/portal/{ids}/")
+        self.assertEqual(r.context["extent"], [-1.2, 51.0, -1.0, 51.2])
+
+    def test_mapdata_bounds_cover_visible_members_only(self):
+        caches = CollectionSurfaceTests._mapdata_caches(self)
+        with override_settings(CACHES=caches):
+            def minx(r):
+                self.assertEqual(r.status_code, 200, r.content[:200])
+                return min(x for x, _y in r.json()["metadata"]["bounds"]["coordinates"][0])
+            self.login("beta")
+            self.assertEqual(minx(self.client.get(f"/mapdata/collections/{self.pl_coll.id}/")), -1.0)
+            self.login("owner")
+            self.assertEqual(minx(self.client.get(f"/mapdata/collections/{self.pl_coll.id}/")), -1.2)
+
+    def test_attribution_does_not_resolve_a_withheld_place_or_dataset(self):
+        """``/api/attribution/?ids=`` names a contributed place's dataset (label,
+        citation, licence) for the ``whg:<ds>:<src>``, ``whg:<pk>`` and bare-pk
+        forms; a withheld one answers exactly as an absent id."""
+        forms = {
+            "bare pk": lambda k: str(self.places[k].id),
+            "whg:<pk>": lambda k: f"whg:{self.places[k].id}",
+            "whg:<ds>:<src>": lambda k: f"whg:{self.datasets[k].pk}:1",
+        }
+        wrong = []
+        for who in WHO:
+            self.login(who)
+            for k in DATASETS:
+                for form, mk in forms.items():
+                    r = self.client.get("/api/attribution/", {"ids": mk(k)})
+                    self.assertEqual(r.status_code, 200, (who, k, form))
+                    got = self.datasets[k].label in (r.json().get("datasets") or {})
+                    if got != expected(who, k):
+                        wrong.append(f"{who}/{k} [{form}]: {'named' if got else 'absent'}")
+        self.assertEqual(wrong, [], "\n".join(wrong))
+        # the control for the control: an absent id names nothing
+        self.login("owner")
+        self.assertNotIn("datasets", self.client.get("/api/attribution/", {"ids": "999999999"}).json())
+
+    def test_republish_by_an_outsider_leaves_their_annotation_on_a_withheld_member_alone(self):
+        from collection.models import CollPlace
+        from traces.models import TraceAnnotation
+        from workbench.checkout import checkout_place_collection
+        from workbench.models import Team, WorkbenchProject
+        from workbench.publish import publish_place_collection
+        beta = self.users["beta"]
+        priv, pub = self.places["priv"], self.places["pub"]
+        mine = TraceAnnotation.objects.create(
+            collection=self.pl_coll, place=priv, owner=beta, anno_type="place", motivation="locating",
+            relation=["waypoint"], note="my note on a place I can no longer see", saved=True)
+        TraceAnnotation.objects.create(
+            collection=self.pl_coll, place=pub, owner=beta, anno_type="place", motivation="locating",
+            relation=["waypoint"], note="old note", saved=True)
+        snapshot, base_version = checkout_place_collection(self.pl_coll, user=beta)
+        for ref in snapshot["places"]:
+            if ref["id"] == f"whg:{pub.id}":
+                ref["note"] = "new note"
+        project = WorkbenchProject.objects.create(
+            team=Team.personal_for(beta), title="pc", created_by=beta, snapshot=snapshot, version=1,
+            status="draft", doc_type="place_collection", published_collection=self.pl_coll,
+            source_published_id=str(self.pl_coll.pk), base_version=base_version)
+        out = publish_place_collection(project, beta)
+        self.assertEqual(out["collection_id"], self.pl_coll.pk)
+        self.assertEqual(CollPlace.objects.filter(collection=self.pl_coll).count(), 3)   # membership kept
+        mine.refresh_from_db()                                                           # row untouched
+        self.assertEqual(mine.note, "my note on a place I can no longer see")
+        self.assertEqual(TraceAnnotation.objects.filter(collection=self.pl_coll, owner=beta, place=priv).count(), 1)
+        self.assertEqual(TraceAnnotation.objects.get(collection=self.pl_coll, owner=beta, place=pub).note, "new note")
+        # the owner's annotations were never the publisher's to touch
+        self.assertEqual(TraceAnnotation.objects.filter(collection=self.pl_coll, owner=self.users["owner"]).count(), 3)

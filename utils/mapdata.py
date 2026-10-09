@@ -592,7 +592,12 @@ def mapdata_collection(id, withheld_dataset_pks=None):
     collection = get_object_or_404(Collection, id=id)
     withheld = frozenset(withheld_dataset_pks or ())
 
-    bbox = collection.bbox or compute_collection_bbox(collection)
+    # place#310: the stored bbox covers every member; a filtered view gets a
+    # bbox of the members it shows.
+    if withheld:
+        bbox = compute_collection_bbox(collection, withheld_dataset_pks=withheld)
+    else:
+        bbox = collection.bbox or compute_collection_bbox(collection)
 
     feature_collection = {
         "title": collection.title,

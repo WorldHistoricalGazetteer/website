@@ -258,7 +258,10 @@ class PlacePortalView(TemplateView):
             raise Http404("Invalid place ID format")
 
         if all_geoms:
-            unioned_geometry = PlaceGeom.objects.filter(place_id__in=place_ids).aggregate(union=Union('geom'))['union']
+            # place#310: the extent and centroid are those of the places rendered, not of
+            # every id asked for — a withheld member must not shape them either.
+            unioned_geometry = (PlaceGeom.objects.filter(place_id__in=[p.id for p in qs])
+                                .aggregate(union=Union('geom'))['union'])
             context['extent'] = list(wkt.loads(unioned_geometry.envelope.wkt).bounds)
             context['centroid'] = list(unioned_geometry.centroid.tuple)
         else:

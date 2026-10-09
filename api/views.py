@@ -504,7 +504,11 @@ class IndexAPIView(View):
                             "should": [
                                 {"parent_id": {"type": "child", "id": whgid}},
                                 {"match": {"_id": whgid}}
-                            ]
+                            ],
+                            # The shoulds ARE the query. Without this, any filter added
+                            # below (the visibility clause) drops ES's default from 1 to 0
+                            # and the bundle becomes "every visible document".
+                            "minimum_should_match": 1
                         }
                     }
                 }
@@ -1770,24 +1774,28 @@ class AttributionView(APIView):
     GET /api/attribution/?namespaces=gn,wd,tgn
     GET /api/attribution/?ids=gn:745044,wd:Q84
 
-    Returns ``{"sources": {ns: {name, citation, record_count}}, "whg": {…overlay…}}``.
+    Returns ``{"sources": {ns: {name, citation, record_count}}, "whg": {…overlay…}}``
+    plus ``datasets`` (keyed by label) when ``ids`` name contributed places —
+    only those the requester may see (place#310), so a session is recognised
+    here as on ``/api/sources/``; a withheld id names nothing, as an absent one.
     Consumers of the reconciliation / search / extension APIs can resolve the
     attribution for the namespaces appearing in their results.
     """
-    authentication_classes = []
+    authentication_classes = [SessionAuthentication]
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        from api.attribution import attribution_block, namespaces_from_ids
-        namespaces = set()
+        from api.attribution import attribution_block, datasets_from_place_ids, namespaces_from_ids
+        namespaces, datasets = set(), set()
         ns_param = request.GET.get('namespaces')
         if ns_param:
             namespaces |= {n.strip().lower() for n in ns_param.split(',') if n.strip()}
         ids_param = request.GET.get('ids')
         if ids_param:
-            namespaces |= namespaces_from_ids(
-                [i.strip() for i in ids_param.split(',') if i.strip()])
-        return Response(attribution_block(namespaces))
+            ids = [i.strip() for i in ids_param.split(',') if i.strip()]
+            namespaces |= namespaces_from_ids(ids)
+            datasets = datasets_from_place_ids(ids, user=request.user)
+        return Response(attribution_block(namespaces, datasets=datasets))
 
 
 class SourceGazetteersView(APIView):

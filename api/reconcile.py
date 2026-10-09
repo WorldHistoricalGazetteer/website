@@ -1273,11 +1273,11 @@ def process_queries(queries, batch_size=50, user=None):
                 results[key] = res
 
     out = {**results, "messages": messages} if messages else dict(results)
-    out["attribution"] = _attribution_for_results(results)
+    out["attribution"] = _attribution_for_results(results, user=user)
     return out
 
 
-def _attribution_for_results(results):
+def _attribution_for_results(results, user=None):
     """Aggregated source terms for a batch of reconciliation results (place#157).
 
     Reconciliation is the channel where this matters most: a single response
@@ -1311,7 +1311,7 @@ def _attribution_for_results(results):
                for c in candidates if c.get("namespace") == WHG_NAMESPACE]
     return safe_attribution_block(
         namespaces=namespaces,
-        datasets=datasets_from_place_ids(whg_ids),
+        datasets=datasets_from_place_ids(whg_ids, user=user),
     )
 
 
