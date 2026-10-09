@@ -260,6 +260,7 @@ Each query id you send comes back as a key carrying `result`, plus per-query met
 ```
 {"q1": {"result": [ /* candidates */ ],
         "namespaces_searched": ["gn","osm"],
+        "namespaces_excluded": ["gb"],                        // the default exclusion, applied
         "variants_used": [], "derived_forms": [],
         "scope": {"applied": true, "mode": "polygon", ...},   // only when a region was requested
         "gateway": {"answered": false, "error": "timeout"}},  // ONLY on failure — see below
