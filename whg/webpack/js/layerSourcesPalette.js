@@ -64,6 +64,18 @@ function tierLevelRange(tier) {
     return first === last ? first : `${first}–${last}`;
 }
 
+/**
+ * The text of a tier's ``<option>``. A tier that *Auto by zoom* chose is
+ * prefixed "Auto: " so the closed select never reads as a choice the user
+ * made (place#317): the tier is picked from the opening zoom before anyone
+ * has touched the control, and a bare "Municipality / locality" there looked
+ * like a stray setting.
+ */
+function tierOptionLabel(tier, autoChosen) {
+    const range = tier.levels ? ` (${tierLevelRange(tier)})` : '';
+    return `${autoChosen ? 'Auto: ' : ''}${tier.label}${range}`;
+}
+
 /* Sources that support admin-tier filtering (the Boundary Level dropdown).
    osm_misc, po, clio, nl are boundary-bearing but untiered: their
    ``boundary`` field carries tag values or single class strings, not the
@@ -148,7 +160,7 @@ export default class LayerSourcesPalette {
                 </p>
                 <select id="boundary_level_select" class="form-select form-select-sm">
                     ${BOUNDARY_TIERS.map(t =>
-                        `<option value="${t.value}">${t.label}${t.levels ? ' (' + tierLevelRange(t) + ')' : ''}</option>`
+                        `<option value="${t.value}">${tierOptionLabel(t, false)}</option>`
                     ).join('')}
                 </select>
                 <div class="admin-auto-toggle">
@@ -241,6 +253,9 @@ export default class LayerSourcesPalette {
                 this._autoAdmin = autoCheck.checked;
                 if (this._autoAdmin) {
                     this._applyAutoTier();
+                } else {
+                    // The tier stays; it is now the user's, so drop the "Auto:" prefix.
+                    this._syncSelect();
                 }
             });
         }
@@ -282,10 +297,22 @@ export default class LayerSourcesPalette {
         this._probeTier();
     }
 
-    /** Reflect the active tier in the dropdown (auto changes it behind the user). */
+    /**
+     * Reflect the active tier in the dropdown (auto changes it behind the
+     * user), and say so: while *Auto by zoom* is on, the tier it chose reads
+     * "Auto: Country (2)" rather than a bare "Country (2)" (place#317).
+     */
     _syncSelect() {
         const select = this._panel.querySelector('#boundary_level_select');
-        if (select) select.value = this._currentTier ? this._currentTier.value : 'off';
+        if (!select) return;
+        const current = this._currentTier ? this._currentTier.value : 'off';
+        for (const opt of select.options) {
+            const tier = tierByValue(opt.value);
+            if (!tier) continue;
+            const label = tierOptionLabel(tier, this._autoAdmin && !!tier.levels && opt.value === current);
+            if (opt.textContent !== label) opt.textContent = label;
+        }
+        select.value = current;
     }
 
     _setStatus(text, muted = false) {
@@ -347,6 +374,13 @@ export default class LayerSourcesPalette {
             // panning from a country that uses level 4 to one that does not has
             // to re-pick. Both fire once per gesture, so this is not chatty.
             const reapply = () => {
+                // The opening globe spin is a ``jumpTo`` per animation frame,
+                // so it emits ``moveend`` ~60 times a second (place#317). Each
+                // call here would re-arm an idle listener and a timer; and
+                // nothing the spin changes (longitude only) can alter the
+                // tier. Any zoom stops the spin before its ``zoomend``, so a
+                // deep-linked ``?z=`` still gets through.
+                if (heroMap.isSpinning) return;
                 if (this._autoAdmin && TIERED_SOURCES.has(this._activeSource)) {
                     this._applyAutoTier();
                 } else if (this._currentTier) {
@@ -355,6 +389,13 @@ export default class LayerSourcesPalette {
             };
             heroMap.map.on('zoomend', reapply);
             heroMap.map.on('moveend', reapply);
+            // The opening view gets its tier deliberately, not as a side effect
+            // of the first move: *Auto by zoom* is on from the start, so the
+            // select shows what auto chose for the opening zoom (labelled
+            // "Auto: …") rather than "Off" until something nudges the map.
+            if (this._autoAdmin && TIERED_SOURCES.has(this._activeSource)) {
+                this._applyAutoTier();
+            }
         });
     }
 
@@ -551,6 +592,8 @@ export default class LayerSourcesPalette {
         this._currentTier = null;
         this._shownSource = null;
         this._boundariesVisible = true;
+        this._probeToken++;            // a tier probe still waiting on 'idle' must not land on this source
+        this._syncSelect();
         // Tileset isn't in the base style — load it on demand via the generic
         // gazetteer-style loader.
         heroMap.showGazetteer(tileSourceFor(id));
@@ -591,8 +634,7 @@ export default class LayerSourcesPalette {
         heroMap.hideBoundaries();
         this._setStatus('');
 
-        const select = this._panel.querySelector('#boundary_level_select');
-        if (select) select.value = 'off';
+        this._syncSelect();
         const autoCheck = this._panel.querySelector('#admin_auto_zoom');
         if (autoCheck) autoCheck.checked = true;
     }

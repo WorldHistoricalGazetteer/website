@@ -520,6 +520,9 @@ class HeroMap {
 
     get spinWasStopped() { return this._spinStopped; }
 
+    /** True while the opening globe spin is running (a jumpTo per frame). */
+    get isSpinning() { return !!this._spinning; }
+
     _wireSpinStop() {
         const canvas = this.map.getCanvas();
         const stop = () => this.stopSpin();
