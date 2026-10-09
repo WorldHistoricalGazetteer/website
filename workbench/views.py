@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 SNAPSHOT_HISTORY = 25  # ProjectSnapshot rows kept per project (merge ancestor + backup)
+# Collab-token claims the Hocuspocus service checks (hocuspocus/server.js: JWT_ISSUER, JWT_AUDIENCE).
+COLLAB_JWT_ISSUER = 'whg-workbench'
+COLLAB_JWT_AUDIENCE = 'whg-hocuspocus'
+COLLAB_JWT_TTL = 120
 VALID_ROLES = {r[0] for r in TEAM_ROLES}
 
 
@@ -1359,12 +1363,17 @@ def collab_token(request, pid):
         return JsonResponse({'error': 'real-time collaboration is not available'}, status=501)
     now = int(time.time())
     payload = {
+        'iss': COLLAB_JWT_ISSUER,      # the service verifies both (place#314): a token minted for
+        'aud': COLLAB_JWT_AUDIENCE,    # anything else, by anything else, is refused there
         'sub': str(request.user.id),
         'name': getattr(request.user, 'name', '') or request.user.username,
         'project_id': str(p.id),
-        'role': role,
+        'doc_type': p.doc_type,
+        'role': role,                  # advisory: the service re-reads the role from the database
+        'jti': uuid.uuid4().hex,
         'iat': now,
-        'exp': now + 120,  # short TTL: only needs to survive the WS handshake
+        'nbf': now,
+        'exp': now + COLLAB_JWT_TTL,   # short TTL: only needs to survive the WS handshake
     }
     token = jwt.encode(payload, secret, algorithm='HS256')
     return JsonResponse({'token': token, 'document': str(p.id), 'role': role})
