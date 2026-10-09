@@ -12,6 +12,7 @@ data-gaz-group for the root group-pill filter.
      data-gaz-group="{{ g.gaz_group }}"
      {% if g.namespace %}data-namespace="{{ g.namespace }}"{% endif %}
      data-no-explore="{% if g.no_explore %}1{% else %}0{% endif %}"
+     data-redistributable="{% if g.redistributable is False %}0{% else %}1{% endif %}"
      data-gazetteer-type="{{ g.gazetteer_type|default:'standard' }}">
     <div class="gaz-entry-row">
         <label class="form-check gaz-check mb-0"
@@ -46,6 +47,7 @@ data-gaz-group for the root group-pill filter.
             <button type="button" class="btn btn-sm gaz-meta-toggle collapsed"
                     data-bs-toggle="collapse" data-bs-target="#gazmeta-{{ g.dom_id }}"
                     aria-expanded="false" aria-controls="gazmeta-{{ g.dom_id }}"
+                    aria-label="Details, citation and download: {{ g.name }}"
                     rel="tooltip" data-bs-title="Details, citation &amp; download">
                 <i class="fas fa-circle-info"></i>
             </button>
