@@ -31,6 +31,12 @@ app.conf.beat_schedule = {
         'task': 'api.tasks.release_embargoes',
         'schedule': crontab(minute=15, hour='*'),  # Runs every hour
     },
+    # place#322: rebuild the sitemap toponym table so a dataset that goes private or
+    # embargoed drops out of it without a manual step.
+    'populate-toponyms-daily': {
+        'task': 'sitemap.tasks.populate_toponyms',
+        'schedule': crontab(minute=30, hour=3),  # Runs daily at 03:30
+    },
 }
 
 # Load task modules from all registered Django app configs.

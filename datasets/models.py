@@ -568,6 +568,11 @@ class Dataset(models.Model):
         return result
 
     @property
+    def has_accessioned_places(self):
+        """place#322: any of its places is in the shared ``whg`` index (accessioned)."""
+        return self.places.filter(indexed=True).exists()
+
+    @property
     def unindexed(self):
         unidxed = self.places.filter(indexed=False).count()
         return unidxed

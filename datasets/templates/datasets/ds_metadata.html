@@ -172,6 +172,9 @@
               <td>
                 <span class="form-public">{{ form.public.value }}</span>
                 <span class="hidden editing-public">{{ form.public }}</span>
+                {% if form.public.errors %}
+                  <div class="text-danger small mt-1">{{ form.public.errors|join:" " }}</div>
+                {% endif %}
 
                 {% if not editorial and ds.public == False %}
                     <a href="#"><span data-whg-modal="/media/help/going_public_ds.html">
