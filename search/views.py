@@ -637,6 +637,12 @@ def _not_redistributable_response(pid: str, ns: str, attribution: dict,
     }, status=451)
 
 
+# Namespaces whose registry row is an umbrella, not a per-record licence and
+# visibility determination: a place id under them belongs to a contributed
+# dataset (`whg:<dataset_id>:<id>`) whose terms must be looked up per dataset.
+CONTRIBUTED_NAMESPACES = frozenset({"whg"})
+
+
 def atlas_geometry(request):
     """One place's authoritative geometry for the Atlas area selection, proxied
     from the CRC gateway ``GET /api/geometry/<place_id>`` (geom store).
@@ -671,8 +677,26 @@ def atlas_geometry(request):
     ns = pid.split(":", 1)[0]
 
     from api.attribution import registry_attribution
-    attribution = registry_attribution(ns)
-    if attribution and attribution.get("redistributable") is False:
+    attribution = None if ns in CONTRIBUTED_NAMESPACES else registry_attribution(ns)
+    if not attribution:
+        # Contributed data (`whg:<dataset>:<id>`), or a namespace with no
+        # authority row. The `whg` registry row IS an authority row (the
+        # umbrella seeded by api/migrations/0004), but it says nothing about
+        # the dataset the place belongs to: its polygons are in the gateway's
+        # store, and neither the store nor the index knows the dataset's
+        # visibility, embargo or licence, so a private or no-derivatives
+        # dataset would be served like a public one. Withheld (451; the
+        # gateway says the same, since `whg` is not in its AUTHORITIES) until
+        # a per-dataset lookup exists — place#319 follow-up.
+        return JsonResponse({
+            "error": "source licence not determined",
+            "detail": (f"'{ns}' is not a registered authority, so the terms and visibility "
+                       f"of its geometry cannot be determined here; it is withheld rather "
+                       f"than served on an assumption."),
+            "id": pid,
+            "namespace": ns,
+        }, status=451)
+    if attribution.get("redistributable") is False:
         return _not_redistributable_response(pid, ns, attribution, what="its geometry")
 
     from api.crc_client import crc_geometry

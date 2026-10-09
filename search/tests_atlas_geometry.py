@@ -202,6 +202,37 @@ class GeometryRedistributionTests(GeometryTestBase):
         super().setUp()
         self.client.force_login(self.beta)
 
+    def test_namespace_without_an_authority_row_is_451_without_asking_the_gateway(self):
+        # Contributed data (whg:<dataset>:<id>) has no authority row, and the
+        # registry row it does have says nothing this view can read about the
+        # dataset's visibility, embargo or licence: withheld (451), and the
+        # gateway — whose store holds the polygon — is never asked.
+        with patch(GET, side_effect=_fake_gateway) as get, \
+                patch("api.attribution.registry_attribution", return_value=None) as attr:
+            resp = self.geometry("nonesuch:1")
+        get.assert_not_called()
+        attr.assert_called_once_with("nonesuch")
+        self.assertEqual(resp.status_code, 451)
+        body = resp.json()
+        self.assertEqual(body["error"], "source licence not determined")
+        self.assertEqual(body["namespace"], "nonesuch")
+        self.assertNotIn("coordinates", json.dumps(body))
+        # Unpatched, against the real registry: migration 0004 seeds a `whg`
+        # row with entry_class='authority' (the umbrella), so "no authority
+        # row" alone would let contributed data through — `whg` is refused by
+        # name. Establish the premise, then the refusal.
+        from api.attribution import registry_attribution
+        self.assertIsNotNone(registry_attribution("whg"), "premise: the whg umbrella row exists")
+        with patch(GET, side_effect=_fake_gateway) as get:
+            resp = self.geometry("whg:42:7")
+        get.assert_not_called()
+        self.assertEqual(resp.status_code, 451)
+        self.assertEqual(resp.json()["error"], "source licence not determined")
+        # And a namespace WITH an authority row still gets through.
+        with patch(GET, side_effect=_fake_gateway) as get, _attribution(True):
+            self.assertEqual(self.geometry("osm:r1").status_code, 200)
+        get.assert_called_once()
+
     def test_entity_prefix_is_stripped_before_the_registry_check(self):
         # "place:osm:r1" must be checked as namespace "osm", not "place": a
         # withheld source must not reach the gateway behind the prefix.
