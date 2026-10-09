@@ -1688,6 +1688,16 @@ def reconcile_place_es(query, user=None):
     if searched:
         extra["namespaces_searched"] = sorted(searched)
 
+    # The negative scope, which `namespaces_searched` cannot carry (place#294): the gateway
+    # excludes `gb` by default, on purpose, and until it echoed the exclusion a caller could not tell
+    # "searched, matched nothing" from "never consulted". Echoed in a field of its own — additive, so
+    # a client that validates the fields it knows is unaffected — and ONLY when the gateway reported
+    # it (an older gateway, or a failed call, says nothing and so do we). The place#218 rule applies
+    # here as to `namespaces_searched`: naming an embargoed namespace, even as excluded, discloses it.
+    gw_excluded = crc_meta.get("namespaces_excluded")
+    if gw_excluded is not None:
+        extra["namespaces_excluded"] = sorted(set(gw_excluded) - (_hidden_ns or set()))
+
     # 3. Merge: legacy first, then CRC
     all_hits = legacy_hits + crc_hits
 

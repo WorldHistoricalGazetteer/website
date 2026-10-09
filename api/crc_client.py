@@ -639,6 +639,11 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
             meta["namespaces"] = data["namespaces"]
         if data.get("namespaces_searched") is not None:
             meta["namespaces_searched"] = data["namespaces_searched"]
+        # The exclusion the gateway actually applied (place#294): `["gb"]` by default, `[]` when
+        # an explicit `namespaces` scope overrode it. Nothing else in the response says a source
+        # was consulted-and-suppressed rather than searched-and-empty. Absent on an older gateway.
+        if data.get("namespaces_excluded") is not None:
+            meta["namespaces_excluded"] = data["namespaces_excluded"]
 
     return _adapt_hits(data)
 
