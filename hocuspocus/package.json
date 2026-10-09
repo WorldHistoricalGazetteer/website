@@ -5,7 +5,8 @@
   "description": "WHG Workbench real-time collaboration server (Yjs + Hocuspocus, place#112)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "@hocuspocus/extension-database": "^2.15.2",

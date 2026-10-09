@@ -117,14 +117,24 @@ def consume_query_budget(user, n_queries: int) -> tuple[bool, int]:
     ⚠️ The charge is applied even when it takes the caller over the limit, so a
     client that ignores 429 and hammers cannot reset its own window by retrying.
     """
-    rate = _rate()
+    return consume_budget(_key(user), _rate(), n_queries)
+
+
+def consume_budget(identity: str, rate: int, n: int = 1) -> tuple[bool, int]:
+    """Charge `n` units against the fixed-window budget `identity`, limited to `rate` per
+    minute. The reconciliation limiter above counts queries under `rq:…` keys; the Workbench
+    token path (place#314) counts requests under `wb:…` keys, with its own rate. Same window,
+    same cache, same fail-open rule.
+
+    Returns `(allowed, retry_after_seconds)`; a falsy `rate` means unlimited.
+    """
     if not rate:
         return True, 0
 
-    n = max(1, int(n_queries))
+    n = max(1, int(n))
     now = time.time()
     window = int(now // WINDOW_SECONDS)
-    key = f"{_key(user)}:{window}"
+    key = f"{identity}:{window}"
 
     cache = _cache()
     try:
@@ -159,8 +169,8 @@ def consume_query_budget(user, n_queries: int) -> tuple[bool, int]:
 
     if used > rate:
         retry_after = max(1, int((window + 1) * WINDOW_SECONDS - now))
-        logger.info("throttle: %s over budget — %d/%d queries this window, retry in %ds",
-                    _key(user), used, rate, retry_after)
+        logger.info("throttle: %s over budget — %d/%d this window, retry in %ds",
+                    identity, used, rate, retry_after)
         return False, retry_after
 
     return True, 0

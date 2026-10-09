@@ -249,7 +249,8 @@ class ApiTests(TestCase):
         with override_settings(HOCUSPOCUS_SECRET='test-secret'):
             r = self.client.post(url)
             self.assertEqual(r.status_code, 200, r.content)
-            payload = _jwt.decode(r.json()['token'], 'test-secret', algorithms=['HS256'])
+            payload = _jwt.decode(r.json()['token'], 'test-secret', algorithms=['HS256'],
+                                  audience='whg-hocuspocus', issuer='whg-workbench')
             self.assertEqual(payload['project_id'], j['id'])
             self.assertEqual(payload['role'], 'owner')
             # Non-member is refused a token
