@@ -1119,7 +1119,12 @@ Promise.all([
                 if (!el.getAttribute('data-bs-title')) el.setAttribute('data-bs-title', t);
                 el.removeAttribute('title');
             }
-            bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' });
+            // tt-nopointer: an informational tip must never take a click meant
+            // for the control beside it (the Areas tip sits over Places, place#321).
+            // Advisory tips keep their own custom class from the markup.
+            const cfg = { trigger: 'hover' };
+            if (!el.getAttribute('data-bs-custom-class')) cfg.customClass = 'tt-nopointer';
+            bs.Tooltip.getOrCreateInstance(el, cfg);
         });
         return true;
     };
@@ -1509,9 +1514,35 @@ Promise.all([
     }
 
     // ── Auto-start tour on first visit ──
-    if (!hasSeenAtlasTour() && !isWelcomeDismissed() && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+    // Not when the URL already carries Atlas state (a shared link into
+    // Explore, a place, a panel): the tour's cleanup would reset it under the
+    // visitor (place#320). Same treatment as a pre-populated toponym.
+    const urlHasAtlasState = (() => {
+        try {
+            const p = new URLSearchParams(location.search);
+            return ['gazetteer', 'place', 'panel', 'gmode'].some(k => p.has(k));
+        } catch (e) { return false; }
+    })();
+    if (!hasSeenAtlasTour() && !isWelcomeDismissed() && !urlHasAtlasState
+        && !(typeof atlas_toponym !== 'undefined' && atlas_toponym)) {
+        // And not once the visitor has started using the search bar during the
+        // delay: typing or a mode click means they are busy, and the tour stays
+        // a click away on its bottom-left button (place#320). The map itself is
+        // deliberately not watched: spinning the globe is not "busy".
+        let busy = false;
+        const noteBusy = () => { busy = true; };
+        const fs = document.getElementById('floating_search');
+        if (fs) {
+            fs.addEventListener('pointerdown', noteBusy, { capture: true, once: true });
+            fs.addEventListener('keydown', noteBusy, { capture: true, once: true });
+        }
         // Delay slightly to let the map finish rendering
         setTimeout(() => {
+            if (fs) {
+                fs.removeEventListener('pointerdown', noteBusy, { capture: true });
+                fs.removeEventListener('keydown', noteBusy, { capture: true });
+            }
+            if (busy) return;
             const wp = document.getElementById('atlas_welcome');
             if (wp) {
                 wp.classList.add('atlas-welcome-hidden');

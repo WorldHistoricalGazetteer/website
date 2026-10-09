@@ -41,6 +41,10 @@ let _demoMode = false;
 let _demoPaused = false;
 let _autoAdvanceTimer = null;
 let _activeDriver = null;
+// What the visitor had in the search bar when the tour started (place#320):
+// the tour forces Areas mode and switchSearchMode() clears the input, so the
+// mode and text are put back when the tour ends.
+let _userState = null;
 
 /** Number of steps shown in the current mode. The final "Re-take this
  *  tour" step is omitted in demo mode. */
@@ -289,6 +293,24 @@ function tourCleanup() {
     unblockInteractions();
     ensureSearchMode('areas');
     setTemporalMode('off');
+}
+
+function snapshotUserState() {
+    const active = document.querySelector('.search-mode-toggle .btn.active');
+    const input = document.getElementById('atlas_search_input');
+    return {
+        mode: (active && active.dataset && active.dataset.searchMode) || 'areas',
+        text: input ? input.value : '',
+    };
+}
+
+function restoreUserState(st) {
+    if (!st) return;
+    const active = document.querySelector('.search-mode-toggle .btn.active');
+    const current = (active && active.dataset && active.dataset.searchMode) || 'areas';
+    if (current !== st.mode) setSearchMode(st.mode);   // this clears the input...
+    const input = document.getElementById('atlas_search_input');
+    if (input && st.text) input.value = st.text;       // ...so the text goes back after
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -577,6 +599,8 @@ function createTourDriver() {
         onDestroyed: () => {
             clearAutoAdvance();
             tourCleanup();
+            restoreUserState(_userState);
+            _userState = null;
             if (_demoMode) {
                 _demoMode = false;
                 _demoPaused = false;
@@ -602,7 +626,9 @@ function createTourDriver() {
 export function startAtlasTour(options = {}) {
     // driver.js popovers do not fit a phone-width viewport: skip the tour there.
     if (isNarrowViewport() && !options.demo) return;
-    // Ensure clean state before starting
+    // Ensure clean state before starting, remembering what the visitor had
+    // typed and which mode they were in so onDestroyed can put it back.
+    _userState = snapshotUserState();
     clearAutoAdvance();
     tourCleanup();
     blockInteractions();
