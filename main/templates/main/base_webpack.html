@@ -226,6 +226,13 @@
                             </span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link px-1" id="atlas-report-snag" href="{% url 'beta-snag' %}"
+                           aria-label="Report a snag"
+                           title="Found a bug in the Atlas or Gazetteers beta? Report it here. Your page, search state, browser and a diagnostic session id are attached automatically.">
+                            <i class="fas fa-bug"></i><span class="d-lg-none ms-1">Report a snag</span>
+                        </a>
+                    </li>
                     {% endif %}
                     {% if user.can_access_beta %}
                     {% comment %}Collaborative Workbench — BETA, unpublished preview (place#111/#112). Whole menu is gated to staff/superusers and beta_tester-role users (can_access_beta); non-beta users never see it. Burnt-orange pill signals an in-development feature not yet public.{% endcomment %}

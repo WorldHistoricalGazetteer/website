@@ -1900,6 +1900,23 @@ function updateExploreUrl(ns) {
     } catch (e) { /* URL API unavailable */ }
 }
 
+// Snapshot of the Atlas view for the beta "Report a snag" form (beta-diag.js
+// reads window.WHGAtlasContext when it opens the form), so a report says which
+// mode / panel / query the tester was in, not just a URL that doesn't carry them.
+window.WHGAtlasContext = function () {
+    const gazOpen = !!document.querySelector('#gazetteers_offcanvas.show');
+    const input = document.getElementById('atlas_search_input');
+    const gazBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
+    return {
+        mode: searchMode,
+        panel: gazOpen ? 'gazetteers' : '',
+        gmode: gazOpen && gazBody ? (gazBody.dataset.mode || 'filter') : '',
+        gazetteer: exploreSelection || '',
+        query: input ? (input.value || '').trim().slice(0, 120) : '',
+        feature: gazOpen ? 'Atlas: Gazetteers panel' : 'Atlas',
+    };
+};
+
 // ── Shareable per-place deep link (?place=<place_id>) ──
 // A place popup/modal focus is reflected in the URL so a shared link reopens the
 // same place; on a cold load the deep-link handler resolves it (popup for placed
