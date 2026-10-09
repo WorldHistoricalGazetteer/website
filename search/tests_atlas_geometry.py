@@ -219,15 +219,19 @@ class GeometryRedistributionTests(GeometryTestBase):
         self.assertNotIn("coordinates", json.dumps(body))
         # Unpatched, against the real registry: migration 0004 seeds a `whg`
         # row with entry_class='authority' (the umbrella), so "no authority
-        # row" alone would let contributed data through — `whg` is refused by
-        # name. Establish the premise, then the refusal.
+        # row" alone would let contributed data through — `whg` is never asked
+        # of the registry; it is decided per dataset (place#319,
+        # search/tests_contributed_access.py). Establish the premise, then
+        # that a `whg:` id naming no dataset is a 404 the gateway never sees.
         from api.attribution import registry_attribution
         self.assertIsNotNone(registry_attribution("whg"), "premise: the whg umbrella row exists")
+        from datasets.models import Dataset
+        self.assertFalse(Dataset.objects.filter(pk=42).exists(), "premise: no dataset 42")
         with patch(GET, side_effect=_fake_gateway) as get:
             resp = self.geometry("whg:42:7")
         get.assert_not_called()
-        self.assertEqual(resp.status_code, 451)
-        self.assertEqual(resp.json()["error"], "source licence not determined")
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(resp.json()["error"], "not found")
         # And a namespace WITH an authority row still gets through.
         with patch(GET, side_effect=_fake_gateway) as get, _attribution(True):
             self.assertEqual(self.geometry("osm:r1").status_code, 200)
