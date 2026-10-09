@@ -19,21 +19,29 @@ browser context so no check inherits state from another:
                  answers 200 from the same client, as the positive control.
   deeplink_gn    /atlas/?gazetteer=gn opens Places > Explore on GeoNames, the
                  gn marker layer exists, the anonymous place list says "beta
-                 feature" AND the 403 behind it was observed, and the map
-                 settles (loaded + tiles) because Explore stops the spin.
+                 feature" WITHOUT asking /atlas/search/ (it would 403, which
+                 beta_gates proves; before drop 3 it asked anyway and logged
+                 the 403), no console errors at all, and the map settles
+                 (loaded + tiles) because Explore stops the spin.
   deeplink_osm   the same for a namespace that is also a base-style source.
+  boundary_tier /  place#317: the boundary-level select on a cold load. Auto
+  boundary_tier_z10
+                 by zoom is on from the start, so the select shows the tier
+                 auto chose for the opening zoom (country at 2.5; local at
+                 ?z=10), labelled "Auto: …" so it never reads as a choice the
+                 visitor made, and the status line proves the tier is really
+                 on screen ("N regions here").
   mobile_375 /   /atlas/ in a touch viewport: no horizontal scroll, no visible
   mobile_768     control off-screen, no tour. Controls must be FOUND for the
                  off-screen check to mean anything.
   places_typing  switch to Places and type: the text stays (tour marked seen,
                  so the mode switch is tested on its own); a tour started by
                  hand gives the text and mode back when closed (place#320).
-                 Also the tooltip-over-sibling defect, place#321 (see
-                 KNOWN_FAILURES).
+                 Also the tooltip-over-sibling defect, place#321.
   first_visit /  the same two actions with NOTHING in localStorage, as a new
   first_visit_link
-                 visitor: the tour auto-starts 1.5 s after boot and resets the
-                 search bar, place#320. Known failures until that is fixed.
+                 visitor: the tour auto-starts 1.5 s after boot and must not
+                 reset the search bar or the deep link (place#320).
 
 Scenarios that test something other than first-visit behaviour mark the tour
 as seen and the welcome panel as dismissed, so the tour cannot reset state
@@ -108,18 +116,9 @@ NO_MAP_PAGE = "data:text/html,<title>no map here</title><p>no map here</p>"
 # reported; they do not affect the exit code. When one PASSES the run says so,
 # which is the cue to remove it from this table.
 KNOWN_FAILURES = {
-    "places_typing.tooltip_not_over_sibling": "place#321",
-    "first_visit.typed_text_survives_tour": "place#320",
-    "first_visit_link.deeplink_survives_tour": "place#320",
+    # Empty since drop 3: #320 and #321 are fixed and live (their three checks
+    # XPASSed against dev on 2026-10-09 and were removed).
 }
-
-# Console errors an anonymous run is EXPECTED to produce, per scenario. An
-# allow-list is an absence claim, so each scenario that allows one must also
-# assert the presence that justifies it (the observed 403).
-GATE_403_PATTERNS = [
-    re.compile(r"status of 403"),
-    re.compile(r"HTTP 403"),
-]
 
 
 class Results:
@@ -215,10 +214,6 @@ def bounded_wait(page, js, budget_s):
 
 def unexpected_console(state, allow):
     return [c for c in state["console"] if not any(p.search(c) for p in allow)]
-
-
-def observed(state, path_fragment, status):
-    return [u for (u, s) in state["responses"] if path_fragment in u and s == status]
 
 
 def new_context(browser, opts, first_visit=False, **kw):
@@ -387,22 +382,88 @@ def scenario_deeplink(browser, R, opts, url_for, ns, heading_expected, expect_la
         R.add(S, "placelist_heading", bool(d["heading"]) and heading_expected in d["heading"], f"heading {d['heading']!r}")
         if expect_layer:
             R.add(S, "marker_layer_present", d["layer"], f"map.getLayer('{ns}_circle') -> {d['layer']}")
-        gate_hits = observed(state, "/atlas/search/", 403)
-        R.add(S, "placelist_honest_beta_message", ok and d["betaText"] and bool(gate_hits),
-              f"DOM says {BETA_MESSAGE_DOM!r}: {d['betaText']} after {secs:.1f}s; /atlas/search/ 403 observed {len(gate_hits)}x")
+        R.add(S, "placelist_honest_beta_message", ok and d["betaText"],
+              f"DOM says {BETA_MESSAGE_DOM!r}: {d['betaText']} after {secs:.1f}s")
+        # The list must not ASK: an anonymous caller gets a 403 from
+        # /atlas/search/ (beta_gates.search_403_honest proves that), and until
+        # drop 3 the list asked anyway and logged the 403 on every deep link.
+        # "No request" is an absence, so it only counts beside the beta text
+        # being up and other responses having been recorded by the listener.
+        asked = [u for (u, s) in state["responses"] if "/atlas/search/" in u]
+        R.add(S, "placelist_no_gated_request", ok and d["betaText"] and not asked and len(state["responses"]) > 0,
+              f"/atlas/search/ asked {len(asked)}x (of {len(state['responses'])} responses recorded)")
         R.add(S, "url_keeps_gazetteer", f"gazetteer={ns}" in d["url"], d["url"][-60:])
         if expect_settle:
             ok, secs = bounded_wait(page, "window.heroMapInstance && window.heroMapInstance.loaded() && window.heroMapInstance.areTilesLoaded()",
                                     opts.settle_timeout)
             R.add(S, "map_settles", ok, f"loaded() && areTilesLoaded() {'after' if ok else 'NOT within'} {secs:.1f}s "
                   "(Explore stops the globe spin, so settling is expected here)")
-        unexpected = unexpected_console(state, GATE_403_PATTERNS if gate_hits else [])
-        R.add(S, "no_page_errors_beyond_gate", booted and not state["pageerrors"] and not unexpected,
-              f"booted {booted}; {len(state['pageerrors'])} page errors, {len(unexpected)} console errors beyond the observed 403"
+        unexpected = unexpected_console(state, [])
+        R.add(S, "no_page_errors", booted and not state["pageerrors"] and not unexpected,
+              f"booted {booted}; {len(state['pageerrors'])} page errors, {len(unexpected)} console errors"
               + (": " + "; ".join((state["pageerrors"] + unexpected)[:3]) if (state["pageerrors"] or unexpected) else ""))
         snapshot(page, opts, S)
     finally:
         ctx.close()
+
+
+TIER_JS = """() => {
+    const m = window.heroMapInstance;
+    const sel = document.getElementById('boundary_level_select');
+    const auto = document.getElementById('admin_auto_zoom');
+    const st = document.getElementById('boundary_level_status');
+    return {
+        zoom: m ? +m.getZoom().toFixed(2) : null,
+        value: sel ? sel.value : null,
+        label: sel ? sel.options[sel.selectedIndex].textContent.trim() : null,
+        auto: auto ? auto.checked : null,
+        status: st ? st.textContent.trim() : null,
+    };
+}"""
+
+# The tier auto-by-zoom must choose for each opening zoom, and the option text
+# it must show (place#317): the "Auto: " prefix is the whole point.
+BOUNDARY_TIER_CASES = (
+    ("boundary_tier", "/atlas/", 2.5, "country", "Auto: Country (2)"),
+    ("boundary_tier_z10", "/atlas/?z=10", 10, "local", "Auto: Municipality / locality (7–11)"),
+)
+
+
+def scenario_boundary_tier(browser, R, opts, url_for):
+    """place#317: on a cold load the boundary-level select is written by
+    auto-by-zoom before the visitor touches anything (country at the opening
+    zoom 2.5; "local" when a ?z= deep link opens at 10). That is intended, so
+    the select must SAY it was automatic. Returning-visitor context: the tour
+    is not what is under test here."""
+    for S, path, zoom, tier, label in BOUNDARY_TIER_CASES:
+        ctx = new_context(browser, opts, viewport={"width": 1400, "height": 900})
+        state = {}
+        page, status = open_page(ctx, url_for(path), state)
+        try:
+            booted = check_boot(R, S, page, status, opts)
+            # A ?z= deep link applies 1.4 s after boot, by which time the
+            # opening zoom's tier (country, "212 regions here") is already up,
+            # so waiting for "any tier with a status" returns on the WRONG
+            # view. Wait for the expected tier itself (the select flips and the
+            # status is rewritten in the same call), with the status line as
+            # the positive control that the tier is really on screen; on a
+            # bundle without the re-pick this times out and the check fails.
+            ok, secs = bounded_wait(page, """(() => {
+                const m = window.heroMapInstance;
+                const s = document.getElementById('boundary_level_select');
+                const st = document.getElementById('boundary_level_status');
+                return !!(m && Math.abs(m.getZoom() - %s) < 0.01 && s && s.value === %r
+                          && st && /regions here/.test(st.textContent));
+            })()""" % (zoom, tier), 20)
+            t = page.evaluate(TIER_JS)
+            R.add(S, "auto_tier_for_opening_zoom", booted and t["auto"] is True and t["zoom"] == zoom and t["value"] == tier,
+                  f"zoom {t['zoom']}, Auto by zoom {t['auto']}, select {t['value']!r} (want {tier!r}) after {secs:.1f}s")
+            R.add(S, "auto_tier_labelled_auto",
+                  booted and ok and t["label"] == label and bool(re.search(r"\d+ regions here", t["status"] or "")),
+                  f"option text {t['label']!r} (want {label!r}); status {t['status']!r}")
+            snapshot(page, opts, S)
+        finally:
+            ctx.close()
 
 
 MOBILE_JS = """() => {
@@ -611,6 +672,7 @@ def main():
         ("beta_gates", lambda b, R: scenario_beta_gates(b, R, opts, url_for)),
         ("deeplink_gn", lambda b, R: scenario_deeplink(b, R, opts, url_for, "gn", "GeoNames", True, True)),
         ("deeplink_osm", lambda b, R: scenario_deeplink(b, R, opts, url_for, "osm", "OpenStreetMap", False, False)),
+        ("boundary_tier", lambda b, R: scenario_boundary_tier(b, R, opts, url_for)),
         ("mobile_375", lambda b, R: scenario_mobile(b, R, opts, url_for, 375, 812)),
         ("mobile_768", lambda b, R: scenario_mobile(b, R, opts, url_for, 768, 1024)),
         ("places_typing", lambda b, R: scenario_places_typing(b, R, opts, url_for)),
@@ -644,6 +706,7 @@ def main():
     n = len(rows)
     if prove:
         allowed = {"plain.http_200", "deeplink_gn.http_200", "deeplink_osm.http_200",
+                   "boundary_tier.http_200", "boundary_tier_z10.http_200",
                    "mobile_375.http_200", "mobile_768.http_200", "places_typing.http_200", "first_visit.http_200",
                    "first_visit_link.http_200"} if prove == "home" else set()
         could_not_fail = [r["check"] for r in rows if r["ok"] and r["check"] not in allowed]
