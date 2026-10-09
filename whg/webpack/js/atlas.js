@@ -20,8 +20,9 @@ import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
-import { idbGet, idbPut, loadAatVocab } from './aatVocab.js';
+import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
+import { atlasNotice, fetchJSON, failureHtml } from './atlasNotice.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -416,11 +417,13 @@ async function loadRegistryCoverage() {
             const cached = await idbGet('coverage');
             if (cached && cached.version === version) { useMaps(cached.temporal, cached.h3); return; }
         }
-        const data = await fetch('/atlas/registry/coverage/', { credentials: 'same-origin' }).then(r => r.json());
+        const data = await fetch('/atlas/registry/coverage/', { credentials: 'same-origin' })
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
         useMaps(data.temporal, data.h3);
         if (data.version) { try { await idbPut('coverage', { version: data.version, temporal: data.temporal, h3: data.h3 }); } catch (e) { /* best-effort cache */ } }
     } catch (e) {
         console.warn('Atlas: registry coverage load failed (coverage filters will keep all gazetteers visible)', e);
+        atlasNotice('Gazetteer coverage could not be loaded, so the date and area filters in the Gazetteers panel will show every gazetteer.');
     }
 }
 
@@ -855,7 +858,11 @@ waitDocumentReady().then(setupWelcomePanel);
 // Load the gazetteer coverage maps (IndexedDB-cached, version-gated) — decoupled
 // from the map, so the coverage filters work even if the map is slow/unavailable.
 waitDocumentReady().then(loadRegistryCoverage);
-waitDocumentReady().then(() => loadAatVocab());
+waitDocumentReady().then(() => loadAatVocab()).then(() => {
+    if (aatVocabLoadError()) {
+        atlasNotice('Place-type names could not be loaded; types will show as identifiers for now.', { level: 'info' });
+    }
+});
 
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready
@@ -1019,10 +1026,18 @@ Promise.all([
             gwBanner.hidden = true;
         });
     }
-    fetch('/atlas/status/', { credentials: 'same-origin' })
-        .then(r => (r.ok ? r.json() : null))
+    // Only beta users' search goes through the gateway. /atlas/status/ answers
+    // gateway:false for an anonymous visitor (it never probes for them), which
+    // raised "search is offline" over a legacy search that works fine.
+    if (isBetaUser()) fetch('/atlas/status/', { credentials: 'same-origin' })
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then(d => { if (d) setGatewayAvailable(d.gateway !== false); })
-        .catch(() => { /* status probe itself failed — stay silent */ });
+        .catch((e) => {
+            // The probe itself failed (our own server, not the gateway), so we
+            // know nothing about search — say so once rather than staying silent.
+            console.warn('Atlas: /atlas/status/ probe failed', e);
+            atlasNotice('Could not check whether the search service is available. Search may not work until the page is reloaded.');
+        });
 
     // Per-mode basemap style switcher (persisted in localStorage).
     initBasemapSwitcher();
@@ -1476,7 +1491,10 @@ Promise.all([
         }
     });
 
-}).catch(error => console.error('Atlas init error:', error));
+}).catch(error => {
+    console.error('Atlas init error:', error);
+    atlasNotice('The map did not finish loading, so some Atlas controls may not work. Reloading the page usually fixes this.', { level: 'danger', delay: 15000 });
+});
 
 /* ═══════════════════════════════════════════════════════════════════
    Helper functions
@@ -2128,18 +2146,25 @@ async function performAreaSearch() {
         namespace: layerPalette ? layerPalette.getNamespace() : 'osm',
     });
 
-    areaSearchResults = results;
-    areaDropdownIndex = -1;
-
-    if (results.length === 0) {
-        renderAreaDropdown([{
+    // Selectable results first, then any notices (planned-source hint, beta
+    // access, service failure) — keeps dropdown indices == result indices.
+    const found = results.filter(r => !r._stub);
+    const notices = results.filter(r => r._stub);
+    if (notices.some(n => n._failure === 'unavailable')) setGatewayAvailable(false);
+    // "No matching areas" only when nothing else explains the empty list — a
+    // failed search or a source with no name search yet is not "no match".
+    if (!found.length && !notices.length) {
+        found.push({
             _stub: true,
             label: 'No matching areas found',
             sublabel: 'Try a different name or adjust your admin level',
-        }]);
-    } else {
-        renderAreaDropdown(results);
+        });
     }
+    const items = found.concat(notices);
+
+    areaSearchResults = items;
+    areaDropdownIndex = -1;
+    renderAreaDropdown(items);
 }
 
 function renderAreaDropdown(items) {
@@ -2151,9 +2176,9 @@ function renderAreaDropdown(items) {
 
     dropdown.innerHTML = items.map((item, i) => `
         <div class="region-result ${item._stub ? 'region-result--stub' : ''}" data-index="${i}">
-            <div class="region-result-label">${item.label || ''}</div>
-            ${item.sublabel ? `<div class="region-result-sublabel">${item.sublabel}</div>` : ''}
-            ${item.source_type ? `<span class="badge bg-secondary" style="font-size:0.6rem">${item.source || ''}</span>` : ''}
+            <div class="region-result-label">${item.labelHtml || escapeHtml(item.label || '')}</div>
+            ${item.sublabel ? `<div class="region-result-sublabel">${escapeHtml(item.sublabel)}</div>` : ''}
+            ${item.source_type ? `<span class="badge bg-secondary" style="font-size:0.6rem">${escapeHtml(item.source || '')}</span>` : ''}
         </div>
     `).join('');
 
@@ -2486,12 +2511,14 @@ function openAtlasPortal(pid) {
     document.getElementById('atlas_portal_title').textContent = 'Place';
     body.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
     window.bootstrap.Modal.getOrCreateInstance(document.getElementById('atlas_portal_modal')).show();
-    $.ajax({
-        url: '/atlas/place/?id=' + encodeURIComponent(pid),
-        success: (place) => renderPortal(place, pid),
-        error: (err) => {
-            body.innerHTML = `<div class="p-3 text-danger">Could not load this place${err.status === 404 ? ' (not found)' : ''}.</div>`;
-        },
+    fetchJSON('/atlas/place/?id=' + encodeURIComponent(pid), { timeoutMs: 30000 }).then(({ kind, data }) => {
+        if (kind === 'ok' && data) { renderPortal(data, pid); return; }
+        // 404 now means the gateway ANSWERED and has no such place; a timeout or
+        // outage is 504/503 (or a client timeout / network failure) and must not
+        // read as "not found" (place#272).
+        if (kind === 'unavailable') setGatewayAvailable(false);
+        const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
+        body.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'This place')}</div>`;
     });
 }
 
@@ -2641,24 +2668,43 @@ function isBetaUser() {
     return !!(m && m.content === '1');
 }
 
+// Client-side ceiling for one gateway search. The server already retries a
+// read timeout once against a 10 s CRC_GATEWAY_TIMEOUT (so ~20 s worst case)
+// and then answers 200 + timeout:true; this only catches a request that never
+// comes back at all (dropped connection, stalled worker).
+const GATEWAY_SEARCH_CLIENT_TIMEOUT_MS = 35000;
+let gatewaySearchCtrl = null;      // AbortController of the in-flight search (a newer one supersedes it)
+
 function initiateGatewaySearch(options) {
     const resultsDiv = document.getElementById('atlas_search_results');
-    $.ajax({
-        type: 'POST',
-        url: '/atlas/search/',
-        data: JSON.stringify(options),
-        contentType: 'application/json',
-        headers: { 'X-CSRFToken': csrfToken },
-        success: (data) => {
-            setGatewayAvailable(data && data.gateway !== false);
+    if (gatewaySearchCtrl) gatewaySearchCtrl.abort();
+    const ctrl = new AbortController();
+    gatewaySearchCtrl = ctrl;
+    fetchJSON('/atlas/search/', {
+        method: 'POST',
+        body: JSON.stringify(options),
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        signal: ctrl.signal,
+        timeoutMs: GATEWAY_SEARCH_CLIENT_TIMEOUT_MS,
+    }).then(({ kind, status, data }) => {
+        if (kind === 'aborted' || ctrl !== gatewaySearchCtrl) return;   // superseded
+        gatewaySearchCtrl = null;
+        if (kind === 'ok' && data) {
+            setGatewayAvailable(data.gateway !== false);
             gatewayData = data;
             seedClusterControls(data.clustering_params);
             renderClusters();
-        },
-        error: (err) => {
-            console.error('Atlas: gateway search error', err);
-            resultsDiv.innerHTML = '<div class="p-3 text-danger">Search failed. Please try again.</div>';
-        },
+            return;
+        }
+        console.error('Atlas: gateway search failed', status, kind, data);
+        // 403 → beta-access wording (Decision Q4); 503/network → unavailable
+        // and raise the banner; a client-side timeout is "slow", not "offline",
+        // so it does NOT raise the banner (reference_atlas_gateway_failure_ux).
+        if (kind === 'unavailable') setGatewayAvailable(false);
+        const noRes = document.getElementById('atlas_no_results');
+        if (noRes) noRes.style.display = 'none';
+        const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
+        resultsDiv.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'Search')}</div>`;
     });
 }
 
@@ -2814,6 +2860,15 @@ function renderClusters() {
         html += `</div>`;
         $resultsDiv.append(html);
     });
+
+    // place#294: the gateway may report sources it leaves out unless asked for
+    // explicitly. Tolerate absence (older gateway) and either placement.
+    const excludedNs = gatewayData.namespaces_excluded
+        || (gatewayData.meta && gatewayData.meta.namespaces_excluded) || [];
+    if (Array.isArray(excludedNs) && excludedNs.length) {
+        $resultsDiv.append(`<div class="atlas-ns-excluded small text-muted px-2 py-1">`
+            + `Some sources are excluded by default: ${excludedNs.map(escapeHtml).join(', ')}</div>`);
+    }
 
     // Plot on the hero map + cache the pid→index map for panel↔map sync.
     const fc = hitsToFeatureCollection(hits, assignments);

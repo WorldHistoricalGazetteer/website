@@ -14,6 +14,7 @@
 import filterState from './filterState';
 import GazetteerInteraction from './gazetteerInteraction';
 import { temporalFilterClause, withTemporalClause } from './temporalFilter';
+import { atlasNotice } from './atlasNotice.js';
 
 const OVERLAY_SOURCE = 'filter-overlay';
 const OVERLAY_FILL = 'filter-overlay-fill';
@@ -318,6 +319,8 @@ class HeroMap {
                 // reached by swapping. Unchanged behaviour for those (place#237).
                 if (pendingSwap) {
                     this.setBasemapStyle(pendingSwap)
+                        // setBasemapStyle() catches (and now reports) its own
+                        // failures, so this guard only covers a synchronous throw.
                         .catch((err) => console.warn('heroMap.init: basemap swap failed', err));
                 }
 
@@ -985,6 +988,7 @@ class HeroMap {
             tilejson = await this.map.loadGazetteerStyle(id);
         } catch (e) {
             console.warn('heroMap.showGazetteer: load failed', id, e);
+            atlasNotice(`The map layer for this gazetteer (${id}) could not be loaded. Please try again shortly.`);
             return;
         }
         this._currentGazetteer = id;
@@ -1840,7 +1844,10 @@ class HeroMap {
                     this.ensureContextStyle();
                 });
             })
-            .catch(e => { console.warn('heroMap.setBasemapStyle failed', styleId, e); });
+            .catch(e => {
+                console.warn('heroMap.setBasemapStyle failed', styleId, e);
+                atlasNotice('That basemap could not be loaded. Please try again, or choose another.');
+            });
     }
 
     /** Re-apply the map's preferred-language coalesce to the base style's
