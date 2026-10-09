@@ -1046,6 +1046,29 @@ class HeroMap {
         vectorLayers.forEach((vl, i) => {
             const labelId = `${baseIds[i]}_label`;
             if (this.map.getLayer(labelId)) return;
+            // Which features carry a name (place#166, indexing
+            // developer/plan-tile-channels-166.md). Tilesets built with the
+            // channel model mark ONE anchor per shape with ``label: 1`` and
+            // declare ``label`` in their TileJSON fields; a polygon is cut at
+            // every tile edge and a symbol layer draws one label per
+            // fragment, so on those tilesets the shapes themselves must NOT
+            // be labelled or Nebraska gets its five fragment labels plus the
+            // anchor. Raw points stay their own anchor (points get no anchor
+            // feature). Tilesets that predate the label channel declare no
+            // ``label`` field and keep the old rule — every unclustered
+            // feature — so both schemes render correctly while the retile
+            // rolls through bucket by bucket.
+            const hasLabelChannel = !!(vl && vl.fields
+                && Object.prototype.hasOwnProperty.call(vl.fields, 'label'));
+            const labelFilter = hasLabelChannel
+                ? ['all',
+                    ['!', ['has', 'point_count']],
+                    ['any',
+                        ['has', 'label'],
+                        ['all', ['==', ['geometry-type'], 'Point'], ['!', ['has', 'coverage']]],
+                    ],
+                ]
+                : ['!', ['has', 'point_count']];   // legacy: individual places only
             try {
                 this.map.addLayer({
                     id: labelId,
@@ -1053,8 +1076,7 @@ class HeroMap {
                     source: id,
                     'source-layer': vl.id,
                     minzoom: 8,   // match the point layer — no labels under the heatmap (place#133)
-                    // Individual places only — skip clustered aggregate features.
-                    filter: ['!', ['has', 'point_count']],
+                    filter: labelFilter,
                     layout: {
                         'text-field': textField,
                         'text-font': ['Open Sans Regular'],
