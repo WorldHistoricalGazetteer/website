@@ -193,6 +193,15 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
         params["tolerance"] = float(tolerance)
     try:
         from urllib.parse import quote
+        # The id is ONE path segment: everything but ":" is percent-encoded, so
+        # a contributed src_id containing "/" (whg:1760:https://sferaproject.org/
+        # toponyms/persia/) travels as %2F. The gateway route is
+        # ``/api/geometry/{place_id:path}`` (indexing, place#319): its server
+        # decodes the path before routing and the route takes the whole
+        # remainder, so the decoded id — the string the grant was signed over —
+        # reaches the handler. A gateway without that route lets such a request
+        # fall through to its ES catch-all, which is reported as ``"http"``
+        # above (503 at the view), never as a miss.
         url = f"{_gateway_url()}/api/geometry/{quote(place_id, safe=':')}"
         resp = requests.get(url, params=params or None, headers={**_headers(), **(headers or {})},
                             timeout=_timeout())
