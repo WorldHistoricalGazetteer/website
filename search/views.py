@@ -659,6 +659,13 @@ def atlas_geometry(request):
     if not (request.user.is_authenticated and request.user.can_access_beta):
         return JsonResponse({"error": "beta access required"}, status=403)
     pid = (request.GET.get("id") or request.GET.get("pid") or "").strip()
+    # The Reconciliation API's entity form ("place:kain_par:7") must be
+    # reduced BEFORE the licence check, or the registry is asked about a
+    # namespace called "place" and the withheld source slips through to the
+    # gateway (which strips the prefix itself and would then refuse — but the
+    # registry gate must not depend on it).
+    if pid.startswith("place:"):
+        pid = pid[len("place:"):]
     if not pid or ":" not in pid:
         return JsonResponse({"error": "missing or unnamespaced id"}, status=400)
     ns = pid.split(":", 1)[0]
@@ -672,7 +679,7 @@ def atlas_geometry(request):
     meta: dict = {}
     data = crc_geometry(pid, user=request.user, meta=meta)
     if data is None:
-        if meta.get("status") in (404, 451) and meta.get("body"):
+        if meta.get("status") in (404, 413, 451) and meta.get("body"):
             body = dict(meta["body"])
             body.setdefault("id", pid)
             return JsonResponse(body, status=meta["status"])

@@ -48,6 +48,8 @@ def _fake_gateway(url, params=None, **kwargs):
         return _Resp(404, {"detail": {"error": "no geometry", "id": "osm:r2"}})
     if "/api/geometry/nl:" in url:
         return _Resp(451, WITHHELD_BY_GATEWAY)
+    if "/api/geometry/osm:r7" in url:
+        return _Resp(413, TOO_LARGE)
     if "/api/geometry/" in url:
         return _Resp(404, {"detail": {"error": "not found", "id": url.rsplit("/", 1)[-1]}})
     return _Resp(404, {})
@@ -55,9 +57,25 @@ def _fake_gateway(url, params=None, **kwargs):
 
 def _unrestarted_gateway(url, params=None, **kwargs):
     """A gateway WITHOUT the route: its catch-all proxies the path to ES, which
-    answers with its own error body, not the route's JSON ``detail``."""
-    return _Resp(400, {"error": "no handler found for uri [/api/geometry/osm:r1] and method [GET]",
-                       "status": 400})
+    answers 401 with a security_exception body (measured from the app host,
+    2026-10-09), not the route's JSON ``detail``."""
+    return _Resp(401, {
+        "error": {
+            "root_cause": [{"type": "security_exception",
+                            "reason": "missing authentication credentials for REST request [/api/geometry/osm:r1]",
+                            "header": {"WWW-Authenticate": ["Basic realm=\"security\" charset=\"UTF-8\"",
+                                                            "ApiKey"]}}],
+            "type": "security_exception",
+            "reason": "missing authentication credentials for REST request [/api/geometry/osm:r1]",
+            "header": {"WWW-Authenticate": ["Basic realm=\"security\" charset=\"UTF-8\"", "ApiKey"]},
+        },
+        "status": 401,
+    })
+
+
+TOO_LARGE = {"detail": {"error": "geometry too large", "id": "osm:r7",
+                        "detail": "Stored geometry: 2,400,000 vertices, above the 1,500,000 this endpoint will serve whole.",
+                        "vertex_count": 2400000, "max_vertices": 1500000}}
 
 
 def _attribution(redistributable, name="Test Source"):
@@ -148,6 +166,16 @@ class GeometryMissVsFailureTests(GeometryTestBase):
         self.assertEqual(resp.status_code, 503)
         self.assertEqual(resp.json()["failure"], "http")
 
+    def test_too_large_is_413_passed_through_as_an_answer(self):
+        # The gateway declining to serve a continent whole is an answer the
+        # client acts on (fall back to the tiles), not a gateway failure.
+        with patch(GET, side_effect=_fake_gateway) as get, _attribution(True):
+            resp = self.geometry("osm:r7")
+        get.assert_called_once()
+        self.assertEqual(resp.status_code, 413)
+        self.assertEqual(resp.json()["error"], "geometry too large")
+        self.assertEqual(resp.json()["max_vertices"], 1500000)
+
     def test_unrestarted_gateway_is_503_not_a_miss(self):
         # The route is not there yet: ES's "no handler" body must not be read
         # as "no such place" — the client falls back to the tiles either way,
@@ -174,6 +202,27 @@ class GeometryRedistributionTests(GeometryTestBase):
         super().setUp()
         self.client.force_login(self.beta)
 
+    def test_entity_prefix_is_stripped_before_the_registry_check(self):
+        # "place:osm:r1" must be checked as namespace "osm", not "place": a
+        # withheld source must not reach the gateway behind the prefix.
+        seen = []
+
+        def attribution(ns):
+            seen.append(ns)
+            return {"name": "Withheld Source", "redistributable": False,
+                    "source_url": "https://example.org/src", "license__spdx_id": "custom"}
+        with patch(GET, side_effect=_fake_gateway) as get, \
+                patch("api.attribution.registry_attribution", side_effect=attribution):
+            resp = self.geometry("place:osm:r1")
+        get.assert_not_called()
+        self.assertEqual(seen, ["osm"])
+        self.assertEqual(resp.status_code, 451)
+        self.assertEqual(resp.json()["id"], "osm:r1")
+        # And a permitted one still reaches the gateway with the bare id.
+        with patch(GET, side_effect=_fake_gateway) as get, _attribution(True):
+            self.assertEqual(self.geometry("place:osm:r1").status_code, 200)
+        self.assertIn("/api/geometry/osm:r1", get.call_args.args[0])
+
     def test_registry_withholds_without_asking_the_gateway(self):
         with patch(GET, side_effect=_fake_gateway) as get, _attribution(False, name="Withheld Source"):
             resp = self.geometry("osm:r1")
@@ -197,3 +246,37 @@ class GeometryRedistributionTests(GeometryTestBase):
         body = resp.json()
         self.assertEqual(body["source"]["rights_holder"], "Native Land Digital")
         self.assertNotIn("coordinates", json.dumps(body))
+
+
+class ContainedInForwardingTests(GeometryTestBase):
+    """The exact-region search constraint travels as place ids, not polygons."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.beta)
+
+    def _search(self, options):
+        from search.tests_atlas import POST, SEARCH_OK
+        with patch(POST, return_value=_Resp(200, SEARCH_OK)) as post:
+            resp = self.client.post("/atlas/search/", data=json.dumps(options),
+                                    content_type="application/json")
+        post.assert_called_once()
+        return resp, post.call_args.kwargs["json"]
+
+    def test_contained_in_and_containment_are_forwarded_and_prefix_stripped(self):
+        resp, body = self._search({"qstr": "Paris", "contained_in": ["place:osm:r1", "ohm:r9", "bad"],
+                                   "containment": "exact", "relation": "intersects",
+                                   "bounds": {"type": "GeometryCollection", "geometries": []}})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(body["contained_in"], ["osm:r1", "ohm:r9"])
+        self.assertEqual(body["containment"], "exact")
+        self.assertEqual(body["relation"], "intersects")
+        self.assertNotIn("bounds", body, "an empty collection must not be sent as a constraint")
+
+    def test_polygon_constraint_still_travels_as_bounds(self):
+        resp, body = self._search({"qstr": "Paris", "bounds": {"type": "GeometryCollection",
+                                                                "geometries": [SQUARE]}})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(body["bounds"]["geometries"], [SQUARE])
+        self.assertNotIn("contained_in", body)
+        self.assertNotIn("containment", body)
