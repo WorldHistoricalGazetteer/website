@@ -165,6 +165,9 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
       (a point-only place). ``meta`` carries no ``error``.
     * ``meta["status"]`` = 451 with ``meta["body"]`` — the gateway withholds
       the source (its own ``redistributable`` determination).
+    * ``meta["status"]`` = 413 with ``meta["body"]`` — the gateway will not
+      serve the geometry whole (``error: "geometry too large"`` over its
+      vertex cap, or ``"geometry budget exceeded"``): an answer, not a failure.
     * ``meta["error"]`` = ``"timeout"`` / ``"connection"`` / ``"http"`` /
       ``"unexpected"`` — not an answer. ``"http"`` includes the case of a
       gateway that has not yet been restarted with the route: its catch-all
@@ -196,7 +199,7 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
             detail = resp.json().get("detail")
         except Exception:  # noqa: BLE001 — a non-JSON body is not the route's answer
             detail = None
-        if resp.status_code in (404, 451) and isinstance(detail, dict) and detail.get("error"):
+        if resp.status_code in (404, 413, 451) and isinstance(detail, dict) and detail.get("error"):
             if meta is not None:
                 meta["status"] = resp.status_code
                 meta["body"] = detail
@@ -345,6 +348,29 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
         bounds.get("coordinates") or bounds.get("geometries")
     ):
         body["bounds"] = bounds
+    # Containment by reference to the selected places themselves. When every
+    # selected region is a gateway-served exact polygon the Atlas sends the
+    # place ids rather than the polygons: the gateway resolves them from the
+    # geom store in a worker thread, instead of receiving up to 1 MB of
+    # GeoJSON per search and polyfilling it on the event loop. The gateway
+    # prefers ``contained_in`` over ``bounds`` when both are present.
+    contained_in = options.get("contained_in")
+    if contained_in:
+        if isinstance(contained_in, str):
+            contained_in = contained_in.split(",")
+        ids = []
+        for pid in contained_in:
+            s = str(pid).strip()
+            if s.startswith("place:"):
+                s = s[len("place:"):]
+            if s and ":" in s:
+                ids.append(s)
+        if ids:
+            body["contained_in"] = ids
+    if options.get("containment") in ("fuzzy", "exact"):
+        body["containment"] = options["containment"]
+    if options.get("relation") in ("intersects", "within"):
+        body["relation"] = options["relation"]
 
     if options.get("temporal"):
         start = options.get("start")

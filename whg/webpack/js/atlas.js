@@ -925,6 +925,7 @@ Promise.all([
             id: regionId,
             label: detail.name || 'Unnamed',
             namespace: detail.namespace || 'osm',
+            place_id: detail.place_id || null,
             geometry: detail.geometry,
         });
         upgradeRegionGeometry(regionId, detail.place_id);
@@ -2395,6 +2396,14 @@ async function resolveBoundaryFromTiles(item) {
     // would be neither visible nor clickable when we get there.
     if (layerPalette) layerPalette.setActiveSource(source);
 
+    // Fly first, then ask: the map must move the moment the result is picked,
+    // not after a gateway round trip. The exact polygon re-fits the view when
+    // it arrives; otherwise the tiles at this zoom are what we pick from.
+    try {
+        heroMap.map.flyTo({ center: item.repr_point, zoom, duration: 900 });
+    } catch (e) {
+        return;
+    }
     const exact = await fetchExactGeometry(item.place_id);
     if (exact) {
         // Same id the map-click path builds, so a click on the same region
@@ -2403,21 +2412,23 @@ async function resolveBoundaryFromTiles(item) {
             id: `boundary:${source}:${item.place_id}`,
             label: item.label,
             namespace: source,
+            place_id: item.place_id,
             geometry: exact.geometry,
             exact: true,
         });
         return;
     }
 
-    try {
-        heroMap.map.flyTo({ center: item.repr_point, zoom, duration: 900 });
-    } catch (e) {
-        return;
-    }
-    heroMap.map.once('idle', () => {
+    const onIdle = () => {
         if (heroMap.selectBoundaryByPlaceId(source, item.place_id)) return;
         showCopyToast(`Showing ${item.label} — click its outline to use it as an area filter.`);
-    });
+    };
+    // The flight (and its tiles) may already have settled while we waited on
+    // the gateway, in which case `idle` has been and gone.
+    let settled = false;
+    try { settled = !heroMap.map.isMoving() && heroMap.map.areTilesLoaded(); } catch (e) { /* */ }
+    if (settled) onIdle();
+    else heroMap.map.once('idle', onIdle);
 }
 
 /* ── Exact region geometry (indexing plan §5.3) ──
@@ -2464,12 +2475,17 @@ function upgradeRegionGeometry(regionId, placeId) {
         if (!region || region.exact) return;
         const before = region.geometry;
         region.geometry = data.geometry;
+        region.place_id = region.place_id || placeId;
         region.exact = true;
         renderSelectionChips();   // also re-applies the coverage filter
         updateSelectionOverlay();
         if (!bboxCovers(geometryBBox(before), geometryBBox(data.geometry))) {
             heroMap.fitTo({ type: 'Feature', geometry: data.geometry, properties: {} });
         }
+        // A search already run against the fragments answered a different
+        // question; re-ask it with the real constraint (as the temporal
+        // re-query does), keeping the user's facet and θ choices.
+        if (gatewayData) initiateToponymSearch({ preserveFacets: true });
     });
 }
 
@@ -3153,6 +3169,7 @@ function gatherToponymOptions(qstr) {
     // Build spatial constraint: viewport takes precedence over area selections
     let bounds;
     let spatialMode;
+    let containedIn;
 
     if (useViewport && !heroMap.isGlobeMode()) {
         // Viewport constraint: use current map viewport as a bounding polygon
@@ -3174,17 +3191,32 @@ function gatherToponymOptions(qstr) {
             spatialMode = 'none';
         }
     } else {
-        // Area-selection constraint
-        const regionGeometries = selectedRegions
-            .filter(r => r.geometry)
-            .map(r => r.geometry);
-        bounds = regionGeometries.length > 0
-            ? { type: 'GeometryCollection', geometries: regionGeometries }
-            : { type: 'GeometryCollection', geometries: [] };
-        spatialMode = regionGeometries.length > 0 ? 'region' : 'none';
+        // Area-selection constraint. When every selected region is a
+        // gateway-served exact polygon, send the place ids (`contained_in`,
+        // exact containment, intersects — the same relation `bounds` applies)
+        // instead of the polygons: the gateway resolves them from its geom
+        // store in a worker thread, rather than receiving up to 1 MB of
+        // GeoJSON per search and polyfilling it on its event loop. Any region
+        // still on tile fragments has no id the gateway could resolve to that
+        // geometry, so a mixed selection falls back to sending all the shapes.
+        const withGeometry = selectedRegions.filter(r => r.geometry);
+        const allExact = withGeometry.length > 0 && withGeometry.every(r => r.exact && r.place_id);
+        if (allExact) {
+            containedIn = withGeometry.map(r => r.place_id);
+            bounds = { type: 'GeometryCollection', geometries: [] };
+        } else {
+            const regionGeometries = withGeometry.map(r => r.geometry);
+            bounds = regionGeometries.length > 0
+                ? { type: 'GeometryCollection', geometries: regionGeometries }
+                : { type: 'GeometryCollection', geometries: [] };
+        }
+        spatialMode = withGeometry.length > 0 ? 'region' : 'none';
     }
 
     return {
+        contained_in: containedIn,
+        containment: containedIn ? 'exact' : undefined,
+        relation: containedIn ? 'intersects' : undefined,
         qstr: qstr,
         idx: eswhg,
         fclasses: treeIds.join(','),
