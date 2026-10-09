@@ -36,6 +36,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.views import APIView
 from accounts.permissions import IsOwnerOrReadOnly
 from api.attribution import safe_attribution_block
+from api.dataset_access import es_apply_visibility, visible_datasets_q, visible_places_q
 from api.serializers import (
     UserSerializer, DatasetSerializer, PlaceSerializer,
     PlaceTableSerializer, PlaceGeomSerializer, AreaSerializer,
@@ -245,7 +246,8 @@ class SpatialAPIView(generics.ListAPIView):
                 raise BadRequestException("Spatial query requires 'type' parameter to be 'nearby' or 'bbox'.")
 
             # Query places and apply additional filters
-            qs = Place.objects.filter(id__in=placeids)
+            # place#310: only places the requester may see, whatever the spatial hit.
+            qs = Place.objects.filter(id__in=placeids).filter(visible_places_q(self.request.user))
             if coll:
                 try:
                     coll_ids = Collection.objects.get(id=coll).places.values_list('id', flat=True)
@@ -253,10 +255,12 @@ class SpatialAPIView(generics.ListAPIView):
                 except Collection.DoesNotExist:
                     raise BadRequestException(f"The requested collection with ID {coll} does not exist.")
             if ds:
-                try:
-                    qs = qs.filter(dataset=Dataset.objects.get(id=ds))
-                except Dataset.DoesNotExist:
+                # A dataset the requester may not see answers exactly as one that does
+                # not exist, so the id is not confirmed.
+                dataset = Dataset.objects.filter(id=ds).filter(visible_datasets_q(self.request.user)).first()
+                if dataset is None:
                     raise BadRequestException(f"The requested dataset with ID {ds} does not exist.")
+                qs = qs.filter(dataset=dataset)
             if fc:
                 fclasses = list(set([x.upper() for x in fc.split(',')]))
                 qs = qs.filter(fclasses__overlap=fclasses)
@@ -504,6 +508,7 @@ class IndexAPIView(View):
                         }
                     }
                 }
+                es_apply_visibility(q, request.user)  # place#310
                 try:
                     bundle = bundler(q, whgid, idx)
                 except INDEX_DOWN_EXCEPTIONS:
@@ -554,6 +559,7 @@ class IndexAPIView(View):
                     # q['query']['bool']["filter"] = get_bounds_filter(bounds, 'whg')
                     q['query']['bool']["filter"] = get_bounds_filter(bounds, settings.ES_WHG)
 
+                es_apply_visibility(q, request.user)  # place#310
                 try:
                     response = collector(q, settings.ES_WHG)
                 except INDEX_DOWN_EXCEPTIONS:
@@ -768,8 +774,9 @@ class SearchAPIView(generics.ListAPIView):
             return HttpResponse(content=b'<h3>Needs either a "name", a "name_contains", or "id" parameter at \
                 minimum <br/>(e.g. ?name=myplacename or ?name_contains=astring or ?id=integer)</h3>')
 
-        # Begin queryset
-        qs = Place.objects.filter(Q(dataset__public=True) | Q(dataset__core=True))
+        # Begin queryset. place#310: the visibility rule, applied to the requester —
+        # a contributor sees their own non-public places here; nobody else does.
+        qs = Place.objects.filter(visible_places_q(request.user))
         err_note = None
 
         # Filtering
@@ -987,7 +994,8 @@ class DatasetAPIView(generics.ListAPIView):
         dslabel = params.get('label', None)
         query = params.get('q', None)
 
-        qs = Dataset.objects.filter(Q(public=True) | Q(core=True)).order_by('label')
+        # place#310: a non-public dataset is listed only to its circle, core or not.
+        qs = Dataset.objects.filter(visible_datasets_q(request.user)).order_by('label')
 
         if id_:
             qs = qs.filter(id=id_)
@@ -1178,7 +1186,9 @@ class PlacesDetailAPIView(View):
                 status=400
             )
 
-        places = Place.objects.filter(id__in=ids)
+        # place#310: places of datasets outside the requester's circle are left out,
+        # and a request made only of those is "no places found".
+        places = Place.objects.filter(id__in=ids).filter(visible_places_q(request.user))
 
         # Check if any places were found
         if not places.exists():
@@ -1344,8 +1354,11 @@ class PlacesDetailAPIView(View):
 @extend_schema(exclude=True)
 class PlaceCompareAPIView(generics.RetrieveAPIView):
     """  returns single serialized database place record by id  """
-    queryset = Place.objects.all()
     serializer_class = PlaceCompareSerializer
+
+    def get_queryset(self):
+        # place#310: a place outside the requester's circle is "not found".
+        return Place.objects.filter(visible_places_q(self.request.user))
     renderer_classes = [PrettyJsonRenderer]
 
     permission_classes = [permissions.IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
@@ -1392,11 +1405,10 @@ class PlaceDetailSourceAPIView(generics.RetrieveAPIView):
     def get_queryset(self):
         # Place.dataset is a FK to Dataset with to_field='label', so the label
         # is matched by traversing the relation rather than on the raw column.
-        qs = Place.objects.filter(dataset__label=self.kwargs['dslabel'])
-        user = self.request.user
-        if user.is_authenticated:
-            return qs.filter(Q(dataset__public=True) | Q(dataset__owner=user))
-        return qs.filter(dataset__public=True)
+        # place#310: the one rule (owner, co-owner, collaborator, staff; embargo
+        # folded in) rather than public-or-owner.
+        return (Place.objects.filter(dataset__label=self.kwargs['dslabel'])
+                .filter(visible_places_q(self.request.user)))
 
 
 """
@@ -1436,7 +1448,8 @@ class GeomViewSet(viewsets.ModelViewSet):
             cid = self.request.GET.get('coll')
             try:
                 coll = Collection.objects.get(id=cid)
-                collPlaceIds = [p.id for p in coll.places.all()]
+                # place#310: members from datasets outside the requester's circle are withheld.
+                collPlaceIds = list(coll.visible_thru_places(self.request.user).values_list('id', flat=True))
                 if not collPlaceIds:
                     return qs  # Return an empty queryset if no place IDs are found
                 qs = PlaceGeom.objects.filter(
@@ -1471,8 +1484,9 @@ class GeoJSONAPIView(generics.ListAPIView):
             qs = PlaceGeom.objects.filter(place_id__in=dsPlaceIds)
         elif 'coll' in self.request.GET:
             cid = self.request.GET.get('coll')
-            coll = Collection.objects.get(id=cid)
-            collPlaceIds = [p.id for p in coll.places.all()]
+            coll = get_object_or_404(Collection, id=cid)
+            # place#310: members from datasets outside the requester's circle are withheld.
+            collPlaceIds = list(coll.visible_thru_places(self.request.user).values_list('id', flat=True))
             qs = PlaceGeom.objects.filter(place_id__in=collPlaceIds, jsonb__type='Point')
 
         else:
@@ -1510,17 +1524,25 @@ class featureCollectionAPIView(generics.ListAPIView):
             return Response({"error": "QueryString must include either an id or coll identifier"},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # place#310: for a collection, the geometry utilities take the requester so
+        # members from datasets outside their circle are withheld (a dataset is
+        # gated as a whole above).
+        from utils.cluster_geometries import clustered_geometries
+        from utils.feature_collection import feature_collection
+        from utils.heatmap_geometries import heatmapped_geometries
+        from utils.hull_geometries import hull_geometries
+        viewer = self.request.user if isinstance(datacollection, Collection) else None
         if mode == 'clusterhull':
-            featureCollection = datacollection.clustered_geometries
+            featureCollection = clustered_geometries(datacollection, user=viewer)
             pass
         elif mode == 'heatmap':
-            featureCollection = datacollection.heatmapped_geometries
+            featureCollection = heatmapped_geometries(datacollection, user=viewer)
             pass
         elif mode == 'convexhull':
-            featureCollection = datacollection.hull_geometries
+            featureCollection = hull_geometries(datacollection, user=viewer)
             pass
         elif mode == 'default':
-            featureCollection = datacollection.feature_collection
+            featureCollection = feature_collection(datacollection, user=viewer)
             pass
         else:
             return Response({"error": "Invalid QueryString"}, status=status.HTTP_400_BAD_REQUEST)
@@ -1589,10 +1611,11 @@ class PlaceTableCollViewSet(viewsets.ModelViewSet):
         id_ = self.request.GET.get('id')
         from django.db.models import Min
         coll = get_object_or_404(Collection, id=id_)
+        # place#310: members from datasets outside the requester's circle are withheld.
         if coll.collection_class == 'dataset':
-            qs = coll.places_all
+            qs = coll.visible_places(self.request.user)
         else:
-            qs = coll.places.annotate(seq=Min('annos__sequence')).order_by('seq')
+            qs = coll.visible_thru_places(self.request.user).annotate(seq=Min('annos__sequence')).order_by('seq')
         # qs = coll.places.annotate(seq=Min('collplace__sequence')).order_by('seq')
         # print('qs from PlaceTableCollViewSet()', qs)
         if query is not None:

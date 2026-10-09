@@ -7,7 +7,7 @@ import numpy as np
 import simplejson as json
 from json.encoder import INFINITY
 
-def heatmapped_geometries(caller):
+def heatmapped_geometries(caller, user=None):
     
     # Detect the class of the caller
     caller_class = type(caller)
@@ -58,7 +58,8 @@ def heatmapped_geometries(caller):
             add_geometry(dsgeom.geom)
 
     else: # caller_class == 'Collection'
-        places = caller.places_all
+        # place#310: a viewer is named ⇒ withhold members of datasets outside their circle
+        places = caller.visible_places(user) if user is not None else caller.places_all
         if not places:
             return heatmapped_geometries
         for place in places:

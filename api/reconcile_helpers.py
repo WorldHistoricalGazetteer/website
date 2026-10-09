@@ -692,12 +692,14 @@ def build_es_query(params, size=100):
     return q
 
 
-def es_search(index=ELASTIC_INDICES, query=None, ids=None):
+def es_search(index=ELASTIC_INDICES, query=None, ids=None, hidden=None):
     """
     Execute an Elasticsearch search.
 
     query: dict from normalise_query_params
     ids: optional list of document IDs to fetch directly
+    hidden: an ``api.dataset_access.HiddenDatasets`` for the requester
+            (place#310) — docs of those datasets are excluded in the query
     """
 
     if ids:
@@ -716,6 +718,10 @@ def es_search(index=ELASTIC_INDICES, query=None, ids=None):
         body = build_es_query(params, size=query["size"])
     else:
         return []
+
+    if hidden:
+        from api.dataset_access import es_apply_visibility
+        es_apply_visibility(body, hidden=hidden)
 
     # Tolerate an index in ELASTIC_INDICES that is absent from the cluster
     # (e.g. dropped/renamed during reindexing): skip it rather than 500 the

@@ -66,7 +66,11 @@ def downloader(request, *args, **kwargs):
                     username=user.username,
                     dsid=dsid,
                     collid=collid,
-                    format=format
+                    format=format,
+                    # place#310: who is asking, so a collection's members from datasets
+                    # outside their circle are withheld (None ⇒ anonymous; userid 1 above
+                    # is a real account and must not decide visibility).
+                    viewer_id=user.id if user.is_authenticated else None,
                 )
                 logger.info(f'Task sent to Celery, task_id: {download_task.task_id}')
                 return HttpResponse(
@@ -238,7 +242,11 @@ def make_download(self, *args, **kwargs):
         colltitle = coll.title
         collclass = coll.collection_class
 
-        qs = coll.places_all.all()
+        # place#310: members from datasets outside the requester's circle are withheld.
+        from django.contrib.auth.models import AnonymousUser
+        viewer_id = kwargs.get("viewer_id")
+        viewer = (User.objects.filter(pk=viewer_id).first() if viewer_id else None) or AnonymousUser()
+        qs = coll.visible_places(viewer).all()
         total_operations = qs.count()
 
         req_format = "lpf"

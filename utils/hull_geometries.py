@@ -6,7 +6,7 @@ from places.models import PlaceGeom
 import numpy as np
 import simplejson as json
 
-def hull_geometries(caller):
+def hull_geometries(caller, user=None):
     
     # Detect the class of the caller
     caller_class = type(caller)
@@ -25,7 +25,8 @@ def hull_geometries(caller):
         if dsgeoms.count() > 0:
             geom_list = [GEOSGeometry(dsgeom.geom.wkt) for dsgeom in dsgeoms]
     else: # caller_class == 'Collection'
-        places = caller.places_all
+        # place#310: a viewer is named ⇒ withhold members of datasets outside their circle
+        places = caller.visible_places(user) if user is not None else caller.places_all
         if places.count() > 0:
             geom_list = [GEOSGeometry(geom.geom.wkt) for place in places for geom in place.geoms.all()]
             

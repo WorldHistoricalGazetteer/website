@@ -119,6 +119,211 @@ def is_dataset_embargoed(dataset_pk: int, now=None) -> bool:
     return release is None or release > (now or timezone.now())
 
 
+# ---------------------------------------------------------------------------
+# Batch forms of the same rule, for list / search surfaces (place#310)
+#
+# ``Dataset.user_can_view`` answers for ONE dataset with up to three queries.
+# A search page, a reconciliation batch or a collection's feature list may
+# touch hundreds of places from dozens of datasets, so the surfaces below ask
+# the rule once per request instead: either as a ``Q`` the ORM applies in the
+# same query as the search (``visible_places_q``), or as the set of dataset
+# ids / labels to drop from a list already in hand (``visible_dataset_pks``,
+# ``hidden_dataset_labels``). The truth table is the one ``user_can_view``
+# and ``user_has_private_access`` define; the embargo row is folded in as
+# ``dataset_visibility`` does. Both forms are tested against each other
+# (datasets/tests_place_visibility.py), so they cannot drift apart silently.
+# ---------------------------------------------------------------------------
+
+_SEES_EVERYTHING_GROUPS = ("whg_admins", "whg_team")
+
+
+def embargoed_dataset_pks(now=None) -> set[int]:
+    """Ids of the datasets whose registry row (``whg:<pk>``) is under an
+    unlifted embargo. One query; the row set is admin-curated and tiny."""
+    from api.models import GazetteerRegistryEntry
+    from django.db.models import Q
+    now = now or timezone.now()
+    rows = (GazetteerRegistryEntry.objects
+            .filter(status="embargoed", id__startswith=f"{WHG_NAMESPACE}:")
+            .filter(Q(embargo_release_at__isnull=True) | Q(embargo_release_at__gt=now))
+            .values_list("id", flat=True))
+    out = set()
+    for rid in rows:
+        tail = rid.split(":", 1)[1]
+        if tail.isdigit():
+            out.add(int(tail))
+    return out
+
+
+def user_sees_every_dataset(user) -> bool:
+    """Staff, superusers, ``whg_admins`` and ``whg_team`` are inside every
+    dataset's circle (``user_has_private_access`` says so for the first three;
+    ``Dataset.collaborators`` folds ``whg_team`` in for every dataset)."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
+        return True
+    return user.groups.filter(name__in=_SEES_EVERYTHING_GROUPS).exists()
+
+
+def visible_datasets_q(user, prefix: str = ""):
+    """A ``Q`` selecting the datasets ``user`` may see, applied to a
+    ``Dataset`` queryset (``prefix=""``) or through a relation
+    (``prefix="dataset__"`` on ``Place``). Public-and-not-embargoed is
+    visible to everyone; a dataset the user owns, co-owns or collaborates on
+    is visible whatever its state; everything else is withheld. Insiders by
+    role (``user_sees_every_dataset``) get an unconstrained ``Q``."""
+    from django.db.models import Q
+    if user_sees_every_dataset(user):
+        return Q()
+    embargoed = embargoed_dataset_pks()
+    q = Q(**{f"{prefix}public": True})
+    if embargoed:
+        q &= ~Q(**{f"{prefix}id__in": embargoed})
+    if user and getattr(user, "is_authenticated", False):
+        from datasets.models import DatasetUser
+        mine = DatasetUser.objects.filter(user_id_id=user.id).values("dataset_id_id")
+        q |= Q(**{f"{prefix}owner_id": user.id}) | Q(**{f"{prefix}id__in": mine})
+    return q
+
+
+def visible_places_q(user):
+    """``visible_datasets_q`` for a ``Place`` queryset."""
+    return visible_datasets_q(user, prefix="dataset__")
+
+
+def visible_dataset_pks(user, pks) -> set[int]:
+    """Of ``pks`` (dataset ids already in hand), the ones ``user`` may see.
+    One query, however many ids. Use on a result list whose rows already
+    name their dataset, so the filter costs nothing per hit."""
+    from datasets.models import Dataset
+    pks = {int(p) for p in pks if p is not None}
+    if not pks:
+        return set()
+    q = visible_datasets_q(user)
+    if not q.children:  # an unconstrained Q: the user sees everything
+        return pks
+    return set(Dataset.objects.filter(id__in=pks).filter(q).values_list("id", flat=True))
+
+
+@dataclass(frozen=True)
+class HiddenDatasets:
+    """The datasets one user may NOT see, as ids and as labels, computed once
+    per request (one query) so that a search-like surface can drop hits in
+    Python — by the ``dataset`` label a legacy ES doc carries, or by the
+    ``<dataset_id>`` inside a gateway ``whg:<dataset_id>:<src_id>`` id —
+    without a query per hit."""
+    pks: frozenset
+    labels: frozenset
+
+    def __bool__(self):
+        return bool(self.pks)
+
+    def hides_contributed_id(self, pid: str) -> bool:
+        """True when ``pid`` names a dataset this user may not see — or names
+        no dataset at all (the two-part ``whg:<pk>`` fallback, a malformed id):
+        a contributed id that cannot be checked is withheld, not served."""
+        parsed = parse_contributed_id(pid)
+        if parsed is None:
+            return True
+        return parsed[0] in self.pks
+
+    def es_filter(self) -> Optional[dict]:
+        """The clause a legacy-index query adds to its ``bool.filter`` — a
+        ``must_not terms`` on the ``dataset`` keyword field (``whg`` / ``pub``
+        docs carry the label: elastic/es_utils.py makeDoc) — or None when
+        nothing is hidden, so the query can be left untouched."""
+        if not self.labels:
+            return None
+        return {"bool": {"must_not": [{"terms": {"dataset": sorted(self.labels)}}]}}
+
+
+_NOTHING_HIDDEN = HiddenDatasets(frozenset(), frozenset())
+
+
+def hidden_datasets(user) -> HiddenDatasets:
+    """Everything ``user`` may not see, in one query. Non-public datasets
+    number in the hundreds (343 on prod, 2026-09-30), far below ES's terms
+    limit, and the set is smaller still for a signed-in contributor."""
+    from datasets.models import Dataset
+    q = visible_datasets_q(user)
+    if not q.children:  # an unconstrained Q: the user sees everything
+        return _NOTHING_HIDDEN
+    rows = Dataset.objects.exclude(q).values_list("id", "label")
+    pks, labels = set(), set()
+    for pk, label in rows:
+        pks.add(pk)
+        labels.add(label)
+    return HiddenDatasets(frozenset(pks), frozenset(labels))
+
+
+def hidden_dataset_labels(user) -> list[str]:
+    """Labels of the datasets ``user`` may NOT see (see ``HiddenDatasets``)."""
+    return sorted(hidden_datasets(user).labels)
+
+
+def es_visibility_filter(user) -> Optional[dict]:
+    """``hidden_datasets(user).es_filter()``."""
+    return hidden_datasets(user).es_filter()
+
+
+def es_apply_visibility(body: dict, user=None, hidden: Optional[HiddenDatasets] = None) -> dict:
+    """Add the visibility clause to a legacy-index query ``body`` in place and
+    return it. The body's top-level query is wrapped in a ``bool`` when it is
+    not one already, and the clause goes into ``bool.filter`` (a list; an
+    existing single-object ``filter`` is turned into one). Idempotent for a
+    given clause. Pass ``hidden`` when the caller already computed it."""
+    hidden = hidden if hidden is not None else hidden_datasets(user)
+    clause = hidden.es_filter()
+    if clause is None:
+        return body
+    query = body.get("query")
+    if not isinstance(query, dict) or "bool" not in query:
+        query = {"bool": {"must": [query] if query else [{"match_all": {}}]}}
+        body["query"] = query
+    b = query["bool"]
+    flt = b.get("filter")
+    if flt is None:
+        flt = []
+    elif isinstance(flt, dict):
+        flt = [flt]
+    if clause not in flt:
+        flt.append(clause)
+    b["filter"] = flt
+    return body
+
+
+def dataset_visible_to(dataset, user) -> bool:
+    """One dataset, one user: ``user_can_view`` with the embargo row folded in
+    (an embargoed dataset is treated as non-public whatever ``public`` says) —
+    the single-row form of ``visible_datasets_q``."""
+    if dataset is None:
+        return False
+    if is_dataset_embargoed(dataset.pk):
+        return dataset.user_has_private_access(user)
+    return dataset.user_can_view(user)
+
+
+def place_visible_to(place, user) -> bool:
+    """``dataset_visible_to`` for a place already in hand (``place.dataset`` is
+    one query unless select_related)."""
+    return place is not None and dataset_visible_to(place.dataset, user)
+
+
+def get_visible_place_or_404(user, **lookup):
+    """A ``Place`` the user may see, or ``Http404`` — the same answer whether
+    the place does not exist or belongs to a dataset outside the user's
+    circle, so a private id is not confirmed. ``lookup`` is passed to
+    ``filter`` (``pk=…``, ``id=…``)."""
+    from django.http import Http404
+    from places.models import Place
+    place = (Place.objects.select_related("dataset")
+             .filter(visible_places_q(user)).filter(**lookup).first())
+    if place is None:
+        raise Http404("No Place matches the given query.")
+    return place
+
+
 def dataset_attribution(dataset) -> dict:
     """Flat, ``registry_attribution``-shaped attribution for a contributed
     dataset, so the Atlas portal and geometry client read one shape for

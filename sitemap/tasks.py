@@ -21,8 +21,13 @@ def populate_toponyms():
     page_size = 1000
 
     try:
-        # Fetch all places and paginate
-        places = Place.objects.prefetch_related('names', 'whens').order_by('id')
+        # Only places anyone may see (place#310): the table feeds sitemap.xml and the
+        # public /search/<toponym> page, so a non-public or embargoed dataset's names
+        # must never enter it.
+        from django.contrib.auth.models import AnonymousUser
+        from api.dataset_access import visible_places_q
+        places = (Place.objects.filter(visible_places_q(AnonymousUser()))
+                  .prefetch_related('names', 'whens').order_by('id'))
         paginator = Paginator(places, page_size)
 
         for page_num in paginator.page_range:

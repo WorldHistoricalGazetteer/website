@@ -67,10 +67,16 @@ def _repr_lnglat(place):
     return None, None
 
 
-def checkout_place_collection(collection):
+def checkout_place_collection(collection, user=None):
     """Serialise a published ``Collection(collection_class='place')`` → a Place-Collection snapshot.
-    Returns ``(snapshot, base_version)``."""
+    Returns ``(snapshot, base_version)``.
+
+    place#310: with ``user`` given, a member from a dataset outside the user's circle keeps its
+    place in the sequence (id, seq, ``withheld: True``) but carries no title, coordinates or
+    annotation, so an editor can reorder around it without reading it — and publish-back keeps it
+    (see ``publish._resolve_places``)."""
     from collection.models import CollPlace
+    from datasets.models import Dataset
     from traces.models import TraceAnnotation
 
     if collection.collection_class != 'place':
@@ -78,9 +84,17 @@ def checkout_place_collection(collection):
 
     annos = {a.place_id: a for a in TraceAnnotation.objects.filter(
         collection=collection, anno_type='place', archived=False)}
+    withheld_labels = set()
+    if user is not None:
+        withheld = collection.withheld_dataset_pks(user)
+        if withheld:
+            withheld_labels = set(Dataset.objects.filter(id__in=withheld).values_list('label', flat=True))
 
     places = []
     for cp in CollPlace.objects.filter(collection=collection).select_related('place').order_by('sequence'):
+        if cp.place.dataset_id in withheld_labels:
+            places.append({'id': f'whg:{cp.place_id}', 'title': '', 'seq': cp.sequence, 'withheld': True})
+            continue
         a = annos.get(cp.place_id)
         lng, lat = _repr_lnglat(cp.place)
         ref = {'id': f'whg:{cp.place_id}', 'title': getattr(cp.place, 'title', '') or '',

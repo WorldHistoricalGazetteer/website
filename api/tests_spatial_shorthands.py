@@ -256,8 +256,10 @@ class BatchRejectionContractTests(SimpleTestCase):
                 return self.username
         force_authenticate(request, user=_U())
 
+        from api.dataset_access import _NOTHING_HIDDEN
         with _patch("api.reconcile.reconcile_place_es",
-                    side_effect=lambda *a, **k: {"result": [], "geojson": None}):
+                    side_effect=lambda *a, **k: {"result": [], "geojson": None}), \
+                _patch("api.reconcile.hidden_datasets", return_value=_NOTHING_HIDDEN):
             response = ReconciliationView.as_view()(request)
         return response.status_code, _json.loads(response.content)
 

@@ -14,6 +14,7 @@ from unittest.mock import patch
 from django.test import SimpleTestCase
 
 from api.reconcile import normalise_query_params, reconcile_place_es
+from api.dataset_access import _NOTHING_HIDDEN
 
 
 def _query(**params):
@@ -34,7 +35,8 @@ class UnscopedGatewayFailureTests(SimpleTestCase):
     """The hole this fixes: no spatial constraint, so the `scope` block never fired."""
 
     def _run(self, **meta):
-        with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)):
+        with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)), \
+                patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN):
             return reconcile_place_es(_query(namespaces='ukhc'))
 
     def test_timeout_is_reported_to_the_client(self):
@@ -67,7 +69,8 @@ class LiveGatewayTests(SimpleTestCase):
     def test_a_genuine_empty_result_carries_no_gateway_key(self):
         """The discriminator that did not exist before: the gateway answered, and the answer was
         'nothing'. That IS an honest miss and must stay distinguishable from an outage."""
-        with patch('api.reconcile.crc_reconcile_search',
+        with patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN), \
+                patch('api.reconcile.crc_reconcile_search',
                    _gateway(namespaces_searched=['ukhc'], variants_used=[])):
             res = reconcile_place_es(_query(namespaces='ukhc'))
         self.assertEqual(res['result'], [])
@@ -76,7 +79,8 @@ class LiveGatewayTests(SimpleTestCase):
         self.assertIn('ukhc', res['namespaces_searched'])
 
     def test_a_gateway_that_answered_is_believed_about_its_scope(self):
-        with patch('api.reconcile.crc_reconcile_search',
+        with patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN), \
+                patch('api.reconcile.crc_reconcile_search',
                    _gateway(namespaces_searched=['ukhc', 'kain_par'])):
             res = reconcile_place_es(_query(namespaces='ukhc,kain_par'))
         self.assertEqual(res['namespaces_searched'], ['kain_par', 'ukhc'])
@@ -86,7 +90,8 @@ class ScopedGatewayFailureTests(SimpleTestCase):
     """Regression guard: the place#144 behaviour for scoped queries must survive unchanged."""
 
     def _run(self, **meta):
-        with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)):
+        with patch('api.reconcile.crc_reconcile_search', _gateway(**meta)), \
+                patch('api.reconcile.hidden_datasets', return_value=_NOTHING_HIDDEN):
             return reconcile_place_es(
                 _query(namespaces='kain_par', contained_in=['ukhc:KEN'],
                        containment='fuzzy', relation='intersects'))

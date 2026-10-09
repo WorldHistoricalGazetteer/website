@@ -134,11 +134,38 @@ class MapdataGateTests(_DatasetRolesMixin, SimpleTestCase):
         self.assertEqual(resp.status_code, 200)
         gen.assert_called_once()
 
+    def _call_collection(self, coll, user):
+        from utils import mapdata as md
+        req = self.rf.get("/mapdata/collections/1/")
+        req.user = user
+        with mock.patch.object(md.Collection.objects, "filter") as flt, \
+                mock.patch.object(md, "generate_mapdata", return_value={"table": [], "metadata": {}}) as gen:
+            flt.return_value.first.return_value = coll
+            resp = md.mapdata(req, "collections", 1)
+        return resp, gen
+
     def test_collections_not_gated(self):
-        # Collections stay viewable by link: no dataset lookup, generation proceeds.
-        resp, gen = self._call(self.dataset(False), AnonymousUser(), category="collections")
+        # Collections stay viewable by link: an anonymous viewer with nothing withheld
+        # gets the shared (cacheable) view — generate_mapdata is asked for no filter.
+        coll = mock.Mock()
+        coll.withheld_dataset_pks.return_value = frozenset()
+        resp, gen = self._call_collection(coll, AnonymousUser())
         self.assertEqual(resp.status_code, 200)
-        gen.assert_called_once()
+        gen.assert_called_once_with("collections", 1, False, withheld_dataset_pks=None)
+
+    def test_collections_private_members_withheld_for_outsiders(self):
+        # place#310: a member dataset outside the viewer's circle is passed to
+        # generate_mapdata as withheld, so the filtered (uncached) view is built.
+        coll = mock.Mock()
+        coll.withheld_dataset_pks.return_value = frozenset({7})
+        resp, gen = self._call_collection(coll, AnonymousUser())
+        self.assertEqual(resp.status_code, 200)
+        gen.assert_called_once_with("collections", 1, False, withheld_dataset_pks=frozenset({7}))
+
+    def test_collections_missing_404(self):
+        resp, gen = self._call_collection(None, AnonymousUser())
+        self.assertEqual(resp.status_code, 404)
+        gen.assert_not_called()
 
 
 class DatasetViewGateTests(_DatasetRolesMixin, SimpleTestCase):

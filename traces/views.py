@@ -139,8 +139,11 @@ def get_form(request):
     # print('get_form() request.method', request.method)
     pid = request.GET['p']
     cid = request.GET['c']
-    place = Place.objects.get(id=pid)
-    coll = Collection.objects.get(id=cid)
+    # place#310: the form renders the place's title and names, so a place outside
+    # the requester's circle is "not found".
+    from api.dataset_access import get_visible_place_or_404
+    place = get_visible_place_or_404(request.user, id=pid)
+    coll = get_object_or_404(Collection, id=cid)
 
     # is there a trace_annotation record already?
     existing = TraceAnnotation.objects.filter(place=pid, collection=cid, archived=False)

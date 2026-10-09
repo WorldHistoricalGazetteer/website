@@ -43,6 +43,7 @@ from django.conf import settings
 from django.db import connection as db_connection
 
 from .querysets import place_feature_queryset, period_public_queryset
+from .dataset_access import hidden_datasets, visible_datasets_q
 from .reconcile_helpers import make_candidate, format_extend_row, es_search, \
     extract_entity_type, is_crc_place_id, create_type_guessing_dummies, parse_schema, \
     parse_namespaces, parse_delimited_param, filter_hits_by_namespace, WHG_NAMESPACE, \
@@ -852,6 +853,7 @@ class SuggestEntityView(AuthenticatedAPIView):
         # same treatment: resolved once, applied to both arms, and never named in the response.
         _suggest_hidden = hidden_namespaces(request.user, request)
         namespaces, _ = apply_namespace_embargo(namespaces, _suggest_hidden)
+        _suggest_withheld = hidden_datasets(request.user)  # place#310, once per request
         ccodes = parse_delimited_param(request.GET.get("countries"), upper=True)
         fclasses = parse_delimited_param(request.GET.get("fclasses"), upper=True)
         types = parse_delimited_param(request.GET.get("types"))
@@ -877,7 +879,8 @@ class SuggestEntityView(AuthenticatedAPIView):
                 query = normalise_query_params(raw_params)
                 query["mode"] = "starts" if exact else "fuzzy"
 
-                place_hits = es_search(query=query)
+                place_hits = _drop_withheld_hits(es_search(query=query, hidden=_suggest_withheld),
+                                                 _suggest_withheld)
 
                 # Max score is used for normalizing subsequent scores
                 max_score = place_hits[0].get("_score", 1.0) if place_hits else 1.0
@@ -900,9 +903,11 @@ class SuggestEntityView(AuthenticatedAPIView):
             crc_namespaces = namespaces
             if namespaces is None or namespaces:
                 crc_mode = "starts" if exact else "fuzzy"
-                crc_hits = crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user,
-                                              namespaces=crc_namespaces, ccodes=ccodes,
-                                              fclasses=fclasses, types=types)
+                crc_hits = _drop_withheld_hits(
+                    crc_suggest_search(prefix, mode=crc_mode, limit=50, user=request.user,
+                                       namespaces=crc_namespaces, ccodes=ccodes,
+                                       fclasses=fclasses, types=types),
+                    _suggest_withheld)
                 if _suggest_hidden:
                     crc_hits = [h for h in crc_hits
                                 if (h.get("_source") or {}).get("namespace") not in _suggest_hidden]
@@ -1085,6 +1090,9 @@ class AuthorityDatasetsView(AuthenticatedAPIView):
             )
         else:
             qs = Dataset.objects.filter(authority=True)
+        # place#310: a pending (non-public) dataset is listed only to its circle; the
+        # indexing rebuild runs as staff and sees everything, as before.
+        qs = qs.filter(visible_datasets_q(request.user))
 
         datasets = list(
             qs.annotate(place_count=Count("places", distinct=True))
@@ -1177,11 +1185,35 @@ def parse_request_payload(request):
 RECON_FANOUT = max(1, int(getattr(settings, "RECON_FANOUT", 8)))
 
 
+def _drop_withheld_hits(hits, hidden):
+    """place#310: remove hits for places of datasets outside the requester's
+    circle. A gateway hit names its dataset in its id (``whg:<dataset>:<id>``);
+    a legacy hit names it in ``_source.dataset`` (already excluded in the ES
+    query — this is the belt to that brace). A contributed id that names no
+    dataset is withheld. Pure Python: ``hidden`` was computed once per request."""
+    if not hidden:
+        return hits
+    kept = []
+    for h in hits:
+        src = h.get("_source") or {}
+        pid = str(src.get("place_id") or "")
+        if pid.lower().startswith(WHG_NAMESPACE + ":"):
+            if hidden.hides_contributed_id(pid):
+                continue
+        elif pid.isdigit() and src.get("dataset") in hidden.labels:
+            continue
+        kept.append(h)
+    return kept
+
+
 def process_queries(queries, batch_size=50, user=None):
     """
     Enforce batch limit, normalise each query, and return a dict of results.
     """
     messages = []
+    # place#310: the datasets this requester may not see, once for the whole batch
+    # (one query), so each worker filters its hits without touching the DB.
+    hidden = hidden_datasets(user)
 
     if len(queries) > batch_size:
         # Defensive backstop only. The HTTP path REJECTS an oversized batch with
@@ -1215,7 +1247,7 @@ def process_queries(queries, batch_size=50, user=None):
         key, params = item
         try:
             query = normalise_query_params(params)
-            return key, reconcile_place_es(query, user=user), None
+            return key, reconcile_place_es(query, user=user, hidden=hidden), None
         except ValueError as e:
             return key, None, e
         finally:
@@ -1512,7 +1544,7 @@ def normalise_query_params(params):
     }
 
 
-def reconcile_place_es(query, user=None):
+def reconcile_place_es(query, user=None, hidden=None):
     """
     Execute a reconciliation query against Elasticsearch.
 
@@ -1527,8 +1559,12 @@ def reconcile_place_es(query, user=None):
 
     query: dict from normalise_query_params
     user:  Django User instance (used for CRC gateway access check)
+    hidden: ``api.dataset_access.HiddenDatasets`` for ``user`` (place#310);
+            computed here when the caller did not
     """
     namespaces = query.get("namespaces")  # None ⇒ all
+    if hidden is None:
+        hidden = hidden_datasets(user)
 
     # place#218 — an embargoed gazetteer must not be reachable here. Resolved once, applied to BOTH
     # the gateway request and the legacy hits: this is a hybrid path and filtering one arm still leaks.
@@ -1565,7 +1601,7 @@ def reconcile_place_es(query, user=None):
     #    scope is active and the gateway will serve the (properly scoped) results.
     legacy_hits = []
     if (namespaces is None or WHG_NAMESPACE in namespaces) and not suppress_legacy:
-        legacy_hits = es_search(query=query)
+        legacy_hits = _drop_withheld_hits(es_search(query=query, hidden=hidden), hidden)
         # place#218 — the legacy arm. `filter_hits_by_namespace` is the caller-driven safety net; this
         # is the registry-driven one, and it must run even when the caller named no namespaces.
         if _hidden_ns:
@@ -1581,7 +1617,8 @@ def reconcile_place_es(query, user=None):
     # Only call the gateway when at least one CRC namespace is wanted
     # (or when no namespace filter was given at all).
     if gateway_in_play:
-        crc_hits = crc_reconcile_search(query, user=user, namespaces=crc_namespaces, meta=crc_meta)
+        crc_hits = _drop_withheld_hits(
+            crc_reconcile_search(query, user=user, namespaces=crc_namespaces, meta=crc_meta), hidden)
         # place#218 — the gateway arm. When the caller asked for everything we could not express
         # "all but these" in the request, so the exclusion happens here. Belt and braces even when we
         # could: the gateway is a separate service and this must not depend on it honouring the list.

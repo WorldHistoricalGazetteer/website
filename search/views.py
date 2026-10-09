@@ -12,6 +12,7 @@ from django.views.generic import View
 from django.views.generic.base import TemplateView
 
 from api.reconcile import DOCS_URL
+from api.dataset_access import es_apply_visibility, hidden_datasets, visible_dataset_pks, visible_places_q
 from elastic.health import index_available
 from areas.models import Area
 from collection.models import Collection
@@ -367,8 +368,19 @@ class AtlasPageView(TemplateView):
             rid = str(row.get('id') or '')
             if ':' in rid and rid.split(':', 1)[1].isdigit():
                 _spec_pks.append(int(rid.split(':', 1)[1]))
+        # place#310: a registry row (name, description, record count) for a dataset
+        # outside this viewer's circle is withheld, as is any row that names no
+        # dataset. One query for all rows.
+        _visible_pks = visible_dataset_pks(self.request.user, _spec_pks)
+
+        def _spec_pk(row):
+            rid = str(row.get('id') or '')
+            tail = rid.split(':', 1)[1] if ':' in rid else ''
+            return int(tail) if tail.isdigit() else None
+
+        specialist_gazetteers = [row for row in specialist_gazetteers if _spec_pk(row) in _visible_pks]
         _ds_downloadable = dict(
-            Dataset.objects.filter(pk__in=_spec_pks)
+            Dataset.objects.filter(pk__in=_visible_pks)
             .values_list('pk', 'downloadable')
         )
         _authed = self.request.user.is_authenticated
@@ -568,8 +580,37 @@ def atlas_search(request):
         # real status — not an empty 200 the client renders as "no results,
         # modify your search".
         return _gateway_failure_response(failure or "error", **empty)
+    _withhold_contributed_hits(data, request.user)
     data["gateway"] = True
     return JsonResponse(data)
+
+
+def _withhold_contributed_hits(data, user):
+    """place#310: drop gateway search hits whose ``whg:<dataset>:<id>`` names a
+    dataset outside this user's circle (the gateway index is a snapshot that
+    knows nothing of ``Dataset.public`` or the embargo row), and any edge that
+    touches one. One query per request, no query per hit. Mutates ``data``."""
+    hidden = hidden_datasets(user)
+    hits = data.get("hits")
+    if not hidden or not isinstance(hits, list):
+        return data
+    dropped = set()
+    kept = []
+    for hit in hits:
+        pid = str((hit or {}).get("place_id") or "")
+        if pid.lower().startswith("whg:") and hidden.hides_contributed_id(pid):
+            dropped.add(pid)
+            continue
+        kept.append(hit)
+    if dropped:
+        data["hits"] = kept
+        if isinstance(data.get("total"), int):
+            data["total"] = max(0, data["total"] - len(dropped))
+        if isinstance(data.get("edges"), list):
+            data["edges"] = [e for e in data["edges"]
+                             if not (isinstance(e, dict)
+                                     and (str(e.get("a")) in dropped or str(e.get("b")) in dropped))]
+    return data
 
 
 def atlas_place(request):
@@ -957,6 +998,7 @@ def TypeaheadSuggestions(request):
     # Use SearchViewV3's query builder
     query_body = SearchViewV3.build_search_query(params)
     query_body["size"] = 20  # Limit typeahead results
+    es_apply_visibility(query_body, request.user)  # place#310
 
     es = settings.ES_CONN
     indices = [settings.ES_WHG, settings.ES_PUB]
@@ -1131,6 +1173,7 @@ class SearchViewV3(View):
             result = {'parameters': params, 'suggestions': []}
         else:
             q = SearchViewV3.build_search_query(params)
+            es_apply_visibility(q, request.user)  # place#310
             suggestions = suggester(q, [idx, 'pub'])
             suggestions = [suggestionItem(s) for s in suggestions]
             result = {'parameters': params, 'suggestions': suggestions}
@@ -1459,7 +1502,8 @@ class SearchDatabaseView(View):
             area = Area.objects.get(id=bounds['id'][0])
             ga = GEOSGeometry(json.dumps(area.geojson))
 
-        qs = Place.objects.filter(dataset__public=True)
+        # place#310: the one visibility rule, applied to the requester.
+        qs = Place.objects.filter(visible_places_q(request.user))
 
         if bounds:
             qs = qs.filter(geoms__geom__within=ga)
@@ -1571,6 +1615,7 @@ class FeatureContextView(View):
                 }}
             }
         }}
+        es_apply_visibility(q_context_all, request.user)  # place#310
         response = contextSearch(idx, doctype, q_context_all, task)
         return JsonResponse(response, safe=False)
 
@@ -1619,7 +1664,8 @@ class CollectionGeomView(View):
         """
         coll_id = request.GET.get('coll_id')
         coll = Collection.objects.get(id=coll_id)
-        pids = [p.id for p in coll.places_all]
+        # place#310: members from datasets outside the requester's circle are withheld.
+        pids = list(coll.visible_places(request.user).values_list('id', flat=True))
         placegeoms = PlaceGeom.objects.filter(place_id__in=pids)
         features = [{"type": "Feature",
                      "geometry": pg.jsonb,
@@ -1650,6 +1696,7 @@ class TraceGeomView(View):
 
         bodyids = [b['place_id'] for b in bodies if b['place_id']]
         q_geom = {"query": {"bool": {"must": [{"terms": {"place_id": bodyids}}]}}}
+        es_apply_visibility(q_geom, request.user)  # place#310
         geoms = getGeomCollection(idx, doctype, q_geom)
         geoms['bodies'] = bodies
 

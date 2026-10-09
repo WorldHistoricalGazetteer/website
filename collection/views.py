@@ -34,6 +34,7 @@ from .access import (
     get_reviewable_collection_or_404, get_manageable_group_or_404,
 )
 from datasets.utils import get_viewable_dataset_or_404
+from api.dataset_access import visible_datasets_q
 from .forms import CollectionModelForm, CollectionGroupModelForm
 from .models import *
 from django.core.exceptions import PermissionDenied
@@ -665,6 +666,10 @@ def fetch_geojson_coll(request, *args, **kwargs):
     coll = get_object_or_404(Collection, id=id_)
     rel_keywords = coll.rel_keywords
 
+    # place#310: traces on places from datasets outside the requester's circle are withheld.
+    traces = (coll.traces.filter(archived=False)
+              .filter(visible_datasets_q(request.user, prefix='place__dataset__'))
+              .select_related('place'))
     features_t = [
         {
             "type": "Feature",
@@ -677,7 +682,7 @@ def fetch_geojson_coll(request, *args, **kwargs):
                 "note": t.note
             }
         }
-        for t in coll.traces.filter(archived=False)
+        for t in traces
     ]
 
     feature_collection = {
@@ -1111,16 +1116,22 @@ class PlaceCollectionUpdateView(LoginRequiredMixin, UpdateView):
         #     {'id': cp.id, 'p': cp.place, 'seq': cp.sequence}
         #     for cp in CollPlace.objects.filter(collection=_id).order_by('sequence')
         # ]
+        # place#310: an editor outside a member dataset's circle sees that member's
+        # position in the sequence but not its title.
+        withheld = self.object.withheld_dataset_pks(self.request.user)
+        withheld_labels = (set(Dataset.objects.filter(id__in=withheld).values_list('label', flat=True))
+                           if withheld else set())
         context['seq_places'] = [
             {
                 'id': cp.id,
                 'p': {
                     'id': cp.place.id,
-                    'title': cp.place.title
+                    'title': cp.place.title if cp.place.dataset_id not in withheld_labels else ''
                 },
-                'seq': cp.sequence
+                'seq': cp.sequence,
+                'withheld': cp.place.dataset_id in withheld_labels,
             }
-            for cp in CollPlace.objects.filter(collection=_id).order_by('sequence')
+            for cp in CollPlace.objects.filter(collection=_id).select_related('place').order_by('sequence')
         ]
         context['created'] = self.object.create_date.strftime("%Y-%m-%d")
         # context['whgteam'] = User.objects.filter(groups__name='whg_team')
@@ -1167,11 +1178,20 @@ class PlaceCollectionBrowseView(DetailView):
         u = self.request.user
         context['can_edit_in_workbench'] = bool(
             u.is_authenticated and getattr(u, 'can_access_beta', False) and coll.can_edit(u))
-        context['ds_list'] = coll.ds_list
-        context['num_places'] = coll.num_places
-        context['ds_counter'] = coll.ds_counter
+        # place#310: datasets / places / images from datasets outside the viewer's
+        # circle are withheld (the place rows themselves come from /mapdata/, which
+        # applies the same rule).
+        withheld = coll.withheld_dataset_pks(u)
+        context['ds_list'] = coll.visible_ds_list(u)
+        context['num_places'] = coll.visible_num_places(u)
+        if withheld:
+            withheld_labels = set(Dataset.objects.filter(id__in=withheld).values_list('label', flat=True))
+            context['ds_counter'] = {k: v for k, v in coll.ds_counter.items() if k not in withheld_labels}
+            context['images'] = [ta.image_file.name for ta in coll.traces.exclude(place__dataset__id__in=withheld)]
+        else:
+            context['ds_counter'] = coll.ds_counter
+            context['images'] = [ta.image_file.name for ta in coll.traces.all()]
         context['collabs'] = coll.collaborators.all()
-        context['images'] = [ta.image_file.name for ta in coll.traces.all()]
         context['links'] = coll.related_links.all()
         # context['places'] = coll.places.all().order_by('title')
         context['updates'] = {}
@@ -1563,9 +1583,10 @@ class DatasetCollectionBrowseView(DetailView):
             u.is_authenticated and getattr(u, 'can_access_beta', False) and coll.can_edit(u))
         context[
             'visParameters'] = coll.vis_parameters or "{'seq': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'min': {'tabulate': false, 'temporal_control': 'none', 'trail': false},'max': {'tabulate': false, 'temporal_control': 'none', 'trail': false}}"
+        # place#310: member datasets outside the viewer's circle are withheld.
         context['datasets'] = [{"id": ds["id"], "label": ds["label"], "title": ds["title"], "extent": ds["extent"]} for
-                               ds in coll.ds_list]
-        context['num_places'] = coll.num_places
+                               ds in coll.visible_ds_list(u)]
+        context['num_places'] = coll.visible_num_places(u)
 
         context['coordinate_density'] = coll.coordinate_density_value
 
