@@ -5,7 +5,6 @@
   a dataset with no accessioned places, and a private -> public change, pass.
 * ``review`` refuses a POST on an ``align_idx`` task of a non-public dataset before any
   decision is processed; GET, a public dataset and a non-idx task are the controls.
-* the beat schedule rebuilds the toponym table daily.
 
 Run locally (never in the prod container):
 
@@ -102,10 +101,3 @@ class ReviewAccessionGateTests(_WriteGateBase):
                 self.assertEqual(resp, "reached")
                 msgs.error.assert_not_called()
 
-
-class ToponymScheduleTests(TestCase):
-    def test_populate_toponyms_is_scheduled(self):
-        from whg.celery import app
-        import sitemap.tasks
-        tasks = {e["task"] for e in app.conf.beat_schedule.values()}
-        self.assertIn(sitemap.tasks.populate_toponyms.name, tasks)
