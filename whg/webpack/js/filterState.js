@@ -166,56 +166,6 @@ class FilterState {
         }
     }
 
-    /**
-     * Build the search payload descriptor (§11.2).
-     * Geometries are referenced by ID, never sent as GeoJSON.
-     * Multiple selections are sent as an array of geometry_refs.
-     */
-    toSearchPayload() {
-        const s = this._state;
-        const payload = {
-            authorities: s.authorities,
-            place_types: s.place_types,
-            mode: s.mode,
-            spatial: {
-                bbox: s.spatial.bbox,
-                geometry_refs: [],
-            },
-            temporal: {
-                start_year: s.temporal.start_year,
-                stop_year: s.temporal.stop_year,
-                source: s.temporal.source,
-            },
-        };
-
-        // Attach geometry references based on active mode (now arrays)
-        if (s.mode === 'timespan' && s.spatial.region_id.length > 0) {
-            // FIXME: ``osm_admin_polygons`` is a stale reference — no
-            // such Elasticsearch index currently exists. The intended
-            // index name is unresolved; the search backend likely
-            // ignores or rejects this geometry_refs payload until it's
-            // pointed at a real index. Both branches of the ternary
-            // resolve to the same value, which is itself a clue that
-            // the original author had pending decisions here.
-            payload.spatial.geometry_refs = s.spatial.region_id.map(r => ({
-                index: r.source === 'un_geoscheme' ? 'osm_admin_polygons' : 'osm_admin_polygons',
-                id: r.id,
-            }));
-        } else if (s.mode === 'period' && s.spatial.period_id.length > 0) {
-            payload.spatial.geometry_refs = s.spatial.period_id.map(p => ({
-                index: 'periodo_periods',
-                id: p.id,
-            }));
-        } else if (s.mode === 'polity' && s.spatial.polity_id.length > 0) {
-            payload.spatial.geometry_refs = s.spatial.polity_id.map(t => ({
-                index: 'territories',
-                id: t.id,
-            }));
-        }
-
-        return payload;
-    }
-
     /** Reset state to defaults. */
     reset() {
         this._state = JSON.parse(JSON.stringify(DEFAULT_STATE));
