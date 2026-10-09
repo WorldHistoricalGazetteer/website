@@ -12,7 +12,7 @@ import { geomsGeoJSON, formatYear, formatYearWindow } from './utilities';
 import CountryParents from './countryParents';
 import TypeTreeWidget from './typeTreeWidget';
 import filterState from './filterState';
-import heroMap from './heroMap';
+import heroMap, { isDebugEnabled } from './heroMap';
 import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
@@ -773,6 +773,26 @@ function waitDocumentReady() {
     return new Promise((resolve) => $(document).ready(() => resolve()));
 }
 
+// Readiness flag for automation (scripts/atlas_smoke.py). Set as the LAST
+// statement of the boot below, so a harness can wait on the Atlas's own
+// "booted" rather than on MapLibre state: on a plain /atlas/ load the globe
+// spins until the first interaction (heroMap.startSpin), which keeps
+// map.loaded() false and `idle` from ever firing, so library readiness is the
+// wrong signal for this page. Behind the same debug gate as
+// window.heroMapInstance; nothing is set otherwise. A harness that enables the
+// gate with an injected localStorage value (not ?debug) is immune to the
+// replaceState URL rewrites this page performs.
+function markAtlasBooted(error) {
+    if (!isDebugEnabled()) return;
+    try {
+        window.__whgAtlas = {
+            booted: !error,
+            error: error ? String(error) : null,
+            t: Math.round(performance.now()),
+        };
+    } catch (e) { /* */ }
+}
+
 // ── Welcome panel ──────────────────────────────────────────────────────────
 // Persisted opt-out (mirrors atlasTour.js's TOUR_SEEN_KEY): once the user
 // clicks "Don't show this again" the panel never returns, and the first-visit
@@ -1512,9 +1532,12 @@ Promise.all([
         }
     });
 
+    // Last statement of the boot on purpose (see markAtlasBooted).
+    markAtlasBooted();
 }).catch(error => {
     console.error('Atlas init error:', error);
     atlasNotice('The map did not finish loading, so some Atlas controls may not work. Reloading the page usually fixes this.', { level: 'danger', delay: 15000 });
+    markAtlasBooted(error);
 });
 
 /* ═══════════════════════════════════════════════════════════════════
