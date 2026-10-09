@@ -67,8 +67,13 @@ def _verify_like_the_gateway(grant, pid, secret=SECRET):
 def _fake_gateway_get(url, params=None, headers=None, **kwargs):
     """A restarted gateway with the grant check: serves any granted whg:<ds>:<id>
     except src ``lent`` (a polygon lent by another dataset: 451 whatever the
-    grant); refuses an ungranted one 451; knows osm:r1."""
-    pid = url.rsplit("/api/geometry/", 1)[-1]
+    grant); refuses an ungranted one 451; knows osm:r1. Src ``nowhere`` (any
+    dataset) is unknown to the index: the route's own 404."""
+    from urllib.parse import unquote
+    # The ASGI server decodes the path before routing, and the gateway's
+    # route takes the whole remainder (``{place_id:path}``): a src_id
+    # containing ``/`` arrives decoded, as one id.
+    pid = unquote(url.rsplit("/api/geometry/", 1)[-1])
     if pid.startswith("whg:"):
         reason = _verify_like_the_gateway((headers or {}).get(GRANT_HEADER), pid)
         if reason != "ok":
@@ -78,11 +83,14 @@ def _fake_gateway_get(url, params=None, headers=None, **kwargs):
             return _Resp(451, {"detail": {"error": "source licence not determined", "id": pid,
                                           "namespace": "whg",
                                           "detail": "geometry borrowed from whg:9999:1_0"}})
+        if "nowhere" in pid:
+            return _Resp(404, {"detail": {"error": "not found", "id": pid}})
         return _Resp(200, {"place_id": pid, "namespace": "whg", "geometry": SQUARE,
                            "geometry_count": 1, "bounds": [0, 0, 1, 1], "vertex_count": 5,
                            "bytes": 70, "max_bytes": 1000000, "simplified": False,
                            "tolerance": None, "source": "geom-store",
-                           "dataset": pid.rsplit(":", 1)[0]})
+                           # whg:<dataset>:<src_id> — the src_id may itself contain ":"
+                           "dataset": ":".join(pid.split(":", 2)[:2])})
     if pid == "osm:r1":
         return _Resp(200, {"place_id": pid, "namespace": "osm", "geometry": SQUARE,
                            "geometry_count": 1, "bounds": [0, 0, 1, 1], "vertex_count": 5,
@@ -299,6 +307,64 @@ class GeometryViewTests(ContributedAccessBase):
             resp = self.geometry("place:" + self.pid(self.public_ok))
         self.assertEqual(resp.status_code, 200)
         self.assertIn("/api/geometry/" + self.pid(self.public_ok), get.call_args.args[0])
+
+    # A contributed src_id may contain "/" — whg:1760:https://sferaproject.org/toponyms/persia/
+    # is a real one (place#319 gap). It must travel to the gateway as ONE path
+    # segment, and the gateway's answer for it must come back as that answer.
+    SLASH_SRC = "https://sferaproject.org/toponyms/persia/"
+
+    def test_src_id_with_slashes_travels_as_one_encoded_segment_and_is_served(self):
+        pid = self.pid(self.public_ok, self.SLASH_SRC)
+        with patch(GET, side_effect=_fake_gateway_get) as get:
+            resp = self.geometry(pid)
+        get.assert_called_once()
+        url = get.call_args.args[0]
+        tail = url.split("/api/geometry/", 1)[1]
+        self.assertNotIn("/", tail, f"the id must be one path segment: {url}")
+        self.assertIn("%2F", tail)
+        self.assertEqual(tail, f"whg:{self.public_ok.pk}:https:%2F%2Fsferaproject.org%2Ftoponyms%2Fpersia%2F",
+                         "colons kept (the namespace separators), slashes encoded")
+        # The grant was signed over the decoded id, the one the gateway verifies.
+        sent = get.call_args.kwargs["headers"]
+        self.assertEqual(_verify_like_the_gateway(sent.get(GRANT_HEADER), pid), "ok")
+        self.assertEqual(resp.status_code, 200, resp.content[:200])
+        body = resp.json()
+        self.assertEqual(body["place_id"], pid)
+        self.assertEqual(body["dataset"], f"whg:{self.public_ok.pk}")
+        self.assertEqual(body["geometry"], SQUARE)
+
+    def test_unknown_src_id_with_slashes_is_404_not_503(self):
+        pid = self.pid(self.public_ok, "https://example.org/nowhere/")
+        with patch(GET, side_effect=_fake_gateway_get) as get:
+            resp = self.geometry(pid)
+        get.assert_called_once()
+        self.assertEqual(resp.status_code, 404, resp.content[:200])
+        self.assertEqual(resp.json(), {"error": "not found", "id": pid})
+        self.assertNotIn("failure", resp.json())
+
+    def test_src_id_with_slashes_under_an_unknown_dataset_is_404_before_the_gateway(self):
+        with patch(GET, side_effect=_fake_gateway_get) as get:
+            resp = self.geometry(f"whg:999999:{self.SLASH_SRC}")
+        get.assert_not_called()
+        self.assertEqual(resp.status_code, 404)
+
+    def test_src_id_with_slashes_in_a_private_dataset_is_404_to_a_stranger(self):
+        with patch(GET, side_effect=_fake_gateway_get) as get:
+            resp = self.geometry(self.pid(self.private_ok, self.SLASH_SRC))
+        get.assert_not_called()
+        self.assertEqual(resp.status_code, 404)
+
+    def test_a_gateway_without_the_path_route_is_still_a_503_not_a_miss(self):
+        # Before the gateway gained `{place_id:path}`, a slash id fell through
+        # to its ES catch-all (measured: 401 security_exception). That is a
+        # failure to answer, and stays one — the client must not read it as
+        # "no such place".
+        from search.tests_atlas_geometry import _unrestarted_gateway
+        with patch(GET, side_effect=_unrestarted_gateway) as get:
+            resp = self.geometry(self.pid(self.public_ok, self.SLASH_SRC))
+        get.assert_called_once()
+        self.assertEqual(resp.status_code, 503)
+        self.assertEqual(resp.json()["failure"], "http")
 
     def test_private_dataset_is_404_to_a_beta_stranger_and_served_to_its_circle(self):
         pid = self.pid(self.private_ok)
