@@ -101,11 +101,11 @@
                        autocomplete="off" spellcheck="false"
                        placeholder="Search for regions…"/>
                 <button id="atlas_initiate_search" class="btn btn-outline-secondary btn-success" type="button"
-                        data-bs-toggle="tooltip" title="Search">
+                        aria-label="Search" data-bs-toggle="tooltip" title="Search">
                     <i class="fas fa-search"></i>
                 </button>
                 <button id="atlas_clear_search" class="btn btn-outline-secondary" type="button"
-                        data-bs-toggle="tooltip" title="Clear search">
+                        aria-label="Clear search" data-bs-toggle="tooltip" title="Clear search">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -118,8 +118,9 @@
                           data-bs-toggle="tooltip"
                           title="Switch to flat map projection to enable viewport constraint">
                         <button id="atlas_viewport_btn" class="btn" type="button"
-                                disabled style="pointer-events: none;">
-                            <i class="fas fa-crop-alt me-1"></i>Viewport
+                                disabled style="pointer-events: none;"
+                                aria-describedby="atlas_viewport_hint">
+                            <i class="fas fa-crop-alt me-1"></i>Viewport<span id="atlas_viewport_hint" class="viewport-off-hint">flat map only</span>
                         </button>
                     </span>
                     <button id="atlas_layers_btn" class="btn"
@@ -192,7 +193,7 @@
                 {# tests, so `possibly` still admits undated places and           #}
                 {# `definitely` still demands an attested core containing Y.      #}
                 <button type="button" id="temporal_lock_btn" class="temporal-lock"
-                        aria-pressed="false"
+                        aria-pressed="false" aria-label="Lock to a single year"
                         data-bs-toggle="tooltip"
                         title="Lock to a single year — show the map as at one moment, and step through time with the arrow keys">
                     <i class="fas fa-thumbtack"></i>
@@ -226,7 +227,7 @@
         <div class="results-panel-header" style="display:none;">
             <span id="atlas_results_count" class="small text-muted"></span>
             <button id="atlas_close_results" class="btn btn-sm btn-outline-secondary ms-auto"
-                    data-bs-toggle="tooltip" title="Clear results">
+                    aria-label="Clear results" data-bs-toggle="tooltip" title="Clear results">
                 <i class="fas fa-times"></i>
             </button>
         </div>
@@ -379,7 +380,7 @@
     </div>
 
     <!-- Tour relaunch button (bottom-left) -->
-    <button id="atlas_tour_btn" class="atlas-tour-btn" title="Take a guided tour">
+    <button id="atlas_tour_btn" class="atlas-tour-btn" title="Take a guided tour" aria-label="Take a guided tour">
         <i class="fas fa-map-signs"></i>
     </button>
 
@@ -424,8 +425,8 @@
     </div>
     <div class="offcanvas-body" data-mode="filter">
 
-        <!-- Filter | Explore mode toggle (Master Plan §1.4 — sketch UI; backend unification of
-             Authorities/Datasets/Collections via /suggest is pending Phase 2) -->
+        <!-- Filter | Explore mode toggle (Master Plan §1.4 — sketch UI; the unified list
+             of Authorities/Datasets/Collections is still being built) -->
         <div class="gazetteer-mode-toggle btn-group btn-group-sm w-100 mb-2" role="group"
              aria-label="Gazetteer mode">
             <button type="button" class="btn active" data-gazetteer-mode="filter"
@@ -499,10 +500,10 @@
                 <button type="button" class="btn active" data-gaz-type-pill="all">All</button>
                 <button type="button" class="btn" data-gaz-type-pill="standard"
                         rel="tooltip" data-bs-title="Gazetteers without sequence/network metadata.">Standard</button>
-                <button type="button" class="btn" data-gaz-type-pill="itinerary"
-                        rel="tooltip" data-bs-title="Sketch — gazetteers with embedded sequence metadata.">Itinerary</button>
-                <button type="button" class="btn" data-gaz-type-pill="network"
-                        rel="tooltip" data-bs-title="Sketch — gazetteers with embedded network metadata.">Network</button>
+                <button type="button" class="btn gaz-planned" data-gaz-type-pill="itinerary" aria-disabled="true"
+                        rel="tooltip" data-bs-title="Planned, not yet available: filter to gazetteers with embedded sequence (itinerary) metadata.">Itinerary <span class="whg-planned-tag">planned</span></button>
+                <button type="button" class="btn gaz-planned" data-gaz-type-pill="network" aria-disabled="true"
+                        rel="tooltip" data-bs-title="Planned, not yet available: filter to gazetteers with embedded network metadata.">Network <span class="whg-planned-tag">planned</span></button>
             </div>
             <input class="form-control form-control-sm gazetteer-search" type="search"
                    placeholder="Search gazetteers by name…" aria-label="Search gazetteers by name">

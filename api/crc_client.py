@@ -100,15 +100,25 @@ def crc_health(user=None) -> bool:
 # Public API
 # ---------------------------------------------------------------------------
 
-def crc_places(ids: list, user=None) -> dict | None:
+def crc_places(ids: list, user=None, meta: dict | None = None) -> dict | None:
     """Call the CRC gateway ``POST /api/places`` and return the full response.
 
     Fetches complete ``PlaceDetail`` records (names, types, geometries, links,
     descriptions, relations, timespans, …) by namespaced place id — the data
     source for the dynamic Atlas portal. Returns ``None`` when the gateway is
     unconfigured or the call fails.
+
+    ``meta`` (optional) is populated in place so a caller can tell a miss from
+    a failure — the same contract as :func:`crc_fetch_places` (place#272):
+    ``meta["error"]`` is ``"timeout"`` / ``"connection"`` / ``"http"`` /
+    ``"unexpected"`` when the gateway could not be asked, and
+    ``meta["disabled"] = True`` when it was never called. A gateway 404/422
+    (unknown or malformed id) is an ANSWER, not a failure, and leaves ``meta``
+    clean so the caller can still say "not found".
     """
     if not _is_enabled(user):
+        if meta is not None:
+            meta["disabled"] = True
         return None
     if isinstance(ids, str):
         ids = [ids]
@@ -122,11 +132,21 @@ def crc_places(ids: list, user=None) -> dict | None:
             return resp.json()
         logger.warning("CRC gateway POST /api/places %s: %s",
                        resp.status_code, resp.text[:200])
+        if meta is not None and resp.status_code not in (404, 422):
+            meta["error"] = "http"
         return None
-    except (requests.Timeout, requests.ConnectionError) as exc:
+    except requests.Timeout as exc:
+        logger.warning("CRC gateway /api/places timed out: %s", exc)
+        if meta is not None:
+            meta["error"] = "timeout"
+    except requests.ConnectionError as exc:
         logger.warning("CRC gateway /api/places network error: %s", exc)
+        if meta is not None:
+            meta["error"] = "connection"
     except Exception as exc:  # pragma: no cover — defensive
         logger.warning("CRC gateway /api/places unexpected: %s", exc)
+        if meta is not None:
+            meta["error"] = "unexpected"
     return None
 
 

@@ -18,6 +18,10 @@ import heroMap from './heroMap';
 const TOUR_SEEN_KEY = 'whg_atlas_tour_seen';
 const TOUR_ACTIVE_CLASS = 'atlas-tour-active';
 
+function isNarrowViewport() {
+    try { return window.matchMedia('(max-width: 768px)').matches; } catch (e) { return false; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Demo mode — auto-advancing, looping presentation for kiosk/monitor use
    ═══════════════════════════════════════════════════════════════════ */
@@ -596,6 +600,8 @@ function createTourDriver() {
  *   persistent "preview of a future release" banner.
  */
 export function startAtlasTour(options = {}) {
+    // driver.js popovers do not fit a phone-width viewport: skip the tour there.
+    if (isNarrowViewport() && !options.demo) return;
     // Ensure clean state before starting
     clearAutoAdvance();
     tourCleanup();
@@ -619,6 +625,8 @@ export function startAtlasDemo() {
 
 /** Has the user already seen the tour? */
 export function hasSeenAtlasTour() {
+    // Below 768px the tour is skipped, so report it as "seen" to suppress the auto-start.
+    if (isNarrowViewport()) return true;
     return localStorage.getItem(TOUR_SEEN_KEY) === 'true';
 }
 

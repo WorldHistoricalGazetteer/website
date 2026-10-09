@@ -509,6 +509,29 @@ def atlas_status(request):
     return JsonResponse({"gateway": bool(crc_health(user=request.user))})
 
 
+def _gateway_failure_response(failure: str, **extra) -> JsonResponse:
+    """503/504 for a request the gateway could not ANSWER (place#272 pattern).
+
+    The Atlas endpoints used to report a gateway that timed out or refused the
+    connection as a 404 / an empty result — "there is no such place" when the
+    truth was "we could not ask". A timeout is 504 (the service is up, this call
+    was slow); anything else is 503. Both carry ``Retry-After`` because both are
+    recoverable by waiting. ``gateway: false`` keeps the existing client
+    contract; ``failure`` names the kind so the client can choose its words.
+    """
+    timed_out = failure == "timeout"
+    body = {
+        "error": "gateway timeout" if timed_out else "gateway unavailable",
+        "gateway": False,
+        "failure": failure,
+        "timeout": timed_out,
+    }
+    body.update(extra)
+    resp = JsonResponse(body, status=504 if timed_out else 503)
+    resp["Retry-After"] = "30"
+    return resp
+
+
 def atlas_search(request):
     """Atlas search — proxy to the CRC gateway ``POST /api/search`` with the
     clustering fuel, returning the full response for the browser clusterer
@@ -530,17 +553,21 @@ def atlas_search(request):
     from api.crc_client import crc_search_status
     data, failure = crc_search_status(options, user=request.user)
     if data is None:
-        # Empty but well-formed so the client renders a message rather than
-        # erroring. A read timeout is NOT reported as gateway-down: the service
-        # is up and merely slow for this query, and claiming otherwise raises a
-        # sticky "search is offline" banner over a working search (the retry in
-        # crc_search_status has already had a second go by this point).
-        timed_out = failure == "timeout"
-        return JsonResponse({
+        empty = {
             "hits": [], "total": 0, "edges": [],
             "clustering_params": None, "toponym_stoplist": [],
-            "gateway": timed_out, "timeout": timed_out,
-        })
+        }
+        if failure == "timeout":
+            # A read timeout is NOT reported as gateway-down: the service is up
+            # and merely slow for this query, and claiming otherwise raises a
+            # sticky "search is offline" banner over a working search (the retry
+            # in crc_search_status has already had a second go by this point).
+            # Kept as a 200 so the client's "took too long" empty state renders.
+            return JsonResponse({**empty, "gateway": True, "timeout": True})
+        # Unreachable / gateway error / unconfigured: a real outage, said with a
+        # real status — not an empty 200 the client renders as "no results,
+        # modify your search".
+        return _gateway_failure_response(failure or "error", **empty)
     data["gateway"] = True
     return JsonResponse(data)
 
@@ -560,9 +587,17 @@ def atlas_place(request):
         return JsonResponse({"error": "missing id"}, status=400)
 
     from api.crc_client import crc_places
-    data = crc_places([pid], user=request.user)
+    meta: dict = {}
+    data = crc_places([pid], user=request.user, meta=meta)
     places = (data or {}).get("places") or []
     if not places:
+        # 503/504 first: only a gateway that ANSWERED can support a 404. A
+        # timeout or refused connection used to come back as "not found"
+        # (place#272). `disabled` (gateway unconfigured) is also a failure HERE:
+        # the caller has already passed the beta gate, so "never asked" can only
+        # mean the service is not available, not that the place is absent.
+        if meta.get("error") or meta.get("disabled"):
+            return _gateway_failure_response(meta.get("error") or "disabled", id=pid)
         return JsonResponse({"error": "not found", "id": pid}, status=404)
     place = places[0]
 
@@ -570,6 +605,26 @@ def atlas_place(request):
     ns = place.get("namespace") or (pid.split(":", 1)[0] if ":" in pid else "")
     from api.attribution import registry_attribution
     attribution = registry_attribution(ns)
+    # 🛑 Same rule as /entity/<id>/api (place#269): a source we may index and
+    # search but may not re-serve gets 451, not its record. The portal hands
+    # over the source's own content, so it is a redistribution surface even
+    # behind the beta gate. The body still says whose it is and where to get it.
+    if attribution and attribution.get("redistributable") is False:
+        name = attribution.get("name") or ns or "this source"
+        return JsonResponse({
+            "error": "source not redistributable",
+            "detail": (f"{name} is indexed and searchable through WHG, but its terms do "
+                       f"not permit WHG to redistribute its records. Obtain the data "
+                       f"from the source under its own terms."),
+            "id": pid,
+            "namespace": ns,
+            "source": {
+                "name": attribution.get("name"),
+                "rights_holder": attribution.get("rights_holder"),
+                "source_url": attribution.get("source_url"),
+                "license": attribution.get("license__spdx_id") or attribution.get("license__label"),
+            },
+        }, status=451)
     if attribution:
         place["attribution"] = attribution
     return JsonResponse(place)
@@ -614,18 +669,20 @@ def atlas_boundaries(request):
     if mode not in ("exact", "starts", "in", "fuzzy"):
         mode = "in"
 
-    from api.crc_client import crc_search
+    from api.crc_client import crc_search_status
     # Over-fetch: the gateway cannot filter on feature type, so non-boundary
     # places (settlements sharing the name) are dropped here and would
     # otherwise eat into the caller's limit.
-    data = crc_search({
+    data, failure = crc_search_status({
         "qstr": query,
         "mode": mode,
         "namespaces": namespaces,
         "size": limit * 5,
     }, user=request.user)
     if data is None:
-        return JsonResponse({"results": [], "gateway": False})
+        # Was a 200 with empty results, which the Areas box rendered as "No
+        # matching areas found" — an outage presented as a fact about the name.
+        return _gateway_failure_response(failure or "error", results=[])
 
     results = []
     for hit in (data.get("hits") or []):

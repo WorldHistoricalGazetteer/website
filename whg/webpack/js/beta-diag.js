@@ -205,14 +205,29 @@ function wireReportForm(panel, url) {
 // being reported, so they can be read directly — no round trip through query parameters.
 function prefillReportForm(body) {
   const set = (sel, val) => { const f = body.querySelector(sel); if (f && !f.value) f.value = val; };
-  set('input[name="page_url"]', location.href);
+  set('input[name="page_url"]', reportedPage());
+  const ctx = atlasContext();
+  if (ctx) { const sel = body.querySelector('select[name="feature"]'); if (sel && !sel.value) sel.value = ctx.feature; }
   set('input[name="user_agent"]', (navigator.userAgent || '').slice(0, 300));
   set('input[name="session_id"]', (window.WHGDiag && window.WHGDiag.session) || '');
 }
 
+// The page being reported: its URL, plus (on the Atlas) the mode / panel / query that the URL doesn't carry.
+function atlasContext() {
+  try { return typeof window.WHGAtlasContext === 'function' ? window.WHGAtlasContext() : null; } catch (_) { return null; }
+}
+
+function reportedPage() {
+  const c = atlasContext();
+  if (!c) return location.href;
+  const bits = ['mode=' + c.mode, c.panel && 'panel=' + c.panel, c.gmode && 'gmode=' + c.gmode,
+    c.gazetteer && 'gazetteer=' + c.gazetteer, c.query && 'query=' + JSON.stringify(c.query)].filter(Boolean);
+  return (location.href + ' [atlas ' + bits.join(' ') + ']').slice(0, 500);
+}
+
 function embedUrl(href) {
   const base = href || '/beta/snag/';
-  return base + (base.indexOf('?') > -1 ? '&' : '?') + 'embed=1&page=' + encodeURIComponent(location.href);
+  return base + (base.indexOf('?') > -1 ? '&' : '?') + 'embed=1&page=' + encodeURIComponent(reportedPage());
 }
 
 async function openReportPanel(href, title) {

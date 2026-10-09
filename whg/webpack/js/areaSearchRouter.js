@@ -5,13 +5,26 @@
  * Routes Areas-mode search queries to the correct backend(s) based
  * on which layer sources are active in the Layer Sources palette.
  *
- * Currently supports:
- * - OSM/OHM → /search/boundaries/ endpoint
+ * Source ids are the gazetteer-registry ids the palette uses
+ * (search/views.py REGION_SOURCE_ORDER): osm, ohm, osm_misc, po, clio, nl.
  *
- * Future:
- * - PeriodO → periodo_periods ES index
- * - Cliopatria/D-PLACE/NativeLand → territories ES index
+ * Currently supports:
+ * - osm / ohm → /atlas/boundaries/ (gateway name search over admin boundaries)
+ *
+ * Not yet searchable by name (planned): po (PeriodO), clio (Cliopatria),
+ * nl (Native Land), osm_misc. For these the router returns an inline hint
+ * rather than an empty list, so the dropdown never says "No matching areas
+ * found" about a source it never asked (Decision Q3).
+ *
+ * Results are an array of selectable items; non-selectable notices (hints,
+ * beta-access, service failures) are appended as items with `_stub: true`.
  */
+
+import { classifyStatus, failureText, failureHtml } from './atlasNotice.js';
+
+// Registry ids with a name-search backend.
+const NAME_SEARCH_SOURCES = ['osm', 'ohm'];
+const SOURCE_LABELS = { po: 'PeriodO', clio: 'Cliopatria', nl: 'Native Land', osm_misc: 'OSM (other areas)' };
 
 export default class AreaSearchRouter {
     /**
@@ -35,25 +48,25 @@ export default class AreaSearchRouter {
         const promises = [];
 
         // OSM/OHM boundary search
-        if (activeSources.includes('osm') || activeSources.includes('ohm')) {
+        if (activeSources.some(s => NAME_SEARCH_SOURCES.includes(s))) {
             promises.push(this._searchBoundaries(query, options, activeSources));
         }
 
-        // PeriodO (future)
-        if (activeSources.includes('periodo')) {
-            promises.push(this._searchPeriods(query, options));
-        }
-
-        // Cliopatria/NativeLand (future)
-        const polityDatasets = ['cliopatria', 'nativeland']
-            .filter(d => activeSources.includes(d));
-        if (polityDatasets.length > 0) {
-            promises.push(this._searchPolities(query, polityDatasets, options));
-        }
-
         const resultSets = await Promise.all(promises);
-        // Flatten and return all results
-        return resultSets.flat();
+        const results = resultSets.flat();
+
+        // Sources with no name search yet: say so inline (planned), instead of
+        // returning nothing and letting the caller report "no matching areas".
+        const unsupported = activeSources.filter(s => !NAME_SEARCH_SOURCES.includes(s));
+        if (unsupported.length) {
+            results.push({
+                _stub: true,
+                label: "Name search isn't available for this source yet (planned)",
+                sublabel: unsupported.map(s => SOURCE_LABELS[s] || s).join(', ')
+                    + ' — pick areas on the map instead',
+            });
+        }
+        return results;
     }
 
     /**
@@ -78,8 +91,13 @@ export default class AreaSearchRouter {
         if (namespaces.length === 1) params.set('namespace', namespaces[0]);
 
         try {
-            const resp = await fetch(`/atlas/boundaries/?${params}`);
-            if (!resp.ok) return [];
+            const resp = await fetch(`/atlas/boundaries/?${params}`, { credentials: 'same-origin' });
+            if (!resp.ok) {
+                // 403 = no beta access; 503/504 = the gateway did not answer.
+                // Neither is "no matching areas" — return a notice instead.
+                const kind = classifyStatus(resp.status);
+                return [this._failureStub(kind)];
+            }
             const data = await resp.json();
             return (data.results || []).map(r => ({
                 id: r.place_id || `boundary:${r.namespace}:${r.name}`,
@@ -100,26 +118,20 @@ export default class AreaSearchRouter {
             }));
         } catch (e) {
             console.warn('AreaSearchRouter: boundary search failed', e);
-            return [];
+            return [this._failureStub('unavailable')];
         }
     }
 
-    /**
-     * Search PeriodO periods (stub — backend not yet connected).
-     */
-    async _searchPeriods(query, options) {
-        // Future: POST to /search/periods/ or query periodo_periods ES index
-        console.log('AreaSearchRouter: PeriodO search not yet connected');
-        return [];
-    }
-
-    /**
-     * Search polity/territory datasets (stub — backend not yet connected).
-     */
-    async _searchPolities(query, datasets, options) {
-        // Future: POST to /search/polities/ or query territories ES index
-        console.log('AreaSearchRouter: polity search not yet connected for', datasets);
-        return [];
+    /** A non-selectable dropdown notice for a failed boundary search.
+     *  `labelHtml` is trusted markup (the beta case carries a link);
+     *  `kind` lets the caller react (e.g. raise the gateway banner). */
+    _failureStub(kind) {
+        return {
+            _stub: true,
+            _failure: kind,
+            label: failureText(kind, 'Area search'),
+            labelHtml: failureHtml(kind, 'Area search'),
+        };
     }
 }
 

@@ -20,8 +20,9 @@ import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta } from './clustering.js';
 import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
-import { idbGet, idbPut, loadAatVocab } from './aatVocab.js';
+import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
+import { atlasNotice, fetchJSON, failureHtml } from './atlasNotice.js';
 import './toggle-truncate.js';
 import '../css/typeahead.css';
 import '../css/atlas.css';
@@ -416,11 +417,13 @@ async function loadRegistryCoverage() {
             const cached = await idbGet('coverage');
             if (cached && cached.version === version) { useMaps(cached.temporal, cached.h3); return; }
         }
-        const data = await fetch('/atlas/registry/coverage/', { credentials: 'same-origin' }).then(r => r.json());
+        const data = await fetch('/atlas/registry/coverage/', { credentials: 'same-origin' })
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
         useMaps(data.temporal, data.h3);
         if (data.version) { try { await idbPut('coverage', { version: data.version, temporal: data.temporal, h3: data.h3 }); } catch (e) { /* best-effort cache */ } }
     } catch (e) {
         console.warn('Atlas: registry coverage load failed (coverage filters will keep all gazetteers visible)', e);
+        atlasNotice('Gazetteer coverage could not be loaded, so the date and area filters in the Gazetteers panel will show every gazetteer.');
     }
 }
 
@@ -855,7 +858,11 @@ waitDocumentReady().then(setupWelcomePanel);
 // Load the gazetteer coverage maps (IndexedDB-cached, version-gated) — decoupled
 // from the map, so the coverage filters work even if the map is slow/unavailable.
 waitDocumentReady().then(loadRegistryCoverage);
-waitDocumentReady().then(() => loadAatVocab());
+waitDocumentReady().then(() => loadAatVocab()).then(() => {
+    if (aatVocabLoadError()) {
+        atlasNotice('Place-type names could not be loaded; types will show as identifiers for now.', { level: 'info' });
+    }
+});
 
 /* ═══════════════════════════════════════════════════════════════════
    DOM wiring — runs after map + DOM ready
@@ -991,17 +998,9 @@ Promise.all([
         emailPlaceLink(invite.getAttribute('data-invite-pid'));
     });
 
-    // "Attest" button (map popup + geometry-less overlay). The authoring flow is
-    // being built as part of the Collaborative Workbench; for now, signed-in
-    // users get a "coming soon" toast (anonymous users see a disabled button
-    // with a sign-in tooltip, so they never reach here). Bound once at document
-    // level since the popup/overlay HTML is re-rendered freely.
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest && e.target.closest('.whg-attest-btn');
-        if (!btn || btn.disabled || btn.getAttribute('aria-disabled') === 'true') return;
-        e.preventDefault();
-        showCopyToast('Attestations are coming soon — you’ll be able to assert or correct this place’s name(s), dates, geometry, place types, external links and relations to other places.');
-    });
+    // "Attest" is a planned feature: the button is rendered aria-disabled with a
+    // "planned" tag (gazetteerInteraction.renderAttestControl), so it needs no
+    // click handler and no "coming soon" toast.
     // Keep the ?place= link in step with map-driven selections + popup close.
     document.addEventListener('whg:map-place-click', (e) => {
         if (e.detail && e.detail.placeId) updatePlaceUrl(e.detail.placeId);
@@ -1019,10 +1018,18 @@ Promise.all([
             gwBanner.hidden = true;
         });
     }
-    fetch('/atlas/status/', { credentials: 'same-origin' })
-        .then(r => (r.ok ? r.json() : null))
+    // Only beta users' search goes through the gateway. /atlas/status/ answers
+    // gateway:false for an anonymous visitor (it never probes for them), which
+    // raised "search is offline" over a legacy search that works fine.
+    if (isBetaUser()) fetch('/atlas/status/', { credentials: 'same-origin' })
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
         .then(d => { if (d) setGatewayAvailable(d.gateway !== false); })
-        .catch(() => { /* status probe itself failed — stay silent */ });
+        .catch((e) => {
+            // The probe itself failed (our own server, not the gateway), so we
+            // know nothing about search — say so once rather than staying silent.
+            console.warn('Atlas: /atlas/status/ probe failed', e);
+            atlasNotice('Could not check whether the search service is available. Search may not work until the page is reloaded.');
+        });
 
     // Per-mode basemap style switcher (persisted in localStorage).
     initBasemapSwitcher();
@@ -1306,6 +1313,16 @@ Promise.all([
         $(this).closest('.cluster-card').addClass('cluster-highlight');
     });
 
+    // Keyboard access: cluster heads, members and flat result rows are
+    // role="button" divs, so Enter / Space must activate them like a click.
+    // Ignore keys that originate in a nested control (e.g. the details button).
+    $(document).on('keydown', '#atlas_search_results .cluster-head, #atlas_search_results .cluster-member, #atlas_search_results .result', function (e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (e.target !== this) return;
+        e.preventDefault();
+        $(this).trigger('click');
+    });
+
     // ── BETA dynamic portal: open place detail (from cluster cards/members and
     //    from the portal's own live-cluster links). ──
     $(document).on('click', '.atlas-portal-open', function (e) {
@@ -1421,7 +1438,24 @@ Promise.all([
                         let tries = 0;
                         const pick = () => {
                             const radio = document.querySelector(sel);
-                            if (radio && !radio.disabled && radio.type === 'radio') {
+                            if (radio && radio.disabled) {
+                                // The gazetteer exists but is flagged no_explore (OSM, OHM,
+                                // OSM misc, PO, Cliopatria, NL ... have no browsable place
+                                // list), so Explore can't open it. Say so and fall back to
+                                // Filter mode with it ticked, rather than failing silently.
+                                const row = radio.closest('.authority-item');
+                                const nm = row && row.querySelector('.form-check-label');
+                                const label = (nm && nm.textContent.trim()) || wantGazetteer;
+                                const filterBtn = document.querySelector(
+                                    '#gazetteers_offcanvas .gazetteer-mode-toggle .btn[data-gazetteer-mode="filter"]');
+                                if (filterBtn) filterBtn.click();
+                                const cb = document.querySelector(sel);
+                                if (cb && cb.type === 'checkbox' && !cb.checked) {
+                                    cb.checked = true;
+                                    cb.dispatchEvent(new Event('change', { bubbles: true }));
+                                }
+                                atlasNotice(`${label} can't be browsed in Explore mode. It is selected as a search filter instead.`, { level: 'info' });
+                            } else if (radio && radio.type === 'radio') {
                                 radio.checked = true;
                                 radio.dispatchEvent(new Event('change', { bubbles: true }));
                                 // emitGazetteerSelection → PlaceList.open ran; queue the
@@ -1430,6 +1464,8 @@ Promise.all([
                                 if (wantPlace) PlaceList.setPendingFocus(wantPlace, pendingZoom);
                             } else if (++tries < 20) {
                                 setTimeout(pick, 100);
+                            } else {
+                                atlasNotice(`The gazetteer "${wantGazetteer}" was not found in this registry.`, { level: 'info' });
                             }
                         };
                         pick();
@@ -1476,7 +1512,10 @@ Promise.all([
         }
     });
 
-}).catch(error => console.error('Atlas init error:', error));
+}).catch(error => {
+    console.error('Atlas init error:', error);
+    atlasNotice('The map did not finish loading, so some Atlas controls may not work. Reloading the page usually fixes this.', { level: 'danger', delay: 15000 });
+});
 
 /* ═══════════════════════════════════════════════════════════════════
    Helper functions
@@ -1848,11 +1887,13 @@ function _wireGazPillGroup(selector, attr, storageKey) {
     let saved = null;
     try { saved = localStorage.getItem(storageKey); } catch (e) {}
     const buttons = Array.from(group.querySelectorAll('.btn'));
-    if (saved && buttons.some(b => b.dataset[attr] === saved)) {
+    // A "planned" (aria-disabled) pill is never a valid saved choice.
+    if (saved && buttons.some(b => b.dataset[attr] === saved && b.getAttribute('aria-disabled') !== 'true')) {
         buttons.forEach(b => b.classList.toggle('active', b.dataset[attr] === saved));
     }
     buttons.forEach((btn) => {
         btn.addEventListener('click', () => {
+            if (btn.getAttribute('aria-disabled') === 'true') return;   // planned, not built
             buttons.forEach(b => b.classList.toggle('active', b === btn));
             try { localStorage.setItem(storageKey, btn.dataset[attr]); } catch (e) {}
             applyGazetteerListFilter();
@@ -1881,6 +1922,23 @@ function updateExploreUrl(ns) {
         window.history.replaceState(null, '', url);
     } catch (e) { /* URL API unavailable */ }
 }
+
+// Snapshot of the Atlas view for the beta "Report a snag" form (beta-diag.js
+// reads window.WHGAtlasContext when it opens the form), so a report says which
+// mode / panel / query the tester was in, not just a URL that doesn't carry them.
+window.WHGAtlasContext = function () {
+    const gazOpen = !!document.querySelector('#gazetteers_offcanvas.show');
+    const input = document.getElementById('atlas_search_input');
+    const gazBody = document.querySelector('#gazetteers_offcanvas .offcanvas-body');
+    return {
+        mode: searchMode,
+        panel: gazOpen ? 'gazetteers' : '',
+        gmode: gazOpen && gazBody ? (gazBody.dataset.mode || 'filter') : '',
+        gazetteer: exploreSelection || '',
+        query: input ? (input.value || '').trim().slice(0, 120) : '',
+        feature: gazOpen ? 'Atlas: Gazetteers panel' : 'Atlas',
+    };
+};
 
 // ── Shareable per-place deep link (?place=<place_id>) ──
 // A place popup/modal focus is reflected in the URL so a shared link reopens the
@@ -2128,18 +2186,25 @@ async function performAreaSearch() {
         namespace: layerPalette ? layerPalette.getNamespace() : 'osm',
     });
 
-    areaSearchResults = results;
-    areaDropdownIndex = -1;
-
-    if (results.length === 0) {
-        renderAreaDropdown([{
+    // Selectable results first, then any notices (planned-source hint, beta
+    // access, service failure) — keeps dropdown indices == result indices.
+    const found = results.filter(r => !r._stub);
+    const notices = results.filter(r => r._stub);
+    if (notices.some(n => n._failure === 'unavailable')) setGatewayAvailable(false);
+    // "No matching areas" only when nothing else explains the empty list — a
+    // failed search or a source with no name search yet is not "no match".
+    if (!found.length && !notices.length) {
+        found.push({
             _stub: true,
             label: 'No matching areas found',
             sublabel: 'Try a different name or adjust your admin level',
-        }]);
-    } else {
-        renderAreaDropdown(results);
+        });
     }
+    const items = found.concat(notices);
+
+    areaSearchResults = items;
+    areaDropdownIndex = -1;
+    renderAreaDropdown(items);
 }
 
 function renderAreaDropdown(items) {
@@ -2151,9 +2216,9 @@ function renderAreaDropdown(items) {
 
     dropdown.innerHTML = items.map((item, i) => `
         <div class="region-result ${item._stub ? 'region-result--stub' : ''}" data-index="${i}">
-            <div class="region-result-label">${item.label || ''}</div>
-            ${item.sublabel ? `<div class="region-result-sublabel">${item.sublabel}</div>` : ''}
-            ${item.source_type ? `<span class="badge bg-secondary" style="font-size:0.6rem">${item.source || ''}</span>` : ''}
+            <div class="region-result-label">${item.labelHtml || escapeHtml(item.label || '')}</div>
+            ${item.sublabel ? `<div class="region-result-sublabel">${escapeHtml(item.sublabel)}</div>` : ''}
+            ${item.source_type ? `<span class="badge bg-secondary" style="font-size:0.6rem">${escapeHtml(item.source || '')}</span>` : ''}
         </div>
     `).join('');
 
@@ -2486,12 +2551,23 @@ function openAtlasPortal(pid) {
     document.getElementById('atlas_portal_title').textContent = 'Place';
     body.innerHTML = '<div class="p-3 text-center"><i class="fas fa-spinner fa-spin"></i> Loading…</div>';
     window.bootstrap.Modal.getOrCreateInstance(document.getElementById('atlas_portal_modal')).show();
-    $.ajax({
-        url: '/atlas/place/?id=' + encodeURIComponent(pid),
-        success: (place) => renderPortal(place, pid),
-        error: (err) => {
-            body.innerHTML = `<div class="p-3 text-danger">Could not load this place${err.status === 404 ? ' (not found)' : ''}.</div>`;
-        },
+    fetchJSON('/atlas/place/?id=' + encodeURIComponent(pid), { timeoutMs: 30000 }).then(({ kind, data }) => {
+        if (kind === 'ok' && data) { renderPortal(data, pid); return; }
+        // 404 now means the gateway ANSWERED and has no such place; a timeout or
+        // outage is 504/503 (or a client timeout / network failure) and must not
+        // read as "not found" (place#272).
+        if (kind === 'withheld') {
+            // 451 (place#269): indexed and searchable, but its terms forbid WHG
+            // re-serving the record. Say whose it is and where to get it.
+            const src = (data && data.source) || {};
+            let h = `<div class="p-3 text-body"><p><i class="fas fa-lock"></i> ${escapeHtml((data && data.detail) || 'This source does not permit WHG to redistribute its records.')}</p>`;
+            if (src.source_url) h += `<p><a href="${escapeHtml(src.source_url)}" target="_blank" rel="noopener">Go to ${escapeHtml(src.name || 'the source')}</a></p>`;
+            body.innerHTML = h + '</div>';
+            return;
+        }
+        if (kind === 'unavailable') setGatewayAvailable(false);
+        const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
+        body.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'This place')}</div>`;
     });
 }
 
@@ -2641,24 +2717,43 @@ function isBetaUser() {
     return !!(m && m.content === '1');
 }
 
+// Client-side ceiling for one gateway search. The server already retries a
+// read timeout once against a 10 s CRC_GATEWAY_TIMEOUT (so ~20 s worst case)
+// and then answers 200 + timeout:true; this only catches a request that never
+// comes back at all (dropped connection, stalled worker).
+const GATEWAY_SEARCH_CLIENT_TIMEOUT_MS = 35000;
+let gatewaySearchCtrl = null;      // AbortController of the in-flight search (a newer one supersedes it)
+
 function initiateGatewaySearch(options) {
     const resultsDiv = document.getElementById('atlas_search_results');
-    $.ajax({
-        type: 'POST',
-        url: '/atlas/search/',
-        data: JSON.stringify(options),
-        contentType: 'application/json',
-        headers: { 'X-CSRFToken': csrfToken },
-        success: (data) => {
-            setGatewayAvailable(data && data.gateway !== false);
+    if (gatewaySearchCtrl) gatewaySearchCtrl.abort();
+    const ctrl = new AbortController();
+    gatewaySearchCtrl = ctrl;
+    fetchJSON('/atlas/search/', {
+        method: 'POST',
+        body: JSON.stringify(options),
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        signal: ctrl.signal,
+        timeoutMs: GATEWAY_SEARCH_CLIENT_TIMEOUT_MS,
+    }).then(({ kind, status, data }) => {
+        if (kind === 'aborted' || ctrl !== gatewaySearchCtrl) return;   // superseded
+        gatewaySearchCtrl = null;
+        if (kind === 'ok' && data) {
+            setGatewayAvailable(data.gateway !== false);
             gatewayData = data;
             seedClusterControls(data.clustering_params);
             renderClusters();
-        },
-        error: (err) => {
-            console.error('Atlas: gateway search error', err);
-            resultsDiv.innerHTML = '<div class="p-3 text-danger">Search failed. Please try again.</div>';
-        },
+            return;
+        }
+        console.error('Atlas: gateway search failed', status, kind, data);
+        // 403 → beta-access wording (Decision Q4); 503/network → unavailable
+        // and raise the banner; a client-side timeout is "slow", not "offline",
+        // so it does NOT raise the banner (reference_atlas_gateway_failure_ux).
+        if (kind === 'unavailable') setGatewayAvailable(false);
+        const noRes = document.getElementById('atlas_no_results');
+        if (noRes) noRes.style.display = 'none';
+        const cls = (kind === 'beta') ? 'text-body' : 'text-danger';
+        resultsDiv.innerHTML = `<div class="p-3 ${cls}">${failureHtml(kind, 'Search')}</div>`;
     });
 }
 
@@ -2690,6 +2785,56 @@ function hitsToFeatureCollection(hits, assignments) {
         });
     });
     return { type: 'FeatureCollection', features };
+}
+
+// Source & licence footer for a cluster card: one badge per distinct source
+// namespace among the members, cloned from the server-rendered licence pill on
+// that gazetteer's row in the Gazetteers panel (same colours, deed link and
+// tooltip as the portal / map popup). Search results are permitted for every
+// source, but a source flagged non-redistributable (451 on its entity API) is
+// marked "details withheld" so the Details button's refusal is not a surprise.
+const _licenceCache = {};
+function licenceInfoFor(ns) {
+    const key = String(ns || '');
+    if (!key) return null;
+    if (_licenceCache[key] !== undefined) return _licenceCache[key];
+    let info = null;
+    // 'whg' is shared by EVERY contributed dataset, each under its own licence,
+    // so any one row's pill would be wrong for the others. No badge here: the
+    // record's own licence is shown in its portal.
+    if (key === 'whg') {
+        info = { badge: '<span class="text-muted small">licence per dataset (see Details)</span>', restricted: false };
+        _licenceCache[key] = info;
+        return info;
+    }
+    const row = document.querySelector(`#gazetteers_offcanvas .authority-item[data-namespace="${CSS.escape(key)}"]`);
+    if (row) {
+        const badge = row.querySelector('.whg-licence-badge');
+        info = {
+            badge: badge ? badge.outerHTML : '',
+            restricted: row.dataset.redistributable === '0',
+        };
+    }
+    _licenceCache[key] = info;
+    return info;
+}
+function clusterLicenceFooter(members) {
+    const seen = new Set();
+    const parts = [];
+    members.forEach(m => {
+        const ns = m.namespace;
+        if (!ns || seen.has(ns)) return;
+        seen.add(ns);
+        const info = licenceInfoFor(ns);
+        if (!info) return;
+        parts.push(`<span class="cluster-licence-item"><span class="cluster-licence-src">${escapeHtml(nsLabel(ns))}</span>`
+            + (info.badge || '<span class="whg-licence-badge lic-unknown"><span class="whg-licence-code">©?</span></span>')
+            + (info.restricted ? '<span class="cluster-licence-withheld"><i class="fas fa-lock"></i> details withheld (licence)</span>' : '')
+            + '</span>');
+    });
+    return parts.length
+        ? `<div class="cluster-licence"><span class="cluster-licence-label">Source &amp; licence</span>${parts.join('')}</div>`
+        : '';
 }
 
 function renderClusters() {
@@ -2774,14 +2919,14 @@ function renderClusters() {
         // an attribute selector ([data-pids~="<pid>"]).
         const pids = members.map(m => m.place_id).join(' ');
         let html = `<div class="cluster-card${multi ? ' cluster-multi' : ''}" data-cluster="${ci}" data-pids="${escapeHtml(pids)}">`;
-        html += `<div class="cluster-head">
+        html += `<div class="cluster-head" role="button" tabindex="0" aria-label="${escapeHtml(rep.title || '(untitled)')}: show on map">
             <span class="cluster-title">${escapeHtml(rep.title || '(untitled)')}</span>`;
         if (multi) {
             html += `<span class="cluster-badge" title="places merged into this cluster">`
                 + `${members.length}<i class="fas fa-layer-group ms-1"></i></span>`;
         } else {
             // Single-place cluster: the "open details" affordance lives on the head.
-            html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`;
+            html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details" aria-label="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
         html += `</div>`;
         // Cluster-level facets: countries, AAT types common to all members, and
@@ -2799,11 +2944,11 @@ function renderClusters() {
             members.forEach((m, mi) => {
                 const mRange = formatRange(m.temporal_range);
                 html += `<div class="cluster-member-wrap">`
-                    + `<div class="cluster-member" data-pid="${escapeHtml(m.place_id)}">`
+                    + `<div class="cluster-member" role="button" tabindex="0" data-pid="${escapeHtml(m.place_id)}">`
                     + `<span class="member-title">${escapeHtml(m.title || m.place_id)}</span>`
                     + (mRange ? `<span class="member-temporal" title="Attested date range">${escapeHtml(mRange)}</span>` : '')
                     + `<span class="member-ns" title="${escapeHtml(nsLabel(m.namespace))}">${escapeHtml(m.namespace || '')}</span>`
-                    + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details"><i class="fas fa-circle-info"></i></button>`
+                    + `<button class="atlas-portal-open btn btn-sm btn-link p-0 ms-1" data-portal-pid="${escapeHtml(m.place_id)}" title="Open place details" aria-label="Open place details"><i class="fas fa-circle-info"></i></button>`
                     + `</div>`
                     + chipRow('member-types', (extraTypes[mi] || []).map(t => ({ chip: 'type-chip', text: t })))
                     + toponymsList(extraTop[mi] || [], 'member-toponyms')
@@ -2811,9 +2956,19 @@ function renderClusters() {
             });
             html += `</div>`;
         }
+        html += clusterLicenceFooter(members);
         html += `</div>`;
         $resultsDiv.append(html);
     });
+
+    // place#294: the gateway may report sources it leaves out unless asked for
+    // explicitly. Tolerate absence (older gateway) and either placement.
+    const excludedNs = gatewayData.namespaces_excluded
+        || (gatewayData.meta && gatewayData.meta.namespaces_excluded) || [];
+    if (Array.isArray(excludedNs) && excludedNs.length) {
+        $resultsDiv.append(`<div class="atlas-ns-excluded small text-muted px-2 py-1">`
+            + `Some sources are excluded by default: ${excludedNs.map(escapeHtml).join(', ')}</div>`);
+    }
 
     // Plot on the hero map + cache the pid→index map for panel↔map sync.
     const fc = hitsToFeatureCollection(hits, assignments);
@@ -2934,7 +3089,7 @@ function renderToponymResults(data) {
         const encodedChildren = encodeURIComponent(children.join(','));
         let resultIdx = count > 1 ? 'whg' : 'pub';
 
-        let html = `<div class="result ${resultIdx}-result">
+        let html = `<div class="result ${resultIdx}-result" role="button" tabindex="0">
             <span>
                 <span class="red-head">${r.title}</span>
                 <span class="float-end small">

@@ -32,6 +32,7 @@ import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
 import { aatTooltipHtml, aatUrl, ccName, canNativeShare, isLoggedIn } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
+import { classifyStatus, failureText, failureHtml } from './atlasNotice.js';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
 const OFFSET_CAP = 10000;   // gateway offset ceiling (ES max_result_window)
@@ -372,7 +373,13 @@ const PlaceList = {
             },
             body: JSON.stringify(opts),
         })
-            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then(r => {
+                if (r.ok) return r.json();
+                // Carry the failure KIND (beta / unavailable / …) to the catch.
+                const err = new Error(`HTTP ${r.status}`);
+                err.kind = classifyStatus(r.status);
+                throw err;
+            })
             .then(data => {
                 if (seq !== this.reqSeq) return;   // a newer query superseded this one
                 this.loading = false;
@@ -391,6 +398,9 @@ const PlaceList = {
                 this.els.rows.style.height = (this.hits.length * ROW_H) + 'px';
                 this._render();
                 this._updateStatus();
+                // A gateway that was merely slow (200 + timeout:true) is not "no
+                // places" — say so, as the main search does.
+                if (data.timeout && !this.hits.length) this._setStatus(failureText('timeout', 'This list'));
                 // Deep link: once the first page is in, focus the requested place
                 // (opens its popup/modal + highlights its row if it's on this page).
                 if (offset === 0 && this._pendingFocus) {
@@ -405,7 +415,14 @@ const PlaceList = {
                 if (seq !== this.reqSeq) return;
                 this.loading = false;
                 console.error('PlaceList: search failed', err);
-                this._setStatus('Could not load places. Please try again.');
+                // No kind = fetch itself rejected (network) — the service did not answer.
+                const kind = err.kind || 'unavailable';
+                if (kind === 'unavailable' && this.cfg.onGatewayStatus) this.cfg.onGatewayStatus(false);
+                if (kind === 'beta' || kind === 'unavailable' || kind === 'timeout') {
+                    this._setStatusHtml(failureHtml(kind, 'This list'));
+                } else {
+                    this._setStatus('Could not load places. Please try again.');
+                }
             });
     },
 
@@ -624,6 +641,7 @@ const PlaceList = {
 
     // ── Status line ───────────────────────────────────────────────────────
     _setStatus(text) { if (this.els) this.els.status.textContent = text; },
+    _setStatusHtml(html) { if (this.els) this.els.status.innerHTML = html; },
 
     _updateStatus() {
         if (!this.hits.length) {

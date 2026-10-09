@@ -702,22 +702,20 @@ export function isLoggedIn() {
 }
 
 // What an attestation can cover — surfaced in the button tooltip so users
-// understand the breadth (kept in step with the "coming soon" toast in atlas.js).
+// understand the breadth.
 const ATTEST_SCOPE = "its name(s), dates, geometry, place types, external links and relations to other places";
 
 export function renderAttestControl(placeId) {
     if (!placeId) return '';
-    const inner = '<i class="fas fa-file-signature me-1"></i>Attest';
-    if (isLoggedIn()) {
-        return `<button type="button" class="btn btn-sm whg-attest-btn" data-attest-pid="${esc(placeId)}"
-                        data-bs-toggle="tooltip" data-bs-title="Add an attestation about this place — assert or correct ${esc(ATTEST_SCOPE)}.">${inner}</button>`;
-    }
-    // aria-disabled (not the `disabled` attribute, which sets pointer-events:none
-    // and would kill the hover) so this advisory tooltip still fires; marked
-    // tt-advisory so the "Show control tooltips" opt-out doesn't suppress it.
+    // Attestation is planned, not built (Collaborative Workbench). Shown, but
+    // visibly disabled and tagged "planned", for everyone. aria-disabled (not
+    // the `disabled` attribute, which sets pointer-events:none and would kill
+    // the hover) so the advisory tooltip still fires; tt-advisory so the "Show
+    // control tooltips" opt-out doesn't suppress it.
     return `<button type="button" class="btn btn-sm whg-attest-btn whg-attest-off" aria-disabled="true"
                     data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory"
-                    data-bs-title="Sign in to attest this place — to assert or correct ${esc(ATTEST_SCOPE)}.">${inner}</button>`;
+                    data-bs-title="Planned, not yet available: attesting a place, to assert or correct ${esc(ATTEST_SCOPE)}.">`
+        + '<i class="fas fa-file-signature me-1"></i>Attest <span class="whg-planned-tag">planned</span></button>';
 }
 
 function renderActions(data) {

@@ -62,6 +62,14 @@ export function registryVersion() {
 // De-duplicate concurrent/repeat loads: many modules on one page may call
 // loadAatVocab(); they all await the same fetch + cache write.
 let _loadPromise = null;
+// The error from the last failed load, or null. loadAatVocab() resolves to {}
+// on failure (callers must keep working with ids only), which is
+// indistinguishable from an empty vocabulary — this is how a caller that wants
+// to SAY so (the Atlas toast) can tell the difference.
+let _loadError = null;
+
+/** The error from a failed loadAatVocab(), or null if it succeeded / has not run. */
+export function aatVocabLoadError() { return _loadError; }
 
 /**
  * Populate the module-local AAT vocab (via setAatVocab) from IndexedDB when the
@@ -92,7 +100,8 @@ export function loadAatVocab(opts = {}) {
             // failed request) — a browser has nothing to compute heuristic freshness from, so no such
             // window exists. Put any freshness header on that endpoint, or front it with a CDN, and it
             // does: fetch with `cache: 'no-cache'` here in the same change.
-            const data = await fetch('/types/vocab/', { credentials: 'same-origin' }).then(r => r.json());
+            const data = await fetch('/types/vocab/', { credentials: 'same-origin' })
+                .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
             use(data.byId);
             if (version && data.byId) {
                 try { await idbPut('aat_vocab', { version, byId: data.byId }); } catch (e) { /* best-effort cache */ }
@@ -100,6 +109,7 @@ export function loadAatVocab(opts = {}) {
             return data.byId || {};
         } catch (e) {
             console.warn('AAT vocab load failed (type tooltips/labels fall back to ids only)', e);
+            _loadError = e;
             return {};
         }
     })();
