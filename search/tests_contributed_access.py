@@ -257,7 +257,7 @@ class DecisionTests(ContributedAccessBase):
             ("none", self.public_unlicensed, 451, "source licence not determined"),
             ("custom", self.public_custom, 451, "source not redistributable"),
             ("custom public domain", self.public_pd, 451, "source not redistributable"),
-            ("ND", self.public_nd, 451, "source not redistributable"),
+            ("ND", self.public_nd, 200, None),  # SG, place#319 2026-10-09
         ]
         for name, ds, status, error in cases:
             with self.subTest(licence=name):
@@ -397,10 +397,9 @@ class GeometryViewTests(ContributedAccessBase):
         with patch(GET, side_effect=_fake_gateway_get):
             self.assertEqual(self.geometry(self.pid(self.embargoed)).status_code, 200)
 
-    def test_unlicensed_custom_and_nd_datasets_are_451_without_asking_the_gateway(self):
+    def test_unlicensed_and_custom_datasets_are_451_without_asking_the_gateway(self):
         for name, ds, error in [("none", self.public_unlicensed, "source licence not determined"),
-                                ("custom", self.public_custom, "source not redistributable"),
-                                ("ND", self.public_nd, "source not redistributable")]:
+                                ("custom", self.public_custom, "source not redistributable")]:
             with self.subTest(licence=name):
                 with patch(GET, side_effect=_fake_gateway_get) as get:
                     resp = self.geometry(self.pid(ds))
@@ -417,6 +416,12 @@ class GeometryViewTests(ContributedAccessBase):
         get.assert_called_once()
         self.assertEqual(resp.status_code, 200)
         self.assertIs(resp.json()["attribution"]["license__permits_commercial"], False)
+        # ND is served too (SG, place#319 2026-10-09), with its licence named.
+        with patch(GET, side_effect=_fake_gateway_get) as get:
+            resp = self.geometry(self.pid(self.public_nd))
+        get.assert_called_once()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["attribution"]["license__spdx_id"], "CC-BY-ND-4.0")
 
     def test_ids_naming_no_dataset_are_404_without_asking_the_gateway(self):
         for pid in ("whg:42", "whg:abc:1", "whg:999999999:1", f"whg:{self.public_ok.pk}:"):
