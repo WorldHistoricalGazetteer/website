@@ -40,6 +40,10 @@ DOC_PLACE_RECORD = 'place_record'   # single-place correction (created only via 
 DOC_DATASET_EDIT = 'dataset_edit'   # whole-/subset-of-a-gazetteer correction (created only via check-out)
 DOC_ROUTE = 'route'
 DOC_NETWORK = 'network'
+# A PLATO Tools (pelagios.org) workflow project, kept here for sharing (place#314). OPAQUE: the server
+# stores the JSON without reading it, a stale write is refused whole (409 with the current snapshot)
+# rather than merged, and live editing is off (see workbench/doctypes.py).
+DOC_PLATO = 'plato'
 DOC_TYPES = [
     (DOC_RECONCILIATION, 'Map your Data (reconciliation)'),
     (DOC_GAZETTEER_GROUP, 'Gazetteer Group'),
@@ -49,6 +53,7 @@ DOC_TYPES = [
     (DOC_DATASET_EDIT, 'Gazetteer records correction'),
     (DOC_ROUTE, 'Route'),
     (DOC_NETWORK, 'Network'),
+    (DOC_PLATO, 'PLATO Tools project'),
 ]
 
 

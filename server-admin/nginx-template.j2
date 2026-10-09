@@ -56,6 +56,21 @@ server {
         proxy_set_header Connection "upgrade";
     }
 
+    # Workbench project API (place#314). Django answers CORS itself here, for an allow-list of
+    # origins and including PUT/DELETE preflights (workbench/access.py), so this location must NOT
+    # carry the wildcard headers of `location /`: a second Access-Control-Allow-Origin value makes
+    # the browser reject the response, and the `return 204` on OPTIONS would answer every preflight
+    # with "GET, POST" before Django saw it. The body cap must exceed WORKBENCH_BODY_MAX_BYTES (2 MiB)
+    # so that an oversize snapshot gets Django's JSON 413 rather than nginx's HTML one.
+    location /reconciliation/ {
+        client_max_body_size 4m;
+        proxy_pass http://127.0.0.1:{{ APP_PORT }};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     # Real-time collaboration WebSocket (Hocuspocus / Yjs — Workbench Phase 2, place#112).
     # Proxies to the hocuspocus container (bound to 127.0.0.1). Strictly additive: if the service is
     # down only /collab fails, never the main site.

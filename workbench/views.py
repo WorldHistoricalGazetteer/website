@@ -6,6 +6,10 @@ the Phase-0 read-only ``shared/<token>/`` endpoint, whose capability is the ungu
 
 Plain Django function views returning JSON — session auth + CSRF (the client sends ``X-CSRFToken``,
 mirroring the existing ``postReconcile`` call in reconciliation.js).
+
+The project, team and share endpoints are also reachable with a WHG API token from an allow-listed
+origin (place#314, PLATO Tools): ``@workbench_api`` in workbench/access.py handles the Bearer path,
+CORS, the body cap and JSON refusals; the session path keeps CSRF and the beta gate as before.
 """
 import json
 import logging
@@ -29,6 +33,7 @@ from django.views.decorators.http import require_http_methods
 from api.models import UserAPIProfile
 
 from . import doctypes, extraction
+from .access import workbench_api
 from .merge import merge_snapshots
 from .models import (Team, TeamMember, WorkbenchProject, ProjectSnapshot, RecordSuggestion,
                      ROLE_OWNER, ROLE_EDITOR, ROLE_VIEWER, EDIT_ROLES, TEAM_ROLES,
@@ -95,13 +100,20 @@ def _find_user(identifier):
 
 
 # ── projects ──────────────────────────────────────────────────────────────────
-@login_required
-@_beta_required
-@require_http_methods(['GET', 'POST'])
+@workbench_api(['GET', 'POST'])
 def projects(request):
     if request.method == 'GET':
         team_ids = TeamMember.objects.filter(user=request.user).values_list('team_id', flat=True)
         qs = WorkbenchProject.objects.filter(team_id__in=list(team_ids)).select_related('team')
+        # ``?doc_type=<key>`` narrows the list to one type. Without it, OPAQUE types are left out:
+        # WHG has no editor for them, and Map your Data opens whatever it lists (place#314).
+        wanted = (request.GET.get('doc_type') or '').strip()
+        if wanted:
+            if doctypes.get(wanted) is None:
+                return _err(f'unknown doc_type: {wanted}')
+            qs = qs.filter(doc_type=wanted)
+        else:
+            qs = qs.exclude(doc_type__in=doctypes.opaque_types())
         out = [_project_dict(p, p.role_for(request.user)) for p in qs]
         return JsonResponse({'projects': out})
 
@@ -124,8 +136,12 @@ def projects(request):
     if errs:
         return _err('; '.join(errs))
 
-    title = (data.get('title') or snapshot.get('title') or snapshot.get('fileName')
-             or 'Untitled project')[:300]
+    # The title comes from the request, else from inside the snapshot — never from inside an
+    # opaque one, which the server does not read (place#314).
+    title = data.get('title')
+    if not title and not dt.opaque:
+        title = snapshot.get('title') or snapshot.get('fileName')
+    title = str(title or 'Untitled project')[:300]
     team = _resolve_target_team(request.user, data.get('team'))
     if team is None:
         return _err('you are not an editor of that team', 403)
@@ -151,9 +167,7 @@ def _resolve_target_team(user, team_id):
     return team if team.role_for(user) in EDIT_ROLES else None
 
 
-@login_required
-@_beta_required
-@require_http_methods(['GET', 'PUT', 'DELETE'])
+@workbench_api(['GET', 'PUT', 'DELETE'])
 def project_detail(request, pid):
     p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
     role = p.role_for(request.user)
@@ -192,16 +206,25 @@ def project_detail(request, pid):
         return _err('snapshot (object) is required')
     if not isinstance(base_version, int):
         return _err('base_version (int) is required')
-    return _push(request, p, snapshot, base_version)
+    title = data.get('title')
+    return _push(request, p, snapshot, base_version, title=title if isinstance(title, str) else None)
 
 
-def _push(request, p, snapshot, base_version):
+def _push(request, p, snapshot, base_version, title=None):
+    dt = doctypes.get(p.doc_type)
+    opaque = bool(dt and dt.opaque)
     with transaction.atomic():
         p = WorkbenchProject.objects.select_for_update().get(pk=p.pk)
 
         # Fast-forward: client is current.
         if base_version == p.version:
-            return _commit(request, p, snapshot, status='ok')
+            return _commit(request, p, snapshot, status='ok', title=title, opaque=opaque)
+
+        # Opaque doc-type (place#314): the server does not know the shape, so it never merges. The
+        # client gets the current snapshot and version back, merges on its side, and pushes again.
+        if opaque:
+            return JsonResponse({'status': 'conflict', 'reason': 'opaque', 'version': p.version,
+                                 'snapshot': p.snapshot}, status=409)
 
         # Client is stale → attempt a three-way merge against the ancestor snapshot.
         ancestor = p.snapshots.filter(version=base_version).first()
@@ -221,8 +244,11 @@ def _push(request, p, snapshot, base_version):
         return _commit(request, p, merged, status='merged')
 
 
-def _commit(request, p, snapshot, status):
-    title = snapshot.get('fileName') or snapshot.get('title')
+def _commit(request, p, snapshot, status, title=None, opaque=False):
+    # An explicit ``title`` in the request wins; otherwise it is read off the snapshot — except for
+    # an opaque doc-type, whose snapshot the server does not read (place#314).
+    if title is None and not opaque:
+        title = snapshot.get('fileName') or snapshot.get('title')
     if title:
         p.title = str(title)[:300]
     p.snapshot = snapshot
@@ -236,9 +262,7 @@ def _commit(request, p, snapshot, status):
 
 
 # ── sharing (Phase 0) ─────────────────────────────────────────────────────────
-@login_required
-@_beta_required
-@require_http_methods(['POST', 'DELETE'])
+@workbench_api(['POST', 'DELETE'])
 def project_share(request, pid):
     p = get_object_or_404(WorkbenchProject, pk=pid)
     if p.role_for(request.user) not in EDIT_ROLES:
@@ -258,9 +282,10 @@ def project_share(request, pid):
     return JsonResponse({'ok': True, 'shared': True, 'token': str(p.public_token), 'url': url})
 
 
-@require_http_methods(['GET'])
+@workbench_api(['GET'], auth=False)
 def shared_snapshot(request, token):
-    """Phase-0 read-only fetch. No auth — the token is the capability. Recipients import a *copy*."""
+    """Phase-0 read-only fetch. No auth — the token is the capability. Recipients import a *copy*.
+    Readable cross-origin from the allow-listed origins (place#314), still without credentials."""
     try:
         uuid.UUID(str(token))
     except (ValueError, TypeError):
@@ -555,9 +580,7 @@ def suggestions_for_place(request, pid):
 
 
 # ── teams ───────────────────────────────────────────────────────────────────
-@login_required
-@_beta_required
-@require_http_methods(['GET', 'POST'])
+@workbench_api(['GET', 'POST'])
 def teams(request):
     if request.method == 'GET':
         memberships = (TeamMember.objects.filter(user=request.user)
@@ -582,9 +605,7 @@ def teams(request):
     return JsonResponse({'id': team.id, 'title': team.title, 'role': ROLE_OWNER}, status=201)
 
 
-@login_required
-@_beta_required
-@require_http_methods(['GET', 'POST'])
+@workbench_api(['GET', 'POST'])
 def team_members(request, tid):
     team = get_object_or_404(Team, pk=tid)
     my_role = team.role_for(request.user)
@@ -627,12 +648,29 @@ def team_members(request, tid):
     # they don't, we can't reach them, so surface that to the owner instead of failing silently.
     notified = False
     if getattr(user, 'has_verified_email', False):
-        notified = _notify_team_member(request, team, user, m.role, data.get('project_id'))
+        # The email deep-links into Map your Data (?open=<id>) — not for a project of an opaque
+        # doc-type, which that page could not open (place#314).
+        project_id = data.get('project_id')
+        if project_id:
+            proj = WorkbenchProject.objects.filter(pk=project_id, team=team).first() \
+                if _is_uuid(project_id) else None
+            dt = doctypes.get(proj.doc_type) if proj else None
+            if proj is None or (dt and dt.opaque):
+                project_id = None
+        notified = _notify_team_member(request, team, user, m.role, project_id)
     return JsonResponse({'ok': True, 'user_id': user.id, 'username': user.username,
                          'name': getattr(user, 'name', '') or user.username, 'role': m.role,
                          'created': created,
                          'has_verified_email': bool(getattr(user, 'has_verified_email', False)),
                          'notified': notified})
+
+
+def _is_uuid(value):
+    try:
+        uuid.UUID(str(value))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 def _invite_prospective_member(request, identifier):
@@ -696,9 +734,7 @@ def _notify_team_member(request, team, user, role, project_id=None):
         return False
 
 
-@login_required
-@_beta_required
-@require_http_methods(['DELETE'])
+@workbench_api(['DELETE'])
 def team_member_detail(request, tid, uid):
     team = get_object_or_404(Team, pk=tid)
     if team.role_for(request.user) != ROLE_OWNER:
@@ -1302,18 +1338,22 @@ def ner_extract_rows(request):
     return JsonResponse(out)
 
 # ── Phase-2 real-time collab token ─────────────────────────────────────────────
-@login_required
-@_beta_required
-@require_http_methods(['POST'])
+@workbench_api(['POST'])
 def collab_token(request, pid):
     """Mint a short-lived JWT the client presents to the Hocuspocus WebSocket service (Phase 2,
     place#112). The service verifies it with the shared ``HOCUSPOCUS_SECRET`` and enforces the role
     (viewer → read-only). 501 if the realtime service isn't configured, so the client feature-detects
-    and falls back to the Phase-1 REST sync."""
+    and falls back to the Phase-1 REST sync. 403 for a doc-type with live editing off (place#314:
+    the websocket checks no origin, the JWT has no ``iss``/``aud``, membership is not re-checked on
+    connect, and the Yjs store stringifies cells — so an opaque document never gets a token)."""
     p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
     role = p.role_for(request.user)
     if role is None:
         return _err('not a member of this project’s team', 403)
+    dt = doctypes.get(p.doc_type)
+    if dt is not None and not dt.live:
+        return JsonResponse({'error': 'live editing is not available for this doc_type',
+                             'code': 'live_editing_disabled'}, status=403)
     secret = getattr(settings, 'HOCUSPOCUS_SECRET', '')
     if not secret:
         return JsonResponse({'error': 'real-time collaboration is not available'}, status=501)
