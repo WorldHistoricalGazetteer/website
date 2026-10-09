@@ -1,3 +1,4 @@
+import sys
 import html
 import logging
 import re
@@ -17,6 +18,12 @@ def zulip_notification(notification, stream="website-notifications", topic="WHG 
     """
     Sends a notification to a specified Zulip stream using an incoming webhook bot.
     """
+    # Never post from a test run: the test database is rebuilt each time, so a
+    # verified test user re-fires "New User Registered" with the same id (141 on
+    # 2026-10-09) into the real stream. Also a no-op without a key.
+    if "test" in sys.argv or not getattr(settings, "ZULIP_API_KEY", ""):
+        logger.debug("Zulip notification suppressed (test run or no key): %s", topic)
+        return False
     try:
         # For incoming webhook bots, use the messages endpoint
         url = "https://chat.whgazetteer.org/api/v1/messages"
