@@ -28,15 +28,15 @@ serves):
    staff circle is the one every other private-dataset surface uses, and the
    gateway index can be stale (a dataset made private after the last ingest is
    still in it), so the live row is what decides. Refused: **404**.
-3. The dataset must carry a licence that permits redistribution of an
-   adaptation: a known, non-custom (SPDX) licence with ``no_derivatives`` False.
-   No licence recorded ⇒ **451 "source licence not determined"**; a custom
-   licence (bespoke terms this code cannot evaluate: all-rights-reserved,
-   academic-use, even public-domain-by-assertion) or an ND licence (the
-   gateway may simplify the outline, and the Atlas re-uses it as a derived
-   search constraint) ⇒ **451 "source not redistributable"**, naming the
-   licence. NC licences are served: WHG is non-commercial and the terms travel
-   in the attribution block.
+3. The dataset must carry a known, non-custom (SPDX) licence. No licence
+   recorded ⇒ **451 "source licence not determined"**; a custom licence
+   (bespoke terms this code cannot evaluate: all-rights-reserved,
+   academic-use, even public-domain-by-assertion) ⇒ **451 "source not
+   redistributable"**, naming the licence. NC licences are served: WHG is
+   non-commercial and the terms travel in the attribution block. ND licences
+   are served too (SG, place#319, 2026-10-09): a size-bounded simplification
+   of an outline for display, or its use as a search constraint, is not a
+   derivative in the sense the licensor intended.
 
 The positive decision reaches the gateway as ``X-WHG-Geometry-Grant``, an
 HMAC-SHA256 over ``"geometry|<place_id>|<expires>"`` keyed with
@@ -400,10 +400,9 @@ def dataset_redistribution(decision: DatasetDecision, pid: str) -> DatasetDecisi
             "namespace": WHG_NAMESPACE,
             "source": _source_block(attribution),
         })
-    if lic.custom or lic.no_derivatives is not False:
+    if lic.custom:
         attribution["redistributable"] = False
-        why = ("bespoke terms this service cannot evaluate" if lic.custom
-               else "a licence that does not permit adaptations, and a served outline may be simplified")
+        why = "bespoke terms this service cannot evaluate"
         return DatasetDecision(451, {
             "error": "source not redistributable",
             "detail": (f"{name} is published under {lic.spdx_id}: {why}. Its geometry is "
