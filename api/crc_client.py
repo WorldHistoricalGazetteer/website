@@ -150,6 +150,78 @@ def crc_places(ids: list, user=None, meta: dict | None = None) -> dict | None:
     return None
 
 
+def crc_geometry(place_id: str, user=None, meta: dict | None = None,
+                 max_bytes: int | None = None, tolerance: float | None = None) -> dict | None:
+    """Call the CRC gateway ``GET /api/geometry/<place_id>`` and return its body.
+
+    One place's authoritative geometry from the geom store (indexing plan
+    §5.3), for the Atlas area selection — the alternative is unioning tile
+    fragments in the browser, which truncates any region larger than the
+    viewport. Returns ``None`` when the gateway is unconfigured, refused, or
+    could not be asked; ``meta`` says which:
+
+    * ``meta["status"]`` = 404 with ``meta["body"]`` — the gateway ANSWERED:
+      either ``error: "not found"`` (no such place) or ``error: "no geometry"``
+      (a point-only place). ``meta`` carries no ``error``.
+    * ``meta["status"]`` = 451 with ``meta["body"]`` — the gateway withholds
+      the source (its own ``redistributable`` determination).
+    * ``meta["error"]`` = ``"timeout"`` / ``"connection"`` / ``"http"`` /
+      ``"unexpected"`` — not an answer. ``"http"`` includes the case of a
+      gateway that has not yet been restarted with the route: its catch-all
+      then proxies the path to Elasticsearch, which answers 400/404 with an
+      ES error body rather than the route's JSON ``detail``. Only a JSON
+      ``detail`` carrying an ``error`` is read as the route's own answer.
+    * ``meta["disabled"]`` = True — never called.
+    """
+    if not _is_enabled(user):
+        if meta is not None:
+            meta["disabled"] = True
+        return None
+    place_id = (place_id or "").strip()
+    if not place_id:
+        return None
+    params = {}
+    if max_bytes:
+        params["max_bytes"] = int(max_bytes)
+    if tolerance:
+        params["tolerance"] = float(tolerance)
+    try:
+        from urllib.parse import quote
+        url = f"{_gateway_url()}/api/geometry/{quote(place_id, safe=':')}"
+        resp = requests.get(url, params=params or None, headers=_headers(), timeout=_timeout())
+        if 200 <= resp.status_code < 300:
+            return resp.json()
+        detail = None
+        try:
+            detail = resp.json().get("detail")
+        except Exception:  # noqa: BLE001 — a non-JSON body is not the route's answer
+            detail = None
+        if resp.status_code in (404, 451) and isinstance(detail, dict) and detail.get("error"):
+            if meta is not None:
+                meta["status"] = resp.status_code
+                meta["body"] = detail
+            return None
+        logger.warning("CRC gateway GET /api/geometry/%s %s: %s",
+                       place_id, resp.status_code, resp.text[:200])
+        if meta is not None:
+            meta["error"] = "http"
+            meta["status"] = resp.status_code
+        return None
+    except requests.Timeout as exc:
+        logger.warning("CRC gateway /api/geometry timed out: %s", exc)
+        if meta is not None:
+            meta["error"] = "timeout"
+    except requests.ConnectionError as exc:
+        logger.warning("CRC gateway /api/geometry network error: %s", exc)
+        if meta is not None:
+            meta["error"] = "connection"
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("CRC gateway /api/geometry unexpected: %s", exc)
+        if meta is not None:
+            meta["error"] = "unexpected"
+    return None
+
+
 def crc_search(options: dict, user=None) -> dict | None:
     """Fail-safe wrapper over :func:`crc_search_status` — the response, or None.
 

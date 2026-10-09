@@ -898,12 +898,16 @@ Promise.all([
         if (searchMode !== 'areas') return;
         const detail = e.detail;
         if (!detail || !detail.geometry) return;
+        const regionId = `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`;
+        // The tile-fragment union is shown at once; the authoritative polygon
+        // replaces it when /atlas/geometry/ answers (or never, if it cannot).
         addRegionSelection({
-            id: `boundary:${detail.namespace || 'osm'}:${detail.id || detail.name}`,
+            id: regionId,
             label: detail.name || 'Unnamed',
             namespace: detail.namespace || 'osm',
             geometry: detail.geometry,
         });
+        upgradeRegionGeometry(regionId, detail.place_id);
     });
 
     // ── Search mode toggle ──
@@ -2319,20 +2323,37 @@ function selectAreaResult(index) {
 }
 
 /**
- * Fly to a boundary search hit and turn it into a region selection.
+ * Turn a boundary search hit into a region selection.
  *
- * The map has to be at the hit's own zoom band before its feature exists in the
- * tiles, and the tiles then have to arrive, so this waits for the map to settle
- * before looking. If the feature still is not there — a level the tileset drops
- * at this zoom, say — the map is left framed on it and the user is told to
- * click, which is the old behaviour rather than a silent failure.
+ * First choice is the authoritative polygon from /atlas/geometry/, which needs
+ * no tiles at all. Failing that (the gateway is down, has not yet got the
+ * route, or withholds the source), fall back to the tiles: the map has to be
+ * at the hit's own zoom band before its feature exists in them, and the tiles
+ * then have to arrive, so this waits for the map to settle before looking. If
+ * the feature still is not there — a level the tileset drops at this zoom,
+ * say — the map is left framed on it and the user is told to click, which is
+ * the old behaviour rather than a silent failure.
  */
-function resolveBoundaryFromTiles(item) {
+async function resolveBoundaryFromTiles(item) {
     const source = item.namespace || 'osm';
     const zoom = zoomForAdminLevel(item.boundary);
     // Put the level picker on the tier that draws this region, or the polygon
     // would be neither visible nor clickable when we get there.
     if (layerPalette) layerPalette.setActiveSource(source);
+
+    const exact = await fetchExactGeometry(item.place_id);
+    if (exact) {
+        // Same id the map-click path builds, so a click on the same region
+        // afterwards is recognised as already selected.
+        addRegionSelection({
+            id: `boundary:${source}:${item.place_id}`,
+            label: item.label,
+            namespace: source,
+            geometry: exact.geometry,
+            exact: true,
+        });
+        return;
+    }
 
     try {
         heroMap.map.flyTo({ center: item.repr_point, zoom, duration: 900 });
@@ -2343,6 +2364,80 @@ function resolveBoundaryFromTiles(item) {
         if (heroMap.selectBoundaryByPlaceId(source, item.place_id)) return;
         showCopyToast(`Showing ${item.label} — click its outline to use it as an area filter.`);
     });
+}
+
+/* ── Exact region geometry (indexing plan §5.3) ──
+   A selected boundary used to become a search constraint by unioning its tile
+   fragments in the browser (place#156). Only fragments in loaded tiles are
+   found, so a region larger than the viewport was silently truncated, and the
+   outline was the current zoom's simplification. /atlas/geometry/ serves the
+   geom store's polygon; the fragment union stays as the fallback so the Atlas
+   works before the gateway gains the route and whenever it cannot answer. */
+
+/**
+ * The authoritative geometry for a place, or null when it cannot be had.
+ * Never throws and never notifies: a fallback to the tiles is not a failure
+ * the user needs to hear about (the reason is logged to the console).
+ *
+ * @param {string} placeId — e.g. ``osm:r62149``
+ * @returns {Promise<Object|null>} the /atlas/geometry/ body, or null
+ */
+async function fetchExactGeometry(placeId) {
+    if (!placeId) return null;
+    const { kind, status, data } = await fetchJSON(
+        '/atlas/geometry/?id=' + encodeURIComponent(placeId), { timeoutMs: 20000 });
+    if (kind === 'ok' && data && data.geometry) return data;
+    const why = (data && (data.error || data.failure)) || kind;
+    console.debug(`Atlas: exact geometry not available for ${placeId} (${status || kind}: ${why}); using tile fragments`);
+    return null;
+}
+
+/**
+ * Replace a selected region's tile-fragment geometry with the exact polygon,
+ * once it arrives. No-op if the region was dismissed meanwhile. The overlay,
+ * the search constraint and the gazetteer coverage filter all read
+ * ``selectedRegions``, so one swap updates all three. The viewport is only
+ * re-fitted when the exact extent reaches beyond what the fragments showed,
+ * i.e. when the region really was truncated.
+ */
+function upgradeRegionGeometry(regionId, placeId) {
+    if (!placeId) return;
+    const current = selectedRegions.find(r => r.id === regionId);
+    if (!current || current.exact) return;   // not selected, or already exact
+    fetchExactGeometry(placeId).then((data) => {
+        if (!data) return;
+        const region = selectedRegions.find(r => r.id === regionId);
+        if (!region || region.exact) return;
+        const before = region.geometry;
+        region.geometry = data.geometry;
+        region.exact = true;
+        renderSelectionChips();   // also re-applies the coverage filter
+        updateSelectionOverlay();
+        if (!bboxCovers(geometryBBox(before), geometryBBox(data.geometry))) {
+            heroMap.fitTo({ type: 'Feature', geometry: data.geometry, properties: {} });
+        }
+    });
+}
+
+/** [west, south, east, north] of a GeoJSON geometry, or null. */
+function geometryBBox(geometry) {
+    const turf = window.turf;
+    if (!geometry || !turf || !turf.bbox) return null;
+    try {
+        const bb = turf.bbox({ type: 'Feature', geometry, properties: {} });
+        return bb.every(Number.isFinite) ? bb : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** Whether ``outer`` contains ``inner`` to within 1% of its own span. If
+ *  either is unknown the answer is "no", so the caller re-fits. */
+function bboxCovers(outer, inner) {
+    if (!outer || !inner) return false;
+    const tol = 0.01 * Math.max(outer[2] - outer[0], outer[3] - outer[1], 1e-6);
+    return inner[0] >= outer[0] - tol && inner[1] >= outer[1] - tol
+        && inner[2] <= outer[2] + tol && inner[3] <= outer[3] + tol;
 }
 
 /* ── Region selections ── */
