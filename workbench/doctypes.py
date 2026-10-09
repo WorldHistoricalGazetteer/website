@@ -17,6 +17,12 @@ One Workbench, many doc-types. Each doc-type declares, in one place:
   * ``checkout``         — dotted path to the server function that materialises an already-published
                            item into a snapshot for editing (workbench/checkout.py, §6). ``None``
                            until published-editing is enabled for that doc-type.
+  * ``opaque``           — the server never reads the snapshot (place#314): no three-way merge (a
+                           stale write is a 409 carrying the current snapshot, for the client to
+                           merge), no title derived from it, and it is left out of the default
+                           project list because no WHG editor can open it.
+  * ``live``             — whether real-time (Hocuspocus/Yjs) editing may be started for it.
+                           ``False`` keeps ``collab-token/`` from minting a token for the type.
 
 Adding a doc-type = one registry entry + one editor chunk + one publish/checkout pair. Nothing
 else in the envelope (team, version, share, collab) changes.
@@ -24,7 +30,8 @@ else in the envelope (team, version, share, collab) changes.
 from importlib import import_module
 
 from .models import (DOC_RECONCILIATION, DOC_GAZETTEER_GROUP, DOC_PLACE_COLLECTION,
-                     DOC_ITINERARY, DOC_PLACE_RECORD, DOC_DATASET_EDIT, DOC_ROUTE, DOC_NETWORK)
+                     DOC_ITINERARY, DOC_PLACE_RECORD, DOC_DATASET_EDIT, DOC_ROUTE, DOC_NETWORK,
+                     DOC_PLATO)
 
 
 # ── snapshot validators ───────────────────────────────────────────────────────
@@ -111,10 +118,16 @@ def _errs_disabled(snap):
     return ['this doc-type is not available yet']
 
 
+def _errs_opaque(snap):
+    """An opaque snapshot (PLATO Tools, place#314): the server checks only that it is a JSON object
+    and never reads inside it — the client owns the shape and the merge."""
+    return [] if isinstance(snap, dict) else ['snapshot must be an object']
+
+
 # ── registry ──────────────────────────────────────────────────────────────────
 class DocType:
     def __init__(self, key, label_key, enabled, editor, validate,
-                 publish=None, checkout=None, sequenced=False):
+                 publish=None, checkout=None, sequenced=False, opaque=False, live=True):
         self.key = key
         self.label_key = label_key        # key into main.labels.LABELS
         self.enabled = enabled            # may users CREATE this doc-type?
@@ -123,6 +136,8 @@ class DocType:
         self._publish = publish           # dotted path str or None
         self._checkout = checkout         # dotted path str or None
         self.sequenced = sequenced        # Itinerary: sequence is meaningful
+        self.opaque = opaque              # server never reads the snapshot (place#314)
+        self.live = live                  # real-time editing may be started
 
     @property
     def label(self):
@@ -186,6 +201,12 @@ REGISTRY = {
         DOC_ROUTE, 'route', enabled=False, editor=None, validate=_errs_disabled),
     DOC_NETWORK: DocType(
         DOC_NETWORK, 'network', enabled=False, editor=None, validate=_errs_disabled),
+    # ── PLATO Tools (place#314): an external client's project kept here for sharing. Creatable
+    # (through the token path), but with no WHG editor, no merge and no live editing: the client at
+    # pelagios.org owns the document's shape and merges on 409 itself.
+    DOC_PLATO: DocType(
+        DOC_PLATO, 'plato', enabled=True, editor=None, validate=_errs_opaque,
+        opaque=True, live=False),
 }
 
 
@@ -203,7 +224,13 @@ def validate_snapshot(doc_type, snapshot):
     return dt.validate(snapshot)
 
 
+def opaque_types():
+    """Doc-type keys the server stores without reading (place#314)."""
+    return [k for k, dt in REGISTRY.items() if dt.opaque]
+
+
 def creatable():
-    """Doc-types users may create right now (enabled), in display order."""
+    """Doc-types users may create right now (enabled), in display order. The WHG "New…" picker
+    only; ``plato`` is creatable too but has no WHG editor, so it is not listed here."""
     order = [DOC_PLACE_COLLECTION, DOC_ITINERARY, DOC_GAZETTEER_GROUP, DOC_RECONCILIATION]
     return [REGISTRY[k] for k in order if REGISTRY[k].enabled]

@@ -658,6 +658,13 @@ CACHES = {
 # (20 req/min x 1 = 20). Falsy means unlimited, matching UserAPIProfile.daily_limit.
 RECON_QUERY_RATE = int(os.environ.get('RECON_QUERY_RATE') or 600)
 
+# Workbench project API from another origin (place#314): the exact origins allowed CORS on the
+# token path (comma-separated), token requests per minute per user, and the POST/PUT body cap in
+# bytes. Falsy rate = unlimited. See workbench/access.py.
+WORKBENCH_CORS_ORIGINS = [o.strip() for o in os.environ.get('WORKBENCH_CORS_ORIGINS', 'https://pelagios.org').split(',') if o.strip()]
+WORKBENCH_TOKEN_RATE = int(os.environ.get('WORKBENCH_TOKEN_RATE') or 120)
+WORKBENCH_BODY_MAX_BYTES = int(os.environ.get('WORKBENCH_BODY_MAX_BYTES') or 2 * 1024 * 1024)
+
 SITEMAP_CACHE = 'sitemap_cache'
 
 # Allow inventory pushes from Pitt VM with large h3 cell lists.
