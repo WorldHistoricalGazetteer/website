@@ -373,15 +373,20 @@ def scenario_deeplink(browser, R, opts, url_for, ns, heading_expected, expect_la
     try:
         booted = check_boot(R, S, page, status, opts)
         # The deep-link handler polls (<=2 s) for the radio, then opens the Place
-        # List, which fetches /atlas/search/. Wait for THAT request to answer.
+        # List. Since drop 3 the anonymous list shows its beta text at once
+        # (no request), so that text no longer proves the Explore flow has run
+        # to the end; the gazetteer's marker layer, added by the same radio
+        # change, is waited for separately where one is expected.
         ok, secs = bounded_wait(page, "document.body.textContent.includes(%r)" % BETA_MESSAGE_DOM, 30)
+        _, layer_secs = (bounded_wait(page, f"window.heroMapInstance && !!window.heroMapInstance.getLayer('{ns}_circle')", 30)
+                                if expect_layer else (None, 0))
         d = page.evaluate(DEEPLINK_JS, ns)
         R.add(S, "places_mode_active", d["placesActive"] and "mode-toponyms" in d["modeClass"], f"mode class {d['modeClass']!r}")
         R.add(S, "explore_tab_active", d["exploreActive"], "Explore tab active" if d["exploreActive"] else "Explore tab NOT active")
         R.add(S, "gazetteer_radio_checked", d["checked"] == [f"{ns}:radio"], f"checked inputs {d['checked']}")
         R.add(S, "placelist_heading", bool(d["heading"]) and heading_expected in d["heading"], f"heading {d['heading']!r}")
         if expect_layer:
-            R.add(S, "marker_layer_present", d["layer"], f"map.getLayer('{ns}_circle') -> {d['layer']}")
+            R.add(S, "marker_layer_present", d["layer"], f"map.getLayer('{ns}_circle') -> {d['layer']} after {layer_secs:.1f}s")
         R.add(S, "placelist_honest_beta_message", ok and d["betaText"],
               f"DOM says {BETA_MESSAGE_DOM!r}: {d['betaText']} after {secs:.1f}s")
         # The list must not ASK: an anonymous caller gets a 403 from
