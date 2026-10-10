@@ -429,6 +429,13 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
     return None, "timeout"  # pragma: no cover — loop always returns
 
 
+def _truthy_flag(v):
+    """True for True, 1, or the strings true/1/yes/on (any case); everything else is False."""
+    if isinstance(v, str):
+        return v.strip().lower() in ("true", "1", "yes", "on")
+    return v is True or (isinstance(v, int) and not isinstance(v, bool) and v == 1)
+
+
 def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str] | None = None,
                          meta: dict | None = None) -> list[dict]:
     """
@@ -572,6 +579,19 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
     relation = raw.get("relation")
     if relation in ("intersects", "within"):
         body["relation"] = relation
+
+    # place#323 — only candidates with an areal geometry. Sent only when true, so the default request
+    # body is byte-identical to before. Accepts a bool or true/false-style text (it may arrive via
+    # an OpenRefine `whg:area_only` property or a query string).
+    if _truthy_flag(raw.get("area_only")):
+        body["area_only"] = True
+
+    # place#324 — ISO 639-1 language for the gateway's SERVER-SIDE embedding. Forwarded as given
+    # (trimmed): the gateway lowercases, and falls back to "und" for anything malformed, never an
+    # error. A client vector, when valid for the gateway's model, still wins there.
+    lang = raw.get("lang")
+    if isinstance(lang, str) and lang.strip():
+        body["lang"] = lang.strip()
 
     # Temporal range
     start = raw.get("start")
