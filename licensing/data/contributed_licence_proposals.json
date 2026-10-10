@@ -597,6 +597,48 @@
    "approved": true,
    "approved_by": "SG",
    "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 2,
+   "label": "dplace",
+   "title": "dplace",
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "low",
+   "evidence": "github.com/D-PLACE/dplace-data LICENSE.txt: CC BY 4.0; the d-place.org footer says CC BY-NC 4.0 (both read 2026-10-09). Loaded by WHG staff 2019-02-11.",
+   "ruling": "SG, 2026-10-10: CC BY 4.0, waved through without asking (the data repository's licence governs)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 39,
+   "label": "crete_violence_01",
+   "title": "crete_violence_01",
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "legacy_notice",
+   "class": 2,
+   "confidence": "low",
+   "evidence": "Jesse Obert's thesis data, uploaded through the form under the CC BY 4.0 notice by a WHC/Pitt staff account 2023-12-17.",
+   "ruling": "SG, 2026-10-10: CC BY 4.0, waved through without asking",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 657,
+   "label": "africanports1887",
+   "title": "africanports1887",
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "legacy_notice",
+   "class": 2,
+   "confidence": "low",
+   "evidence": "African Ports 1887 (Patricia Seed; contributors Azizou, Manning), uploaded through the form under the CC BY 4.0 notice by WHG staff 2020-06-17.",
+   "ruling": "SG, 2026-10-10: CC BY 4.0, waved through without asking",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   }
  ],
  "approved": "2026-10-10"

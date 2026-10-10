@@ -205,10 +205,11 @@ class ApplyProposalsTests(TestCase):
 # rows proposed on 2026-10-09, plus `12` (CC-BY-NC-2.5 seeded by licensing/0006)
 # and the two WHG-own datasets `1328` and `1360`; then, the same day, the three
 # class-3 rows settled by reading their sources in a browser (`1052`, `1076`,
-# `1352`). Nothing else may be in the file; nothing in it may be unapproved.
-# Changing this set is a reviewed diff.
+# `1352`); then three class-3 rows SG waved through as CC BY 4.0 without asking
+# (`2`, `39`, `657`). Nothing else may be in the file; nothing in it may be
+# unapproved. Changing this set is a reviewed diff.
 APPROVED_2026_10_10 = frozenset({
-    12, 14, 15, 16, 17, 693, 764, 792, 975, 979, 1052, 1076, 1094, 1121, 1165,
+    2, 12, 14, 15, 16, 17, 39, 657, 693, 764, 792, 975, 979, 1052, 1076, 1094, 1121, 1165,
     1203, 1206, 1209, 1212, 1223, 1245, 1328, 1352, 1354, 1358, 1360, 1361, 1364,
     1365, 1390, 1404, 1415, 1435, 1446, 1451, 1452, 1473, 1475, 1476, 1479, 1482,
     1484, 1487, 1488, 1501,
@@ -216,7 +217,7 @@ APPROVED_2026_10_10 = frozenset({
 # Class 3 (ask) and class 4 (restrict / de-accession) datasets from the same
 # proposal: a row for any of these would be a defect.
 NEVER_IN_FILE = frozenset({
-    2, 13, 18, 20, 39, 657, 819, 827, 829, 838, 1118, 1155, 1196,
+    13, 18, 20, 819, 827, 829, 838, 1118, 1155, 1196,
     1319, 1381, 1392, 1393, 1394, 1395, 1397, 1413, 1429, 1438, 1439, 1456,
     1461, 1467, 1478, 1481, 1485, 1486,
 })
@@ -231,6 +232,9 @@ RULED_OVERRIDES = {
     1052: ("custom-ogl-yukon-2.0", "upstream_terms", 1),
     1076: ("custom-public-domain", "upstream_terms", 1),
     1352: ("CC-BY-NC-SA-4.0", "upstream_terms", 1),
+    2: ("CC-BY-4.0", "upstream_terms", 1),
+    39: ("CC-BY-4.0", "legacy_notice", 2),
+    657: ("CC-BY-4.0", "legacy_notice", 2),
 }
 
 
