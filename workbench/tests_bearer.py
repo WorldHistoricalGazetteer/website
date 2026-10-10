@@ -487,6 +487,30 @@ class PlatoDocTypeTests(BearerBase):
                                **self.bearer(self.alice_token))
         self.assertEqual(r.status_code, 200, r.content)
 
+    def test_a_share_link_for_an_opaque_project_is_a_token_not_a_map_your_data_url(self):
+        """SG, 2026-10-09: PLATO builds its own link from ``token``. The ``url`` the endpoint
+        returns opens Map your Data, which cannot open a PLATO blob, so for an opaque type there is
+        none; the anonymous fetch says what type it is, so a recipient's page can refuse it."""
+        j = self.create(self.alice_token, snapshot=self.SNAP).json()
+        r = self.anon.post(reverse('workbench:project-share', args=[j['id']]), **self.bearer(self.alice_token))
+        self.assertEqual(r.status_code, 200, r.content)
+        body = r.json()
+        self.assertTrue(body['shared'])
+        self.assertIsNone(body['url'])
+        self.assertEqual(body['doc_type'], 'plato')
+        g = self.anon.get(reverse('workbench:shared', args=[body['token']]), HTTP_ORIGIN=PELAGIOS)
+        self.assertEqual(g.status_code, 200)
+        self.assertEqual(g.json()['doc_type'], 'plato')
+        self.assertEqual(g.json()['snapshot'], self.SNAP)
+        # The companion: a Map your Data project still gets the page URL, and says so.
+        k = self.create(self.alice_token, doc_type='reconciliation', snapshot=snap()).json()
+        r = self.anon.post(reverse('workbench:project-share', args=[k['id']]), **self.bearer(self.alice_token))
+        body = r.json()
+        self.assertIn(f"/reconciliation/?shared={body['token']}", body['url'])
+        self.assertEqual(body['doc_type'], 'reconciliation')
+        g = self.anon.get(reverse('workbench:shared', args=[body['token']]))
+        self.assertEqual(g.json()['doc_type'], 'reconciliation')
+
     def test_opaque_projects_are_listed_only_when_asked_for(self):
         self.create(self.alice_token, snapshot=self.SNAP)
         self.create(self.alice_token, doc_type='reconciliation', snapshot=snap())

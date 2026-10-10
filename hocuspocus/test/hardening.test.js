@@ -110,7 +110,7 @@ function dbWith(rows) {
 }
 
 test('membership, role and doc_type come from the database, not the token', async () => {
-  const db = dbWith([{ doc_type: 'reconciliation', role: 'viewer' }]);
+  const db = dbWith([{ doc_type: 'reconciliation', role: 'viewer', is_active: true }]);
   const hooks = S.buildHooks({ config: S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }), query: db.query });
   const connection = { readOnly: false };
   const ctx = await hooks.onAuthenticate({ documentName: DOC, token: mint({ role: 'owner' }),
@@ -129,7 +129,7 @@ test('a user removed from the team since the mint is refused', async () => {
 
 test('an opaque doc_type never gets a live connection, whatever the token claims', async () => {
   const hooks = S.buildHooks({ config: S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }),
-    query: dbWith([{ doc_type: 'plato', role: 'owner' }]).query });
+    query: dbWith([{ doc_type: 'plato', role: 'owner', is_active: true }]).query });
   await assert.rejects(hooks.onAuthenticate({ documentName: DOC, token: mint({ doc_type: 'reconciliation' }),
     connection: {}, requestHeaders: OWN }), /live editing is disabled for doc_type plato/);
   assert.equal(S.DEFAULT_LIVE_DOC_TYPES.includes('plato'), false);
@@ -137,7 +137,7 @@ test('an opaque doc_type never gets a live connection, whatever the token claims
 
 test('authentication also refuses a foreign origin and a bad token', async () => {
   const hooks = S.buildHooks({ config: S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }),
-    query: dbWith([{ doc_type: 'reconciliation', role: 'editor' }]).query });
+    query: dbWith([{ doc_type: 'reconciliation', role: 'editor', is_active: true }]).query });
   await assert.rejects(hooks.onAuthenticate({ documentName: DOC, token: mint(), connection: {},
     requestHeaders: { ...OWN, origin: 'https://evil.example' } }), /origin/);
   await assert.rejects(hooks.onAuthenticate({ documentName: DOC, token: mint({}, 'other'), connection: {},
@@ -217,14 +217,183 @@ test('configuration defaults need nothing in the environment, and the env overri
   assert.equal(o.messageRate, 0);
 });
 
-// ── the mapping is unchanged ─────────────────────────────────────────────────
-test('projectToDoc/docToProject still round-trip a Map-your-Data snapshot', () => {
+// ── the mapping ──────────────────────────────────────────────────────────────
+test('projectToDoc/docToProject round-trip a Map-your-Data snapshot', () => {
   const snap = { fileName: 'x.csv', columns: [{ name: 'Place' }, { name: 'Lat' }], rows: [['Richmond', '51.4'], ['York', null]],
     decisions: { '0:1': { status: 'accepted' } }, matches: {}, geom: {}, rowTypes: {}, scope: { cc: ['GB'] } };
   const back = S.docToProject(S.projectToDoc(snap));
   assert.equal(back.fileName, 'x.csv');
-  assert.deepEqual(back.rows, [['Richmond', '51.4'], ['York', '']]); // the known stringification
+  assert.deepEqual(back.rows, [['Richmond', '51.4'], ['York', null]]);
   assert.deepEqual(back.decisions, snap.decisions);
   assert.deepEqual(back.scope, snap.scope);
   assert.equal(back.total, 2);
+});
+
+// ── follow-ups (place#314 "remaining") ───────────────────────────────────────
+test('cells keep their types: a number, a boolean, null and an object come back as themselves; only an absent cell is ""', () => {
+  const rows = [['Richmond', 51.4, true, null, { a: 1 }], ['York']];
+  const back = S.docToProject(S.projectToDoc({ columns: [{ name: 'a' }, { name: 'b' }, { name: 'c' }, { name: 'd' }, { name: 'e' }], rows }));
+  assert.deepEqual(back.rows[0], rows[0]);
+  assert.equal(typeof back.rows[0][1], 'number');
+  assert.equal(back.rows[0][3], null);
+  assert.deepEqual(back.rows[1], ['York', '', '', '', '']); // padding for absent cells, as before
+  // the persisted JSON (what flattenBack writes) is the input, not a stringified copy
+  assert.equal(S.canonical(back.rows[0]), S.canonical(rows[0]));
+});
+
+test('an object-valued meta field is merged by key: two editors annotating different rows both keep their note', () => {
+  const seed = S.projectToDoc({ columns: [{ name: 'x' }], rows: [['a'], ['b']], notes: { 0: 'first' }, scope: { cc: ['GB'] },
+    rowFilters: [{ col: 0, q: 'a' }], title: 'T' });
+  const state = Y.encodeStateAsUpdate(seed);
+  const alice = new Y.Doc(); Y.applyUpdate(alice, state);
+  const bob = new Y.Doc(); Y.applyUpdate(bob, state);
+  // nested maps, not whole values
+  assert.ok(alice.getMap('meta').get('notes') instanceof Y.Map);
+  assert.ok(!(alice.getMap('meta').get('rowFilters') instanceof Y.Map)); // an array stays whole
+  assert.equal(alice.getMap('meta').get('title'), 'T');
+  alice.getMap('meta').get('notes').set('1', 'from alice');
+  bob.getMap('meta').get('notes').set('0', 'bob rewrote the first');
+  Y.applyUpdate(alice, Y.encodeStateAsUpdate(bob));
+  Y.applyUpdate(bob, Y.encodeStateAsUpdate(alice));
+  const a = S.docToProject(alice);
+  const b = S.docToProject(bob);
+  assert.deepEqual(a.notes, { 0: 'bob rewrote the first', 1: 'from alice' });
+  assert.deepEqual(b.notes, a.notes);
+  assert.deepEqual(a.scope, { cc: ['GB'] });
+  assert.deepEqual(a.rowFilters, [{ col: 0, q: 'a' }]);
+  // a whole-value meta written by an OLD client (plain object) still reads back as the object
+  alice.getMap('meta').set('flags', { '0:1': true });
+  assert.deepEqual(S.docToProject(alice).flags, { '0:1': true });
+});
+
+test('canonical JSON ignores key order (jsonb reorders keys) and nothing else', () => {
+  assert.equal(S.canonical({ b: [1, { d: null, c: 'x' }], a: 1 }), S.canonical({ a: 1, b: [1, { c: 'x', d: null }] }));
+  assert.notEqual(S.canonical({ a: 1 }), S.canonical({ a: '1' }));
+  assert.notEqual(S.canonical([1, 2]), S.canonical([2, 1]));
+});
+
+// A fake pool that holds one project row and records the writes.
+function fakePool(project) {
+  const writes = [];
+  return {
+    writes,
+    row: project,
+    async query(sql, params) {
+      writes.push({ sql, params });
+      if (/SELECT snapshot, version FROM workbench_project/.test(sql)) {
+        return { rows: project ? [{ snapshot: JSON.parse(JSON.stringify(project.snapshot)), version: project.version }] : [] };
+      }
+      if (/UPDATE workbench_project/.test(sql)) {
+        if (!project) return { rows: [] };
+        project.version += 1;
+        project.snapshot = JSON.parse(params[1]);
+        return { rows: [{ version: project.version }] };
+      }
+      return { rows: [] };
+    },
+  };
+}
+
+test('a store whose flattened snapshot equals the stored one bumps nothing; a changed one bumps once and tells the clients', async () => {
+  const snapshot = { columns: [{ name: 'x' }], rows: [['a', 1]], notes: { 0: 'n' }, matches: {}, decisions: {}, geom: {}, rowTypes: {}, total: 1 };
+  // the stored copy with keys in jsonb's order, so only canonical comparison can see it is the same
+  const stored = { total: 1, rows: [['a', 1]], notes: { 0: 'n' }, rowTypes: {}, matches: {}, geom: {}, decisions: {}, columns: [{ name: 'x' }] };
+  const pool = fakePool({ snapshot: stored, version: 7 });
+  const db = S.buildDatabase(pool, S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }));
+  const sent = [];
+  const document = { broadcastStateless: (p) => sent.push(p) };
+  const doc = S.projectToDoc(snapshot);
+  await db.configuration.store({ documentName: DOC, state: Y.encodeStateAsUpdate(doc), document });
+  assert.equal(pool.row.version, 7, 'an unchanged snapshot bumped the version');
+  assert.equal(pool.writes.filter((w) => /INSERT INTO workbench_project_snapshot/.test(w.sql)).length, 0);
+  assert.deepEqual(sent.map((s) => JSON.parse(s)), [{ type: S.VERSION_MESSAGE, version: 7 }]);
+  // now a real change
+  doc.getMap('meta').get('notes').set('0', 'edited');
+  await db.configuration.store({ documentName: DOC, state: Y.encodeStateAsUpdate(doc), document });
+  assert.equal(pool.row.version, 8);
+  assert.deepEqual(pool.row.snapshot.notes, { 0: 'edited' });
+  const hist = pool.writes.filter((w) => /INSERT INTO workbench_project_snapshot/.test(w.sql));
+  assert.equal(hist.length, 1);
+  assert.equal(hist[0].params[1], 8);
+  assert.deepEqual(JSON.parse(sent[1]), { type: S.VERSION_MESSAGE, version: 8 });
+  // the ydoc state itself is still written every time
+  assert.equal(pool.writes.filter((w) => /INSERT INTO workbench_ydoc/.test(w.sql)).length, 2);
+});
+
+test('an inactive account is refused on connect, and the query asks the users table', async () => {
+  const db = dbWith([{ doc_type: 'reconciliation', role: 'editor', is_active: false }]);
+  const hooks = S.buildHooks({ config: S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }), query: db.query });
+  await assert.rejects(hooks.onAuthenticate({ documentName: DOC, token: mint(), connection: {}, requestHeaders: OWN, socketId: 's' }),
+    /inactive/);
+  assert.match(db.calls[0].sql, /is_active/);
+  assert.match(db.calls[0].sql, /auth_users/);
+  // a row without the column (an old query shape) is not treated as active either
+  const hooks2 = S.buildHooks({ config: S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }),
+    query: dbWith([{ doc_type: 'reconciliation', role: 'editor' }]).query });
+  await assert.rejects(hooks2.onAuthenticate({ documentName: DOC, token: mint(), connection: {}, requestHeaders: OWN, socketId: 's' }),
+    /inactive/);
+});
+
+test('a long-lived connection is re-authorised: deactivated or removed → closed with the policy code; demoted → read-only', async () => {
+  let t = 0;
+  let rows = [{ doc_type: 'reconciliation', role: 'editor', is_active: true }];
+  const calls = [];
+  const query = async (sql, params) => { calls.push(params); return { rows }; };
+  const config = { ...S.makeConfig({ HOCUSPOCUS_SECRET: SECRET }), recheckSeconds: 60, docCheckEvery: 1e9 };
+  const tracker = new S.ConnectionTracker(config.maxConnectionsPerUser, () => t);
+  const hooks = S.buildHooks({ config, query, tracker });
+  const connection = { readOnly: false };
+  const context = await hooks.onAuthenticate({ documentName: DOC, token: mint(), connection, requestHeaders: OWN, socketId: 's' });
+  assert.equal(calls.length, 1);
+  const msg = () => hooks.beforeHandleMessage({ socketId: 's', documentName: DOC, update: new Uint8Array(1), document: new Y.Doc(), connection, context });
+  t = 59_000; await msg();
+  assert.equal(calls.length, 1, 're-checked before the interval');
+  t = 60_000; rows = [{ doc_type: 'reconciliation', role: 'viewer', is_active: true }];
+  await msg();
+  assert.equal(calls.length, 2, 'not re-checked at the interval');
+  assert.deepEqual(calls[1], [DOC, 42]);          // by the connection's user, no token involved
+  assert.equal(connection.readOnly, true);         // demoted in mid-session
+  assert.equal(context.user.role, 'viewer');
+  t = 120_000; rows = [{ doc_type: 'reconciliation', role: 'owner', is_active: true }];
+  await msg();
+  assert.equal(connection.readOnly, false);        // and promoted back
+  t = 180_000; rows = [{ doc_type: 'reconciliation', role: 'owner', is_active: false }];
+  await assert.rejects(msg(), (e) => e.code === S.CLOSE_POLICY && /inactive/.test(e.reason));
+  t = 240_000; rows = [];
+  await assert.rejects(msg(), (e) => e.code === S.CLOSE_POLICY && /not a member/.test(e.reason));
+  // recheckSeconds 0 = never
+  rows = [{ doc_type: 'reconciliation', role: 'editor', is_active: true }];
+  const never = S.buildHooks({ config: { ...config, recheckSeconds: 0 }, query, tracker: new S.ConnectionTracker(0, () => t) });
+  await never.onAuthenticate({ documentName: DOC, token: mint(), connection: {}, requestHeaders: OWN, socketId: 'n' });
+  const before = calls.length;
+  t = 1e9;
+  await never.beforeHandleMessage({ socketId: 'n', documentName: DOC, update: new Uint8Array(1), document: new Y.Doc(), connection: {}, context: {} });
+  assert.equal(calls.length, before);
+});
+
+test('a user gets at most N live connections; a disconnect frees a slot; another user is unaffected; 0 = unlimited', async () => {
+  const config = { ...S.makeConfig({ HOCUSPOCUS_SECRET: SECRET, HOCUSPOCUS_MAX_CONNECTIONS_PER_USER: '2' }) };
+  assert.equal(config.maxConnectionsPerUser, 2);
+  const query = async () => ({ rows: [{ doc_type: 'reconciliation', role: 'editor', is_active: true }] });
+  const hooks = S.buildHooks({ config, query });
+  const auth = (socketId, doc = DOC, sub = '42') => hooks.onAuthenticate({ documentName: doc, token: mint({ sub, project_id: doc }),
+    connection: {}, requestHeaders: OWN, socketId });
+  await auth('a');
+  await auth('b');
+  await assert.rejects(auth('c'), /too many live connections/);
+  await auth('d', DOC, '43');                      // another user has their own budget
+  await auth('a');                                  // the same (socket, document) again is not a new slot
+  await hooks.onDisconnect({ socketId: 'a', documentName: DOC });
+  await auth('c');                                  // freed
+  // a second document on the same socket is another connection
+  await assert.rejects(auth('b', OTHER_DOC), /too many/);
+  const unlimited = S.buildHooks({ config: { ...config, maxConnectionsPerUser: 0 }, query });
+  for (let i = 0; i < 50; i++) {
+    await unlimited.onAuthenticate({ documentName: DOC, token: mint(), connection: {}, requestHeaders: OWN, socketId: `s${i}` });
+  }
+  // a refused authentication (not a member) never occupies a slot
+  const strict = S.buildHooks({ config: { ...config, maxConnectionsPerUser: 1 }, query: async () => ({ rows: [] }) });
+  await assert.rejects(strict.onAuthenticate({ documentName: DOC, token: mint(), connection: {}, requestHeaders: OWN, socketId: 'x' }), /not a member/);
+  const tracker = new S.ConnectionTracker(1);
+  assert.equal(tracker.count('42'), 0);
 });
