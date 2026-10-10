@@ -26,11 +26,13 @@ SEEDED_BY_LICENSING = frozenset({
     "custom-ukds-eul", "custom-un-geodata", "CC-BY-ND-4.0",
     # 0006_seed_cc_by_nc_25 (place#158: OWTRAD's published terms)
     "CC-BY-NC-2.5",
+    # 0007_seed_ogl_yukon (place#158: the Yukon gazetteer's published terms)
+    "custom-ogl-yukon-2.0",
 })
 
 
 class LicenseSeedTests(TestCase):
-    """The 0002 + 0003 + 0005 + 0006 data migrations run as part of test-DB setup, so the
+    """The 0002 + 0003 + 0005 + 0006 + 0007 data migrations run as part of test-DB setup, so the
     seeded rows are present without re-running anything here."""
 
     def test_seed_rows_present(self):
