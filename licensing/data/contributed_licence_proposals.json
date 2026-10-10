@@ -639,6 +639,20 @@
    "approved": true,
    "approved_by": "SG",
    "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 1395,
+   "label": "TurtleIsland",
+   "title": "TurtleIsland",
+   "spdx_id": "CC-BY-NC-ND-4.0",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "high",
+   "evidence": "The Decolonial Atlas map page licenses the map CC BY-NC-ND 4.0; the dataset was uploaded 'with the permission of the Decolonial Atlas' (read 2026-10-09).",
+   "ruling": "SG, 2026-10-10: WHG is licensed by the Decolonial Atlas to show this dataset; the ND (and NC) terms bind anyone who acquires it from WHG, so CC-BY-NC-ND-4.0 is recorded as the terms that travel with it",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   }
  ],
  "approved": "2026-10-10"
