@@ -9,6 +9,12 @@ LICENSE_SOURCE_CHOICES = [
     ("contributor_selected", "Chosen by the contributor"),
     ("legacy_acceptance", "Recorded retrospectively: contributor accepted a blanket licence at upload"),
     ("legacy_notice", "Recorded retrospectively: licence was displayed at upload but not recorded"),
+    # The licence is the upstream source's own published terms, read by staff
+    # from the source (a Dataverse record, an HDX licence field, a project's
+    # terms page) and recorded against a dataset derived from it. Distinct from
+    # the two legacy values above: nothing the contributor saw or ticked is
+    # relied on, only what the source itself says. See place#158.
+    ("upstream_terms", "Recorded retrospectively from the upstream source's published terms"),
 ]
 
 

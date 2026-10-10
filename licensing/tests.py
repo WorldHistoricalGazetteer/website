@@ -5,7 +5,7 @@ from .models import License
 
 
 # The rows THIS app's data migrations seed: 8 from 0002, 7 from 0003, 6 from
-# 0005 (place#157). Named rather than counted, deliberately.
+# 0005 (place#157), 1 from 0006 (place#158). Named rather than counted, deliberately.
 #
 # A bare `License.objects.count()` is not a claim about the licensing app — it is
 # a claim about every app in the project, because the vocabulary is shared and
@@ -24,11 +24,13 @@ SEEDED_BY_LICENSING = frozenset({
     # 0005_seed_authority_licences
     "custom-nativeland-dst", "custom-historic-counties", "custom-chgis-academic",
     "custom-ukds-eul", "custom-un-geodata", "CC-BY-ND-4.0",
+    # 0006_seed_cc_by_nc_25 (place#158: OWTRAD's published terms)
+    "CC-BY-NC-2.5",
 })
 
 
 class LicenseSeedTests(TestCase):
-    """The 0002 + 0003 + 0005 data migrations run as part of test-DB setup, so the
+    """The 0002 + 0003 + 0005 + 0006 data migrations run as part of test-DB setup, so the
     seeded rows are present without re-running anything here."""
 
     def test_seed_rows_present(self):
