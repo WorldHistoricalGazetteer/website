@@ -6,7 +6,9 @@ row names one dataset, the licence to record, the provenance value to record wit
 it, and the evidence. A row is applied only when it carries
 ``"approved": true`` together with ``approved_by`` and ``approved_on`` — the
 Technical Director's sign-off, made in the file so that it is reviewed and
-versioned like code. Every row ships as ``"approved": false``.
+versioned like code. The file shipped as all-unapproved on 2026-10-09; every row
+in it was approved on 2026-10-10, with the departures from the proposal recorded
+per row under ``ruling``.
 
 Dry by default: pass ``--commit`` to write. The command refuses outright, writing
 nothing, when any approved row would
@@ -15,7 +17,13 @@ nothing, when any approved row would
   (a guard against an id that has drifted since the proposal was written);
 * record a licence that is not in the vocabulary;
 * carry a provenance value other than ``legacy_notice`` or ``upstream_terms``
-  (a contributor's own choice, and the cohort-A acceptance, have their own routes);
+  (the cohort-A acceptance has its own route) — with one exception:
+  ``contributor_selected`` is accepted for a row of ``class: "ui"`` whose dataset
+  is owned by a staff account. Those are WHG's own datasets, for which WHG is
+  the contributor and the Technical Director's approval in this file *is* the
+  contributor's choice; the licence picker only exists at upload, so there is no
+  other route for an existing dataset. A ``contributor_selected`` row for a
+  dataset owned by anyone else is refused;
 * overwrite a licence already recorded — a contributor's choice is never touched,
   and a differing retrospective record is a contradiction to resolve by hand, not
   a race to win.
@@ -45,6 +53,10 @@ DEFAULT_PROPOSALS = (
 
 # The only provenance values a retrospective, staff-recorded licence may carry.
 ALLOWED_SOURCES = ("legacy_notice", "upstream_terms")
+# Plus WHG's own choice for its own data: only on a class-"ui" row, only when the
+# dataset's owner is a staff account. See the module docstring.
+OWN_CHOICE_SOURCE = "contributor_selected"
+OWN_CHOICE_CLASS = "ui"
 
 
 class Command(BaseCommand):
@@ -94,10 +106,12 @@ class Command(BaseCommand):
         """Return (dataset, licence, note) for an approved row, or raise."""
         valid_sources = {k for k, _ in LICENSE_SOURCE_CHOICES}
         source = row["license_source"]
-        if source not in ALLOWED_SOURCES or source not in valid_sources:
+        own_choice = source == OWN_CHOICE_SOURCE and row.get("class") == OWN_CHOICE_CLASS
+        if not own_choice and (source not in ALLOWED_SOURCES or source not in valid_sources):
             raise CommandError(
                 f"Dataset {row['dataset_id']}: provenance '{source}' is not one this command may "
-                f"record ({', '.join(ALLOWED_SOURCES)})."
+                f"record ({', '.join(ALLOWED_SOURCES)}; {OWN_CHOICE_SOURCE} only on a "
+                f"class-{OWN_CHOICE_CLASS} row for a staff-owned dataset)."
             )
         try:
             licence = License.objects.get(spdx_id=row["spdx_id"])
@@ -113,6 +127,11 @@ class Command(BaseCommand):
             raise CommandError(
                 f"Dataset {ds.id}: label is '{ds.label}' but the proposal says '{row['label']}' — "
                 f"the id may have drifted; not applying."
+            )
+        if own_choice and not (ds.owner.is_staff or ds.owner.is_superuser):
+            raise CommandError(
+                f"Dataset {ds.id}: '{OWN_CHOICE_SOURCE}' may only be recorded on WHG's own data, "
+                f"but the owner is not a staff account; refusing to choose on a contributor's behalf."
             )
         if ds.license_id is not None:
             if ds.license_id == licence.id and ds.license_source == source:

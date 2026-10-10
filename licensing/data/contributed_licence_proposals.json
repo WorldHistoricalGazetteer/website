@@ -1,8 +1,22 @@
 {
  "issue": "place#158",
  "generated": "2026-10-09",
- "note": "Proposals only. A row is applied by `manage.py apply_licence_proposals --commit` solely when approved/approved_by/approved_on are set by the Technical Director. Datasets of class 3 (ask) and 4 (restrict) are deliberately absent: they keep license NULL.",
+ "note": "Approved rows are applied by `manage.py apply_licence_proposals --commit`. Every row here was approved by the Technical Director on 2026-10-10 (see the `ruling` field where the approval departs from or qualifies the 2026-10-09 proposal). Datasets of class 3 (ask) and 4 (restrict) are deliberately absent: they keep license NULL. Class-ui rows are WHG's own data and record WHG's own choice as contributor_selected.",
  "proposals": [
+  {
+   "dataset_id": 12,
+   "label": "owtrad",
+   "title": "OWTRAD (Old World Trade Routes)",
+   "spdx_id": "CC-BY-NC-2.5",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "high",
+   "evidence": "ciolek.com/owtrad.html: 'OWTRAD materials and data sets may be distributed only subject to ... the Creative Commons Attribution-Noncommercial 2.5 License' (read 2026-10-09). Was class 1v (licence not in the vocabulary); CC-BY-NC-2.5 is seeded by licensing/0006",
+   "ruling": "SG, 2026-10-10: add CC-BY-NC-2.5 to the vocabulary and record it as upstream_terms",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
   {
    "dataset_id": 14,
    "label": "lugares13k_rel",
@@ -12,9 +26,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "HGIS de las Indias places gazetteer, Harvard Dataverse doi:10.7910/DVN/FUSJD3: termsOfUse = creativecommons.org/licenses/by-nc-sa/4.0/ (API, 2026-10-09); site: 'for non-commercial use'. No DatasetFile (bulk load 2019-04-16), so the notice is irrelevant",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 15,
@@ -25,9 +39,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "HGIS de las Indias territorial gazetteer, Harvard Dataverse doi:10.7910/DVN/YPEU5E: termsOfUse = by-nc-sa/4.0 (API, 2026-10-09); no DatasetFile",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 16,
@@ -38,9 +52,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "Getty TGN extract (2016); WHG registry row `tgn` records ODC-By-1.0, rights holder J. Paul Getty Trust; not downloadable; no DatasetFile",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 17,
@@ -51,22 +65,24 @@
    "class": 1,
    "confidence": "high",
    "evidence": "pleiades.stoa.org/credits: 'Using, sharing, and remixing of the content is permitted under terms of the Creative Commons Attribution 3.0 License' (read 2026-10-09); matches registry row `pl`; not downloadable; no DatasetFile",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 693,
    "label": "west_ghats_monast",
    "title": "Buddhist monasteries of the Western Ghats",
-   "spdx_id": "CC-BY-NC-4.0",
-   "license_source": "upstream_terms",
-   "class": 1,
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "legacy_notice",
+   "class": 2,
    "confidence": "medium",
    "evidence": "the author's own deposit, Zenodo 998080 (Rees, British Library): license cc-by-nc-4.0 (API, 2026-10-09). Uploaded to WHG 2020-10-05 under the CC BY notice by the same author — the explicit NC deposit is recorded; inf: the author could choose CC BY 4.0 via the picker (last login 2024-03)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10",
+   "proposed_originally": "CC-BY-NC-4.0 (upstream_terms), class 1",
+   "ruling": "SG, 2026-10-10: record CC BY 4.0 as legacy_notice, not the upstream NC statement — that is how the rights holder uploaded it, and their own narrower deposit elsewhere does not narrow the grant made here"
   },
   {
    "dataset_id": 764,
@@ -77,9 +93,10 @@
    "class": 2,
    "confidence": "low",
    "evidence": "Frolov (IGH RAS), own data; uploaded 2020-12-15 under the notice; histgeo.nextgis.com resources 1154/1211 carry only 'Author: © A. Frolov, IGH RAS', no licence (API, 2026-10-09); last login 2022-09",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10",
+   "ruling": "SG, 2026-10-10: approved as proposed (low confidence noted)"
   },
   {
    "dataset_id": 792,
@@ -90,9 +107,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "Stapel's own deposit, DataverseNL doi:10.34894/2ZJ3RF (hdl:10622/QKLHUV) v4.1 2026-10-08: license CC0-1.0 (API, 2026-10-09)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 975,
@@ -103,9 +120,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "data.atlasfontium.pl GeoNode: every 'miejscowosci' layer carries license id 9 = 'Attribution 4.0 International (CC BY 4.0)', attribution 'AHP 2.0, IH PAN', 'No restrictions' (read 2026-10-09); also uploaded by a project member 2022-03-06 under the notice; inf: the districts layer shares the project's licence",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 979,
@@ -116,9 +133,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "as 975 (provinces)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1094,
@@ -129,9 +146,10 @@
    "class": 1,
    "confidence": "medium",
    "evidence": "US Board on Geographic Names list (USGS); inf: a US Government work has no US copyright (17 USC 105) — usgs.gov copyright page was 403 to automated reads, so not quoted; 'public domain' is a US-only status; NB #319 refuses custom-* on the geometry endpoint (points only here)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10",
+   "ruling": "SG, 2026-10-10: approved as proposed; the #319 geometry rule for custom-* is unchanged (points only here)"
   },
   {
    "dataset_id": 1121,
@@ -142,9 +160,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "as 975; this is the localities layer itself (geonode:miejscowosci, named in web_item)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1165,
@@ -155,9 +173,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "Periplus place list; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1203,
@@ -168,9 +186,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "CHGIS 1911 layers, Harvard Dataverse doi:10.7910/DVN/HHVVHX: license CC0-1.0 (SPDX, Dataverse API, 2026-10-09). NB the registry `chgis` row (v6, custom-chgis-academic, redistributable=False) is a different product",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1206,
@@ -181,9 +199,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "as 1203 (same Dataverse record)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1209,
@@ -194,9 +212,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "as 1203 (same Dataverse record)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1212,
@@ -207,9 +225,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "as 1203 (same Dataverse record); not downloadable",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1223,
@@ -220,9 +238,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "Mosul Dam survey, Harvard Dataverse doi:10.7910/DVN/DPNEXP: license CC0-1.0 (Dataverse API, 2026-10-09)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1245,
@@ -233,9 +251,22 @@
    "class": 1,
    "confidence": "high",
    "evidence": "landesgeschichte.uni-goettingen.de/handelsstrassen/info.php: Viabundus data 'available Open Access (CC-BY-SA)', links by-sa/4.0 (read 2026-10-09); uploaded by a project owner 2023-04-04",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 1328,
+   "label": "fadlan_71",
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "contributor_selected",
+   "class": "ui",
+   "confidence": "high",
+   "evidence": "'WHG team' is the creator; Pitt owns the compilation (inf: work for hire). WHG's own data, so the licence is WHG's own choice, not a retrospective record; the command accepts contributor_selected only for a class-ui row whose owner is a staff account",
+   "ruling": "SG, 2026-10-10: CC BY 4.0 as contributor_selected (WHG's own)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1354,
@@ -246,9 +277,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "Faxian itinerary from Legge 1886 (out of copyright); inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1358,
@@ -259,9 +290,22 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "village names from Donehoo 1998; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 1360,
+   "label": "innerasia_christian",
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "contributor_selected",
+   "class": "ui",
+   "confidence": "high",
+   "evidence": "1 record, WHG-made from a journal article; as 1328",
+   "ruling": "SG, 2026-10-10: CC BY 4.0 as contributor_selected (WHG's own)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1361,
@@ -272,9 +316,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "places from Mango & Scott's Theophanes (1997); inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1364,
@@ -285,9 +329,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "places from Zimonyi 1990; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1365,
@@ -298,9 +342,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "Benjamin of Tudela from Adler's 1907 translation (out of copyright, via UW Silk Road texts); inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1390,
@@ -311,9 +355,9 @@
    "class": 1,
    "confidence": "medium",
    "evidence": "citation names Wikipedia 'List of villages depopulated during the Arab–Israeli conflict'; Wikipedia:Copyrights: text 'co-licensed under the Creative Commons Attribution-ShareAlike 4.0 International License' (read 2026-10-09); inf: a dataset derived from it is share-alike; #319 serves SA",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1404,
@@ -324,9 +368,9 @@
    "class": 1,
    "confidence": "medium",
    "evidence": "HDX chad-populated-places-settlements: license_id cc-by 'Creative Commons Attribution International (CC BY)'; inf: version 4.0 ('International' is the 4.0 deed; HDX does not state it)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1415,
@@ -337,9 +381,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "HCED, Harvard Dataverse doi:10.7910/DVN/6ZFC0V: license CC0-1.0 (Dataverse API, 2026-10-09)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1435,
@@ -350,9 +394,9 @@
    "class": 1,
    "confidence": "medium",
    "evidence": "HDX niger-settlements: license_id cc-by (as 1404)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1446,
@@ -363,9 +407,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "places from Honeychurch 2015; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1451,
@@ -376,9 +420,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "settlements georeferenced from an 1880 map (out of copyright); inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1452,
@@ -389,9 +433,9 @@
    "class": 1,
    "confidence": "high",
    "evidence": "HDX cod-st-som: license_id cc-by-igo -> creativecommons.org/licenses/by/3.0/igo/ (HDX licence list)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1473,
@@ -402,9 +446,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "place names from Frankopan ch.3; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice; inf: a list of place names + coordinates compiled from a published text is the compiler's own compilation, not a reproduction of the text — a legal inference, not a finding",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1475,
@@ -415,9 +459,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.4)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1476,
@@ -428,9 +472,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.5)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1479,
@@ -441,9 +485,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.6)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1482,
@@ -454,9 +498,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.7)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1484,
@@ -467,9 +511,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.8)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1487,
@@ -480,9 +524,9 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "as 1473 (ch.9)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1488,
@@ -493,22 +537,25 @@
    "class": 2,
    "confidence": "medium",
    "evidence": "Mesha Stele place names from five public web sources; inf: owner reads as a student account (role normal, no affiliation, joined Aug 2023, 2-29 datasets of this kind; not verified); uploaded via the form under the notice",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   },
   {
    "dataset_id": 1501,
    "label": "studium-ai",
    "title": "STUDIUM.AI - Places associated with the University of Leuven (1425 – 1797)",
-   "spdx_id": "CC-BY-NC-SA-4.0",
-   "license_source": "upstream_terms",
-   "class": 1,
+   "spdx_id": "CC-BY-4.0",
+   "license_source": "legacy_notice",
+   "class": 2,
    "confidence": "medium",
    "evidence": "studium-ai.org 'How to Cite': 'Reuse of STUDIUM.AI data is permitted under the CC BY-NC-SA 4.0 license' (read from the app bundle, 2026-10-09). Uploaded by the project 2024-07-02 under the CC BY notice — the explicit NC-SA statement is recorded; inf: the project could choose CC BY 4.0 via the picker (owner active 2026-01)",
-   "approved": false,
-   "approved_by": null,
-   "approved_on": null
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10",
+   "proposed_originally": "CC-BY-NC-SA-4.0 (upstream_terms), class 1",
+   "ruling": "SG, 2026-10-10: record CC BY 4.0 as legacy_notice, not the upstream NC statement — that is how the rights holder uploaded it, and their own narrower deposit elsewhere does not narrow the grant made here"
   }
- ]
+ ],
+ "approved": "2026-10-10"
 }
