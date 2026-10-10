@@ -31,6 +31,13 @@ browser context so no check inherits state from another:
                  ?z=10), labelled "Auto: …" so it never reads as a choice the
                  visitor made, and the status line proves the tier is really
                  on screen ("N regions here").
+  heat_gn        place#326: the GeoNames heat layer over central Europe at z5,
+                 isolated (every other layer hidden, opacity 1) and read back
+                 from the canvas: it must draw (>= 20% of pixels), must not be
+                 at the top colour stop over more than 40% of the canvas (the
+                 pre-fix paint: 94.5%), and must show the ramp (mid/low bands
+                 >= 20%; pre-fix 3.4%). The anonymous ?gazetteer= deep link
+                 builds the layer, so no beta login is needed.
   mobile_375 /   /atlas/ in a touch viewport: no horizontal scroll, no visible
   mobile_768     control off-screen, no tour. Controls must be FOUND for the
                  off-screen check to mean anything.
@@ -221,10 +228,14 @@ def new_context(browser, opts, first_visit=False, **kw):
     ctx.add_init_script(INIT_DEBUG if first_visit else INIT_QUIET)
     if opts.bundle:
         # A file: just atlas.bundle.js. A directory (webpack's output path):
-        # atlas.bundle.js and atlas.bundle.css, so a CSS fix is exercised too.
+        # atlas.bundle.js and atlas.bundle.css, so a CSS fix is exercised too,
+        # and whg_maplibre.bundle.js/.css (the map layer code, place#326)
+        # when the directory has them.
         files = ([("atlas.bundle.js", "application/javascript", opts.bundle)] if os.path.isfile(opts.bundle) else
-                 [("atlas.bundle.js", "application/javascript", os.path.join(opts.bundle, "atlas.bundle.js")),
-                  ("atlas.bundle.css", "text/css", os.path.join(opts.bundle, "atlas.bundle.css"))])
+                 [(name, ctype, os.path.join(opts.bundle, name))
+                  for name, ctype in (("atlas.bundle.js", "application/javascript"), ("atlas.bundle.css", "text/css"),
+                                      ("whg_maplibre.bundle.js", "application/javascript"), ("whg_maplibre.bundle.css", "text/css"))
+                  if os.path.isfile(os.path.join(opts.bundle, name)) or name.startswith("atlas.")])
         def serve(body, ctype):
             # Playwright calls the handler as (route, request); bind by closure.
             return lambda route, request=None: route.fulfill(status=200, content_type=ctype, body=body)
@@ -432,6 +443,98 @@ BOUNDARY_TIER_CASES = (
     ("boundary_tier", "/atlas/", 2.5, "country", "Auto: Country (2)"),
     ("boundary_tier_z10", "/atlas/?z=10", 10, "local", "Auto: Municipality / locality (7–11)"),
 )
+
+
+# place#326: the gazetteer heat layer read back from the WebGL canvas with
+# every other layer hidden and heatmap-opacity forced to 1, so each pixel is a
+# point on the colour ramp. `sat` = the top stop rgb(224,64,64) opaque; `hi`
+# orange..red (density 0.8-1); `mid` green/yellow (0.4-0.8); `low` blue or
+# fading in. drawImage inside the `render` callback reads the buffer before
+# the frame is handed over (the canvas is not preserveDrawingBuffer).
+HEAT_ISOLATE_JS = """({layerId, center, zoom}) => {
+    const m = window.heroMapInstance;
+    for (const l of m.getStyle().layers) if (l.id !== layerId) m.setLayoutProperty(l.id, 'visibility', 'none');
+    m.setLayoutProperty(layerId, 'visibility', 'visible');
+    m.setPaintProperty(layerId, 'heatmap-opacity', 1);
+    m.jumpTo({center, zoom});
+    return m.getStyle().layers.filter(l => (m.getLayoutProperty(l.id, 'visibility') || 'visible') !== 'none').length;
+}"""
+HEAT_MEASURE_JS = """() => new Promise(res => {
+    const m = window.heroMapInstance; const c = m.getCanvas();
+    m.once('render', () => {
+        const w = c.width, h = c.height;
+        const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+        const ctx = cv.getContext('2d'); ctx.drawImage(c, 0, 0);
+        const d = ctx.getImageData(0, 0, w, h).data;
+        let sat = 0, heated = 0, hi = 0, mid = 0, low = 0;
+        for (let i = 0; i < d.length; i += 4) {
+            const a = d[i + 3]; if (a < 25) continue; heated++;
+            const r = d[i], g = d[i + 1], b = d[i + 2];
+            if (a >= 250 && Math.abs(r - 224) <= 4 && Math.abs(g - 64) <= 4 && Math.abs(b - 64) <= 4) sat++;
+            else if (a >= 250 && r >= 224 && g < 170) hi++;
+            else if (a >= 250 && r >= 120 && g >= 170) mid++;
+            else low++;
+        }
+        res({total: w * h, w, h, heated, sat, hi, mid, low, zoom: +m.getZoom().toFixed(2)});
+    });
+    m.triggerRepaint();
+})"""
+
+# gn over central Europe at z5 (the dense case of place#326). Measured on the
+# canvas (978x788 px at a 1400x900 viewport, 2026-10-10): the pre-fix paint
+# put 94.5% of it at the top stop with 3.4% in the mid/low bands; the
+# normalised paint 16.6% and 62%. The limits leave room for a retune, not for
+# a return to solid red.
+HEAT_CASE = ("gn", [10, 48], 5)
+HEAT_MAX_SATURATED = 0.40    # share of canvas pixels at the top stop
+HEAT_MIN_GRADIENT = 0.20     # share of canvas pixels in the mid or low bands
+HEAT_MIN_HEATED = 0.20       # positive control: the layer drew at all
+
+
+def scenario_heat(browser, R, opts, url_for):
+    """place#326: the gazetteer heat layer must be a density FIELD on a dense
+    gazetteer, not solid red over all land. The layer is isolated and read back
+    pixel by pixel; the share that drew at all is the positive control, so a
+    layer that never rendered cannot pass the saturation check by absence."""
+    ns, center, zoom = HEAT_CASE
+    S = f"heat_{ns}"
+    ctx = new_context(browser, opts, viewport={"width": 1400, "height": 900})
+    state = {}
+    page, status = open_page(ctx, url_for(f"/atlas/?gazetteer={ns}"), state)
+    try:
+        booted = check_boot(R, S, page, status, opts)
+        have, secs = bounded_wait(page, f"window.heroMapInstance && !!window.heroMapInstance.getLayer('{ns}_heat')", 30)
+        R.add(S, "heat_layer_present", have, f"map.getLayer('{ns}_heat') -> {have} after {secs:.1f}s")
+        m = None
+        if have:
+            visible = page.evaluate(HEAT_ISOLATE_JS, {"layerId": f"{ns}_heat", "center": center, "zoom": zoom})
+            settled, ssecs = bounded_wait(page, "window.heroMapInstance.loaded() && window.heroMapInstance.areTilesLoaded()",
+                                          opts.settle_timeout)
+            page.wait_for_timeout(800)
+            m = page.evaluate(HEAT_MEASURE_JS)
+            m["visible_layers"] = visible
+            m["settled"] = settled
+        tot = max(1, (m or {}).get("total", 0))
+        share = lambda k: (m or {}).get(k, 0) / tot
+        where = f"{ns} at {center} z{zoom}"
+        drew = bool(m) and m["settled"] and share("heated") >= HEAT_MIN_HEATED
+        R.add(S, "heat_renders", drew,
+              (f"{where}: {m['heated']:,} of {m['total']:,} canvas px heated ({100 * share('heated'):.1f}%, need >= {100 * HEAT_MIN_HEATED:.0f}%), "
+               f"{m['visible_layers']} layer visible, settled {m['settled']}, zoom {m['zoom']}") if m else "no measurement (no heat layer)")
+        R.add(S, "heat_not_saturated", drew and share("sat") <= HEAT_MAX_SATURATED,
+              (f"{m['sat']:,} of {m['total']:,} px at the top stop ({100 * share('sat'):.1f}%, limit {100 * HEAT_MAX_SATURATED:.0f}%); "
+               f"of heated px {100 * m['sat'] / max(1, m['heated']):.1f}%") if m else "no measurement")
+        R.add(S, "heat_has_gradient", drew and share("mid") + share("low") >= HEAT_MIN_GRADIENT,
+              (f"mid+low bands {m['mid'] + m['low']:,} px ({100 * (share('mid') + share('low')):.1f}%, need >= {100 * HEAT_MIN_GRADIENT:.0f}%); "
+               f"bands sat {100 * share('sat'):.1f}% hi {100 * share('hi'):.1f}% mid {100 * share('mid'):.1f}% low {100 * share('low'):.1f}%") if m else "no measurement",
+              **({"bands": {k: m[k] for k in ("total", "heated", "sat", "hi", "mid", "low")}} if m else {}))
+        unexpected = unexpected_console(state, [])
+        R.add(S, "no_page_errors", booted and not state["pageerrors"] and not unexpected,
+              f"booted {booted}; {len(state['pageerrors'])} page errors, {len(unexpected)} console errors"
+              + (": " + "; ".join((state["pageerrors"] + unexpected)[:3]) if (state["pageerrors"] or unexpected) else ""))
+        snapshot(page, opts, S)
+    finally:
+        ctx.close()
 
 
 def scenario_boundary_tier(browser, R, opts, url_for):
@@ -665,7 +768,7 @@ def main():
                     help="run against a subject that cannot satisfy the checks and require every check to fail")
     ap.add_argument("--legacy-ready", action="store_true", help="accept the pre-flag readiness signal (labelled LEGACY)")
     ap.add_argument("--no-gl-flags", action="store_true", help="launch Chromium without the software-GL flags")
-    ap.add_argument("--bundle", help="serve a local atlas.bundle.js (file) or atlas.bundle.js+css (webpack output dir) in place of the deployed ones")
+    ap.add_argument("--bundle", help="serve a local atlas.bundle.js (file) or atlas.bundle.js+css and whg_maplibre.bundle.js+css (webpack output dir) in place of the deployed ones")
     ap.add_argument("--storage-state", help="Playwright storage-state JSON of a logged-in beta session; enables the beta scenario")
     ap.add_argument("--json", help="write the results and run metadata here")
     ap.add_argument("--shots", help="directory for one screenshot per scenario (to look at, never to compare)")
@@ -691,6 +794,7 @@ def main():
         ("deeplink_gn", lambda b, R: scenario_deeplink(b, R, opts, url_for, "gn", "GeoNames", True, True)),
         ("deeplink_osm", lambda b, R: scenario_deeplink(b, R, opts, url_for, "osm", "OpenStreetMap", False, False)),
         ("boundary_tier", lambda b, R: scenario_boundary_tier(b, R, opts, url_for)),
+        ("heat_gn", lambda b, R: scenario_heat(b, R, opts, url_for)),
         ("mobile_375", lambda b, R: scenario_mobile(b, R, opts, url_for, 375, 812)),
         ("mobile_768", lambda b, R: scenario_mobile(b, R, opts, url_for, 768, 1024)),
         ("places_typing", lambda b, R: scenario_places_typing(b, R, opts, url_for)),
@@ -724,7 +828,7 @@ def main():
     n = len(rows)
     if prove:
         allowed = {"plain.http_200", "deeplink_gn.http_200", "deeplink_osm.http_200",
-                   "boundary_tier.http_200", "boundary_tier_z10.http_200",
+                   "boundary_tier.http_200", "boundary_tier_z10.http_200", "heat_gn.http_200",
                    "mobile_375.http_200", "mobile_768.http_200", "places_typing.http_200", "first_visit.http_200",
                    "first_visit_link.http_200"} if prove == "home" else set()
         could_not_fail = [r["check"] for r in rows if r["ok"] and r["check"] not in allowed]

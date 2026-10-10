@@ -213,6 +213,68 @@ maplibregl.Map.prototype.applyTemporalFilter = function (mode, fromYear, toYear)
 	return this;
 };
 
+// Per-gazetteer heat normalisation (place#326). Since the #166 tile swaps every
+// zoom carries the gazetteer's FULL point mass (tippecanoe --drop-rate 1): the
+// cluster features in the loaded tiles sum to every point under them, so the
+// kernel sum at a pixel is the true mass within the heat radius. Weighting by
+// sqrt(point_count) with one fixed intensity (the pre-#166 paint, calibrated
+// against rate-thinned tiles) then saturated a 13M-point gazetteer solid red
+// over all land at z5 while a 14k-point one still showed a gradient.
+//
+// The weight is now the cluster's point_count divided by a reference mass K
+// read from the tileset's own tilestats: the largest cluster anywhere in the
+// tileset (the densest z0 cluster, `point_count.max`). K scales with the
+// gazetteer's PEAK concentration rather than its total size, so a 13M-point
+// world gazetteer and a 14k-point regional one both reach the top colour
+// stop only in their own densest places (measured 2026-10-10: gn 489,737;
+// tgn 253,999; hgis 3,925; pl 2,832). A tileset too small to have clustered
+// at all has no point_count attribute; its whole mass is then the reference.
+//
+// Intensity grows 2.5x per zoom level from HEAT_I_REF at HEAT_ZREF: the mass
+// within a fixed pixel radius falls 4x per level for a uniform field, but real
+// settlement fields are not uniform — zooming in resolves hotspots — so a base
+// below 4 lets them sharpen without the whole view dimming (base 3 put 35% of
+// central Europe at the top stop at z7, 2.5 puts 21%). HEAT_I_REF was tuned
+// headlessly (scripts/atlas_smoke.py's heat_gn scenario measures it) so that
+// gn over central Europe at z5 is a density field with a visible ramp (16.6%
+// of the canvas at the top stop against 94.5% before) while hgis over Mexico
+// at z5 keeps its red-cored blobs (12.4% against 25.2%).
+//
+// A tileset without tilestats cannot be normalised; it keeps the legacy paint.
+const HEAT_ZREF = 5;
+const HEAT_I_REF = 1200;
+const HEAT_ZOOM_BASE = 2.5;
+
+function heatReferenceMass(tilejson, sourceLayer) {
+	const layers = (tilejson && tilejson.tilestats && Array.isArray(tilejson.tilestats.layers))
+		? tilejson.tilestats.layers : [];
+	const L = layers.find(l => l && l.layer === sourceLayer) || layers[0];
+	if (!L) return null;
+	const pc = (L.attributes || []).find(a => a && a.attribute === 'point_count');
+	if (pc && Number.isFinite(pc.max) && pc.max > 0) return pc.max;
+	if (Number.isFinite(L.count) && L.count > 0) return L.count;
+	return null;
+}
+
+function heatPaint(referenceMass, heatMaxzoom) {
+	if (!referenceMass) {
+		// Legacy (pre-#326) paint: no reference to normalise against.
+		return {
+			'heatmap-weight': ['coalesce', ['get', 'sqrt_point_count'], 1],
+			'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1.2, heatMaxzoom, 3],
+		};
+	}
+	const intensity = ['interpolate', ['linear'], ['zoom']];
+	for (let z = 0; z <= heatMaxzoom; z++) {
+		intensity.push(z, HEAT_I_REF * Math.pow(HEAT_ZOOM_BASE, z - HEAT_ZREF));
+	}
+	return {
+		// Un-clustered singletons carry no point_count and weigh one point.
+		'heatmap-weight': ['/', ['coalesce', ['get', 'point_count'], 1], referenceMass],
+		'heatmap-intensity': intensity,
+	};
+}
+
 // Dynamically load a gazetteer vector tileset (one not in the base whg-context
 // style) and add its fill/line/circle shape layers. RETURNS the fetched TileJSON
 // so the caller (heroMap.showGazetteer) can read vector_layers + bounds. The
@@ -251,8 +313,9 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 	// Point-density rendering (place#133): the tiles are pre-clustered to z8
 	// (tippecanoe --cluster-maxzoom 8), so at low zoom raw point features are a
 	// misleadingly-sparse scatter. Show a density HEATMAP (weighted by the
-	// pre-baked sqrt_point_count) below the threshold, and only reveal the
-	// individual-point circles once zoomed past it — cross-fading between them.
+	// cluster's point_count, normalised per gazetteer — see heatPaint) below
+	// the threshold, and only reveal the individual-point circles once zoomed
+	// past it — cross-fading between them.
 	const POINT_MINZOOM = 8;   // ~ tiles' --cluster-maxzoom; raw points from here
 	const HEAT_MAXZOOM = 9;    // heatmap only at low zoom, faded out by here
 	// Register the coverage mottle sprites (shared across all gazetteer
@@ -280,10 +343,7 @@ maplibregl.Map.prototype.loadGazetteerStyle = async function (id) {
 					['!', ['has', 'label']],
 				],
 				paint: {
-					// Weight by the cluster's pre-computed sqrt(point_count) so big
-					// clusters don't saturate; un-clustered singletons weigh 1.
-					'heatmap-weight': ['coalesce', ['get', 'sqrt_point_count'], 1],
-					'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1.2, HEAT_MAXZOOM, 3],
+					...heatPaint(heatReferenceMass(tilejson, sourceLayer), HEAT_MAXZOOM),
 					// Wide radius at low zoom so the sparse (heavily-clustered) tile
 					// points blend into a density field rather than discrete blobs.
 					'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 22, 4, 26, HEAT_MAXZOOM, 40],
