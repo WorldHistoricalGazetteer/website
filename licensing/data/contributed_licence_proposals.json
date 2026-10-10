@@ -555,6 +555,48 @@
    "approved_on": "2026-10-10",
    "proposed_originally": "CC-BY-NC-SA-4.0 (upstream_terms), class 1",
    "ruling": "SG, 2026-10-10: record CC BY 4.0 as legacy_notice, not the upstream NC statement — that is how the rights holder uploaded it, and their own narrower deposit elsewhere does not narrow the grant made here"
+  },
+  {
+   "dataset_id": 1052,
+   "label": "yukon100",
+   "title": "yukon100",
+   "spdx_id": "custom-ogl-yukon-2.0",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "medium",
+   "evidence": "yukon.ca 'Open Government Licence – Yukon' v2.0 (read in a browser 2026-10-10): worldwide, royalty-free, commercial use, attribution required. Not SPDX, so recorded as custom-* (seeded by licensing/0007). Inference: the Yukon gazetteer is published under it (portal-level statement).",
+   "ruling": "SG, 2026-10-10: approved as read in a browser (place#158 comment 6095146087)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 1076,
+   "label": "Florida100",
+   "title": "Florida100",
+   "spdx_id": "custom-public-domain",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "medium",
+   "evidence": "HathiTrust record 001648943 (Simpson, Tallahassee 1956): Full view (read in a browser 2026-10-10). Inference: HathiTrust opens a US work in full view only once it has determined it public domain; the rights code was not shown.",
+   "ruling": "SG, 2026-10-10: approved as read in a browser (place#158 comment 6095146087)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
+  },
+  {
+   "dataset_id": 1352,
+   "label": "libya1349_nm",
+   "title": "libya1349_nm",
+   "spdx_id": "CC-BY-NC-SA-4.0",
+   "license_source": "upstream_terms",
+   "class": 1,
+   "confidence": "medium",
+   "evidence": "slsgazetteer.org footer (read in a browser 2026-10-10): 'This work is licensed under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License' (© 2015 King's Digital Humanities & King's Digital Lab). Inference: the site-wide statement covers the gazetteer data.",
+   "ruling": "SG, 2026-10-10: approved as read in a browser (place#158 comment 6095146087)",
+   "approved": true,
+   "approved_by": "SG",
+   "approved_on": "2026-10-10"
   }
  ],
  "approved": "2026-10-10"
