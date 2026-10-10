@@ -138,18 +138,40 @@ class UpdateDoiRightsTests(TestCase):
 
     # --- idempotence ---------------------------------------------------------
     def test_already_matching_rights_are_not_resent(self):
-        """DataCite echoes our payload with its own key casing (rightsUri,
-        schemeUri); that must still read as equal."""
-        from utils.doi import get_rights_list
-        echoed = []
-        for e in get_rights_list(self.by):
-            echoed.append({("rightsUri" if k == "rightsURI" else "schemeUri" if k == "schemeURI" else k): v
-                           for k, v in e.items()})
-        self.requests.get.return_value = _resp(200, {"rightsList": echoed})
+        """DataCite does not echo our entry verbatim: it lower-cases a known
+        SPDX id, rewrites the text and URI from the SPDX list, and uses its own
+        key casing (verified against a live record). That must still read as
+        equal, or the command would re-send every DOI on every run."""
+        self.requests.get.return_value = _resp(200, {"rightsList": [{
+            "rights": "Creative Commons Attribution 4.0 International",
+            "rightsUri": "https://creativecommons.org/licenses/by/4.0/legalcode",
+            "schemeUri": "https://spdx.org/licenses/",
+            "rightsIdentifier": "cc-by-4.0",
+            "rightsIdentifierScheme": "SPDX",
+            "lang": "en",
+        }]})
         out = self._run(*self._ids(self.by), "--commit")
         self.requests.put.assert_not_called()
         self.assertIn("unchanged: CC-BY-4.0", out)
         self.assertIn("Sent 0 of 0", out)
+
+    def test_a_different_version_of_the_same_family_is_a_change(self):
+        """Identity comparison must not collapse CC BY 3.0 into CC BY 4.0."""
+        self.requests.get.return_value = _resp(200, {"rightsList": [{
+            "rightsIdentifier": "cc-by-3.0", "rightsIdentifierScheme": "SPDX"}]})
+        out = self._run(*self._ids(self.by))
+        self.assertIn("cc-by-3.0 -> CC-BY-4.0", out)
+        self.assertIn("to update 1", out)
+
+    def test_custom_licence_compares_by_text(self):
+        pd = License.objects.get(spdx_id="custom-public-domain")
+        with patch("datasets.signals.doi"):
+            Dataset.objects.filter(id=self.zero.id).update(license=pd)
+        self.requests.get.return_value = _resp(200, {"rightsList": [
+            {"rights": pd.label.upper(), "lang": "en"}]})
+        out = self._run(*self._ids(self.zero))
+        self.requests.put.assert_not_called()
+        self.assertIn("unchanged", out)
 
     # --- skips ---------------------------------------------------------------
     def test_dataset_without_doi_is_skipped_not_fetched(self):

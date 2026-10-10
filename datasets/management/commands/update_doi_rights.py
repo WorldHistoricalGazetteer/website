@@ -43,16 +43,27 @@ TIMEOUT = 30
 
 
 def _normalise(rights):
-    """DataCite returns ``rightsUri`` / ``schemeUri`` where we send ``rightsURI`` /
-    ``schemeURI``, and may add keys we never sent. Compare on lower-cased keys
-    with empty values dropped, order-insensitively."""
+    """Reduce a rightsList to the identities it asserts, so that what DataCite
+    echoes back compares equal to what we sent.
+
+    DataCite does not store our entry verbatim: for a recognised SPDX
+    ``rightsIdentifier`` it lower-cases the id (we send ``CC-BY-4.0``, it
+    returns ``cc-by-4.0``, verified against a live record) and rewrites
+    ``rights`` / ``rightsUri`` from the SPDX list; its key casing also differs
+    (``rightsUri`` for our ``rightsURI``). So: an entry with an identifier is
+    compared by that identifier, case-insensitively; an entry without one (a
+    custom licence, or a free-text rights statement) by its text. Order-insensitive.
+    """
     out = []
     for entry in rights or []:
         if not isinstance(entry, dict):
             continue
-        out.append(tuple(sorted(
-            (k.lower(), v) for k, v in entry.items() if v not in (None, "", [])
-        )))
+        lower = {k.lower(): v for k, v in entry.items()}
+        ident = (lower.get("rightsidentifier") or "").strip().lower()
+        if ident:
+            out.append(("id", ident))
+        else:
+            out.append(("text", " ".join((lower.get("rights") or "").split()).lower()))
     return sorted(out)
 
 
