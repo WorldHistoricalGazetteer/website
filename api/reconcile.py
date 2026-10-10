@@ -36,7 +36,7 @@ from periods.models import Period, Chrononym
 from datasets.models import Dataset
 from places.models import Place
 from .authentication import AuthenticatedAPIView, TokenQueryOrBearerAuthentication
-from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend
+from .crc_client import crc_reconcile_search, crc_suggest_search, crc_extend, _truthy_flag
 from concurrent.futures import ThreadPoolExecutor
 
 from django.conf import settings
@@ -1337,6 +1337,12 @@ PROPERTY_FILTER_MAP = {
     # disambiguates a place name was unavailable to exactly the audience most likely to need it.
     "whg:contained_in": "contained_in",
     "whg:within_bbox": "bbox",
+    # place#323 / place#324 — gateway-side switches. `area_only` keeps only candidates with an areal
+    # (polygon) geometry, so a caller looking for a CONTAINER never gets a point or a line back.
+    # `lang` (ISO 639-1) language-conditions the gateway's server-side Symphonym embedding. Both are
+    # additive: absent, the query is byte-identical to before.
+    "whg:area_only": "area_only",
+    "whg:lang": "lang",
 }
 
 # Handled separately because it sets THREE params from one property value.
@@ -1595,7 +1601,10 @@ def reconcile_place_es(query, user=None, hidden=None):
     # dedupes across them by place key rather than by raw id. See place#183.
     crc_namespaces = namespaces  # None ⇒ don't filter on the gateway side
     gateway_in_play = namespaces is None or bool(namespaces)
-    suppress_legacy = spatially_scoped and gateway_in_play
+    # `area_only` (place#323) is likewise a filter only the gateway can apply: the legacy index has no
+    # per-geometry shape flag, so its hits would arrive unfiltered and re-enter the ranking.
+    area_only_requested = _truthy_flag(raw_q.get("area_only"))
+    suppress_legacy = (spatially_scoped or area_only_requested) and gateway_in_play
 
     # 1. Legacy ES search — skip when the caller excluded "whg", or when an unenforceable containment
     #    scope is active and the gateway will serve the (properly scoped) results.
