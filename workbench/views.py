@@ -282,14 +282,20 @@ def project_share(request, pid):
     if p.status == 'draft':
         p.status = 'shared'
     p.save(update_fields=['public_token', 'status', 'updated'])
-    url = request.build_absolute_uri(f'/reconciliation/?shared={p.public_token}')
-    return JsonResponse({'ok': True, 'shared': True, 'token': str(p.public_token), 'url': url})
+    # ``url`` opens the shared copy in WHG's Map your Data page, which only suits its own doc_type.
+    # An opaque project (PLATO Tools, place#314) has no WHG viewer: the client builds its own link
+    # from ``token`` (SG, 2026-10-09), and no URL is offered that would open the blob in the wrong tool.
+    dt = doctypes.get(p.doc_type)
+    url = None if (dt and dt.opaque) else request.build_absolute_uri(f'/reconciliation/?shared={p.public_token}')
+    return JsonResponse({'ok': True, 'shared': True, 'token': str(p.public_token), 'url': url,
+                         'doc_type': p.doc_type})
 
 
 @workbench_api(['GET'], auth=False)
 def shared_snapshot(request, token):
     """Phase-0 read-only fetch. No auth — the token is the capability. Recipients import a *copy*.
-    Readable cross-origin from the allow-listed origins (place#314), still without credentials."""
+    Readable cross-origin from the allow-listed origins (place#314), still without credentials.
+    Carries ``doc_type`` so the recipient's page can tell whether the snapshot is one it can open."""
     try:
         uuid.UUID(str(token))
     except (ValueError, TypeError):
@@ -298,7 +304,7 @@ def shared_snapshot(request, token):
     if not p:
         raise Http404()
     return JsonResponse({'title': p.title, 'snapshot': p.snapshot, 'version': p.version,
-                         'read_only': True})
+                         'doc_type': p.doc_type, 'read_only': True})
 
 
 # ── gazetteer (dataset) search for the Gazetteer Group editor ───────────────────
@@ -1355,8 +1361,8 @@ def collab_token(request, pid):
     place#112). The service verifies it with the shared ``HOCUSPOCUS_SECRET`` and enforces the role
     (viewer → read-only). 501 if the realtime service isn't configured, so the client feature-detects
     and falls back to the Phase-1 REST sync. 403 for a doc-type with live editing off (place#314:
-    the websocket checks no origin, the JWT has no ``iss``/``aud``, membership is not re-checked on
-    connect, and the Yjs store stringifies cells — so an opaque document never gets a token)."""
+    the opaque ``plato`` type, whose shape the Yjs mapping in hocuspocus/server.js does not know;
+    whether to enable it is a WHG decision, taken in the registry's ``live`` flag)."""
     p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
     role = p.role_for(request.user)
     if role is None:

@@ -11,10 +11,15 @@
 //   • readProject()     — reconstruct a plain project from the Yjs doc (peers → local)
 // Only runs for team (non-personal) server projects; solo/personal projects never load this chunk.
 //
-// Doc shape:  rows = Y.Array<Y.Map>  (a Y.Map per row, keyed by column index "0","1",… → cell text)
+// Doc shape:  rows = Y.Array<Y.Map>  (a Y.Map per row, keyed by column index "0","1",… → the cell's
+//                    JSON value as it is: a number stays a number, null stays null; only an ABSENT
+//                    cell reads back as '')
 //             columns = Y.Array<Y.Map>  (a Y.Map per column: name/role/child/…)
 //             decisions|matches|geom|rowTypes = Y.Map  (keyed overlays, per key = JSON value)
-//             meta = Y.Map  (all remaining scalar/whole-value fields: scope, coordFormat, total, …)
+//             meta = Y.Map  (all remaining fields: scope, coordFormat, total, notes, flags, …); an
+//                    object-valued field is a NESTED Y.Map keyed like the object, so two people
+//                    annotating different rows both keep their note; scalars and arrays are whole.
+// MUST match hocuspocus/server.js (projectToDoc/docToProject), which seeds and flattens the same doc.
 
 import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -42,7 +47,9 @@ export function isEmpty() {
   return !ydoc || (yRows.length === 0 && yCols.length === 0 && yMeta.size === 0);
 }
 
-// opts: { serverId, token, wsUrl, user:{name,color}, offline, onStatus, onSynced, onRemote(project), onPresence(states) }
+// opts: { serverId, token, wsUrl, user:{name,color}, offline, onStatus, onSynced, onRemote(project), onPresence(states),
+//         onVersion(version) — the project's REST version after each server store, so a client that
+//         drops back to REST pushes with a current base_version }
 export function connect(opts) {
   disconnect();
   cbs = opts || {};
@@ -64,6 +71,11 @@ export function connect(opts) {
     onStatus: ({ status }) => { if (opts.onStatus) opts.onStatus(status); },
     onAuthenticationFailed: () => { if (opts.onStatus) opts.onStatus('unauthorized'); },
     onSynced: () => { if (opts.onSynced) opts.onSynced(); },
+    onStateless: ({ payload }) => {
+      let msg = null;
+      try { msg = JSON.parse(payload); } catch (_) { return; }
+      if (msg && msg.type === 'version' && Number.isInteger(msg.version) && cbs.onVersion) cbs.onVersion(msg.version);
+    },
   });
 
   // Presence (awareness): advertise who we are; notify on any change.
@@ -75,7 +87,7 @@ export function connect(opts) {
   const mark = (section) => (events, tx) => { if (tx && tx.local) return; _dirty.add(section); scheduleRemote(); };
   yRows.observeDeep(mark('rows'));
   yCols.observeDeep(mark('columns'));
-  yMeta.observe((e, tx) => { if (tx && tx.local) return; _dirty.add('meta'); scheduleRemote(); });
+  yMeta.observeDeep(mark('meta')); // deep: an object-valued field is a nested map
   KEYED.forEach((k) => yKeyed[k].observeDeep(mark(k)));
 
   return { provider, ydoc };
@@ -94,10 +106,18 @@ function scheduleRemote() {
 export function mirror(project) {
   if (!ydoc || !project) return;
   ydoc.transact(() => {
-    // meta (everything scalar/whole-value)
+    // meta: an object-valued field is reconciled key by key inside its nested map (only the keys
+    // this client changed are written, so a peer's concurrent key survives); anything else whole.
     for (const k of Object.keys(project)) {
       if (META_EXCLUDE.has(k)) continue;
-      if (!jsonEq(yMeta.get(k), project[k])) yMeta.set(k, project[k]);
+      const v = project[k];
+      const cur = yMeta.get(k);
+      if (isPlainObject(v)) {
+        if (cur instanceof Y.Map) reconcileMap(cur, v);
+        else yMeta.set(k, objMap(v)); // first write, or a whole value left by an older client
+      } else if (!jsonEq(cur, v)) {
+        yMeta.set(k, jsonValue(v));
+      }
     }
     for (const k of Array.from(yMeta.keys())) if (!(k in project) || META_EXCLUDE.has(k)) yMeta.delete(k);
 
@@ -116,7 +136,7 @@ export function mirror(project) {
 // ── Yjs → plain project ──────────────────────────────────────────────────────────────────────────
 export function readProject() {
   const p = {};
-  yMeta.forEach((v, k) => { p[k] = v; });
+  yMeta.forEach((v, k) => { p[k] = fromY(v); });
   p.columns = yCols.toArray().map((m) => (m instanceof Y.Map ? mapToObj(m) : m));
   const ncols = p.columns.length;
   p.rows = yRows.toArray().map((m) => {
@@ -124,17 +144,22 @@ export function readProject() {
     let max = ncols - 1;
     m.forEach((v, k) => { const j = Number(k); if (j > max) max = j; });
     const arr = [];
-    for (let j = 0; j <= max; j++) { const v = m.get(String(j)); arr.push(v == null ? '' : v); }
+    for (let j = 0; j <= max; j++) { const v = m.get(String(j)); arr.push(v === undefined ? '' : fromY(v)); }
     return arr;
   });
   p.total = p.rows.length;
-  for (const kk of KEYED) { p[kk] = {}; yKeyed[kk].forEach((v, k) => { p[kk][k] = v; }); }
+  for (const kk of KEYED) { p[kk] = {}; yKeyed[kk].forEach((v, k) => { p[kk][k] = fromY(v); }); }
   return p;
 }
 
 // ── reconcilers ────────────────────────────────────────────────────────────────────────────────
 function rowMap(row) { const m = new Y.Map(); for (let j = 0; j < row.length; j++) m.set(String(j), cell(row[j])); return m; }
-function objMap(obj) { const m = new Y.Map(); for (const [k, v] of Object.entries(obj)) m.set(k, v); return m; }
+function objMap(obj) { const m = new Y.Map(); for (const [k, v] of Object.entries(obj)) m.set(k, jsonValue(v)); return m; }
+// Bring a nested meta map to `obj`, touching only the keys that differ.
+function reconcileMap(ym, obj) {
+  for (const [k, v] of Object.entries(obj)) if (!jsonEq(ym.get(k), v)) ym.set(k, jsonValue(v));
+  for (const k of Array.from(ym.keys())) if (!(k in obj)) ym.delete(k);
+}
 
 // Reconcile in place by index: append ONLY for genuinely new indices (i >= length), otherwise update
 // the existing Y.Map. Never insert at an occupied index (that would shift + duplicate).
@@ -145,7 +170,7 @@ function reconcileRows(yarr, rows) {
     if (i >= yarr.length) { yarr.push([rowMap(row)]); continue; }
     const ym = yarr.get(i);
     if (!(ym instanceof Y.Map)) { yarr.delete(i, 1); yarr.insert(i, [rowMap(row)]); continue; }
-    for (let j = 0; j < row.length; j++) { const cv = cell(row[j]); if (ym.get(String(j)) !== cv) ym.set(String(j), cv); }
+    for (let j = 0; j < row.length; j++) { const cv = cell(row[j]); if (!jsonEq(ym.get(String(j)), cv)) ym.set(String(j), cv); }
     for (const key of Array.from(ym.keys())) if (Number(key) >= row.length) ym.delete(key);
   }
 }
@@ -162,8 +187,13 @@ function reconcileObjArray(yarr, objs) {
   }
 }
 
-function mapToObj(m) { const o = {}; m.forEach((v, k) => { o[k] = v; }); return o; }
-function cell(v) { return String(v == null ? '' : v); }
+function mapToObj(m) { const o = {}; m.forEach((v, k) => { o[k] = fromY(v); }); return o; }
+// A cell is stored as the JSON value it is (place#314: no stringification, so a number or null
+// survives a live session). JSON has no undefined, which becomes null.
+function cell(v) { return jsonValue(v); }
+function jsonValue(v) { return v === undefined ? null : v; }
+function isPlainObject(v) { return v !== null && typeof v === 'object' && !Array.isArray(v); }
+function fromY(v) { return v instanceof Y.Map ? v.toJSON() : v; }
 function jsonEq(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
 // ── presence ─────────────────────────────────────────────────────────────────────────────────────

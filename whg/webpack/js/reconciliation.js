@@ -4241,6 +4241,9 @@ async function maybeStartRealtime() {
       onSynced: () => rtOnSynced(mod),
       onRemote: applyRemoteProject,
       onPresence: renderPresence,
+      // Each server store of the live doc bumps the REST version; keep ours current so that a push
+      // after dropping back to REST (tab offline, service down) is a fast-forward, not a merge.
+      onVersion: (v) => { if (project && project.serverId) { project.serverVersion = v; putProject(project); } },
     });
   } catch (err) { console.warn('[recon] realtime connect failed — staying on REST', err); }
 }
@@ -4915,6 +4918,13 @@ async function handleSharedBootstrap(token) {
   try {
     const res = await Sync.fetchShared(token);
     if (res.status !== 200 || !res.data || !res.data.snapshot) { await loadSaved(); return; }
+    // Only a Map your Data project can be opened here: a link to a project kept for another tool
+    // (doc_type "plato", place#314) would be mangled into a table. Older servers send no doc_type.
+    if (res.data.doc_type && res.data.doc_type !== 'reconciliation') {
+      await loadSaved();
+      flashSaved('That link is to a project from another tool — open it there, not in Map your Data');
+      return;
+    }
     const snap = res.data.snapshot;
     // Import a LOCAL copy — the recipient edits their own device-only project (no serverId).
     project = Object.assign({}, snap);
