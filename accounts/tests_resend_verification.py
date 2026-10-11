@@ -19,6 +19,7 @@ regression to truthiness-testing fails here rather than in a support ticket.
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import caches
 from django.test import TestCase
 from django.urls import reverse
 
@@ -47,6 +48,8 @@ class ResendVerificationTests(TestCase):
         self.user.email_confirmed = False
         self.user.save()
         self.client.force_login(self.user)
+        # The send throttle lives in Redis, which a TestCase rollback does not reset.
+        caches['property_cache'].delete_pattern(f"verify-mail*:{self.user.pk}*")
 
     def _post(self, data):
         with patch('accounts.views.WHGmail') as mail:
@@ -87,3 +90,43 @@ class ResendVerificationTests(TestCase):
         self.user.save()
         _, mail = self._post({'resend_verification': ''})
         self.assertEqual(mail.call_count, 0)
+
+
+class VerificationThrottleTests(ResendVerificationTests):
+    """One send per address per two minutes, five per user per hour (2026-10-11: two new users
+    each got three verification emails within a minute from double-clicks and early resends)."""
+
+    # Inheriting setUp only; do not re-run the parent's tests under this class.
+    test_the_button_as_a_browser_sends_it_triggers_an_email = None
+    test_a_value_bearing_button_still_works = None
+    test_the_email_carries_a_confirmation_url = None
+    test_an_unrelated_post_does_not_send = None
+    test_no_email_when_the_address_is_already_confirmed = None
+    test_no_email_when_the_account_has_no_address = None
+
+    def test_a_second_resend_within_the_cooldown_is_not_sent(self):
+        _, first = self._post({'resend_verification': ''})
+        response, second = self._post({'resend_verification': ''})
+        self.assertEqual(first.call_count, 1)
+        self.assertEqual(second.call_count, 0)
+        self.assertEqual(response.status_code, 302)
+
+    def test_a_double_submitted_update_sends_once(self):
+        data = {'email_action': 'update', 'email': 'new@example.org'}
+        _, first = self._post(data)
+        _, second = self._post(data)
+        self.assertEqual((first.call_count, second.call_count), (1, 0))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, 'new@example.org')
+
+    def test_correcting_a_typo_is_not_blocked_by_the_cooldown(self):
+        _, first = self._post({'email_action': 'update', 'email': 'tpyo@example.org'})
+        _, second = self._post({'email_action': 'update', 'email': 'typo@example.org'})
+        self.assertEqual((first.call_count, second.call_count), (1, 1))
+
+    def test_the_hourly_cap_stops_cycling_addresses(self):
+        sent = 0
+        for i in range(8):
+            _, mail = self._post({'email_action': 'update', 'email': f'a{i}@example.org'})
+            sent += mail.call_count
+        self.assertEqual(sent, 5)

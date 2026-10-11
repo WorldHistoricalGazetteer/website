@@ -26,6 +26,30 @@ import logging
 logger = logging.getLogger('authentication')
 from urllib.parse import urlencode
 
+from django.core.cache import caches
+from users.models import email_lookup_hash
+
+# Verification-email throttle. On 2026-10-11 two new users each triggered three sends within a
+# minute (a double-click, then "resend" before the first had arrived), and nothing here limited
+# how often a signed-in account could make WHG mail an arbitrary address. Redis (property_cache)
+# because cache.add() there is atomic, so two near-simultaneous POSTs cannot both get through.
+VERIFY_MAIL_COOLDOWN = 120        # seconds between sends to the same address
+VERIFY_MAIL_HOURLY_CAP = 5        # sends per user per hour, across all addresses
+
+
+def _verification_send_refusal(user, email):
+    """Return None if a verification email may be sent now, else a message saying why not."""
+    cache = caches['property_cache']
+    if not cache.add(f"verify-mail:{user.pk}:{email_lookup_hash(email)}", 1, VERIFY_MAIL_COOLDOWN):
+        return ('A verification email was sent to this address less than two minutes ago. '
+                'Please check your inbox (and spam folder) before requesting another.')
+    count_key = f"verify-mail-count:{user.pk}"
+    cache.add(count_key, 0, 3600)
+    if cache.incr(count_key) > VERIFY_MAIL_HOURLY_CAP:
+        return ('Too many verification emails have been requested for this account in the last '
+                'hour. Please try again later.')
+    return None
+
 
 def orcid_denied_modal(request):
     return render(request, "accounts/orcid_denied_modal.html", {})
@@ -277,6 +301,11 @@ def profile_edit(request):
                 request.user.email_confirmed = False
                 request.user.save()
 
+                refusal = _verification_send_refusal(request.user, new_email)
+                if refusal:
+                    messages.info(request, refusal)
+                    return redirect('profile-edit')
+
                 # Generate verification token
                 signer = Signer()
                 token = signer.sign(request.user.pk)
@@ -350,6 +379,11 @@ def profile_edit(request):
         # one"). Testing membership rather than value keeps working whatever the template sends.
         elif 'resend_verification' in request.POST:
             if request.user.email and not request.user.email_confirmed:
+                refusal = _verification_send_refusal(request.user, request.user.email)
+                if refusal:
+                    messages.info(request, refusal)
+                    return redirect('profile-edit')
+
                 signer = Signer()
                 token = signer.sign(request.user.pk)
 
