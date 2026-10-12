@@ -600,7 +600,17 @@ def crc_reconcile_search(normalised_query: dict, user=None, namespaces: set[str]
         body["start_year"] = int(start)
     if end is not None:
         body["end_year"] = int(end)
-
+    # With a year window, keep places that carry no dates at all instead of dropping them, and say
+    # which bounds the window is tested against — as crc_search does. Until 2026-10-12 neither
+    # reached /api/reconcile, so Map your Data's "undated places included" tick only affected the
+    # legacy index. Sent only with a window and only when set, so other bodies are unchanged; an
+    # older gateway ignores both.
+    if start is not None or end is not None:
+        if _truthy_flag(raw.get("undated")):
+            body["undated"] = True
+        mode = raw.get("temporal_mode")
+        if mode in ("possibly", "definitely"):
+            body["temporal_mode"] = mode
 
     try:
         url = f"{_gateway_url()}/api/reconcile"
