@@ -5,8 +5,8 @@ Translates an unreachable Elasticsearch indexing server into a clear
 reconciliation views). Plain Django views guard themselves via
 `elastic.health.index_unavailable_response`.
 
-Also renders `GatewayUnavailable` (place#272), which must not go through DRF's
-default rendering — see the note on that class.
+Also renders `GatewayUnavailable` (place#272) and `DailyLimitExceeded`, which
+must not go through DRF's default rendering — see the notes on those classes.
 """
 
 import logging
@@ -15,6 +15,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler as drf_default_handler
 
+from api.authentication import DailyLimitExceeded
 from api.gateway_errors import GatewayUnavailable
 from elastic.health import INDEX_DOWN_EXCEPTIONS, index_unavailable_payload
 
@@ -31,6 +32,9 @@ def api_exception_handler(exc, context):
         # (place#272).
         return Response(exc.payload(),
                         status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        headers={"Retry-After": str(exc.wait)})
+    if isinstance(exc, DailyLimitExceeded):
+        return Response(exc.payload(), status=status.HTTP_429_TOO_MANY_REQUESTS,
                         headers={"Retry-After": str(exc.wait)})
     if isinstance(exc, INDEX_DOWN_EXCEPTIONS):
         view = context.get('view').__class__.__name__ if context.get('view') else '?'

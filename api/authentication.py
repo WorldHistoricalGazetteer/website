@@ -1,9 +1,12 @@
 # api/authentication.py
+from datetime import datetime, timedelta
+
 from django.contrib.auth.models import AnonymousUser
 from django.middleware.csrf import CsrfViewMiddleware
 from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication, SessionAuthentication
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework import status
+from rest_framework.exceptions import APIException, AuthenticationFailed
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
 
@@ -23,6 +26,34 @@ def enforce_csrf(request):
     reason = check.process_view(request, None, (), {})
     if reason:  # if not None, validation failed
         raise AuthenticationFailed(f"CSRF Failed: {reason}")
+
+class DailyLimitExceeded(APIException):
+    """429 for a token that has used up today's allowance.
+
+    It used to be an `AuthenticationFailed`, which DRF answers with 401 and a Bearer challenge: the
+    same response as a mistyped token, so a client could tell "wait until tomorrow" from "your token
+    is wrong" only by parsing the English message, and a browser client could not read when to try
+    again. Not a subclass of `AuthenticationFailed` deliberately: DRF rewrites those to 401/403.
+    Rendered by `api.exception_handlers` so that `limit` stays an integer.
+    """
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    default_code = 'daily_limit_exceeded'
+
+    def __init__(self, limit):
+        self.limit = limit
+        # The allowance rolls over when `timezone.now().date()` changes (UserAPIProfile), i.e. at
+        # the next midnight in settings.TIME_ZONE (UTC).
+        now = timezone.now()
+        self.resets_at = datetime.combine(now.date() + timedelta(days=1), datetime.min.time())
+        if timezone.is_aware(now):
+            self.resets_at = self.resets_at.replace(tzinfo=now.tzinfo)
+        self.wait = max(1, int((self.resets_at - now).total_seconds()) + 1)
+        super().__init__(f"Daily API limit ({limit} calls) exceeded")
+
+    def payload(self):
+        return {'code': self.default_code, 'detail': str(self.detail), 'limit': self.limit,
+                'resets_at': self.resets_at.strftime('%Y-%m-%dT%H:%M:%SZ')}
+
 
 class TokenQueryOrBearerAuthentication(BaseAuthentication):
     """
@@ -60,9 +91,7 @@ class TokenQueryOrBearerAuthentication(BaseAuthentication):
             # waiting cleared it. `remaining_today()` applies the rollover; `increment_usage()` below
             # then writes it back. None means UNLIMITED, so compare against 0 explicitly.
             if profile.remaining_today() == 0:
-                raise AuthenticationFailed(
-                    f"Daily API limit ({profile.daily_limit} calls) exceeded"
-                )
+                raise DailyLimitExceeded(profile.daily_limit)
             profile.increment_usage()
 
             now = timezone.now()
