@@ -11,8 +11,9 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.test import APIClient
 
-from api.authentication import TokenQueryOrBearerAuthentication
+from api.authentication import DailyLimitExceeded, TokenQueryOrBearerAuthentication
 from api.models import APIToken, UserAPIProfile
 
 User = get_user_model()
@@ -34,7 +35,7 @@ class DailyLimitRolloverTests(TestCase):
         UserAPIProfile.objects.create(
             user=self.user, daily_limit=5000, daily_count=5000,
             daily_reset=timezone.now().date())
-        with self.assertRaises(AuthenticationFailed):
+        with self.assertRaises(DailyLimitExceeded):
             self._authenticate()
 
     def test_an_exhausted_account_is_admitted_again_the_next_day(self):
@@ -77,13 +78,49 @@ class DailyLimitRolloverTests(TestCase):
         self._authenticate()
         profile.refresh_from_db()
         self.assertEqual(profile.daily_count, 3)
-        with self.assertRaises(AuthenticationFailed):
+        with self.assertRaises(DailyLimitExceeded):
             self._authenticate()
 
     def test_the_refusal_names_the_limit(self):
         UserAPIProfile.objects.create(
             user=self.user, daily_limit=5000, daily_count=5000,
             daily_reset=timezone.now().date())
-        with self.assertRaises(AuthenticationFailed) as caught:
+        with self.assertRaises(DailyLimitExceeded) as caught:
             self._authenticate()
         self.assertIn('5000', str(caught.exception))
+
+
+class DailyLimitResponseTests(TestCase):
+    """The exhausted cap is a 429 with a machine-readable code and a Retry-After, so a client can
+    tell it from a bad token (still 401) without parsing English (plato-tools #22)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='recon-client', password='x', email='recon@example.org',
+            given_name='Recon', surname='Client')
+        APIToken.objects.create(user=self.user, key='k-cap')
+        UserAPIProfile.objects.create(user=self.user, daily_limit=5000, daily_count=5000,
+                                      daily_reset=timezone.now().date())
+        self.client = APIClient()
+
+    def _get(self, key):
+        return self.client.get('/reconcile', HTTP_AUTHORIZATION=f'Bearer {key}')
+
+    def test_exhausted_cap_is_429_with_code_reset_and_retry_after(self):
+        r = self._get('k-cap')
+        self.assertEqual(r.status_code, 429)
+        body = r.json()
+        self.assertEqual(body['code'], 'daily_limit_exceeded')
+        self.assertEqual(body['limit'], 5000)
+        self.assertIn('5000', body['detail'])
+        tomorrow = timezone.now().date() + timedelta(days=1)
+        self.assertEqual(body['resets_at'], f'{tomorrow.isoformat()}T00:00:00Z')
+        wait = int(r['Retry-After'])
+        self.assertTrue(0 < wait <= 86401, wait)
+        self.assertNotIn('WWW-Authenticate', r)
+
+    def test_a_bad_token_is_still_401(self):
+        self.assertEqual(self._get('k-cap').status_code, 429)          # positive control
+        r = self._get('no-such-token')
+        self.assertEqual(r.status_code, 401)
+        self.assertNotEqual(r.json().get('code'), 'daily_limit_exceeded')
