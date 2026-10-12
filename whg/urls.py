@@ -19,6 +19,7 @@ import resources.views
 
 from accounts import orcid
 from accounts.views import profile_edit
+from datasets.protected_media import protected_media
 from datasets.views import PublicListsView  # , DataListsView
 from licensing import views as licensing_views
 from main import views
@@ -216,6 +217,11 @@ urlpatterns = [
                   # prefix has to resolve in production and not only under DEBUG — otherwise a third
                   # party validating a WHG-exported LPF gets an unresolvable ref rather than an answer.
                   path('schema/<str:name>', validation_views.schema_document, name="schema-document"),
+
+                  # place#310: uploaded dataset files and exports, served only to those allowed to see
+                  # them (nginx sends these two prefixes here; the rest of /media/ stays public).
+                  re_path(r'^media/(?P<path>(?:user_[^/]+|downloads)/.+)$', protected_media,
+                          name="protected-media"),
 
                   # Serve the CDNfallbacks folder with host check
                   re_path(r'^CDNfallbacks/(?P<path>.*)$', serve_cdnfallbacks),
