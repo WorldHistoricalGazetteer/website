@@ -235,6 +235,10 @@ def make_download(self, *args, **kwargs):
     req_format = kwargs["format"]
     logger.debug(f"make_download() userid: {user.id}, dsid: {dsid}, collid: {collid}, format: {req_format}")
     date = makeNow()
+    # place#310: the file is served back only to the account named in its prefix (datasets/
+    # protected_media.py). An anonymous request runs as userid 1, a real account, so its file is
+    # marked "anon_" instead: it holds only public material, and must not be readable as user 1's.
+    owner_prefix = 'anon' if ('viewer_id' in kwargs and kwargs['viewer_id'] is None) else user.id
 
     # collection or dataset
     if collid and not dsid:
@@ -251,7 +255,7 @@ def make_download(self, *args, **kwargs):
 
         req_format = "lpf"
 
-        fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{user.id}_{collid}_{date}.json')
+        fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{owner_prefix}_{collid}_{date}.json')
         # Ensure directory exists
         os.makedirs(os.path.dirname(fn), exist_ok=True)
 
@@ -368,7 +372,7 @@ def make_download(self, *args, **kwargs):
             )
             logger.debug(f"New header with additional columns: {newheader}")
 
-            fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{user.id}_{dslabel}_{date}.tsv')
+            fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{owner_prefix}_{dslabel}_{date}.tsv')
             # Ensure directory exists
             os.makedirs(os.path.dirname(fn), exist_ok=True)
 
@@ -461,7 +465,7 @@ def make_download(self, *args, **kwargs):
         else:
             logger.info("Building LPF file")
 
-            fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{user.id}_{dslabel}_{date}.json')
+            fn = os.path.join(settings.MEDIA_ROOT, 'downloads', f'{owner_prefix}_{dslabel}_{date}.json')
             # Ensure directory exists
             os.makedirs(os.path.dirname(fn), exist_ok=True)
 
