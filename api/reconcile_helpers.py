@@ -618,19 +618,23 @@ def build_es_query(params, size=100):
             types = [t.strip() for t in types.split(",") if t.strip()]
         q["query"]["bool"]["must"].append({"terms": {"types.identifier": types}})
 
-    # temporal
-    if params.get("temporal"):
-        current_year = datetime.now().year
-        start_year = str(params.get("start")) if params.get("start") else None
-        end_year = str(params.get("end", current_year))
-        if start_year:
-            timespan_filter = {"range": {"timespans": {"gte": start_year, "lte": end_year}}}
-            if params.get("undated"):
-                q["query"]["bool"]["must"].append({
-                    "bool": {"should": [timespan_filter, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
-                })
-            else:
-                q["query"]["bool"]["must"].append(timespan_filter)
+    # temporal — the window applies whenever `start` or `end` is given, as on the gateway arm. It used
+    # to need `temporal: true` as well (and ignored an `end` with no `start`), so a caller sending only
+    # years had gateway hits filtered by date and these not, merged into one list (place#327).
+    # `temporal` is still accepted; it is simply no longer required.
+    has_start = params.get("start") not in (None, "")
+    has_end = params.get("end") not in (None, "")
+    if has_start or has_end:
+        rng = {"lte": str(params["end"]) if has_end else str(datetime.now().year)}
+        if has_start:
+            rng["gte"] = str(params["start"])
+        timespan_filter = {"range": {"timespans": rng}}
+        if params.get("undated"):
+            q["query"]["bool"]["must"].append({
+                "bool": {"should": [timespan_filter, {"bool": {"must_not": {"exists": {"field": "timespans"}}}}]}
+            })
+        else:
+            q["query"]["bool"]["must"].append(timespan_filter)
 
     # countries
     countries = params.get("countries")
