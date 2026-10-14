@@ -31,7 +31,9 @@ Why not django-cors-headers: the pinned 2.4.0 does not import on Python 3.10 and
 ``MIDDLEWARE``; a site-wide middleware would also widen CORS to every view, and the point here is
 to scope it to these endpoints only.
 """
+import json
 import logging
+import zlib
 from functools import wraps
 
 from django.conf import settings
@@ -50,7 +52,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TOKEN_RATE = 120            # token-authenticated requests per minute per user
 DEFAULT_BODY_MAX_BYTES = 2 * 1024 * 1024   # 2 MiB request body on POST/PUT
 
-ALLOWED_REQUEST_HEADERS = 'Authorization, Content-Type'
+ALLOWED_REQUEST_HEADERS = 'Authorization, Content-Type, Content-Encoding'
 EXPOSED_RESPONSE_HEADERS = 'Retry-After'
 PREFLIGHT_MAX_AGE = '86400'
 
@@ -187,6 +189,59 @@ def _check_body_size(request):
     return None
 
 
+def _decode_body(request):
+    """Accept ``Content-Encoding: gzip`` on a write. The cap applies to the DECODED body as well as to
+    the bytes sent, and decompression stops one byte past it, so a small compressed body cannot
+    expand into an unbounded one. Any other encoding is refused rather than parsed as JSON."""
+    if request.method not in ('POST', 'PUT', 'PATCH'):
+        return None
+    encoding = (request.headers.get('Content-Encoding') or '').strip().lower()
+    if encoding in ('', 'identity'):
+        return None
+    if encoding != 'gzip':
+        return _json_error(f'unsupported Content-Encoding: {encoding}; send gzip or none', 415,
+                           code='unsupported_encoding')
+    cap = body_max_bytes()
+    inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    try:
+        decoded = inflater.decompress(request.body, (cap + 1) if cap else 0)
+        if not inflater.eof:
+            if cap and len(decoded) > cap:
+                return _json_error(f'request body too large once decompressed: more than {cap} '
+                                   f'bytes; the limit is {cap} bytes', 413, code='body_too_large',
+                                   limit=cap, size=len(decoded))
+            raise zlib.error('truncated gzip stream')
+    except zlib.error:
+        return _json_error('the request body is not valid gzip', 400, code='bad_encoding')
+    request._body = decoded
+    return None
+
+
+def _has_nul(value):
+    if isinstance(value, str):
+        return '\x00' in value
+    if isinstance(value, dict):
+        return any(_has_nul(k) or _has_nul(v) for k, v in value.items())
+    if isinstance(value, list):
+        return any(_has_nul(v) for v in value)
+    return False
+
+
+def _check_nul(request):
+    """Refuse U+0000 anywhere in a JSON body, key or value: Postgres jsonb cannot store it, and the
+    failure surfaced as an unhandled 500 on save. A body that is not JSON is left to the view."""
+    if request.method not in ('POST', 'PUT', 'PATCH') or b'\\u0000' not in request.body:
+        return None
+    try:
+        parsed = json.loads(request.body)
+    except (ValueError, TypeError):
+        return None
+    if _has_nul(parsed):
+        return _json_error('JSON strings may not contain \\u0000 (U+0000): it cannot be stored; '
+                           'encode such data, for example as base64', 400, code='nul_character')
+    return None
+
+
 def workbench_api(methods, auth=True):
     """Decorate a Workbench JSON view: CORS for the allow-listed origins (preflight included),
     Bearer-or-session authentication (``auth=False`` for the anonymous share endpoint), the
@@ -231,9 +286,10 @@ def _dispatch(request, view, methods, auth, args, kwargs):
                 refused = _unauthenticated()
             if refused is not None:
                 return refused
-        too_big = _check_body_size(request)
-        if too_big is not None:
-            return too_big
+        for check in (_check_body_size, _decode_body, _check_nul):
+            refused = check(request)
+            if refused is not None:
+                return refused
         return view(request, *args, **kwargs)
     except Http404:
         return _json_error('not found', 404, code='not_found')

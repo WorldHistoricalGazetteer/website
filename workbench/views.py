@@ -265,6 +265,38 @@ def _commit(request, p, snapshot, status, title=None, opaque=False):
                          'snapshot': snapshot if status == 'merged' else None})
 
 
+def _version_dict(v):
+    u = v.created_by
+    saved_by = ({'user_id': u.id, 'username': u.username, 'name': getattr(u, 'name', '') or u.username}
+                if u else None)
+    return {'version': v.version, 'created': v.created.isoformat(), 'saved_by': saved_by}
+
+
+@workbench_api(['GET'])
+def project_versions(request, pid):
+    """The kept versions of a project, newest first: number, when, and who saved it. Kept versions
+    are the newest ``SNAPSHOT_HISTORY``; older ones are gone. Any team member may read them, as they
+    may read the project itself. ``saved_by`` is null for a version whose saver's account is gone."""
+    p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
+    if p.role_for(request.user) is None:
+        return _err('not a member of this project’s team', 403)
+    versions = [_version_dict(v) for v in p.snapshots.select_related('created_by').order_by('-version')]
+    return JsonResponse({'id': str(p.id), 'current_version': p.version, 'kept': SNAPSHOT_HISTORY,
+                         'versions': versions})
+
+
+@workbench_api(['GET'])
+def project_version_detail(request, pid, version):
+    """One kept version's snapshot, read-only. Restoring it is a normal PUT of that snapshot on the
+    current ``base_version``, so the restore is itself a new version and nothing is overwritten."""
+    p = get_object_or_404(WorkbenchProject.objects.select_related('team'), pk=pid)
+    if p.role_for(request.user) is None:
+        return _err('not a member of this project’s team', 403)
+    v = get_object_or_404(p.snapshots.select_related('created_by'), version=version)
+    return JsonResponse(dict(_version_dict(v), id=str(p.id), doc_type=p.doc_type,
+                             current_version=p.version, snapshot=v.snapshot))
+
+
 # ── sharing (Phase 0) ─────────────────────────────────────────────────────────
 @workbench_api(['POST', 'DELETE'])
 def project_share(request, pid):
