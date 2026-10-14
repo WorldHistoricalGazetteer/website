@@ -11,6 +11,9 @@ app_name = 'workbench'
 urlpatterns = [
     path('projects/', views.projects, name='projects'),
     path('projects/<uuid:pid>/', views.project_detail, name='project-detail'),
+    path('projects/<uuid:pid>/versions/', views.project_versions, name='project-versions'),
+    path('projects/<uuid:pid>/versions/<int:version>/', views.project_version_detail,
+         name='project-version-detail'),
     path('projects/<uuid:pid>/share/', views.project_share, name='project-share'),
     path('projects/<uuid:pid>/publish/', views.project_publish, name='project-publish'),
     path('projects/<uuid:pid>/collab-token/', views.collab_token, name='collab-token'),

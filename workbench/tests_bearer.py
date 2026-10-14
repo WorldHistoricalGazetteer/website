@@ -9,7 +9,7 @@ What these prove, and the way each could fail:
     session cookie; good token → the token's user, with no charge to the daily API limit;
   * CSRF stays enforced for the cookie path once the view is ``csrf_exempt`` for the token path;
   * ownership is unchanged: a token is exactly its user, no more;
-  * the body cap is a JSON 413; the opaque doc-type is stored byte-for-byte, refused whole when
+  * the body cap is a JSON 413; the opaque doc-type comes back as the same JSON value, refused whole when
     stale, and never gets a live-editing token.
 
 Run: venv/bin/python manage.py test workbench.tests_bearer --settings=whg.settings_localtest
@@ -85,7 +85,7 @@ class PreflightTests(BearerBase):
         self.assertIn('Vary', r)
         self.assertIn('Origin', r['Vary'])
         headers = {h.strip().lower() for h in r['Access-Control-Allow-Headers'].split(',')}
-        self.assertEqual(headers, {'authorization', 'content-type'})
+        self.assertEqual(headers, {'authorization', 'content-type', 'content-encoding'})
         self.assertNotIn('Access-Control-Allow-Credentials', r)
 
     def test_preflight_on_the_detail_endpoint_offers_put_and_delete(self):
