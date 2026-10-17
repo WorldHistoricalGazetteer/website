@@ -31,6 +31,13 @@ browser context so no check inherits state from another:
                  ?z=10), labelled "Auto: …" so it never reads as a choice the
                  visitor made, and the status line proves the tier is really
                  on screen ("N regions here").
+  boundary_click place#319: a real mouse click on France at z4. Every boundary
+                 source in the style has a FILL layer (the click handlers are
+                 attached to fills only; osm/ohm had none 2026-08-07 to
+                 2026-10-17), an osm feature is under the cursor (positive
+                 control), the click emits boundary-click for it, the region
+                 becomes a chip and an overlay, and /atlas/geometry/ is asked
+                 for its place_id (403 anonymously; the swap needs `beta`).
   heat_gn        place#326: the GeoNames heat layer over central Europe at z5,
                  isolated (every other layer hidden, opacity 1) and read back
                  from the canvas: it must draw (>= 20% of pixels), must not be
@@ -587,6 +594,120 @@ def scenario_boundary_tier(browser, R, opts, url_for):
             ctx.close()
 
 
+# place#319: clicking a boundary needs a FILL layer for its source. heroMap
+# attaches the hover and click handlers to the first fill layer of each
+# boundary source-layer only. A style with outlines alone draws the regions
+# and silently ignores the click: osm/ohm from 2026-08-07 (tileboss f6c60d6)
+# until 47b277c.
+BOUNDARY_SOURCE_LAYERS = ["osm", "ohm", "osm_misc", "po", "clio", "nl"]
+CLICK_TARGET = {"lnglat": [2.5, 46.5], "zoom": 4, "fill": "osm-fill", "ns": "osm"}   # central France
+
+FILLS_JS = """(sls) => {
+    const m = window.heroMapInstance; if (!m) return null;
+    const out = {};
+    for (const l of m.getStyle().layers) {
+        const sl = l['source-layer']; if (!sls.includes(sl)) continue;
+        (out[sl] ||= {any: false, fill: null}).any = true;
+        if (l.type === 'fill' && !out[sl].fill) out[sl].fill = l.id;
+    }
+    return out;
+}"""
+
+CLICK_PREP_JS = """(t) => {
+    const m = window.heroMapInstance; if (!m) return null;
+    window.__smokeClicks = [];
+    document.addEventListener('boundary-click', e => window.__smokeClicks.push(
+        {place_id: e.detail && e.detail.place_id, name: e.detail && e.detail.name}));
+    const p = m.project(t.lnglat);
+    const r = m.getCanvas().getBoundingClientRect();
+    const f = m.queryRenderedFeatures([p.x, p.y], {layers: m.getLayer(t.fill) ? [t.fill] : []})[0];
+    return {x: r.left + p.x, y: r.top + p.y, fillVisible: !!m.getLayer(t.fill) && m.getLayoutProperty(t.fill, 'visibility') === 'visible',
+            under: f ? {place_id: f.properties.place_id || null, name: f.properties.name || null, type: f.geometry.type} : null};
+}"""
+
+CLICK_RESULT_JS = """() => {
+    const m = window.heroMapInstance;
+    const ov = m && m.getSource('filter-overlay') && m.getSource('filter-overlay')._data;
+    return {
+        clicks: window.__smokeClicks || [],
+        chips: [...document.querySelectorAll('.filter-chip[data-region-id]')].map(e => e.dataset.regionId),
+        overlay: ov && ov.features ? ov.features.length : 0,
+    };
+}"""
+
+
+def scenario_boundary_click(browser, R, opts, url_for):
+    """place#319: a real mouse click on an OSM country selects it. Anonymous, so
+    /atlas/geometry/ answers 403 (beta) and the selection keeps the tile
+    outline. The check is that the click is wired end to end: the style has a
+    fill for every boundary source, a feature is under the cursor (positive
+    control: without it a missed click proves nothing), the click emits
+    boundary-click for that feature, the region becomes a chip and an overlay,
+    and the exact-geometry request is made for its place_id. The exact swap
+    itself needs a beta session (scenario `beta`)."""
+    S = "boundary_click"
+    ctx = new_context(browser, opts, viewport={"width": 1400, "height": 900})
+    state = {}
+    page, status = open_page(ctx, url_for("/atlas/"), state)
+    try:
+        booted = check_boot(R, S, page, status, opts)
+        fills = page.evaluate(FILLS_JS, BOUNDARY_SOURCE_LAYERS) if booted else None
+        present = sorted(fills or {})
+        missing = [sl for sl in present if not fills[sl]["fill"]]
+        R.add(S, "fill_layer_per_source", booted and "osm" in present and "ohm" in present and not missing,
+              f"boundary sources in style {present}; without a fill layer: {missing or 'none'}")
+
+        t = CLICK_TARGET
+        if booted:
+            # A zoom change stops the globe spin (heroMap._wireSpinStop), so the
+            # target stays where it was projected.
+            # Wait for the idle AFTER the jump: loaded() is still true from the
+            # old view for a moment, so polling it alone returns before the new
+            # tiles are even asked for.
+            page.evaluate("""(t) => new Promise(res => { const m = window.heroMapInstance;
+                m.once('idle', () => res(true)); m.jumpTo({center: t.lnglat, zoom: t.zoom});
+                setTimeout(() => res(false), 30000); })""", t)
+        settled, ssecs = bounded_wait(page, """(() => { const m = window.heroMapInstance;
+            const st = document.getElementById('boundary_level_status');
+            return !!(m && Math.abs(m.getZoom() - %s) < 0.01 && m.loaded() && m.areTilesLoaded()
+                      && st && /regions here/.test(st.textContent)); })()""" % t["zoom"],
+                                      opts.settle_timeout if booted else 1)
+        prep = page.evaluate(CLICK_PREP_JS, t) if booted else None
+        under = (prep or {}).get("under") or {}
+        pid = under.get("place_id") or ""
+        R.add(S, "feature_under_cursor", settled and bool(prep and prep["fillVisible"]) and pid.startswith(t["ns"] + ":"),
+              f"settled {settled} after {ssecs:.1f}s; {t['fill']} visible {bool(prep and prep['fillVisible'])}; "
+              f"under {t['lnglat']}: {under or None}")
+
+        if prep:
+            page.mouse.click(prep["x"], prep["y"])
+        selected, csecs = bounded_wait(page, """(() => { const c = window.__smokeClicks || [];
+            return c.length > 0 && document.querySelectorAll('.filter-chip[data-region-id]').length > 0; })()""",
+                                       15 if prep else 1)
+        res = page.evaluate(CLICK_RESULT_JS) if prep else {"clicks": [], "chips": [], "overlay": 0}
+        got = (res["clicks"] or [{}])[-1].get("place_id")
+        R.add(S, "click_selects_region",
+              bool(pid) and selected and got == pid and any(pid in c for c in res["chips"]) and res["overlay"] >= 1,
+              f"boundary-click {res['clicks'][-1:] or 'none'} (want {pid or '?'}); chips {res['chips']}; "
+              f"overlay features {res['overlay']}; after {csecs:.1f}s")
+
+        want = "/atlas/geometry/?id=" + pid.replace(":", "%3A")
+        t0 = time.monotonic()
+        hit = None
+        while pid and time.monotonic() - t0 < 20 and hit is None:
+            hit = next(((u, s) for u, s in state["responses"] if want in u), None)
+            if hit is None:
+                page.wait_for_timeout(250)
+        R.add(S, "exact_geometry_requested", bool(pid) and hit is not None and hit[1] in (200, 403),
+              f"{want if pid else '(no target)'} -> {hit[1] if hit else 'never asked'} (403 expected anonymously)")
+        stray = unexpected_console(state, [re.compile(r"status of 403")])
+        R.add(S, "no_page_errors", booted and not state["pageerrors"] and not stray,
+              f"page errors {state['pageerrors'][:2] or 'none'}; console errors {stray[:2] or 'none'}")
+        snapshot(page, opts, S)
+    finally:
+        ctx.close()
+
+
 MOBILE_JS = """() => {
     const vis = [...document.querySelectorAll('button, input, select, a.btn')].filter(e => e.offsetParent && e.getBoundingClientRect().width > 0);
     const off = vis.filter(e => { const r = e.getBoundingClientRect(); return r.right > innerWidth + 1 || r.left < -1; });
@@ -794,6 +915,7 @@ def main():
         ("deeplink_gn", lambda b, R: scenario_deeplink(b, R, opts, url_for, "gn", "GeoNames", True, True)),
         ("deeplink_osm", lambda b, R: scenario_deeplink(b, R, opts, url_for, "osm", "OpenStreetMap", False, False)),
         ("boundary_tier", lambda b, R: scenario_boundary_tier(b, R, opts, url_for)),
+        ("boundary_click", lambda b, R: scenario_boundary_click(b, R, opts, url_for)),
         ("heat_gn", lambda b, R: scenario_heat(b, R, opts, url_for)),
         ("mobile_375", lambda b, R: scenario_mobile(b, R, opts, url_for, 375, 812)),
         ("mobile_768", lambda b, R: scenario_mobile(b, R, opts, url_for, 768, 1024)),
@@ -828,7 +950,7 @@ def main():
     n = len(rows)
     if prove:
         allowed = {"plain.http_200", "deeplink_gn.http_200", "deeplink_osm.http_200",
-                   "boundary_tier.http_200", "boundary_tier_z10.http_200", "heat_gn.http_200",
+                   "boundary_tier.http_200", "boundary_tier_z10.http_200", "boundary_click.http_200", "heat_gn.http_200",
                    "mobile_375.http_200", "mobile_768.http_200", "places_typing.http_200", "first_visit.http_200",
                    "first_visit_link.http_200"} if prove == "home" else set()
         could_not_fail = [r["check"] for r in rows if r["ok"] and r["check"] not in allowed]
