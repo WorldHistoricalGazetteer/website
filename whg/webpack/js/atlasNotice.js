@@ -11,8 +11,8 @@
 //  • classifyResponse()/fetchJSON() — one place that turns an HTTP status (or a
 //    network failure / client timeout) into the kind of failure the user should
 //    be told about: beta access, slow, unavailable, not found.
-//  • betaAccessHtml()       — the Decision-Q4 wording for non-beta users, with a
-//    "request access" link that opens the site's contact dialog.
+//  • betaAccessHtml()       — the Decision-Q4 wording for non-beta users: what the beta is
+//    for, with no link to the contact form.
 //
 // Deliberately free of Atlas imports so heroMap.js, atlasPlaceList.js and
 // areaSearchRouter.js can all use it without a cycle. Uses window.bootstrap
@@ -87,31 +87,16 @@ export function atlasNotice(message, opts = {}) {
     }
 }
 
-/* ── Beta access (Decision Q4: page stays open; say why, offer a way in) ── */
+/* ── Beta access (the page stays open; say what the beta is, and is not) ── */
 
-export const BETA_ACCESS_TEXT = 'This is a beta feature — request access to use it.';
+// Deliberately NO "request access" link: access is by invitation, for testing the Atlas, and a
+// link to the contact form drew unsolicited requests for gated data (2026-10-19).
+export const BETA_ACCESS_TEXT = 'This is a beta feature. Access is for invited beta testers helping to test the Atlas; '
+    + 'it is not a way to obtain restricted data.';
 
 export function betaAccessHtml() {
-    return 'This is a beta feature — '
-        + '<a href="#" class="atlas-beta-request">request access</a> to use it.';
+    return _escape(BETA_ACCESS_TEXT);
 }
-
-// One delegated handler for every "request access" link, wherever it was
-// rendered (result panel, place list status, area dropdown, portal). The
-// contact dialog is the existing [data-whg-modal] target; dynamically inserted
-// links never received whg-modal.js's attribute wiring, so open it directly.
-let _betaLinkWired = false;
-function _wireBetaLink() {
-    if (_betaLinkWired || typeof document === 'undefined') return;
-    _betaLinkWired = true;
-    document.addEventListener('click', (e) => {
-        const a = e.target && e.target.closest && e.target.closest('.atlas-beta-request');
-        if (!a) return;
-        e.preventDefault();
-        if (typeof window.openWHGModal === 'function') window.openWHGModal('/contact_modal/');
-    });
-}
-_wireBetaLink();
 
 /* ── Failure classification ── */
 
@@ -177,7 +162,7 @@ export function failureText(kind, what = 'This') {
     }
 }
 
-/** As failureText, but HTML (the beta case carries the request-access link). */
+/** As failureText, but HTML (escaped text; the beta case is plain, with no link). */
 export function failureHtml(kind, what = 'This') {
     return kind === 'beta' ? betaAccessHtml() : _escape(failureText(kind, what));
 }

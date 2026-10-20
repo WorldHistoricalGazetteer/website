@@ -407,6 +407,13 @@ def scenario_deeplink(browser, R, opts, url_for, ns, heading_expected, expect_la
             R.add(S, "marker_layer_present", d["layer"], f"map.getLayer('{ns}_circle') -> {d['layer']} after {layer_secs:.1f}s")
         R.add(S, "placelist_honest_beta_message", ok and d["betaText"],
               f"DOM says {BETA_MESSAGE_DOM!r}: {d['betaText']} after {secs:.1f}s")
+        # The beta notice says what the beta is for and offers NO way to ask for access
+        # (contact-form requests for gated data, 2026-10-19). The absence only counts
+        # beside the presence of the wording, in the same call.
+        n = page.evaluate("({text: document.body.textContent.includes('invited beta testers'),"
+                          " links: document.querySelectorAll('.atlas-beta-request').length})")
+        R.add(S, "beta_notice_has_no_request_link", ok and n["text"] and n["links"] == 0,
+              f"'invited beta testers' in DOM: {n['text']}; .atlas-beta-request links: {n['links']}")
         # The list must not ASK: an anonymous caller gets a 403 from
         # /atlas/search/ (beta_gates.search_403_honest proves that), and until
         # drop 3 the list asked anyway and logged the 403 on every deep link.
