@@ -12,9 +12,12 @@ let featureCollection;
 let table;
 let activePopup;
 let highlightedFeatureId = false;
+let mapReady = false;
 
 async function init() {
-    await waitMapLoad();
+    // The table must not depend on the map: if the base map never loads (a failed third-party
+    // source, blocked CDN) the owner still gets their records, without the map.
+    mapReady = await waitMapLoad(20000);
     await waitDocumentReady();
     await Promise.all(datatables_CDN_fallbacks.map(loadResource));
 
@@ -31,25 +34,39 @@ async function init() {
 
         featureCollection = window.datacollection.table;
 
-        whg_map
-            .newSource(window.datacollection)
-            .newLayerset(window.datacollection.metadata.ds_id, window.datacollection);
-        whg_map.fitViewport(window.datacollection.metadata.extent, defaultZoom);
+        if (mapReady) {
+            whg_map
+                .newSource(window.datacollection)
+                .newLayerset(window.datacollection.metadata.ds_id, window.datacollection);
+            whg_map.fitViewport(window.datacollection.metadata.extent, defaultZoom);
+        }
 
         initPlacetable(filter_col);
-        initMapInteractions(table);
-        whg_map.getContainer().style.opacity = 1;
+
+        if (mapReady) {
+            initMapInteractions(table);
+            whg_map.getContainer().style.opacity = 1;
+        } else {
+            $('#map').text('The base map could not be loaded, so the map is unavailable. The table below is complete.')
+                .addClass('text-muted small p-3');
+        }
 
     } catch (error) {
         console.error("Error loading mapdata:", error);
     }
 }
 
-function waitMapLoad() {
+// Resolves true when the map has loaded, false after `timeoutMs` without it.
+function waitMapLoad(timeoutMs) {
     return new Promise(resolve => {
+        const timer = setTimeout(() => {
+            console.warn(`Map did not load within ${timeoutMs / 1000}s; showing the table without it.`);
+            resolve(false);
+        }, timeoutMs);
         whg_map.on('load', () => {
+            clearTimeout(timer);
             console.log('Map loaded.');
-            resolve();
+            resolve(true);
         });
     });
 }
@@ -363,7 +380,7 @@ function setRowEvents() {
                 ds_id: window.datacollection.metadata.ds_id
             }
 
-            highlightFeature(ds_pid, featureCollection.features, whg_map, placedata.extent);
+            if (mapReady) highlightFeature(ds_pid, featureCollection.features, whg_map, placedata.extent);
 
         });
 
