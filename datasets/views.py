@@ -162,7 +162,10 @@ class FileHandlingMixin:
         original_file_name = uploaded_file.name
         _, file_extension = os.path.splitext(original_file_name)
 
-        with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False) as temp_file:
+        # /var/tmp is the volume shared by the web and celery-worker containers (and swept by
+        # validation.tasks.clean_tmp_files); /tmp is per-container, so the worker could not
+        # find the converted .jsonld at ingest.
+        with tempfile.NamedTemporaryFile(suffix=file_extension, delete=False, dir='/var/tmp') as temp_file:
             temp_file_path = temp_file.name
             try:
                 if hasattr(uploaded_file, 'temporary_file_path'):
