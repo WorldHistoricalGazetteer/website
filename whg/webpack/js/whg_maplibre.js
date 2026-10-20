@@ -1634,6 +1634,34 @@ maplibregl.Map = function (options = {}) {
         });
     }
 
+    // A base-style source whose TileJSON cannot be fetched (a revoked third-party key, 2026-10-20)
+    // leaves the style never "loaded", so MapLibre never fires `load` and every page that awaits
+    // it hangs — on the dataset pages that meant an empty table and a map on its default view.
+    // Give such a source a grace period, then drop it and its layers: the map degrades to the
+    // layers that did load, and `load` fires. Tile errors (e.tile set) are transient and untouched.
+    let mapLoadFired = false;
+    const failedBaseSources = new Set();
+    mapInstance.once('load', () => { mapLoadFired = true; });
+    mapInstance.on('error', (e) => {
+        if (mapLoadFired || !e || !e.sourceId || e.tile) return;
+        if (e.error && (e.error.name === 'AbortError' || /abort/i.test(e.error.message || ''))) return;
+        if (failedBaseSources.has(e.sourceId)) return;
+        failedBaseSources.add(e.sourceId);
+        setTimeout(() => {
+            if (mapLoadFired) return;
+            try {
+                const id = e.sourceId;
+                (mapInstance.getStyle().layers || [])
+                    .filter(layer => layer.source === id)
+                    .forEach(layer => mapInstance.removeLayer(layer.id));
+                if (mapInstance.getSource(id)) mapInstance.removeSource(id);
+                console.warn(`Base map source "${id}" could not be loaded; continuing without it.`);
+            } catch (err) {
+                console.warn('Could not drop failed base map source:', err);
+            }
+        }, 5000);
+    });
+
     mapInstance.on('error', (e) => {
         // Identify if this is a "Fatal" error (WebGL or Critical Resource Failure)
         let isFatal = false;
