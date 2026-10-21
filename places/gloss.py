@@ -145,7 +145,8 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
             clause += "; the records do not all use the same type"
         s.append(clause + ".")
     if untyped:
-        out["unknown"].append(f"{_of(untyped, len(known)).capitalize()} carr{'ies' if untyped == 1 else 'y'} no place type.")
+        out["unknown"].append("No record carries a place type." if untyped == len(known) > 1 else
+                              f"{_of(untyped, len(known)).capitalize()} carr{'ies' if untyped == 1 else 'y'} no place type.")
 
     # ---- where: country codes and containment -------------------------------
     cc_sets = [tuple(m.get("ccodes") or []) for m in known]
@@ -159,8 +160,9 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
         else:
             s.append(f"The records disagree on country: {_list(_counted(codes, 8))}.")
     if len(with_cc) < len(known):
-        out["unknown"].append(f"{_of(len(known) - len(with_cc), len(known)).capitalize()} "
-                              f"{'has' if len(known) - len(with_cc) == 1 else 'have'} no country code.")
+        k = len(known) - len(with_cc)
+        out["unknown"].append("No record has a country code." if k == len(known) > 1 else
+                              f"{_of(k, len(known)).capitalize()} {'has' if k == 1 else 'have'} no country code.")
     parts = Counter()
     for m in known:
         for p in dict.fromkeys(m.get("part_of") or []):
@@ -187,7 +189,8 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
         out["facts"]["dates_disjoint"] = disjoint
     if len(spans) < len(known):
         k = len(known) - len(spans)
-        out["unknown"].append(f"{_of(k, len(known)).capitalize()} {'is' if k == 1 else 'are'} undated.")
+        out["unknown"].append("No record is dated." if k == len(known) > 1 else
+                              f"{_of(k, len(known)).capitalize()} {'is' if k == 1 else 'are'} undated.")
 
     if unresolved:
         out["unknown"].append(f"{unresolved} attested equivalent{'s' if unresolved != 1 else ''} could not be looked "

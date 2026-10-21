@@ -73,6 +73,11 @@ class GlossTests(SimpleTestCase):
         g = build_gloss([m("a", "Berlin", "gn", names=["Berlin", "BERLIN", "Berlino"]),
                          m("b", "Berlin", "wd"), m("c", "Berlín", "tgn")], kind="locus")
         self.assertTrue(g["sentences"][0].startswith("3 records currently in this cluster, from 3 sources"))
+        # all-of-n unknowns read as "No record ...", never "Every record carry no ..."
+        self.assertIn("No record carries a place type.", g["unknown"])
+        self.assertIn("No record is dated.", g["unknown"])
+        self.assertIn("No record has a country code.", g["unknown"])
+        self.assertFalse(any(u.startswith("Every record") for u in g["unknown"]))
         names = next(s for s in g["sentences"] if s.startswith("Named"))
         self.assertEqual(names, "Named “Berlin” in 2 of 3 records; also “Berlino” and “Berlín”.")
         self.assertEqual(g["facts"]["names"]["in_records"], 2)
