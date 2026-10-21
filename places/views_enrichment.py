@@ -16,6 +16,13 @@ nothing posted is stored or shown to anyone else, the members are capped and red
 to plain capped values (``places.gloss.member_from_hit``), and the EDOPS cache is keyed
 on the request sent to EDOPS and filled only from EDOPS's answer, so a client cannot
 put anything into it. A non-public record sends nothing to EDOPS.
+
+What may be SENT to EDOPS is narrower than what the page shows: only members an
+anonymous caller could see (``places.record_group.mark_offsite``). A beta user also
+sees embargoed gateway namespaces; those members stay in the concordance and the gloss
+(neither leaves WHG) but no coordinate, hull or date of theirs goes to EDOPS, whose
+cache keeps a request 30 days. Posted locus members are checked by the same rule: the
+coordinates are the client's, but they came from WHG's search for that user.
 """
 from __future__ import annotations
 
@@ -45,7 +52,8 @@ def _forbidden():
 def _member_view(m: dict) -> dict:
     from api.edop_client import valid_point
     return {"key": m["key"], "title": m.get("title"), "source": m.get("source"),
-            "is_record": bool(m.get("is_record")), "located": valid_point(m.get("repr_point"))}
+            "is_record": bool(m.get("is_record")), "located": valid_point(m.get("repr_point")),
+            "sent_to_edops": m.get("offsite") is True}
 
 
 def _environment_payload(plan: dict, results: list, members: list) -> dict:
@@ -55,7 +63,9 @@ def _environment_payload(plan: dict, results: list, members: list) -> dict:
     from api import edop_client as edop
     plan_view = {k: v for k, v in plan.items() if k not in ("requests",)}
     sigs = []
-    groups = plan.get("groups") or [[m["key"] for m in members if edop.valid_point(m.get("repr_point"))]]
+    # The default group is the members that were SENT: withheld ones are not in it.
+    groups = plan.get("groups") or [[m["key"] for m in members
+                                     if edop.valid_point(m.get("repr_point")) and m.get("offsite") is not False]]
     by_unit = {}
     for res, keys in zip(results, groups):
         pub = edop.public_result(res, members=list(keys))
@@ -91,7 +101,7 @@ def atlas_record_environment(request, pk):
         return JsonResponse({"error": "not found", "id": pk}, status=404)
     from api import edop_client as edop
     from django.contrib.gis.geos import GEOSGeometry
-    from places.record_group import group_span, record_group
+    from places.record_group import group_span, offsite_members, record_group
 
     t0 = time.monotonic()
     if not edop.enabled():
@@ -101,16 +111,20 @@ def atlas_record_environment(request, pk):
     if not group["public"]:
         return JsonResponse({"public": False, "place_id": place.pk})
     members = group["members"]
+    # 🛑 Only members an anonymous caller could see are planned (mark_offsite); the
+    # rest are listed in plan["withheld"] and never reach EDOPS.
+    sendable = offsite_members(members)
     planned = []
-    for m in members:
+    for m in sendable:
         geom = None
         if m.get("hull_wkt"):
             try:
                 geom = GEOSGeometry(m["hull_wkt"], srid=4326)
             except Exception:  # noqa: BLE001
                 geom = None
-        planned.append({"key": m["key"], "repr_point": m.get("repr_point"), "geometry": geom})
-    plan = edop.plan_concordance(planned, span=group_span(members))
+        planned.append({"key": m["key"], "repr_point": m.get("repr_point"), "geometry": geom, "offsite": True})
+    plan = edop.plan_concordance(planned, span=group_span(sendable))
+    plan["withheld"] = [m["key"] for m in members if m.get("offsite") is not True]
     results = edop.run_requests(plan["requests"])
     out = _environment_payload(plan, results, members)
     out.update({"public": True, "place_id": place.pk, "unresolved": group.get("unresolved", 0),
@@ -132,6 +146,9 @@ def atlas_record_gloss(request, pk):
     group = record_group(place, user=request.user)
     if not group["public"]:
         return JsonResponse({"public": False, "place_id": place.pk})
+    # The gloss is NOT sent off-site, so it describes the group as this user may see
+    # it, embargoed gateway members included for a beta user (unlike the EDOPS
+    # request above, which uses offsite_members only).
     gloss = build_gloss(group["members"], kind="concordance", unresolved=group.get("unresolved", 0))
     return JsonResponse({"public": True, "place_id": place.pk, "gloss": gloss,
                          "members": [_member_view(m) for m in group["members"]]})
@@ -160,6 +177,9 @@ def _posted_members(request):
     if not members:
         return None, JsonResponse({"error": "no usable member"}, status=400)
     _name_sources(members, request.user)
+    # The anonymous rule, for the EDOPS request only (see the module docstring).
+    from places.record_group import mark_offsite
+    mark_offsite(members)
     return members, None
 
 
@@ -187,7 +207,9 @@ def atlas_locus_environment(request):
     if not edop.enabled():
         return JsonResponse({"status": edop.STATUS_DISABLED, "signatures": [], "attribution": edop.ATTRIBUTION})
     t0 = time.monotonic()
-    plan = edop.plan_locus(members)
+    from places.record_group import offsite_members
+    plan = edop.plan_locus(offsite_members(members))
+    plan["withheld"] = [m["key"] for m in members if m.get("offsite") is not True]
     results = edop.run_requests(plan["requests"])
     out = _environment_payload(plan, results, members)
     out["elapsed_ms"] = int((time.monotonic() - t0) * 1000)
@@ -202,5 +224,6 @@ def atlas_locus_gloss(request):
     members, err = _posted_members(request)
     if err:
         return err
+    # Not sent off-site: the gloss keeps members mark_offsite withholds from EDOPS.
     return JsonResponse({"gloss": build_gloss(members, kind="locus"),
                          "members": [_member_view(m) for m in members]})

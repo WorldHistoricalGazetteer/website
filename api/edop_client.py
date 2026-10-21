@@ -643,6 +643,17 @@ def _years_block(span):
     return years, {"span": list(span) if span else None, "used": list(years) if years else None, "note": note}
 
 
+def _drop_withheld(members: list):
+    """``(members that may be sent, keys of those marked offsite: False)``."""
+    keep, withheld = [], []
+    for m in members:
+        if m.get("offsite") is False:
+            withheld.append(m.get("key"))
+        else:
+            keep.append(m)
+    return keep, withheld
+
+
 def plan_concordance(members: list, span=None) -> dict:
     """The scope for one concordance aggregate. ``members``: dicts with ``repr_point``
     and optional ``geometry`` (GEOSGeometry). ``span``: the group's [start, end] years.
@@ -652,20 +663,25 @@ def plan_concordance(members: list, span=None) -> dict:
     * several -> ``area`` over the hull of their geometries, unless they span more than
       CONCORDANCE_MAX_SPAN_KM -> ``dispersed`` (nothing asked).
     Band T: basin takes the group's years; area only a single year (the spec), so a
-    range is reported as not requested on area, with the reason."""
+    range is reported as not requested on area, with the reason.
+
+    A member marked ``offsite: False`` (``places.record_group.mark_offsite``: not
+    visible to an anonymous caller) is never part of a request; its key is listed in
+    ``withheld``. The caller should not pass it at all; this is the second guard."""
+    members, withheld = _drop_withheld(members)
     located = [m for m in members if valid_point(m.get("repr_point"))]
     years, yblock = _years_block(span)
     if not located:
-        return {"kind": "no_location", "requests": [], "years": yblock}
+        return {"kind": "no_location", "requests": [], "years": yblock, "withheld": withheld}
     pts = [m["repr_point"] for m in located]
     spread = span_km(pts)
     if len(located) == 1 or spread <= SAME_POINT_KM:
         lon, lat = pts[0][:2]
         return {"kind": "basin", "span_km": round(spread, 3), "n_located": len(located),
-                "requests": [basin_request(lon, lat, years)], "years": yblock}
+                "requests": [basin_request(lon, lat, years)], "years": yblock, "withheld": withheld}
     if spread > CONCORDANCE_MAX_SPAN_KM:
         return {"kind": "dispersed", "span_km": round(spread, 1), "limit_km": CONCORDANCE_MAX_SPAN_KM,
-                "n_located": len(located), "requests": [], "years": yblock}
+                "n_located": len(located), "requests": [], "years": yblock, "withheld": withheld}
     from django.contrib.gis.geos import Point
     geoms = [m.get("geometry") or Point(*m["repr_point"][:2], srid=4326) for m in located]
     wkt = hull_wkt(geoms)
@@ -673,7 +689,7 @@ def plan_concordance(members: list, span=None) -> dict:
     if years and single is None:
         yblock = {**yblock, "used": None, "note": "area_needs_single_year"}
     return {"kind": "area", "span_km": round(spread, 1), "n_located": len(located),
-            "requests": [area_request(wkt, single)], "years": yblock}
+            "requests": [area_request(wkt, single)], "years": yblock, "withheld": withheld}
 
 
 def plan_locus(members: list) -> dict:
@@ -684,17 +700,21 @@ def plan_locus(members: list) -> dict:
     * all within LOCUS_TIGHT_KM of each other -> ONE ``area`` over their hull (or ``basin``
       when they are all at one point), Band T only for a single shared year;
     * otherwise -> per-member ``basin`` (each with its own years), for at most
-      LOCUS_MAX_MEMBER_SIGNATURES members; the rest are listed as not looked up."""
+      LOCUS_MAX_MEMBER_SIGNATURES members; the rest are listed as not looked up.
+
+    Members marked ``offsite: False`` are withheld, as in ``plan_concordance``."""
+    members, withheld = _drop_withheld(members)
     located = [m for m in members if valid_point(m.get("repr_point"))]
     if not located:
-        return {"kind": "no_location", "requests": [], "tight_km": LOCUS_TIGHT_KM}
+        return {"kind": "no_location", "requests": [], "tight_km": LOCUS_TIGHT_KM, "withheld": withheld}
     pts = [m["repr_point"] for m in located]
     spread = span_km(pts)
     # ``years`` is None or [start, end] with both ints (the caller normalises).
     spans = [m["years"] for m in located if m.get("years")]
     union = [min(s[0] for s in spans), max(s[1] for s in spans)] if spans else None
     base = {"span_km": round(spread, 1), "tight_km": LOCUS_TIGHT_KM, "n_located": len(located),
-            "n_members": len(members), "max_member_signatures": LOCUS_MAX_MEMBER_SIGNATURES}
+            "n_members": len(members), "max_member_signatures": LOCUS_MAX_MEMBER_SIGNATURES,
+            "withheld": withheld}
     if len(located) == 1 or spread <= SAME_POINT_KM:
         years, yblock = _years_block(union)
         lon, lat = pts[0][:2]

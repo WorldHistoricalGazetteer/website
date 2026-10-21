@@ -22,6 +22,12 @@ GATEWAY = {"gn:100": {"place_id": "gn:100", "title": "Gateway Town", "namespace"
                       "names": [{"label": "Gateway Town"}, {"label": "Porta"}], "types": [{"label": "P"}],
                       "ccodes": ["GB"], "timespans": [{"start": 1650, "end": 1650}],
                       "geometries": [{"type": "Point", "coordinates": [0.2, 51.4]}]}}
+# An embargoed namespace's record (visible to a beta user only): it lies OUTSIDE the
+# hull of the others, so had it been sent it would be a hull vertex.
+EMB_XY = (0.5, 51.6)
+GATEWAY["emb:7"] = {"place_id": "emb:7", "title": "Embargoed Town", "namespace": "emb", "repr_point": list(EMB_XY),
+                    "names": [{"label": "Embargoed Town"}], "types": [], "ccodes": ["GB"],
+                    "geometries": [{"type": "Point", "coordinates": list(EMB_XY)}]}
 
 
 def fake_fetch(ids, user=None, allow_anonymous=False, meta=None):
@@ -68,6 +74,12 @@ class EnrichmentViewTests(TestCase):
             a, b, priv = ds("a"), ds("b"), ds("priv", public=False)
         GazetteerRegistryEntry.objects.update_or_create(
             id="gn", defaults=dict(name="GeoNames", namespace="gn", entry_class="authority", status="published"))
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="wd", defaults=dict(name="Wikidata", namespace="wd", entry_class="authority", status="published"))
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="emb", defaults=dict(name="Embargoed Source", namespace="emb", entry_class="authority",
+                                    status="embargoed"))
+        self.ds_a, self.ds_priv = a, priv
         self.A = place(a, "Record A", "A1", geom=Point(-0.1278, 51.5074, srid=4326),
                        links=[("exactMatch", "gn:100")], minmax=[1600, 1700], types=["parish"])
         # B says it is A, with a polygon: the hull must take its geometry, not just a point.
@@ -253,3 +265,82 @@ class EnrichmentViewTests(TestCase):
         self.assertIn("GeoNames", text)
         self.assertIn("Country code DE in every record.", text)
         self.assertNotIn("disagree", text)
+
+    # ---- nothing off-site that an anonymous caller could not see (review 2026-10-21) ----
+    def _points_sent(self, t):
+        """Every coordinate in every request the fake transport received."""
+        from django.contrib.gis.geos import GEOSGeometry
+        out = []
+        for c in t.calls:
+            p = c["params"]
+            if p.get("geom_wkt"):
+                out.append(GEOSGeometry(p["geom_wkt"], srid=4326))
+            if p.get("lat") is not None:
+                out.append(Point(p["lon"], p["lat"], srid=4326))
+        return out
+
+    def test_embargoed_gateway_member_never_reaches_edops(self):
+        from places.models import PlaceLink
+        PlaceLink.objects.create(place=self.A, jsonb={"type": "closeMatch", "identifier": "emb:7"})
+        t = FakeTransport(AREA)
+        r = self.env(self.A.pk, t).json()
+        self.assertEqual((r["status"], r["plan"]["kind"]), ("ok", "area"))
+        (hull,) = self._points_sent(t)
+        # Presence: the public gateway member and both records are in the hull sent ...
+        for xy in [(-0.1278, 51.5074), (0.2, 51.4), (-0.3, 51.3)]:
+            self.assertTrue(hull.buffer(1e-6).contains(Point(*xy, srid=4326)), xy)
+        # ... absence: the embargoed one is not, and is listed as withheld.
+        self.assertFalse(hull.buffer(1e-3).contains(Point(*EMB_XY, srid=4326)))
+        self.assertNotIn(f"{EMB_XY[0]:.4f} {EMB_XY[1]:.4f}", t.calls[0]["params"]["geom_wkt"])
+        self.assertEqual(r["plan"]["withheld"], ["emb:7"])
+        self.assertEqual(r["signatures"][0]["members"], [f"whg:{self.A.pk}", f"whg:{self.B.pk}", "gn:100"])
+        sent = {m["key"]: m["sent_to_edops"] for m in r["members"]}
+        self.assertEqual(sent, {f"whg:{self.A.pk}": True, f"whg:{self.B.pk}": True, "gn:100": True,
+                                "emb:7": False})
+        # The beta user still SEES it in the gloss (not sent off-site).
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            g = self.client.get(f"/atlas/place/{self.A.pk}/gloss/").json()
+        self.assertIn("Embargoed Source", " ".join(g["gloss"]["sentences"]))
+        self.assertIn("GeoNames", " ".join(g["gloss"]["sentences"]))
+
+    def test_embargoed_member_alone_is_not_a_basin_for_it(self):
+        """A record whose only equivalent is embargoed: one basin, at the RECORD's point."""
+        from places.models import PlaceLink
+        PlaceLink.objects.create(place=self.Sea, jsonb={"type": "exactMatch", "identifier": "emb:7"})
+        t = FakeTransport(BASIN)
+        r = self.env(self.Sea.pk, t).json()
+        self.assertEqual(r["plan"]["kind"], "basin")
+        self.assertEqual((t.calls[0]["params"]["lon"], t.calls[0]["params"]["lat"]), (-30, 0))
+        self.assertEqual(r["plan"]["withheld"], ["emb:7"])
+
+    def test_locus_posts_only_what_an_anonymous_caller_could_see(self):
+        members = [
+            {"place_id": "gn:1", "namespace": "gn", "title": "A", "repr_point": [-0.1, 51.5]},
+            {"place_id": f"whg:{self.ds_a.pk}:A1", "namespace": "whg", "title": "A", "repr_point": [-0.11, 51.49]},
+            {"place_id": "emb:7", "namespace": "emb", "title": "A", "repr_point": list(EMB_XY)},
+            {"place_id": f"whg:{self.ds_priv.pk}:P1", "namespace": "whg", "title": "A", "repr_point": [-0.2, 51.45]},
+            {"place_id": "nope:1", "namespace": "nope", "title": "A", "repr_point": [-0.15, 51.55]},
+            {"place_id": "whg:12345", "namespace": "whg", "title": "A", "repr_point": [-0.12, 51.52]},
+        ]
+        t = FakeTransport(AREA)
+        r = self.post("/atlas/locus/environment/", {"members": members}, t).json()
+        self.assertEqual(r["plan"]["kind"], "area")
+        (hull,) = self._points_sent(t)
+        for xy in ([-0.1, 51.5], [-0.11, 51.49]):                       # presence
+            self.assertTrue(hull.buffer(1e-6).contains(Point(*xy, srid=4326)), xy)
+        for xy in (EMB_XY, (-0.2, 51.45), (-0.15, 51.55)):               # absence
+            self.assertFalse(hull.buffer(1e-4).contains(Point(*xy, srid=4326)), xy)
+        self.assertEqual(sorted(r["plan"]["withheld"]),
+                         sorted(["emb:7", f"whg:{self.ds_priv.pk}:P1", "nope:1", "whg:12345"]))
+        # The same members, all withheld but one: per-member basins would be per member,
+        # so check a dispersed posting too (each request is one member's point).
+        t2 = FakeTransport(BASIN)
+        far = [dict(members[0]), {**members[2], "repr_point": [20.0, 51.6]}, {**members[0], "place_id": "gn:2",
+                                                                          "repr_point": [10.0, 51.5]}]
+        r2 = self.post("/atlas/locus/environment/", {"members": far}, t2).json()
+        self.assertEqual(r2["plan"]["kind"], "per_member")
+        lons = sorted(c["params"]["lon"] for c in t2.calls)
+        self.assertEqual(lons, [-0.1, 10.0])                               # 20.0 (emb) absent
+        # The gloss of the same posting keeps every member (not sent off-site).
+        g = self.post("/atlas/locus/gloss/", {"members": members}).json()
+        self.assertEqual(g["gloss"]["n_records"], 6)

@@ -32,7 +32,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 GROUP_CACHE_TTL = 300
-GROUP_CACHE_VERSION = 1
+GROUP_CACHE_VERSION = 2  # 2: members carry ``offsite`` (mark_offsite)
 GATEWAY_BATCH = 50
 
 # GeoNames feature classes: the only gateway namespace whose `types.label` is a place
@@ -223,6 +223,65 @@ def gateway_members(aggregate_entries: list, user=None) -> list:
     return out
 
 
+def mark_offsite(members: list) -> list:
+    """Set ``offsite`` on each member, in place: True when the member's data may be
+    sent off-site (to EDOPS, computingplace.org, where requests are cached 30 days),
+    which is when an ANONYMOUS caller could see it. Returns ``members``.
+
+    🛑 The rule: nothing sent to EDOPS may derive from a record or namespace an
+    anonymous caller cannot see. A beta user sees embargoed gateway namespaces
+    (``visible_to(user)`` admits them), so they reach the concordance and the group;
+    they may stay on the page for that user, but their geometry must not leave WHG.
+
+    * ``whg:<pk>`` (Record page, Postgres members): the record passes
+      ``visible_places_q(None)``; ``whg:<ds>:<src>`` (a locus page's posted hit):
+      its dataset is public and not embargoed; any other ``whg:`` form cannot be
+      checked and is withheld;
+    * ``<ns>:<id>``: ``ns`` has a non-dataset registry row visible to an anonymous
+      caller. A namespace with no registry row is withheld (fail closed).
+
+    Fails closed: a member whose key cannot be read is withheld."""
+    from api.dataset_access import hidden_datasets, visible_places_q
+    from api.models import GazetteerRegistryEntry
+    from places.models import Place
+
+    def ns_of(m):
+        key = str(m.get("key") or "")
+        return (m.get("namespace") or key.split(":", 1)[0]).lower() if ":" in key else ""
+
+    pks, nss = {}, set()
+    for m in members:
+        key = str(m.get("key") or "")
+        if ns_of(m) == "whg":
+            tail = key.split(":", 1)[1]
+            if tail.isdigit():
+                pks[key] = int(tail)
+        elif ns_of(m):
+            nss.add(ns_of(m))
+    visible_pks = set(Place.objects.filter(pk__in=set(pks.values())).filter(visible_places_q(None))
+                      .values_list("pk", flat=True)) if pks else set()
+    anon_ns = set(GazetteerRegistryEntry.objects.visible_to(None).filter(namespace__in=nss)
+                  .exclude(entry_class="dataset").values_list("namespace", flat=True)) if nss else set()
+    hidden = None
+    for m in members:
+        key, ns = str(m.get("key") or ""), ns_of(m)
+        if ns == "whg":
+            if key in pks:
+                ok = pks[key] in visible_pks
+            else:
+                hidden = hidden if hidden is not None else hidden_datasets(None)
+                ok = not hidden.hides_contributed_id(key)
+        else:
+            ok = bool(ns) and ns in anon_ns
+        m["offsite"] = ok
+    return members
+
+
+def offsite_members(members: list) -> list:
+    """The members ``mark_offsite`` cleared; an unmarked member is NOT cleared."""
+    return [m for m in members if m.get("offsite") is True]
+
+
 def build_record_group(place, user=None) -> dict:
     """``{"public": bool, "members": [member], "n_equivalents": int}``; the record
     first. Not public -> ``{"public": False, "members": []}``: like the concordance,
@@ -250,6 +309,9 @@ def build_record_group(place, user=None) -> dict:
     unresolved = sum(1 for e in conc.get("outbound") or []
                      if e.get("aggregates") and (e.get("target") or {}).get("status")
                      in ("gateway_unavailable", "gateway_disabled"))
+    # Every member is marked for EDOPS by the ANONYMOUS rule, whoever is asking: the
+    # beta user's own view (the concordance, the gloss) keeps embargoed members.
+    mark_offsite(members)
     return {"public": True, "members": members, "n_equivalents": len(members) - 1, "unresolved": unresolved}
 
 

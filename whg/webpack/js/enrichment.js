@@ -199,6 +199,12 @@ function renderEnvironment(body, data) {
     if (data.unresolved) {
         h += `<p class="enr-incomplete small">${esc(data.unresolved)} attested equivalent${data.unresolved === 1 ? '' : 's'} could not be looked up in WHG's index just now, so ${data.unresolved === 1 ? 'it is' : 'they are'} not in this signature. Reload to try again.</p>`;
     }
+    // Members an anonymous visitor could not see (an embargoed source shown to a beta
+    // user) are never sent to EDOPS (places.record_group.mark_offsite): say so.
+    const withheld = (p.withheld || []).length;
+    if (withheld) {
+        h += `<p class="enr-withheld small">${esc(withheld)} record${withheld === 1 ? ' is' : 's are'} from a source that is not public yet, so ${withheld === 1 ? 'it was' : 'they were'} not sent to EDOPS and ${withheld === 1 ? 'is' : 'are'} not in this signature.</p>`;
+    }
     if (data.status === 'no_location') {
         h += '<p class="enr-card" data-status="no_location">None of these records has a location, so no signature was asked for.</p>';
     } else if (data.status === 'dispersed') {
