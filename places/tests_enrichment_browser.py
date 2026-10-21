@@ -266,11 +266,38 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertIn("Country code DE in every record.", d["gloss"])
         self.assertNotIn("US", d["gloss"])                  # the other Berlin is another cluster
         self.assertIn("an area", d["env"])
+        self.assertIn("BasinATLAS level 6", d["env"])
+        self.assertNotIn("level 8", d["env"])
         self.assertIn("tight: 50", d["env"])
         self.assertNotIn("Based on the first", d["gloss"] + d["env"])   # no cap note under the cap
         self.assertEqual(sorted(d["selected"]), ["gn:1", "wd:Q64"])
         self.assertEqual(len(t.calls), 1)
         self.assertEqual(self.external, [])
+
+    @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
+    def test_locus_per_member_scope_names_basinatlas_level_8(self):
+        """Issue 325 (status 2026-10-21): the Locus page's per-member text ("each record's
+        own basin") did not say which BasinATLAS level. It now says level 8, read from the
+        server's plan (api.edop_client.BASIN_LEVEL), even when EDOPS is down. The two
+        Berlins are ~1.3 km apart; LOCUS_TIGHT_KM is patched below that, so the
+        same cluster is described per member (test_locus_page_sections: one area, level 6)."""
+        from search.tests_locus import FakeGateway, token
+        t = FakeTransport((503, ""), (503, ""))
+        page = self.new_page()
+        with patch("api.crc_client.requests.post", side_effect=FakeGateway()), \
+                patch("api.edop_client.LOCUS_TIGHT_KM", 0.5), \
+                patch("api.edop_client._requests_transport", side_effect=t):
+            page.goto(f"{self.live_server_url}/atlas/locus/?r={token()}")
+            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", 45000)
+            env = page.evaluate("() => (document.querySelector('#locus_environment') || {}).innerText || ''")
+            self.shot(page, "locus_environment_per_member", "#locus_environment")
+        self.assertTrue(ok, f"errors={self.errors}")
+        self.assertIn("each record's own basin", env)
+        self.assertIn("BasinATLAS level 8", env)
+        self.assertNotIn("level 6", env)
+        self.assertIn("could not be reached", env)           # the level came from the plan, not an answer
+        self.assertEqual({c["params"]["level"] for c in t.calls}, {8})
+        self.assertEqual(len(t.calls), 2)
 
     @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
     def test_locus_over_200_members_posts_a_deterministic_200_and_says_so(self):

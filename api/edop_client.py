@@ -752,7 +752,7 @@ def plan_concordance(members: list, span=None) -> dict:
     spread = span_km(pts)
     if len(located) == 1 or spread <= SAME_POINT_KM:
         lon, lat = pts[0][:2]
-        return {"kind": "basin", "span_km": round(spread, 3), "n_located": len(located),
+        return {"kind": "basin", "span_km": round(spread, 3), "n_located": len(located), "level": BASIN_LEVEL,
                 "requests": [basin_request(lon, lat, years)], "years": yblock, "withheld": withheld}
     if spread > CONCORDANCE_MAX_SPAN_KM:
         return {"kind": "dispersed", "span_km": round(spread, 1), "limit_km": CONCORDANCE_MAX_SPAN_KM,
@@ -763,7 +763,7 @@ def plan_concordance(members: list, span=None) -> dict:
     single = years[0] if years and years[0] == years[1] else None
     if years and single is None:
         yblock = {**yblock, "used": None, "note": "area_needs_single_year"}
-    return {"kind": "area", "span_km": round(spread, 1), "n_located": len(located),
+    return {"kind": "area", "span_km": round(spread, 1), "n_located": len(located), "level": AREA_LEVEL,
             "requests": [area_request(wkt, single)], "years": yblock, "withheld": withheld}
 
 
@@ -777,7 +777,11 @@ def plan_locus(members: list) -> dict:
     * otherwise -> per-member ``basin`` (each with its own years), for at most
       LOCUS_MAX_MEMBER_SIGNATURES members; the rest are listed as not looked up.
 
-    Members marked ``offsite: False`` are withheld, as in ``plan_concordance``."""
+    Members marked ``offsite: False`` are withheld, as in ``plan_concordance``.
+
+    Every plan that asks EDOPS carries ``level``: the BasinATLAS level its requests
+    were sent at (``BASIN_LEVEL`` for basin and per-member, ``AREA_LEVEL`` for area),
+    so the page names it from the server, not from a copy in the JS."""
     members, withheld = _drop_withheld(members)
     located = [m for m in members if valid_point(m.get("repr_point"))]
     if not located:
@@ -793,7 +797,7 @@ def plan_locus(members: list) -> dict:
     if len(located) == 1 or spread <= SAME_POINT_KM:
         years, yblock = _years_block(union)
         lon, lat = pts[0][:2]
-        return {**base, "kind": "basin", "requests": [basin_request(lon, lat, years)],
+        return {**base, "kind": "basin", "level": BASIN_LEVEL, "requests": [basin_request(lon, lat, years)],
                 "groups": [[m["key"] for m in located]], "years": yblock}
     if spread <= LOCUS_TIGHT_KM:
         from django.contrib.gis.geos import Point
@@ -802,7 +806,7 @@ def plan_locus(members: list) -> dict:
         if years and single is None:
             yblock = {**yblock, "used": None, "note": "area_needs_single_year"}
         wkt = hull_wkt([Point(*p[:2], srid=4326) for p in pts])
-        return {**base, "kind": "area", "requests": [area_request(wkt, single)],
+        return {**base, "kind": "area", "level": AREA_LEVEL, "requests": [area_request(wkt, single)],
                 "groups": [[m["key"] for m in located]], "years": yblock}
     asked = located[:LOCUS_MAX_MEMBER_SIGNATURES]
     reqs, groups, yblocks = [], [], []
@@ -811,7 +815,8 @@ def plan_locus(members: list) -> dict:
         reqs.append(basin_request(m["repr_point"][0], m["repr_point"][1], years))
         groups.append([m["key"]])
         yblocks.append(yblock)
-    return {**base, "kind": "per_member", "requests": reqs, "groups": groups, "years_each": yblocks,
+    return {**base, "kind": "per_member", "level": BASIN_LEVEL, "requests": reqs, "groups": groups,
+            "years_each": yblocks,
             "not_looked_up": [m["key"] for m in located[LOCUS_MAX_MEMBER_SIGNATURES:]],
             "no_location": [m["key"] for m in members if not valid_point(m.get("repr_point"))]}
 

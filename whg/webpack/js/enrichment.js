@@ -108,7 +108,10 @@ function scopeText(data) {
     const p = data.plan || {};
     const sig = (data.signatures || [])[0] || {};
     const unit = (sig.summary && sig.summary.unit) || {};
-    const lvl = unit.level ? ` (BasinATLAS level ${esc(unit.level)})` : '';
+    // The level EDOPS answered at, else the level the server's plan sent
+    // (api/edop_client.py BASIN_LEVEL / AREA_LEVEL): never a copy kept here.
+    const level = unit.level || p.level;
+    const lvl = level ? ` (BasinATLAS level ${esc(level)})` : '';
     switch (p.kind) {
         case 'basin':
             return p.n_located > 1
@@ -122,7 +125,7 @@ function scopeText(data) {
             return `Scope: <strong>an area</strong>, the outline (convex hull) of the ${esc(p.n_located)} located records${nb}${lvl}.${why}`;
         }
         case 'per_member':
-            return `Scope: <strong>each record's own basin</strong>. The records lie up to ${esc(p.span_km)} km apart, more than the ${esc(p.tight_km)} km within which one signature could describe them all.`;
+            return `Scope: <strong>each record's own basin</strong>${p.level ? ` (BasinATLAS level ${esc(p.level)})` : ''}. The records lie up to ${esc(p.span_km)} km apart, more than the ${esc(p.tight_km)} km within which one signature could describe them all.`;
         default: return '';
     }
 }

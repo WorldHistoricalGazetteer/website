@@ -256,6 +256,37 @@ class EnrichmentViewTests(TestCase):
         self.assertEqual(r["signatures"][0]["members"], ["gn:1", "gn:2"])
         self.assertEqual(r["plan"]["no_location"], ["gn:3"])
 
+    def test_plan_states_the_basinatlas_level_it_asked_for(self):
+        """Every plan that asks EDOPS names the BasinATLAS level it sent, from the
+        constants (api.edop_client.BASIN_LEVEL / AREA_LEVEL), so the page can say it
+        even when the answer is a failure: 8 for a basin (one point, or each member of a
+        dispersed locus), 6 for an area. Nothing asked, no level."""
+        from api import edop_client as edop
+        self.assertEqual((edop.BASIN_LEVEL, edop.AREA_LEVEL), (8, 6))
+        basin = self.env(self.Lonely.pk, FakeTransport(BASIN)).json()
+        area = self.env(self.A.pk, FakeTransport(AREA)).json()
+        down = self.env(self.Sea.pk, FakeTransport((503, ""))).json()       # a failed basin still names it
+        nowhere = self.env(self.Nowhere.pk, FakeTransport(BASIN)).json()
+        self.assertEqual((basin["plan"]["kind"], basin["plan"]["level"]), ("basin", edop.BASIN_LEVEL))
+        self.assertEqual((area["plan"]["kind"], area["plan"]["level"]), ("area", edop.AREA_LEVEL))
+        self.assertEqual((down["status"], down["plan"]["level"]), ("unavailable", edop.BASIN_LEVEL))
+        self.assertEqual(nowhere["plan"]["kind"], "no_location")
+        self.assertNotIn("level", nowhere["plan"])
+        far = self.post("/atlas/locus/environment/", {"members": [
+            {"place_id": "gn:1", "title": "A", "repr_point": [-0.1, 51.5]},
+            {"place_id": "gn:2", "title": "A", "repr_point": [2.0, 51.5]}]}, FakeTransport(BASIN)).json()
+        tight = self.post("/atlas/locus/environment/", {"members": [
+            {"place_id": "gn:1", "title": "A", "repr_point": [-0.1, 51.5]},
+            {"place_id": "wd:Q1", "title": "A", "repr_point": [-0.05, 51.52]}]}, FakeTransport(AREA)).json()
+        self.assertEqual((far["plan"]["kind"], far["plan"]["level"]), ("per_member", edop.BASIN_LEVEL))
+        self.assertEqual((tight["plan"]["kind"], tight["plan"]["level"]), ("area", edop.AREA_LEVEL))
+        # The level in the plan is the level in the request actually sent.
+        with patch.object(edop, "BASIN_LEVEL", 6):
+            t = FakeTransport(BASIN)
+            caches["default"].clear()
+            r = self.env(self.Lonely.pk, t).json()
+        self.assertEqual((r["plan"]["level"], t.calls[0]["params"]["level"]), (6, 6))
+
     def test_locus_gloss(self):
         r = self.post("/atlas/locus/gloss/", {"members": [
             {"place_id": "gn:1", "namespace": "gn", "title": "Berlin", "types": [{"label": "P"}], "ccodes": ["DE"]},
