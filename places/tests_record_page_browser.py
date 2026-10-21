@@ -266,6 +266,15 @@ class RecordPageBrowserTests(LiveServerTestCase):
             "member:Gateway Town", "member:Record B", "record:Record A"]
         results["map_extent_excludes_tier3"] = bool(m) and m["a"] and m["b"] and m["gw"] and not m["c"] \
             and not m["ph"]
+        # The canvas fills its container (dev walkthrough 2026-10-21: 400x300 in ~1294 px,
+        # because the map was created while the section was still hidden).
+        size = page.evaluate("""() => { const el = document.getElementById('concordance_map');
+            const map = window.__whgRecordMap; if (!el || !map) return null;
+            const c = map.getCanvas();
+            return {box: el.clientWidth, boxH: el.clientHeight, css: c.clientWidth, cssH: c.clientHeight}; }""")
+        self.map_size = size
+        results["map_canvas_fills_container"] = bool(size) and size["box"] > 600 \
+            and abs(size["css"] - size["box"]) <= 2 and abs(size["cssH"] - size["boxH"]) <= 2
         results["map_rendered_members"] = bool(m) and {"Gateway Town", "Record B"} <= set(m["rendered"]) \
             and "Record C" not in m["rendered"]
         return results, m
@@ -278,9 +287,18 @@ class RecordPageBrowserTests(LiveServerTestCase):
             results, m = self.concordance_checks(page)
         self.shot(page, "record_with_concordance")
         failed = {k: v for k, v in results.items() if not v}
-        self.assertEqual(failed, {}, f"checks failed: {failed}; map={m}; diag={self.map_diag}; "
-                         f"errors={self.page_errors}; console={self.console[-25:]}")
+        self.assertEqual(failed, {}, f"checks failed: {failed}; map={m}; size={self.map_size}; "
+                         f"diag={self.map_diag}; errors={self.page_errors}; console={self.console[-25:]}")
         self.assertEqual(self.page_errors, [])
+        # ... and keeps tracking it when the container changes size later.
+        page.set_viewport_size({"width": 820, "height": 1000})
+        tracked = self.wait_for(page, """() => { const el = document.getElementById('concordance_map');
+            const c = window.__whgRecordMap.getCanvas();
+            return el.clientWidth < 800 && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""", 5000)
+        after = page.evaluate("""() => [document.getElementById('concordance_map').clientWidth,
+                                        window.__whgRecordMap.getCanvas().clientWidth]""")
+        self.assertTrue(tracked, f"canvas did not follow its container: {after} (before: {self.map_size})")
+        self.assertLess(after[0], self.map_size["box"])                   # the container did shrink
 
     def test_unreachable_base_map_still_maps(self):
         """The base style failing outright falls back to a plain background, and
