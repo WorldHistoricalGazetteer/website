@@ -36,3 +36,25 @@
 .enr-note { color: #777; font-size: .78rem; }
 .enr-notes { font-size: .8rem; color: #666; padding-left: 1.1rem; margin: .3rem 0 0; }
 .enr-attribution { color: #555; border-top: 1px solid #e9ecef; padding-top: .4rem; margin-top: .5rem; }
+
+/* Stage 5: gloss facet cards, the environment card + modal, the Wikipedia block.
+   The card look itself is recordShell.css (.rs-card, .rs-icon-<theme>). */
+.rs-facet-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: .6rem; }
+@media (min-width: 576px) { .rs-facet-grid { grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); } }
+.rs-facet-grid .rs-facet[data-facet="unknown"], .rs-facet-grid .rs-facet[data-facet="sources"] { grid-column: 1 / -1; }
+.rs-facet p { font-size: .92rem; }
+.rs-facet .enr-unknown { color: inherit; margin: 0; }
+.enr-gloss-cards .enr-how { margin-top: .6rem; }
+.enr-capped { margin-bottom: .5rem; }
+
+.enr-env-card .btn { margin-top: .1rem; }
+.enr-env-status:empty { display: none; }
+.enr-env-modal .modal-body { font-size: .95rem; }
+.enr-env-inline { border: 1px solid #e3e6e9; border-radius: 8px; margin-top: .6rem; }
+.enr-env-inline .modal-dialog { margin: 0; max-width: none; }
+.enr-env-inline .modal-header .btn-close, .enr-env-inline .modal-footer { display: none; }
+
+.enr-wp-list { list-style: none; padding: 0; margin: 0 0 .25rem; font-size: .92rem; }
+.enr-wp-list li { padding: 1px 0; }
+.enr-wp-lang { color: #565e66; font-size: .82rem; min-width: 5.5rem; display: inline-block; }
+.enr-wp-more summary { cursor: pointer; font-size: .86rem; color: #0b5394; }

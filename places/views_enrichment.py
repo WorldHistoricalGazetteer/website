@@ -244,8 +244,14 @@ def atlas_record_gloss(request, pk):
     members = _public_members(group["members"]) if public else group["members"]
     gloss = build_gloss(members, kind="concordance", unresolved=group.get("unresolved", 0),
                         truncated=bool(group.get("truncated")))
+    # place#325 Stage 5: Wikipedia links held on the group's wd: members (from the same
+    # /api/places answer; no extra call). They obey the members' visibility: the public
+    # path reads only what an anonymous caller may see; a beta user also reads members
+    # it may see that an anonymous caller may not, as its gloss does.
+    from places.wikipedia_links import wikipedia_payload
     return JsonResponse({"public": True, "place_id": place.pk, "gloss": gloss,
-                         "members": [_member_view(m) for m in members]})
+                         "members": [_member_view(m) for m in members],
+                         **wikipedia_payload(members, include_withheld=not public)})
 
 
 def _posted_members(request):
@@ -319,5 +325,10 @@ def atlas_locus_gloss(request):
     if err:
         return err
     # Not sent off-site: the gloss keeps members mark_offsite withholds from EDOPS.
+    # ``wikipedia``: links on posted wd: hits (none today: the gateway search model
+    # drops ``links``; places.wikipedia_links). Beta-only endpoint, so a beta user's
+    # visibility; if this ever becomes public it must take the Record path's rule.
+    from places.wikipedia_links import wikipedia_payload
     return JsonResponse({"gloss": build_gloss(members, kind="locus"),
-                         "members": [_member_view(m) for m in members]})
+                         "members": [_member_view(m) for m in members],
+                         **wikipedia_payload(members, include_withheld=True)})

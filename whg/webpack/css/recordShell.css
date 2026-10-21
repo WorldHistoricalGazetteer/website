@@ -1,0 +1,179 @@
+/* whg/webpack/css/recordShell.css: the shared look of the Record and Locus pages (place#325
+ * Stage 5, "siblings, not cousins"). Owned by the foundation; page agents USE these
+ * classes and add page-only rules to their own css (atlasRecord.css / locus.css), and
+ * ask rather than edit here. Light theme only (the site has no dark mode); colours are
+ * custom properties so a page can retune one without copying rules. Mobile first.
+ *
+ * ── CONTRACT ─────────────────────────────────────────────────────────────────────
+ * Structure (plain divs for the two columns: below lg they become `display: contents`,
+ * so they must not be landmarks; put <header>/<section>/<aside> INSIDE them):
+ *
+ *   <div class="rs-layout">
+ *     <div class="rs-main">
+ *       <header class="rs-header">…title, identifiers, promise text…</header>
+ *       <section>…the page's main sections…</section>
+ *     </div>
+ *     <div class="rs-side">
+ *       <div class="rs-map"><div class="rs-map-canvas" id="…"></div></div>
+ *       <div class="rs-card">…</div> …
+ *     </div>
+ *   </div>
+ *
+ *   >= lg (992px): main ~7/12 left, side ~5/12 right. Below lg: one column, in the
+ *   order header, map, the rest of .rs-main, the rest of .rs-side.
+ *
+ * .rs-map         roughly square (aspect-ratio 1/1), max-height var(--rs-map-max-h) =
+ *                 480px; position: relative. The map container is EITHER a child
+ *                 .rs-map-canvas (absolutely filling it; wins over MapLibre's
+ *                 .maplibregl-map { position: relative }) OR .rs-map itself. Its size
+ *                 comes from CSS alone, so a ResizeObserver on the container sees
+ *                 every change (column switch at lg, window resize) and map.resize() /
+ *                 a refit works as before.
+ * .rs-card        a compact card; .rs-card-title its heading (h2/h3, any level: the
+ *                 class sets the size), .rs-card-subtitle a heading inside a card.
+ * .rs-icon        an icon (<i class="fa-solid fa-… rs-icon" aria-hidden="true">) inside
+ *                 a title: takes the card theme's accent colour.
+ * .rs-icon-<theme> on a card (or any element) sets its theme: sources, names, type,
+ *                 countries, dates, unknown (muted), links, environment. A themed card
+ *                 gets a coloured left rule and a tinted icon; its TEXT stays the body
+ *                 colour (every accent is >= 4.5:1 on white and on its own tint).
+ * .rs-facts       a <dl> of label/value rows: <dl class="rs-facts"><dt>…</dt><dd>…</dd></dl>.
+ * .rs-muted       muted secondary text (>= 4.5:1 on white and on the card background).
+ */
+
+:root {
+    --rs-gap: 1rem;
+    --rs-map-max-h: 480px;
+    --rs-radius: 8px;
+    --rs-text: #212529;
+    --rs-muted: #565e66;            /* 6.6:1 on #fff, 6.1:1 on the unknown tint */
+    --rs-border: #dfe3e7;
+    --rs-card-bg: #fff;
+    --rs-map-bg: #eef1f4;
+
+    /* theme accents (icon + left rule) and tints; each accent >= 4.5:1 on #fff and its tint */
+    --rs-sources: #1c5d8c;        --rs-sources-tint: #eef5fb;
+    --rs-names: #6a3d9a;          --rs-names-tint: #f5f0fa;
+    --rs-type: #8a4a06;           --rs-type-tint: #fdf5ea;
+    --rs-countries: #a3262d;      --rs-countries-tint: #fcf0f0;
+    --rs-dates: #0d6b59;          --rs-dates-tint: #ebf6f3;
+    --rs-unknown: #5c636a;        --rs-unknown-tint: #f5f6f7;
+    --rs-links: #0b5394;          --rs-links-tint: #eef3fb;
+    --rs-environment: #2f6b34;    --rs-environment-tint: #eef6ee;
+}
+
+/* ── layout ─────────────────────────────────────────────────────────────────── */
+.rs-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rs-gap);
+    min-width: 0;
+}
+.rs-layout > .rs-main,
+.rs-layout > .rs-side { display: contents; }
+.rs-layout .rs-header { order: 1; }
+.rs-layout .rs-side > .rs-map { order: 2; }
+.rs-layout .rs-main > :not(.rs-header) { order: 3; min-width: 0; }
+.rs-layout .rs-side > :not(.rs-map) { order: 4; min-width: 0; }
+
+@media (min-width: 992px) {
+    .rs-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+        column-gap: calc(var(--rs-gap) * 1.75);
+        align-items: start;
+    }
+    .rs-layout > .rs-main,
+    .rs-layout > .rs-side {
+        display: flex;
+        flex-direction: column;
+        gap: var(--rs-gap);
+        min-width: 0;
+    }
+    .rs-layout .rs-header,
+    .rs-layout .rs-side > .rs-map,
+    .rs-layout .rs-main > :not(.rs-header),
+    .rs-layout .rs-side > :not(.rs-map) { order: 0; }
+}
+
+/* ── the map box ────────────────────────────────────────────────────────────── */
+.rs-map {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    max-height: var(--rs-map-max-h);
+    border: 1px solid var(--rs-border);
+    border-radius: var(--rs-radius);
+    background: var(--rs-map-bg);
+    overflow: hidden;
+}
+.rs-map .rs-map-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+/* ── cards ──────────────────────────────────────────────────────────────────── */
+.rs-card {
+    --rs-accent: var(--rs-border);
+    background: var(--rs-card-bg);
+    color: var(--rs-text);
+    border: 1px solid var(--rs-border);
+    border-radius: var(--rs-radius);
+    padding: .7rem .9rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.rs-card > :last-child { margin-bottom: 0; }
+.rs-card-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: .45rem;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    margin: 0 0 .4rem;
+    color: var(--rs-text);
+}
+.rs-card-subtitle {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .9rem;
+    font-weight: 600;
+    margin: .6rem 0 .3rem;
+    color: var(--rs-text);
+}
+.rs-icon { color: var(--rs-accent, var(--rs-muted)); width: 1.15em; text-align: center; flex: 0 0 auto; }
+.rs-muted { color: var(--rs-muted); }
+
+/* themes: set the accent and tint; a themed card shows them as a left rule and icon */
+.rs-icon-sources { --rs-accent: var(--rs-sources); --rs-tint: var(--rs-sources-tint); }
+.rs-icon-names { --rs-accent: var(--rs-names); --rs-tint: var(--rs-names-tint); }
+.rs-icon-type { --rs-accent: var(--rs-type); --rs-tint: var(--rs-type-tint); }
+.rs-icon-countries { --rs-accent: var(--rs-countries); --rs-tint: var(--rs-countries-tint); }
+.rs-icon-dates { --rs-accent: var(--rs-dates); --rs-tint: var(--rs-dates-tint); }
+.rs-icon-unknown { --rs-accent: var(--rs-unknown); --rs-tint: var(--rs-unknown-tint); }
+.rs-icon-links { --rs-accent: var(--rs-links); --rs-tint: var(--rs-links-tint); }
+.rs-icon-environment { --rs-accent: var(--rs-environment); --rs-tint: var(--rs-environment-tint); }
+.rs-card[class*="rs-icon-"] { border-left: 4px solid var(--rs-accent); }
+.rs-card.rs-icon-unknown { background: var(--rs-tint); }
+.rs-card.rs-icon-unknown, .rs-card.rs-icon-unknown .rs-card-title { color: var(--rs-muted); }
+i[class*="rs-icon-"] { color: var(--rs-accent); }
+
+/* ── label/value rows ───────────────────────────────────────────────────────── */
+.rs-facts {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: .1rem .75rem;
+    margin: 0;
+    font-size: .92rem;
+}
+.rs-facts dt { font-weight: 500; color: var(--rs-muted); }
+.rs-facts dd { margin: 0 0 .35rem; min-width: 0; overflow-wrap: anywhere; }
+@media (min-width: 400px) {
+    .rs-facts { grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr); }
+    .rs-facts dd { margin-bottom: .2rem; }
+}

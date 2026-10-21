@@ -1,23 +1,64 @@
 // whg/webpack/js/enrichment.js
 //
-// place#325 Stage 3, beta pages only: the "About this group" gloss (place#299,
-// limited) and the EDOPS "Environmental signature", for the Record page
-// (atlasRecord.js -> initRecordEnrichment) and the Locus page (locus.js ->
-// loadLocusEnrichment). Both are fetched after the page has painted, from the
-// beta-gated endpoints in places/views_enrichment.py.
+// place#325, beta pages (and the Record page's public sections with the v4 release
+// switch on): the "About this group / cluster" gloss (place#299, limited), the EDOPS
+// environment, and the Wikipedia links WHG's Wikidata records hold, for the Record page
+// (atlasRecord.js) and the Locus page (locus.js). Data comes from the endpoints in
+// places/views_enrichment.py.
+//
+// ── CONTRACT for the page agents (Stage 5) ──────────────────────────────────────
+// Shared look: whg/webpack/css/recordShell.css (imported here too, so a page that
+// imports this module gets it): .rs-layout/.rs-main/.rs-side/.rs-map/.rs-card/
+// .rs-card-title/.rs-facts/.rs-icon-<theme>. See that file's header.
+//
+// renderGlossCards(containerEl, glossPayload, {kind, cap} = {})
+//     Replaces containerEl's content with one themed .rs-card per gloss facet
+//     (sources, names, type, countries, dates, unknown), then "How this was written".
+//     glossPayload: the endpoint's JSON ({gloss: {...}}) or the gloss object itself.
+//     No `facets` (an older server) -> the Stage 3 paragraph rendering.
+// loadGlossCards(containerEl, fetchGloss, {kind, cap, onData} = {}) -> Promise
+//     Spinner, then fetchGloss() (a () => Promise<{ok, status, data, timeout?}>, e.g.
+//     recordFetcher(url) / locusFetchers(members).gloss), then renderGlossCards; on
+//     failure a plain message + "Try again"; {public: false} -> the not-public line.
+//     onData(data) is called with the whole JSON on success: data.wikipedia is there.
+// mountEnvironmentCard(containerEl, {fetchEnvironment, title = 'Environment', cap,
+//                      invitation, headingTag = 'h2'}) -> {open(), element}
+//     A compact card (title, EDOPS badge, one sentence, "Show environment" button).
+//     NOTHING is fetched until the button is clicked; then fetchEnvironment() is called
+//     and the answer is shown in a Bootstrap modal built on demand (bands A-E/T, scope
+//     and level wording, attribution and 'research prototype' note as in Stage 3). The
+//     answer is cached in the closure: reopening never refetches. A failure (incl. 429
+//     and 403) is said plainly in the modal, nothing is cached, and the button retries.
+// renderWikipediaLinks(containerEl, wikipedia, {total, max = 6, headingTag = 'h3'})
+//     A "Wikipedia" block: language-labelled links, English first (server order), the
+//     first `max` shown and the rest behind "+n more languages". Labelled as links held
+//     in WHG's Wikidata record(s). Renders nothing (and empties containerEl) when the
+//     list is empty: only where known.
+// recordFetcher(url) -> () => Promise   GET, same-origin credentials (the Record pair).
+// locusFetchers(members) -> {gloss, environment, cap}   POSTs the capped, slimmed
+//     members with X-CSRFToken (the Locus pair), exactly as Stage 3 did.
+// capPostedMembers(members), LOCUS_MAX_POSTED_MEMBERS: unchanged.
+//
+// OLD exports kept as thin wrappers (to be removed by the page agents):
+//   initRecordEnrichment()            -> gloss cards into #record_gloss .enr-body and an
+//                                        environment card into #record_environment .enr-body
+//   loadLocusEnrichment(members, anchor) -> the same into the Stage 3 locus sections
+// Neither fetches EDOPS on page load any more.
 //
 // Wording rules carried from the server: every status is its own sentence, and
 // "could not be reached" is never worded as "no data"; Band D is present-day
 // only; the years used for Band T, and why Band T was not asked for, are shown.
 //
-// Readiness for tests: window.__whgEnrichment = {gloss, environment}, each
-// 'loading' | 'ready' | 'not_public' | 'error' (environment also carries the
-// server's overall status in environmentStatus).
+// Readiness for tests: window.__whgEnrichment = {gloss, environment, environmentStatus,
+// environmentFetches}: gloss 'idle' | 'loading' | 'ready' | 'not_public' | 'error';
+// environment the same, 'idle' until the button is clicked; environmentFetches counts
+// fetchEnvironment() calls (a reopen must not add one).
 
+import '../css/recordShell.css';
 import '../css/enrichment.css';
 
 const state = (window.__whgEnrichment = window.__whgEnrichment
-    || { gloss: 'idle', environment: 'idle', environmentStatus: null });
+    || { gloss: 'idle', environment: 'idle', environmentStatus: null, environmentFetches: 0 });
 const FETCH_TIMEOUT_MS = 45000;
 // = places/views_enrichment.py LOCUS_MAX_POSTED_MEMBERS: the locus endpoints refuse
 // more (400), so a bigger cluster is described from a deterministic 200 of it.
@@ -79,17 +120,178 @@ function spinner(text) {
         aria-hidden="true"></div><span>${esc(text)}</span></div>`;
 }
 
+const NOT_PUBLIC_HTML = '<p class="text-muted small mb-0">Shown for records in public datasets only, and this record\'s dataset is not public. Nothing was looked up or sent anywhere.</p>';
+
+// ── fetchers (request shapes as in Stage 3) ────────────────────────────────────
+/** Record page: GET one of its two endpoints (data-endpoint on the Stage 3 sections). */
+export function recordFetcher(url) {
+    return () => getJSON(url);
+}
+
+// A wd: hit's Wikipedia sitelinks, if the hit carries `links` (the gateway search model
+// does not declare them today: places/wikipedia_links.py). English first, at most 20 per
+// member, so 200 members stay well inside the endpoint's 512 KiB body limit.
+const MAX_POSTED_WIKIPEDIA_PER_MEMBER = 20;
+function wikipediaLinksToPost(m) {
+    const ns = String((m && m.namespace) || String((m && m.place_id) || '').split(':')[0]).toLowerCase();
+    if (ns !== 'wd' || !Array.isArray(m.links)) return undefined;
+    const wp = m.links.filter((l) => l && typeof l.identifier === 'string' && l.identifier.includes('.wikipedia.org/wiki/'));
+    wp.sort((a, b) => Number(!a.identifier.includes('//en.')) - Number(!b.identifier.includes('//en.')));
+    return wp.slice(0, MAX_POSTED_WIKIPEDIA_PER_MEMBER).map((l) => ({ type: l.type, identifier: l.identifier }));
+}
+
+/** Locus page: POST the selected cluster's members (capped, slimmed) to the two locus
+ * endpoints. ``cap`` is capPostedMembers' answer, for the "first 200 of N" note. */
+export function locusFetchers(members) {
+    const cap = capPostedMembers(Array.isArray(members) ? members : []);
+    state.posted = { sent: cap.sent.length, total: cap.total, capped: cap.capped };
+    const slim = cap.sent.map((m) => ({
+        place_id: m.place_id, title: m.title, namespace: m.namespace, repr_point: m.repr_point,
+        names: m.names, types: m.types, ccodes: m.ccodes, temporal_range: m.temporal_range, timespans: m.timespans,
+        links: wikipediaLinksToPost(m),
+    }));
+    const post = (url) => () => getJSON(url, {
+        method: 'POST', body: JSON.stringify({ members: slim }),
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': window.csrfToken || '' },
+    });
+    return { gloss: post('/atlas/locus/gloss/'), environment: post('/atlas/locus/environment/'), cap };
+}
+
 // ── gloss ───────────────────────────────────────────────────────────────────
+// Stage 3's paragraph rendering: the fallback when a payload carries no facets.
 function renderGloss(body, data, kind) {
     const g = data.gloss || {};
     const sentences = (g.sentences || []).map((s) => `<p class="enr-gloss-sentence">${esc(s)}</p>`).join('');
     const unknown = (g.unknown || []).length
         ? `<h3 class="h6 mt-3 mb-1">Not known from these records</h3><ul class="enr-unknown">${
             g.unknown.map((u) => `<li>${esc(u)}</li>`).join('')}</ul>` : '';
-    const limits = (g.limits || []).map((l) => `<li>${esc(l)}</li>`).join('');
     body.innerHTML = `<div class="enr-gloss" data-kind="${esc(kind)}">${sentences || '<p class="text-muted">Nothing to say.</p>'}
         ${unknown}
-        <details class="enr-how small text-muted mt-2"><summary>How this was written</summary><ul>${limits}</ul></details></div>`;
+        ${howHTML(g)}</div>`;
+}
+
+function howHTML(g) {
+    const limits = (g.limits || []).map((l) => `<li>${esc(l)}</li>`).join('');
+    return `<details class="enr-how small text-muted mt-2"><summary>How this was written</summary><ul>${limits}</ul></details>`;
+}
+
+// facet key -> [theme, Font Awesome 6 icon] (FA 6.5.1 is on the site: base.js)
+const FACET_ICONS = {
+    sources: ['sources', 'fa-database'],
+    names: ['names', 'fa-font'],
+    type: ['type', 'fa-tag'],
+    countries: ['countries', 'fa-flag'],
+    dates: ['dates', 'fa-hourglass-half'],
+    unknown: ['unknown', 'fa-circle-question'],
+};
+
+function facetCard(f) {
+    const [theme, icon] = FACET_ICONS[f.key] || ['unknown', 'fa-circle-info'];
+    const body = f.key === 'unknown'
+        ? `<ul class="enr-unknown mb-0">${(f.items || []).map((i) => `<li>${esc(i.label)}</li>`).join('')}</ul>`
+        : `<p class="mb-0">${esc(f.text)}</p>`;
+    return `<div class="rs-card rs-facet rs-icon-${esc(theme)}" data-facet="${esc(f.key)}">
+        <h3 class="rs-card-title"><i class="fa-solid ${esc(icon)} rs-icon" aria-hidden="true"></i>${esc(f.title)}</h3>
+        ${body}</div>`;
+}
+
+function capNote(cap) {
+    return cap && cap.capped
+        ? `<p class="enr-capped small text-muted">Based on the first ${esc(cap.sent.length)} of ${esc(cap.total)} members (in order of identifier): this page describes at most ${esc(LOCUS_MAX_POSTED_MEMBERS)}.</p>`
+        : '';
+}
+
+/** One themed card per gloss facet (see the contract at the top). */
+export function renderGlossCards(containerEl, glossPayload, { kind = 'concordance', cap = null } = {}) {
+    if (!containerEl) return;
+    const data = glossPayload && glossPayload.gloss ? glossPayload : { gloss: glossPayload || {} };
+    const g = data.gloss || {};
+    if (!Array.isArray(g.facets)) {
+        renderGloss(containerEl, data, kind);
+    } else {
+        const cards = g.facets.map(facetCard).join('');
+        containerEl.innerHTML = `<div class="enr-gloss enr-gloss-cards" data-kind="${esc(kind)}">
+            <div class="rs-facet-grid">${cards || '<p class="text-muted">Nothing to say.</p>'}</div>
+            ${howHTML(g)}</div>`;
+    }
+    if (cap && cap.capped) containerEl.insertAdjacentHTML('afterbegin', capNote(cap));
+}
+
+/** Spinner, fetch, cards; failure says so and retries (see the contract at the top). */
+export async function loadGlossCards(containerEl, fetchGloss, { kind = 'concordance', cap = null, onData = null } = {}) {
+    if (!containerEl || typeof fetchGloss !== 'function') return;
+    containerEl.innerHTML = spinner('Describing the records…');
+    state.gloss = 'loading';
+    const res = await fetchGloss();
+    if (!res.ok || !res.data) {
+        containerEl.innerHTML = errorHTML('The description', res);
+        containerEl.querySelector('.enr-retry').addEventListener('click',
+            () => loadGlossCards(containerEl, fetchGloss, { kind, cap, onData }));
+        state.gloss = 'error';
+        return;
+    }
+    if (res.data.public === false) {
+        containerEl.innerHTML = NOT_PUBLIC_HTML;
+        state.gloss = 'not_public';
+        return;
+    }
+    renderGlossCards(containerEl, res.data, { kind, cap });
+    state.gloss = 'ready';
+    if (typeof onData === 'function') onData(res.data);
+}
+
+function errorHTML(what, res) {
+    return `<div class="alert alert-warning mb-0 enr-error"><p class="mb-2">${esc(failureText(what, res))} This is not a finding that there is nothing to show.</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary enr-retry">Try again</button></div>`;
+}
+
+// ── Wikipedia ───────────────────────────────────────────────────────────────
+function languageName(code) {
+    try {
+        const dn = new Intl.DisplayNames(['en'], { type: 'language' });
+        const n = dn.of(code);
+        if (n && n !== code) return n;
+    } catch (e) { /* an unknown code, or no Intl.DisplayNames */ }
+    return code;
+}
+
+function safeWikipediaUrl(u) {
+    return typeof u === 'string' && /^https:\/\/[a-z][a-z0-9-]{0,19}\.wikipedia\.org\/wiki\/[^\s]+$/.test(u);
+}
+
+function wikiItem(w) {
+    const name = languageName(w.lang);
+    return `<li><span class="enr-wp-lang" aria-hidden="true">${esc(name)}</span><a href="${esc(w.url)}" target="_blank"`
+        + ` rel="noopener noreferrer" hreflang="${esc(w.lang)}"><span class="visually-hidden">${esc(name)} Wikipedia: </span>`
+        + `<span lang="${esc(w.lang)}">${esc(w.title)}</span></a></li>`;
+}
+
+/** The "Wikipedia" block for the right column's Elsewhere card (see the contract). */
+export function renderWikipediaLinks(containerEl, wikipedia, { total = null, max = 6, headingTag = 'h3' } = {}) {
+    if (!containerEl) return;
+    const links = (Array.isArray(wikipedia) ? wikipedia : []).filter((w) => w && safeWikipediaUrl(w.url));
+    if (!links.length) {
+        containerEl.innerHTML = '';
+        return;
+    }
+    const shown = links.slice(0, max);
+    const rest = links.slice(max);
+    const shownLangs = new Set(shown.map((w) => w.lang));
+    const restLangs = new Set(rest.map((w) => w.lang));
+    const languagesOnly = rest.length === restLangs.size && ![...restLangs].some((l) => shownLangs.has(l));
+    const more = rest.length
+        ? `<details class="enr-wp-more"><summary>+${esc(rest.length)} more ${languagesOnly
+            ? (rest.length === 1 ? 'language' : 'languages') : (rest.length === 1 ? 'link' : 'links')}</summary>
+            <ul class="enr-wp-list">${rest.map(wikiItem).join('')}</ul></details>` : '';
+    const notAll = total != null && total > links.length
+        ? `<p class="small text-muted mb-0">The first ${esc(links.length)} of ${esc(total)} are listed.</p>` : '';
+    const tag = /^h[2-6]$/.test(headingTag) ? headingTag : 'h3';
+    const several = links.some((w) => w.from !== links[0].from);
+    containerEl.innerHTML = `<div class="enr-wikipedia">
+        <${tag} class="rs-card-subtitle"><i class="fa-brands fa-wikipedia-w rs-icon" aria-hidden="true"></i>Wikipedia</${tag}>
+        <p class="small text-muted mb-1">${several ? 'Links held in WHG\'s Wikidata records' : `Links held in WHG's Wikidata record ${esc(links[0].from)}`}:
+            what Wikidata links to, not a claim WHG makes about the place.</p>
+        <ul class="enr-wp-list">${shown.map(wikiItem).join('')}</ul>${more}${notAll}</div>`;
 }
 
 // ── environmental signature ────────────────────────────────────────────────
@@ -243,46 +445,128 @@ function renderEnvironment(body, data) {
     body.innerHTML = h;
 }
 
-// ── loaders ─────────────────────────────────────────────────────────────────
-async function loadInto(section, what, key, fetcher, render) {
-    const body = section.querySelector('.enr-body');
-    body.innerHTML = spinner(what === 'gloss' ? 'Describing the records…' : 'Asking EDOPS for the environmental signature…');
-    state[key] = 'loading';
-    const res = await fetcher();
-    if (!res.ok || !res.data) {
-        body.innerHTML = `<div class="alert alert-warning mb-0 enr-error"><p class="mb-2">${esc(failureText(
-            what === 'gloss' ? 'The description' : 'The environmental signature', res))} This is not a finding that there is nothing to show.</p>
-            <button type="button" class="btn btn-sm btn-outline-secondary enr-retry">Try again</button></div>`;
-        body.querySelector('.enr-retry').addEventListener('click', () => loadInto(section, what, key, fetcher, render));
-        state[key] = 'error';
-        return;
+// ── the environment card + on-demand modal ───────────────────────────────────
+let modalSeq = 0;
+
+const DEFAULT_INVITATION = 'River basin, climate and land-use figures for where these records lie, from EDOPS, '
+    + 'a research service outside WHG. Nothing is looked up or sent until you ask.';
+
+/** The compact Environment card; EDOPS is asked only on click (see the contract). */
+export function mountEnvironmentCard(containerEl, {
+    fetchEnvironment, title = 'Environment', cap = null, invitation = DEFAULT_INVITATION, headingTag = 'h2',
+} = {}) {
+    if (!containerEl || typeof fetchEnvironment !== 'function') return null;
+    const n = ++modalSeq;
+    const tag = /^h[2-6]$/.test(headingTag) ? headingTag : 'h2';
+    containerEl.innerHTML = `<div class="rs-card rs-icon-environment enr-env-card">
+        <${tag} class="rs-card-title"><i class="fa-solid fa-water rs-icon" aria-hidden="true"></i>${esc(title)}
+            <span class="enr-badge">EDOPS</span></${tag}>
+        <p class="small mb-2">${esc(invitation)}</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary enr-env-show" aria-haspopup="dialog">Show environment</button>
+        <span class="enr-env-status small text-muted ms-2" role="status"></span></div>`;
+    const card = containerEl.firstElementChild;
+    const button = card.querySelector('.enr-env-show');
+    const status = card.querySelector('.enr-env-status');
+    state.environment = 'idle';
+
+    let cached = null;      // the endpoint's JSON once one answer has arrived (or {public: false})
+    let inflight = null;
+    let modalEl = null;
+    let modal = null;
+
+    function ensureModal() {
+        if (modalEl) return modalEl;
+        modalEl = document.createElement('div');
+        modalEl.className = 'modal fade enr-env-modal';
+        modalEl.id = `enr_env_modal_${n}`;
+        modalEl.tabIndex = -1;
+        modalEl.setAttribute('aria-labelledby', `enr_env_modal_${n}_h`);
+        modalEl.setAttribute('aria-hidden', 'true');
+        modalEl.innerHTML = `<div class="modal-dialog modal-lg modal-dialog-scrollable"><div class="modal-content">
+            <div class="modal-header"><h2 class="modal-title h5" id="enr_env_modal_${n}_h">${esc(title)}
+                <span class="enr-badge">EDOPS</span></h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+            <div class="modal-body enr-body"></div>
+            <div class="modal-footer"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button></div>
+            </div></div>`;
+        document.body.appendChild(modalEl);
+        const Modal = window.bootstrap && window.bootstrap.Modal;
+        modal = Modal ? (Modal.getOrCreateInstance ? Modal.getOrCreateInstance(modalEl) : new Modal(modalEl)) : null;
+        return modalEl;
     }
-    if (res.data.public === false) {
-        body.innerHTML = '<p class="text-muted small mb-0">Shown for records in public datasets only, and this record\'s dataset is not public. Nothing was looked up or sent anywhere.</p>';
-        state[key] = 'not_public';
-        return;
+
+    function show() {
+        ensureModal();
+        if (modal) {
+            modal.show();
+        } else {
+            // No Bootstrap JS: show the modal's body inline after the card instead.
+            modalEl.classList.remove('fade', 'modal');
+            modalEl.classList.add('enr-env-inline');
+            card.insertAdjacentElement('afterend', modalEl);
+        }
     }
-    render(body, res.data);
-    if (key === 'environment') state.environmentStatus = res.data.status;
-    state[key] = 'ready';
+
+    function paint(data) {
+        const body = modalEl.querySelector('.modal-body');
+        if (data.public === false) {
+            body.innerHTML = NOT_PUBLIC_HTML;
+            return;
+        }
+        renderEnvironment(body, data);
+        if (cap && cap.capped) body.insertAdjacentHTML('afterbegin', capNote(cap));
+    }
+
+    async function load() {
+        const body = modalEl.querySelector('.modal-body');
+        body.innerHTML = spinner('Asking EDOPS for the environmental signature…');
+        state.environment = 'loading';
+        state.environmentFetches = (state.environmentFetches || 0) + 1;
+        button.disabled = true;
+        status.textContent = 'Asking EDOPS…';
+        const res = await fetchEnvironment();
+        button.disabled = false;
+        if (!res || !res.ok || !res.data) {
+            body.innerHTML = errorHTML('The environmental signature', res || {});
+            body.querySelector('.enr-retry').addEventListener('click', start);
+            status.textContent = 'Not loaded: try again.';
+            state.environment = 'error';
+            return;
+        }
+        cached = res.data;
+        paint(cached);
+        status.textContent = res.data.public === false ? '' : 'Loaded.';
+        if (res.data.public !== false) state.environmentStatus = res.data.status;
+        state.environment = res.data.public === false ? 'not_public' : 'ready';
+    }
+
+    function start() {
+        if (!inflight) inflight = load().finally(() => { inflight = null; });
+        return inflight;
+    }
+
+    function open() {
+        show();
+        if (cached) return Promise.resolve();          // a reopen never refetches
+        return start();
+    }
+
+    button.addEventListener('click', open);
+    return { open, element: card };
 }
 
-/** Record page: sections #record_gloss and #record_environment are in the template. */
+// ── OLD exports: thin wrappers, to be removed by the page agents ──────────────────
+/** Record page (Stage 3 template): #record_gloss and #record_environment sections. */
 export function initRecordEnrichment() {
     const gloss = document.getElementById('record_gloss');
     const env = document.getElementById('record_environment');
     if (!isBetaUser() && !(isPublicSection(gloss) || isPublicSection(env))) return;
-    // One after the other: both read the same server-side group (the concordance,
-    // 0.3-3 s), which the first request caches for the second.
-    const first = (gloss && gloss.dataset.endpoint)
-        ? loadInto(gloss, 'gloss', 'gloss', () => getJSON(gloss.dataset.endpoint),
-            (b, d) => renderGloss(b, d, 'concordance'))
-        : Promise.resolve();
+    if (gloss && gloss.dataset.endpoint) {
+        loadGlossCards(gloss.querySelector('.enr-body'), recordFetcher(gloss.dataset.endpoint), { kind: 'concordance' });
+    }
     if (env && env.dataset.endpoint) {
-        env.querySelector('.enr-body').innerHTML = spinner('Waiting to ask EDOPS…');
-        state.environment = 'loading';
-        first.finally(() => loadInto(env, 'environment', 'environment', () => getJSON(env.dataset.endpoint),
-            renderEnvironment));
+        mountEnvironmentCard(env.querySelector('.enr-body'), {
+            fetchEnvironment: recordFetcher(env.dataset.endpoint), title: 'Environment', headingTag: 'h3' });
     }
 }
 
@@ -323,32 +607,12 @@ export function capPostedMembers(members) {
     return { sent: byId.slice(0, LOCUS_MAX_POSTED_MEMBERS), total: distinct.length, capped: true };
 }
 
-function capNote(cap) {
-    return cap.capped
-        ? `<p class="enr-capped small text-muted">Based on the first ${esc(cap.sent.length)} of ${esc(cap.total)} members (in order of identifier): this page describes at most ${esc(LOCUS_MAX_POSTED_MEMBERS)}.</p>`
-        : '';
-}
-
-/** Locus page: describe ``members`` (the selected cluster's current hits). */
+/** Locus page (Stage 3 sections): describe ``members`` (the selected cluster's hits). */
 export function loadLocusEnrichment(members, anchor) {
     if (!isBetaUser() || !anchor || !Array.isArray(members) || !members.length) return;
     ensureLocusSections(anchor);
-    const cap = capPostedMembers(members);
-    state.posted = { sent: cap.sent.length, total: cap.total, capped: cap.capped };
-    const slim = cap.sent.map((m) => ({
-        place_id: m.place_id, title: m.title, namespace: m.namespace, repr_point: m.repr_point,
-        names: m.names, types: m.types, ccodes: m.ccodes, temporal_range: m.temporal_range, timespans: m.timespans,
-    }));
-    const post = (url) => () => getJSON(url, {
-        method: 'POST', body: JSON.stringify({ members: slim }),
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': window.csrfToken || '' },
-    });
-    const withCap = (render) => (b, d) => {
-        render(b, d);
-        if (cap.capped) b.insertAdjacentHTML('afterbegin', capNote(cap));
-    };
-    loadInto(document.getElementById('locus_gloss'), 'gloss', 'gloss', post('/atlas/locus/gloss/'),
-        withCap((b, d) => renderGloss(b, d, 'locus')));
-    loadInto(document.getElementById('locus_environment'), 'environment', 'environment',
-        post('/atlas/locus/environment/'), withCap(renderEnvironment));
+    const f = locusFetchers(members);
+    loadGlossCards(document.querySelector('#locus_gloss .enr-body'), f.gloss, { kind: 'locus', cap: f.cap });
+    mountEnvironmentCard(document.querySelector('#locus_environment .enr-body'), {
+        fetchEnvironment: f.environment, title: 'Environmental signature', cap: f.cap, headingTag: 'h3' });
 }
