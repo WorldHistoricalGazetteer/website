@@ -54,6 +54,10 @@ try:
         APP_VERSION = f.read().strip()
 except FileNotFoundError:
     APP_VERSION = "dev"
+# place#325 Stage 4: the v4 landing switch (portal -> permanent redirects, public Record page,
+# anonymous /entity/place:<pid>/ for public records). OFF until the v4 release; read only via
+# places.v4_landing.v4_landing_enabled(). Set V4_LANDING_ENABLED=1 in env or local_settings.
+V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(globals().get('V4_LANDING_ENABLED', False))
 
 # CRC Gateway (Pitt CRC Elasticsearch + FastAPI gateway)
 # Set CRC_GATEWAY_URL in env vars or local_settings to enable.

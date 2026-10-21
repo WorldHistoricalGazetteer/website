@@ -265,10 +265,13 @@ def _record_payload(place) -> dict:
 def atlas_record_page(request, pk):
     """The Record page (beta). Anonymous: to the login page. Signed in without
     beta access: 404, as ``main.views.reconciliation_view`` answers. A record
-    the user may not see: 404, the same as one that does not exist."""
-    if not request.user.is_authenticated:
-        return redirect_to_login(request.get_full_path())
-    if not _beta(request.user):
+    the user may not see: 404, the same as one that does not exist. With
+    V4_LANDING_ENABLED (place#325 Stage 4) the page is open to everyone, and
+    the visibility rule alone decides which records it shows."""
+    from places.v4_landing import record_page_open_to
+    if not record_page_open_to(request.user):
+        if not request.user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
         raise Http404("Not found")
     place = get_visible_place_or_404(request.user, pk=pk)
     record = _record_payload(place)
@@ -301,7 +304,8 @@ def atlas_record_concordance(request, pk):
     (their own private data) has no concordance: ``{"public": false}``, not an
     empty concordance, so the page cannot mistake one for the other.
     """
-    if not _beta(request.user):
+    from places.v4_landing import record_page_open_to
+    if not record_page_open_to(request.user):
         return JsonResponse({"error": "beta access required"}, status=403)
     try:
         place = get_visible_place_or_404(request.user, pk=pk)
