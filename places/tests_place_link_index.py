@@ -6,9 +6,11 @@ Run locally (never in a prod container):
     GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so.34 \\
         venv/bin/python manage.py test places.tests_place_link_index --settings=whg.settings_localtest
 
-The SQL explained is the one ``build_concordance`` actually sends (captured,
-not re-typed), so a change to ``_LinkIdentifier`` that the index no longer
-matches fails here. The control drops the index in the same transaction and
+The SQL explained is what ``build_concordance`` actually sends (captured,
+not re-typed): one query for tier 2 (inbound) and one for tier 3 (co-cited),
+each ordered by place id with its own LIMIT (review 2026-10-21), so a change to
+``_LinkIdentifier`` or to the ORDER BY that the index no longer serves fails
+here. The control drops the index in the same transaction and
 requires the plan to change, so the assertion is shown to be able to fail.
 """
 from unittest.mock import patch
@@ -50,8 +52,11 @@ class PlaceLinkIdentifierIndexTests(TestCase):
         with CaptureQueriesContext(connection) as ctx:
             conc = build_concordance(self.A, user=None, use_gateway=False)
         sqls = [q["sql"] for q in ctx.captured_queries if "->> 'identifier'" in q["sql"]]
-        self.assertEqual(len(sqls), 1, sqls)
-        return conc, sqls[0]
+        self.assertEqual(len(sqls), 2, sqls)            # inbound, then co-cited
+        for sql in sqls:
+            self.assertIn("ORDER BY", sql)
+            self.assertIn("LIMIT", sql)
+        return conc, sqls
 
     def _plan(self, sql):
         with connection.cursor() as cur:
@@ -66,22 +71,27 @@ class PlaceLinkIdentifierIndexTests(TestCase):
         self.assertIn("(jsonb ->> 'identifier'::text)", row[0])
 
     def test_concordance_query_uses_the_index_and_not_without_it(self):
-        conc, sql = self._concordance_sql()
+        conc, sqls = self._concordance_sql()
         # Presence: the query found B's co-citation (so it is the live tier-3 query).
         self.assertEqual([e["record"]["place_id"] for e in conc["cocited"]], [self.B.pk])
 
-        plan = self._plan(sql)
-        print(f"\n--- EXPLAIN with {INDEX} ({SYNTHETIC_ROWS:,} synthetic rows) ---\n{plan}")
-        self.assertIn(INDEX, plan)
-        self.assertNotIn("Seq Scan on place_link", plan)
+        for sql in sqls:
+            plan = self._plan(sql)
+            print(f"\n--- EXPLAIN with {INDEX} ({SYNTHETIC_ROWS:,} synthetic rows) ---\n{plan}")
+            self.assertIn(INDEX, plan)
+            self.assertNotIn("Seq Scan on place_link", plan)
+            # Not a walk of the place_id / pk index to satisfy ORDER BY + LIMIT.
+            self.assertNotIn("place_link_pkey", plan)
+            self.assertNotIn("place_link_place_id", plan)
 
         # Control: without the index the same SQL must plan differently.
         with connection.cursor() as cur:
             cur.execute(f'DROP INDEX "{INDEX}"')
-        plan_without = self._plan(sql)
-        print(f"--- EXPLAIN without it ---\n{plan_without}")
-        self.assertNotIn(INDEX, plan_without)
-        self.assertIn("Seq Scan on place_link", plan_without)
+        for sql in sqls:
+            plan_without = self._plan(sql)
+            print(f"--- EXPLAIN without it ---\n{plan_without}")
+            self.assertNotIn(INDEX, plan_without)
+            self.assertIn("Seq Scan on place_link", plan_without)
 
 
 class PlaceLinkIdentifierIndexReversibleTests(TransactionTestCase):

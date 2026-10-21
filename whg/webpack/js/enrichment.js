@@ -199,6 +199,11 @@ function renderEnvironment(body, data) {
     if (data.unresolved) {
         h += `<p class="enr-incomplete small">${esc(data.unresolved)} attested equivalent${data.unresolved === 1 ? '' : 's'} could not be looked up in WHG's index just now, so ${data.unresolved === 1 ? 'it is' : 'they are'} not in this signature. Reload to try again.</p>`;
     }
+    // The concordance capped its inbound attestations (places.concordance.INBOUND_LIMIT):
+    // the group is partial, and an area's outline is the outline of part of it.
+    if (data.truncated) {
+        h += `<p class="enr-incomplete enr-truncated small">This group is partial: more records attest that they are this place than WHG reads for one page, so this signature describes only the ones read${p.kind === 'area' ? ', and the area is the outline of those only' : ''}.</p>`;
+    }
     // Members an anonymous visitor could not see (an embargoed source shown to a beta
     // user) are never sent to EDOPS (places.record_group.mark_offsite): say so.
     const withheld = (p.withheld || []).length;

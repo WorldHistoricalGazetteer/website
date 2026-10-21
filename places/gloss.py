@@ -65,13 +65,16 @@ def _overlap(a, b) -> bool:
     return a[0] <= b[1] and b[0] <= a[1]
 
 
-def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0) -> dict:
+def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0,
+                truncated: bool = False) -> dict:
     """``{"version", "kind", "n_records", "sentences", "unknown", "limits", "facts"}``.
 
     ``kind``: ``"concordance"`` (the record plus its attested equivalents; the record is
     the member with ``is_record``) or ``"locus"`` (a soft cluster's current members).
     ``unresolved``: attested equivalents that could not be looked up (the index was
-    unreachable), so are missing from ``members``; the gloss says the group is incomplete."""
+    unreachable), so are missing from ``members``; the gloss says the group is incomplete.
+    ``truncated``: more records attest this one than the concordance reads
+    (``places.concordance.INBOUND_LIMIT``), so ``members`` is part of the group."""
     n = len(members)
     out = {"version": GLOSS_VERSION, "kind": kind, "n_records": n, "sentences": [], "unknown": [],
            "limits": [], "facts": {}}
@@ -195,6 +198,12 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
     if unresolved:
         out["unknown"].append(f"{unresolved} attested equivalent{'s' if unresolved != 1 else ''} could not be looked "
                               "up in WHG's index just now, so this describes an incomplete group. Reload to try again.")
+    if truncated:
+        from places.concordance import INBOUND_LIMIT
+        out["unknown"].append(f"More records attest that they are this place than WHG reads for one page (the "
+                              f"first {INBOUND_LIMIT}, by record id), so this describes part of the group, not "
+                              "all of it.")
+    out["facts"]["truncated"] = bool(truncated)
     if unread:
         out["unknown"].append(f"The details of {unread} record{'s' if unread != 1 else ''} held in WHG's index "
                               "could not be read just now, so they are counted above by name only. That is not a "

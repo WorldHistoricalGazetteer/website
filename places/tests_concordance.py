@@ -355,3 +355,92 @@ class ConcordanceTests(TestCase):
         m = self.A.matches
         ids = {p.id for p in m}
         self.assertEqual(ids, {self.A.id, self.F.id, self.G.id, self.H.id})
+
+
+class HubTruncationTests(TestCase):
+    """Review 2026-10-21: tiers 2 and 3 shared one LIMIT with no ORDER BY, so the
+    survivors were arbitrary and co-citers could crowd every inbound attester out;
+    and the group did not know it was partial. The caps are patched small (5 and 3)
+    so the hub is cheap; the co-citers are created FIRST, so a shared, unordered
+    LIMIT returns them before any inbound row."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datasets.models import Dataset
+        from places.models import Place, PlaceGeom, PlaceLink
+
+        user = get_user_model().objects.create_user(username="hub_owner", email="hub@example.org", password="pw",
+                                                    given_name="H", surname="Ub")
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=user, label="hub325", title="Hub ds", description="D", creator="X",
+                                        public=True, ds_status="indexed", uri_base="https://example.org/p/")
+
+        def place(title, src):
+            p = Place.objects.create(title=title, src_id=src, dataset=ds, ccodes=[])
+            PlaceGeom.objects.create(place=p, geom=Point(1.0, 2.0, srid=4326),
+                                     jsonb={"type": "Point", "coordinates": [1.0, 2.0]})
+            return p
+        cls.Hub = place("Hub", "H0")
+        PlaceLink.objects.create(place=cls.Hub, jsonb={"type": "closeMatch", "identifier": "gn:4242"})
+        cls.Small = place("Small", "S0")
+        PlaceLink.objects.create(place=cls.Small, jsonb={"type": "closeMatch", "identifier": "gn:4243"})
+        cls.cociters = []
+        for i in range(12):                      # > INBOUND + COCITED + 1 (5 + 3 + 1)
+            p = place(f"Cociter {i}", f"C{i}")
+            PlaceLink.objects.create(place=p, jsonb={"type": "closeMatch", "identifier": "gn:4242"})
+            cls.cociters.append(p.pk)
+        cls.inbound = []
+        for i in range(8):                       # > INBOUND_LIMIT (5)
+            p = place(f"Attester {i}", f"A{i}")
+            PlaceLink.objects.create(place=p, jsonb={"type": "exactMatch", "identifier": f"whg:{cls.Hub.pk}"})
+            cls.inbound.append(p.pk)
+        p = place("Small attester", "SA")
+        PlaceLink.objects.create(place=p, jsonb={"type": "exactMatch", "identifier": f"whg:{cls.Small.pk}"})
+        cls.small_attester = p.pk
+
+    def setUp(self):
+        for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
+            p = patch(f"places.concordance.{name}", val)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def conc(self, place):
+        return build_concordance(place, user=None, use_gateway=False)
+
+    def test_inbound_capped_deterministically_and_never_crowded_out(self):
+        runs = [self.conc(self.Hub) for _ in range(2)]
+        for c in runs:
+            self.assertEqual([e["record"]["place_id"] for e in c["inbound"]], sorted(self.inbound)[:5])
+            self.assertEqual([e["record"]["place_id"] for e in c["cocited"]], sorted(self.cociters)[:3])
+            self.assertEqual(c["truncated"], {"inbound": True, "cocited": True})
+        self.assertEqual(runs[0]["inbound"], runs[1]["inbound"])
+        # Control: a record under both caps is complete and says so.
+        small = self.conc(self.Small)
+        self.assertEqual([e["record"]["place_id"] for e in small["inbound"]], [self.small_attester])
+        self.assertEqual(small["truncated"], {"inbound": False, "cocited": False})
+
+    def test_partial_group_is_said_in_gloss_and_environment_payload(self):
+        from places.gloss import build_gloss
+        from places.record_group import build_record_group
+        hub = build_record_group(self.Hub, user=None)
+        small = build_record_group(self.Small, user=None)
+        self.assertEqual((hub["truncated"], small["truncated"]), (True, False))
+        self.assertEqual(hub["n_equivalents"], 5)
+        partial = "describes part of the group"
+        g = build_gloss(hub["members"], truncated=hub["truncated"])
+        self.assertTrue(any(partial in u and "first 5" in u for u in g["unknown"]), g["unknown"])
+        g2 = build_gloss(small["members"], truncated=small["truncated"])
+        self.assertFalse(any(partial in u for u in g2["unknown"]), g2["unknown"])
+        self.assertTrue(g2["sentences"])                                     # presence beside the absence
+        # The environment endpoint carries the flag for the page to say so (enrichment.js).
+        from django.test import override_settings
+        from api.tests_edop_client import BASIN, FakeTransport
+        from places.tests_enrichment_views import LOCMEM
+        beta = get_user_model().objects.create_user(username="hub_beta", email="hub_beta@example.org",
+                                                    password="pw", given_name="H", surname="B", role="beta_tester")
+        self.client.force_login(beta)
+        with override_settings(CACHES=LOCMEM, EDOP_ENABLED=True), \
+                patch("api.edop_client._requests_transport", side_effect=FakeTransport(BASIN)):
+            env = {p.pk: self.client.get(f"/atlas/place/{p.pk}/environment/").json() for p in (self.Hub, self.Small)}
+        self.assertEqual((env[self.Hub.pk]["truncated"], env[self.Small.pk]["truncated"]), (True, False))
+        self.assertEqual(env[self.Small.pk]["status"], "ok")

@@ -32,7 +32,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 GROUP_CACHE_TTL = 300
-GROUP_CACHE_VERSION = 2  # 2: members carry ``offsite`` (mark_offsite)
+GROUP_CACHE_VERSION = 3  # 2: members carry ``offsite`` (mark_offsite); 3: ``truncated``
 GATEWAY_BATCH = 50
 
 # GeoNames feature classes: the only gateway namespace whose `types.label` is a place
@@ -289,7 +289,7 @@ def build_record_group(place, user=None) -> dict:
     from places.concordance import build_concordance
     conc = build_concordance(place, user=user)
     if conc is None:
-        return {"public": False, "members": [], "n_equivalents": 0, "unresolved": 0}
+        return {"public": False, "members": [], "n_equivalents": 0, "unresolved": 0, "truncated": False}
     agg = conc.get("aggregate") or []
     pg_ids = [m["place_id"] for m in agg if m.get("via") == "postgres" and isinstance(m.get("place_id"), int)]
     gw = [m for m in agg if m.get("via") == "gateway"]
@@ -312,7 +312,13 @@ def build_record_group(place, user=None) -> dict:
     # Every member is marked for EDOPS by the ANONYMOUS rule, whoever is asking: the
     # beta user's own view (the concordance, the gloss) keeps embargoed members.
     mark_offsite(members)
-    return {"public": True, "members": members, "n_equivalents": len(members) - 1, "unresolved": unresolved}
+    # Inbound attestations past INBOUND_LIMIT were not read (the first ones by place
+    # id were): the group is then PARTIAL, and the gloss and the EDOPS section must
+    # say so rather than describe the first 500 as the whole. Tier 3 never aggregates,
+    # so its cap does not make the group partial.
+    truncated = bool((conc.get("truncated") or {}).get("inbound"))
+    return {"public": True, "members": members, "n_equivalents": len(members) - 1, "unresolved": unresolved,
+            "truncated": truncated}
 
 
 def record_group(place, user=None) -> dict:

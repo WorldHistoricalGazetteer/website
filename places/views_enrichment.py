@@ -128,6 +128,7 @@ def atlas_record_environment(request, pk):
     results = edop.run_requests(plan["requests"])
     out = _environment_payload(plan, results, members)
     out.update({"public": True, "place_id": place.pk, "unresolved": group.get("unresolved", 0),
+                "truncated": bool(group.get("truncated")),
                 "elapsed_ms": int((time.monotonic() - t0) * 1000)})
     return JsonResponse(out)
 
@@ -149,7 +150,8 @@ def atlas_record_gloss(request, pk):
     # The gloss is NOT sent off-site, so it describes the group as this user may see
     # it, embargoed gateway members included for a beta user (unlike the EDOPS
     # request above, which uses offsite_members only).
-    gloss = build_gloss(group["members"], kind="concordance", unresolved=group.get("unresolved", 0))
+    gloss = build_gloss(group["members"], kind="concordance", unresolved=group.get("unresolved", 0),
+                        truncated=bool(group.get("truncated")))
     return JsonResponse({"public": True, "place_id": place.pk, "gloss": gloss,
                          "members": [_member_view(m) for m in group["members"]]})
 

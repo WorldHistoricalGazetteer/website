@@ -48,10 +48,13 @@ Resolution of an outbound target:
 * anything else (``viaf:``, ``loc:``, unrecognised URLs) is listed with
   ``status: "not_held"``.
 
-Cost: tiers 2-3 need one scan of ``place_link`` by identifier, which has no
-index, so ``build_concordance`` took 0.3-3.0 s per record on prod (read-only
-trial, 2026-10-21, five records, gateway time included). An expression index on
-``(jsonb->>'identifier')`` is the fix before this backs a page.
+Cost: tiers 2 and 3 are one ``place_link`` query each, by identifier, on the
+expression index ``place_link_identifier_idx`` (migration 0026; without it,
+0.3-3.0 s per record on prod, 2026-10-21). Each tier is capped
+(``INBOUND_LIMIT``, ``COCITED_LIMIT``) and ordered by place id, so a capped list
+is the same list every time, and ``truncated`` says when a cap was reached; the
+record group carries the inbound flag on, so the gloss and the EDOPS section say
+they describe a partial group.
 
 The transitive groupings in ``utils/mapdata.py`` and
 ``collection/views.update_collection_components`` are a different thing (a
@@ -538,70 +541,85 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
             entry["record"] = partner
             out["inbound"].append(entry)
 
-    # ---- tiers 2 and 3 from one scan of place_link ----------------------
+    # ---- tiers 2 and 3: two queries on the place_link identifier index ----
+    # Separately, each with its own cap and a deterministic order (review of
+    # place#325, 2026-10-21): one shared LIMIT with no ORDER BY kept arbitrary
+    # survivors, and a widely co-cited identifier could crowd every inbound
+    # attestation out. The order is place id, then link id, written ``place_id + 0``
+    # so the planner cannot walk the place_id (or pk) index across the whole table
+    # to satisfy ORDER BY + LIMIT (1.7 s vs 0.4 s on prod before the identifier
+    # index); it must find the rows by identifier (place_link_identifier_idx,
+    # migration 0026) and sort that small set. places/tests_place_link_index.py
+    # EXPLAINs both queries as sent.
     inbound_strings = set()
-    for s in self_idents:
-        inbound_strings.update(identifier_variants(s))
+    for s_ in self_idents:
+        inbound_strings.update(identifier_variants(s_))
     cocite_map: dict[str, str] = {}
     for e in outbound_links:
         for v in identifier_variants(e["identifier"]):
             cocite_map[v] = e["identifier"]
-    wanted = inbound_strings | set(cocite_map)
-    rows = []
-    if wanted:
-        # A seq scan of place_link: it has no index on the identifier. An
-        # expression index on (jsonb->>'identifier') would make this cheap.
-        rows = list(
+    cocite_map = {k: v for k, v in cocite_map.items() if k not in inbound_strings}
+
+    def link_rows(idents, limit, exclude_ids=()):
+        if not idents:
+            return []
+        from django.db.models import ExpressionWrapper, IntegerField
+        by_place = ExpressionWrapper(F("place_id") + 0, output_field=IntegerField())
+        by_link = ExpressionWrapper(F("id") + 0, output_field=IntegerField())
+        return list(
             PlaceLink.objects.annotate(_ident=_LinkIdentifier(F("jsonb")))
-            .filter(_ident__in=sorted(wanted))
-            .exclude(place_id=place.id)
+            .filter(_ident__in=sorted(idents))
+            .exclude(place_id__in={place.id, *exclude_ids})
             .filter(_visible_places_q(prefix="place__"))
             .select_related("place__dataset")
-            .order_by()[: INBOUND_LIMIT + COCITED_LIMIT + 1]
+            .order_by(by_place.asc(), by_link.asc())[: limit + 1]
         )
-        # Ordered here, not in SQL: ORDER BY place_id + LIMIT lets the planner
-        # walk the place_id index over the whole table (1.7 s vs 0.4 s on prod).
-        rows.sort(key=lambda r: (r.place_id, r.id))
-    if len(rows) > INBOUND_LIMIT + COCITED_LIMIT:
-        out["truncated"]["inbound"] = out["truncated"]["cocited"] = True
-        rows = rows[: INBOUND_LIMIT + COCITED_LIMIT]
 
-    seen_inbound = {e["record"]["place_id"] for e in out["inbound"] if e.get("record")}
-    tier1_ids = {rec["place_id"] for e in out["outbound"] for rec in (e.get("target") or {}).get("records", [])
-                 if isinstance(rec.get("place_id"), int)}
-    point_ids = {row.place_id for row in rows}
-    points = _repr_points(point_ids)
-    inbound_rows, cocited_rows = [], []
-    for row in rows:
+    def entry_base(row, points):
         j = row.jsonb or {}
         raw_ident = j.get("identifier")
         p = row.place
-        if is_self_link(raw_ident, p.id, p.src_id):
-            # The other record naming ITSELF: that is how it is a target
-            # (tier 1, resolved above), not an attestation about this record.
-            continue
         ident, ns, _l = normalise_identifier(raw_ident)
         ltype, agg = normalise_link_type(j.get("type"))
         rec = _record_summary(p)
         rec["repr_point"] = points.get(p.id)
         rec["has_geometry"] = p.id in points
-        base = {"source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
-                "namespace": ns, "link_type": ltype, "link_type_raw": j.get("type"),
-                "provenance": _link_provenance(row), "attested_by": rec, "record": rec}
-        if raw_ident in inbound_strings:
-            inbound_rows.append({"tier": 2, "aggregates": agg, "direction": "inbound", **base})
-        elif raw_ident in cocite_map and p.id not in tier1_ids:
-            cocited_rows.append({"tier": 3, "aggregates": False, "cocited_identifier": cocite_map[raw_ident],
-                                 **base})
-    if len(inbound_rows) > INBOUND_LIMIT:
-        out["truncated"]["inbound"] = True
-        inbound_rows = inbound_rows[:INBOUND_LIMIT]
+        return agg, {"source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
+                     "namespace": ns, "link_type": ltype, "link_type_raw": j.get("type"),
+                     "provenance": _link_provenance(row), "attested_by": rec, "record": rec}
+
+    def not_self(row):
+        # The other record naming ITSELF: that is how it is a target (tier 1,
+        # resolved above), not an attestation about this record.
+        return not is_self_link((row.jsonb or {}).get("identifier"), row.place.id, row.place.src_id)
+
+    seen_inbound = {e["record"]["place_id"] for e in out["inbound"] if e.get("record")}
+    tier1_ids = {rec["place_id"] for e in out["outbound"] for rec in (e.get("target") or {}).get("records", [])
+                 if isinstance(rec.get("place_id"), int)}
+
+    # ``truncated`` is read from the rows fetched, before self-links are dropped: it may
+    # then say "more exist" when the last were self-links; it can never miss a cap.
+    raw = link_rows(inbound_strings, INBOUND_LIMIT)
+    out["truncated"]["inbound"] = len(raw) > INBOUND_LIMIT
+    in_rows = [r for r in raw[:INBOUND_LIMIT] if not_self(r)]
+    points = _repr_points({r.place_id for r in in_rows})
+    inbound_rows = []
+    for row in in_rows:
+        agg, base = entry_base(row, points)
+        inbound_rows.append({"tier": 2, "aggregates": agg, "direction": "inbound", **base})
+
+    # A record that is already an identity attester, or a tier-1 target, is not ALSO
+    # "co-cited": excluded in SQL, so they cannot use up tier 3's cap either.
     inbound_ids = seen_inbound | {e["record"]["place_id"] for e in inbound_rows}
-    # A record that is already an identity attester is not ALSO "co-cited".
-    cocited_rows = [e for e in cocited_rows if e["record"]["place_id"] not in inbound_ids]
-    if len(cocited_rows) > COCITED_LIMIT:
-        out["truncated"]["cocited"] = True
-        cocited_rows = cocited_rows[:COCITED_LIMIT]
+    raw = link_rows(set(cocite_map), COCITED_LIMIT, exclude_ids=inbound_ids | tier1_ids)
+    out["truncated"]["cocited"] = len(raw) > COCITED_LIMIT
+    co_rows = [r for r in raw[:COCITED_LIMIT] if not_self(r)]
+    points = _repr_points({r.place_id for r in co_rows})
+    cocited_rows = []
+    for row in co_rows:
+        _agg, base = entry_base(row, points)
+        cocited_rows.append({"tier": 3, "aggregates": False,
+                             "cocited_identifier": cocite_map[base["identifier_raw"]], **base})
     out["inbound"].extend(inbound_rows)
     out["cocited"].extend(cocited_rows)
 
