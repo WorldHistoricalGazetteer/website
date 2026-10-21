@@ -20,12 +20,21 @@
 // is the modal's opt-in name box, default off). On success the browser goes to
 // the canonical /entity/locus:<PID>/ URI. A withdrawn or redacted locus is a
 // tombstone: the server renders no recipe for it, so there is nothing to re-run.
+//
+// Layout (place#325 Stage 5): the Record page's shared shell (recordShell.css).
+// The recipe sits in a modal the template renders (#locus_recipe_modal, opened by
+// Bootstrap's data API); this script still fills its stoplist row and marks its
+// members. For a beta viewer the server also renders "About this cluster", an
+// "Elsewhere" card and an Environment slot: once a cluster is selected, the gloss
+// is fetched (themed cards, enrichment.js), the Wikipedia block is shown only when
+// the gloss payload carries links, and the Environment card is mounted, fetching
+// EDOPS only when someone clicks (its own button, or the cluster card's).
 
 import bbox from '@turf/bbox';
 import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
 import { resolveRecipe, canonicalMemberId } from './locus_resolve.js';
 import '../css/locus.css';
-import { loadLocusEnrichment } from './enrichment.js';   // place#325 Stage 3: gloss + EDOPS
+import { loadGlossCards, locusFetchers, mountEnvironmentCard, renderWikipediaLinks } from './enrichment.js';
 
 const RESOLVE_TIMEOUT_MS = 35000;
 
@@ -64,9 +73,11 @@ let whgMap = null;
 let mapReady = false;
 let pendingFC = null;
 let pendingHighlight = [];
+let fitBox = null;          // the bbox last fitted, refitted when the map box changes size
 
 function initMap() {
-    if (!document.getElementById('locus_map') || !window.whg_maplibre) return;
+    const container = document.getElementById('locus_map');
+    if (!container || !window.whg_maplibre) return;
     try {
         whgMap = new window.whg_maplibre.Map({ container: 'locus_map', maxZoom: 12 });
     } catch (e) {
@@ -80,6 +91,22 @@ function initMap() {
         } catch (e) { console.warn('Locus: layerset failed', e); return; }
         if (pendingFC) showOnMap(pendingFC, pendingHighlight);
     });
+    // The square .rs-map box takes its size from CSS alone (recordShell.css): it
+    // changes at the lg column switch, on window resize and as the column settles.
+    // Keep the canvas tracking it and refit the cluster to the new size, as the
+    // Record page's Concordance map does.
+    let lastSize = '';
+    const track = () => {
+        const size = `${container.clientWidth}x${container.clientHeight}`;
+        if (size === lastSize || !container.clientWidth) return;
+        lastSize = size;
+        try {
+            whgMap.resize();
+            if (mapReady && fitBox) whgMap.fitViewport(fitBox, 8);
+        } catch (e) { /* */ }
+    };
+    if (window.ResizeObserver) new ResizeObserver(track).observe(container);
+    else window.addEventListener('resize', track);
 }
 
 function showOnMap(fc, highlightIds) {
@@ -94,7 +121,10 @@ function showOnMap(fc, highlightIds) {
         const feats = highlightIds.length ? highlightIds.map((i) => fc.features[i]).filter(Boolean) : fc.features;
         if (feats.length) {
             const b = bbox({ type: 'FeatureCollection', features: feats });
-            if (b && b.every(Number.isFinite)) whgMap.fitViewport(b, 8);
+            if (b && b.every(Number.isFinite)) {
+                fitBox = b;
+                whgMap.fitViewport(b, 8);
+            }
         }
     } catch (e) { console.warn('Locus: could not plot', e); }
 }
@@ -157,9 +187,17 @@ function renderResult(recipe, data, out) {
         tie_centroid: `${selection.candidates} clusters tied on surviving members; the one nearest the survivors' centroid was selected.`,
         tie_first_member: `${selection.candidates} clusters tied on surviving members; with no geometry to decide, the one holding the first surviving member id was selected.`,
     }[selection.reason] || selection.reason;
-    let h = `<div class="locus-cluster">`
-        + `<div class="locus-cluster-title">${escapeHtml(rep.title || rep.place_id || '(untitled)')}`
-        + ` <span class="locus-unminted-badge">${members.length} record${members.length === 1 ? '' : 's'} now</span></div>`
+    // The Environment button opens the same modal as the right column's card; it
+    // is rendered only where the server rendered that card's slot (beta viewers),
+    // and stays hidden until the card is mounted (describeCluster).
+    const envButton = document.getElementById('locus_environment_slot')
+        ? '<button type="button" class="btn btn-link btn-sm locus-env-open" aria-haspopup="dialog" hidden>'
+            + '<i class="fa-solid fa-water me-1" aria-hidden="true"></i>Environment</button>'
+        : '';
+    let h = `<div class="rs-card locus-cluster">`
+        + `<div class="locus-cluster-head"><h3 class="rs-card-title locus-cluster-title">`
+        + `<i class="fa-solid fa-layer-group rs-icon" aria-hidden="true"></i>${escapeHtml(rep.title || rep.place_id || '(untitled)')}`
+        + ` <span class="locus-unminted-badge">${members.length} record${members.length === 1 ? '' : 's'} now</span></h3>${envButton}</div>`
         + `<p class="small text-muted mb-0">${escapeHtml(reasonText)}</p>`
         + `<ul class="locus-cluster-members">`;
     members.forEach((m) => {
@@ -203,6 +241,38 @@ function renderStoplist(stoplist) {
         + `<div class="locus-stoplist-body">${stoplist.map((s) => `<span class="locus-chip">${escapeHtml(s)}</span>`).join('')}</div></details>`;
 }
 
+// ── About this cluster, Elsewhere, Environment (beta viewers) ──────────────────
+// The server renders these slots only for a beta viewer (the endpoints are
+// beta-gated); with no slot there is nothing to do and nothing is fetched.
+function showWikipedia(data) {
+    const card = document.getElementById('locus_elsewhere');
+    if (!card) return;
+    const box = card.querySelector('.locus-wikipedia');
+    renderWikipediaLinks(box, data && data.wikipedia, { total: data && data.wikipedia_total, headingTag: 'h3' });
+    // Only where known: no links (the gateway search response drops them today), no card.
+    card.hidden = !box.innerHTML.trim();
+}
+
+function describeCluster(members) {
+    const about = document.getElementById('locus_about');
+    const envSlot = document.getElementById('locus_environment_slot');
+    if ((!about && !envSlot) || !Array.isArray(members) || !members.length) return;
+    const f = locusFetchers(members);
+    if (about) {
+        about.hidden = false;
+        loadGlossCards(about.querySelector('.locus-about-body'), f.gloss, { kind: 'locus', cap: f.cap, onData: showWikipedia });
+    }
+    if (envSlot) {
+        const env = mountEnvironmentCard(envSlot, { fetchEnvironment: f.environment, cap: f.cap, headingTag: 'h2' });
+        if (!env) return;
+        envSlot.hidden = false;
+        document.querySelectorAll('#locus_result .locus-env-open').forEach((b) => {
+            b.hidden = false;
+            b.addEventListener('click', () => env.open());
+        });
+    }
+}
+
 // ── boot ───────────────────────────────────────────────────────────────────
 async function resolve(root, recipe) {
     const token = root.dataset.token;
@@ -227,8 +297,8 @@ async function resolve(root, recipe) {
     const out = resolveRecipe(recipe, data);
     renderStoplist(out.stoplist);
     renderResult(recipe, data, out);
-    // place#325 Stage 3: describe the selected cluster's current members (gloss + EDOPS).
-    if (out.selection.cluster) loadLocusEnrichment(out.selection.cluster.members || [], document.getElementById('locus_result'));
+    // place#325: describe the selected cluster's current members (gloss now; EDOPS on click).
+    if (out.selection.cluster) describeCluster(out.selection.cluster.members || []);
     const { fc, indexByPid } = hitsToFC(out.hits);
     const highlight = out.selection.cluster
         ? (out.selection.cluster.memberIds || []).map((id) => indexByPid.get(canonicalMemberId(id))).filter((i) => i != null)

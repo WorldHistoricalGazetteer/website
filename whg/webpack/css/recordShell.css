@@ -113,6 +113,11 @@
     width: 100%;
     height: 100%;
 }
+/* maplibre-common.css frames every .maplibregl-map; .rs-map already has the frame. */
+.rs-map .maplibregl-map {
+    border: 0;
+    border-radius: 0;
+}
 
 /* ── cards ──────────────────────────────────────────────────────────────────── */
 .rs-card {
