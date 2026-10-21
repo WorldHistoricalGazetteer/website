@@ -6,8 +6,8 @@ JSON-LD documents name a REAL, dereferenceable, minimal WHG context, served at
     DB_NAME=whgv3beta_f4 GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so.34 \\
         venv/bin/python manage.py test api.tests_whg_context --settings=whg.settings_localtest
 
-* the context is served always (switch on AND off), GET, CORS-open,
-  ``application/ld+json``, with a SHORT ``Cache-Control`` (it is provisional);
+* the context is served always (switch on AND off), GET, ``application/ld+json``,
+  with a SHORT ``Cache-Control`` (it is provisional); CORS is nginx's (see the view);
 * every key either document emits is a term the context defines (no ``@vocab``, so an
   undefined key cannot pass by falling through to a catch-all vocabulary). The walker
   is proved able to fail on a planted key, beside the real documents that pass;
@@ -77,7 +77,9 @@ class ContextDocumentTests(_Fixture):
         resp = self.client.get(CONTEXT_PATH)
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp["Content-Type"].startswith("application/ld+json"), resp["Content-Type"])
-        self.assertEqual(resp["Access-Control-Allow-Origin"], "*")
+        # CORS comes from nginx on every GET (both hosts); a second copy from Django
+        # would make it "*, *", which browsers reject (measured on prod /schema/).
+        self.assertNotIn("Access-Control-Allow-Origin", resp)
         cc = resp["Cache-Control"]
         self.assertIn("public", cc)
         max_age = int(cc.split("max-age=")[1].split(",")[0])

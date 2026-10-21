@@ -13,8 +13,12 @@ One context for both documents, not one per document: they share most of their t
 and PLATO will replace it in one place.
 
 Served ALWAYS, not behind the v4 release switch: a context reveals nothing. GET/HEAD,
-CORS-open (someone else's JSON-LD processor fetches it), ``application/ld+json``, and
-a SHORT ``Cache-Control`` because, while provisional, it may change.
+``application/ld+json``, and a SHORT ``Cache-Control`` because, while provisional, it
+may change. CORS-open, but NOT set here: nginx adds ``Access-Control-Allow-Origin: *``
+to every GET on both hosts (``location /``, ``always``), and a second copy from Django
+makes the header ``*, *``, which browsers reject. Measured 2026-10-21 on prod's
+``/schema/lpo_v2.0.jsonld`` (validation.views.schema_document sets it too): the header
+arrives twice.
 
 The path is free: ``/ns/`` is not otherwise routed in whg3, nginx sends it to Django
 (``location /``), and the w3id.org/whg rules rewrite ``/whg/id/...`` only.
@@ -44,7 +48,6 @@ def whg_context(request):
         body = f.read()
     resp = HttpResponse(body, content_type="application/ld+json; charset=utf-8")
     resp["Cache-Control"] = f"public, max-age={CONTEXT_MAX_AGE}"
-    resp["Access-Control-Allow-Origin"] = "*"
     resp["X-WHG-Provisional"] = "true"
     return resp
 
