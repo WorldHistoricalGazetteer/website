@@ -113,9 +113,9 @@ class Place(models.Model):
 
     @property
     def matches(self):
-        close_matches = CloseMatch.objects.filter(
-            Q(place_a=self) | Q(place_b=self)
-        )
+        # One step, no closure: the same close_matches read as the concordance (place#325).
+        from places.concordance import close_match_rows
+        close_matches = close_match_rows(self.id).select_related('place_a', 'place_b')
         distinct_places = set(
             [self] + [match.place_a for match in close_matches] + [match.place_b for match in close_matches])
         # First in returned list is the Primary Place, determined by having the most links
