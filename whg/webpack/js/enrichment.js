@@ -19,6 +19,9 @@ import '../css/enrichment.css';
 const state = (window.__whgEnrichment = window.__whgEnrichment
     || { gloss: 'idle', environment: 'idle', environmentStatus: null });
 const FETCH_TIMEOUT_MS = 45000;
+// = places/views_enrichment.py LOCUS_MAX_POSTED_MEMBERS: the locus endpoints refuse
+// more (400), so a bigger cluster is described from a deterministic 200 of it.
+export const LOCUS_MAX_POSTED_MEMBERS = 200;
 
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -291,11 +294,39 @@ function ensureLocusSections(anchor) {
     return wrap;
 }
 
+/** At most LOCUS_MAX_POSTED_MEMBERS distinct members, the same ones every time for
+ * the same cluster: sorted by place id (the cluster's own order follows the search
+ * response), then the first 200. ``total`` is the distinct count before the cap. */
+export function capPostedMembers(members) {
+    const seen = new Set();
+    const distinct = [];
+    for (const m of members) {
+        const k = m && m.place_id != null ? String(m.place_id) : null;
+        if (k === null || seen.has(k)) continue;
+        seen.add(k);
+        distinct.push(m);
+    }
+    if (distinct.length <= LOCUS_MAX_POSTED_MEMBERS) return { sent: distinct, total: distinct.length, capped: false };
+    const byId = [...distinct].sort((a, b) => {
+        const x = String(a.place_id); const y = String(b.place_id);
+        return x < y ? -1 : (x > y ? 1 : 0);
+    });
+    return { sent: byId.slice(0, LOCUS_MAX_POSTED_MEMBERS), total: distinct.length, capped: true };
+}
+
+function capNote(cap) {
+    return cap.capped
+        ? `<p class="enr-capped small text-muted">Based on the first ${esc(cap.sent.length)} of ${esc(cap.total)} members (in order of identifier): this page describes at most ${esc(LOCUS_MAX_POSTED_MEMBERS)}.</p>`
+        : '';
+}
+
 /** Locus page: describe ``members`` (the selected cluster's current hits). */
 export function loadLocusEnrichment(members, anchor) {
     if (!isBetaUser() || !anchor || !Array.isArray(members) || !members.length) return;
     ensureLocusSections(anchor);
-    const slim = members.map((m) => ({
+    const cap = capPostedMembers(members);
+    state.posted = { sent: cap.sent.length, total: cap.total, capped: cap.capped };
+    const slim = cap.sent.map((m) => ({
         place_id: m.place_id, title: m.title, namespace: m.namespace, repr_point: m.repr_point,
         names: m.names, types: m.types, ccodes: m.ccodes, temporal_range: m.temporal_range, timespans: m.timespans,
     }));
@@ -303,8 +334,12 @@ export function loadLocusEnrichment(members, anchor) {
         method: 'POST', body: JSON.stringify({ members: slim }),
         headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRFToken': window.csrfToken || '' },
     });
+    const withCap = (render) => (b, d) => {
+        render(b, d);
+        if (cap.capped) b.insertAdjacentHTML('afterbegin', capNote(cap));
+    };
     loadInto(document.getElementById('locus_gloss'), 'gloss', 'gloss', post('/atlas/locus/gloss/'),
-        (b, d) => renderGloss(b, d, 'locus'));
+        withCap((b, d) => renderGloss(b, d, 'locus')));
     loadInto(document.getElementById('locus_environment'), 'environment', 'environment',
-        post('/atlas/locus/environment/'), renderEnvironment);
+        post('/atlas/locus/environment/'), withCap(renderEnvironment));
 }

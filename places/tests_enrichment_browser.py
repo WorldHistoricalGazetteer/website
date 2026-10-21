@@ -233,8 +233,51 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertNotIn("US", d["gloss"])                  # the other Berlin is another cluster
         self.assertIn("an area", d["env"])
         self.assertIn("tight: 50", d["env"])
+        self.assertNotIn("Based on the first", d["gloss"] + d["env"])   # no cap note under the cap
         self.assertEqual(sorted(d["selected"]), ["gn:1", "wd:Q64"])
         self.assertEqual(len(t.calls), 1)
+        self.assertEqual(self.external, [])
+
+    @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
+    def test_locus_over_200_members_posts_a_deterministic_200_and_says_so(self):
+        """Review #10: the locus endpoints refuse more than 200 members (400), so a big
+        cluster showed an error card. The page now posts the first 200 by place id and
+        says so; the 2-member cluster of test_locus_page_sections carries no such note."""
+        import copy
+        from places import locus_recipe as lr
+        from search.tests_locus import HITS, FakeGateway, recipe
+        hits = [copy.deepcopy(HITS[0]), copy.deepcopy(HITS[1])]
+        for i in range(203):
+            h = copy.deepcopy(HITS[0])
+            h.update(place_id=f"gn:{1000 + i}", repr_point=[13.4 + 0.0001 * i, 52.52])
+            hits.append(h)
+        gw = FakeGateway(hits=hits)
+        t = FakeTransport(AREA)
+        page = self.new_page()
+        posted = []
+        page.on("request", lambda r: posted.append((r.url, r.post_data))
+                if "/atlas/locus/" in r.url and r.method == "POST" else None)
+        tok = lr.encode_recipe_token(recipe({"query": "Berlin", "mode": "in", "size": 250}))
+        with patch("api.crc_client.requests.post", side_effect=gw), \
+                patch("api.edop_client._requests_transport", side_effect=t):
+            page.goto(f"{self.live_server_url}/atlas/locus/?r={tok}")
+            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready' "
+                                     "&& window.__whgEnrichment.gloss === 'ready'", 60000)
+            d = page.evaluate("""() => ({gloss: (document.querySelector('#locus_gloss') || {}).innerText || '',
+                env: (document.querySelector('#locus_environment') || {}).innerText || '',
+                posted: window.__whgEnrichment.posted, errors: document.querySelectorAll('.enr-error').length})""")
+            self.shot(page, "locus_enrichment_capped", "#locus_enrichment")
+        self.assertTrue(ok, f"errors={self.errors}; d={d}")
+        self.assertEqual(d["posted"], {"sent": 200, "total": 205, "capped": True})
+        bodies = [json.loads(b) for u, b in posted]
+        self.assertEqual(len(bodies), 2)                                   # gloss + environment
+        want = sorted(h["place_id"] for h in hits)[:200]
+        for b in bodies:
+            self.assertEqual([m["place_id"] for m in b["members"]], want)
+        self.assertEqual(d["errors"], 0)
+        for text in (d["gloss"], d["env"]):
+            self.assertIn("Based on the first 200 of 205 members", text)
+        self.assertIn("200 records currently in this cluster", d["gloss"])
         self.assertEqual(self.external, [])
 
     @override_settings(V4_LANDING_ENABLED=True)
