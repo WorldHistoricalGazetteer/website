@@ -268,7 +268,7 @@ def atlas_record_page(request, pk):
     the user may not see: 404, the same as one that does not exist. With
     V4_LANDING_ENABLED (place#325 Stage 4) the page is open to everyone, and
     the visibility rule alone decides which records it shows."""
-    from places.v4_landing import record_page_open_to
+    from places.v4_landing import record_page_open_to, v4_landing_enabled
     if not record_page_open_to(request.user):
         if not request.user.is_authenticated:
             return redirect_to_login(request.get_full_path())
@@ -292,6 +292,9 @@ def atlas_record_page(request, pk):
         "explore_similar": explore,
         "default_cluster": default_cluster_link(place, request.user),
         "concordance_endpoint": reverse("atlas-record-concordance", args=[place.pk]),
+        # The gloss and environment sections for non-beta visitors: only with the
+        # release switch on (ruling 2026-10-21); beta users always see them.
+        "enrichment_public": v4_landing_enabled(),
     }
     return render(request, "places/atlas_record.html", context)
 

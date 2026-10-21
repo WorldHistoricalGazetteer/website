@@ -73,7 +73,7 @@
     <ul class="nav nav-pills nav-sm mt-3 atlas-record-tabs">
       <li class="nav-item"><a class="nav-link" href="#record">Record</a></li>
       <li class="nav-item"><a class="nav-link" href="#concordance">Concordance</a></li>
-      {% if user.can_access_beta %}
+      {% if user.can_access_beta or enrichment_public %}
       <li class="nav-item"><a class="nav-link" href="#record_gloss">About</a></li>
       <li class="nav-item"><a class="nav-link" href="#record_environment">Environment</a></li>
       {% endif %}
@@ -200,15 +200,18 @@
     <div id="concordance_body" hidden></div>
   </section>
 
-  {% if user.can_access_beta %}
+  {% if user.can_access_beta or enrichment_public %}
   {% comment %}
-    place#325 Stage 3, BETA only even when the page itself is open (V4_LANDING_ENABLED):
-    both describe the GROUP (this record plus the concordance's
+    place#325 Stage 3: beta users always; everyone else only with the v4 release switch
+    on (ruling 2026-10-21: public at release, anonymous visitors too). The public
+    sections carry data-enrichment="public" (the beta page's bytes are unchanged), and
+    their endpoints describe only what an anonymous caller may see, under their own
+    throttle. Both describe the GROUP (this record plus the concordance's
     aggregated subset: exactMatch/closeMatch, tiers 1-2; never co-cited records).
     Filled by enrichment.js from places/views_enrichment.py.
   {% endcomment %}
   <section id="record_gloss" class="atlas-record-section enr-section" aria-labelledby="record_gloss_heading"
-           data-endpoint="{% url 'atlas-record-gloss' place.pk %}">
+           data-endpoint="{% url 'atlas-record-gloss' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
     <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
     <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
       say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
@@ -216,7 +219,7 @@
   </section>
 
   <section id="record_environment" class="atlas-record-section enr-section" aria-labelledby="record_environment_heading"
-           data-endpoint="{% url 'atlas-record-environment' place.pk %}">
+           data-endpoint="{% url 'atlas-record-environment' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
     <h2 id="record_environment_heading" class="h5">Environmental signature <span class="enr-badge">EDOPS</span></h2>
     <p class="small text-muted">The environment of the drainage basin (or area) where this group lies, from
       <a href="https://computingplace.org/" target="_blank" rel="noopener noreferrer">EDOPS, Computing Place</a>.

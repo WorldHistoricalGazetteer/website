@@ -38,12 +38,17 @@ function spanText(s) {
     return s[0] === s[1] ? yearText(s[0]) : `${yearText(s[0])}–${yearText(s[1])}`;
 }
 
-// Beta only (place#325 Stage 3). The pages themselves may be open to everyone (Stage 4's
-// V4_LANDING_ENABLED, minted loci), so the sections load only for a beta user; the
-// endpoints refuse everyone else anyway (403).
+// Beta users always (place#325 Stage 3). The RECORD page's two sections are also
+// public with the v4 release switch on (ruling 2026-10-21): the server then renders
+// them with data-enrichment="public" for a non-beta visitor, signed in or not, and
+// renders nothing at all with the switch off. The Locus page's sections stay beta.
 function isBetaUser() {
     const m = document.querySelector('meta[name="beta-user"]');
     return !!(m && m.getAttribute('content') === '1');
+}
+
+function isPublicSection(el) {
+    return !!(el && el.dataset && el.dataset.enrichment === 'public');
 }
 
 async function getJSON(url, init = {}) {
@@ -64,6 +69,7 @@ async function getJSON(url, init = {}) {
 
 function failureText(what, res) {
     if (res.status === 403) return `${what} is a beta feature and this account cannot see it.`;
+    if (res.status === 429) return `${what} was asked for too often from this address just now; try again in a minute.`;
     if (res.timeout) return `${what} took too long to load.`;
     return `${what} could not be loaded${res.status ? ` (HTTP ${res.status})` : ''}.`;
 }
@@ -263,9 +269,9 @@ async function loadInto(section, what, key, fetcher, render) {
 
 /** Record page: sections #record_gloss and #record_environment are in the template. */
 export function initRecordEnrichment() {
-    if (!isBetaUser()) return;
     const gloss = document.getElementById('record_gloss');
     const env = document.getElementById('record_environment');
+    if (!isBetaUser() && !(isPublicSection(gloss) || isPublicSection(env))) return;
     // One after the other: both read the same server-side group (the concordance,
     // 0.3-3 s), which the first request caches for the second.
     const first = (gloss && gloss.dataset.endpoint)

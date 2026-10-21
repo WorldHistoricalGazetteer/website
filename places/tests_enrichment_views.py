@@ -496,3 +496,257 @@ class SharedGroupCacheTests(TestCase):
         self.assertIn("gn:100", keys(anon))
         self.assertIs(record_group(self.A, user=self.beta)["members"][0]["is_record"], True)
         self.assertEqual(self.builds, ["gc_beta", "anonymous"])
+
+
+# ---------------------------------------------------------------------------------------
+# Ruling 2026-10-21 (release-behaviour interview): the gloss and environment sections are
+# PUBLIC at release, for anonymous visitors too, behind the release switch.
+# ---------------------------------------------------------------------------------------
+
+def honest_fetch(ids, user=None, allow_anonymous=False, meta=None):
+    """The gateway as api.crc_client.crc_fetch_places behaves: a signed-out caller is
+    answered only with the anonymous opt-in (``gateway_disabled / anonymous`` else)."""
+    if not getattr(user, "is_authenticated", False) and not allow_anonymous:
+        if meta is not None:
+            meta.update(disabled=True, disabled_reason="anonymous")
+        return {}
+    return fake_fetch(ids)
+
+
+class _PublicFixture(TestCase):
+    """Record A (public) with an open gateway equivalent (gn:100), an EMBARGOED gateway
+    namespace's equivalent (emb:7, a beta user sees it) and a public WHG equivalent (B);
+    records in an embargoed and in a private dataset also claim to be A."""
+
+    def setUp(self):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from licensing.models import License
+        from places.models import Place, PlaceGeom, PlaceLink, PlaceName
+
+        caches["default"].clear()
+        User = get_user_model()
+        self.beta = User.objects.create_user(username="pe_beta", email="pe_beta@example.org", password="pw",
+                                             given_name="P", surname="Beta", role="beta_tester")
+        self.plain = User.objects.create_user(username="pe_plain", email="pe_plain@example.org", password="pw",
+                                              given_name="P", surname="Plain")
+
+        def ds(key, public=True):
+            return Dataset.objects.create(owner=self.beta, label=f"pe325_{key}", title=f"Dataset {key}",
+                                          description="D", creator="X", public=public, ds_status="indexed",
+                                          uri_base="https://example.org/places/")
+
+        def place(d, title, src_id, xy, links=()):
+            p = Place.objects.create(title=title, src_id=src_id, dataset=d, ccodes=["GB"], minmax=[1600, 1700])
+            PlaceGeom.objects.create(place=p, geom=Point(*xy, srid=4326), jsonb={"type": "Point"})
+            PlaceName.objects.create(place=p, toponym=title, jsonb={"toponym": title})
+            for t, ident in links:
+                PlaceLink.objects.create(place=p, jsonb={"type": t, "identifier": ident})
+            return p
+
+        with patch("datasets.signals.doi"):
+            a, emb_ds, priv_ds = ds("a"), ds("emb"), ds("priv", public=False)
+        lic, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="gn", defaults=dict(name="GeoNames", namespace="gn", entry_class="authority", status="published",
+                                   redistributable=True, license=lic))
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="emb", defaults=dict(name="Embargoed Source", namespace="emb", entry_class="authority",
+                                    status="embargoed", redistributable=True, license=lic))
+        GazetteerRegistryEntry.objects.create(id=f"whg:{emb_ds.pk}", name="Emb DS", namespace="whg",
+                                              entry_class="dataset", status="embargoed")
+        self.A = place(a, "Record A", "A1", (-0.1278, 51.5074),
+                       links=[("exactMatch", "gn:100"), ("closeMatch", "emb:7")])
+        self.B = place(a, "Record B", "B1", (-0.3, 51.3), links=[("closeMatch", f"whg:{self.A.pk}")])
+        self.EmbRec = place(emb_ds, "Embargoed Record", "E1", (0.9, 51.9), links=[("closeMatch", f"whg:{self.A.pk}")])
+        self.Priv = place(priv_ds, "Private Record", "P1", (0.8, 51.8), links=[("closeMatch", f"whg:{self.A.pk}")])
+        self.missing = Place.objects.order_by("-id").first().id + 1000
+        self.SECRET = ("Embargoed Source", "Embargoed Town", "Embargoed Record", "Private Record", "emb:7")
+        self.SECRET_XY = [EMB_XY, (0.9, 51.9), (0.8, 51.8)]
+
+    def call(self, path, transport=None, user=None, ip="203.0.113.5", fetch=honest_fetch):
+        self.client.logout()
+        if user is not None:
+            self.client.force_login(user)
+        with patch("api.edop_client._requests_transport", side_effect=transport or FakeTransport(AREA)), \
+                patch("api.crc_client.crc_fetch_places", side_effect=fetch):
+            return self.client.get(path, REMOTE_ADDR=ip)
+
+    def gloss(self, pk, **kw):
+        return self.call(f"/atlas/place/{pk}/gloss/", **kw)
+
+    def env(self, pk, **kw):
+        return self.call(f"/atlas/place/{pk}/environment/", **kw)
+
+
+@override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+class PublicEnrichmentSwitchOffTests(_PublicFixture):
+    def test_off_anonymous_and_non_beta_get_todays_403_bytes(self):
+        t = FakeTransport(AREA)
+        for user in (None, self.plain):
+            for path in (f"/atlas/place/{self.A.pk}/gloss/", f"/atlas/place/{self.A.pk}/environment/",
+                         f"/atlas/place/{self.missing}/gloss/"):
+                r = self.call(path, transport=t, user=user)
+                self.assertEqual((r.status_code, r.content), (403, b'{"error": "beta access required"}'), path)
+                self.assertEqual(r["Content-Type"], "application/json")
+        self.assertEqual(t.calls, [])
+        ok = self.env(self.A.pk, transport=t, user=self.beta)            # presence: beta unchanged
+        self.assertEqual((ok.status_code, len(t.calls)), (200, 1))
+
+
+@override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=True)
+class PublicEnrichmentTests(_PublicFixture):
+    def assert_no_secret(self, data):
+        blob = json.dumps(data)
+        for s in self.SECRET:
+            self.assertNotIn(s, blob)
+
+    def test_anonymous_gloss_and_environment_200(self):
+        t = FakeTransport(AREA)
+        g = self.gloss(self.A.pk, transport=t)
+        e = self.env(self.A.pk, transport=t)
+        self.assertEqual((g.status_code, e.status_code), (200, 200))
+        g, e = g.json(), e.json()
+        keys = {f"whg:{self.A.pk}", f"whg:{self.B.pk}", "gn:100"}
+        self.assertEqual({m["key"] for m in g["members"]}, keys)           # presence: what anyone may see
+        self.assertIn("GeoNames", " ".join(g["gloss"]["sentences"]))
+        self.assertIn("This record and 2 attested equivalents", " ".join(g["gloss"]["sentences"]))
+        self.assert_no_secret(g)                                           # absence: embargoed/private
+        self.assertEqual((e["status"], e["plan"]["kind"]), ("ok", "area"))
+        self.assertEqual({m["key"] for m in e["members"]}, keys)
+        self.assertEqual(e["plan"]["withheld"], [])
+        self.assert_no_secret(e)
+
+    def test_signed_in_non_beta_is_served_too_and_beta_is_unchanged(self):
+        t = FakeTransport(AREA)
+        plain = self.gloss(self.A.pk, transport=t, user=self.plain).json()
+        self.assertEqual({m["key"] for m in plain["members"]}, {f"whg:{self.A.pk}", f"whg:{self.B.pk}", "gn:100"})
+        self.assert_no_secret(plain)
+        beta = self.gloss(self.A.pk, transport=t, user=self.beta).json()
+        # By design a beta user's gloss still describes the embargoed namespace's member.
+        self.assertIn("emb:7", {m["key"] for m in beta["members"]})
+        self.assertIn("Embargoed Source", " ".join(beta["gloss"]["sentences"]))
+
+    def test_anonymous_is_never_served_a_beta_group(self):
+        from places import record_group as rg
+        built = []
+        real = rg.build_record_group
+
+        def counting(place, user=None):
+            from places.concordance import viewer_class
+            built.append(viewer_class(user))
+            return real(place, user=user)
+        t = FakeTransport(AREA, AREA)
+        with patch("places.record_group.build_record_group", side_effect=counting):
+            beta = self.gloss(self.A.pk, transport=t, user=self.beta).json()     # warms the beta entry first
+            anon_g = self.gloss(self.A.pk, transport=t).json()
+            anon_e = self.env(self.A.pk, transport=t).json()
+        self.assertIn("emb:7", {m["key"] for m in beta["members"]})               # presence
+        self.assert_no_secret(anon_g)                                              # absence
+        self.assert_no_secret(anon_e)
+        self.assertEqual(built, ["beta", "anonymous_open"])                       # one anonymous build, its own
+        self.assertIsNotNone(caches["default"].get(f"record_group:v{rg.GROUP_CACHE_VERSION}:{self.A.pk}:anonymous_open"))
+
+    def test_nothing_an_anonymous_caller_cannot_see_reaches_edops(self):
+        from django.contrib.gis.geos import GEOSGeometry
+        t = FakeTransport(AREA)
+        self.env(self.A.pk, transport=t, user=self.beta)                   # the beta path, same record
+        t_anon = FakeTransport(AREA)
+        r = self.env(self.A.pk, transport=t_anon).json()
+        self.assertEqual(r["status"], "ok")
+        sent = t.calls + t_anon.calls
+        self.assertTrue(sent)
+        for c in sent:
+            p = c["params"]
+            hull = GEOSGeometry(p["geom_wkt"], srid=4326)
+            for xy in [(-0.1278, 51.5074), (0.2, 51.4), (-0.3, 51.3)]:    # presence: A, gn:100, B
+                self.assertTrue(hull.buffer(1e-6).contains(Point(*xy, srid=4326)), xy)
+            for xy in self.SECRET_XY:                                      # absence: emb:7, embargoed, private
+                self.assertFalse(hull.buffer(1e-3).contains(Point(*xy, srid=4326)), xy)
+            self.assertNotIn("Embargoed", json.dumps(p))
+
+    def test_private_embargoed_and_missing_are_one_404(self):
+        t = FakeTransport(AREA)
+        answers = {}
+        for name, pk in (("private", self.Priv.pk), ("embargoed", self.EmbRec.pk), ("missing", self.missing)):
+            for kind in ("gloss", "environment"):
+                r = self.call(f"/atlas/place/{pk}/{kind}/", transport=t)
+                answers[(name, kind)] = (r.status_code, r["Content-Type"],
+                                         r.content.replace(str(pk).encode(), b"<pk>"))
+        self.assertEqual(len(set(answers.values())), 1, answers)
+        self.assertEqual(next(iter(answers.values()))[0], 404)
+        self.assertEqual(t.calls, [])
+        self.assertEqual(self.gloss(self.A.pk, transport=t).status_code, 200)     # presence
+
+    def test_locus_endpoints_stay_beta_gated(self):
+        body = json.dumps({"members": [{"place_id": "gn:1", "title": "A", "repr_point": [-0.1, 51.5]}]})
+        t = FakeTransport(BASIN)
+        with patch("api.edop_client._requests_transport", side_effect=t):
+            for user in (None, self.plain):
+                self.client.logout()
+                if user:
+                    self.client.force_login(user)
+                for url in ("/atlas/locus/gloss/", "/atlas/locus/environment/"):
+                    r = self.client.post(url, body, content_type="application/json")
+                    self.assertEqual(r.status_code, 403, (user, url))
+            self.client.force_login(self.beta)
+            self.assertEqual(self.client.post("/atlas/locus/environment/", body,
+                                              content_type="application/json").status_code, 200)
+        self.assertEqual(len(t.calls), 1)
+
+    def test_public_rates(self):
+        from places import views_enrichment as ve
+        self.assertEqual((ve.PUBLIC_GLOSS_RATE, ve.PUBLIC_ENVIRONMENT_RATE), ("60/min", "20/min"))
+
+    def test_throttles_per_ip_per_endpoint_and_beta_is_not_throttled(self):
+        from places import views_enrichment as ve
+        with patch.object(ve, "PUBLIC_GLOSS_RATE", "2/min"), patch.object(ve, "PUBLIC_ENVIRONMENT_RATE", "1/min"):
+            g = [self.gloss(self.A.pk).status_code for _ in range(3)]
+            self.assertEqual(g, [200, 200, 429])
+            r = self.gloss(self.A.pk)
+            self.assertEqual(r.status_code, 429)
+            self.assertGreater(int(r["Retry-After"]), 0)
+            self.assertEqual(r.json()["error"], "rate limited")
+            self.assertEqual(self.gloss(self.A.pk, ip="198.51.100.9").status_code, 200)   # another IP
+            e = [self.env(self.A.pk).status_code for _ in range(2)]        # its own scope, own rate
+            self.assertEqual(e, [200, 429])
+            self.assertEqual([self.gloss(self.A.pk, user=self.plain).status_code for _ in range(3)],
+                             [200, 200, 429])                               # signed in: per user
+            self.assertEqual([self.gloss(self.A.pk, user=self.beta).status_code for _ in range(4)],
+                             [200] * 4)                                     # beta: as before, unthrottled
+            # A throttled request does no work: the transport is not called for it.
+            t = FakeTransport(AREA)
+            self.assertEqual(self.env(self.A.pk, transport=t).status_code, 429)
+            self.assertEqual(t.calls, [])
+
+
+class PublicSectionsTemplateTests(_PublicFixture):
+    """The Record page renders the two sections for a non-beta visitor only with the
+    switch on, marked data-enrichment="public"; the beta page carries no marker."""
+
+    def page(self, user=None):
+        self.client.logout()
+        if user is not None:
+            self.client.force_login(user)
+        with patch("api.crc_client.crc_clustering_params", return_value=(None, "disabled")):
+            return self.client.get(f"/atlas/place/{self.A.pk}/")
+
+    @override_settings(CACHES=LOCMEM, V4_LANDING_ENABLED=True)
+    def test_on(self):
+        for user in (None, self.plain):
+            html = self.page(user).content.decode()
+            self.assertIn('id="record_gloss"', html)
+            self.assertIn('id="record_environment"', html)
+            self.assertEqual(html.count('data-enrichment="public"'), 2)
+            self.assertIn('href="#record_gloss"', html)
+        beta = self.page(self.beta).content.decode()
+        self.assertIn('id="record_gloss"', beta)                       # presence
+        self.assertNotIn("data-enrichment", beta)                      # absence: beta unchanged
+
+    @override_settings(CACHES=LOCMEM, V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    def test_off(self):
+        self.assertEqual(self.page().status_code, 302)                 # to sign in, as today
+        self.assertEqual(self.page(self.plain).status_code, 404)
+        beta = self.page(self.beta).content.decode()
+        self.assertIn('id="record_gloss"', beta)
+        self.assertNotIn("data-enrichment", beta)
