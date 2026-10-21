@@ -26,7 +26,7 @@ from datetime import timedelta
 from typing import Optional
 
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from places.locus_recipe import (RECIPE_VERSION, RecipeError, canonical_bytes, encode_recipe_token,
@@ -39,6 +39,9 @@ from places.models_locus import LocusRegistryEntry
 # registry we have undertaken never to prune should not absorb unexamined.
 MINT_LIMIT_PER_HOUR = 20
 MINT_LIMIT_PER_DAY = 100
+# First key of the two-key pg_advisory_xact_lock(<this>, <user pk>) that serialises one
+# user's mints (count, then insert), so it cannot collide with another lock's keys.
+MINT_LOCK_NAMESPACE = 325172
 
 
 class LocusCollision(Exception):
@@ -138,9 +141,21 @@ def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL) -> tuple[
     entry, binding = existing_for_recipe(recipe)
     if entry is not None:
         return entry, False          # idempotent: same bytes, same locus, nothing new owed
-    _check_rate_limit(user)
     try:
         with transaction.atomic():
+            # One user's mints are serialised: count and insert under one
+            # transaction-scoped lock (released at commit or rollback). Without it,
+            # parallel POSTs each counted the same total and all minted (review #11).
+            with connection.cursor() as cur:
+                cur.execute("SELECT pg_advisory_xact_lock(%s, %s)", [MINT_LOCK_NAMESPACE, int(user.pk)])
+            # A parallel mint of THIS recipe may have committed while we waited:
+            # that is the idempotent answer, not a rate-limit refusal.
+            done = LocusRegistryEntry.objects.filter(pk=binding["pid"]).first()
+            if done is not None:
+                if done.canonical_bytes != binding["canonical"]:
+                    raise LocusCollision(binding["pid"])
+                return done, False
+            _check_rate_limit(user)
             entry = LocusRegistryEntry.objects.create(
                 pid=binding["pid"], kind=LocusRegistryEntry.KIND_RECIPE, version=RECIPE_VERSION,
                 canonical=binding["canonical"], digest=binding["digest"], token=binding["token"],

@@ -335,3 +335,47 @@ class RegistryConcurrencyTests(TransactionTestCase):
         self.assertEqual(errors, [])
         self.assertEqual(sum(1 for _, created in results if created), 1)
         self.assertEqual(LocusRegistryEntry.objects.filter(pid="10000009").count(), 1)
+
+
+class MintRateLimitRaceTests(TransactionTestCase):
+    """Review #11: the rate limit counted, then inserted, with nothing between the two
+    held: parallel POSTs each counted the same total and all minted. Six different
+    recipes from one user race against an hourly limit of 3 with 2 already used:
+    exactly one may be created. The real check is slowed (it still runs) to widen
+    the count-to-insert window that the lock must close."""
+
+    def test_parallel_mints_do_not_overshoot_the_limit(self):
+        import time
+        from unittest.mock import patch
+        user = make_user("registry_rate_race")
+        for i in range(2):
+            registry.mint_recipe(recipe(query=f"Used {i}"), user)
+        real = registry._check_rate_limit
+
+        def slow_check(u):
+            real(u)
+            time.sleep(0.3)
+
+        results, errors = [], []
+        barrier = threading.Barrier(6)
+
+        def worker(i):
+            try:
+                barrier.wait(timeout=10)
+                results.append(registry.mint_recipe(recipe(query=f"Race {i}"), user))
+            except Exception as exc:  # noqa: BLE001 — collected, asserted below
+                errors.append(exc)
+            finally:
+                connection.close()
+
+        with patch.object(registry, "MINT_LIMIT_PER_HOUR", 3), \
+                patch.object(registry, "_check_rate_limit", side_effect=slow_check):
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=60)
+        self.assertEqual(sum(1 for _, created in results if created), 1, (results, errors))
+        self.assertEqual(len(errors), 5, errors)
+        self.assertTrue(all(isinstance(e, registry.MintRateLimited) for e in errors), errors)
+        self.assertEqual(LocusRegistryEntry.objects.filter(minted_by=user).count(), 3)
