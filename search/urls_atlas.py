@@ -8,6 +8,7 @@ from django.urls import path
 from search.views import (AtlasPageView, atlas_search, atlas_place,
                           atlas_boundaries, atlas_geometry,
                           atlas_registry_coverage, atlas_status)
+from places.views_record import atlas_record_concordance, atlas_record_page
 
 urlpatterns = [
     path('', AtlasPageView.as_view(), name='atlas-page'),
@@ -15,6 +16,10 @@ urlpatterns = [
     # or these paths are captured as toponyms.
     path('search/', atlas_search, name='atlas-search'),
     path('place/', atlas_place, name='atlas-place'),
+    # place#325 Stage 2: the Record page (a contributed record by places.id)
+    # and its Concordance section's JSON, beta-gated in places/views_record.py.
+    path('place/<int:pk>/', atlas_record_page, name='atlas-record'),
+    path('place/<int:pk>/concordance/', atlas_record_concordance, name='atlas-record-concordance'),
     path('boundaries/', atlas_boundaries, name='atlas-boundaries'),
     path('geometry/', atlas_geometry, name='atlas-geometry'),
     path('status/', atlas_status, name='atlas-status'),
