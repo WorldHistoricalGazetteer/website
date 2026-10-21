@@ -572,10 +572,13 @@ class EntityDetailView(PublicEntityReadAPIView):
         if not url_name:
             raise Http404(f"No detail_url defined for {obj_type}")
 
-        # place#325 Stage 4: the Record page replaces the portal as a record's page.
-        from places.v4_landing import v4_landing_enabled
+        # place#325 Stage 4, ruling 2026-10-21: with the release switch on, the entity
+        # URI IS the Record page (HTML) or its small machine representation (JSON-LD /
+        # JSON), content-negotiated; no redirect. The visibility rule has already
+        # answered above (private, embargoed, missing: one 404).
+        from places.v4_landing import record_entity_response, v4_landing_enabled
         if obj_type == "place" and v4_landing_enabled():
-            return HttpResponseRedirect(reverse("atlas-record", args=[obj.pk]))
+            return record_entity_response(request, obj)
 
         url = reverse(url_name, kwargs={"pid" if obj_type == "place" else "id": obj.pk})
 

@@ -16,8 +16,12 @@ On, three things change together, because none is coherent without the others:
    anonymous visibility rule admits (``visible_places_q``: a public dataset,
    not embargoed). Otherwise the redirects in 1 would land anonymous visitors
    on a login page.
-3. **#271.** ``/entity/place:<contributed pid>/`` resolves for anonymous
-   callers (to the Record page) when the record is public and not embargoed;
+3. **#271, and the Record page at its URI** (ruling 2026-10-21).
+   ``/entity/place:<contributed pid>/`` RENDERS the Record page (HTML) or a small
+   machine representation (JSON-LD / JSON), content-negotiated
+   (``record_entity_response``), for anonymous callers too when the record is
+   public and not embargoed; ``/atlas/place/<pk>/`` keeps working and both name
+   the entity URI as canonical;
    private, embargoed or missing records answer 404, all alike. The
    machine-readable ``/entity/place:<pid>/api`` is NOT opened: distributing
    contributed data anonymously is a licensing decision (#271, 2026-09-21
@@ -162,3 +166,99 @@ def record_page_open_to(user) -> bool:
     if v4_landing_enabled():
         return True
     return bool(user.is_authenticated and getattr(user, "can_access_beta", False))
+
+
+# ---------------------------------------------------------------- /entity/place:<pk>/
+
+RECORD_STATEMENT = (
+    "A place: identifier names a gazetteer record: one contributor's account of a place, "
+    "not the place itself (place#325)."
+)
+# Placeholder vocabulary, as for the locus document (api/views_locus.LOCUS_CONTEXT):
+# WHG has not yet published a term for a Record; an open question for SG.
+RECORD_CONTEXT = {"@vocab": "https://whgazetteer.org/ns/record#"}
+
+
+def _concordance_entry(e: dict, request) -> dict:
+    """One concordance link, reduced to what a machine reader needs: what is linked,
+    how, on whose word, and (for records WHG holds) the record's own entity URI."""
+    out = {"tier": e.get("tier"), "identifier": e.get("identifier"), "link_type": e.get("link_type"),
+           "aggregates": bool(e.get("aggregates")),
+           "provenance": (e.get("provenance") or {}).get("label")}
+    if e.get("placeholder"):
+        out["placeholder"] = True
+    target = e.get("target") or {}
+    if target:
+        out["target_status"] = target.get("status")
+    recs = list(target.get("records") or [])
+    if e.get("record"):
+        recs.append(e["record"])
+    held = [r.get("place_id") for r in recs if isinstance(r, dict) and isinstance(r.get("place_id"), int)]
+    if held:
+        out["records"] = [request.build_absolute_uri(record_uri(pk)) for pk in held]
+    if e.get("cocited_identifier"):
+        out["cocited_identifier"] = e["cocited_identifier"]
+    return out
+
+
+def record_document(request, place) -> dict:
+    """The JSON(-LD) representation of a Record at its entity URI: small and honest.
+    The full LPF stays at ``/api`` (closed to anonymous callers: licensing, #271)."""
+    from places.concordance import cached_concordance
+    ds = place.dataset
+    doc = {
+        "@context": RECORD_CONTEXT,
+        "@id": request.build_absolute_uri(record_uri(place.pk)),
+        "@type": "Record",
+        "statement": RECORD_STATEMENT,
+        "title": place.title,
+        "src_id": place.src_id,
+        "dataset": {"label": getattr(ds, "label", None), "title": getattr(ds, "title", None)},
+        "lpf": request.build_absolute_uri(record_uri(place.pk) + "api"),
+        "lpf_access": "signed-in session or API token",
+    }
+    conc = cached_concordance(place, user=request.user)
+    if conc is None:
+        doc["concordance"] = None
+        doc["concordance_note"] = "only public records have a concordance"
+        return doc
+    doc["concordance"] = {
+        "aggregated_types": ["exactMatch", "closeMatch"],
+        "note": "sameAs counts as exactMatch; tier 3 (co-citation) is listed, never aggregated",
+        "outbound": [_concordance_entry(e, request) for e in conc.get("outbound") or []],
+        "inbound": [_concordance_entry(e, request) for e in conc.get("inbound") or []],
+        "cocited": [_concordance_entry(e, request) for e in conc.get("cocited") or []],
+        "truncated": conc.get("truncated"),
+        "section": request.build_absolute_uri(record_uri(place.pk)) + "#concordance",
+    }
+    return doc
+
+
+def record_entity_response(request, place):
+    """``/entity/place:<pk>/`` with the switch on (ruling 2026-10-21). ``request`` is the
+    DRF request, whose content negotiation has already chosen: HTML -> the Record page
+    itself (``places.views_record.atlas_record_page``, reused, not forked) served at this
+    URI; otherwise JSON-LD or JSON (``record_document``). The caller has already applied
+    the visibility rule (private, embargoed and missing are one 404 before this)."""
+    import json as _json
+    from django.http import HttpResponse
+    from django.utils.cache import patch_vary_headers
+    renderer = getattr(request, "accepted_renderer", None)
+    media = getattr(renderer, "media_type", "application/json")
+    if media == "text/html":
+        from places.views_record import atlas_record_page
+        resp = atlas_record_page(request._request, pk=place.pk)
+    else:
+        media = "application/ld+json" if media == "application/ld+json" else "application/json"
+        body = _json.dumps(record_document(request, place), ensure_ascii=False, indent=2, default=str)
+        resp = HttpResponse(body, content_type=f"{media}; charset=utf-8")
+    patch_vary_headers(resp, ("Accept",))
+    return resp
+
+
+def record_canonical_url(request, place) -> str:
+    """The canonical URL for a Record page: the entity URI when the switch is on, else ""
+    (off, the entity URI 302s to the portal, so the beta preview names nothing)."""
+    if not v4_landing_enabled() or place is None or request is None:
+        return ""
+    return request.build_absolute_uri(record_uri(place.pk))
