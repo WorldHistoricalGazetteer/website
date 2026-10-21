@@ -365,13 +365,24 @@ def _place_lookup_id(obj_type, raw_id):
 
     Place ids are namespaced — ``whg:<dataset_id>:<src_id>`` — while the ORM keys
     on the primary key; ids emitted before namespacing (``whg:<pk>``, or a bare
-    number) resolve too, so links already held keep working. Non-place types and
-    unresolvable ids pass through untouched, to 404 as they did before.
+    number) resolve too, so links already held keep working. Non-place types pass
+    through untouched.
+
+    An unresolvable PLACE id raises Http404 here, with the text
+    ``get_object_or_404`` uses. It used to pass through and reach the integer pk
+    filter, which 500'd (``whg:<ds>:<missing src>``, ``whg:abc``) while a
+    private record 404'd: anonymous callers could test whether a private record
+    exists (review of place#325, 2026-10-21). Private, embargoed, missing and
+    malformed must be one answer, status and body
+    (places/tests_v4_entity_271.py).
     """
     if obj_type != "place":
         return raw_id
     pk = resolve_legacy_place_pk(raw_id)
-    return pk if pk is not None else raw_id
+    if pk is None:
+        from places.models import Place
+        raise Http404("No %s matches the given query." % Place._meta.object_name)
+    return pk
 
 
 # ---------------------------------------------------------------------------
@@ -459,13 +470,26 @@ class EntityResolveAnonThrottle(AnonRateThrottle):
     rate = "60/min"
 
 
-def anonymous_resolution_allowed(request, entity_id) -> bool:
-    """True when this request may proceed without authentication."""
+def anonymous_resolution_allowed(request, entity_id, contributed_ok=False) -> bool:
+    """True when this request may proceed without authentication.
+
+    ``contributed_ok`` (place#271 / place#325 Stage 4): a view that only
+    REDIRECTS a contributed (WHG-hosted) place id to its human page may admit
+    anonymous callers once ``V4_LANDING_ENABLED`` is on. Which records resolve
+    is then the queryset's business: ``place_preview_queryset`` applies
+    ``visible_places_q`` (place#310), so a private, embargoed or missing record
+    is the same 404. The note above about unscoped querysets predates #310.
+    """
     user = getattr(request, "user", None)
     if user is not None and user.is_authenticated:
         return True
     obj_type, _, obj_id = str(entity_id or "").partition(":")
-    return obj_type == "place" and bool(obj_id) and is_crc_place_id(obj_id)
+    if obj_type != "place" or not obj_id:
+        return False
+    if is_crc_place_id(obj_id):
+        return True
+    from places.v4_landing import v4_landing_enabled
+    return contributed_ok and v4_landing_enabled()
 
 
 class PublicEntityReadAPIView(AuthenticatedAPIView):
@@ -479,10 +503,14 @@ class PublicEntityReadAPIView(AuthenticatedAPIView):
     permission_classes = [AllowAny]
     throttle_classes = [EntityResolveAnonThrottle]
     renderer_classes = [JSONRenderer, LinkedDataJSONRenderer, LinkedDataHTMLRenderer]
+    # Contributed place ids stay closed to anonymous callers unless a view
+    # opts in (EntityDetailView only; see anonymous_resolution_allowed).
+    anonymous_contributed_ok = False
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
-        if not anonymous_resolution_allowed(request, kwargs.get("entity_id")):
+        if not anonymous_resolution_allowed(request, kwargs.get("entity_id"),
+                                            contributed_ok=self.anonymous_contributed_ok):
             raise NotAuthenticated()
 
 
@@ -500,6 +528,9 @@ class EntityDetailView(PublicEntityReadAPIView):
     # request 406'd before reaching any of the logic below. StaticHTMLRenderer
     # suffices here because nothing is ever rendered through it.
     renderer_classes = [JSONRenderer, LinkedDataJSONRenderer, StaticHTMLRenderer]
+    # place#271: only redirects, so it may resolve a PUBLIC contributed record
+    # for an anonymous caller once V4_LANDING_ENABLED is on.
+    anonymous_contributed_ok = True
 
     def get(self, request, entity_id, *args, **kwargs):
 
@@ -540,6 +571,11 @@ class EntityDetailView(PublicEntityReadAPIView):
 
         if not url_name:
             raise Http404(f"No detail_url defined for {obj_type}")
+
+        # place#325 Stage 4: the Record page replaces the portal as a record's page.
+        from places.v4_landing import v4_landing_enabled
+        if obj_type == "place" and v4_landing_enabled():
+            return HttpResponseRedirect(reverse("atlas-record", args=[obj.pk]))
 
         url = reverse(url_name, kwargs={"pid" if obj_type == "place" else "id": obj.pk})
 

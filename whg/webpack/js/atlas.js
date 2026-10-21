@@ -17,7 +17,9 @@ import LayerSourcesPalette from './layerSourcesPalette';
 import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
-import { clusterHits, suggestTheta } from './clustering.js';
+import { clusterHits, suggestTheta, DEFAULT_PARAMS } from './clustering.js';
+import { ATLAS_DEFAULT_THETA, ATLAS_DEFAULT_MATCH_MODE, ATLAS_DEFAULT_CLUSTERING } from './atlas_cluster_defaults.js';
+import { encodeRecipeToken, decodeRecipeToken, recipePid, retrievalFromSearchBody, RecipeError } from './locus_recipe.js';
 import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
 import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
@@ -44,7 +46,7 @@ let areaRouter = null;
 // only where a core is attested. Replaces the old range + '+Undated' hatch.
 let temporalMode = 'off';
 let searchMode = 'areas';       // 'areas' | 'toponyms'
-let searchMatchMode = 'in';   // main Places search match type: exact | starts | in (contains) | phonetic
+let searchMatchMode = ATLAS_DEFAULT_MATCH_MODE;   // main Places search match type: exact | starts | in (contains) | phonetic
 let useViewport = false;       // viewport-constraint toggle (non-globe only)
 let clusterResults = true;
 let selectedRegions = [];        // Array of {id, label, namespace, geometry}
@@ -69,12 +71,9 @@ let temporalSpanBeforeLock = 1000;
 const TEMPORAL_MIN = -2000;
 const TEMPORAL_MAX = 2100;
 
-/* Default merge sensitivity (θ_query). Bumped from the calibration default 0.55
-   to a more disambiguating 0.65: empirically (spread-vs-θ sweep on ambiguous
-   names) the max intra-cluster geographic spread collapses from ~30 km to ~4 km
-   between 0.55 and 0.65 — tightening loose same-name merges — while 0.70 starts
-   over-splitting genuine multi-source places into pairs. */
-const ATLAS_DEFAULT_THETA = 0.65;
+/* Default merge sensitivity (θ_query): ATLAS_DEFAULT_THETA, imported from
+   atlas_cluster_defaults.js (the one place the Atlas's literal defaults live;
+   the Record page's default-settings locus link mirrors them server-side). */
 
 /* ═══════════════════════════════════════════════════════════════════
    Init: Load data dependencies
@@ -1360,6 +1359,12 @@ Promise.all([
         e.preventDefault();
         e.stopPropagation();
         openAtlasPortal($(this).data('portal-pid'));
+    });
+    // ── BETA locus link on a cluster card: a real <a>, so its default
+    //    navigation stands; only the card head's highlight-and-fit must not
+    //    fire underneath it (place#325 Stage 2). ──
+    $(document).on('click', '.cluster-locus-open', function (e) {
+        e.stopPropagation();
     });
 
     // ── BETA AAT type facet: toggle a hierarchical type filter, re-search ──
@@ -2657,7 +2662,7 @@ let thetaUserSet = false;          // true once the user drags θ → stop auto-
 let thetaAutoFitted = false;       // whether the current θ was auto-fitted to the result set
 let thetaNeedsFit = true;          // re-fit θ only on a FRESH query; preserve it across reloads of a result set
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
-const ATLAS_DEFAULT_NS_PENALTY = 0.15;  // mirrors clustering.js DEFAULT_PARAMS.same_ns_penalty
+const ATLAS_DEFAULT_NS_PENALTY = ATLAS_DEFAULT_CLUSTERING.same_ns_penalty;  // clustering.js DEFAULT_PARAMS.same_ns_penalty
 let sameNsPenaltyOverride = ATLAS_DEFAULT_NS_PENALTY; // same-gazetteer repulsion strength (slider)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
@@ -2744,6 +2749,12 @@ function renderPortal(place, pid) {
     if (attr.rights_holder) h += ` — ${escapeHtml(attr.rights_holder)}`;
     if (attr.license__spdx_id) h += ` <span class="portal-license">(${escapeHtml(attr.license__spdx_id)})</span>`;
     h += ` <span class="text-muted small">${escapeHtml(pid)}</span></p>`;
+    // A contributed record has a beta Record page (place#325 Stage 2); the
+    // server says where when the row can be found.
+    if (place.record_url && String(place.record_url).startsWith('/atlas/')) {
+        h += `<p class="portal-record-link"><a href="${escapeHtml(place.record_url)}" target="_blank" rel="noopener">`
+            + `<i class="fas fa-file-lines me-1"></i>Open the record page</a></p>`;
+    }
 
     const names = (place.names || []).map(n => escapeHtml(n.label || n.toponym)).filter(Boolean);
     if (names.length) h += `<p><strong>Names:</strong> ${names.join(', ')}</p>`;
@@ -2798,7 +2809,7 @@ function renderPortal(place, pid) {
 
 // Fallback weights when the gateway ships no clustering_params (mirrors
 // clustering.js DEFAULT_PARAMS / indexing clustering_params.json).
-const DEFAULT_CLUSTER_WEIGHTS = { name: 0.35, spatial: 0.20, temporal: 0.15, type: 0.15, link: 0.15 };
+const DEFAULT_CLUSTER_WEIGHTS = ATLAS_DEFAULT_CLUSTERING.weights;
 
 // Seed the θ + weight sliders from the shipped clustering_params (called once
 // per search, before the user starts tuning). Resets any prior overrides.
@@ -3021,6 +3032,62 @@ function clusterLicenceFooter(members) {
         : '';
 }
 
+// ── BETA: the unminted locus link on a cluster card (place#325 Stage 2, place#172) ──
+// A card used to link nowhere. It now links to /atlas/locus/?r=<token>, where the
+// token is the canonical recipe (locus_recipe.js): the retrieval the gateway was
+// actually sent (echoed back as `request`, read through retrievalFromSearchBody so
+// an unknown key fails loudly instead of vanishing from the hash), the LITERAL
+// clustering parameters this render used (the values clusterHits reports back,
+// never a params version), and the cluster's member ids.
+const LOCUS_PAGE_URL = '/atlas/locus/';
+const LOCUS_TOKEN_PARAM = 'r';
+
+/** The recipe for `cluster` as rendered with `params` (clusterHits' report of
+ *  what it used). Throws RecipeError when a recipe cannot honestly be built. */
+function locusRecipeFor(cluster, params) {
+    if (!gatewayData || !gatewayData.request) {
+        throw new RecipeError('request', 'the search response carried no request echo');
+    }
+    const shipped = (gatewayData.clustering_params && gatewayData.clustering_params.thresholds) || {};
+    const w = params.weights || {};
+    return {
+        v: 1,
+        retrieval: retrievalFromSearchBody(gatewayData.request),
+        clustering: {
+            weights: { link: w.link, name: w.name, spatial: w.spatial, temporal: w.temporal, type: w.type },
+            theta: params.theta,
+            // Shipped with clustering_params but not read by clusterHits today;
+            // frozen as literals anyway (place#172 lists them; recipe ruling 2).
+            tau_name: shipped.tau_name ?? DEFAULT_PARAMS.thresholds.tau_name,
+            tau_link: shipped.tau_link ?? DEFAULT_PARAMS.thresholds.tau_link,
+            same_ns_penalty: params.sameNsMargin,
+            respect_distinct: true,   // clusterHits' default; this page never overrides it
+            // NO stoplist: it is gateway data, taken from the gateway response at
+            // resolve time, not part of the recipe or its PID (place#325 ruling 3).
+        },
+        members: (cluster.memberIds || []).slice(),
+    };
+}
+
+function locusLinkHtml(cluster, ci, params, debugSink) {
+    try {
+        const recipe = locusRecipeFor(cluster, params);
+        const token = encodeRecipeToken(recipe);
+        if (debugSink) debugSink.recipes.set(ci, recipe);
+        const url = `${LOCUS_PAGE_URL}?${LOCUS_TOKEN_PARAM}=${token}`;
+        return `<a class="cluster-locus-open" href="${escapeHtml(url)}" target="_blank" rel="noopener" `
+            + `title="Open as a shareable (unminted) locus page" aria-label="Open as a shareable locus page">`
+            + `<i class="fas fa-share-nodes"></i></a>`;
+    } catch (e) {
+        // Loud, not silent: a filter the recipe does not know must not vanish
+        // from the hash. The card says there is no link and why.
+        console.warn('Atlas: no locus link for cluster', ci, e && e.message);
+        return `<span class="cluster-locus-open cluster-locus-unavailable" `
+            + `title="No shareable link: ${escapeHtml(e && e.message)}" aria-label="No shareable link">`
+            + `<i class="fas fa-share-nodes"></i></span>`;
+    }
+}
+
 function renderClusters() {
     if (!gatewayData) return;
     // Apply the temporal filter client-side too, so dragging the date control
@@ -3056,6 +3123,14 @@ function renderClusters() {
     lastClusters = clusters;
     renderTypeFacets(gatewayData.facets);
     console.log('Atlas cluster', debug, params);
+    // Behind the debug gate (as window.__whgAtlas is): the recipes behind this
+    // render's locus links, and the recipe functions, so a harness can check a
+    // card's token against the server for the same body.
+    let locusDebug = null;
+    if (isDebugEnabled()) {
+        locusDebug = { recipes: new Map(), params, encodeRecipeToken, decodeRecipeToken, recipePid };
+        try { window.__whgAtlasLocus = locusDebug; } catch (e) { /* */ }
+    }
 
     // aat_id → friendly label, from the result-set facets (used for member types).
     const aatLabels = {};
@@ -3112,6 +3187,8 @@ function renderClusters() {
             // Single-place cluster: the "open details" affordance lives on the head.
             html += `<button class="atlas-portal-open btn btn-sm btn-link p-0" data-portal-pid="${escapeHtml(rep.place_id)}" title="Open place details" aria-label="Open place details"><i class="fas fa-circle-info"></i></button>`;
         }
+        // The shareable (unminted) locus page for this cluster (place#325 Stage 2).
+        html += locusLinkHtml(cluster, ci, params, locusDebug);
         html += `</div>`;
         // Cluster-level facets: countries, AAT types common to all members, and
         // the overall attested date span. (Namespaces are shown per member below.)
@@ -3173,7 +3250,7 @@ function renderClusters() {
 // to the gateway match modes (exact | starts | in | phonetic).
 const SEARCH_MODE_LABELS = { exact: 'Exactly', starts: 'Starts with', in: 'Contains', phonetic: 'Sounds like' };
 function setSearchMatchMode(mode) {
-    if (!SEARCH_MODE_LABELS[mode]) mode = 'in';
+    if (!SEARCH_MODE_LABELS[mode]) mode = ATLAS_DEFAULT_MATCH_MODE;
     searchMatchMode = mode;
     const label = document.getElementById('atlas_searchmode_label');
     if (label) label.textContent = SEARCH_MODE_LABELS[mode];
@@ -3484,7 +3561,7 @@ function clearAll() {
     }
 
     // Reset search match type to the default (Contains)
-    setSearchMatchMode('in');
+    setSearchMatchMode(ATLAS_DEFAULT_MATCH_MODE);
 
     // Reset viewport constraint
     useViewport = false;

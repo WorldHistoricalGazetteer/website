@@ -1,0 +1,242 @@
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block maplibre %}
+  <script type="text/javascript">
+    const loadMaplibre = true;
+  </script>
+  <link href="{% static 'webpack/whg_maplibre.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+{% endblock %}
+
+{% block extra_head %}
+  <link href="{% static 'webpack/atlas_record.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+  {% comment %}
+    place#325 Stage 2, beta only. Not for indexing: the public record page is
+    /entity/place:<pid>/ at the v4 release; this route is a preview.
+  {% endcomment %}
+  <meta name="robots" content="noindex, nofollow">
+{% endblock %}
+
+{% block title %}
+  <title>WHG · {{ place.title }} (record, beta)</title>
+{% endblock %}
+
+{% block content %}
+<main id="atlas_record" class="container-md atlas-record my-3" data-place-id="{{ place.pk }}">
+
+  <nav class="atlas-record-crumbs small mb-2" aria-label="breadcrumb">
+    <a href="{% url 'atlas-page' %}">Atlas</a>
+    <span class="text-muted mx-1">/</span>
+    <span class="text-muted">Record</span>
+    <span class="badge bg-warning text-dark ms-2">beta preview</span>
+  </nav>
+
+  <header class="atlas-record-header">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+      <div>
+        <h1 class="h3 mb-1">{{ place.title }}</h1>
+        <p class="text-muted mb-0">
+          A record in <strong>{{ dataset.title }}</strong>{% if dataset.creator %}, by {{ dataset.creator }}{% endif %}:
+          one contributor's account of a place.
+        </p>
+      </div>
+      <div class="atlas-record-actions">
+        <a class="btn btn-sm btn-outline-primary" id="explore_similar_header"
+           href="{{ explore_similar.url }}">
+          <i class="fas fa-magnifying-glass me-1"></i>Explore similar records
+        </a>
+        {% if default_cluster %}
+          {% comment %}
+            Secondary (place#325 Stage 2): the unminted locus page for a recipe
+            with this record as its one member and its title as the query. The
+            wording says WHICH settings: the gateway's calibrated ones, or the WHG
+            fallback literals when the gateway could not be asked (different
+            numbers, so never silently). Omitted where the record is not in the
+            search index under a gateway id, rather than shown dead.
+          {% endcomment %}
+          {% if default_cluster.source == "gateway" %}
+            <a class="d-block small mt-1 text-end" id="default_cluster_link" data-settings="gateway"
+               href="{{ default_cluster.url }}"
+               title="The search index's cluster for this record's name, with the gateway's current calibrated weights and thresholds. The merge threshold is the Atlas's fixed default (0.65): the Atlas fits it to each result set, which this link cannot. Shareable, not permanent.">
+              <i class="fas fa-share-nodes me-1"></i>See this record's cluster at gateway-calibrated settings
+            </a>
+          {% else %}
+            <a class="d-block small mt-1 text-end" id="default_cluster_link" data-settings="fallback"
+               data-fallback-reason="{{ default_cluster.reason }}" href="{{ default_cluster.url }}"
+               title="The search index's calibrated settings could not be read just now, so this uses WHG's fixed fallback settings, which differ from what the Atlas would use. Shareable, not permanent.">
+              <i class="fas fa-share-nodes me-1"></i>See this record's cluster at WHG fallback settings
+            </a>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    <ul class="nav nav-pills nav-sm mt-3 atlas-record-tabs">
+      <li class="nav-item"><a class="nav-link" href="#record">Record</a></li>
+      <li class="nav-item"><a class="nav-link" href="#concordance">Concordance</a></li>
+      {% if user.can_access_beta %}
+      <li class="nav-item"><a class="nav-link" href="#record_gloss">About</a></li>
+      <li class="nav-item"><a class="nav-link" href="#record_environment">Environment</a></li>
+      {% endif %}
+    </ul>
+  </header>
+
+  {# ---------------- the record: one contributor's account ---------------- #}
+  <section id="record" class="atlas-record-section" aria-labelledby="record_heading">
+    <h2 id="record_heading" class="h5">Record</h2>
+    <dl class="row atlas-record-facts mb-0">
+      <dt class="col-sm-3">Identifier</dt>
+      <dd class="col-sm-9"><code>place:{{ place.pk }}</code>
+        {% if place.src_id %}<span class="text-muted ms-2">contributor's id <code>{{ place.src_id }}</code></span>{% endif %}
+      </dd>
+      {% if variants %}
+        <dt class="col-sm-3">Other names</dt>
+        <dd class="col-sm-9">
+          {% for n in variants %}<span class="atlas-record-name">{{ n.label }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}
+        </dd>
+      {% endif %}
+      {% if type_labels %}
+        <dt class="col-sm-3">Place types</dt>
+        <dd class="col-sm-9">{{ type_labels|join:", " }}</dd>
+      {% endif %}
+      {% if timespan_labels %}
+        <dt class="col-sm-3">When</dt>
+        <dd class="col-sm-9">{{ timespan_labels|join:"; " }}</dd>
+      {% endif %}
+      {% if record.ccodes %}
+        <dt class="col-sm-3">Country codes</dt>
+        <dd class="col-sm-9">{{ record.ccodes|join:", " }}</dd>
+      {% endif %}
+      <dt class="col-sm-3">Geometry</dt>
+      <dd class="col-sm-9">
+        {% if record.geom %}{{ record.geom|length }} geometr{{ record.geom|length|pluralize:"y,ies" }}{% else %}<span class="text-muted">none in this record</span>{% endif %}
+      </dd>
+    </dl>
+
+    <div id="record_descriptions" class="atlas-record-block">
+      <h3 class="h6">Descriptions</h3>
+      {% if descriptions %}
+        {% for d in descriptions %}
+          <blockquote class="atlas-record-description"{% if d.lang %} lang="{{ d.lang }}"{% endif %}>
+            <p class="mb-1">{{ d.value }}</p>
+            {% if d.lang or d.source %}
+              <footer class="small text-muted">
+                {% if d.lang %}{{ d.lang }}{% endif %}
+                {% if d.source %}{% if d.lang %} · {% endif %}<a href="{{ d.source }}" target="_blank" rel="noopener noreferrer">source</a>{% endif %}
+              </footer>
+            {% endif %}
+          </blockquote>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted small mb-0">This record has no descriptions.</p>
+      {% endif %}
+    </div>
+
+    <div id="record_depictions" class="atlas-record-block">
+      <h3 class="h6">Depictions</h3>
+      {% if depictions %}
+        <ul class="list-unstyled atlas-record-depictions">
+          {% for d in depictions %}
+            <li>
+              <a href="{{ d.href }}" target="_blank" rel="noopener noreferrer">{{ d.title }}</a>
+              {% if d.license %}<span class="small text-muted ms-1">({{ d.license }})</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted small mb-0">This record has no depictions.</p>
+      {% endif %}
+    </div>
+
+    <div id="record_links" class="atlas-record-block">
+      <h3 class="h6">Links, as contributed</h3>
+      {% if links %}
+        <p class="small text-muted mb-1">The identifiers this record cites, exactly as its dataset has them. The Concordance below says what each one leads to.</p>
+        <ul class="list-unstyled atlas-record-links">
+          {% for l in links %}
+            <li><span class="badge text-bg-light border me-1">{{ l.type }}</span>
+              {% if l.href %}<a href="{{ l.href }}" target="_blank" rel="noopener noreferrer">{{ l.identifier }}</a>{% else %}<code>{{ l.identifier }}</code>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-muted small mb-0">This record cites no other identifiers.</p>
+      {% endif %}
+    </div>
+
+    <div id="record_related" class="atlas-record-block">
+      <h3 class="h6">Related places</h3>
+      {% if related %}
+        <ul class="list-unstyled atlas-record-related">
+          {% for r in related %}
+            <li><span class="badge text-bg-light border me-1">{{ r.relation }}</span>
+              {% if r.href %}<a href="{{ r.href }}" target="_blank" rel="noopener noreferrer">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}
+              {% if r.when %}<span class="small text-muted ms-1">{{ r.when }}</span>{% endif %}
+              {% if r.citation %}<span class="small text-muted ms-1">({{ r.citation }})</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+        <p class="small text-muted mb-0">Relations such as part-of are not identity: they are not part of the Concordance.</p>
+      {% else %}
+        <p class="text-muted small mb-0">This record names no related places.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {# ---------------- the concordance: attestations about the record ---------------- #}
+  <section id="concordance" class="atlas-record-section" aria-labelledby="concordance_heading"
+           data-endpoint="{{ concordance_endpoint }}"
+           data-explore-url="{{ explore_similar.url }}"
+           data-explore-seeded-by="{{ explore_similar.seeded_by|join:',' }}"
+           data-record-title="{{ place.title }}">
+    <h2 id="concordance_heading" class="h5">Concordance</h2>
+    <p class="small text-muted">
+      The records attested to be the same place as this one, one step from it.
+      This is a view of other attestations, not a merged place.
+    </p>
+    <div id="concordance_status" class="atlas-record-loading" role="status" aria-live="polite">
+      <div class="spinner-border spinner-border-sm text-secondary me-2" aria-hidden="true"></div>
+      <span>Looking up the attestations about this record&hellip;</span>
+    </div>
+    <div id="concordance_body" hidden></div>
+  </section>
+
+  {% if user.can_access_beta %}
+  {% comment %}
+    place#325 Stage 3, BETA only even when the page itself is open (V4_LANDING_ENABLED):
+    both describe the GROUP (this record plus the concordance's
+    aggregated subset: exactMatch/closeMatch, tiers 1-2; never co-cited records).
+    Filled by enrichment.js from places/views_enrichment.py.
+  {% endcomment %}
+  <section id="record_gloss" class="atlas-record-section enr-section" aria-labelledby="record_gloss_heading"
+           data-endpoint="{% url 'atlas-record-gloss' place.pk %}">
+    <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
+    <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
+      say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
+    <div class="enr-body"></div>
+  </section>
+
+  <section id="record_environment" class="atlas-record-section enr-section" aria-labelledby="record_environment_heading"
+           data-endpoint="{% url 'atlas-record-environment' place.pk %}">
+    <h2 id="record_environment_heading" class="h5">Environmental signature <span class="enr-badge">EDOPS</span></h2>
+    <p class="small text-muted">The environment of the drainage basin (or area) where this group lies, from
+      <a href="https://computingplace.org/" target="_blank" rel="noopener noreferrer">EDOPS, Computing Place</a>.
+      Mostly present-day conditions: read the note on each band.</p>
+    <div class="enr-body"></div>
+  </section>
+  {% endif %}
+
+</main>
+{% endblock %}
+
+{% block deferredScripts %}
+  var scripts = [
+    {
+      src: '{% static 'webpack/whg_maplibre.bundle.js' %}',
+      type: 'text/javascript',
+    },
+    {
+      src: '{% static 'webpack/atlas_record.bundle.js' %}',
+      type: 'module',
+    },
+  ]
+{% endblock %}

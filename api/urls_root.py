@@ -9,6 +9,7 @@ from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView,
     AuthorityDatasetsView, DummyView, PeriodSuggestView
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
+from .views_locus import locus_entity, locus_entity_api
 from .views_indexing import (
     ContributorAttestationView,
     GazetteerInventoryView,
@@ -44,6 +45,15 @@ urlpatterns = [
     path('reconcile/periods/suggest', PeriodSuggestView.as_view(), name='reconcile-period-suggest'),
     path("suggest/entity", SuggestEntityView.as_view(), name="suggest_entity"),
     path("suggest/property", SuggestPropertyView.as_view(), name="suggest_property"),
+
+    # place#172 / place#325 Stage 4: /entity/locus:<PID> (content-negotiated) and
+    # its /api alias. Listed BEFORE the generic entity routes so the `locus`
+    # object type never reaches EntityDetailView; place: etc. are untouched.
+    # Off (settings.LOCUS_MINTING_ENABLED False) they hand the request to the
+    # generic entity views below, so the answer is the pre-route one exactly
+    # (anonymous 401, signed-in 404); beta-gated when on.
+    path("entity/locus:<str:pid>/", locus_entity, name="entity-locus"),
+    path("entity/locus:<str:pid>/api", locus_entity_api, name="entity-locus-api"),
 
     # Entity API endpoints
     path("entity/<str:entity_id>/", EntityDetailView.as_view(), name="entity-detail"),

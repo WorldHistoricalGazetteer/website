@@ -2536,6 +2536,10 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .cluster-member { cursor: pointer; }
 .cluster-member:hover { background: #f1f6fb; border-radius: 4px; }
 .cluster-title { font-weight: 600; color: #b0413e; }
+/* The shareable (unminted) locus link on a card head (place#325 Stage 2). */
+.cluster-locus-open { color: #2980b9; font-size: 0.85rem; padding: 0 4px; flex-shrink: 0; }
+.cluster-locus-open:hover { color: #1b5e8a; }
+.cluster-locus-unavailable { color: #b5b9bd; cursor: help; }
 .cluster-badge {
     font-size: 0.75rem; color: #2980b9; background: #eaf3fa;
     border-radius: 10px; padding: 1px 8px; white-space: nowrap;

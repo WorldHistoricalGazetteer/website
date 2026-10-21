@@ -59,6 +59,16 @@ def _is_enabled(user=None, allow_anonymous: bool = False) -> bool:
     return True
 
 
+def _disabled_reason() -> str:
+    """Why ``_is_enabled`` said no: ``"not_configured"`` (no ``CRC_GATEWAY_URL``
+    on this server) or ``"anonymous"`` (configured, but this caller is signed out
+    and the call did not opt into anonymous access). The page words them
+    differently: only the first is "not configured" (place#325 review)."""
+    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+        return "not_configured"
+    return "anonymous"
+
+
 def _gateway_url() -> str:
     return settings.CRC_GATEWAY_URL.rstrip("/")
 
@@ -238,6 +248,12 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
     return None
 
 
+# The candidate limit a search gets when its caller names none: the Atlas
+# Places search sends no ``size``, so this is the Atlas default too (the Record
+# page's default-settings locus recipe reads it from here, place#325 Stage 2).
+DEFAULT_SEARCH_SIZE = 100
+
+
 def crc_search(options: dict, user=None) -> dict | None:
     """Fail-safe wrapper over :func:`crc_search_status` — the response, or None.
 
@@ -248,8 +264,16 @@ def crc_search(options: dict, user=None) -> dict | None:
     return data
 
 
-def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None]:
+def crc_search_status(options: dict, user=None,
+                      meta: dict | None = None) -> tuple[dict | None, str | None]:
     """Call the CRC gateway ``POST /api/search`` and return the FULL response.
+
+    ``meta``, when given, receives ``meta["request"]``: the exact body sent to
+    the gateway (set before the call, so it is there even when the call
+    fails). A locus recipe's ``retrieval`` block is built from THIS dict
+    (``places.locus_recipe.retrieval_from_search_body``), never from
+    ``options``, so a new filter key fails loudly in the recipe adapter instead
+    of silently dropping out of the hash (place#325 Stage 2).
 
     Unlike ``crc_reconcile_search`` (which adapts hits for the reconciliation
     make_candidate() path), this returns the gateway's complete SearchResponse
@@ -300,7 +324,7 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
     body = {
         "query": (options.get("qstr") or "").strip() or None,
         "mode": _mode,
-        "size": int(options.get("size") or 100),
+        "size": int(options.get("size") or DEFAULT_SEARCH_SIZE),
         "geom": "full",
         "include_hard_links": True,
         "include_clustering_fields": True,
@@ -402,6 +426,9 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
         if mode in ("possibly", "definitely"):
             body["temporal_mode"] = mode
 
+    if meta is not None:
+        meta["request"] = body
+
     url = f"{_gateway_url()}/api/search"
     # attempt 0, then one retry reserved for a read timeout (see docstring).
     for attempt in (0, 1):
@@ -427,6 +454,45 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
             logger.warning("CRC gateway /api/search unexpected: %s", exc)
             return None, "error"
     return None, "timeout"  # pragma: no cover — loop always returns
+
+
+# A fixed, cheap probe for the gateway's clustering_params. Measured 2026-10-21
+# (prod host -> gateway): the block is identical for different queries (it is the
+# offline calibration, not per-result), and a size-1 exact search returns it in
+# ~0.3 s. clustering_params is only sent when include_clustering_fields is set.
+CLUSTERING_PARAMS_PROBE = {"query": "London", "mode": "exact", "size": 1,
+                           "include_clustering_fields": True}
+
+
+def crc_clustering_params(user=None, timeout: float = 1.5) -> tuple[dict | None, str | None]:
+    """The gateway's current ``clustering_params``: the same block ``POST
+    /api/search`` hands the Atlas (``atlas_search``), read with one tiny probe
+    search and a SHORT timeout, no retry, so a caller rendering a page is never
+    held up for long. Returns ``(params, failure)``; ``failure`` is
+    ``"disabled"``, ``"timeout"``, ``"unreachable"``, ``"error"`` or
+    ``"no_params"`` (the gateway answered without the block)."""
+    if not _is_enabled(user):
+        return None, "disabled"
+    url = f"{_gateway_url()}/api/search"
+    try:
+        resp = requests.post(url, json=dict(CLUSTERING_PARAMS_PROBE), headers=_headers(),
+                             timeout=(min(1.0, timeout), timeout))
+        if not (200 <= resp.status_code < 300):
+            logger.warning("CRC gateway clustering_params probe %s", resp.status_code)
+            return None, "error"
+        params = (resp.json() or {}).get("clustering_params")
+    except requests.Timeout:
+        logger.warning("CRC gateway clustering_params probe timed out after %ss", timeout)
+        return None, "timeout"
+    except requests.ConnectionError:
+        logger.warning("CRC gateway clustering_params probe unreachable")
+        return None, "unreachable"
+    except Exception as exc:  # noqa: BLE001 — a page render must never fail on this
+        logger.warning("CRC gateway clustering_params probe unexpected: %s", exc)
+        return None, "error"
+    if not isinstance(params, dict):
+        return None, "no_params"
+    return params, None
 
 
 def _truthy_flag(v):
@@ -707,7 +773,8 @@ def crc_fetch_places(place_ids: list[str], user=None,
         meta: Optional dict, populated in place. On any gateway failure this
             records ``meta["error"]`` as ``timeout`` / ``connection`` / ``http`` /
             ``unexpected``, and ``meta["disabled"] = True`` when the gateway was
-            never called at all.
+            never called at all, with ``meta["disabled_reason"]`` saying why
+            (``_disabled_reason``).
 
     Returns:
         Dict mapping each place_id to its data dict (with keys like
@@ -725,6 +792,7 @@ def crc_fetch_places(place_ids: list[str], user=None,
     if not _is_enabled(user, allow_anonymous=allow_anonymous):
         if meta is not None:
             meta["disabled"] = True
+            meta["disabled_reason"] = _disabled_reason()
         return {}
 
     if not place_ids:

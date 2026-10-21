@@ -41,6 +41,7 @@ module.exports = {
 	entry: {
 		areas: './whg/webpack/js/areas.js',
 		atlas: './whg/webpack/js/atlas.js',
+		atlas_record: './whg/webpack/js/atlasRecord.js',
 		base: './whg/webpack/js/base.js',
 		'builders-collection-dataset': './whg/webpack/js/builders-collection-dataset.js',
 		'builders-collection-place': './whg/webpack/js/builders-collection-place.js',
@@ -50,6 +51,7 @@ module.exports = {
 		ds_browse: './whg/webpack/js/ds_browse.js',
 		gallery: './whg/webpack/js/gallery.js',
 		home: './whg/webpack/js/home.js',
+		locus: './whg/webpack/js/locus.js',
 		mapAndTable: './whg/webpack/js/mapAndTable.js',
 		phonetics: './whg/webpack/js/phonetics.js',
 		places: './whg/webpack/js/places.js',

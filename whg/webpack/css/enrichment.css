@@ -1,0 +1,38 @@
+/* The gloss and EDOPS environmental signature on the beta Record and Locus pages (place#325 Stage 3). */
+
+.enr-section { margin-bottom: 2rem; scroll-margin-top: 80px; }
+.enr-locus { margin-top: 1.25rem; }
+.enr-locus .enr-section { margin-bottom: 1.25rem; }
+.enr-badge { font-size: .68rem; text-transform: uppercase; letter-spacing: .4px; font-weight: 600;
+             background: #eef6ee; color: #2f6b34; border-radius: 10px; padding: 2px 8px; vertical-align: middle; }
+.enr-loading { display: flex; align-items: center; color: #555; padding: .5rem 0; }
+
+.enr-gloss-sentence { margin-bottom: .35rem; }
+.enr-unknown { font-size: .88rem; color: #555; padding-left: 1.1rem; margin-bottom: .25rem; }
+.enr-how summary { cursor: pointer; }
+.enr-how ul { padding-left: 1.1rem; margin: .25rem 0 0; }
+
+.enr-scope { margin-bottom: .25rem; }
+.enr-years { color: #444; margin-bottom: .5rem; }
+.enr-incomplete { color: #842029; }
+.enr-card { border: 1px solid #e3e6e9; border-radius: 6px; padding: .6rem .75rem; margin-bottom: .6rem; }
+.enr-card[data-status="unavailable"], .enr-card[data-status="rejected"] { border-color: #f1c4c4; background: #fff8f8; }
+.enr-card[data-status="no_basin"], .enr-card[data-status="dispersed"], .enr-card[data-status="no_location"] {
+    background: #fbfaf5; color: #5c4b00; }
+.enr-card-members { font-weight: 600; }
+.enr-headline { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: .4rem; }
+.enr-chip { background: #eef3f8; border: 1px solid #d5e1ec; border-radius: 12px; padding: 1px 10px; font-size: .86rem; }
+.enr-chip-label { color: #5a6b7b; font-size: .74rem; text-transform: uppercase; letter-spacing: .3px; margin-right: 2px; }
+
+.enr-band { border-top: 1px solid #f0f1f3; padding: .3rem 0; }
+.enr-band summary { cursor: pointer; font-weight: 600; font-size: .92rem; }
+.enr-band-letter { display: inline-block; min-width: 1.4em; text-align: center; background: #495057; color: #fff;
+                   border-radius: 3px; font-size: .75rem; margin-right: .35rem; }
+.enr-band-desc { font-size: .82rem; color: #666; margin: .2rem 0 .3rem; }
+.enr-table { width: 100%; font-size: .86rem; border-collapse: collapse; }
+.enr-table th { font-weight: 500; color: #444; width: 42%; padding: 2px 8px 2px 0; vertical-align: top; }
+.enr-table td { padding: 2px 0; vertical-align: top; word-break: break-word; }
+.enr-unit { color: #777; font-size: .8rem; }
+.enr-note { color: #777; font-size: .78rem; }
+.enr-notes { font-size: .8rem; color: #666; padding-left: 1.1rem; margin: .3rem 0 0; }
+.enr-attribution { color: #555; border-top: 1px solid #e9ecef; padding-top: .4rem; margin-top: .5rem; }

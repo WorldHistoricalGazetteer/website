@@ -562,12 +562,28 @@ def atlas_search(request):
     except (ValueError, TypeError):
         options = {}
 
+    return _gateway_search_response(options, request.user)
+
+
+def _gateway_search_response(options, user, extra=None):
+    """Run one gateway search for a beta user and answer as ``atlas_search``
+    always has; shared with the locus resolver. ``extra`` is merged into a
+    successful (or timed-out) body.
+
+    The body actually posted to the gateway is echoed as ``request`` (Stage 1
+    note on place#325): a cluster card builds its locus recipe from THAT, via
+    ``retrievalFromSearchBody``, so a filter key the adapter does not know
+    fails loudly instead of vanishing from the hash.
+    """
     from api.crc_client import crc_search_status
-    data, failure = crc_search_status(options, user=request.user)
+    meta: dict = {}
+    data, failure = crc_search_status(options, user=user, meta=meta)
+    extra = extra or {}
     if data is None:
         empty = {
             "hits": [], "total": 0, "edges": [],
             "clustering_params": None, "toponym_stoplist": [],
+            "request": meta.get("request"),
         }
         if failure == "timeout":
             # A read timeout is NOT reported as gateway-down: the service is up
@@ -575,12 +591,14 @@ def atlas_search(request):
             # sticky "search is offline" banner over a working search (the retry
             # in crc_search_status has already had a second go by this point).
             # Kept as a 200 so the client's "took too long" empty state renders.
-            return JsonResponse({**empty, "gateway": True, "timeout": True})
+            return JsonResponse({**empty, **extra, "gateway": True, "timeout": True})
         # Unreachable / gateway error / unconfigured: a real outage, said with a
         # real status — not an empty 200 the client renders as "no results,
         # modify your search".
         return _gateway_failure_response(failure or "error", **empty)
-    _withhold_contributed_hits(data, request.user)
+    _withhold_contributed_hits(data, user)
+    data["request"] = meta.get("request")
+    data.update(extra)
     data["gateway"] = True
     return JsonResponse(data)
 
@@ -610,6 +628,10 @@ def _withhold_contributed_hits(data, user):
             data["edges"] = [e for e in data["edges"]
                              if not (isinstance(e, dict)
                                      and (str(e.get("a")) in dropped or str(e.get("b")) in dropped))]
+        # place#172: withheld records are reported as a count and a reason,
+        # never enumerated.
+        data["withheld"] = {"count": len(dropped),
+                            "reason": "records in datasets not visible to this account"}
     return data
 
 
@@ -660,6 +682,11 @@ def atlas_place(request):
 
     if contributed is not None:
         place["attribution"] = contributed.attribution
+        # The beta Record page for this contributed record (place#325 Stage 2),
+        # so the modal can open it; absent when the row cannot be found.
+        url = _record_urls_for_hits([{"place_id": pid}]).get(pid)
+        if url and url.startswith("/atlas/"):
+            place["record_url"] = url
         return JsonResponse(place)
 
     # Enrich with the source authority's attribution (registry, per-namespace).
@@ -702,6 +729,144 @@ def _not_redistributable_response(pid: str, ns: str, attribution: dict,
 # visibility determination: a place id under them belongs to a contributed
 # dataset (`whg:<dataset_id>:<id>`) whose terms must be looked up per dataset.
 CONTRIBUTED_NAMESPACES = frozenset({"whg"})
+
+
+# ── place#325 Stage 2: the unminted locus page ──────────────────────────────
+# Route: /atlas/locus/?r=<token>  (search/locus.py explains the design.)
+# BETA-gated (ruling D1) the way the Record page is: anonymous visitors are
+# sent to sign in and come back (a shared link must survive a sign-in);
+# signed-in users without beta access get the same 404 as every other
+# unpublished beta surface (existence not disclosed, reconciliation_view
+# pattern). Nothing public changes.
+
+def _locus_gate(request):
+    """None when the request may proceed; else the response to send."""
+    from django.contrib.auth.views import redirect_to_login
+    from django.http import Http404
+    if not request.user.is_authenticated:
+        return redirect_to_login(request.get_full_path())
+    if not request.user.can_access_beta:
+        raise Http404()
+    return None
+
+
+def atlas_locus(request):
+    """The unminted locus page: the recipe, human-readable, and its members.
+
+    The recipe is decoded and validated HERE, so a tampered or truncated token
+    renders a plain error page with the offending path and reason (HTTP 400),
+    never a 500. The current matches are fetched by the page's own script from
+    ``atlas_locus_resolve`` and clustered in the browser.
+    """
+    from django.shortcuts import render
+    from search.locus import LOCUS_TOKEN_PARAM, describe_recipe, load_token
+    from search.views_locus import minting_context
+    refused = _locus_gate(request)
+    if refused is not None:
+        return refused
+    token = (request.GET.get(LOCUS_TOKEN_PARAM) or "").strip()
+    recipe, canonical_token, error = load_token(token)
+    if error is not None:
+        return render(request, "search/locus.html", {
+            "error": error, "token": token,
+        }, status=400)
+    return render(request, "search/locus.html", {
+        "recipe": recipe,
+        "token": canonical_token,
+        "token_was_normalised": canonical_token != token,
+        "summary": describe_recipe(recipe),
+        "resolve_url": "/atlas/locus/resolve/",
+        # Stage 4: {"enabled": False} unless settings.LOCUS_MINTING_ENABLED, in
+        # which case the page offers the mint modal (search/views_locus.py).
+        "minting": minting_context(recipe, canonical_token),
+    })
+
+
+def atlas_locus_resolve(request):
+    """Re-run a recipe's retrieval through the gateway: ``POST {"r": token}``.
+
+    Answers like ``atlas_search`` (hits, edges, clustering fuel, ``request``
+    echo, 503/504 when the gateway could not be asked) plus ``recipe`` (the
+    canonical recipe the token decoded to) and ``record_urls`` (each hit's
+    record page). The browser then clusters with the recipe's LITERAL
+    parameters and THIS response's ``toponym_stoplist`` (the gateway's current
+    list: not part of the recipe, place#325 ruling 3), and picks the cluster the
+    recipe meant (locus_resolve.js).
+
+    Before answering, the body that was actually sent is re-read through the
+    recipe adapter and must canonicalise to the recipe's own retrieval; a
+    resolver that cannot reproduce the question refuses (500, said plainly)
+    rather than answer a different one.
+    """
+    from search.locus import (LOCUS_TOKEN_PARAM, load_token, retrieval_round_trips,
+                              search_options_for_retrieval)
+    if not (request.user.is_authenticated and request.user.can_access_beta):
+        return JsonResponse({"error": "beta access required"}, status=403)
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    try:
+        payload = json.loads(request.body or b"{}")
+    except (ValueError, TypeError):
+        payload = {}
+    token = (payload.get(LOCUS_TOKEN_PARAM) if isinstance(payload, dict) else None) or ""
+    recipe, canonical_token, error = load_token(str(token).strip())
+    if error is not None:
+        return JsonResponse({"error": "invalid recipe", **error}, status=400)
+
+    options = search_options_for_retrieval(recipe["retrieval"])
+    resp = _gateway_search_response(options, request.user, extra={"recipe": recipe})
+    if resp.status_code != 200:
+        return resp
+    data = json.loads(resp.content)
+    drift = retrieval_round_trips(recipe, data.get("request") or {})
+    if drift is not None:
+        logger.error("atlas_locus_resolve: %s (token %s…)", drift, canonical_token[:40])
+        return JsonResponse({
+            "error": "resolver could not reproduce the recipe's retrieval",
+            "detail": drift,
+            "recipe": recipe,
+        }, status=500)
+    data["record_urls"] = _record_urls_for_hits(data.get("hits") or [])
+    return JsonResponse(data)
+
+
+def _record_urls_for_hits(hits) -> dict:
+    """``{place_id: url}`` for every hit: a contributed record
+    (``whg:<dataset>:<src_id>``) links to the beta Record page by its
+    ``places.id`` (one query for the lot); an authority record links to its
+    entity URL, ``/entity/place:<ns>:<id>/``."""
+    from api.dataset_access import parse_contributed_id
+    from django.urls import NoReverseMatch, reverse
+    out = {}
+    wanted = {}
+    for h in hits:
+        pid = str((h or {}).get("place_id") or "")
+        if not pid:
+            continue
+        parsed = parse_contributed_id(pid) if pid.lower().startswith("whg:") else None
+        if parsed:
+            wanted[pid] = parsed
+        else:
+            out[pid] = f"/entity/place:{pid}/"
+    if wanted:
+        from django.db.models import Q
+        q = Q()
+        for ds, src in wanted.values():
+            # Place.dataset is keyed by the dataset LABEL (to_field), so the
+            # numeric id in the gateway's `whg:<dataset_id>:<src_id>` is reached
+            # through the relation, not through `dataset_id`.
+            q |= Q(dataset__id=ds, src_id=src)
+        rows = Place.objects.filter(q).values_list("id", "dataset__id", "src_id")
+        by_key = {(ds, src): pk for pk, ds, src in rows}
+        for pid, key in wanted.items():
+            pk = by_key.get(key)
+            if pk is None:
+                continue
+            try:
+                out[pid] = reverse("atlas-record", kwargs={"pk": pk})
+            except NoReverseMatch:  # the Record page route is 2A's; absent until it lands
+                out[pid] = f"/entity/place:{pk}/"
+    return out
 
 
 def atlas_geometry(request):

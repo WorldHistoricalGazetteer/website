@@ -9,6 +9,7 @@ from django.contrib.gis.db.models import Extent
 from django.contrib.postgres import indexes as django_postgres_indexes
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import JSONField, Q
+from django.db.models.fields.json import KeyTextTransform
 from django.db import models
 
 # from datasets.models import Dataset
@@ -113,9 +114,9 @@ class Place(models.Model):
 
     @property
     def matches(self):
-        close_matches = CloseMatch.objects.filter(
-            Q(place_a=self) | Q(place_b=self)
-        )
+        # One step, no closure: the same close_matches read as the concordance (place#325).
+        from places.concordance import close_match_rows
+        close_matches = close_match_rows(self.id).select_related('place_a', 'place_b')
         distinct_places = set(
             [self] + [match.place_a for match in close_matches] + [match.place_b for match in close_matches])
         # First in returned list is the Primary Place, determined by having the most links
@@ -319,6 +320,14 @@ class PlaceLink(models.Model):
     class Meta:
         managed = True
         db_table = 'place_link'
+        indexes = [
+            # place#325: the concordance's tiers 2-3 look rows up by
+            # (jsonb ->> 'identifier') (places/concordance.py _LinkIdentifier).
+            # The expression must stay identical to that query's, or the
+            # planner cannot use the index. Built CONCURRENTLY (0026).
+            models.Index(KeyTextTransform('identifier', 'jsonb'),
+                         name='place_link_identifier_idx'),
+        ]
 
 
 class PlaceWhen(models.Model):
