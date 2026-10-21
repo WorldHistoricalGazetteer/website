@@ -331,7 +331,14 @@ class EntityLocusTests(MintBase):
         self.assertEqual(cur["candidates"], [h["place_id"] for h in HITS])
         self.assertEqual(cur["candidate_total"], 3)
         self.assertEqual(cur["recipe_members"], {"present": ["gn:1", "wd:Q64"], "absent": []})
-        self.assertIsNone(cur["cluster_members"])            # the clusterer runs in the browser only
+        # The server-side clusterer (search.clustering, parity-tested twin of clustering.js)
+        # selects the cluster the recipe meant: HITS at the recipe's theta 0.33 put the two
+        # Berlins together and the New Hampshire one apart (the shape_berlin_three parity fixture).
+        self.assertEqual(cur["cluster_members"], ["gn:1", "wd:Q64"])
+        self.assertEqual(cur["cluster"]["reason"], "plurality")
+        self.assertEqual((cur["cluster"]["score"], cur["cluster"]["candidates"], cur["cluster"]["cluster_count"]), (2, 1, 2))
+        self.assertEqual(cur["cluster"]["stoplist_count"], 500)   # the response's list, not the recipe's
+        self.assertEqual(cur["cluster"]["params"]["theta"], 0.33)
         self.assertIn("clustering.js", cur["note"])
         self.assertEqual(len(self.gateway.bodies), 4)          # one real retrieval per JSON dereference
         self.assertEqual(self.gateway.bodies[-1]["query"], "Berlin")
@@ -340,6 +347,14 @@ class EntityLocusTests(MintBase):
             resp = self.entity(self.pid, accept="text/html", api=True)
         self.assertTrue(resp["Content-Type"].startswith("application/ld+json"))
         self.assertEqual(json.loads(resp.content)["pid"], self.pid)
+        # ...and a recipe none of whose members survive says so instead of guessing.
+        entry2, _ = registry.mint_recipe(recipe(SIMPLE, members=("gn:404",)), self.beta)
+        with patch(POST, side_effect=self.gateway):
+            cur2 = json.loads(self.entity(entry2.pid, accept="application/json").content)["current"]
+        self.assertIsNone(cur2["cluster_members"])
+        self.assertEqual(cur2["cluster"]["reason"], "no_members_survive")
+        self.assertEqual(cur2["recipe_members"], {"present": [], "absent": ["gn:404"]})
+        self.assertEqual(len(self.gateway.bodies), 6)          # still one retrieval per dereference
 
     def test_json_reports_a_gateway_failure_without_pretending(self):
         import requests

@@ -42,10 +42,12 @@ The JSON representation is honest about what the server can and cannot say.
 The retrieval half of a recipe runs here (the same gateway call the page
 makes), so ``current.candidates`` is the recipe's current retrieval and
 ``current.recipe_members`` says which of the recipe's members survive in it.
-The CLUSTERING half runs only in the browser (``clustering.js``, deliberately
-the one implementation; search/locus.py explains), so the selected cluster's
-membership is NOT in this document: ``current.cluster_members`` is null and
-``current.note`` says why. A server-side clusterer is a separate decision.
+The CLUSTERING half runs here too, with ``search.clustering`` (SG ruling
+2026-10-21), the Python twin of the browser's ``clustering.js`` +
+``locus_resolve.js`` held equal to them by ``search.tests_cluster_parity``, so
+``current.cluster_members`` is the selected cluster's membership and
+``current.cluster`` says how it was selected (the fixed plurality / nearest-
+centroid / first-member contract of place#172). ``current.note`` says so.
 """
 from __future__ import annotations
 
@@ -88,10 +90,11 @@ FROZEN_STATEMENT = (
     "frozen loci are created."
 )
 CLUSTER_NOTE = (
-    "Cluster selection runs in the browser resolver (clustering.js, the one implementation of "
-    "the clusterer), so this document carries the recipe's current retrieval and which of its "
-    "members survive in it, not the selected cluster's membership. The HTML representation at "
-    "this URI computes and shows the cluster."
+    "cluster_members is the membership of the cluster the recipe selects in its current retrieval, "
+    "computed server-side by search.clustering, the Python twin of the browser's clustering.js + "
+    "locus_resolve.js (parity-tested); `cluster` says how it was selected (place#172: the cluster "
+    "holding the plurality of surviving recipe members; a tie goes to the nearest centroid, else "
+    "the code-point-smallest member). It is null when no recipe member survives in the retrieval."
 )
 
 
@@ -225,6 +228,18 @@ def _current(recipe, user) -> dict:
                            "absent": [m for m in recipe["members"] if m not in set(present)]},
         "withheld": data.get("withheld"),
     })
+    # The clustering half (search.clustering, parity-tested twin of clustering.js +
+    # locus_resolve.js): the recipe's LITERAL parameters, THIS response's stoplist
+    # (place#325 ruling 3), over the withheld-filtered hits the page would cluster.
+    from search.clustering import resolve_recipe, selection_summary
+    try:
+        summary = selection_summary(resolve_recipe(recipe, data))
+    except Exception:  # noqa: BLE001 — a malformed hit must not take the document down
+        logger.exception("locus dereference: server-side clustering failed")
+        out["cluster"] = {"error": "server-side clustering failed; the HTML representation still computes it"}
+        return out
+    out["cluster_members"] = summary.pop("cluster_members")
+    out["cluster"] = summary
     return out
 
 
