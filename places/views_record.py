@@ -90,36 +90,55 @@ def gateway_place_id(place) -> str | None:
     return f"whg:{ds.pk}:{src}"
 
 
-def default_cluster_url(place) -> str | None:
-    """The unminted locus URL for *See this record's cluster at default settings*,
-    or None where it could not resolve (then the page omits the link rather than
-    show a dead one).
+def default_cluster_link(place, user=None) -> dict | None:
+    """The unminted locus link for *See this record's cluster at ... settings*:
+    ``{"url", "source", "reason"}``, or None where it could not resolve (then the
+    page omits the link rather than show a dead one).
 
     Recipe: members = [this record's gateway id]; retrieval = the record's title
     with the Atlas's default filters (none), match mode and size, exactly the body
-    the Atlas Places search sends for that name; clustering = the Atlas's literal
-    defaults (``search.locus.ATLAS_DEFAULT_CLUSTERING``, proven equal to
-    ``atlas_cluster_defaults.js``). Built with ``encode_recipe_token``.
+    the Atlas Places search sends for that name; clustering = what a fresh Atlas
+    search would use (SG ruling 2026-10-21): the gateway's CURRENT calibrated
+    weights and thresholds (``search.locus.record_default_clustering``, cached
+    10 min, 1.5 s timeout), with the fixed Atlas fallback theta because theta is
+    fitted to a result set the page does not have. When the gateway cannot be
+    asked, ``source`` is ``"fallback"`` and the Atlas fallback literals are used;
+    the page labels which. Built with ``encode_recipe_token``. The gateway is
+    only consulted for a record that can have a link at all.
     """
     from api.crc_client import DEFAULT_SEARCH_SIZE
     from places.locus_recipe import RecipeError, encode_recipe_token
-    from search.locus import ATLAS_DEFAULT_CLUSTERING, ATLAS_DEFAULT_MATCH_MODE, LOCUS_TOKEN_PARAM
+    from search.locus import (ATLAS_DEFAULT_CLUSTERING, ATLAS_DEFAULT_MATCH_MODE, LOCUS_TOKEN_PARAM,
+                              record_default_clustering)
     title = re.sub(r"\s+", " ", place.title or "").strip()
     member = gateway_place_id(place)
     if not title or not member:
         return None
-    recipe = {
-        "v": 1,
-        "retrieval": {"query": title, "mode": ATLAS_DEFAULT_MATCH_MODE, "size": DEFAULT_SEARCH_SIZE},
-        "clustering": ATLAS_DEFAULT_CLUSTERING,
-        "members": [member],
-    }
+    chosen = record_default_clustering(user)
+
+    def build(clustering):
+        return encode_recipe_token({
+            "v": 1,
+            "retrieval": {"query": title, "mode": ATLAS_DEFAULT_MATCH_MODE, "size": DEFAULT_SEARCH_SIZE},
+            "clustering": clustering,
+            "members": [member],
+        })
+
     try:
-        token = encode_recipe_token(recipe)
-    except RecipeError as exc:   # e.g. a src_id with a space in it is not a place id
-        logger.info("no default-settings locus link for place %s: %s", place.pk, exc)
-        return None
-    return f"{reverse('atlas-locus')}?{LOCUS_TOKEN_PARAM}={token}"
+        token = build(chosen["clustering"])
+    except RecipeError as exc:
+        if chosen["source"] != "gateway":   # e.g. a src_id with a space in it is not a place id
+            logger.info("no default-settings locus link for place %s: %s", place.pk, exc)
+            return None
+        # The gateway sent values a recipe refuses (out of range): fall back, labelled.
+        logger.warning("gateway clustering_params unusable for a recipe: %s", exc)
+        chosen = {"clustering": ATLAS_DEFAULT_CLUSTERING, "source": "fallback", "reason": "invalid"}
+        try:
+            token = build(chosen["clustering"])
+        except RecipeError:
+            return None
+    return {"url": f"{reverse('atlas-locus')}?{LOCUS_TOKEN_PARAM}={token}",
+            "source": chosen["source"], "reason": chosen["reason"]}
 
 
 def _http_url(value):
@@ -268,7 +287,7 @@ def atlas_record_page(request, pk):
         "descriptions": _display_descriptions(record.get("descriptions")),
         "depictions": _display_depictions(record.get("depictions")),
         "explore_similar": explore,
-        "default_cluster_url": default_cluster_url(place),
+        "default_cluster": default_cluster_link(place, request.user),
         "concordance_endpoint": reverse("atlas-record-concordance", args=[place.pk]),
     }
     return render(request, "places/atlas_record.html", context)

@@ -24,7 +24,7 @@ from django.test import TestCase, override_settings
 from django.urls import resolve, reverse
 
 from places import locus_recipe as lr
-from places.views_record import default_cluster_url, explore_similar_url, gateway_place_id
+from places.views_record import default_cluster_link, explore_similar_url, gateway_place_id
 
 GATEWAY_DB = {
     "gn:100": {"place_id": "gn:100", "title": "Gateway Town", "namespace": "gn",
@@ -42,7 +42,36 @@ def failing_fetch(ids, user=None, allow_anonymous=False, meta=None):
     return {}
 
 
+# A gateway clustering_params block with values no default shares (and, like the
+# live one today, no same_ns_penalty), so a recipe that used a default instead of
+# the calibrated value would show it.
+GATEWAY_PARAMS = {
+    "version": 1, "calibrated": True,
+    "weights": {"name": 0.1405, "spatial": 0.2903, "temporal": 0.3613, "type": 0.0579, "link": 0.15},
+    "thresholds": {"theta_query": 0.21, "theta_bridge": 0.31, "tau_name": 0.71, "tau_link": 0.9},
+}
+# The default cache is file-based and shared with local dev runs: these tests use
+# a private in-memory one (the other aliases unchanged).
+LOCMEM = {**settings.CACHES,
+          "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "r325"}}
+
+
+@override_settings(CACHES=LOCMEM)
 class RecordPageTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        # The gateway's clustering_params probe, faked: every render that builds a
+        # default-settings link reads it. Tests that need another answer re-patch.
+        self.params_calls = []
+
+        def fake_params(user=None, timeout=None):
+            self.params_calls.append(timeout)
+            return dict(GATEWAY_PARAMS), None
+        self._params_patch = patch("api.crc_client.crc_clustering_params", side_effect=fake_params)
+        self._params_patch.start()
+        self.addCleanup(self._params_patch.stop)
+
     @classmethod
     def setUpTestData(cls):
         from api.models import GazetteerRegistryEntry
@@ -249,24 +278,38 @@ class RecordPageTests(TestCase):
         self.assertIn('id="explore_similar_header"', html)
         self.assertIn("Explore similar records", html)
         import re
-        m = re.search(r'id="default_cluster_link" href="([^"]+)"', html)
+        m = re.search(r'<a[^>]*id="default_cluster_link"[^>]*href="([^"]+)"', html)
         return m.group(1).replace("&amp;", "&") if m else None
 
-    def test_default_cluster_link_is_the_atlas_default_recipe(self):
+    @staticmethod
+    def _recipe(href):
+        return lr.decode_recipe_token(parse_qs(urlparse(href).query)["r"][0])
+
+    def test_default_cluster_link_uses_the_gateway_calibrated_settings(self):
         html = self.page(self.A, self.beta).content.decode()
         href = self._default_link(html)
         self.assertIsNotNone(href, "an indexed record has the link")
-        self.assertIn("See this record's cluster at default settings", html)
+        self.assertIn("See this record's cluster at gateway-calibrated settings", html)
+        self.assertIn('data-settings="gateway"', html)
+        self.assertNotIn("WHG fallback settings", html)
+        self.assertIn("fixed default (0.65)", html)           # the tooltip says theta is not the gateway's
         u = urlparse(href)
         self.assertEqual(u.path, reverse("atlas-locus"))
-        recipe = lr.decode_recipe_token(parse_qs(u.query)["r"][0])
+        recipe = self._recipe(href)
         self.assertEqual(recipe["members"], [f"whg:{self.ds_a.pk}:A1"])
         self.assertEqual(recipe["retrieval"], {"query": "Record/A", "mode": "in", "size": 100})
+        c = recipe["clustering"]
+        self.assertEqual(c["weights"], GATEWAY_PARAMS["weights"])            # the calibrated weights
+        self.assertEqual((c["tau_name"], c["tau_link"]), (0.71, 0.9))       # the calibrated thresholds
         from search.locus import ATLAS_DEFAULT_CLUSTERING
-        self.assertEqual(recipe["clustering"], lr.parse_recipe(
-            {"v": 1, "retrieval": recipe["retrieval"], "clustering": ATLAS_DEFAULT_CLUSTERING,
-             "members": recipe["members"]})["clustering"])
-        self.assertNotIn("stoplist", recipe["clustering"])
+        self.assertEqual(c["theta"], ATLAS_DEFAULT_CLUSTERING["theta"])    # NOT theta_query 0.21
+        self.assertNotEqual(c["theta"], GATEWAY_PARAMS["thresholds"]["theta_query"])
+        self.assertEqual(c["same_ns_penalty"], ATLAS_DEFAULT_CLUSTERING["same_ns_penalty"])   # none shipped
+        self.assertIs(c["respect_distinct"], True)
+        self.assertNotEqual(c["weights"], ATLAS_DEFAULT_CLUSTERING["weights"])
+        self.assertEqual(set(c), {"weights", "theta", "tau_name", "tau_link", "same_ns_penalty",
+                                  "respect_distinct"})                      # only what the clusterer reads
+        self.assertEqual(self.params_calls, [1.5])                          # one probe, short timeout
         # The locus page accepts it (200), as it would any card's token.
         r = self.client.get(href)
         self.assertEqual(r.status_code, 200)
@@ -301,7 +344,7 @@ class RecordPageTests(TestCase):
                 patch("api.crc_client.requests.post", side_effect=fake_post):
             crc_client.crc_search_status(atlas_defaults, user=self.beta)
         self.assertEqual(len(sent), 1)
-        recipe = lr.decode_recipe_token(parse_qs(urlparse(default_cluster_url(self.A)).query)["r"][0])
+        recipe = self._recipe(default_cluster_link(self.A, self.beta)["url"])
         from_body = lr.parse_recipe({**recipe, "retrieval": lr.retrieval_from_search_body(sent[0])})
         self.assertEqual(from_body["retrieval"], recipe["retrieval"])
         # ...and the comparison can fail: a different mode is a different retrieval.
@@ -310,8 +353,10 @@ class RecordPageTests(TestCase):
 
     def test_default_cluster_link_omitted_where_it_cannot_resolve(self):
         self.assertIsNotNone(gateway_place_id(self.A))
-        # dataset not in the index (no registry row): no link, primary still there
+        # dataset not in the index (no registry row): no link, primary still there,
+        # and the gateway is not even asked for its params
         html_b = self.page(self.B, self.beta).content.decode()
+        self.assertEqual(self.params_calls, [])
         self.assertIsNone(self._default_link(html_b))
         self.assertIsNone(gateway_place_id(self.B))
         self.assertNotIn("default_cluster_link", html_b)
@@ -322,7 +367,7 @@ class RecordPageTests(TestCase):
         from places.models import Place
         Place.objects.filter(pk=self.Lonely.pk).update(src_id="has space")
         self.Lonely.refresh_from_db()
-        self.assertIsNone(default_cluster_url(self.Lonely))
+        self.assertIsNone(default_cluster_link(self.Lonely, self.beta))
         Place.objects.filter(pk=self.Lonely.pk).update(src_id="")
         self.Lonely.refresh_from_db()
         self.assertIsNone(gateway_place_id(self.Lonely))
@@ -332,6 +377,92 @@ class RecordPageTests(TestCase):
         self.assertIsNone(gateway_place_id(self.A))
         GazetteerRegistryEntry.objects.filter(id=f"whg:{self.ds_a.pk}").update(status="published")
         self.assertIsNotNone(self._default_link(self.page(self.A, self.beta).content.decode()))
+
+    def _fallback_page(self, failure):
+        from django.core.cache import cache
+        cache.clear()
+        calls = []
+
+        def failing(user=None, timeout=None):
+            calls.append(timeout)
+            return None, failure
+        with patch("api.crc_client.crc_clustering_params", side_effect=failing):
+            html = self.page(self.A, self.beta).content.decode()
+            html2 = self.page(self.A, self.beta).content.decode()
+        return html, html2, calls
+
+    def test_gateway_failure_falls_back_and_says_so(self):
+        from search.locus import ATLAS_DEFAULT_CLUSTERING
+        for failure in ("timeout", "unreachable", "error"):
+            html, html2, calls = self._fallback_page(failure)
+            href = self._default_link(html)
+            self.assertIsNotNone(href, failure)
+            self.assertIn("See this record's cluster at WHG fallback settings", html)
+            self.assertIn('data-settings="fallback"', html)
+            self.assertIn(f'data-fallback-reason="{failure}"', html)
+            self.assertNotIn("gateway-calibrated settings", html)
+            c = self._recipe(href)["clustering"]
+            self.assertEqual(c["weights"], ATLAS_DEFAULT_CLUSTERING["weights"])
+            self.assertEqual(c["theta"], ATLAS_DEFAULT_CLUSTERING["theta"])
+            self.assertNotEqual(c["weights"], GATEWAY_PARAMS["weights"])
+            # the failure is cached briefly: the second render did not ask again
+            self.assertEqual(calls, [1.5], failure)
+            self.assertIn("WHG fallback settings", html2)
+        # ...and with the gateway back (fresh cache) the calibrated label returns
+        from django.core.cache import cache
+        cache.clear()
+        self.assertIn("gateway-calibrated settings", self.page(self.A, self.beta).content.decode())
+
+    def test_incomplete_or_invalid_gateway_params_fall_back(self):
+        from django.core.cache import cache
+        for params, reason in (({"weights": {"name": 0.3}}, "incomplete"),
+                               ({**GATEWAY_PARAMS, "weights": {**GATEWAY_PARAMS["weights"], "name": 4.0}}, "invalid")):
+            cache.clear()
+            with patch("api.crc_client.crc_clustering_params", return_value=(params, None)):
+                link = default_cluster_link(self.A, self.beta)
+            self.assertEqual((link["source"], link["reason"]), ("fallback", reason))
+        cache.clear()
+        self.assertEqual(default_cluster_link(self.A, self.beta)["source"], "gateway")
+
+    def test_cache_hit_makes_no_second_gateway_call(self):
+        from django.core.cache import cache
+        a = self._default_link(self.page(self.A, self.beta).content.decode())
+        lonely = self._default_link(self.page(self.Lonely, self.beta).content.decode())
+        self.assertIsNotNone(a)
+        self.assertIsNotNone(lonely)
+        self.assertEqual(len(self.params_calls), 1)               # two renders, one probe
+        cache.clear()
+        self.page(self.A, self.beta)
+        self.assertEqual(len(self.params_calls), 2)               # the count is live: a miss asks again
+
+    def test_probe_is_short_and_reads_clustering_params(self):
+        """api.crc_client.crc_clustering_params itself (unpatched): the probe body,
+        the short timeout, success, timeout and the anonymous/disabled answer."""
+        import requests as _rq
+        probe = self._params_patch.temp_original     # the real function, not setUp's fake
+        self.assertEqual(probe.__module__, "api.crc_client")
+        seen = []
+
+        class R:
+            status_code = 200
+
+            def json(self):
+                return {"hits": [], "clustering_params": GATEWAY_PARAMS}
+
+        def ok(url, json=None, headers=None, timeout=None):
+            seen.append((url, json, timeout))
+            return R()
+        with override_settings(CRC_GATEWAY_URL="http://gateway.invalid"):
+            with patch("api.crc_client.requests.post", side_effect=ok):
+                self.assertEqual(probe(self.beta), (GATEWAY_PARAMS, None))
+                self.assertEqual(probe(None), (None, "disabled"))
+            self.assertEqual(len(seen), 1)                          # disabled never called out
+            url, body, timeout = seen[0]
+            self.assertTrue(url.endswith("/api/search"))
+            self.assertEqual((body["size"], body["include_clustering_fields"]), (1, True))
+            self.assertLessEqual(max(timeout), 1.5)
+            with patch("api.crc_client.requests.post", side_effect=_rq.Timeout("slow")):
+                self.assertEqual(probe(self.beta), (None, "timeout"))
 
     def test_atlas_default_literals_match_the_js_module(self):
         """search.locus.ATLAS_DEFAULT_* equal what atlas_cluster_defaults.js exports

@@ -44,13 +44,13 @@ from places.locus_recipe import (RecipeError, decode_recipe_token, encode_recipe
 LOCUS_TOKEN_PARAM = "r"
 
 # Server-side mirror of whg/webpack/js/atlas_cluster_defaults.js, the one place
-# the Atlas keeps its LITERAL clustering and match-mode defaults. The Record
-# page's "See this record's cluster at default settings" link builds its recipe
-# from these (place#325 Stage 2); places.tests_record_page runs the JS module
-# under Node and asserts equality, so neither can drift alone. They are the
-# fallback literals: a live Atlas search seeds its weights from the gateway's
-# calibrated clustering_params and auto-fits theta, which no server-built recipe
-# can know in advance.
+# the Atlas keeps its LITERAL clustering and match-mode defaults;
+# places.tests_record_page runs the JS module under Node and asserts equality,
+# so neither can drift alone. They are the FALLBACK literals: the Record page's
+# cluster link uses the gateway's calibrated clustering_params when it can read
+# them (record_default_clustering below) and these, labelled as such, when it
+# cannot. theta is always this fixed value there: the Atlas fits theta to each
+# result set, which a recipe built before any search cannot do.
 ATLAS_DEFAULT_MATCH_MODE = "in"
 ATLAS_DEFAULT_CLUSTERING = {
     "weights": {"name": 0.35, "spatial": 0.20, "temporal": 0.15, "type": 0.15, "link": 0.15},
@@ -74,6 +74,84 @@ TEMPORAL_MODE_LABELS = {
 }
 WEIGHT_LABELS = (("name", "Name"), ("spatial", "Location"), ("temporal", "Time"),
                  ("type", "Type"), ("link", "Links"))
+
+
+# The gateway's calibrated clustering_params, for the Record page's default-
+# settings locus link (SG ruling, 2026-10-21: use the calibrated values at render
+# time). Cached for everyone (the block is global calibration, not per user or
+# per query); a failure is cached briefly so a down gateway costs one short
+# timeout a minute, not one per render.
+GATEWAY_PARAMS_CACHE_KEY = "locus:gateway_clustering_params:v1"
+GATEWAY_PARAMS_TTL = 600
+GATEWAY_PARAMS_FAILURE_TTL = 60
+GATEWAY_PARAMS_TIMEOUT = 1.5
+
+
+def _calibrated_clustering(params: dict) -> Optional[dict]:
+    """The recipe clustering block the Atlas would use for a fresh search with
+    the gateway's ``params``, or None if they are incomplete. Mirrors atlas.js:
+    weights = the shipped weights (seedClusterControls; all five required here,
+    since a recipe never defaults); tau_* = shipped thresholds, else the
+    clustering.js defaults (locusRecipeFor); same-namespace margin = shipped,
+    else the Atlas default (the gateway ships none today); respect_distinct =
+    true (the Atlas never overrides it). theta is NOT the gateway's: the Atlas
+    fits theta to each result set, which a recipe built before any search
+    cannot do, so the fixed Atlas fallback theta is kept."""
+    w = params.get("weights") if isinstance(params, dict) else None
+    if not isinstance(w, dict):
+        return None
+    weights = {}
+    for k in ATLAS_DEFAULT_CLUSTERING["weights"]:
+        v = w.get(k)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            return None
+        weights[k] = v
+    th = params.get("thresholds") if isinstance(params.get("thresholds"), dict) else {}
+    ns = params.get("same_ns_penalty")
+    return {
+        "weights": weights,
+        "theta": ATLAS_DEFAULT_CLUSTERING["theta"],
+        "tau_name": th.get("tau_name", ATLAS_DEFAULT_CLUSTERING["tau_name"]),
+        "tau_link": th.get("tau_link", ATLAS_DEFAULT_CLUSTERING["tau_link"]),
+        "same_ns_penalty": ns if ns is not None else ATLAS_DEFAULT_CLUSTERING["same_ns_penalty"],
+        "respect_distinct": True,
+    }
+
+
+def record_default_clustering(user=None) -> dict:
+    """``{"clustering", "source", "reason"}`` for the Record page's link.
+
+    ``source`` is ``"gateway"`` (calibrated weights/thresholds from the
+    gateway's current clustering_params, cached ``GATEWAY_PARAMS_TTL`` s) or
+    ``"fallback"`` (the Atlas fallback literals, because the gateway could not
+    be asked, timed out, or sent no usable block; ``reason`` says which). The
+    caller must LABEL which it got; the numbers differ."""
+    from django.core.cache import cache
+    from api.crc_client import crc_clustering_params
+
+    try:
+        hit = cache.get(GATEWAY_PARAMS_CACHE_KEY)
+    except Exception:  # noqa: BLE001 — a broken cache must not break the page
+        hit = None
+    if hit is None:
+        params, failure = crc_clustering_params(user=user, timeout=GATEWAY_PARAMS_TIMEOUT)
+        hit = {"params": params} if params is not None else {"failure": failure}
+        # "disabled" depends on the asker, so it is never cached for everyone.
+        if failure != "disabled":
+            try:
+                cache.set(GATEWAY_PARAMS_CACHE_KEY, hit,
+                          GATEWAY_PARAMS_TTL if params is not None else GATEWAY_PARAMS_FAILURE_TTL)
+            except Exception:  # noqa: BLE001
+                pass
+    if hit.get("params") is not None:
+        calibrated = _calibrated_clustering(hit["params"])
+        if calibrated is not None:
+            return {"clustering": calibrated, "source": "gateway", "reason": None}
+        reason = "incomplete"
+    else:
+        reason = hit.get("failure") or "error"
+    return {"clustering": dict(ATLAS_DEFAULT_CLUSTERING, weights=dict(ATLAS_DEFAULT_CLUSTERING["weights"])),
+            "source": "fallback", "reason": reason}
 
 
 def search_options_for_retrieval(retrieval: dict) -> dict:

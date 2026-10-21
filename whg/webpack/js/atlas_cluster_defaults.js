@@ -2,16 +2,18 @@
 // in ONE place (place#325 Stage 2: the Record page's "cluster at default settings"
 // link).
 //
-// atlas.js seeds its sliders and its search-type dropdown from these, and the
-// server builds the Record page's default-settings locus recipe from the Python
-// mirror, search.locus.ATLAS_DEFAULT_CLUSTERING / ATLAS_DEFAULT_MATCH_MODE.
+// atlas.js seeds its sliders and its search-type dropdown from these. The server
+// mirrors them as search.locus.ATLAS_DEFAULT_CLUSTERING / ATLAS_DEFAULT_MATCH_MODE:
+// the Record page's cluster link uses the match mode and theta always, and the
+// rest only as a labelled fallback when the gateway's calibrated params are
+// unavailable.
 // places.tests_record_page runs this module under Node and asserts the two are
 // equal, so changing a number here without the mirror fails a test.
 //
 // These are the FALLBACK literals. On a live search the Atlas seeds its weight
 // sliders from the gateway's calibrated clustering_params and auto-fits θ to the
-// result set (atlas.js seedClusterControls); those depend on the response, so a
-// server-built recipe cannot use them. No DOM, no dependencies beyond clustering.js.
+// result set (atlas.js seedClusterControls). No DOM, no dependencies beyond
+// clustering.js.
 
 import { DEFAULT_PARAMS } from './clustering.js';
 

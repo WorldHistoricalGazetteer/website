@@ -53,7 +53,14 @@ def failing_fetch(ids, user=None, allow_anonymous=False, meta=None):
     return {}
 
 
+# The default cache is file-based and shared with local dev runs; the live server
+# here gets a private in-memory one (the other aliases unchanged).
+LOCMEM = {**settings.CACHES,
+          "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "rb325"}}
+
+
 @unittest.skipUnless(RUN, "set WHG_BROWSER_TESTS=1 to drive the Record page in headless Chromium")
+@override_settings(CACHES=LOCMEM)
 class RecordPageBrowserTests(LiveServerTestCase):
     @classmethod
     def setUpClass(cls):
@@ -116,6 +123,21 @@ class RecordPageBrowserTests(LiveServerTestCase):
                                                                    ("closeMatch", f"whg:{hidden.pk}"),
                                                                    ("closeMatch", f"whg:{hidden.pk + 100000}")])
         self.hidden_pk = hidden.pk
+        # Record-page renders read the gateway's clustering_params for the
+        # default-settings link. Never the real gateway from here: answer
+        # "unreachable" unless a test opts into the real probe (self.real_probe),
+        # which then reaches whatever fake requests.post that test installs.
+        from django.core.cache import cache
+        from api import crc_client
+        cache.clear()
+        self.real_probe = False
+        real = crc_client.crc_clustering_params
+
+        def params(user=None, timeout=None):
+            return real(user=user, timeout=timeout) if self.real_probe else (None, "unreachable")
+        pp = patch("api.crc_client.crc_clustering_params", side_effect=params)
+        pp.start()
+        self.addCleanup(pp.stop)
         self.B = place(b, "Record B", "B1", xy=(0.5, 0.5), links=[("closeMatch", f"whg:{self.A.pk}")])
         # The co-citer is far away: if tier 3 leaked into the extent, the map would show it.
         self.C = place(b, "Record C", "C1", xy=(120.0, -40.0), links=[("closeMatch", "gn:100")])
@@ -324,7 +346,8 @@ class RecordPageBrowserTests(LiveServerTestCase):
         Atlas defaults, and that page re-runs it and selects the record's cluster.
         A record whose dataset is not in the index has no such link (but keeps
         the primary one)."""
-        from search.tests_locus import STOPLIST, FakeGateway, _Resp
+        from search.tests_locus import PARAMS, STOPLIST, FakeGateway, _Resp
+        self.real_probe = True   # the probe reaches the fake gateway, which ships PARAMS
         member = f"whg:{self.ds_a.pk}:L1"
         gw = FakeGateway(hits=[
             {"place_id": member, "title": "Lonely Place", "namespace": "whg", "repr_point": [2.0, 2.0],
@@ -350,7 +373,7 @@ class RecordPageBrowserTests(LiveServerTestCase):
             state = page.evaluate("window.__whgLocus || null")
             self.shot(page, "record_default_cluster_locus")
         self.assertEqual(on_b, {"primary": True, "secondary": False})
-        self.assertEqual(link["text"], "See this record's cluster at default settings")
+        self.assertEqual(link["text"], "See this record's cluster at gateway-calibrated settings")
         self.assertTrue(link["primary"])
         self.assertTrue(link["href"].startswith("/atlas/locus/?r="), link["href"])
         self.assertTrue(ok, f"the locus page never resolved; console={self.console[-10:]}")
@@ -360,9 +383,26 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn(member, state["selectedIds"])
         self.assertNotIn("gn:9", state["selectedIds"])      # the far namesake is another cluster
         self.assertEqual(state["stoplistCount"], len(STOPLIST))
-        self.assertEqual(len(gw.bodies), 1)
-        self.assertEqual((gw.bodies[0]["query"], gw.bodies[0]["mode"], gw.bodies[0]["size"]),
+        # The page re-clustered with the CALIBRATED weights the fake gateway shipped.
+        self.assertEqual(state["params"]["weights"], PARAMS["weights"])
+        # Bodies: ONE clustering_params probe (B has no link, so it asked nothing;
+        # Lonely's render probed once) and the locus re-run.
+        from api.crc_client import CLUSTERING_PARAMS_PROBE
+        self.assertEqual(gw.bodies[0], CLUSTERING_PARAMS_PROBE)
+        self.assertEqual(len(gw.bodies), 2, gw.bodies)
+        self.assertEqual((gw.bodies[1]["query"], gw.bodies[1]["mode"], gw.bodies[1]["size"]),
                          ("Lonely Place", "in", 100))
+
+    def test_default_cluster_link_falls_back_labelled(self):
+        """Gateway params unreachable: the link still appears, says WHG fallback settings."""
+        page = self.new_page()
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/")
+            link = page.evaluate("""() => { const a = document.getElementById('default_cluster_link');
+                return a && {text: a.textContent.trim(), settings: a.dataset.settings,
+                             reason: a.dataset.fallbackReason}; }""")
+        self.assertEqual(link, {"text": "See this record's cluster at WHG fallback settings",
+                                "settings": "fallback", "reason": "unreachable"})
 
     def test_harness_can_fail(self):
         """The same checks, with the page's bundle blocked: every one must fail.

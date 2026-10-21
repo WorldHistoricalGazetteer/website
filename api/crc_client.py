@@ -446,6 +446,45 @@ def crc_search_status(options: dict, user=None,
     return None, "timeout"  # pragma: no cover — loop always returns
 
 
+# A fixed, cheap probe for the gateway's clustering_params. Measured 2026-10-21
+# (prod host -> gateway): the block is identical for different queries (it is the
+# offline calibration, not per-result), and a size-1 exact search returns it in
+# ~0.3 s. clustering_params is only sent when include_clustering_fields is set.
+CLUSTERING_PARAMS_PROBE = {"query": "London", "mode": "exact", "size": 1,
+                           "include_clustering_fields": True}
+
+
+def crc_clustering_params(user=None, timeout: float = 1.5) -> tuple[dict | None, str | None]:
+    """The gateway's current ``clustering_params``: the same block ``POST
+    /api/search`` hands the Atlas (``atlas_search``), read with one tiny probe
+    search and a SHORT timeout, no retry, so a caller rendering a page is never
+    held up for long. Returns ``(params, failure)``; ``failure`` is
+    ``"disabled"``, ``"timeout"``, ``"unreachable"``, ``"error"`` or
+    ``"no_params"`` (the gateway answered without the block)."""
+    if not _is_enabled(user):
+        return None, "disabled"
+    url = f"{_gateway_url()}/api/search"
+    try:
+        resp = requests.post(url, json=dict(CLUSTERING_PARAMS_PROBE), headers=_headers(),
+                             timeout=(min(1.0, timeout), timeout))
+        if not (200 <= resp.status_code < 300):
+            logger.warning("CRC gateway clustering_params probe %s", resp.status_code)
+            return None, "error"
+        params = (resp.json() or {}).get("clustering_params")
+    except requests.Timeout:
+        logger.warning("CRC gateway clustering_params probe timed out after %ss", timeout)
+        return None, "timeout"
+    except requests.ConnectionError:
+        logger.warning("CRC gateway clustering_params probe unreachable")
+        return None, "unreachable"
+    except Exception as exc:  # noqa: BLE001 — a page render must never fail on this
+        logger.warning("CRC gateway clustering_params probe unexpected: %s", exc)
+        return None, "error"
+    if not isinstance(params, dict):
+        return None, "no_params"
+    return params, None
+
+
 def _truthy_flag(v):
     """True for True, 1, or the strings true/1/yes/on (any case); everything else is False."""
     if isinstance(v, str):
