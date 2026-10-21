@@ -139,6 +139,33 @@ class TombstoneTests(LocusBase):
         self.assertNotIn("Hidden Hamlet", jbody)
         self.assertNotIn("places_id", jbody)
 
+    def test_tombstone_is_200_in_every_representation_with_the_status_header(self):
+        """Ruling 2: tombstone 200 + status: withdrawn + X-WHG-Locus-Status, honouring redaction."""
+        self.entry.withdraw("gone (test)", by=self.beta)
+        self.control.redact("staff only (test)", by=self.staff)
+        both, _ = registry.mint_recipe(recipe({**QUERY, "size": 98}, members=MEMBERS), self.beta)
+        both.redact("staff only (test)", by=self.staff)
+        LocusRegistryEntry.objects.get(pk=both.pk).withdraw("gone too (test)", by=self.staff)
+        for entry, header, status in ((self.entry, "withdrawn", "withdrawn"), (self.control, "redacted", "active"),
+                                      (both, "withdrawn", "withdrawn")):
+            for accept, api in (("text/html", False), ("application/ld+json", False), ("application/json", False),
+                                ("*/*", False), ("text/html", True)):
+                with patch(POST, side_effect=self.gateway) as post:
+                    resp = self.client.get(f"/entity/locus:{entry.pid}/" + ("api" if api else ""), HTTP_ACCEPT=accept)
+                    post.assert_not_called()                     # never re-run
+                self.assertEqual(resp.status_code, 200, (entry.pid, accept, api))
+                self.assertEqual(resp["X-WHG-Locus-Status"], header, (entry.pid, accept, api))
+                body = resp.content.decode()
+                self.assertNotIn(entry.token, body)
+                if accept != "text/html" or api:
+                    self.assertEqual(json.loads(body)["status"], status)
+        # Presence: an active, unredacted locus carries no such header and IS re-run for JSON.
+        live, _ = registry.mint_recipe(recipe({**QUERY, "size": 97}, members=MEMBERS), self.beta)
+        with patch(POST, side_effect=self.gateway) as post:
+            resp = self.client.get(f"/entity/locus:{live.pid}/api")
+            self.assertTrue(post.called)
+        self.assertNotIn("X-WHG-Locus-Status", resp)
+
     def test_suppressed_loci_are_not_offered_as_overlaps(self):
         other = recipe(QUERY, members=("gn:7777777", "gn:3"))
         before = registry.overlapping(other["members"])
