@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from django.contrib.auth.views import redirect_to_login
 from django.http import Http404, HttpResponse, JsonResponse
@@ -66,6 +67,18 @@ from places import locus_registry as registry
 from search.views_locus import entry_context, render_locus_page
 
 logger = logging.getLogger(__name__)
+
+# Server-side clustering budget (place#325 review #2): the Python clusterer is O(n^2) in
+# hits (measured 0.15 s / 100, 2.35 s / 400, 14.9 s / 1000) and a recipe's size may be
+# 10000. Above CLUSTER_MAX_HITS it is not run; under it, it is aborted once
+# CLUSTER_TIME_BUDGET_S of wall clock have passed. Either way `current.cluster` says
+# "skipped" and why (never a 500); the HTML page still clusters in the browser.
+CLUSTER_MAX_HITS = 500
+CLUSTER_TIME_BUDGET_S = 3.0
+# JSON dereference of a live recipe locus (a gateway retrieval + server clustering):
+# at most N per WINDOW seconds per signed-in user (or per IP). Generous for a person
+# or a polite harvester; the HTML page (no server-side work) is not counted.
+JSON_DEREFERENCE_RATE = (30, 60)
 
 HTML = "text/html"
 JSONLD = "application/ld+json"
@@ -97,7 +110,8 @@ CLUSTER_NOTE = (
     "computed server-side by search.clustering, the Python twin of the browser's clustering.js + "
     "locus_resolve.js (parity-tested); `cluster` says how it was selected (place#172: the cluster "
     "holding the plurality of surviving recipe members; a tie goes to the nearest centroid, else "
-    "the code-point-smallest member). It is null when no recipe member survives in the retrieval."
+    "the code-point-smallest member). It is null when no recipe member survives in the retrieval, "
+    "or when server-side clustering was skipped (`cluster.skipped`: too_many_hits or time_budget)."
 )
 
 
@@ -234,9 +248,18 @@ def _current(recipe, user) -> dict:
     # The clustering half (search.clustering, parity-tested twin of clustering.js +
     # locus_resolve.js): the recipe's LITERAL parameters, THIS response's stoplist
     # (place#325 ruling 3), over the withheld-filtered hits the page would cluster.
-    from search.clustering import resolve_recipe, selection_summary
+    from search.clustering import ClusterBudgetExceeded, resolve_recipe, selection_summary
+    if len(hits) > CLUSTER_MAX_HITS:
+        out["cluster"] = {"skipped": "too_many_hits", "hits": len(hits), "cap": CLUSTER_MAX_HITS}
+        return out
     try:
-        summary = selection_summary(resolve_recipe(recipe, data))
+        summary = selection_summary(resolve_recipe(recipe, data,
+                                                   deadline=time.monotonic() + CLUSTER_TIME_BUDGET_S))
+    except ClusterBudgetExceeded:
+        logger.warning("locus dereference: server-side clustering over %s s budget (%d hits)",
+                       CLUSTER_TIME_BUDGET_S, len(hits))
+        out["cluster"] = {"skipped": "time_budget", "budget_s": CLUSTER_TIME_BUDGET_S, "hits": len(hits)}
+        return out
     except Exception:  # noqa: BLE001 — a malformed hit must not take the document down
         logger.exception("locus dereference: server-side clustering failed")
         out["cluster"] = {"error": "server-side clustering failed; the HTML representation still computes it"}
@@ -376,10 +399,36 @@ def _locus_entity(request, pid, force_json: bool = False):
             resp["X-WHG-Locus-Status"] = header
         return resp
 
+    if entry.kind == entry.KIND_RECIPE and not entry.is_suppressed:
+        limited = _json_dereference_throttled(request)
+        if limited is not None:
+            return limited
     resp = _json(locus_document(request, entry), media=JSONLD if _accept_choice(
         request.META.get("HTTP_ACCEPT", ""), force_json) == JSONLD else JSON)
     if header:
         resp["X-WHG-Locus-Status"] = header
+    return resp
+
+
+def _json_dereference_throttled(request):
+    """A 429 when this caller has used up ``JSON_DEREFERENCE_RATE``; else None (and
+    the call is counted). Fixed window in the default cache; a broken cache admits."""
+    from django.core.cache import cache
+    limit, window = JSON_DEREFERENCE_RATE
+    who = (f"u{request.user.pk}" if request.user.is_authenticated
+           else "ip" + (request.META.get("REMOTE_ADDR") or "?"))
+    key = f"locus-json-deref:{who}:{int(time.time() // window)}"
+    try:
+        cache.add(key, 0, window)
+        count = cache.incr(key)
+    except Exception:  # noqa: BLE001
+        return None
+    if count <= limit:
+        return None
+    resp = _json({"error": "rate limited",
+                  "detail": f"at most {limit} JSON dereferences of a live locus per {window} s"},
+                 status=429, media=JSON)
+    resp["Retry-After"] = str(window - int(time.time()) % window or window)
     return resp
 
 

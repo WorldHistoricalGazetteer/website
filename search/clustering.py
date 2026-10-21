@@ -33,6 +33,7 @@ and ids that are JSON numbers rather than strings.
 from __future__ import annotations
 
 import math
+import time
 from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
@@ -397,8 +398,19 @@ def score_pair(ha: dict, hb: dict, weights: dict, edge_index: Optional[dict], st
 # Clustering
 # ---------------------------------------------------------------------------
 
+class ClusterBudgetExceeded(Exception):
+    """Raised when ``cluster_hits`` passes its ``deadline`` (place#325 review #2).
+    Not part of the JS twin: the browser has no shared server to protect."""
+
+
+def _check_deadline(deadline):
+    if deadline is not None and time.monotonic() > deadline:
+        raise ClusterBudgetExceeded()
+
+
 def cluster_hits(hits=None, edges=None, params=None, weights=None, theta=None,
-                 respect_distinct: bool = True, same_ns_penalty=None, stoplist=None) -> dict:
+                 respect_distinct: bool = True, same_ns_penalty=None, stoplist=None,
+                 deadline=None) -> dict:
     """clusterHits. Returns ``{"clusters": [{"root", "members", "memberIds"}],
     "assignments": {id: root}, "params": {...}, "debug": {...}}`` with clusters
     ordered by size descending (stable, so first-seen root first among equals)
@@ -408,6 +420,11 @@ def cluster_hits(hits=None, edges=None, params=None, weights=None, theta=None,
     weights (merged over params.weights), ``p.theta`` -> theta,
     ``p.respectDistinct`` -> respect_distinct, ``p.sameNsPenalty`` ->
     same_ns_penalty, ``p.stoplist`` -> stoplist.
+
+    ``deadline`` (a ``time.monotonic()`` value; Python only): checked once per
+    outer row of the pair loop and once per candidate merge, raising
+    :class:`ClusterBudgetExceeded` when passed. None (the default) never checks,
+    so the result is exactly the unguarded one (parity).
     """
     params = params or DEFAULT_PARAMS
     wts = dict(params.get("weights") or DEFAULT_PARAMS["weights"])
@@ -475,6 +492,7 @@ def cluster_hits(hits=None, edges=None, params=None, weights=None, theta=None,
     scored: list = []
     n = len(hits)
     for i in range(n):
+        _check_deadline(deadline)
         hi = hits[i]
         for j in range(i + 1, n):
             r = score_pair(hi, hits[j], wts, edge_index, stop_set)
@@ -485,6 +503,7 @@ def cluster_hits(hits=None, edges=None, params=None, weights=None, theta=None,
     scored.sort(key=lambda s: -s["composite"])
     same_ns_blocked = 0
     for s in scored:
+        _check_deadline(deadline)
         ra = uf.find(s["a"])
         rb = uf.find(s["b"])
         if ra == rb:
@@ -578,8 +597,8 @@ def clustering_args(recipe: dict, stoplist) -> dict:
     }
 
 
-def run_recipe(recipe: dict, hits, edges, stoplist) -> dict:
-    return cluster_hits(hits=hits or [], edges=edges or [], **clustering_args(recipe, stoplist))
+def run_recipe(recipe: dict, hits, edges, stoplist, deadline=None) -> dict:
+    return cluster_hits(hits=hits or [], edges=edges or [], deadline=deadline, **clustering_args(recipe, stoplist))
 
 
 def canonical_member_id(pid) -> str:
@@ -672,14 +691,14 @@ def select_locus_cluster(clusters, members, hits) -> dict:
     return {"cluster": candidates[0][0], "reason": "tie_first_member", **base}
 
 
-def resolve_recipe(recipe: dict, data: dict) -> dict:
+def resolve_recipe(recipe: dict, data: dict, deadline=None) -> dict:
     """resolveRecipe: cluster ``data`` (hits, edges, toponym_stoplist) with the
     recipe's literal parameters and this response's stoplist, then select.
     Returns the cluster_hits output plus ``selection``, ``hits``, ``stoplist``."""
     hits = (data or {}).get("hits") or []
     edges = (data or {}).get("edges") or []
     stoplist = gateway_stoplist(data)
-    run = run_recipe(recipe, hits, edges, stoplist)
+    run = run_recipe(recipe, hits, edges, stoplist, deadline=deadline)
     selection = select_locus_cluster(run["clusters"], recipe.get("members"), hits)
     return {**run, "selection": selection, "hits": hits, "stoplist": stoplist}
 
