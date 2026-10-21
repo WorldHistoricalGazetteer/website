@@ -65,6 +65,9 @@ V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(glo
 CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWAY_URL', '')
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
+# Locus minting + /entity/locus: dereference (place#172, place#325 Stage 4). OFF until the v4
+# release; when on, still beta-gated. Set LOCUS_MINTING_ENABLED=1 in env or local_settings.
+LOCUS_MINTING_ENABLED = os.environ.get('LOCUS_MINTING_ENABLED', '') == '1' or bool(globals().get('LOCUS_MINTING_ENABLED', False))
 
 # Shared secret used to sign short-lived collab tokens for the Hocuspocus real-time service
 # (Workbench Phase 2, place#112). Same value is passed to the hocuspocus container via .env so it
