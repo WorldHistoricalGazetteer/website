@@ -251,10 +251,15 @@ def atlas_locus_attribution(request):
     minter may ask (403 otherwise); ``public=1`` is refused (400): a name is
     published only by the consent given in the mint modal, never afterwards
     (migration 0028 enforces the same at the database). A form post is
-    answered with a 303 back to the locus; a JSON post with JSON."""
-    refused = _beta_json_gate(request)
-    if refused is not None:
-        return refused
+    answered with a 303 back to the locus; a JSON post with JSON.
+
+    Gated on the switch and a signed-in account only, NOT on beta access
+    (review #3): withdrawing consent must stay possible for a minter who has
+    since lost beta. Being the minter is the authorisation."""
+    if not registry.minting_enabled():
+        raise Http404()
+    if not request.user.is_authenticated:
+        return JsonResponse({"error": "sign in to change how you are named"}, status=403)
     wants_json = (request.content_type or "").startswith("application/json")
     if wants_json:
         try:

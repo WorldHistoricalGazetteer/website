@@ -310,3 +310,26 @@ class ShareLinkSuppressionTests(LocusBase):
     def test_redacted_recipe_is_suppressed_on_every_token_route(self):
         self.gone.redact("staff only (test)", by=self.staff)
         self.assert_suppressed("redacted")
+
+
+@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+class AttributionGateTests(LocusBase):
+    """Review #3: consent can be withdrawn by a minter who has since lost beta access."""
+
+    def test_a_minter_without_beta_can_still_hide_their_name(self):
+        e, _ = registry.mint_recipe(recipe(QUERY, members=MEMBERS), self.beta, minter_public=True)
+        url = "/atlas/locus/attribution/"
+        anon = self.client.post(url, {"pid": e.pid, "public": "0"})                              # anonymous
+        self.assertEqual((anon.status_code, anon.json()["error"]), (403, "sign in to change how you are named"))
+        self.beta.role = "normal"
+        self.beta.save()
+        self.beta.refresh_from_db()
+        self.assertFalse(self.beta.can_access_beta)
+        self.client.force_login(self.normal)                                  # not the minter
+        self.assertEqual(self.client.post(url, {"pid": e.pid, "public": "0"}).status_code, 403)
+        self.assertTrue(LocusRegistryEntry.objects.get(pk=e.pk).minter_public)
+        self.client.force_login(self.beta)                                    # the minter, no beta now
+        self.assertEqual(self.client.post(url, {"pid": e.pid, "public": "0"}).status_code, 303)
+        self.assertFalse(LocusRegistryEntry.objects.get(pk=e.pk).minter_public)
+        with override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):
+            self.assertEqual(self.client.post(url, {"pid": e.pid, "public": "0"}).status_code, 404)
