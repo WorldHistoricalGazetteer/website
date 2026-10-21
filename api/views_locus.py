@@ -4,8 +4,10 @@ Routed in ``api/urls_root.py`` AHEAD of the generic ``entity/<entity_id>/``
 patterns, so ``place:`` (and every other object type in ``TYPE_MAP``) is
 served exactly as before; this module never sees them.
 
-Everything here is a 404 unless ``LOCUS_MINTING_ENABLED`` is true (v4 changes
-nothing public until release). When it is on, the route is beta-gated like the
+Unless ``LOCUS_MINTING_ENABLED`` is true, ``locus_entity`` hands the request to
+the generic entity views, which answered it before this route existed (anonymous
+401, signed-in 404, HEAD as GET): v4 changes nothing public until release. When
+it is on, the route is beta-gated like the
 locus page: an anonymous browser is sent to sign in and back, an anonymous
 machine client gets 401 JSON, a signed-in user without beta access gets 404.
 Public (anonymous) dereference is the release's business, with place#271.
@@ -277,8 +279,21 @@ def _gate(request, html: bool):
     return None
 
 
-@require_GET
 def locus_entity(request, pid, force_json: bool = False):
+    """``/entity/locus:<PID>/``. With ``LOCUS_MINTING_ENABLED`` off the request is
+    handed to the generic entity view it reached before this route existed
+    (``EntityDetailView``, or ``EntityFeatureView`` for ``/api``), so the answer is
+    exactly the pre-branch one: anonymous 401 from DRF, signed-in 404, HEAD as GET
+    (review #8; search/tests_locus_mint.py pins it against another unsupported type)."""
+    if not registry.minting_enabled():
+        from api.views_entity import EntityDetailView, EntityFeatureView
+        view = EntityFeatureView if force_json else EntityDetailView
+        return view.as_view()(request, entity_id=f"locus:{pid}")
+    return _locus_entity(request, pid, force_json)
+
+
+@require_GET
+def _locus_entity(request, pid, force_json: bool = False):
     html = _wants_html(request, force_json)
     refused = _gate(request, html)
     if refused is not None:

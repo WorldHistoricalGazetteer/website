@@ -23,6 +23,7 @@ import base64
 import json
 from unittest.mock import patch
 
+from django.conf import settings
 from django.test import override_settings
 
 from places import locus_recipe as lr
@@ -70,6 +71,53 @@ class OffByDefaultTests(MintBase):
         with override_settings(LOCUS_MINTING_ENABLED=True), patch(POST, side_effect=self.gateway):
             self.assertEqual(self.preflight(token()).status_code, 200)
             self.assertEqual(self.entity(e.pid).status_code, 200)
+
+
+class OffMatchesPreBranchTests(MintBase):
+    """Review #8: with both flags off, /entity/locus:X/ and its /api must answer
+    EXACTLY as before the branch, when they fell through to the generic entity views
+    (anonymous: DRF's 401; signed in: 404 "unsupported type"; HEAD as GET). The
+    control is another unsupported type, zzz:, which takes that same path today.
+    Paired with flag on, where the locus route answers its own (different) 401."""
+
+    def _answers(self, path, method):
+        # A private cache, cleared per call: the anonymous entity throttle (60/min per
+        # IP) would otherwise answer 429 part-way through, and leave counts behind.
+        from django.core.cache import cache
+        cache.clear()
+        call = self.client.head if method == "HEAD" else self.client.get
+        out = []
+        for accept in ("text/html", "application/json", "application/ld+json"):
+            r = call(path, HTTP_ACCEPT=accept)
+            out.append((r.status_code, r.get("WWW-Authenticate"), r.content))
+        return out
+
+    @override_settings(LOCUS_MINTING_ENABLED=False, V4_LANDING_ENABLED=False, CACHES={
+        **settings.CACHES, "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                                       "LOCATION": "locus-off-review8"}})
+    def test_off_is_the_generic_entity_answer(self):
+        e, _ = registry.mint_recipe(recipe(SIMPLE), self.beta)
+        for who in (None, self.normal, self.beta):
+            self.client.logout()
+            if who is not None:
+                self.client.force_login(who)
+            for tail in ("", "api"):
+                for method in ("GET", "HEAD"):
+                    for pid in (e.pid, "ABCD-EFGH-JKMN"):
+                        got = self._answers(f"/entity/locus:{pid}/{tail}", method)
+                        # The 404 text names the type ("Unsupported object type: locus").
+                        want = [(st, auth, body.replace(b"zzz", b"locus"))
+                                for st, auth, body in self._answers(f"/entity/zzz:{pid}/{tail}", method)]
+                        self.assertEqual(got, want, (who, tail, method, pid))
+                        status = {a[0] for a in got}
+                        self.assertEqual(status, {401} if who is None else {404}, (who, tail, method, got))
+        # Presence: flag on, the locus route answers its OWN 401, unlike the control.
+        self.client.logout()
+        with override_settings(LOCUS_MINTING_ENABLED=True):
+            on = self.client.get(f"/entity/locus:{e.pid}/", HTTP_ACCEPT="application/json")
+            ctl = self.client.get(f"/entity/zzz:{e.pid}/", HTTP_ACCEPT="application/json")
+        self.assertEqual((on.status_code, on.json()["error"]), (401, "authentication required"))
+        self.assertNotEqual(on.content, ctl.content)
 
 
 @override_settings(LOCUS_MINTING_ENABLED=True)
