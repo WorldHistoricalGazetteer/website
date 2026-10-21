@@ -10,6 +10,8 @@ from search.views import (AtlasPageView, atlas_search, atlas_place,
                           atlas_registry_coverage, atlas_status,
                           atlas_locus, atlas_locus_resolve)
 from places.views_record import atlas_record_concordance, atlas_record_page
+from places.views_enrichment import (atlas_locus_environment, atlas_locus_gloss,
+                                     atlas_record_environment, atlas_record_gloss)
 
 urlpatterns = [
     path('', AtlasPageView.as_view(), name='atlas-page'),
@@ -25,6 +27,12 @@ urlpatterns = [
     # and the resolver its script POSTs the token to (search/locus.py).
     path('locus/', atlas_locus, name='atlas-locus'),
     path('locus/resolve/', atlas_locus_resolve, name='atlas-locus-resolve'),
+    # place#325 Stage 3: EDOPS environmental signature and data-derived gloss for the
+    # Record page's group and a locus's current members (places/views_enrichment.py).
+    path('place/<int:pk>/environment/', atlas_record_environment, name='atlas-record-environment'),
+    path('place/<int:pk>/gloss/', atlas_record_gloss, name='atlas-record-gloss'),
+    path('locus/environment/', atlas_locus_environment, name='atlas-locus-environment'),
+    path('locus/gloss/', atlas_locus_gloss, name='atlas-locus-gloss'),
     path('boundaries/', atlas_boundaries, name='atlas-boundaries'),
     path('geometry/', atlas_geometry, name='atlas-geometry'),
     path('status/', atlas_status, name='atlas-status'),
