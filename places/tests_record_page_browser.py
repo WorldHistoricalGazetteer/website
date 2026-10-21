@@ -98,6 +98,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
 
         with patch("datasets.signals.doi"):
             a, b = ds("a"), ds("b")
+            priv = Dataset.objects.create(owner=self.beta, label="rb325_priv", title="Dataset priv",
+                                          description="D", creator="X", public=False, ds_status="indexed",
+                                          uri_base="https://example.org/places/")
         GazetteerRegistryEntry.objects.update_or_create(
             id="gn", defaults=dict(name="gn", namespace="gn", entry_class="authority", status="published"))
         GazetteerRegistryEntry.objects.filter(namespace="viaf").delete()
@@ -106,8 +109,13 @@ class RecordPageBrowserTests(LiveServerTestCase):
             id=f"whg:{a.pk}", defaults=dict(name="Dataset a", namespace="whg", entry_class="dataset",
                                             status="published"))
         self.ds_a = a
+        hidden = place(priv, "Hidden Thing", "H1", xy=(4.0, 4.0))
         self.A = place(a, "Record A", "A1", xy=(0.0, 0.0), links=[("exactMatch", "gn:100"),
-                                                                   ("closeMatch", "viaf:55")])
+                                                                   ("closeMatch", "viaf:55"),
+                                                                   # private, and non-existent: one status
+                                                                   ("closeMatch", f"whg:{hidden.pk}"),
+                                                                   ("closeMatch", f"whg:{hidden.pk + 100000}")])
+        self.hidden_pk = hidden.pk
         self.B = place(b, "Record B", "B1", xy=(0.5, 0.5), links=[("closeMatch", f"whg:{self.A.pk}")])
         # The co-citer is far away: if tier 3 leaked into the extent, the map would show it.
         self.C = place(b, "Record C", "C1", xy=(120.0, -40.0), links=[("closeMatch", "gn:100")])
@@ -179,6 +187,16 @@ class RecordPageBrowserTests(LiveServerTestCase):
         results["tier1_typed_and_resolved"] = ("exactMatch" in tier1 and "Gateway Town" in tier1
                                                and "on the map" in tier1)
         results["tier1_not_held_reason"] = "viaf:55" in tier1 and "WHG does not hold records for" in tier1
+        whg = page.evaluate("""(ids) => ids.map(id => {
+            const e = Array.from(document.querySelectorAll('#concordance_tier1 .conc-entry'))
+                .find(x => (x.querySelector('code') || {}).textContent === id);
+            return e ? {status: e.dataset.status, text: e.textContent.replace(id, '<id>')} : null; })""",
+                            [f"whg:{self.hidden_pk}", f"whg:{self.hidden_pk + 100000}"])
+        results["tier1_whg_unavailable_same_for_private_and_missing"] = (
+            all(w and w["status"] == "unavailable" for w in whg) and whg[0] == whg[1]
+            and "may be private, or may no longer exist" in whg[0]["text"]
+            and "WHG does not hold records for" not in whg[0]["text"]
+            and "Hidden Thing" not in page.evaluate("document.body.innerText"))
         tier2 = " | ".join(dom["tier2"])
         results["tier2_attributed"] = ("Attested by Dataset b" in tier2 and "Record B" in tier2
                                        and "Record C" not in tier2)

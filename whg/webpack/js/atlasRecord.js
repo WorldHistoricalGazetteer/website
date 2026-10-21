@@ -88,11 +88,11 @@ function targetStatus(e) {
         }
         case 'not_found':
             return { cls: 'not-found', html: 'WHG’s index was asked and holds no record with this identifier, so it can be listed but not mapped.' };
+        case 'unavailable':
+            // A whg: target that is private OR does not exist: resolve_targets gives
+            // both the same status on purpose, so this sentence must not tell them apart.
+            return { cls: 'not-held', html: 'This names a WHG record that is not available to show: it may be private, or may no longer exist.' };
         case 'not_held':
-            if (e.namespace === 'whg') {
-                // resolve_targets reports a WHG record that is not public (or gone) as not_held.
-                return { cls: 'not-held', html: 'This names a WHG record that is not public or no longer exists, so it is not shown.' };
-            }
             return { cls: 'not-held', html: `WHG does not hold records for ${ns}, so this can be listed but not mapped. That says nothing about whether the place exists there.` };
         case 'gateway_unavailable':
             return { cls: 'unavailable', html: 'WHG’s index could not be reached just now, so this was not looked up. That is not a finding that it is absent: reload to try again.' };

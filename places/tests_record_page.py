@@ -109,6 +109,10 @@ class RecordPageTests(TestCase):
         # plain whg:<ds>:<src_id> form names neither for certain.
         cls.Dup1 = place(cls.ds_a, "Twin", "T1")
         cls.Dup2 = place(cls.ds_a, "Twin", "T1")
+        # Links to a private record and to one that does not exist: one status for both.
+        cls.Linker = place(cls.ds_b, "Linker", "K1", xy=(7.0, 7.0), links=[
+            ("closeMatch", f"whg:{cls.Priv.pk}"), ("closeMatch", f"whg:{cls.Priv.pk + 100000}"),
+            ("closeMatch", f"whg:{cls.B.pk}")])
 
     def page(self, place, user=None):
         if user is not None:
@@ -205,6 +209,17 @@ class RecordPageTests(TestCase):
         self.assertIn("imported", d["provenance_labels"])
         self.assertTrue(d["explore_similar"]["url"].startswith("/atlas/"))
         self.assertIsInstance(d["elapsed_ms"], int)
+
+    def test_whg_target_private_or_missing_is_unavailable(self):
+        d = self.conc(self.Linker, self.beta).json()
+        out = {e["identifier"]: e for e in d["outbound"]}
+        self.assertEqual(out[f"whg:{self.B.pk}"]["target"]["status"], "resolved")      # a public one resolves
+        private = out[f"whg:{self.Priv.pk}"]["target"]
+        missing = out[f"whg:{self.Priv.pk + 100000}"]["target"]
+        self.assertEqual(private["status"], "unavailable")
+        self.assertEqual(private, missing)
+        self.assertNotIn("Secret Own", r := repr(d))
+        self.assertIn("Record B", r)
 
     def test_gateway_failure_is_not_absence(self):
         d = self.conc(self.A, self.beta, fetch=failing_fetch).json()

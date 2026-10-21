@@ -241,7 +241,8 @@ class ConcordanceTests(TestCase):
         # the link is the record's own data and is listed ...
         self.assertIn(f"whg:{self.P.pk}", out)
         # ... but the private record behind it is not resolved or named anywhere
-        self.assertEqual(out[f"whg:{self.P.pk}"]["target"]["status"], "not_held")
+        self.assertEqual(out[f"whg:{self.P.pk}"]["target"]["status"], "unavailable")
+        self.assertEqual(out[f"whg:{self.P.pk}"]["target"]["records"], [])
         self.assertIn("Record B", repr(c))
         self.assertNotIn("Secret", repr(c))
 
@@ -331,6 +332,24 @@ class ConcordanceTests(TestCase):
             r = resolve_targets(["tgn:7000", "gn:100", "viaf:1", f"whg:{self.F.pk}"], user=self.user)
         self.assertEqual(set(r), {"tgn:7000", "gn:100", "viaf:1", f"whg:{self.F.pk}"})
         self.assertEqual(r[f"whg:{self.F.pk}"]["records"][0]["place_id"], self.F.id)
+
+    def test_unresolved_whg_target_is_unavailable_and_reveals_nothing(self):
+        """A private, an embargoed and a non-existent whg: target get the IDENTICAL
+        resolution, distinct from not_held; a public one still resolves."""
+        from places.models import Place
+        missing = (Place.objects.order_by("-id").values_list("id", flat=True).first() or 0) + 1000
+        ids = [f"whg:{self.P.pk}", f"whg:{self.E.pk}", f"whg:{missing}", f"whg:{self.F.pk}", "viaf:1"]
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            r = resolve_targets(ids, user=self.user)
+        self.assertEqual(r[f"whg:{self.F.pk}"]["status"], "resolved")                 # presence
+        self.assertEqual(r[f"whg:{self.F.pk}"]["records"][0]["place_id"], self.F.id)
+        private, embargoed, absent = r[f"whg:{self.P.pk}"], r[f"whg:{self.E.pk}"], r[f"whg:{missing}"]
+        self.assertEqual(private, {"status": "unavailable", "via": None, "records": [], "has_geometry": False})
+        self.assertEqual(private, absent)          # the answer cannot tell private from non-existent
+        self.assertEqual(embargoed, absent)
+        self.assertEqual(r["viaf:1"]["status"], "not_held")                             # the other meaning
+        self.assertNotIn("Secret", repr(r))
+        self.assertNotIn("Embargoed", repr(r))
 
     def test_place_matches_still_one_step(self):
         m = self.A.matches

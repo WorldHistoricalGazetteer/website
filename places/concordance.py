@@ -41,6 +41,10 @@ Resolution of an outbound target:
 * other ids in a namespace the CRC gateway holds (the visible
   ``GazetteerRegistryEntry`` namespaces: ``gn``, ``wd``, ``pl`` ...) resolve via
   ``api.crc_client.crc_fetch_places``;
+* a ``whg:`` target that does not resolve (a private record, or one that does
+  not exist) is listed with ``status: "unavailable"``: ONE status for both, so
+  the page cannot be used to probe whether a private record exists; and not
+  ``not_held``, which says WHG holds nothing from that source;
 * anything else (``viaf:``, ``loc:``, unrecognised URLs) is listed with
   ``status: "not_held"``.
 
@@ -287,16 +291,20 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
 
     Returns ``{curie: resolution}``; every input appears. ``resolution`` is::
 
-        {"status": "resolved" | "not_found" | "not_held" | "gateway_unavailable"
-                   | "gateway_disabled",
+        {"status": "resolved" | "not_found" | "not_held" | "unavailable"
+                   | "gateway_unavailable" | "gateway_disabled",
          "via": "postgres" | "gateway" | None,
          "records": [ {place_id|place_id(gateway), title, has_geometry, repr_point, ...} ],
          "has_geometry": bool}
 
     ``not_found``: asked and definitively absent. ``not_held``: no store WHG
     has could hold it (``viaf:``, an unknown URL, or a namespace not in the
-    gateway). ``gateway_unavailable`` / ``gateway_disabled`` are NOT absence
-    (place#272): the gateway could not be, or was not, asked.
+    gateway). ``unavailable``: a ``whg:`` identifier that names no record the
+    ANONYMOUS visibility rule lets us show. A private record and a record that
+    does not exist get the identical resolution (same status, ``via``, empty
+    records), so the answer reveals nothing about private data.
+    ``gateway_unavailable`` / ``gateway_disabled`` are NOT absence (place#272):
+    the gateway could not be, or was not, asked.
     """
     from places.models import Place, PlaceLink
 
@@ -359,7 +367,10 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     ns_held = gateway_namespaces(user) if (use_gateway and rest) else set()
     to_ask = [c for c in rest if parsed[c][1] in ns_held]
     for c in rest:
-        if c not in to_ask:
+        if parsed[c][1] == WHG_NS:
+            # Private or non-existent: one answer for both (never which).
+            out[c] = blank("unavailable")
+        elif c not in to_ask:
             out[c] = blank("not_held")
     if to_ask:
         from api.crc_client import crc_fetch_places
