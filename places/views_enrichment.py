@@ -12,17 +12,20 @@ All four are beta-gated like the concordance endpoint (403 JSON without
 
 The locus endpoints take the members the page has just resolved (the cluster is
 computed in the browser, so the server does not know it). That is safe because
-nothing posted is stored or shown to anyone else, the members are capped and reduced
-to plain capped values (``places.gloss.member_from_hit``), and the EDOPS cache is keyed
-on the request sent to EDOPS and filled only from EDOPS's answer, so a client cannot
-put anything into it. A non-public record sends nothing to EDOPS.
+WHG stores nothing posted and shows it to no one else, the members are capped and
+reduced to plain capped values (``places.gloss.member_from_hit``), and WHG's EDOPS cache
+is keyed on the request sent to EDOPS and filled only from EDOPS's answer, so a client
+cannot put anything into it.
 
-What may be SENT to EDOPS is narrower than what the page shows: only members an
-anonymous caller could see (``places.record_group.mark_offsite``). A beta user also
-sees embargoed gateway namespaces; those members stay in the concordance and the gloss
-(neither leaves WHG) but no coordinate, hull or date of theirs goes to EDOPS, whose
-cache keeps a request 30 days. Posted locus members are checked by the same rule: the
-coordinates are the client's, but they came from WHG's search for that user.
+What is SENT to EDOPS (computingplace.org, which keeps a request 30 days) is narrower
+than what the page shows, and the rule is about every member, not only the record: it
+contains nothing an anonymous caller could not see (``places.record_group.mark_offsite``).
+A non-public record sends nothing at all. A public record's group may hold members from
+an embargoed gateway namespace, which a beta user sees; they stay in the concordance and
+the gloss (neither leaves WHG), but no coordinate, hull or date of theirs goes to EDOPS.
+(Before the review of 2026-10-21 this said only "a non-public record sends nothing", and
+embargoed members' geometries were sent.) Posted locus members are checked by the same
+rule: the coordinates are the client's, but they came from WHG's search for that user.
 """
 from __future__ import annotations
 
