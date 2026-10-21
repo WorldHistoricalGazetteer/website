@@ -1413,10 +1413,19 @@ Promise.all([
     });
 
     // ── Handle pre-populated toponym from URL ──
+    // Mode FIRST, then the text: switchSearchMode() ends by clearing the input,
+    // so the old order (text, then mode) searched an empty box and stopped at
+    // "need a search term" with nothing on screen. The mode goes through the
+    // Places toggle's own click so the toggle shows Places, not Areas. The
+    // boot has already waited for the map, so the search runs now, once.
     if (typeof atlas_toponym !== 'undefined' && atlas_toponym) {
+        const placesBtn = document.querySelector(
+            '.search-mode-toggle .btn[data-search-mode="toponyms"]'
+        );
+        if (placesBtn) placesBtn.click();
+        else switchSearchMode('toponyms');
         searchInput.value = atlas_toponym;
-        switchSearchMode('toponyms');
-        setTimeout(() => initiateToponymSearch(), 300);
+        initiateToponymSearch();
     }
 
     // ── Handle Gazetteers deep link from sitewide navbar ──
