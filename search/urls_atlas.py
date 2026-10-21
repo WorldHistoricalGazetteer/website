@@ -7,7 +7,8 @@ from django.urls import path
 
 from search.views import (AtlasPageView, atlas_search, atlas_place,
                           atlas_boundaries, atlas_geometry,
-                          atlas_registry_coverage, atlas_status)
+                          atlas_registry_coverage, atlas_status,
+                          atlas_locus, atlas_locus_resolve)
 from places.views_record import atlas_record_concordance, atlas_record_page
 
 urlpatterns = [
@@ -20,6 +21,10 @@ urlpatterns = [
     # and its Concordance section's JSON, beta-gated in places/views_record.py.
     path('place/<int:pk>/', atlas_record_page, name='atlas-record'),
     path('place/<int:pk>/concordance/', atlas_record_concordance, name='atlas-record-concordance'),
+    # place#325 Stage 2 (2B): the unminted locus page, /atlas/locus/?r=<token>,
+    # and the resolver its script POSTs the token to (search/locus.py).
+    path('locus/', atlas_locus, name='atlas-locus'),
+    path('locus/resolve/', atlas_locus_resolve, name='atlas-locus-resolve'),
     path('boundaries/', atlas_boundaries, name='atlas-boundaries'),
     path('geometry/', atlas_geometry, name='atlas-geometry'),
     path('status/', atlas_status, name='atlas-status'),

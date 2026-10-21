@@ -248,8 +248,16 @@ def crc_search(options: dict, user=None) -> dict | None:
     return data
 
 
-def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None]:
+def crc_search_status(options: dict, user=None,
+                      meta: dict | None = None) -> tuple[dict | None, str | None]:
     """Call the CRC gateway ``POST /api/search`` and return the FULL response.
+
+    ``meta``, when given, receives ``meta["request"]``: the exact body sent to
+    the gateway (set before the call, so it is there even when the call
+    fails). A locus recipe's ``retrieval`` block is built from THIS dict
+    (``places.locus_recipe.retrieval_from_search_body``), never from
+    ``options``, so a new filter key fails loudly in the recipe adapter instead
+    of silently dropping out of the hash (place#325 Stage 2).
 
     Unlike ``crc_reconcile_search`` (which adapts hits for the reconciliation
     make_candidate() path), this returns the gateway's complete SearchResponse
@@ -401,6 +409,9 @@ def crc_search_status(options: dict, user=None) -> tuple[dict | None, str | None
         mode = options.get("temporal_mode")
         if mode in ("possibly", "definitely"):
             body["temporal_mode"] = mode
+
+    if meta is not None:
+        meta["request"] = body
 
     url = f"{_gateway_url()}/api/search"
     # attempt 0, then one retry reserved for a read timeout (see docstring).

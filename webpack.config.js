@@ -51,6 +51,7 @@ module.exports = {
 		ds_browse: './whg/webpack/js/ds_browse.js',
 		gallery: './whg/webpack/js/gallery.js',
 		home: './whg/webpack/js/home.js',
+		locus: './whg/webpack/js/locus.js',
 		mapAndTable: './whg/webpack/js/mapAndTable.js',
 		phonetics: './whg/webpack/js/phonetics.js',
 		places: './whg/webpack/js/places.js',

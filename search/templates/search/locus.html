@@ -1,0 +1,136 @@
+<!-- /search/templates/search/locus.html — the unminted locus page (place#325 Stage 2, place#172) -->
+{% extends "main/base_webpack.html" %}
+{% load static %}
+
+{% block maplibre %}
+<script type="text/javascript">
+	const loadMaplibre = true;
+</script>
+<link href="{% static 'webpack/whg_maplibre.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+{% endblock %}
+
+{% block extra_head %}
+<link href="{% static 'webpack/locus.bundle.css' %}?v={{ asset_version }}" rel="stylesheet"/>
+{% endblock %}
+
+{% block title %}
+<title>WHG Locus (unminted)</title>
+{% endblock %}
+
+{% block content %}
+<div class="container locus-container" id="locus_page"
+     data-token="{{ token }}" data-resolve-url="{{ resolve_url|default:'/atlas/locus/resolve/' }}">
+
+  {% if error %}
+  <div class="locus-error" role="alert">
+    <h1 class="locus-h1"><i class="fas fa-triangle-exclamation me-2"></i>This locus link is not valid</h1>
+    <p>The recipe carried in the address could not be read, so nothing was looked up.</p>
+    <p class="locus-error-detail">
+      {% if error.path %}<code>{{ error.path }}</code>: {% endif %}{{ error.message }}
+    </p>
+    <p class="text-muted small">An unminted locus link carries its whole recipe in the address. If the link was
+      shortened, wrapped across lines or edited, it no longer describes a recipe. Ask for the link again, or
+      make a new one from a cluster card in the <a href="/atlas/">Atlas</a>.</p>
+  </div>
+  {% else %}
+
+  <div class="locus-head">
+    <div>
+      <h1 class="locus-h1">
+        <i class="fas fa-layer-group me-2"></i>Locus
+        <span class="locus-unminted-badge" title="No identifier has been minted for this cluster">unminted</span>
+        <span class="locus-beta-badge">beta</span>
+      </h1>
+      <p class="locus-promise">
+        <strong>This page is shareable but not permanent.</strong> It carries a recipe, not an identifier:
+        every visit re-runs the recipe against the index as it stands now, so the records below are its
+        <em>current</em> answer and will change as data is added, corrected or withdrawn. Nothing has been
+        stored, and there is no persistent identifier to cite.
+      </p>
+    </div>
+    <div class="locus-actions">
+      <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip"
+            title="Minting a citable locus (a permanent /entity/locus: identifier) arrives with the v4 release. Until then this page can be shared but not cited.">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="locus_mint" disabled
+                style="pointer-events: none;">
+          <i class="fas fa-stamp me-1"></i>Mint a citable locus
+        </button>
+      </span>
+      <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_link"
+              data-bs-toggle="tooltip" title="Copy this page's address">
+        <i class="fas fa-link me-1"></i>Copy link
+      </button>
+    </div>
+  </div>
+
+  {% if token_was_normalised %}
+  <p class="locus-note small text-muted">The address was normalised: the recipe it carried was valid but not
+    in canonical form, and the canonical form is what this page uses.</p>
+  {% endif %}
+
+  <div class="locus-layout">
+    <section class="locus-result-col">
+      <div id="locus_map"></div>
+      <div id="locus_result" class="locus-result" aria-live="polite">
+        <p class="locus-status"><i class="fas fa-spinner fa-spin me-1"></i>Re-running the recipe…</p>
+      </div>
+    </section>
+
+    <aside class="locus-recipe-col">
+      <h2 class="locus-h2">The recipe</h2>
+      <p class="small text-muted">Everything below is literal: these values, not whatever the defaults are
+        today, decide the answer.</p>
+
+      <h3 class="locus-h3">Retrieval</h3>
+      <table class="locus-table">
+        {% for label, value in summary.retrieval %}
+        <tr><th>{{ label }}</th><td>{{ value }}</td></tr>
+        {% endfor %}
+      </table>
+
+      <h3 class="locus-h3">Clustering</h3>
+      <table class="locus-table">
+        {% for label, value in summary.weights %}
+        <tr><th>{{ label }} weight</th><td>{{ value }}</td></tr>
+        {% endfor %}
+        {% for label, value in summary.clustering %}
+        <tr><th>{{ label }}</th><td>{{ value }}</td></tr>
+        {% endfor %}
+        <tr><th>Generic-name stoplist</th>
+          <td>{% if summary.stoplist_count %}
+            <details class="locus-stoplist"><summary>{{ summary.stoplist_count }} name{{ summary.stoplist_count|pluralize }}</summary>
+              <div class="locus-stoplist-body">{% for s in summary.stoplist %}<span class="locus-chip">{{ s }}</span>{% endfor %}</div>
+            </details>
+            {% else %}none{% endif %}</td></tr>
+      </table>
+
+      <h3 class="locus-h3">Members when the recipe was made</h3>
+      <p class="small text-muted">These settle <em>which</em> cluster is meant. They are not the answer: the
+        current members are listed beside the map.</p>
+      <ul class="locus-members" id="locus_recipe_members">
+        {% for m in summary.members %}
+        <li><span class="locus-member-id" data-member="{{ m }}">{{ m }}</span></li>
+        {% endfor %}
+      </ul>
+    </aside>
+  </div>
+
+  {{ recipe|json_script:"locus_recipe" }}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block deferredScripts %}
+
+  var scripts = [
+	  {
+		  src: '{% static 'webpack/whg_maplibre.bundle.js' %}?v={{ asset_version }}',
+		  type: 'text/javascript',
+	  },
+	  {
+		  src: '{% static 'webpack/locus.bundle.js' %}?v={{ asset_version }}',
+		  type: 'module',
+	  },
+  ]
+
+{% endblock %}
