@@ -129,7 +129,7 @@ class EnrichmentViewTests(TestCase):
         self.assertEqual(r["status"], "ok")
         self.assertEqual(r["plan"]["kind"], "basin")
         self.assertEqual(t.calls[0]["params"], {"scope": "basin", "lat": 51.5074, "lon": -0.1278,
-                                                "bands": "ABCDET", "level": 6, "from_year": 1600, "to_year": 1700})
+                                                "bands": "ABCDET", "level": 8, "from_year": 1600, "to_year": 1700})
         (sig,) = r["signatures"]
         self.assertEqual(sig["request"]["from_year"], 1600)
         self.assertEqual(sig["summary"]["temporal"]["years"], [1600, 1700])

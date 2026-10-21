@@ -21,3 +21,13 @@ area over that ~0.8° x 0.4° box 2.2 s, 404/422 ~0.25 s.
 
 Note the two 422 bodies differ in shape: `detail` is a list for a missing
 parameter (FastAPI validation) and a plain string for the area Band T rule.
+
+Added **2026-10-21, 13:19 UTC** (one call, `curl`, same service, spec still 0.4) for the
+ruling "basin level 8 for single points":
+
+| File | HTTP | Request (`GET /api/signature?…`) |
+|---|---|---|
+| `basin_london_ABCDET_1600-1700_L8.json` | 200 | `scope=basin&lat=51.5074&lon=-0.1278&bands=ABCDET&level=8&from_year=1600&to_year=1700` |
+
+Its key structure is identical to the level-6 response (compared recursively); it differs
+in values only (`meta.scope.basin_level` 8, basin `id` 53398, `up_area` 10797.4). 0.72 s.
