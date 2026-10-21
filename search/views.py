@@ -776,7 +776,7 @@ def atlas_locus(request):
         "token_was_normalised": canonical_token != token,
         "summary": describe_recipe(recipe),
         "resolve_url": "/atlas/locus/resolve/",
-        # Stage 4: {"enabled": False} unless settings.LOCUS_MINTING_ENABLED, in
+        # Stage 4: {"enabled": False} unless the v4 release switch is on, in
         # which case the page offers the mint modal (search/views_locus.py).
         "minting": minting_context(recipe, canonical_token),
     })

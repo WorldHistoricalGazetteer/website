@@ -1,7 +1,8 @@
 """Minting a citable locus from the locus page (place#172, place#325 Stage 4).
 
-Routes (``search/urls_atlas.py``), live only when ``LOCUS_MINTING_ENABLED``
-is true, and then only for signed-in beta testers (ruling D1):
+Routes (``search/urls_atlas.py``), live only when the v4 release switch is on
+(``places.v4_landing.v4_landing_enabled``), and then only for signed-in beta
+testers (ruling D1):
 
     GET  /atlas/locus/mint/?r=<token>   preflight: the PID this recipe would get,
                                         whether it is already minted, existing

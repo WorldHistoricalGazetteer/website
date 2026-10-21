@@ -35,7 +35,7 @@ urlpatterns = [
     path('locus/environment/', atlas_locus_environment, name='atlas-locus-environment'),
     path('locus/gloss/', atlas_locus_gloss, name='atlas-locus-gloss'),
     # place#325 Stage 4: minting (GET preflight, POST mint); 404 unless
-    # settings.LOCUS_MINTING_ENABLED, beta-gated when on (search/views_locus.py).
+    # the v4 release switch (places.v4_landing), beta-gated when on (search/views_locus.py).
     path('locus/mint/', atlas_locus_mint, name='atlas-locus-mint'),
     # The minter hides their name on a locus they minted (true -> false only).
     path('locus/attribution/', atlas_locus_attribution, name='atlas-locus-attribution'),

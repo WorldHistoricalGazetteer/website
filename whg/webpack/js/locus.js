@@ -12,7 +12,7 @@
 // Both pages run the same recipe the same way; only the identity block differs.
 //
 // Minting (Stage 4, only when the server rendered data-mint-url, i.e.
-// LOCUS_MINTING_ENABLED and a signed-in beta user): the Mint button opens the
+// the v4 release switch and a signed-in beta user): the Mint button opens the
 // modal the server rendered, which says what is being minted (the RECIPE,
 // re-run on every visit, never the member list shown), lists existing loci
 // sharing members, and needs an explicit confirmation before it POSTs

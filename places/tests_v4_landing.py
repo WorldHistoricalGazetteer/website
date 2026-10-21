@@ -223,3 +223,33 @@ class SwitchOnTests(_Fixture):
             self.assertTrue(r.json()["public"])
             for p in (self.Priv, self.Emb):
                 self.assertEqual(self.anon(f"/atlas/place/{p.pk}/concordance/").status_code, 404, p.title)
+
+
+class OneReleaseSwitchTests(_Fixture):
+    """Ruling 2026-10-21: LOCUS_MINTING_ENABLED merges into V4_LANDING_ENABLED, one
+    release switch. LOCUS_MINTING_ENABLED is honoured as a transitional ALIAS
+    (either true => on), so dev's env (both set) keeps working. Each state is
+    checked through the helpers AND through a route each flag used to govern alone."""
+
+    STATES = ((False, False, False), (True, False, True), (False, True, True), (True, True, True))
+
+    def test_helpers_in_every_state(self):
+        from places.locus_registry import minting_enabled
+        for v4, locus, want in self.STATES:
+            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=locus, CACHES=LOCMEM):
+                self.assertEqual(v4_landing_enabled(), want, (v4, locus))
+                self.assertEqual(minting_enabled(), want, (v4, locus))
+
+    def test_each_flag_alone_drives_both_halves(self):
+        for v4, locus, want in self.STATES:
+            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=locus, CACHES=LOCMEM):
+                portal = self.anon(f"/places/portal/{self.Pub.pk}/")
+                mint = self.anon("/atlas/locus/mint/")
+            if want:
+                self.assertEqual(portal.status_code, PORTAL_REDIRECT_STATUS, (v4, locus))
+                self.assertEqual(portal["Location"], f"/entity/place:{self.Pub.pk}/")
+                self.assertEqual(mint.status_code, 403, (v4, locus))      # minting exists, beta-gated
+            else:
+                # Off, the legacy portal's own answer (a 302 to /detail for a single match).
+                self.assertEqual(portal.get("Location"), f"/places/{self.Pub.pk}/detail", (v4, locus))
+                self.assertEqual(mint.status_code, 404)                   # nothing public exists
