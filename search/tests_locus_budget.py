@@ -92,6 +92,26 @@ class EntityBudgetTests(LocusBase):
         cur = self.current(FakeGateway(hits=many_hits(30)))           # the default budget: clustered
         self.assertIn("gn:1", cur["cluster_members"])
 
+    def test_anonymous_throttle_buckets_by_forwarded_client_not_by_proxy(self):
+        """Behind nginx REMOTE_ADDR is the proxy for everyone: the bucket must follow
+        get_ident (X-Forwarded-For), or all anonymous callers share one allowance."""
+        import uuid
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+        from api import views_locus
+        a, b = (f"203.0.113.{uuid.uuid4().int % 250}", f"198.51.100.{uuid.uuid4().int % 250}")
+        if a == b:
+            b = "192.0.2.77"
+
+        def req(xff):
+            r = RequestFactory().get("/entity/locus:X/api", HTTP_X_FORWARDED_FOR=xff, REMOTE_ADDR="172.18.0.2")
+            r.user = AnonymousUser()
+            return r
+        with patch.object(views_locus, "JSON_DEREFERENCE_RATE", (1, 3600)):
+            self.assertIsNone(views_locus._json_dereference_throttled(req(a)))      # first client: allowed
+            self.assertIsNone(views_locus._json_dereference_throttled(req(b)))      # a different client: its own bucket
+            self.assertEqual(views_locus._json_dereference_throttled(req(a)).status_code, 429)  # the first again: limited
+
     def test_json_dereference_is_throttled(self):
         from api import views_locus
         with patch.object(views_locus, "JSON_DEREFERENCE_RATE", (2, 60)):

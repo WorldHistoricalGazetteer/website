@@ -451,8 +451,11 @@ def _json_dereference_throttled(request):
     the call is counted). Fixed window in the default cache; a broken cache admits."""
     from django.core.cache import cache
     limit, window = JSON_DEREFERENCE_RATE
+    # get_ident (X-Forwarded-For aware), like the other throttles: behind nginx REMOTE_ADDR
+    # is the proxy's address, which would make every anonymous caller share one bucket.
+    from rest_framework.throttling import BaseThrottle
     who = (f"u{request.user.pk}" if request.user.is_authenticated
-           else "ip" + (request.META.get("REMOTE_ADDR") or "?"))
+           else "ip" + BaseThrottle().get_ident(request))
     key = f"locus-json-deref:{who}:{int(time.time() // window)}"
     try:
         cache.add(key, 0, window)
