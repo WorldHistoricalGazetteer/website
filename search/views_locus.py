@@ -100,6 +100,44 @@ def entry_context(entry, request=None) -> dict:
     }
 
 
+SUPPRESSED_RECIPE_STATEMENT = (
+    "This recipe belongs to a locus that has been withdrawn or redacted. It is no longer "
+    "shown or re-run here."
+)
+
+
+def suppressed_entry(recipe):
+    """The registry row minted for exactly this recipe, if it is withdrawn or
+    redacted; else None (unminted, active, or a collision: a colliding PID names
+    DIFFERENT bytes, so it says nothing about this recipe). A take-down covers
+    every route that takes the recipe TOKEN, not only /entity/locus: (review of
+    02e133ddb..staging #1): the share link, the resolver and minting."""
+    try:
+        entry, _binding = registry.existing_for_recipe(recipe)
+    except (registry.LocusCollision, RecipeError):
+        return None
+    return entry if entry is not None and entry.is_suppressed else None
+
+
+def suppressed_json(entry):
+    """The token routes' answer for a suppressed recipe: the tombstone convention
+    (200 + ``X-WHG-Locus-Status``), carrying no recipe text, token or PID."""
+    resp = JsonResponse({"suppressed": True, "status": entry.serving_status,
+                         "statement": SUPPRESSED_RECIPE_STATEMENT})
+    resp["X-WHG-Locus-Status"] = entry.serving_status
+    return resp
+
+
+def render_suppressed_recipe(request, entry):
+    """``/atlas/locus/?r=<token>`` for a suppressed recipe: a plain page, no recipe,
+    no token, no PID, nothing for the page script to re-run."""
+    resp = render(request, "search/locus.html", {"recipe_suppressed": True, "token": "",
+                                                 "minting": {"enabled": False},
+                                                 "suppressed_statement": SUPPRESSED_RECIPE_STATEMENT})
+    resp["X-WHG-Locus-Status"] = entry.serving_status
+    return resp
+
+
 def minting_context(recipe, token) -> dict:
     """What ``search/locus.html`` needs to offer (or not offer) minting for an
     UNMINTED page: ``enabled`` false keeps the Stage 2 disabled button and shows
@@ -157,6 +195,9 @@ def atlas_locus_mint(request):
     recipe, canonical_token, error = load_token(token)
     if error is not None:
         return JsonResponse({"error": "invalid recipe", **error}, status=400)
+    gone = suppressed_entry(recipe)
+    if gone is not None:          # preflight and POST alike: no PID, token or recipe
+        return suppressed_json(gone)
 
     try:
         entry, binding = registry.existing_for_recipe(recipe)

@@ -275,11 +275,7 @@ def suppressed_document(entry, ctx) -> dict:
 
 def status_header(entry) -> str | None:
     """``X-WHG-Locus-Status``: withdrawn wins over redacted; None when neither."""
-    if entry.is_withdrawn:
-        return "withdrawn"
-    if entry.is_redacted:
-        return "redacted"
-    return None
+    return entry.serving_status
 
 
 def locus_document(request, entry, resolve: bool = True) -> dict:

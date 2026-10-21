@@ -46,6 +46,13 @@
     {% endif %}
   </div>
 
+  {% elif recipe_suppressed %}
+  {# The share link of a withdrawn or redacted locus: no recipe, token or PID in the context. #}
+  <div class="locus-error" role="status">
+    <h1 class="locus-h1"><i class="fas fa-eye-slash me-2"></i>This recipe is no longer shown</h1>
+    <p>{{ suppressed_statement }}</p>
+  </div>
+
   {% elif tombstone %}
   {% comment %}
     A withdrawn or redacted locus (rulings 2026-10-21): PID, status, reason and

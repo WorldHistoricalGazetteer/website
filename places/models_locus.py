@@ -169,6 +169,16 @@ class LocusRegistryEntry(models.Model):
         return self.is_withdrawn or self.is_redacted
 
     @property
+    def serving_status(self):
+        """``X-WHG-Locus-Status`` for a suppressed row: "withdrawn" (wins) or
+        "redacted"; None for an active, unredacted row."""
+        if self.is_withdrawn:
+            return "withdrawn"
+        if self.is_redacted:
+            return "redacted"
+        return None
+
+    @property
     def entity_path(self) -> str:
         return f"/entity/locus:{self.pid}/"
 

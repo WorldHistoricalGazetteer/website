@@ -240,3 +240,73 @@ class AttributionTests(LocusBase):
         html = self.get(pid).content.decode()
         self.assertIn("by a WHG contributor", html)
         self.assertNotIn('action="/atlas/locus/attribution/"', html)
+
+
+@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+class ShareLinkSuppressionTests(LocusBase):
+    """Review of 02e133ddb..staging, #1: a take-down must also cover the recipe's own
+    share link (/atlas/locus/?r=), the resolver and the mint preflight/POST, which all
+    take the TOKEN, not the PID. Each answer for a suppressed recipe is checked for the
+    query text, the token and the PID in body AND headers, beside the same request for
+    an active recipe that does carry them."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.beta)
+        self.staff = get_user_model().objects.create_user(
+            username="locus_staff2", email="ls2@example.org", password="pw", given_name="S",
+            surname="P", role="beta_tester", is_staff=True)
+        self.gone_recipe = recipe(QUERY, members=MEMBERS)
+        self.live_recipe = recipe({**QUERY, "size": 99}, members=MEMBERS)
+        self.gone, _ = registry.mint_recipe(self.gone_recipe, self.beta)
+        self.live, _ = registry.mint_recipe(self.live_recipe, self.beta)
+
+    def answers(self, entry):
+        tok = entry.token
+        with patch(POST, side_effect=self.gateway) as post:
+            page = self.client.get("/atlas/locus/", {"r": tok})
+            resolve = self.client.post("/atlas/locus/resolve/", data=json.dumps({"r": tok}),
+                                       content_type="application/json")
+            pre = self.client.get("/atlas/locus/mint/", {"r": tok})
+            mint = self.client.post("/atlas/locus/mint/", data=json.dumps({"r": tok, "confirm": True}),
+                                    content_type="application/json")
+            called = post.called
+        return {"page": page, "resolve": resolve, "preflight": pre, "mint": mint}, called
+
+    def flat(self, resp):
+        return resp.content.decode() + "\n" + "\n".join(f"{k}: {v}" for k, v in resp.items())
+
+    def assert_suppressed(self, header):
+        got, called = self.answers(self.gone)
+        self.assertFalse(called, "a suppressed recipe must not be re-run")
+        for name, resp in got.items():
+            self.assertEqual(resp.status_code, 200, name)
+            self.assertEqual(resp["X-WHG-Locus-Status"], header, name)
+            text = self.flat(resp)
+            for secret in SECRETS + (self.gone.token, self.gone.pid):
+                self.assertNotIn(secret, text, (name, secret))
+        self.assertIn("withdrawn or redacted", got["page"].content.decode())
+        self.assertNotIn('id="locus_recipe"', got["page"].content.decode())
+        for name in ("resolve", "preflight", "mint"):
+            self.assertTrue(got[name].json()["suppressed"], name)
+        # Presence: the same four requests for an active recipe carry what was withheld.
+        live, called = self.answers(self.live)
+        self.assertTrue(called)
+        page = live["page"].content.decode()
+        self.assertIn('id="locus_recipe"', page)
+        self.assertIn("Xanadurecipe", page)
+        self.assertIn(self.live.pid, page)
+        self.assertIn(self.live.token, page)
+        self.assertEqual(live["preflight"].json()["pid"], self.live.pid)
+        self.assertEqual(live["mint"].json()["pid"], self.live.pid)
+        self.assertIn("hits", live["resolve"].json())
+        for resp in live.values():
+            self.assertNotIn("X-WHG-Locus-Status", resp)
+
+    def test_withdrawn_recipe_is_suppressed_on_every_token_route(self):
+        self.gone.withdraw("gone (test)", by=self.beta)
+        self.assert_suppressed("withdrawn")
+
+    def test_redacted_recipe_is_suppressed_on_every_token_route(self):
+        self.gone.redact("staff only (test)", by=self.staff)
+        self.assert_suppressed("redacted")
