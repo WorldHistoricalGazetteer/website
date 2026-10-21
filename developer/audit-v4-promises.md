@@ -183,7 +183,7 @@ types and permissions. Backups are in `/mnt/salvage/whg-backups/metrics-backup-*
 | 137 i18n | "v3.3 Atlas release" | Atlas is 4.0; i18n has no target release (as the roadmap card already says) |
 | 142 AAT mapping UI; 286 contributed fclasses | "in Atlas (v3.5?)" | Atlas is 4.0 |
 | 170 Wikidata push | "v4 data model reintroduces… PLATO's `Thing`"; "before v4" | `SpatialEntity`; identifiers exist via w3id.org, so **reassess whether #170 can proceed now** rather than waiting on v4 |
-| 172 Locus identifiers | "v4's PLATO `Thing`"; "when v4 delivers `Thing`"; "v4 is hoped to begin within a year"; "#170 largely waits on v4" | `SpatialEntity`; w3id identifiers exist; drop the timeline |
+| 172 Locus identifiers | "v4's PLATO `Thing`"; "when v4 delivers `Thing`"; "v4 is hoped to begin within a year"; "#170 largely waits on v4" | **Not** `SpatialEntity`: a locus is not one, and clusters stay out of PLATO (SG 2026-09-30, place#306). #172's `Thing` means a *curated identity judgment*; in PLATO that is an accepted group, i.e. one Attestation bundling `exactMatch` IdentityRelations, one attestation among many and never canonical. Reword to that; keep "a locus cites a specification, not a place". w3id identifiers exist; drop the timeline. *(Corrected 2026-10-21, place#325 Stage 4: this row previously said "`SpatialEntity`", which mapped loci onto it.)* |
 | 25, 32 | "eventual v4 PLACE graph"; "minimal v4 Assertion" | one line: the model is PLATO, delivered in 4.0 as I/O |
 | 93, 109 | "dual store for v3.5"; "transition to v3.5 indices" | historical names for the new index. Leave, or add a one-line gloss |
 | 96 | links to the v4 data-model docs | none |
