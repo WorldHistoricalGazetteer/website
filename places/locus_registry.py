@@ -40,6 +40,13 @@ from places.models_locus import LocusRegistryEntry
 # registry we have undertaken never to prune should not absorb unexamined.
 MINT_LIMIT_PER_HOUR = 20
 MINT_LIMIT_PER_DAY = 100
+# NEW legacy rows (a first dereference of a ``1NNNNNNN`` whg_id writes a permanent row)
+# per caller per hour: per IP when signed out, per user when signed in (ruling SG
+# 2026-10-21; enforced by ``api.views_locus.LegacyLocusRowThrottle``). Existing rows
+# are served freely and an id not in the snapshot costs nothing. 30/h is far above a
+# person following old portal links (each whg_id is minted once, ever, for everyone)
+# and keeps one IP to ~720 rows a day; the snapshot bounds the total anyway.
+LEGACY_NEW_ROWS_PER_HOUR = 30
 # First key of the two-key pg_advisory_xact_lock(<this>, <user pk>) that serialises one
 # user's mints (count, then insert), so it cannot collide with another lock's keys.
 MINT_LOCK_NAMESPACE = 325172
@@ -70,6 +77,16 @@ class LookupError_(Exception):
         self.status = status
         self.message = message
         super().__init__(message)
+
+
+class LegacyMintThrottled(LookupError_):
+    """A NEW legacy row was refused by the caller's ``LEGACY_NEW_ROWS_PER_HOUR``
+    budget: 429, nothing written. ``retry_after`` in seconds."""
+
+    def __init__(self, retry_after: int):
+        self.retry_after = max(1, int(retry_after))
+        super().__init__(429, f"at most {LEGACY_NEW_ROWS_PER_HOUR} new legacy loci per hour from one caller; "
+                              f"try again in {self.retry_after} s (existing loci are not limited)")
 
 
 def minting_enabled() -> bool:
@@ -219,9 +236,15 @@ def legacy_canonical(row) -> bytes:
     return json.dumps(doc, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def mint_legacy(whg_id: str) -> tuple[Optional[LocusRegistryEntry], bool]:
+def mint_legacy(whg_id: str, charge=None) -> tuple[Optional[LocusRegistryEntry], bool]:
     """Mint (on first dereference) the frozen locus for a legacy ``whg_id``.
-    ``(None, False)`` when the snapshot has no such row."""
+    ``(None, False)`` when the snapshot has no such row.
+
+    ``charge``: called with no arguments only when a NEW row is about to be written
+    (the registry has none for this id AND the snapshot holds it), returning
+    ``(allowed, retry_after_seconds)``; refused -> :class:`LegacyMintThrottled`
+    and nothing is written. An existing row, or an id not in the snapshot, never
+    calls it."""
     from places.models import LegacyUnionRecord
     pid = str(int(whg_id))
     entry = LocusRegistryEntry.objects.filter(pk=pid).first()
@@ -230,6 +253,10 @@ def mint_legacy(whg_id: str) -> tuple[Optional[LocusRegistryEntry], bool]:
     row = LegacyUnionRecord.objects.filter(pk=int(whg_id)).first()
     if row is None:
         return None, False
+    if charge is not None:
+        allowed, retry_after = charge()
+        if not allowed:
+            raise LegacyMintThrottled(retry_after)
     canonical = legacy_canonical(row)
     try:
         with transaction.atomic():
@@ -251,7 +278,8 @@ def mint_legacy(whg_id: str) -> tuple[Optional[LocusRegistryEntry], bool]:
 
 # ---------------------------------------------------------------- lookup
 
-def lookup(pid_text: str, mint_legacy_on_dereference: bool = True) -> tuple[LocusRegistryEntry, bool]:
+def lookup(pid_text: str, mint_legacy_on_dereference: bool = True,
+           charge_new_legacy=None) -> tuple[LocusRegistryEntry, bool]:
     """Resolve the text after ``locus:`` to a registry entry. ``(entry, created)``.
 
     * a recipe PID (``XXXX-XXXX-XXXX`` in any accepted spelling): 400 when it
@@ -260,9 +288,11 @@ def lookup(pid_text: str, mint_legacy_on_dereference: bool = True) -> tuple[Locu
       PID is a hash: there is nothing to mint on dereference, so an unminted
       PID stays 404 until someone mints its recipe on the locus page;
     * a legacy ``1[0-9]{7}``: minted from the snapshot on first dereference,
-      404 when the snapshot has no such whg_id.
+      404 when the snapshot has no such whg_id. ``charge_new_legacy`` is passed to
+      :func:`mint_legacy` as its ``charge`` (the caller's new-row budget).
 
-    Raises :class:`LookupError_` with the status to answer.
+    Raises :class:`LookupError_` with the status to answer (429,
+    :class:`LegacyMintThrottled`, when a new legacy row is over budget).
     """
     text = (pid_text or "").strip()
     if not text:
@@ -273,7 +303,7 @@ def lookup(pid_text: str, mint_legacy_on_dereference: bool = True) -> tuple[Locu
             if entry is None:
                 raise LookupError_(404, f"no locus has been minted for legacy id {text}")
             return entry, False
-        entry, created = mint_legacy(text)
+        entry, created = mint_legacy(text, charge=charge_new_legacy)
         if entry is None:
             raise LookupError_(404, f"{text} is not a legacy WHG identifier held in the snapshot")
         return entry, created

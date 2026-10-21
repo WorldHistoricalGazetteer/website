@@ -30,7 +30,10 @@ What a dereference does with the identifier:
   minting is the explicit, confirmed act on ``/atlas/locus/?r=<token>``;
 * a legacy ``whg_id`` (``1[0-9]{7}``): minted on first dereference from the
   ``LegacyUnionRecord`` snapshot as a FROZEN locus (no recipe; its captured
-  membership), per place#172; 404 when the snapshot has no such id.
+  membership), per place#172; 404 when the snapshot has no such id. A NEW row
+  is charged to the caller (``LegacyLocusRowThrottle``: per IP signed out, per
+  user signed in; ``registry.LEGACY_NEW_ROWS_PER_HOUR``); over budget it is 429
+  with Retry-After and nothing is written. Existing rows are served freely.
 
 Tombstones (place#308) and take-down (rulings 2026-10-21): a withdrawn locus,
 and one redacted by staff (active or withdrawn), still answers 200 at its URI
@@ -62,6 +65,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
+from rest_framework.throttling import SimpleRateThrottle
 
 from api.views_context import whg_context_url
 from places import locus_registry as registry
@@ -377,7 +381,12 @@ def _locus_entity(request, pid, force_json: bool = False):
     if refused is not None:
         return refused
     try:
-        entry, created = registry.lookup(pid)
+        entry, created = registry.lookup(pid, charge_new_legacy=lambda: _charge_new_legacy_row(request))
+    except registry.LegacyMintThrottled as exc:
+        resp = (render_locus_page_error(request, pid, exc) if html else
+                _json({"error": "rate limited", "detail": exc.message, "pid": pid}, status=429, media=JSON))
+        resp["Retry-After"] = str(exc.retry_after)
+        return resp
     except registry.LookupError_ as exc:
         if html:
             return render_locus_page_error(request, pid, exc)
@@ -404,6 +413,37 @@ def _locus_entity(request, pid, force_json: bool = False):
     if header:
         resp["X-WHG-Locus-Status"] = header
     return resp
+
+
+class LegacyLocusRowThrottle(SimpleRateThrottle):
+    """The budget for NEW legacy registry rows (``registry.LEGACY_NEW_ROWS_PER_HOUR``
+    per hour; ruling 2026-10-21): per user when signed in, else per client IP as DRF
+    identifies it (``get_ident``, the same as the Record page's anonymous throttles).
+    Charged only by ``registry.mint_legacy`` when it is about to write a row, so
+    existing rows and ids outside the snapshot cost nothing. The rate is read at use
+    from the constant (no settings entry: settings.py is never promoted wholesale)."""
+    scope = "locus_legacy_row"
+
+    def get_rate(self):
+        return f"{registry.LEGACY_NEW_ROWS_PER_HOUR}/hour"
+
+    def get_cache_key(self, request, view):
+        user = getattr(request, "user", None)
+        ident = f"u{user.pk}" if user is not None and user.is_authenticated else self.get_ident(request)
+        return self.cache_format % {"scope": self.scope, "ident": ident}
+
+
+def _charge_new_legacy_row(request):
+    """``(allowed, retry_after)`` for one new legacy row. A cache that cannot be
+    read admits (as the other WHG limiters do): the snapshot bounds the rows."""
+    throttle = LegacyLocusRowThrottle()
+    try:
+        if throttle.allow_request(request, None):
+            return True, 0
+        return False, int(throttle.wait() or 1)
+    except Exception:  # noqa: BLE001
+        logger.warning("legacy locus row throttle: cache unavailable, admitting")
+        return True, 0
 
 
 def _json_dereference_throttled(request):
