@@ -9,6 +9,7 @@ from django.contrib.gis.db.models import Extent
 from django.contrib.postgres import indexes as django_postgres_indexes
 from django.contrib.postgres.fields import ArrayField
 from django.db.models import JSONField, Q
+from django.db.models.fields.json import KeyTextTransform
 from django.db import models
 
 # from datasets.models import Dataset
@@ -319,6 +320,14 @@ class PlaceLink(models.Model):
     class Meta:
         managed = True
         db_table = 'place_link'
+        indexes = [
+            # place#325: the concordance's tiers 2-3 look rows up by
+            # (jsonb ->> 'identifier') (places/concordance.py _LinkIdentifier).
+            # The expression must stay identical to that query's, or the
+            # planner cannot use the index. Built CONCURRENTLY (0026).
+            models.Index(KeyTextTransform('identifier', 'jsonb'),
+                         name='place_link_identifier_idx'),
+        ]
 
 
 class PlaceWhen(models.Model):
