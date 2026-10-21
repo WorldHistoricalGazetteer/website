@@ -15,8 +15,9 @@ urlpatterns = [
 
     # START new urls-> views (kg 2023-10-31)
     path('portal/', views.PlacePortalView.as_view(), name='place-portal'),
-    # place#325 Stage 4: with V4_LANDING_ENABLED (default off) this 301s to the
-    # Record URI; off, the wrapper returns the portal's own response untouched.
+    # place#325 Stage 4: with V4_LANDING_ENABLED (default off) this redirects to the
+    # Record URI (302 until the v4 release: v4_landing.PORTAL_REDIRECT_STATUS); off,
+    # the wrapper returns the portal's own response untouched.
     path('portal/<int:pid>/', portal_pid_view(views.PlacePortalView.as_view()), name='place-portal-pid'),
     path('portal/<str:encoded_ids>/', views.PlacePortalView.as_view(), name='place-portal-multipid'),
     path('<int:whg_id>/portal/', views.PlacePortalView.as_view(), name='place-portal-whg-id'),

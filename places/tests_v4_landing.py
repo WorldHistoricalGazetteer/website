@@ -7,7 +7,8 @@ Run locally (never in a prod container):
 
 Off: every public route answers exactly as before (the wrappers return the
 legacy view's own response OBJECT, and each route's legacy answer is pinned).
-On: the portal pid routes 301 to the Record URI; the Record page is public for
+On: the portal pid routes redirect (302 until the v4 release, query string kept)
+to the Record URI; the Record page is public for
 public records; ``/entity/place:<contributed>/`` resolves anonymously for a
 public, non-embargoed record only (#271), while ``/api`` stays closed.
 
@@ -23,7 +24,7 @@ from django.http import HttpResponse
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import resolve
 
-from places.v4_landing import PORTAL_REDIRECTS, portal_pid_view, v4_landing_enabled
+from places.v4_landing import PORTAL_REDIRECT_STATUS, PORTAL_REDIRECTS, portal_pid_view, v4_landing_enabled
 
 LOCMEM = {**settings.CACHES,
           "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "v4l"}}
@@ -112,7 +113,7 @@ class SwitchOffTests(_Fixture):
         with override_settings(V4_LANDING_ENABLED=True):  # the control: on, it is NOT the legacy object
             r = portal_pid_view(legacy)(req, pid=1)
             self.assertIsNot(r, sentinel)
-            self.assertEqual((r.status_code, r["Location"]), (301, "/entity/place:1/"))
+            self.assertEqual((r.status_code, r["Location"]), (302, "/entity/place:1/"))
         self.assertEqual(len(calls), 1)
 
     def test_routes_are_wrapped_around_the_original_views(self):
@@ -159,14 +160,40 @@ class SwitchOffTests(_Fixture):
 @ON
 class SwitchOnTests(_Fixture):
 
-    def test_portal_pid_routes_301_to_the_record_uri(self):
+    def test_portal_pid_routes_redirect_to_the_record_uri(self):
+        # 302, not 301, until the v4 release (review 2026-10-21): a browser caches a
+        # 301, and with the switch later off /entity/place:<pk>/ 302s back to the
+        # portal, which the cached 301 would send round again.
+        self.assertEqual(PORTAL_REDIRECT_STATUS, 302)
+        self.assertEqual({row["status"] for row in PORTAL_REDIRECTS if row["target"]}, {302})
         for url in (f"/places/portal/{self.Pub.pk}/", f"/places/{self.Pub.pk}/"):
             r = self.anon(url)
-            self.assertEqual((r.status_code, r["Location"]), (301, f"/entity/place:{self.Pub.pk}/"), url)
+            self.assertEqual((r.status_code, r["Location"]), (302, f"/entity/place:{self.Pub.pk}/"), url)
         # A private pid redirects too (nothing revealed); its target withholds it
         # (places/tests_v4_entity_271.py).
         r = self.anon(f"/places/portal/{self.Priv.pk}/")
-        self.assertEqual((r.status_code, r["Location"]), (301, f"/entity/place:{self.Priv.pk}/"))
+        self.assertEqual((r.status_code, r["Location"]), (302, f"/entity/place:{self.Priv.pk}/"))
+
+    def test_portal_pid_routes_keep_the_query_string(self):
+        # The legacy bare route's RedirectView had query_string=True.
+        for url in (f"/places/portal/{self.Pub.pk}/", f"/places/{self.Pub.pk}/"):
+            r = self.anon(url + "?q=1&lang=fr")
+            self.assertEqual((r.status_code, r["Location"]),
+                             (302, f"/entity/place:{self.Pub.pk}/?q=1&lang=fr"), url)
+            r = self.anon(url)                                   # and none when there is none
+            self.assertEqual(r["Location"], f"/entity/place:{self.Pub.pk}/", url)
+
+    def test_switching_off_again_leaves_no_loop(self):
+        """The round trip a cached 301 would turn into a loop: on, the portal sends
+        to the Record URI with a non-permanent status; off, the Record URI sends
+        (back) to the portal, which then serves the portal's own answer."""
+        r = self.anon(f"/places/portal/{self.Pub.pk}/")
+        self.assertNotEqual(r.status_code, 301)
+        with override_settings(V4_LANDING_ENABLED=False):
+            r = self.as_user(self.plain, f"/entity/place:{self.Pub.pk}/")
+            self.assertEqual((r.status_code, r["Location"]), (302, f"/places/portal/{self.Pub.pk}/"))
+            r = self.as_user(self.plain, f"/places/portal/{self.Pub.pk}/")
+            self.assertEqual((r.status_code, r["Location"]), (302, f"/places/{self.Pub.pk}/detail"))
 
     def test_pending_routes_keep_serving_the_legacy_portal(self):
         pending = {row["name"] for row in PORTAL_REDIRECTS if row["target"] is None}

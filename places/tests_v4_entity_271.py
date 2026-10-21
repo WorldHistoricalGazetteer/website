@@ -83,7 +83,7 @@ class EntitySwitchOnTests(_Fixture):
 
     def test_retired_portal_chain_ends_at_the_record_or_404(self):
         r = self.client.get(f"/places/portal/{self.Pub.pk}/", follow=True)
-        self.assertEqual(r.redirect_chain, [(f"/entity/place:{self.Pub.pk}/", 301),
+        self.assertEqual(r.redirect_chain, [(f"/entity/place:{self.Pub.pk}/", 302),
                                             (f"/atlas/place/{self.Pub.pk}/", 302)])
         self.assertContains(r, "Public Town")
         r = self.client.get(f"/places/portal/{self.Priv.pk}/", follow=True)

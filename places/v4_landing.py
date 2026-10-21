@@ -8,7 +8,8 @@ object untouched (tested in ``places/tests_v4_landing.py``).
 On, three things change together, because none is coherent without the others:
 
 1. **Portal retirement.** The v3.2 portal routes that have a sound v4 target
-   answer with a permanent redirect to it (``PORTAL_REDIRECTS``).
+   redirect to it (``PORTAL_REDIRECTS``), with ``PORTAL_REDIRECT_STATUS``: a
+   302 until the v4 release, 301 from then (see the constant).
 2. **The Record page is public.** ``/atlas/place/<pk>/`` and its concordance
    are served to anonymous and non-beta visitors too, for records the
    anonymous visibility rule admits (``visible_places_q``: a public dataset,
@@ -27,10 +28,18 @@ may not carry the settings line) is off by construction.
 from __future__ import annotations
 
 from django.conf import settings
-from django.http import HttpResponsePermanentRedirect
+from django.http import HttpResponsePermanentRedirect, HttpResponseRedirect
 from django.urls import reverse
 
 SETTING = "V4_LANDING_ENABLED"
+
+# 302 (not cached) until the v4 release. The issue's "permanent redirects" (#172,
+# place#325) become 301 AT the release, by changing this one constant: a 301 is
+# cached by browsers indefinitely, so a 301 served while the switch can still be
+# turned off would outlive it. With the switch off, /entity/place:<pk>/ 302s back
+# to /places/portal/<pk>/, which a cached 301 sends to /entity/place:<pk>/ again:
+# a redirect loop in every browser that saw the 301 (review 2026-10-21).
+PORTAL_REDIRECT_STATUS = 302
 
 
 def v4_landing_enabled() -> bool:
@@ -47,11 +56,11 @@ def record_uri(pk) -> str:
 # reason given: its v4 target does not exist yet or is not decided.
 PORTAL_REDIRECTS = (
     {"route": "/places/portal/<int:pid>/", "name": "places:place-portal-pid",
-     "target": "/entity/place:<pid>/", "status": 301,
+     "target": "/entity/place:<pid>/", "status": PORTAL_REDIRECT_STATUS,
      "why": "The record and its one-step close matches; the Record page's Concordance "
             "section shows the same neighbours, typed and attributed."},
     {"route": "/places/<int:pid>/", "name": "places:place-bare-redirect",
-     "target": "/entity/place:<pid>/", "status": 301,
+     "target": "/entity/place:<pid>/", "status": PORTAL_REDIRECT_STATUS,
      "why": "Today a 302 to the portal pid form; points straight at the record instead."},
     {"route": "/places/<int:whg_id>/portal/", "name": "places:place-portal-whg-id",
      "target": None, "status": None,
@@ -69,11 +78,18 @@ PORTAL_REDIRECTS = (
 
 def portal_pid_view(legacy_view):
     """``/places/portal/<pid>/`` and ``/places/<pid>/``: off, the legacy view's
-    own response; on, 301 to the Record URI. The redirect reveals nothing: the
-    target applies the visibility rule, and a missing pid redirects too."""
+    own response; on, a ``PORTAL_REDIRECT_STATUS`` redirect to the Record URI,
+    with the query string kept (the legacy bare route's RedirectView had
+    ``query_string=True``). The redirect reveals nothing: the target applies the
+    visibility rule, and a missing pid redirects too."""
     def view(request, *args, **kwargs):
         if v4_landing_enabled():
-            return HttpResponsePermanentRedirect(record_uri(kwargs["pid"]))
+            url = record_uri(kwargs["pid"])
+            qs = request.META.get("QUERY_STRING", "")
+            if qs:
+                url = f"{url}?{qs}"
+            cls = HttpResponsePermanentRedirect if PORTAL_REDIRECT_STATUS == 301 else HttpResponseRedirect
+            return cls(url)
         return legacy_view(request, *args, **kwargs)
     view.legacy_view = legacy_view
     return view
