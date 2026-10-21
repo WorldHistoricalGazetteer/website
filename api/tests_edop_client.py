@@ -183,6 +183,16 @@ class StatusTests(SimpleTestCase):
             self.assertNotIn("raw", r)
             self.assertIsNone(edop.summarise(r))
 
+    def test_default_transport_never_calls_out_under_test(self):
+        """A page reached from ANY test suite must not call the live service: the real
+        transport refuses under manage.py test, and that reads as unavailable."""
+        with patch("requests.get", side_effect=AssertionError("network call")) as get:
+            r = edop.fetch_signature(edop.basin_request(*LONDON))
+        self.assertEqual((r["status"], r["reason"]), ("unavailable", "RuntimeError"))
+        get.assert_not_called()
+        r2, t = self.fetch(BASIN, params=edop.basin_request(0, 0))       # control: a fake is still used
+        self.assertEqual((r2["status"], len(t.calls)), ("ok", 1))
+
     def test_disabled_asks_nothing(self):
         with override_settings(EDOP_ENABLED=False):
             r, t = self.fetch(BASIN)

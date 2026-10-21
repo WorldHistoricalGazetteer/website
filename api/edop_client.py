@@ -52,6 +52,7 @@ import hashlib
 import json
 import logging
 import math
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Callable, Iterable, Optional
@@ -204,7 +205,17 @@ def cache_key(params: dict) -> str:
 # Transport and fetch
 # ---------------------------------------------------------------------------
 
+def _running_tests() -> bool:
+    """True under ``manage.py test`` (the same test settings.py uses)."""
+    return "test" in sys.argv
+
+
 def _requests_transport(url: str, params: dict, timeout: tuple) -> tuple:
+    # Automated tests never call the live service: tests that need EDOPS replace this
+    # function with a fake, and any page a browser test opens that reaches it anyway
+    # (another suite's Record page, say) gets "unavailable" instead of a network call.
+    if _running_tests():
+        raise RuntimeError("EDOPS is not called from automated tests")
     import requests
     resp = requests.get(url, params=params, timeout=timeout,
                         headers={"Accept": "application/json",
@@ -683,7 +694,7 @@ def plan_locus(members: list) -> dict:
     spans = [m["years"] for m in located if m.get("years")]
     union = [min(s[0] for s in spans), max(s[1] for s in spans)] if spans else None
     base = {"span_km": round(spread, 1), "tight_km": LOCUS_TIGHT_KM, "n_located": len(located),
-            "n_members": len(members)}
+            "n_members": len(members), "max_member_signatures": LOCUS_MAX_MEMBER_SIGNATURES}
     if len(located) == 1 or spread <= SAME_POINT_KM:
         years, yblock = _years_block(union)
         lon, lat = pts[0][:2]
