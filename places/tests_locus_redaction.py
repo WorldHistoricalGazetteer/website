@@ -189,7 +189,8 @@ class AdminTests(TestCase):
         change = f"/admin/places/locusregistryentry/{{}}/change/"
         self.assertContains(self.client.get(change.format(e.pk)), e.token)      # presence, before
         resp = self.client.post("/admin/places/locusregistryentry/",
-                                {"action": "redact_loci", "_selected_action": [e.pk]})
+                                {"action": "redact_loci", "_selected_action": [e.pk], "apply": "1",
+                                 "reason": "contains a home address"})
         self.assertEqual(resp.status_code, 302)
         row = LocusRegistryEntry.objects.get(pk=e.pk)
         self.assertTrue(row.is_redacted)
@@ -202,6 +203,78 @@ class AdminTests(TestCase):
         self.assertContains(self.client.get(change.format(keep.pk)), keep.token)   # unredacted row still shows
         self.assertFalse(LocusRegistryEntry.objects.get(pk=keep.pk).is_redacted)
         # Withdraw via the admin, then the status field is not editable: there is no way back.
-        self.client.post("/admin/places/locusregistryentry/", {"action": "withdraw_loci", "_selected_action": [e.pk]})
+        self.client.post("/admin/places/locusregistryentry/", {"action": "withdraw_loci", "_selected_action": [e.pk],
+                                                              "apply": "1", "reason": "minter asked"})
         self.assertEqual(LocusRegistryEntry.objects.get(pk=e.pk).status, "withdrawn")
         self.assertNotContains(self.client.get(change.format(e.pk)), 'name="status"')
+
+
+class AdminReasonTests(TestCase):
+    """Review #4: Withdraw and Redact ask for a reason on a confirmation form (the
+    withdrawal reason is public, the redaction reason staff-only, and the form says
+    so); the actions need the change permission; a WITHDRAWN row hides its recipe
+    text in the admin too, as a redacted one does."""
+    URL = "/admin/places/locusregistryentry/"
+
+    @classmethod
+    def setUpTestData(cls):
+        from django.contrib.auth.models import Permission
+        cls.user = make_user("reason_minter")
+        cls.admin = get_user_model().objects.create_superuser(
+            username="reason_admin", email="ra@example.org", password="pw", given_name="R", surname="A")
+        cls.viewer = get_user_model().objects.create_user(
+            username="reason_viewer", email="rv@example.org", password="pw", given_name="R", surname="V",
+            is_staff=True)
+        cls.viewer.user_permissions.add(Permission.objects.get(codename="view_locusregistryentry"))
+
+    def setUp(self):
+        self.e, _ = registry.mint_recipe(recipe("Reasonville"), self.user)
+        self.client.force_login(self.admin)
+
+    def act(self, action, **extra):
+        return self.client.post(self.URL, {"action": action, "_selected_action": [self.e.pk], **extra})
+
+    def test_withdraw_asks_for_a_public_reason(self):
+        form = self.act("withdraw_loci")
+        self.assertEqual(form.status_code, 200)
+        self.assertContains(form, 'name="reason"')
+        self.assertContains(form, "shown publicly")
+        self.assertEqual(LocusRegistryEntry.objects.get(pk=self.e.pk).status, "active")   # nothing yet
+        again = self.act("withdraw_loci", apply="1", reason="   ")
+        self.assertContains(again, "A reason is required")
+        self.assertEqual(LocusRegistryEntry.objects.get(pk=self.e.pk).status, "active")
+        done = self.act("withdraw_loci", apply="1", reason="The minter asked for it to be withdrawn.")
+        self.assertEqual(done.status_code, 302)
+        row = LocusRegistryEntry.objects.get(pk=self.e.pk)
+        self.assertEqual((row.status, row.withdrawn_reason, row.withdrawn_by),
+                         ("withdrawn", "The minter asked for it to be withdrawn.", self.admin))
+
+    def test_redact_asks_for_a_staff_only_reason(self):
+        form = self.act("redact_loci")
+        self.assertContains(form, 'name="reason"')
+        self.assertContains(form, "staff only")
+        self.assertFalse(LocusRegistryEntry.objects.get(pk=self.e.pk).is_redacted)
+        self.act("redact_loci", apply="1", reason="personal data in the query")
+        row = LocusRegistryEntry.objects.get(pk=self.e.pk)
+        self.assertEqual(row.redaction_reason, "personal data in the query")
+
+    def test_actions_need_the_change_permission(self):
+        self.client.force_login(self.viewer)
+        page = self.client.get(self.URL)
+        self.assertEqual(page.status_code, 200)
+        for action in ("withdraw_loci", "redact_loci", "hide_minter_loci"):
+            self.assertNotContains(page, f'value="{action}"')
+            self.act(action, apply="1", reason="x")
+        row = LocusRegistryEntry.objects.get(pk=self.e.pk)
+        self.assertEqual((row.status, row.is_redacted), ("active", False))
+        self.client.force_login(self.admin)                       # presence: the superuser has them
+        self.assertContains(self.client.get(self.URL), 'value="withdraw_loci"')
+
+    def test_withdrawn_rows_hide_their_recipe_text_in_the_admin(self):
+        change = f"{self.URL}{self.e.pk}/change/"
+        self.assertContains(self.client.get(change), self.e.token)
+        self.e.withdraw("gone (test)", by=self.admin)
+        page = self.client.get(change)
+        self.assertEqual(page.status_code, 200)
+        self.assertNotContains(page, self.e.token)
+        self.assertContains(page, self.e.pk)
