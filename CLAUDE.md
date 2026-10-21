@@ -2,14 +2,14 @@
 
 ## Project Overview
 
-**World Historical Gazetteer (WHG)** — a Django 4.1.7 web platform for linking, visualising, and sharing data about historical places. Python 3.10+, PostgreSQL 15/PostGIS 3.4, Elasticsearch 8, Celery 5.3+, Redis.
+**World Historical Gazetteer (WHG)** — a Django 4.2 (LTS; pinned 4.2.30 in requirements.txt) web platform for linking, visualising, and sharing data about historical places. Python 3.10+, PostgreSQL 15/PostGIS 3.4, Elasticsearch 8, Celery 5.3+, Redis.
 
 **Repository:** `whg3` (the `website` repo on GitHub at `WorldHistoricalGazetteer/website`)
 
 ## Architecture
 
 ### Stack
-- **Backend:** Django 4.1.7 + Django REST Framework 3.14 + Celery
+- **Backend:** Django 4.2 (LTS; pinned 4.2.30 in requirements.txt) + Django REST Framework 3.14 + Celery
 - **Database:** PostgreSQL 15 with PostGIS 3.4 (via `psycopg2-binary`)
 - **Search:** Elasticsearch 9 hosted on Pitt CRC
 - **Frontend:** Bootstrap 5.2, jQuery 3.6, Webpack 5 (bundles to `static/webpack/`)
