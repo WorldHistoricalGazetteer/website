@@ -421,7 +421,12 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("resolved", text)
         self.assertIn("Gateway Town", text)
         self.assertNotIn("signed-out", text)
-        self.assertEqual(asked, [(("gn:100",), True)])
+        # Every ask is for the open namespace only, always with the anonymous opt-in.
+        # Not exactly one: with the switch on the page's public gloss/environment
+        # sections (ruling 2026-10-21) read the group's gateway details too, under
+        # the same anonymous rule (places.record_group.gateway_members).
+        self.assertTrue(asked)
+        self.assertEqual(set(asked), {(("gn:100",), True)})
         self.assertTrue(mapped)
         self.assertEqual(page.evaluate("window.__whgRecord.mapped"), 2)       # Gateway Town + Record B
 
