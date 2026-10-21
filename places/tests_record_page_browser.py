@@ -27,7 +27,7 @@ from unittest.mock import patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.test import Client, LiveServerTestCase
+from django.test import Client, LiveServerTestCase, override_settings
 
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 SHOTS = os.environ.get("WHG_BROWSER_SHOTS")
@@ -101,6 +101,11 @@ class RecordPageBrowserTests(LiveServerTestCase):
         GazetteerRegistryEntry.objects.update_or_create(
             id="gn", defaults=dict(name="gn", namespace="gn", entry_class="authority", status="published"))
         GazetteerRegistryEntry.objects.filter(namespace="viaf").delete()
+        # Dataset a is in the search index (its registry row was pushed); b is not.
+        GazetteerRegistryEntry.objects.update_or_create(
+            id=f"whg:{a.pk}", defaults=dict(name="Dataset a", namespace="whg", entry_class="dataset",
+                                            status="published"))
+        self.ds_a = a
         self.A = place(a, "Record A", "A1", xy=(0.0, 0.0), links=[("exactMatch", "gn:100"),
                                                                    ("closeMatch", "viaf:55")])
         self.B = place(b, "Record B", "B1", xy=(0.5, 0.5), links=[("closeMatch", f"whg:{self.A.pk}")])
@@ -294,6 +299,52 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("not a finding that it is absent", d["gn:100"])
         self.assertNotIn("holds no record", d["gn:100"])
         self.assertIn("not_held", d["viaf:55"])
+
+    @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
+    def test_default_cluster_link_resolves(self):
+        """The secondary header link opens the locus page for this record at the
+        Atlas defaults, and that page re-runs it and selects the record's cluster.
+        A record whose dataset is not in the index has no such link (but keeps
+        the primary one)."""
+        from search.tests_locus import STOPLIST, FakeGateway, _Resp
+        member = f"whg:{self.ds_a.pk}:L1"
+        gw = FakeGateway(hits=[
+            {"place_id": member, "title": "Lonely Place", "namespace": "whg", "repr_point": [2.0, 2.0],
+             "names": [{"label": "Lonely Place"}]},
+            {"place_id": "gn:9", "title": "Lonely Place", "namespace": "gn", "repr_point": [100.0, -30.0],
+             "names": [{"label": "Lonely Place"}]},
+        ])
+        page = self.new_page()
+        page.add_init_script("try { localStorage.setItem('whg.debug', '1'); } catch (e) {}")
+        with patch("api.crc_client.requests.post", side_effect=gw), \
+                patch("api.crc_client.requests.get", side_effect=lambda *a, **k: _Resp(200)), \
+                patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.B.pk}/")
+            on_b = page.evaluate("""() => ({primary: !!document.getElementById('explore_similar_header'),
+                                           secondary: !!document.getElementById('default_cluster_link')})""")
+            page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/")
+            link = page.evaluate("""() => { const a = document.getElementById('default_cluster_link');
+                return a && {text: a.textContent.trim(), href: a.getAttribute('href'),
+                             primary: !!document.getElementById('explore_similar_header')}; }""")
+            self.assertIsNotNone(link, f"no default-settings link; console={self.console[-10:]}")
+            page.click("#default_cluster_link")
+            ok = self.wait_for(page, "window.__whgLocus && window.__whgLocus.resolved !== undefined", 45000)
+            state = page.evaluate("window.__whgLocus || null")
+            self.shot(page, "record_default_cluster_locus")
+        self.assertEqual(on_b, {"primary": True, "secondary": False})
+        self.assertEqual(link["text"], "See this record's cluster at default settings")
+        self.assertTrue(link["primary"])
+        self.assertTrue(link["href"].startswith("/atlas/locus/?r="), link["href"])
+        self.assertTrue(ok, f"the locus page never resolved; console={self.console[-10:]}")
+        self.assertIs(state["resolved"], True, state)
+        self.assertEqual(state["surviving"], [member])
+        self.assertEqual(state["missing"], [])
+        self.assertIn(member, state["selectedIds"])
+        self.assertNotIn("gn:9", state["selectedIds"])      # the far namesake is another cluster
+        self.assertEqual(state["stoplistCount"], len(STOPLIST))
+        self.assertEqual(len(gw.bodies), 1)
+        self.assertEqual((gw.bodies[0]["query"], gw.bodies[0]["mode"], gw.bodies[0]["size"]),
+                         ("Lonely Place", "in", 100))
 
     def test_harness_can_fail(self):
         """The same checks, with the page's bundle blocked: every one must fail.

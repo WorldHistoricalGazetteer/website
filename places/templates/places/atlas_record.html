@@ -45,6 +45,18 @@
            href="{{ explore_similar.url }}">
           <i class="fas fa-magnifying-glass me-1"></i>Explore similar records
         </a>
+        {% if default_cluster_url %}
+          {% comment %}
+            Secondary (place#325 Stage 2): the unminted locus page for a recipe
+            with this record as its one member, its title as the query, and the
+            Atlas's literal default settings. Omitted where the record is not in
+            the search index under a gateway id, rather than shown dead.
+          {% endcomment %}
+          <a class="d-block small mt-1 text-end" id="default_cluster_link" href="{{ default_cluster_url }}"
+             title="The search index's cluster for this record's name, at the Atlas's default settings. Shareable, not permanent.">
+            <i class="fas fa-share-nodes me-1"></i>See this record's cluster at default settings
+          </a>
+        {% endif %}
       </div>
     </div>
     <ul class="nav nav-pills nav-sm mt-3 atlas-record-tabs">

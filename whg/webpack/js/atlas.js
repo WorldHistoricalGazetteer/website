@@ -18,6 +18,7 @@ import AreaSearchRouter from './areaSearchRouter';
 import { startAtlasTour, hasSeenAtlasTour } from './atlasTour.js';
 import { polygonToCells, latLngToCell, cellToParent } from 'h3-js';
 import { clusterHits, suggestTheta, DEFAULT_PARAMS } from './clustering.js';
+import { ATLAS_DEFAULT_THETA, ATLAS_DEFAULT_MATCH_MODE, ATLAS_DEFAULT_CLUSTERING } from './atlas_cluster_defaults.js';
 import { encodeRecipeToken, decodeRecipeToken, recipePid, retrievalFromSearchBody, RecipeError } from './locus_recipe.js';
 import PlaceList from './atlasPlaceList.js';
 import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
@@ -45,7 +46,7 @@ let areaRouter = null;
 // only where a core is attested. Replaces the old range + '+Undated' hatch.
 let temporalMode = 'off';
 let searchMode = 'areas';       // 'areas' | 'toponyms'
-let searchMatchMode = 'in';   // main Places search match type: exact | starts | in (contains) | phonetic
+let searchMatchMode = ATLAS_DEFAULT_MATCH_MODE;   // main Places search match type: exact | starts | in (contains) | phonetic
 let useViewport = false;       // viewport-constraint toggle (non-globe only)
 let clusterResults = true;
 let selectedRegions = [];        // Array of {id, label, namespace, geometry}
@@ -70,12 +71,9 @@ let temporalSpanBeforeLock = 1000;
 const TEMPORAL_MIN = -2000;
 const TEMPORAL_MAX = 2100;
 
-/* Default merge sensitivity (θ_query). Bumped from the calibration default 0.55
-   to a more disambiguating 0.65: empirically (spread-vs-θ sweep on ambiguous
-   names) the max intra-cluster geographic spread collapses from ~30 km to ~4 km
-   between 0.55 and 0.65 — tightening loose same-name merges — while 0.70 starts
-   over-splitting genuine multi-source places into pairs. */
-const ATLAS_DEFAULT_THETA = 0.65;
+/* Default merge sensitivity (θ_query): ATLAS_DEFAULT_THETA, imported from
+   atlas_cluster_defaults.js (the one place the Atlas's literal defaults live;
+   the Record page's default-settings locus link mirrors them server-side). */
 
 /* ═══════════════════════════════════════════════════════════════════
    Init: Load data dependencies
@@ -2664,7 +2662,7 @@ let thetaUserSet = false;          // true once the user drags θ → stop auto-
 let thetaAutoFitted = false;       // whether the current θ was auto-fitted to the result set
 let thetaNeedsFit = true;          // re-fit θ only on a FRESH query; preserve it across reloads of a result set
 let weightOverrides = {};          // per-facet weight slider overrides (merged over params.weights)
-const ATLAS_DEFAULT_NS_PENALTY = 0.15;  // mirrors clustering.js DEFAULT_PARAMS.same_ns_penalty
+const ATLAS_DEFAULT_NS_PENALTY = ATLAS_DEFAULT_CLUSTERING.same_ns_penalty;  // clustering.js DEFAULT_PARAMS.same_ns_penalty
 let sameNsPenaltyOverride = ATLAS_DEFAULT_NS_PENALTY; // same-gazetteer repulsion strength (slider)
 let clusterFC = null;              // last plotted FeatureCollection (feature.id = hit index)
 let clusterPidToIndex = null;      // place_id → feature/hit index (for panel↔map sync)
@@ -2811,7 +2809,7 @@ function renderPortal(place, pid) {
 
 // Fallback weights when the gateway ships no clustering_params (mirrors
 // clustering.js DEFAULT_PARAMS / indexing clustering_params.json).
-const DEFAULT_CLUSTER_WEIGHTS = { name: 0.35, spatial: 0.20, temporal: 0.15, type: 0.15, link: 0.15 };
+const DEFAULT_CLUSTER_WEIGHTS = ATLAS_DEFAULT_CLUSTERING.weights;
 
 // Seed the θ + weight sliders from the shipped clustering_params (called once
 // per search, before the user starts tuning). Resets any prior overrides.
@@ -3252,7 +3250,7 @@ function renderClusters() {
 // to the gateway match modes (exact | starts | in | phonetic).
 const SEARCH_MODE_LABELS = { exact: 'Exactly', starts: 'Starts with', in: 'Contains', phonetic: 'Sounds like' };
 function setSearchMatchMode(mode) {
-    if (!SEARCH_MODE_LABELS[mode]) mode = 'in';
+    if (!SEARCH_MODE_LABELS[mode]) mode = ATLAS_DEFAULT_MATCH_MODE;
     searchMatchMode = mode;
     const label = document.getElementById('atlas_searchmode_label');
     if (label) label.textContent = SEARCH_MODE_LABELS[mode];
@@ -3563,7 +3561,7 @@ function clearAll() {
     }
 
     // Reset search match type to the default (Contains)
-    setSearchMatchMode('in');
+    setSearchMatchMode(ATLAS_DEFAULT_MATCH_MODE);
 
     // Reset viewport constraint
     useViewport = false;

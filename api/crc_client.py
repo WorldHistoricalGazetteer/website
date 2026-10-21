@@ -238,6 +238,12 @@ def crc_geometry(place_id: str, user=None, meta: dict | None = None,
     return None
 
 
+# The candidate limit a search gets when its caller names none: the Atlas
+# Places search sends no ``size``, so this is the Atlas default too (the Record
+# page's default-settings locus recipe reads it from here, place#325 Stage 2).
+DEFAULT_SEARCH_SIZE = 100
+
+
 def crc_search(options: dict, user=None) -> dict | None:
     """Fail-safe wrapper over :func:`crc_search_status` — the response, or None.
 
@@ -308,7 +314,7 @@ def crc_search_status(options: dict, user=None,
     body = {
         "query": (options.get("qstr") or "").strip() or None,
         "mode": _mode,
-        "size": int(options.get("size") or 100),
+        "size": int(options.get("size") or DEFAULT_SEARCH_SIZE),
         "geom": "full",
         "include_hard_links": True,
         "include_clustering_fields": True,

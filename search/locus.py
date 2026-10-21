@@ -43,6 +43,24 @@ from places.locus_recipe import (RecipeError, decode_recipe_token, encode_recipe
 # The query-string parameter that carries the token. One name, one place.
 LOCUS_TOKEN_PARAM = "r"
 
+# Server-side mirror of whg/webpack/js/atlas_cluster_defaults.js, the one place
+# the Atlas keeps its LITERAL clustering and match-mode defaults. The Record
+# page's "See this record's cluster at default settings" link builds its recipe
+# from these (place#325 Stage 2); places.tests_record_page runs the JS module
+# under Node and asserts equality, so neither can drift alone. They are the
+# fallback literals: a live Atlas search seeds its weights from the gateway's
+# calibrated clustering_params and auto-fits theta, which no server-built recipe
+# can know in advance.
+ATLAS_DEFAULT_MATCH_MODE = "in"
+ATLAS_DEFAULT_CLUSTERING = {
+    "weights": {"name": 0.35, "spatial": 0.20, "temporal": 0.15, "type": 0.15, "link": 0.15},
+    "theta": 0.65,
+    "tau_name": 0.75,
+    "tau_link": 1.0,
+    "same_ns_penalty": 0.15,
+    "respect_distinct": True,
+}
+
 MODE_LABELS = {
     "exact": "exactly",
     "starts": "starts with",
