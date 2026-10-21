@@ -63,6 +63,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
+from api.views_context import whg_context_url
 from places import locus_registry as registry
 from search.views_locus import entry_context, render_locus_page
 
@@ -85,15 +86,10 @@ JSONLD = "application/ld+json"
 JSON = "application/json"
 OFFERED = (JSONLD, JSON, HTML)   # tie order: a wildcard-only client gets JSON-LD
 
-# A small, explicit context. The vocabulary IRI is a placeholder for a locus
-# vocabulary WHG has not yet published (PLATO has no term for a locus: clusters
-# stay out of PLATO by ruling, place#306); a question for SG in the Stage 4 report.
-LOCUS_CONTEXT = {
-    "@vocab": "https://whgazetteer.org/ns/locus#",
-    "pid": "@id",
-    "members": {"@container": "@set"},
-    "candidates": {"@container": "@set"},
-}
+# The @context is WHG's minimal provisional context, served at /ns/whg-context.jsonld
+# (api.views_context; ruling 2026-10-21). It replaced a placeholder ``@vocab``
+# (https://whgazetteer.org/ns/locus#) that resolved nowhere and mapped ``pid`` to
+# ``@id``, which collides with the document's own ``@id`` (invalid JSON-LD).
 
 MEMBERSHIP_STATEMENT = (
     "This identifier names a recipe, not a set of records. The recipe is re-run against the "
@@ -275,12 +271,12 @@ SUPPRESSED_STATEMENT = (
 )
 
 
-def suppressed_document(entry, ctx) -> dict:
+def suppressed_document(entry, ctx, request) -> dict:
     """A withdrawn or redacted locus: PID, status, reason, dates; nothing else.
     Built from an allow-list, so a field added to the full document later
     cannot leak into a tombstone by default."""
     doc = {
-        "@context": LOCUS_CONTEXT,
+        "@context": whg_context_url(request),
         "@id": ctx["url"],
         "@type": "Locus",
         "pid": entry.pid,
@@ -305,9 +301,9 @@ def locus_document(request, entry, resolve: bool = True) -> dict:
     """The JSON(-LD) representation of a registry entry."""
     ctx = entry_context(entry, request)
     if entry.is_suppressed:
-        return suppressed_document(entry, ctx)
+        return suppressed_document(entry, ctx, request)
     doc = {
-        "@context": LOCUS_CONTEXT,
+        "@context": whg_context_url(request),
         "@id": ctx["url"],
         "@type": "Locus",
         "pid": entry.pid,
