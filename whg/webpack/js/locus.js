@@ -23,6 +23,7 @@ import bbox from '@turf/bbox';
 import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
 import { resolveRecipe, canonicalMemberId } from './locus_resolve.js';
 import '../css/locus.css';
+import { loadLocusEnrichment } from './enrichment.js';   // place#325 Stage 3: gloss + EDOPS
 
 const RESOLVE_TIMEOUT_MS = 35000;
 
@@ -225,6 +226,7 @@ async function resolve(root, recipe) {
     renderStoplist(out.stoplist);
     renderResult(recipe, data, out);
     // place#325 Stage 3: describe the selected cluster's current members (gloss + EDOPS).
+    if (out.selection.cluster) loadLocusEnrichment(out.selection.cluster.members || [], document.getElementById('locus_result'));
     const { fc, indexByPid } = hitsToFC(out.hits);
     const highlight = out.selection.cluster
         ? (out.selection.cluster.memberIds || []).map((id) => indexByPid.get(canonicalMemberId(id))).filter((i) => i != null)

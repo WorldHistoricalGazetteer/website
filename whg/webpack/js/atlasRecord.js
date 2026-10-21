@@ -20,6 +20,7 @@
 // `concordance` ends as 'ready' | 'empty' | 'not_public' | 'error'.
 
 import '../css/atlasRecord.css';
+import { initRecordEnrichment } from './enrichment.js';   // place#325 Stage 3: gloss + EDOPS
 
 const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, baseMap: null });
 const FETCH_TIMEOUT_MS = 60000;
@@ -393,6 +394,7 @@ function load(root) {
 function init() {
     const root = document.getElementById('concordance');
     if (root && root.dataset.endpoint) load(root);
+    initRecordEnrichment();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
