@@ -46,7 +46,14 @@ Resolution of an outbound target:
   the page cannot be used to probe whether a private record exists; and not
   ``not_held``, which says WHG holds nothing from that source;
 * anything else (``viaf:``, ``loc:``, unrecognised URLs) is listed with
-  ``status: "not_held"``.
+  ``status: "not_held"``;
+* a PLACEHOLDER (``wd:None``, ``gn:null``, ``nan``, ``undefined``, an empty local part,
+  any namespace, case-insensitive; ``is_placeholder_identifier``) is not an identifier
+  at all. Ruling SG 2026-10-21: show it flagged, never aggregate. It is listed in tier 1
+  with ``status: "placeholder"``, ``aggregates: False`` and ``placeholder: True``, and is
+  never looked up, never used to find inbound or co-citing records, never a self-link,
+  and so never reaches the aggregate, the map, the gloss or EDOPS. (On dev 6,235 links
+  were the literal ``wd:None``, written by an upload: one false co-citation hub.)
 
 Cost: tiers 2 and 3 are one ``place_link`` query each, by identifier, on the
 expression index ``place_link_identifier_idx`` (migration 0026; without it,
@@ -115,6 +122,11 @@ _URL_PATTERNS = (
 )
 _NS_ALIASES = {"wikidata": "wd", "geonames": "gn", "pleiades": "pl", "getty": "tgn", "whgazetteer": WHG_NS}
 _CURIE = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*):(?!//)(.+)$")
+_CURIE_ANY_LOCAL = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*):(?!//)(.*)$")
+# Values an export writes where it had none (Python, JS, pandas). Compared after
+# trimming and lower-casing; "" is an empty local part (``wd:``).
+PLACEHOLDER_VALUES = frozenset({"none", "null", "nan", "undefined", ""})
+PLACEHOLDER_LABEL = "placeholder, not a real identifier: the contributor's data has no value here"
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +154,29 @@ def normalise_identifier(raw) -> tuple[str, Optional[str], Optional[str]]:
             local = local.upper()
         return f"{ns}:{local}", ns, local
     return s, None, None
+
+
+def is_placeholder_identifier(raw) -> bool:
+    """True for a link identifier that is a placeholder for "no value", not an
+    identifier: missing, empty, a bare ``None``/``null``/``nan``/``undefined``, or a
+    CURIE of any namespace whose local part is one of those or empty (``wd:None``,
+    ``WD: none``, ``gn:``). Case-insensitive, whitespace-trimmed. A URL is never a
+    placeholder here (``https://example.org/None`` names something)."""
+    if raw is None:
+        return True
+    s = str(raw).strip()
+    if s.lower() in PLACEHOLDER_VALUES:
+        return True
+    m = _CURIE_ANY_LOCAL.match(s)
+    return bool(m) and m.group(2).strip().lower() in PLACEHOLDER_VALUES
+
+
+def _placeholder_namespace(raw) -> Optional[str]:
+    m = _CURIE_ANY_LOCAL.match(str(raw or "").strip())
+    if not m:
+        return None
+    ns = m.group(1).lower()
+    return _NS_ALIASES.get(ns, ns)
 
 
 def identifier_variants(curie: str) -> list[str]:
@@ -184,7 +219,13 @@ def is_self_link(identifier_raw, place_id: int, src_id) -> bool:
     Same test as the place#325 measurement (1,805,748 self-links on prod):
     the identifier's local part equals the record's own ``src_id``. A numeric
     ``src_id`` that coincides with an unrelated authority id would also match;
-    that is accepted as the price of not needing a per-dataset authority map."""
+    that is accepted as the price of not needing a per-dataset authority map.
+
+    A placeholder (``is_placeholder_identifier``) is never a self-link, whatever the
+    ``src_id``: a record whose ``src_id`` is the literal ``None`` would otherwise make
+    ``wd:None`` its own identifier, and every carrier of ``wd:None`` its attester."""
+    if is_placeholder_identifier(identifier_raw):
+        return False
     raw = str(identifier_raw or "").strip()
     src = str(src_id or "").strip()
     ident, ns, local = normalise_identifier(raw)
@@ -300,6 +341,7 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
          "records": [ {place_id|place_id(gateway), title, has_geometry, repr_point, ...} ],
          "has_geometry": bool}
 
+    ``placeholder``: not an identifier (``is_placeholder_identifier``); never asked.
     ``not_found``: asked and definitively absent. ``not_held``: no store WHG
     has could hold it (``viaf:``, an unknown URL, or a namespace not in the
     gateway). ``unavailable``: a ``whg:`` identifier that names no record the
@@ -314,10 +356,16 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
 
     curies = [c for c in dict.fromkeys(curies) if c]
     out: dict[str, dict] = {}
-    parsed = {c: normalise_identifier(c) for c in curies}
 
     def blank(status, via=None):
         return {"status": status, "via": via, "records": [], "has_geometry": False}
+
+    # A placeholder is answered without looking anything up (module doc).
+    for c in curies:
+        if is_placeholder_identifier(c):
+            out[c] = blank("placeholder")
+    curies = [c for c in curies if c not in out]
+    parsed = {c: normalise_identifier(c) for c in curies}
 
     # 1. whg:<pk>
     whg_pks = {}
@@ -484,9 +532,24 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
     # ---- tier 1: outbound place_link ------------------------------------
     self_idents = {f"{WHG_NS}:{place.id}"}
     outbound_links = []
+    tier1 = []   # every tier-1 place_link entry, placeholders included, in row order
     for row in PlaceLink.objects.filter(place_id=place.id).order_by("id"):
         j = row.jsonb or {}
         raw_ident = j.get("identifier")
+        if is_placeholder_identifier(raw_ident):
+            # Listed, flagged, never aggregated or looked up; NOT in outbound_links, so
+            # it never seeds tiers 2-3 (ruling SG 2026-10-21).
+            ltype, _agg = normalise_link_type(j.get("type"))
+            ident = normalise_identifier(raw_ident)[0] if str(raw_ident or "").strip() else ""
+            tier1.append({
+                "tier": 1, "source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
+                "namespace": _placeholder_namespace(raw_ident), "link_type": ltype,
+                "link_type_raw": j.get("type"), "aggregates": False, "placeholder": True,
+                "placeholder_label": PLACEHOLDER_LABEL,
+                "provenance": _link_provenance(row), "attested_by": record,
+                "target": {"status": "placeholder", "via": None, "records": [], "has_geometry": False},
+            })
+            continue
         ident, ns, _local = normalise_identifier(raw_ident)
         if not ident:
             continue
@@ -495,18 +558,20 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
             self_idents.add(ident)
             continue
         ltype, agg = normalise_link_type(j.get("type"))
-        outbound_links.append({
+        entry = {
             "tier": 1, "source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
             "namespace": ns, "link_type": ltype, "link_type_raw": j.get("type"), "aggregates": agg,
             "provenance": _link_provenance(row), "attested_by": record,
-        })
+        }
+        outbound_links.append(entry)
+        tier1.append(entry)
     out["self_identifiers"] = sorted(self_idents)
 
     resolutions = resolve_targets([e["identifier"] for e in outbound_links], user=user,
                                   use_gateway=use_gateway, exclude_place_id=place.id)
     for e in outbound_links:
         e["target"] = resolutions.get(e["identifier"])
-    out["outbound"].extend(outbound_links)
+    out["outbound"].extend(tier1)
 
     # ---- close_matches: tier 1 or 2 by who attested ---------------------
     cm_rows = list(close_match_rows(place.id).select_related("task"))

@@ -459,3 +459,130 @@ class HubTruncationTests(TestCase):
             env = {p.pk: self.client.get(f"/atlas/place/{p.pk}/environment/").json() for p in (self.Hub, self.Small)}
         self.assertEqual((env[self.Hub.pk]["truncated"], env[self.Small.pk]["truncated"]), (True, False))
         self.assertEqual(env[self.Small.pk]["status"], "ok")
+
+
+class PlaceholderIdentifierTests(TestCase):
+    """Ruling 2026-10-21 (SG, after the dev walkthrough): a placeholder identifier
+    (``wd:None``: 6,235 links on dev, 6,240 on prod, all ``wd:None``) is not a real
+    identifier. It is listed FLAGGED in the record's own outbound tier and never
+    aggregated, looked up, co-cited, mapped, glossed or sent to EDOPS. Before the fix it
+    was one identifier co-cited by every record carrying it: a false hub. Caps are
+    patched small (5 / 3) and the hub is larger than both."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from places.models import Place, PlaceGeom, PlaceLink
+
+        user = get_user_model().objects.create_user(username="ph_owner", email="ph@example.org", password="pw",
+                                                    given_name="P", surname="H")
+        cls.user = user
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=user, label="ph325", title="Ph ds", description="D", creator="X",
+                                        public=True, ds_status="indexed", uri_base="https://example.org/p/")
+        for ns in ("gn", "wd"):
+            GazetteerRegistryEntry.objects.update_or_create(
+                id=ns, defaults=dict(name=ns, namespace=ns, entry_class="authority", status="published"))
+
+        def place(title, src, links):
+            p = Place.objects.create(title=title, src_id=src, dataset=ds, ccodes=[])
+            PlaceGeom.objects.create(place=p, geom=Point(1.0, 2.0, srid=4326),
+                                     jsonb={"type": "Point", "coordinates": [1.0, 2.0]})
+            for t, ident in links:
+                PlaceLink.objects.create(place=p, jsonb={"type": t, "identifier": ident})
+            return p
+        # Hub of placeholder carriers, created FIRST (so a cap would be hit by them), in
+        # several spellings, one with a src_id that is itself the literal "None".
+        spellings = ["wd:None", " WD:none ", "wd:NULL", "wd:nan", "wd:undefined", "wd:", "None"]
+        cls.hub = [place(f"Carrier {i}", "None" if i == 0 else f"K{i}",
+                         [("closeMatch", spellings[i % len(spellings)])]).pk for i in range(12)]
+        cls.R = place("Real", "R1", [("closeMatch", "wd:None"), ("exactMatch", "gn:4300"),
+                                     ("closeMatch", "gn:None")])
+        # A record whose own src_id is "None": its wd:None is NOT a self-link.
+        cls.S = place("Src None", "None", [("closeMatch", "wd:None")])
+        # Paired presence: a real identifier IS co-cited.
+        cls.cociter = place("Real cociter", "Q1", [("closeMatch", "https://www.geonames.org/4300")]).pk
+
+    def setUp(self):
+        for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
+            p = patch(f"places.concordance.{name}", val)
+            p.start()
+            self.addCleanup(p.stop)
+        fake_fetch.calls = []
+        GATEWAY_DB["gn:4300"] = {"place_id": "gn:4300", "title": "Real Gn", "namespace": "gn",
+                                 "repr_point": [1.1, 2.1], "geometries": [{"repr_point": [1.1, 2.1]}]}
+        self.addCleanup(GATEWAY_DB.pop, "gn:4300", None)
+
+    def build(self, place):
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            return build_concordance(place, user=self.user)
+
+    def test_detection(self):
+        from places.concordance import is_placeholder_identifier
+        for s in ("wd:None", " WD:none ", "gn:NULL", "tgn:NaN", "wd:undefined", "wd:", "wd: ", "None", "null",
+                  "", "   ", None, "whg:None"):
+            self.assertTrue(is_placeholder_identifier(s), repr(s))
+        for s in ("wd:Q1", "gn:100", "wd:Nonesuch", "none:1", "https://example.org/None", "tgn:7000"):
+            self.assertFalse(is_placeholder_identifier(s), repr(s))
+
+    def test_placeholder_is_never_a_self_link(self):
+        self.assertFalse(is_self_link("wd:None", 5, "None"))
+        self.assertFalse(is_self_link("None", 5, "None"))
+        self.assertTrue(is_self_link("tgn:7000", 5, "7000"))       # presence: the rule still works
+
+    def test_listed_flagged_in_tier1_never_aggregated(self):
+        c = self.build(self.R)
+        out = self.by_ident(c["outbound"])
+        ph = out["wd:None"]
+        self.assertEqual((ph["tier"], ph["aggregates"], ph["target"]["status"]), (1, False, "placeholder"))
+        self.assertTrue(ph.get("placeholder"))
+        self.assertEqual(out["gn:None"]["target"]["status"], "placeholder")
+        real = out["gn:4300"]                                      # paired: the real one resolves
+        self.assertEqual((real["aggregates"], real["target"]["status"]), (True, "resolved"))
+        agg = {m["place_id"] for m in c["aggregate"]}
+        self.assertIn("gn:4300", agg)
+        self.assertFalse({"wd:None", "gn:None"} & agg)
+        asked = {i for call in fake_fetch.calls for i in call}
+        self.assertIn("gn:4300", asked)
+        self.assertFalse({"wd:None", "gn:None"} & asked)            # never looked up
+
+    def test_no_cocitation_hub_and_no_truncation_from_it(self):
+        c = self.build(self.R)
+        cocited = {e["record"]["place_id"] for e in c["cocited"]}
+        self.assertIn(self.cociter, cocited)                        # presence: real co-citation
+        self.assertFalse(set(self.hub) & cocited)                   # absence: no placeholder hub
+        self.assertEqual({e["cocited_identifier"] for e in c["cocited"]}, {"gn:4300"})
+        self.assertEqual(c["inbound"], [])
+        self.assertEqual(c["truncated"], {"inbound": False, "cocited": False})
+        # The src_id-"None" record: its wd:None is flagged, not a self-link, so the hub
+        # does not become its inbound tier.
+        s = self.build(self.S)
+        self.assertEqual(s["excluded_self_links"], 0)
+        self.assertEqual([e["target"]["status"] for e in s["outbound"]], ["placeholder"])
+        self.assertEqual((s["inbound"], s["cocited"]), ([], []))
+        self.assertEqual(s["truncated"], {"inbound": False, "cocited": False})
+        self.assertNotIn("wd:None", s["self_identifiers"])
+
+    def test_resolve_targets_answers_placeholder_without_asking(self):
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            r = resolve_targets(["wd:None", "gn:4300"], user=self.user)
+        self.assertEqual(r["wd:None"]["status"], "placeholder")
+        self.assertEqual(r["gn:4300"]["status"], "resolved")
+        self.assertNotIn("wd:None", {i for call in fake_fetch.calls for i in call})
+
+    def test_group_gloss_and_edops_input_exclude_it(self):
+        from places.gloss import build_gloss
+        from places.record_group import build_record_group, offsite_members
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            g = build_record_group(self.R, user=self.user)
+        keys = [m["key"] for m in g["members"]]
+        self.assertIn("gn:4300", keys)                              # presence
+        self.assertFalse({"wd:None", "gn:None"} & set(keys))
+        self.assertEqual(g["n_equivalents"], 1)
+        self.assertEqual(g["unresolved"], 0)
+        self.assertNotIn("None", repr([m["key"] for m in offsite_members(g["members"])]))
+        gl = build_gloss(g["members"], unresolved=g["unresolved"], truncated=g["truncated"])
+        self.assertNotIn("wd:None", repr(gl))
+
+    by_ident = staticmethod(lambda entries: {e["identifier"]: e for e in entries})

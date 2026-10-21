@@ -13,6 +13,8 @@
 //  - tier 3 is worded as co-citation, not identity;
 //  - an unresolved target says WHY (not held / not found / index unreachable),
 //    and an unreachable index is never reported as absence (place#272);
+//  - a placeholder identifier (`wd:None`) is flagged as one, never as "not found"
+//    (ruling 2026-10-21: show flagged, never aggregate);
 //  - the empty concordance (the common case) leads with Explore similar records.
 //
 // Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, baseMap}.
@@ -80,6 +82,10 @@ function targetStatus(e) {
     const t = e.target || {};
     const ns = e.namespace ? `<code>${esc(e.namespace)}</code>` : 'this kind of identifier';
     switch (t.status) {
+        case 'placeholder':
+            // places.concordance.is_placeholder_identifier: `wd:None` and the like. Not an
+            // identifier, so not "WHG's index holds no record": nothing was looked up.
+            return { cls: 'placeholder', html: 'Placeholder, not a real identifier: the contributor’s data has no value here. It is listed so the gap can be seen, and is not looked up, mapped or counted.' };
         case 'resolved': {
             const recs = (t.records || []).map((r) => recordLabel(r, t.via)).join('; ');
             const mapped = !e.aggregates
@@ -115,7 +121,7 @@ function targetStatus(e) {
 }
 
 function identifierHTML(e) {
-    const shown = e.identifier || e.identifier_raw || '';
+    const shown = e.identifier || e.identifier_raw || (e.placeholder ? '(empty)' : '');
     if (isHttp(e.identifier_raw)) {
         return `<a href="${esc(e.identifier_raw)}" target="_blank" rel="noopener noreferrer"><code>${esc(shown)}</code></a>`;
     }
@@ -132,8 +138,9 @@ function outboundItem(e) {
         </li>`;
     }
     const st = targetStatus(e);
-    return `<li class="conc-entry" data-tier="1" data-source="place_link" data-status="${esc((e.target || {}).status || '')}">
-        ${typeBadge(e)} ${identifierHTML(e)}
+    const flag = e.placeholder ? ' <span class="badge conc-placeholder-badge">placeholder</span>' : '';
+    return `<li class="conc-entry${e.placeholder ? ' conc-placeholder' : ''}" data-tier="1" data-source="place_link" data-status="${esc((e.target || {}).status || '')}">
+        ${typeBadge(e)} ${identifierHTML(e)}${flag}
         <div class="conc-meta">${provenanceBadge(e)}</div>
         <div class="conc-target conc-target-${st.cls}">${st.html}</div>
     </li>`;
