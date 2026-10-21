@@ -1,0 +1,24 @@
+{% extends "admin/base_site.html" %}
+{% comment %}place#325 review #4: the confirmation form for the locus registry's Withdraw and Redact actions.{% endcomment %}
+{% block content %}
+<form method="post">{% csrf_token %}
+  <p>You are about to <strong>{{ verb }}</strong> {{ queryset|length }} locus registry entr{{ queryset|length|pluralize:"y,ies" }}:
+    {% for e in queryset %}<code>{{ e.pid }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}.
+    This is one-way: it cannot be undone.</p>
+  {% if public %}
+  <p><strong>The reason is shown publicly</strong> on the locus page and in its JSON, beside the PID and the date.
+    Do not include personal data.</p>
+  {% else %}
+  <p><strong>The reason is for staff only</strong> and is never shown publicly. The public page says only that the
+    locus was redacted by WHG staff, and when.</p>
+  {% endif %}
+  {% if error %}<p class="errornote">{{ error }}</p>{% endif %}
+  <p><label for="id_reason">Reason (required)</label><br>
+    <textarea name="reason" id="id_reason" rows="3" cols="80" required>{{ reason }}</textarea></p>
+  {% for e in queryset %}<input type="hidden" name="_selected_action" value="{{ e.pk }}">{% endfor %}
+  <input type="hidden" name="action" value="{{ action }}">
+  <input type="hidden" name="apply" value="1">
+  <input type="submit" value="{{ verb|capfirst }}">
+  <a href="{% url 'admin:places_locusregistryentry_changelist' %}">Cancel</a>
+</form>
+{% endblock %}

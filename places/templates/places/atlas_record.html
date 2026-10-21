@@ -1,5 +1,5 @@
 {% extends "main/base_webpack.html" %}
-{% load static %}
+{% load static v4_landing_tags %}
 
 {% block maplibre %}
   <script type="text/javascript">
@@ -14,7 +14,7 @@
     place#325 Stage 2, beta only. Not for indexing: the public record page is
     /entity/place:<pid>/ at the v4 release; this route is a preview.
   {% endcomment %}
-  <meta name="robots" content="noindex, nofollow">
+  {% record_canonical_url place as record_canonical %}{% if record_canonical %}<link rel="canonical" href="{{ record_canonical }}">{% else %}<meta name="robots" content="noindex, nofollow">{% endif %}
 {% endblock %}
 
 {% block title %}

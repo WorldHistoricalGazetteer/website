@@ -770,13 +770,18 @@ def atlas_locus(request):
         return render(request, "search/locus.html", {
             "error": error, "token": token,
         }, status=400)
+    # A withdrawn or redacted locus's recipe is not shown from its share link either.
+    from search.views_locus import render_suppressed_recipe, suppressed_entry
+    gone = suppressed_entry(recipe)
+    if gone is not None:
+        return render_suppressed_recipe(request, gone)
     return render(request, "search/locus.html", {
         "recipe": recipe,
         "token": canonical_token,
         "token_was_normalised": canonical_token != token,
         "summary": describe_recipe(recipe),
         "resolve_url": "/atlas/locus/resolve/",
-        # Stage 4: {"enabled": False} unless settings.LOCUS_MINTING_ENABLED, in
+        # Stage 4: {"enabled": False} unless the v4 release switch is on, in
         # which case the page offers the mint modal (search/views_locus.py).
         "minting": minting_context(recipe, canonical_token),
     })
@@ -812,6 +817,11 @@ def atlas_locus_resolve(request):
     recipe, canonical_token, error = load_token(str(token).strip())
     if error is not None:
         return JsonResponse({"error": "invalid recipe", **error}, status=400)
+    # A withdrawn or redacted locus's recipe is never re-run (no gateway call).
+    from search.views_locus import suppressed_entry, suppressed_json
+    gone = suppressed_entry(recipe)
+    if gone is not None:
+        return suppressed_json(gone)
 
     options = search_options_for_retrieval(recipe["retrieval"])
     resp = _gateway_search_response(options, request.user, extra={"recipe": recipe})

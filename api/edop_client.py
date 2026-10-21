@@ -11,6 +11,7 @@ The contract is the LIVE service's OpenAPI spec, ``https://computingplace.org/op
 * ``bands`` (default ``ABCDE``); ``T`` needs ``from_year`` and ``to_year`` (0-1998 CE), and on
   ``scope=area`` they must be EQUAL (422 "Band T requires a single year");
 * ``level`` 6 or 8 (default 6); ``flat``, ``place_links`` (basin only); ``detail`` (area only).
+  WHG sends 8 for ``scope=basin`` and 6 for ``scope=area`` (``BASIN_LEVEL``/``AREA_LEVEL``).
 
 The two scopes return different shapes: basin has ``profile_summary`` +
 ``signature_bands``; area has a flat ``variables`` list of distribution summaries plus
@@ -72,8 +73,21 @@ CODEBOOK_URL = "https://computingplace.org/docs/codebook/"
 HOME_URL = "https://computingplace.org/"
 
 # Passed explicitly so a change of the service's default (it was 8, is now 6) cannot
-# silently change what is cached under the same key or what a page means.
-LEVEL = 6
+# silently change what is cached under the same key or what a page means. The level is
+# in every request, so it is in every cache key: changing it cannot serve a cached
+# answer for the other level.
+#
+# BASIN_LEVEL: ruling SG 2026-10-21 (place#325, after the dev walkthrough): "EDOPS: basin
+# level 8 for single points (spec allows 6 or 8)". A level-6 basin averages ~8,200 km2
+# (see LOCUS_TIGHT_KM), coarse for one settlement; level-8 basins are smaller (London is
+# in level-6 basin 4620 and level-8 basin 53398; fixtures recorded 2026-10-21, same
+# response shape). Used for every scope=basin request: one point, and each member of a
+# dispersed locus.
+BASIN_LEVEL = 8
+# AREA_LEVEL: unchanged at 6, which the spec does not ask us to change. An area aggregate
+# is over the basins inside the hull; level 6 keeps the member-basin count (and EDOPS's
+# work) small for the hulls WHG sends, and LOCUS_TIGHT_KM below was reasoned at level 6.
+AREA_LEVEL = 6
 BASE_BANDS = "ABCDE"
 TEMPORAL_BAND = "T"
 YEAR_MIN, YEAR_MAX = 0, 1998          # Band T coverage, per the spec
@@ -103,7 +117,7 @@ NO_BASIN_DETAIL = "No basin covers this point"
 
 # A locus is "tight" when every pair of its members' representative points is within
 # this many km (the cluster's diameter, great-circle). Why 50 km: BasinATLAS level 6, the
-# level used here, has 16,397 basins over ~134 M km2 of land (Lehner & Grill 2013), a mean
+# level an area signature uses (AREA_LEVEL), has 16,397 basins over ~134 M km2 of land (Lehner & Grill 2013), a mean
 # of ~8,200 km2, i.e. ~90 km across. A cluster no wider than about half a typical basin
 # draws an area aggregate from one or a few adjacent basins, so one signature describes an
 # environment its members share. Wider than that, members usually sit in different basins,
@@ -179,7 +193,7 @@ def band_t_years(span) -> tuple[Optional[tuple[int, int]], Optional[str]]:
 def basin_request(lon: float, lat: float, years: Optional[tuple[int, int]] = None) -> dict:
     """Query parameters for ``scope=basin`` at one point. ``years`` adds Band T."""
     params = {"scope": "basin", "lat": round(float(lat), 6), "lon": round(float(lon), 6),
-              "bands": BASE_BANDS, "level": LEVEL}
+              "bands": BASE_BANDS, "level": BASIN_LEVEL}
     if years:
         params["bands"] = BASE_BANDS + TEMPORAL_BAND
         params["from_year"], params["to_year"] = int(years[0]), int(years[1])
@@ -189,7 +203,7 @@ def basin_request(lon: float, lat: float, years: Optional[tuple[int, int]] = Non
 def area_request(geom_wkt: str, year: Optional[int] = None) -> dict:
     """Query parameters for ``scope=area`` over ``geom_wkt``. Band T only for ONE year
     (the spec: on area, ``from_year`` must equal ``to_year``)."""
-    params = {"scope": "area", "geom_wkt": geom_wkt, "bands": BASE_BANDS, "level": LEVEL}
+    params = {"scope": "area", "geom_wkt": geom_wkt, "bands": BASE_BANDS, "level": AREA_LEVEL}
     if year is not None:
         params["bands"] = BASE_BANDS + TEMPORAL_BAND
         params["from_year"] = params["to_year"] = int(year)
@@ -473,7 +487,7 @@ def _temporal_basin(t: dict) -> Optional[dict]:
             "years": [t.get("year_start"), t.get("year_end")]}
 
 
-def summarise_basin(raw: dict) -> dict:
+def summarise_basin(raw: dict, asked_level: Optional[int] = None) -> dict:
     v = _basin_values(raw)
     headline = [_item(it.get("label"), _num(it.get("value")))
                 for it in (raw.get("profile_summary") or [])
@@ -488,7 +502,9 @@ def summarise_basin(raw: dict) -> dict:
     meta = raw.get("meta") or {}
     sc = meta.get("scope") or {}
     return {"scope": "basin", "headline": headline, "bands": bands, "temporal": t,
-            "unit": {"type": "basin", "level": sc.get("basin_level"), "basin_id": raw.get("id"),
+            # The page labels the level ("BasinATLAS level 8"): the response's own, else
+            # the level that was asked for.
+            "unit": {"type": "basin", "level": sc.get("basin_level") or asked_level, "basin_id": raw.get("id"),
                      "upstream_area_km2": _num(raw.get("up_area"))},
             "data_sources": meta.get("data_sources") or {}, "caveats": [],
             "signature_version": meta.get("signature_version"), "generated": meta.get("generated")}
@@ -552,7 +568,7 @@ def summarise_area(raw: dict) -> dict:
     sc = meta.get("scope") or {}
     shortfall = raw.get("shortfall")
     return {"scope": "area", "headline": headline, "bands": bands, "temporal": temporal,
-            "unit": {"type": "area", "level": (meta.get("query") or {}).get("level", LEVEL),
+            "unit": {"type": "area", "level": (meta.get("query") or {}).get("level", AREA_LEVEL),
                      "n_basins": sc.get("n_units"),
                      "uncovered_pct": _num(100 * shortfall) if isinstance(shortfall, (int, float)) else None},
             "data_sources": meta.get("data_sources") or {}, "caveats": caveats,
@@ -563,7 +579,9 @@ def summarise(result: dict) -> Optional[dict]:
     """The readable summary of an ``ok`` result, else None."""
     if result.get("status") != STATUS_OK or not isinstance(result.get("raw"), dict):
         return None
-    return summarise_area(result["raw"]) if result.get("scope") == "area" else summarise_basin(result["raw"])
+    if result.get("scope") == "area":
+        return summarise_area(result["raw"])
+    return summarise_basin(result["raw"], asked_level=(result.get("request") or {}).get("level"))
 
 
 def public_result(result: dict, members=None) -> dict:

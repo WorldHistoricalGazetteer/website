@@ -144,7 +144,7 @@ class LocusMintBrowserTests(LiveServerTestCase):
     def test_with_the_setting_off_nothing_can_be_minted(self):
         tok = token(SIMPLE)
         page, console = self._page()
-        with override_settings(LOCUS_MINTING_ENABLED=False):
+        with override_settings(LOCUS_MINTING_ENABLED=False, V4_LANDING_ENABLED=False):
             page.goto(self.live_server_url + "/atlas/locus/?r=" + tok)
             state = _poll(page, "window.__whgLocus && window.__whgLocus.resolved !== undefined && window.__whgLocus", 60)
             self.assertTrue(state and state.get("resolved"), f"page never resolved: {state}; console: {console[-8:]}")

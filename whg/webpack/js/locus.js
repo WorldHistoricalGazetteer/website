@@ -12,12 +12,14 @@
 // Both pages run the same recipe the same way; only the identity block differs.
 //
 // Minting (Stage 4, only when the server rendered data-mint-url, i.e.
-// LOCUS_MINTING_ENABLED and a signed-in beta user): the Mint button opens the
+// the v4 release switch and a signed-in beta user): the Mint button opens the
 // modal the server rendered, which says what is being minted (the RECIPE,
 // re-run on every visit, never the member list shown), lists existing loci
 // sharing members, and needs an explicit confirmation before it POSTs
-// {r: token, confirm: true} to /atlas/locus/mint/. On success the browser goes
-// to the canonical /entity/locus:<PID>/ URI. A withdrawn locus is not re-run.
+// {r: token, confirm: true, minter_public} to /atlas/locus/mint/ (minter_public
+// is the modal's opt-in name box, default off). On success the browser goes to
+// the canonical /entity/locus:<PID>/ URI. A withdrawn or redacted locus is a
+// tombstone: the server renders no recipe for it, so there is nothing to re-run.
 
 import bbox from '@turf/bbox';
 import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
@@ -301,6 +303,7 @@ function initMinting(root) {
     const url = root.dataset.mintUrl;
     const token = root.dataset.token;
     const confirmBox = document.getElementById('locus_mint_confirm');
+    const publicBox = document.getElementById('locus_mint_public');
     const go = document.getElementById('locus_mint_go');
     const errEl = document.getElementById('locus_mint_error');
     const overlapEl = document.getElementById('locus_mint_overlap');
@@ -312,6 +315,7 @@ function initMinting(root) {
 
     btn.addEventListener('click', async () => {
         confirmBox.checked = false;
+        if (publicBox) publicBox.checked = false;
         go.disabled = true;
         setError('');
         overlapEl.innerHTML = '';
@@ -340,7 +344,8 @@ function initMinting(root) {
         setError('');
         const { kind, status, data } = await fetchJSON(url, {
             method: 'POST',
-            body: JSON.stringify({ r: token, confirm: true }),
+            // Opt-in name (rulings 2026-10-21): only a ticked box sends true; default off.
+            body: JSON.stringify({ r: token, confirm: true, minter_public: !!(publicBox && publicBox.checked) }),
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrfToken || '' },
             timeoutMs: 20000,
         });
@@ -362,9 +367,10 @@ function initMinting(root) {
 function init() {
     const root = document.getElementById('locus_page');
     const holder = document.getElementById('locus_recipe');
-    if (!root || !holder) {                       // the error page, or a frozen legacy locus
+    if (!root || !holder) {                       // the error page, a frozen legacy locus, or a tombstone
         initControls(root);
-        publish({ resolved: false, kind: 'no_recipe' });
+        if (root && root.dataset.withdrawn === '1') publish({ resolved: false, kind: 'withdrawn', pid: root.dataset.pid });
+        else publish({ resolved: false, kind: 'no_recipe' });
         return;
     }
     let recipe;

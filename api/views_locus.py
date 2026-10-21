@@ -4,13 +4,16 @@ Routed in ``api/urls_root.py`` AHEAD of the generic ``entity/<entity_id>/``
 patterns, so ``place:`` (and every other object type in ``TYPE_MAP``) is
 served exactly as before; this module never sees them.
 
-Unless ``LOCUS_MINTING_ENABLED`` is true, ``locus_entity`` hands the request to
+Unless the v4 release switch is on (``V4_LANDING_ENABLED``; ``LOCUS_MINTING_ENABLED``
+is its deprecated alias), ``locus_entity`` hands the request to
 the generic entity views, which answered it before this route existed (anonymous
 401, signed-in 404, HEAD as GET): v4 changes nothing public until release. When
 it is on, the route is beta-gated like the
 locus page: an anonymous browser is sent to sign in and back, an anonymous
 machine client gets 401 JSON, a signed-in user without beta access gets 404.
-Public (anonymous) dereference is the release's business, with place#271.
+Public (anonymous) dereference is the release's business, with place#271; the
+exception is a LEGACY whg_id (frozen locus), open to everyone when the switch is
+on because ``/places/<whg_id>/portal/`` redirects there (ruling 2026-10-21).
 
 Content negotiation on ``Accept``:
 
@@ -29,23 +32,31 @@ What a dereference does with the identifier:
   ``LegacyUnionRecord`` snapshot as a FROZEN locus (no recipe; its captured
   membership), per place#172; 404 when the snapshot has no such id.
 
-Tombstones (place#308): a withdrawn locus still answers 200 at its URI in
-every representation, with its recipe, status, reason and date; it is not
-re-run.
+Tombstones (place#308) and take-down (rulings 2026-10-21): a withdrawn locus,
+and one redacted by staff (active or withdrawn), still answers 200 at its URI
+in every representation, with ``X-WHG-Locus-Status: withdrawn`` (or
+``redacted``), and shows ONLY its PID, status, withdrawal reason and dates:
+no recipe, no token, no recipe page link, no ``current``, no captured
+membership, no minter. It is not re-run. The canonical bytes stay in the
+registry (the PID is their hash) and are never displayed. A redaction's
+reason is staff-only and is not shown.
 
 The JSON representation is honest about what the server can and cannot say.
 The retrieval half of a recipe runs here (the same gateway call the page
 makes), so ``current.candidates`` is the recipe's current retrieval and
 ``current.recipe_members`` says which of the recipe's members survive in it.
-The CLUSTERING half runs only in the browser (``clustering.js``, deliberately
-the one implementation; search/locus.py explains), so the selected cluster's
-membership is NOT in this document: ``current.cluster_members`` is null and
-``current.note`` says why. A server-side clusterer is a separate decision.
+The CLUSTERING half runs here too, with ``search.clustering`` (SG ruling
+2026-10-21), the Python twin of the browser's ``clustering.js`` +
+``locus_resolve.js`` held equal to them by ``search.tests_cluster_parity``, so
+``current.cluster_members`` is the selected cluster's membership and
+``current.cluster`` says how it was selected (the fixed plurality / nearest-
+centroid / first-member contract of place#172). ``current.note`` says so.
 """
 from __future__ import annotations
 
 import json
 import logging
+import time
 
 from django.contrib.auth.views import redirect_to_login
 from django.http import Http404, HttpResponse, JsonResponse
@@ -56,6 +67,18 @@ from places import locus_registry as registry
 from search.views_locus import entry_context, render_locus_page
 
 logger = logging.getLogger(__name__)
+
+# Server-side clustering budget (place#325 review #2): the Python clusterer is O(n^2) in
+# hits (measured 0.15 s / 100, 2.35 s / 400, 14.9 s / 1000) and a recipe's size may be
+# 10000. Above CLUSTER_MAX_HITS it is not run; under it, it is aborted once
+# CLUSTER_TIME_BUDGET_S of wall clock have passed. Either way `current.cluster` says
+# "skipped" and why (never a 500); the HTML page still clusters in the browser.
+CLUSTER_MAX_HITS = 500
+CLUSTER_TIME_BUDGET_S = 3.0
+# JSON dereference of a live recipe locus (a gateway retrieval + server clustering):
+# at most N per WINDOW seconds per signed-in user (or per IP). Generous for a person
+# or a polite harvester; the HTML page (no server-side work) is not counted.
+JSON_DEREFERENCE_RATE = (30, 60)
 
 HTML = "text/html"
 JSONLD = "application/ld+json"
@@ -83,10 +106,12 @@ FROZEN_STATEMENT = (
     "frozen loci are created."
 )
 CLUSTER_NOTE = (
-    "Cluster selection runs in the browser resolver (clustering.js, the one implementation of "
-    "the clusterer), so this document carries the recipe's current retrieval and which of its "
-    "members survive in it, not the selected cluster's membership. The HTML representation at "
-    "this URI computes and shows the cluster."
+    "cluster_members is the membership of the cluster the recipe selects in its current retrieval, "
+    "computed server-side by search.clustering, the Python twin of the browser's clustering.js + "
+    "locus_resolve.js (parity-tested); `cluster` says how it was selected (place#172: the cluster "
+    "holding the plurality of surviving recipe members; a tie goes to the nearest centroid, else "
+    "the code-point-smallest member). It is null when no recipe member survives in the retrieval, "
+    "or when server-side clustering was skipped (`cluster.skipped`: too_many_hits or time_budget)."
 )
 
 
@@ -220,12 +245,67 @@ def _current(recipe, user) -> dict:
                            "absent": [m for m in recipe["members"] if m not in set(present)]},
         "withheld": data.get("withheld"),
     })
+    # The clustering half (search.clustering, parity-tested twin of clustering.js +
+    # locus_resolve.js): the recipe's LITERAL parameters, THIS response's stoplist
+    # (place#325 ruling 3), over the withheld-filtered hits the page would cluster.
+    from search.clustering import ClusterBudgetExceeded, resolve_recipe, selection_summary
+    if len(hits) > CLUSTER_MAX_HITS:
+        out["cluster"] = {"skipped": "too_many_hits", "hits": len(hits), "cap": CLUSTER_MAX_HITS}
+        return out
+    try:
+        summary = selection_summary(resolve_recipe(recipe, data,
+                                                   deadline=time.monotonic() + CLUSTER_TIME_BUDGET_S))
+    except ClusterBudgetExceeded:
+        logger.warning("locus dereference: server-side clustering over %s s budget (%d hits)",
+                       CLUSTER_TIME_BUDGET_S, len(hits))
+        out["cluster"] = {"skipped": "time_budget", "budget_s": CLUSTER_TIME_BUDGET_S, "hits": len(hits)}
+        return out
+    except Exception:  # noqa: BLE001 — a malformed hit must not take the document down
+        logger.exception("locus dereference: server-side clustering failed")
+        out["cluster"] = {"error": "server-side clustering failed; the HTML representation still computes it"}
+        return out
+    out["cluster_members"] = summary.pop("cluster_members")
+    out["cluster"] = summary
     return out
+
+
+SUPPRESSED_STATEMENT = (
+    "This locus has been withdrawn or redacted. Its identifier stays in the registry and is never "
+    "reused, but its recipe is no longer shown or re-run."
+)
+
+
+def suppressed_document(entry, ctx) -> dict:
+    """A withdrawn or redacted locus: PID, status, reason, dates; nothing else.
+    Built from an allow-list, so a field added to the full document later
+    cannot leak into a tombstone by default."""
+    doc = {
+        "@context": LOCUS_CONTEXT,
+        "@id": ctx["url"],
+        "@type": "Locus",
+        "pid": entry.pid,
+        "status": entry.status,
+        "minted": {"at": entry.minted_at.isoformat()},
+        "statement": SUPPRESSED_STATEMENT,
+    }
+    if entry.is_withdrawn:
+        doc["withdrawn"] = {"at": entry.withdrawn_at.isoformat() if entry.withdrawn_at else None,
+                            "reason": entry.withdrawn_reason}
+    if entry.is_redacted:
+        doc["redacted"] = {"at": entry.redacted_at.isoformat()}   # the reason is staff-only
+    return doc
+
+
+def status_header(entry) -> str | None:
+    """``X-WHG-Locus-Status``: withdrawn wins over redacted; None when neither."""
+    return entry.serving_status
 
 
 def locus_document(request, entry, resolve: bool = True) -> dict:
     """The JSON(-LD) representation of a registry entry."""
     ctx = entry_context(entry, request)
+    if entry.is_suppressed:
+        return suppressed_document(entry, ctx)
     doc = {
         "@context": LOCUS_CONTEXT,
         "@id": ctx["url"],
@@ -241,18 +321,14 @@ def locus_document(request, entry, resolve: bool = True) -> dict:
             "recipe": "public, carried in full in this document" if entry.kind == entry.KIND_RECIPE else None,
         },
     }
-    if entry.is_withdrawn:
-        doc["withdrawn"] = {"at": entry.withdrawn_at.isoformat() if entry.withdrawn_at else None,
-                            "reason": entry.withdrawn_reason}
     if entry.kind == entry.KIND_RECIPE:
         recipe = registry.entry_recipe(entry)
         doc["recipe"] = recipe
         doc["recipe_token"] = entry.token
         doc["recipe_page"] = request.build_absolute_uri(f"/atlas/locus/?r={entry.token}")
-        if entry.is_withdrawn or not resolve:
+        if not resolve:
             doc["current"] = {"frozen": False, "statement": MEMBERSHIP_STATEMENT, "resolved": False,
-                              "note": "withdrawn: the recipe stays public and is not re-run"
-                              if entry.is_withdrawn else "not resolved"}
+                              "note": "not resolved"}
         elif recipe is not None:
             doc["current"] = _current(recipe, request.user)
     else:
@@ -264,9 +340,15 @@ def locus_document(request, entry, resolve: bool = True) -> dict:
 
 # ---------------------------------------------------------------- the view
 
-def _gate(request, html: bool):
+def _gate(request, html: bool, pid: str = ""):
     if not registry.minting_enabled():
         raise Http404()
+    # A LEGACY whg_id (frozen locus) dereferences for everyone once the switch is on:
+    # /places/<whg_id>/portal/ redirects there publicly (ruling 2026-10-21), and its
+    # members are filtered by the viewer's visibility rule. Recipe loci stay beta.
+    from places.locus_recipe import is_legacy_locus_id
+    if is_legacy_locus_id(pid or ""):
+        return None
     if not request.user.is_authenticated:
         if html:
             return redirect_to_login(request.get_full_path())
@@ -280,7 +362,7 @@ def _gate(request, html: bool):
 
 
 def locus_entity(request, pid, force_json: bool = False):
-    """``/entity/locus:<PID>/``. With ``LOCUS_MINTING_ENABLED`` off the request is
+    """``/entity/locus:<PID>/``. With the v4 release switch off the request is
     handed to the generic entity view it reached before this route existed
     (``EntityDetailView``, or ``EntityFeatureView`` for ``/api``), so the answer is
     exactly the pre-branch one: anonymous 401 from DRF, signed-in 404, HEAD as GET
@@ -295,7 +377,7 @@ def locus_entity(request, pid, force_json: bool = False):
 @require_GET
 def _locus_entity(request, pid, force_json: bool = False):
     html = _wants_html(request, force_json)
-    refused = _gate(request, html)
+    refused = _gate(request, html, pid)
     if refused is not None:
         return refused
     try:
@@ -310,22 +392,61 @@ def _locus_entity(request, pid, force_json: bool = False):
     if created:
         logger.info("locus dereference minted legacy locus %s", entry.pid)
 
+    header = status_header(entry)
     if html:
-        if entry.kind == entry.KIND_RECIPE:
-            recipe = registry.entry_recipe(entry)
-            if recipe is None:   # cannot happen for bytes the parser produced; say so rather than 500
-                return _json({"error": "unreadable", "detail": "stored recipe does not parse"}, status=500, media=JSON)
-            return render_locus_page(request, recipe, entry.token, entry=entry)
-        from django.shortcuts import render
-        ctx = {"locus_entry": entry_context(entry, request), "legacy": _legacy_members(entry, request.user),
-               "minting": {"enabled": False}}
-        return render(request, "search/locus.html", ctx)
+        resp = _locus_html(request, entry)
+        if header:
+            resp["X-WHG-Locus-Status"] = header
+        return resp
 
+    if entry.kind == entry.KIND_RECIPE and not entry.is_suppressed:
+        limited = _json_dereference_throttled(request)
+        if limited is not None:
+            return limited
     resp = _json(locus_document(request, entry), media=JSONLD if _accept_choice(
         request.META.get("HTTP_ACCEPT", ""), force_json) == JSONLD else JSON)
-    if entry.is_withdrawn:
-        resp["X-WHG-Locus-Status"] = "withdrawn"
+    if header:
+        resp["X-WHG-Locus-Status"] = header
     return resp
+
+
+def _json_dereference_throttled(request):
+    """A 429 when this caller has used up ``JSON_DEREFERENCE_RATE``; else None (and
+    the call is counted). Fixed window in the default cache; a broken cache admits."""
+    from django.core.cache import cache
+    limit, window = JSON_DEREFERENCE_RATE
+    who = (f"u{request.user.pk}" if request.user.is_authenticated
+           else "ip" + (request.META.get("REMOTE_ADDR") or "?"))
+    key = f"locus-json-deref:{who}:{int(time.time() // window)}"
+    try:
+        cache.add(key, 0, window)
+        count = cache.incr(key)
+    except Exception:  # noqa: BLE001
+        return None
+    if count <= limit:
+        return None
+    resp = _json({"error": "rate limited",
+                  "detail": f"at most {limit} JSON dereferences of a live locus per {window} s"},
+                 status=429, media=JSON)
+    resp["Retry-After"] = str(window - int(time.time()) % window or window)
+    return resp
+
+
+def _locus_html(request, entry):
+    from django.shortcuts import render
+    if entry.is_suppressed:
+        # The tombstone: rendered without the recipe, its token or any membership,
+        # so nothing of the suppressed text reaches the page or its script.
+        return render(request, "search/locus.html", {"locus_entry": entry_context(entry, request),
+                                                     "tombstone": True, "minting": {"enabled": False}})
+    if entry.kind == entry.KIND_RECIPE:
+        recipe = registry.entry_recipe(entry)
+        if recipe is None:   # cannot happen for bytes the parser produced; say so rather than 500
+            return _json({"error": "unreadable", "detail": "stored recipe does not parse"}, status=500, media=JSON)
+        return render_locus_page(request, recipe, entry.token, entry=entry)
+    ctx = {"locus_entry": entry_context(entry, request), "legacy": _legacy_members(entry, request.user),
+           "minting": {"enabled": False}}
+    return render(request, "search/locus.html", ctx)
 
 
 def locus_entity_api(request, pid):

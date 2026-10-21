@@ -49,6 +49,9 @@ class MintBase(LocusBase):
         return self.client.get(f"/entity/locus:{pid}/" + ("api" if api else ""), HTTP_ACCEPT=accept)
 
 
+# Off explicitly (both names: LOCUS_MINTING_ENABLED is the switch's alias), so this
+# holds in an environment that sets either, such as dev (review #5).
+@override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
 class OffByDefaultTests(MintBase):
     def test_everything_is_404_when_off(self):
         self.assertFalse(registry.minting_enabled())
@@ -226,7 +229,7 @@ class MintFlowTests(MintBase):
         self.assertTrue(data["created"])
         self.assertEqual(data["path"], f"/entity/locus:{pid}/")
         self.assertTrue(data["url"].endswith(f"/entity/locus:{pid}/"))
-        self.assertEqual(data["minted"]["minted_by"], self.beta.name or self.beta.username)
+        self.assertEqual(data["minted"]["minted_by"], "a WHG contributor")   # the name is opt-in
         again = self.mint(tok)
         self.assertEqual(again.status_code, 200)
         self.assertFalse(again.json()["created"])
@@ -323,7 +326,7 @@ class EntityLocusTests(MintBase):
         self.assertEqual(doc["status"], "active")
         self.assertEqual(doc["recipe"], lr.parse_recipe(recipe(SIMPLE)))
         self.assertEqual(doc["recipe_token"], self.entry.token)
-        self.assertEqual(doc["minted"]["by"], self.beta.name or self.beta.username)
+        self.assertEqual(doc["minted"]["by"], "a WHG contributor")   # not opted in (rulings 2026-10-21)
         cur = doc["current"]
         self.assertFalse(cur["frozen"])
         self.assertIn("re-run", cur["statement"])
@@ -331,7 +334,14 @@ class EntityLocusTests(MintBase):
         self.assertEqual(cur["candidates"], [h["place_id"] for h in HITS])
         self.assertEqual(cur["candidate_total"], 3)
         self.assertEqual(cur["recipe_members"], {"present": ["gn:1", "wd:Q64"], "absent": []})
-        self.assertIsNone(cur["cluster_members"])            # the clusterer runs in the browser only
+        # The server-side clusterer (search.clustering, parity-tested twin of clustering.js)
+        # selects the cluster the recipe meant: HITS at the recipe's theta 0.33 put the two
+        # Berlins together and the New Hampshire one apart (the shape_berlin_three parity fixture).
+        self.assertEqual(cur["cluster_members"], ["gn:1", "wd:Q64"])
+        self.assertEqual(cur["cluster"]["reason"], "plurality")
+        self.assertEqual((cur["cluster"]["score"], cur["cluster"]["candidates"], cur["cluster"]["cluster_count"]), (2, 1, 2))
+        self.assertEqual(cur["cluster"]["stoplist_count"], 500)   # the response's list, not the recipe's
+        self.assertEqual(cur["cluster"]["params"]["theta"], 0.33)
         self.assertIn("clustering.js", cur["note"])
         self.assertEqual(len(self.gateway.bodies), 4)          # one real retrieval per JSON dereference
         self.assertEqual(self.gateway.bodies[-1]["query"], "Berlin")
@@ -340,6 +350,14 @@ class EntityLocusTests(MintBase):
             resp = self.entity(self.pid, accept="text/html", api=True)
         self.assertTrue(resp["Content-Type"].startswith("application/ld+json"))
         self.assertEqual(json.loads(resp.content)["pid"], self.pid)
+        # ...and a recipe none of whose members survive says so instead of guessing.
+        entry2, _ = registry.mint_recipe(recipe(SIMPLE, members=("gn:404",)), self.beta)
+        with patch(POST, side_effect=self.gateway):
+            cur2 = json.loads(self.entity(entry2.pid, accept="application/json").content)["current"]
+        self.assertIsNone(cur2["cluster_members"])
+        self.assertEqual(cur2["cluster"]["reason"], "no_members_survive")
+        self.assertEqual(cur2["recipe_members"], {"present": [], "absent": ["gn:404"]})
+        self.assertEqual(len(self.gateway.bodies), 6)          # still one retrieval per dereference
 
     def test_json_reports_a_gateway_failure_without_pretending(self):
         import requests
@@ -379,14 +397,18 @@ class EntityLocusTests(MintBase):
         doc = json.loads(resp.content)
         self.assertEqual(doc["status"], "withdrawn")
         self.assertEqual(doc["withdrawn"]["reason"], "Withdrawn on request of the minter (test).")
-        self.assertEqual(doc["recipe"], lr.parse_recipe(recipe(SIMPLE)))   # the recipe stays public
-        self.assertFalse(doc["current"]["resolved"])
+        # Rulings 2026-10-21: the recipe text is suppressed (search.tests_locus_redaction pairs
+        # each absence with its presence on an active locus).
+        self.assertNotIn("recipe", doc)
+        self.assertNotIn("current", doc)
         self.assertEqual(html_resp.status_code, 200)
+        self.assertEqual(html_resp["X-WHG-Locus-Status"], "withdrawn")
         html = html_resp.content.decode()
         self.assertIn("Withdrawn", html)
         self.assertIn("request of the minter", html)
         self.assertIn('data-withdrawn="1"', html)
-        self.assertIn("Not re-run", html)
+        self.assertIn("no longer shown or re-run", html)
+        self.assertNotIn('id="locus_recipe"', html)
         # Still minted, still refused a re-bind, still the same PID.
         e, created = registry.mint_recipe(recipe(SIMPLE), self.normal)
         self.assertFalse(created)

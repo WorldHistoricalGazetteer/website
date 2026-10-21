@@ -46,7 +46,14 @@ Resolution of an outbound target:
   the page cannot be used to probe whether a private record exists; and not
   ``not_held``, which says WHG holds nothing from that source;
 * anything else (``viaf:``, ``loc:``, unrecognised URLs) is listed with
-  ``status: "not_held"``.
+  ``status: "not_held"``;
+* a PLACEHOLDER (``wd:None``, ``gn:null``, ``nan``, ``undefined``, an empty local part,
+  any namespace, case-insensitive; ``is_placeholder_identifier``) is not an identifier
+  at all. Ruling SG 2026-10-21: show it flagged, never aggregate. It is listed in tier 1
+  with ``status: "placeholder"``, ``aggregates: False`` and ``placeholder: True``, and is
+  never looked up, never used to find inbound or co-citing records, never a self-link,
+  and so never reaches the aggregate, the map, the gloss or EDOPS. (On dev 6,235 links
+  were the literal ``wd:None``, written by an upload: one false co-citation hub.)
 
 Cost: tiers 2 and 3 are one ``place_link`` query each, by identifier, on the
 expression index ``place_link_identifier_idx`` (migration 0026; without it,
@@ -115,6 +122,11 @@ _URL_PATTERNS = (
 )
 _NS_ALIASES = {"wikidata": "wd", "geonames": "gn", "pleiades": "pl", "getty": "tgn", "whgazetteer": WHG_NS}
 _CURIE = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*):(?!//)(.+)$")
+_CURIE_ANY_LOCAL = re.compile(r"^([A-Za-z][A-Za-z0-9_.-]*):(?!//)(.*)$")
+# Values an export writes where it had none (Python, JS, pandas). Compared after
+# trimming and lower-casing; "" is an empty local part (``wd:``).
+PLACEHOLDER_VALUES = frozenset({"none", "null", "nan", "undefined", ""})
+PLACEHOLDER_LABEL = "placeholder, not a real identifier: the contributor's data has no value here"
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +154,29 @@ def normalise_identifier(raw) -> tuple[str, Optional[str], Optional[str]]:
             local = local.upper()
         return f"{ns}:{local}", ns, local
     return s, None, None
+
+
+def is_placeholder_identifier(raw) -> bool:
+    """True for a link identifier that is a placeholder for "no value", not an
+    identifier: missing, empty, a bare ``None``/``null``/``nan``/``undefined``, or a
+    CURIE of any namespace whose local part is one of those or empty (``wd:None``,
+    ``WD: none``, ``gn:``). Case-insensitive, whitespace-trimmed. A URL is never a
+    placeholder here (``https://example.org/None`` names something)."""
+    if raw is None:
+        return True
+    s = str(raw).strip()
+    if s.lower() in PLACEHOLDER_VALUES:
+        return True
+    m = _CURIE_ANY_LOCAL.match(s)
+    return bool(m) and m.group(2).strip().lower() in PLACEHOLDER_VALUES
+
+
+def _placeholder_namespace(raw) -> Optional[str]:
+    m = _CURIE_ANY_LOCAL.match(str(raw or "").strip())
+    if not m:
+        return None
+    ns = m.group(1).lower()
+    return _NS_ALIASES.get(ns, ns)
 
 
 def identifier_variants(curie: str) -> list[str]:
@@ -184,7 +219,13 @@ def is_self_link(identifier_raw, place_id: int, src_id) -> bool:
     Same test as the place#325 measurement (1,805,748 self-links on prod):
     the identifier's local part equals the record's own ``src_id``. A numeric
     ``src_id`` that coincides with an unrelated authority id would also match;
-    that is accepted as the price of not needing a per-dataset authority map."""
+    that is accepted as the price of not needing a per-dataset authority map.
+
+    A placeholder (``is_placeholder_identifier``) is never a self-link, whatever the
+    ``src_id``: a record whose ``src_id`` is the literal ``None`` would otherwise make
+    ``wd:None`` its own identifier, and every carrier of ``wd:None`` its attester."""
+    if is_placeholder_identifier(identifier_raw):
+        return False
     raw = str(identifier_raw or "").strip()
     src = str(src_id or "").strip()
     ident, ns, local = normalise_identifier(raw)
@@ -269,6 +310,48 @@ def gateway_namespaces(user=None) -> set[str]:
     )
 
 
+def anonymous_gateway_namespaces() -> set[str]:
+    """Namespaces the CRC gateway may be asked about on behalf of a SIGNED-OUT visitor
+    of the public Record page (ruling SG 2026-10-21: "only for public-licence
+    namespaces"; openly redistributable registry rows, never embargoed ones).
+
+    The rule is the one the anonymous ``/entity/place:<ns>:<id>/api`` path already
+    enforces (``api.views_entity``: answered anonymously, but 451 when the registry
+    row says ``redistributable`` is False), made fail-closed for this caller:
+
+    * an ``authority`` row visible to an anonymous caller (``visible_to(None)``:
+      published, or an embargo whose release date has passed; never ``embargoed``,
+      ``draft``, ``pending`` ...);
+    * ``redistributable`` is True;
+    * a licence is recorded (``license`` not NULL): unknown terms are not open terms;
+    * and no other authority row for the namespace fails any of these.
+
+    ``license.permits_commercial`` is deliberately NOT required (it is NULLABLE, and
+    a non-commercial licence is still redistributable by WHG, which is
+    non-commercial); ``redistributable`` is the registry's legal determination."""
+    from api.models import GazetteerRegistryEntry
+    rows = GazetteerRegistryEntry.objects.filter(entry_class="authority").exclude(namespace__in=["", WHG_NS])
+    ok = set(rows.visible_to(None).filter(redistributable=True, license__isnull=False)
+             .values_list("namespace", flat=True))
+    if not ok:
+        return set()
+    visible_ids = set(rows.visible_to(None).filter(namespace__in=ok).values_list("id", flat=True))
+    bad = set(rows.filter(namespace__in=ok).filter(Q(redistributable=False) | Q(license__isnull=True))
+              .values_list("namespace", flat=True))
+    bad |= set(rows.filter(namespace__in=ok).exclude(id__in=visible_ids).values_list("namespace", flat=True))
+    return ok - bad
+
+
+def _anonymous_open(user) -> bool:
+    """True when ``user`` is signed out AND the public Record page is on, i.e. when
+    ``anonymous_gateway_namespaces`` may be asked for. Flag off: unchanged (no
+    anonymous gateway call at all)."""
+    if getattr(user, "is_authenticated", False):
+        return False
+    from places.v4_landing import v4_landing_enabled
+    return v4_landing_enabled()
+
+
 def _gateway_has_geometry(rec: dict) -> bool:
     if rec.get("repr_point"):
         return True
@@ -300,6 +383,7 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
          "records": [ {place_id|place_id(gateway), title, has_geometry, repr_point, ...} ],
          "has_geometry": bool}
 
+    ``placeholder``: not an identifier (``is_placeholder_identifier``); never asked.
     ``not_found``: asked and definitively absent. ``not_held``: no store WHG
     has could hold it (``viaf:``, an unknown URL, or a namespace not in the
     gateway). ``unavailable``: a ``whg:`` identifier that names no record the
@@ -308,16 +392,24 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     records), so the answer reveals nothing about private data.
     ``gateway_unavailable`` / ``gateway_disabled`` are NOT absence (place#272):
     the gateway could not be, or was not, asked. ``gateway_disabled`` carries
-    ``reason``: ``"not_configured"`` or ``"anonymous"`` (a signed-out caller).
+    ``reason``: ``"not_configured"`` or ``"anonymous"`` (a signed-out caller, for a
+    namespace ``anonymous_gateway_namespaces`` does not admit, or with the public
+    Record page off).
     """
     from places.models import Place, PlaceLink
 
     curies = [c for c in dict.fromkeys(curies) if c]
     out: dict[str, dict] = {}
-    parsed = {c: normalise_identifier(c) for c in curies}
 
     def blank(status, via=None):
         return {"status": status, "via": via, "records": [], "has_geometry": False}
+
+    # A placeholder is answered without looking anything up (module doc).
+    for c in curies:
+        if is_placeholder_identifier(c):
+            out[c] = blank("placeholder")
+    curies = [c for c in curies if c not in out]
+    parsed = {c: normalise_identifier(c) for c in curies}
 
     # 1. whg:<pk>
     whg_pks = {}
@@ -370,6 +462,10 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     rest = [c for c in curies if c not in out]
     ns_held = gateway_namespaces(user) if (use_gateway and rest) else set()
     to_ask = [c for c in rest if parsed[c][1] in ns_held]
+    # A signed-out visitor of the public Record page: the gateway is asked, with the
+    # anonymous opt-in, about openly redistributable namespaces only; the rest stay
+    # "gateway_disabled / anonymous" exactly as before (ruling SG 2026-10-21).
+    open_ns = anonymous_gateway_namespaces() if (to_ask and _anonymous_open(user)) else set()
     for c in rest:
         if parsed[c][1] == WHG_NS:
             # Private or non-existent: one answer for both (never which).
@@ -378,14 +474,17 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
             out[c] = blank("not_held")
     if to_ask:
         from api.crc_client import crc_fetch_places
-        for i in range(0, len(to_ask), GATEWAY_BATCH):
-            batch = to_ask[i:i + GATEWAY_BATCH]
+        groups = [([c for c in to_ask if parsed[c][1] in open_ns], True),
+                  ([c for c in to_ask if parsed[c][1] not in open_ns], False)]
+        batches = [(grp[i:i + GATEWAY_BATCH], anon) for grp, anon in groups
+                   for i in range(0, len(grp), GATEWAY_BATCH)]
+        for batch, anon in batches:
             meta: dict = {}
-            got = crc_fetch_places(batch, user=user, meta=meta)
+            got = crc_fetch_places(batch, user=user, allow_anonymous=anon, meta=meta)
             if meta.get("disabled"):
                 # Two causes, worded differently on the page: the server has no
                 # gateway ("not_configured"), or the caller is signed out
-                # ("anonymous"; allow_anonymous is a licensing decision, not taken).
+                # ("anonymous": a namespace not openly redistributable, or the flag off).
                 for c in batch:
                     r = blank("gateway_disabled", "gateway")
                     r["reason"] = meta.get("disabled_reason") or "unknown"
@@ -411,6 +510,73 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
                     "has_geometry": hg,
                 }]}
     return out
+
+
+# ---------------------------------------------------------------------------
+# The shared cache (concordance endpoint + record group)
+# ---------------------------------------------------------------------------
+
+# The Record page's concordance endpoint and both enrichment endpoints read the same
+# concordance; built once per (record, viewer class) and kept this long. Short, because
+# a link edit or a dataset going private is then visible within two minutes; and the
+# record's own visibility is re-checked on every hit, so a record that stops being
+# public stops rendering at once.
+CONCORDANCE_CACHE_TTL = 120
+CONCORDANCE_CACHE_VERSION = 1
+
+
+def viewer_class(user) -> str:
+    """What a concordance can depend on about its viewer, and nothing finer:
+
+    * ``beta``: ``can_access_beta``; embargoed gateway namespaces are visible
+      (``GazetteerRegistryEntry.visible_to``);
+    * ``signed_in``: any other signed-in user; the gateway is asked about every
+      namespace an anonymous caller may see;
+    * ``anonymous_open`` / ``anonymous``: signed out, with the public Record page on
+      (``anonymous_gateway_namespaces`` only) or off (no gateway at all).
+
+    The concordance never depends on WHO the user is beyond this (WHG records always
+    pass the anonymous visibility rule), so users of one class share one entry, and a
+    privileged class's entry is never read for a lesser one."""
+    if getattr(user, "is_authenticated", False):
+        return "beta" if getattr(user, "can_access_beta", False) else "signed_in"
+    return "anonymous_open" if _anonymous_open(user) else "anonymous"
+
+
+def concordance_cache_key(place_pk: int, user) -> str:
+    return f"concordance:v{CONCORDANCE_CACHE_VERSION}:{int(place_pk)}:{viewer_class(user)}"
+
+
+def _cacheable(conc: dict) -> bool:
+    """Not when an index outage thinned it: a gateway that could not be reached must
+    not pin a smaller concordance for the TTL."""
+    return not any((e.get("target") or {}).get("status") == "gateway_unavailable"
+                   for e in conc.get("outbound") or [])
+
+
+def cached_concordance(place, user=None) -> Optional[dict]:
+    """``build_concordance(place, user)``, shared by the concordance endpoint and the
+    record group (``places.record_group``) for ``CONCORDANCE_CACHE_TTL`` seconds per
+    (record, ``viewer_class``). Returns a fresh copy the caller may change."""
+    import copy
+    from django.core.cache import cache
+    from places.models import Place
+    key = concordance_cache_key(place.pk, user)
+    try:
+        hit = cache.get(key)
+    except Exception:  # noqa: BLE001 — a broken cache must not break the page
+        hit = None
+    if isinstance(hit, dict):
+        if not Place.objects.filter(id=place.id).filter(_visible_places_q()).exists():
+            return None
+        return copy.deepcopy(hit)
+    conc = build_concordance(place, user=user)
+    if conc is not None and _cacheable(conc):
+        try:
+            cache.set(key, conc, CONCORDANCE_CACHE_TTL)
+        except Exception:  # noqa: BLE001
+            pass
+    return copy.deepcopy(conc)
 
 
 # ---------------------------------------------------------------------------
@@ -454,8 +620,9 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
     is not public (private and embargoed datasets never render).
 
     ``user`` is used ONLY to call the CRC gateway (which refuses anonymous
-    callers) and to apply namespace embargoes there; it never widens which
-    WHG records appear. Shape::
+    callers unless the public Record page is on, and then only for openly
+    redistributable namespaces: ``anonymous_gateway_namespaces``) and to apply
+    namespace embargoes there; it never widens which WHG records appear. Shape::
 
         {"record": {...}, "self_identifiers": [...], "excluded_self_links": int,
          "outbound": [entry], "inbound": [entry], "cocited": [entry],
@@ -484,9 +651,24 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
     # ---- tier 1: outbound place_link ------------------------------------
     self_idents = {f"{WHG_NS}:{place.id}"}
     outbound_links = []
+    tier1 = []   # every tier-1 place_link entry, placeholders included, in row order
     for row in PlaceLink.objects.filter(place_id=place.id).order_by("id"):
         j = row.jsonb or {}
         raw_ident = j.get("identifier")
+        if is_placeholder_identifier(raw_ident):
+            # Listed, flagged, never aggregated or looked up; NOT in outbound_links, so
+            # it never seeds tiers 2-3 (ruling SG 2026-10-21).
+            ltype, _agg = normalise_link_type(j.get("type"))
+            ident = normalise_identifier(raw_ident)[0] if str(raw_ident or "").strip() else ""
+            tier1.append({
+                "tier": 1, "source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
+                "namespace": _placeholder_namespace(raw_ident), "link_type": ltype,
+                "link_type_raw": j.get("type"), "aggregates": False, "placeholder": True,
+                "placeholder_label": PLACEHOLDER_LABEL,
+                "provenance": _link_provenance(row), "attested_by": record,
+                "target": {"status": "placeholder", "via": None, "records": [], "has_geometry": False},
+            })
+            continue
         ident, ns, _local = normalise_identifier(raw_ident)
         if not ident:
             continue
@@ -495,18 +677,20 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
             self_idents.add(ident)
             continue
         ltype, agg = normalise_link_type(j.get("type"))
-        outbound_links.append({
+        entry = {
             "tier": 1, "source": "place_link", "identifier": ident, "identifier_raw": raw_ident,
             "namespace": ns, "link_type": ltype, "link_type_raw": j.get("type"), "aggregates": agg,
             "provenance": _link_provenance(row), "attested_by": record,
-        })
+        }
+        outbound_links.append(entry)
+        tier1.append(entry)
     out["self_identifiers"] = sorted(self_idents)
 
     resolutions = resolve_targets([e["identifier"] for e in outbound_links], user=user,
                                   use_gateway=use_gateway, exclude_place_id=place.id)
     for e in outbound_links:
         e["target"] = resolutions.get(e["identifier"])
-    out["outbound"].extend(outbound_links)
+    out["outbound"].extend(tier1)
 
     # ---- close_matches: tier 1 or 2 by who attested ---------------------
     cm_rows = list(close_match_rows(place.id).select_related("task"))

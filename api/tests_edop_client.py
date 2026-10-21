@@ -45,6 +45,8 @@ class FakeTransport:
 
 
 BASIN_T = (200, fixture_text("basin_london_ABCDET_1600-1700.json"))
+# The same request at level 8 (recorded 2026-10-21 13:19 UTC; same shape as level 6).
+BASIN_T8 = (200, fixture_text("basin_london_ABCDET_1600-1700_L8.json"))
 BASIN = (200, fixture_text("basin_london_ABCDE.json"))
 AREA = (200, fixture_text("area_london_ABCDE.json"))
 AREA_T = (200, fixture_text("area_london_ABCDET_1650.json"))
@@ -62,9 +64,9 @@ class RequestTests(SimpleTestCase):
 
     def test_basin_parameters_exact(self):
         self.assertEqual(edop.basin_request(*LONDON),
-                         {"scope": "basin", "lat": 51.5074, "lon": -0.1278, "bands": "ABCDE", "level": 6})
+                         {"scope": "basin", "lat": 51.5074, "lon": -0.1278, "bands": "ABCDE", "level": 8})
         self.assertEqual(edop.basin_request(*LONDON, years=(1600, 1700)),
-                         {"scope": "basin", "lat": 51.5074, "lon": -0.1278, "bands": "ABCDET", "level": 6,
+                         {"scope": "basin", "lat": 51.5074, "lon": -0.1278, "bands": "ABCDET", "level": 8,
                           "from_year": 1600, "to_year": 1700})
 
     def test_area_parameters_exact_and_band_t_single_year_only(self):
@@ -88,9 +90,25 @@ class RequestTests(SimpleTestCase):
         for scope in ("'basin'", "'area'"):
             self.assertIn(scope, params["scope"]["description"])
         self.assertIn("8 or 6", params["level"]["description"])
-        self.assertEqual(edop.LEVEL, 6)
+        # Ruling SG 2026-10-21: basin (one point) at level 8; area stays at 6.
+        self.assertEqual((edop.BASIN_LEVEL, edop.AREA_LEVEL), (8, 6))
+        self.assertEqual(params["level"]["schema"]["default"], 6)   # why it is sent explicitly
         self.assertEqual(edop.SIGNATURE_PATH, "/api/signature")
         self.assertIn("/api/signature", spec["paths"])
+
+    def test_level_8_basin_response_is_read_and_labelled(self):
+        """The level-8 fixture has the level-6 shape; the summary says level 8 (from the
+        response's meta.scope.basin_level) and names the smaller basin."""
+        r = edop.fetch_signature(edop.basin_request(*LONDON, years=(1600, 1700)), transport=FakeTransport(BASIN_T8))
+        s = edop.summarise(r)
+        self.assertEqual((s["unit"]["level"], s["unit"]["basin_id"]), (8, 53398))
+        self.assertEqual([b["band"] for b in s["bands"]], ["A", "B", "C", "D", "E"])
+        self.assertEqual(s["temporal"]["years"], [1600, 1700])
+        # A response that omits the level is labelled with the level that was ASKED for.
+        raw = json.loads(BASIN_T8[1])
+        raw["meta"]["scope"].pop("basin_level")
+        r2 = edop.fetch_signature(edop.basin_request(0.0, 0.0), transport=FakeTransport((200, json.dumps(raw))))
+        self.assertEqual(edop.summarise(r2)["unit"]["level"], 8)
 
     def test_band_t_years(self):
         self.assertEqual(edop.band_t_years([1600, 1700]), ((1600, 1700), None))

@@ -23,7 +23,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
 
-from api.tests_edop_client import AREA, BASIN_T, FakeTransport
+from api.tests_edop_client import AREA, BASIN_T, BASIN_T8, FakeTransport
 
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 SHOTS = os.environ.get("WHG_BROWSER_SHOTS")
@@ -178,7 +178,7 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertEqual(self.errors, [])
 
     def test_single_record_basin_with_band_t(self):
-        t = FakeTransport(BASIN_T)
+        t = FakeTransport(BASIN_T8)     # the level-8 answer (ruling 2026-10-21)
         page = self.new_page()
         with patch("api.edop_client._requests_transport", side_effect=t), \
                 patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
@@ -190,6 +190,9 @@ class EnrichmentBrowserTests(LiveServerTestCase):
             self.shot(page, "record_environment_basin", "#record_environment")
         self.assertTrue(ok)
         self.assertIn("one basin", d["env"])
+        self.assertIn("BasinATLAS level 8", d["env"])                      # the page says which level
+        self.assertNotIn("level 6", d["env"])
+        self.assertEqual(t.calls[0]["params"]["level"], 8)
         self.assertNotIn("an area", d["env"])
         self.assertIn("1600–1700", d["env"])
         self.assertIn("Drought index (PDSI), mean", d["env"])

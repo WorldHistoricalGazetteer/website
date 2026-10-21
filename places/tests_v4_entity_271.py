@@ -7,7 +7,8 @@ Run locally (never in a prod container):
         venv/bin/python manage.py test places.tests_v4_entity_271 --settings=whg.settings_localtest
 
 Off: every contributed id is 401 for an anonymous caller, as before. On: a
-public, non-embargoed record resolves (302 to the Record page); private,
+public, non-embargoed record resolves (200: the Record page AT the entity URI,
+ruling 2026-10-21; places/tests_v4_entity_record.py); private,
 embargoed and missing records are the same 404; ``/api`` stays 401. Each
 absence sits beside a presence on the same route.
 """
@@ -28,12 +29,12 @@ class EntitySwitchOffTests(_Fixture):
 class EntitySwitchOnTests(_Fixture):
 
     def test_entity_resolves_public_contributed_records_anonymously(self):
-        target = f"/atlas/place/{self.Pub.pk}/"
         for ident in (str(self.Pub.pk), f"whg:{self.Pub.pk}", f"whg:{self.ds_pub.pk}:P1"):
-            r = self.anon(f"/entity/place:{ident}/")
-            self.assertEqual((r.status_code, r["Location"]), (302, target), ident)
+            r = self.anon(f"/entity/place:{ident}/", HTTP_ACCEPT="text/html")
+            self.assertEqual(r.status_code, 200, ident)
+            self.assertContains(r, "Public Town")
         r = self.anon(f"/entity/place:{self.Pub.pk}/", HTTP_ACCEPT="application/ld+json")
-        self.assertEqual((r.status_code, r["Location"]), (302, target))
+        self.assertEqual((r.status_code, r.json()["title"]), (200, "Public Town"))
 
     def test_entity_withholds_private_embargoed_missing_alike(self):
         bodies = set()
@@ -44,8 +45,9 @@ class EntitySwitchOnTests(_Fixture):
             bodies.add(r.content.replace(ident.encode(), b"<id>"))
         self.assertEqual(len(bodies), 1, bodies)  # private and missing are indistinguishable
         # Presence on the same route: the owner still resolves their private record.
-        r = self.as_user(self.owner, f"/entity/place:{self.Priv.pk}/")
-        self.assertEqual((r.status_code, r["Location"]), (302, f"/atlas/place/{self.Priv.pk}/"))
+        r = self.as_user(self.owner, f"/entity/place:{self.Priv.pk}/", HTTP_ACCEPT="text/html")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "Secret Town")
 
     def test_every_identifier_form_withholds_alike(self):
         """Review 2026-10-21: a src_id that does not exist reached the integer pk
@@ -66,7 +68,8 @@ class EntitySwitchOnTests(_Fixture):
         for accept in ("application/json", "text/html"):
             for ident in present:
                 r = self.anon(f"/entity/place:{ident}/", HTTP_ACCEPT=accept)
-                self.assertEqual((r.status_code, r["Location"]), (302, f"/atlas/place/{P.pk}/"), ident)
+                self.assertEqual(r.status_code, 200, ident)
+                self.assertIn(b"Public Town", r.content, ident)
             answers = {}
             for ident in withheld:
                 r = self.anon(f"/entity/place:{ident}/", HTTP_ACCEPT=accept)
@@ -83,8 +86,8 @@ class EntitySwitchOnTests(_Fixture):
 
     def test_retired_portal_chain_ends_at_the_record_or_404(self):
         r = self.client.get(f"/places/portal/{self.Pub.pk}/", follow=True)
-        self.assertEqual(r.redirect_chain, [(f"/entity/place:{self.Pub.pk}/", 302),
-                                            (f"/atlas/place/{self.Pub.pk}/", 302)])
+        self.assertEqual(r.redirect_chain, [(f"/entity/place:{self.Pub.pk}/", 302)])
+        self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Public Town")
         r = self.client.get(f"/places/portal/{self.Priv.pk}/", follow=True)
         self.assertEqual(r.status_code, 404)

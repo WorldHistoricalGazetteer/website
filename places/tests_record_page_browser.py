@@ -121,7 +121,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
                                                                    ("closeMatch", "viaf:55"),
                                                                    # private, and non-existent: one status
                                                                    ("closeMatch", f"whg:{hidden.pk}"),
-                                                                   ("closeMatch", f"whg:{hidden.pk + 100000}")])
+                                                                   ("closeMatch", f"whg:{hidden.pk + 100000}"),
+                                                                   # a placeholder (ruling 2026-10-21)
+                                                                   ("closeMatch", "wd:None")])
         self.hidden_pk = hidden.pk
         # Record-page renders read the gateway's clustering_params for the
         # default-settings link. Never the real gateway from here: answer
@@ -142,6 +144,10 @@ class RecordPageBrowserTests(LiveServerTestCase):
         # The co-citer is far away: if tier 3 leaked into the extent, the map would show it.
         self.C = place(b, "Record C", "C1", xy=(120.0, -40.0), links=[("closeMatch", "gn:100")])
         self.Lonely = place(a, "Lonely Place", "L1", xy=(2.0, 2.0))
+        # Placeholder carriers, far away: if wd:None co-cited them, tier 3 would gain a
+        # 'wd:None' group (the groups check is exact) and the map extent would reach them.
+        for i in range(3):
+            place(b, f"Placeholder Carrier {i}", f"PC{i}", xy=(-60.0, 50.0), links=[("closeMatch", "wd:None")])
         # A 2024-migration record-to-record pair, direction unknown, no geometry.
         from places.models import CloseMatch
         self.F = place(b, "Record F", "F1")
@@ -221,6 +227,13 @@ class RecordPageBrowserTests(LiveServerTestCase):
             and "may be private, or may no longer exist" in whg[0]["text"]
             and "WHG does not hold records for" not in whg[0]["text"]
             and "Hidden Thing" not in page.evaluate("document.body.innerText"))
+        ph = page.evaluate("""() => { const e = Array.from(document.querySelectorAll('#concordance_tier1 .conc-entry'))
+            .find(x => (x.querySelector('code') || {}).textContent === 'wd:None');
+            return e ? {status: e.dataset.status, text: e.textContent,
+                        badge: !!e.querySelector('.conc-placeholder-badge')} : null; }""")
+        results["tier1_placeholder_flagged"] = bool(ph) and ph["status"] == "placeholder" and ph["badge"] \
+            and "Placeholder, not a real identifier" in ph["text"] and "holds no record" not in ph["text"] \
+            and "Placeholder Carrier" not in page.evaluate("document.body.innerText")
         tier2 = " | ".join(dom["tier2"])
         results["tier2_attributed"] = ("Attested by Dataset b" in tier2 and "Record B" in tier2
                                        and "Record C" not in tier2)
@@ -245,13 +258,23 @@ class RecordPageBrowserTests(LiveServerTestCase):
             const has = (lng, lat) => b.contains([lng, lat]);
             return {titles: Array.from(new Set(titles)).sort(),
                     rendered: map.queryRenderedFeatures({layers: ['concordance-members']}).map(f => f.properties.title),
-                    a: has(0, 0), b: has(0.5, 0.5), gw: has(10, 20), c: has(120, -40)};
+                    a: has(0, 0), b: has(0.5, 0.5), gw: has(10, 20), c: has(120, -40), ph: has(-60, 50)};
         }""")
         results["base_map_loaded"] = bool(self.map_diag.get("state")) and \
             self.map_diag["state"].get("baseMap") == expect_base
         results["map_aggregate_only"] = bool(m) and m["titles"] == [
             "member:Gateway Town", "member:Record B", "record:Record A"]
-        results["map_extent_excludes_tier3"] = bool(m) and m["a"] and m["b"] and m["gw"] and not m["c"]
+        results["map_extent_excludes_tier3"] = bool(m) and m["a"] and m["b"] and m["gw"] and not m["c"] \
+            and not m["ph"]
+        # The canvas fills its container (dev walkthrough 2026-10-21: 400x300 in ~1294 px,
+        # because the map was created while the section was still hidden).
+        size = page.evaluate("""() => { const el = document.getElementById('concordance_map');
+            const map = window.__whgRecordMap; if (!el || !map) return null;
+            const c = map.getCanvas();
+            return {box: el.clientWidth, boxH: el.clientHeight, css: c.clientWidth, cssH: c.clientHeight}; }""")
+        self.map_size = size
+        results["map_canvas_fills_container"] = bool(size) and size["box"] > 600 \
+            and abs(size["css"] - size["box"]) <= 2 and abs(size["cssH"] - size["boxH"]) <= 2
         results["map_rendered_members"] = bool(m) and {"Gateway Town", "Record B"} <= set(m["rendered"]) \
             and "Record C" not in m["rendered"]
         return results, m
@@ -264,9 +287,18 @@ class RecordPageBrowserTests(LiveServerTestCase):
             results, m = self.concordance_checks(page)
         self.shot(page, "record_with_concordance")
         failed = {k: v for k, v in results.items() if not v}
-        self.assertEqual(failed, {}, f"checks failed: {failed}; map={m}; diag={self.map_diag}; "
-                         f"errors={self.page_errors}; console={self.console[-25:]}")
+        self.assertEqual(failed, {}, f"checks failed: {failed}; map={m}; size={self.map_size}; "
+                         f"diag={self.map_diag}; errors={self.page_errors}; console={self.console[-25:]}")
         self.assertEqual(self.page_errors, [])
+        # ... and keeps tracking it when the container changes size later.
+        page.set_viewport_size({"width": 820, "height": 1000})
+        tracked = self.wait_for(page, """() => { const el = document.getElementById('concordance_map');
+            const c = window.__whgRecordMap.getCanvas();
+            return el.clientWidth < 800 && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""", 5000)
+        after = page.evaluate("""() => [document.getElementById('concordance_map').clientWidth,
+                                        window.__whgRecordMap.getCanvas().clientWidth]""")
+        self.assertTrue(tracked, f"canvas did not follow its container: {after} (before: {self.map_size})")
+        self.assertLess(after[0], self.map_size["box"])                   # the container did shrink
 
     def test_unreachable_base_map_still_maps(self):
         """The base style failing outright falls back to a plain background, and
@@ -364,6 +396,34 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("Sign in to see it", text)
         self.assertNotIn("not configured", text)
         self.assertIn("Record B", page.inner_text("#concordance_tier2"))       # the rest still renders
+
+    @override_settings(V4_LANDING_ENABLED=True, CRC_GATEWAY_URL="http://gateway.invalid")
+    def test_signed_out_visitor_sees_open_namespaces_resolved(self):
+        """Ruling 2026-10-21: an openly redistributable namespace (licence recorded,
+        redistributable, published) IS looked up for a signed-out visitor; the same page
+        with the licence unknown is not (the test above)."""
+        from api.models import GazetteerRegistryEntry
+        from licensing.models import License
+        lic, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        GazetteerRegistryEntry.objects.filter(id="gn").update(license=lic, redistributable=True)
+        asked = []
+
+        def fetch(ids, user=None, allow_anonymous=False, meta=None):
+            asked.append((tuple(ids), allow_anonymous))
+            return fake_fetch(ids) if allow_anonymous else {}
+        page = self.new_page(anonymous=True)
+        with patch("api.crc_client.crc_fetch_places", side_effect=fetch):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/#concordance")
+            ok = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 45000)
+            mapped = self.wait_for(page, "window.__whgRecord.mapDrawn >= 1", 30000)
+        text = self._gn100_entry(page)
+        self.assertTrue(ok)
+        self.assertIn("resolved", text)
+        self.assertIn("Gateway Town", text)
+        self.assertNotIn("signed-out", text)
+        self.assertEqual(asked, [(("gn:100",), True)])
+        self.assertTrue(mapped)
+        self.assertEqual(page.evaluate("window.__whgRecord.mapped"), 2)       # Gateway Town + Record B
 
     @override_settings(CRC_GATEWAY_URL="")
     def test_unconfigured_server_says_not_configured(self):

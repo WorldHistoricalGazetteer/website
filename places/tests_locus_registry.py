@@ -158,13 +158,16 @@ class RegistryTests(TestCase):
         # trigger discriminates, it does not refuse every UPDATE.
         with transaction.atomic():
             self.assertEqual(qs.update(status="withdrawn", withdrawn_reason="raw"), 1)
-        with transaction.atomic(), connection.cursor() as cur:
-            cur.execute("UPDATE locus_registry SET withdrawn_reason = %s WHERE pid = %s", ["raw2", e.pid])
+        # Once withdrawn, the withdrawal record is frozen (migration 0028; one-way
+        # withdrawal is tested in full in places.tests_locus_redaction).
+        with self.assertRaises(DatabaseError):
+            with transaction.atomic(), connection.cursor() as cur:
+                cur.execute("UPDATE locus_registry SET withdrawn_reason = %s WHERE pid = %s", ["raw2", e.pid])
         # minted_by may go to NULL (account deletion) but not to another account.
         with transaction.atomic():
             self.assertEqual(qs.update(minted_by=None), 1)
         row = LocusRegistryEntry.objects.get(pk=e.pk)
-        self.assertEqual((row.status, row.withdrawn_reason, row.minted_by), ("withdrawn", "raw2", None))
+        self.assertEqual((row.status, row.withdrawn_reason, row.minted_by), ("withdrawn", "raw", None))
         self.assertEqual(row.canonical_bytes, lr.canonical_bytes(recipe()))
 
     def test_deleting_the_minter_keeps_the_row(self):

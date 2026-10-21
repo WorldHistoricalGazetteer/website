@@ -34,10 +34,29 @@ be deleted:
   raises on DELETE and on any UPDATE that touches them, so ``QuerySet.update``,
   ``QuerySet.delete``, raw SQL and other clients are refused too.
 
-What CAN change is the serving status (place#308 tombstones): ``status`` goes
-``active`` -> ``withdrawn`` with a reason, by whom, and when. Withdrawal stops
-the recipe being re-run and says why; it never frees the PID and the recipe
-stays public. There is no correction, merge, split or version history
+What CAN change, and only in one direction each (migration 0028, rulings of
+2026-10-21 after the dev walkthrough):
+
+* ``status`` goes ``active`` -> ``withdrawn`` with a reason, by whom, and when
+  (place#308 tombstone). **Withdrawal is one-way**: a withdrawn row can never
+  return to ``active``, and its ``withdrawn_at`` / ``withdrawn_reason`` /
+  ``withdrawn_by`` are frozen once written (``withdrawn_by`` may still become
+  NULL when that account is deleted).
+* ``redacted_at`` / ``redacted_by`` / ``redaction_reason``: a staff take-down,
+  of an active or a withdrawn row. Write-once from NULL; never undone.
+* ``minter_public`` (the minter chose, in the mint modal, to be named): may go
+  ``true`` -> ``false`` (the minter withdraws consent, or staff act on their
+  behalf), never ``false`` -> ``true`` after the row exists. Turning it on
+  later would publish a person's name without the consent recorded at mint
+  time, and the database cannot tell who is asking; retraction is always safe.
+
+A withdrawn OR redacted row is *suppressed* (:attr:`is_suppressed`): its page
+and JSON show the PID, the status, the withdrawal reason and the dates, and
+nothing of the recipe or the minter. The CANONICAL BYTES STAY in this table
+regardless, because the PID is a hash of them and the registry is the
+collision authority (a PID must never be re-bound to different bytes); they
+are simply never displayed once suppressed (not on the page, not in the JSON,
+not in the admin). There is no correction, merge, split or version history
 (place#172: a defective recipe is not ours to fix; mint a better one).
 """
 from __future__ import annotations
@@ -69,7 +88,8 @@ class LocusRegistryEntry(models.Model):
     VIA_DEREFERENCE = "dereference"  # a legacy whg_id minted on its first dereference
     VIA_CHOICES = ((VIA_MODAL, "minting modal"), (VIA_DEREFERENCE, "first dereference"))
 
-    # Columns that make up the binding. Mirrored in the trigger in migration 0027.
+    # Columns that make up the binding. Mirrored in the trigger (migration 0027,
+    # revised in 0028, which adds the one-way rules for the serving columns).
     BINDING_FIELDS = ("pid", "kind", "version", "canonical", "digest", "token",
                       "members", "minted_at", "minted_via")
 
@@ -100,6 +120,19 @@ class LocusRegistryEntry(models.Model):
                                      on_delete=models.SET_NULL, related_name="withdrawn_loci")
     withdrawn_reason = models.TextField(blank=True, default="")
 
+    # Whether the minter chose to be named publicly (the mint modal's checkbox,
+    # default off). Off: the page and JSON say "a WHG contributor"; minted_by is
+    # still recorded, for staff. May only go true -> false (see module docstring).
+    minter_public = models.BooleanField(default=False)
+
+    # Staff redaction (take-down): write-once. The reason is for staff only and
+    # is never shown publicly. Redaction does NOT remove `canonical` (the PID is
+    # its hash); it stops it being displayed.
+    redacted_at = models.DateTimeField(null=True, blank=True)
+    redacted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                    on_delete=models.SET_NULL, related_name="redacted_loci")
+    redaction_reason = models.TextField(blank=True, default="")
+
     class Meta:
         db_table = "locus_registry"
         verbose_name = "locus registry entry"
@@ -127,6 +160,25 @@ class LocusRegistryEntry(models.Model):
         return self.status == self.STATUS_WITHDRAWN
 
     @property
+    def is_redacted(self) -> bool:
+        return self.redacted_at is not None
+
+    @property
+    def is_suppressed(self) -> bool:
+        """Withdrawn or redacted: served as a tombstone, recipe text never shown."""
+        return self.is_withdrawn or self.is_redacted
+
+    @property
+    def serving_status(self):
+        """``X-WHG-Locus-Status`` for a suppressed row: "withdrawn" (wins) or
+        "redacted"; None for an active, unredacted row."""
+        if self.is_withdrawn:
+            return "withdrawn"
+        if self.is_redacted:
+            return "redacted"
+        return None
+
+    @property
     def entity_path(self) -> str:
         return f"/entity/locus:{self.pid}/"
 
@@ -151,17 +203,39 @@ class LocusRegistryEntry(models.Model):
                 if current.minted_by_id is not None and self.minted_by_id not in (None, current.minted_by_id):
                     raise RegistryImmutable(
                         f"locus registry is append-only: minted_by of locus:{self.pid} cannot change (place#172)")
+                self._check_one_way(current)
         elif self.digest != self.digest_of(self.canonical):
             raise RegistryImmutable("digest must be sha256 of canonical")
         super().save(*args, **kwargs)
+
+    def _check_one_way(self, current):
+        """The Python mirror of migration 0028's one-way rules."""
+        def refuse(what):
+            raise RegistryImmutable(f"locus registry: {what} of locus:{self.pid} cannot change (place#325)")
+        if current.status == self.STATUS_WITHDRAWN:
+            if self.status != self.STATUS_WITHDRAWN:
+                refuse("a withdrawal is one-way; the status")
+            if self.withdrawn_at != current.withdrawn_at or self.withdrawn_reason != current.withdrawn_reason:
+                refuse("the withdrawal record")
+            if self.withdrawn_by_id not in (None, current.withdrawn_by_id):
+                refuse("withdrawn_by")
+        if current.redacted_at is not None:
+            if self.redacted_at != current.redacted_at or self.redaction_reason != current.redaction_reason:
+                refuse("a redaction is write-once; the redaction record")
+            if self.redacted_by_id not in (None, current.redacted_by_id):
+                refuse("redacted_by")
+        if self.minter_public and not current.minter_public:
+            refuse("minter_public may only be turned off after minting;")
 
     def delete(self, *args, **kwargs):
         raise RegistryImmutable(
             f"locus registry is append-only: locus:{self.pid} cannot be deleted (place#172)")
 
     def withdraw(self, reason: str, by=None):
-        """Tombstone this locus (place#308): it keeps its PID, page and recipe,
-        and stops being re-run. The only change a row ever undergoes."""
+        """Tombstone this locus (place#308): it keeps its PID and a page that
+        says it was withdrawn, why and when; the recipe stops being re-run and
+        its text stops being shown (rulings 2026-10-21). One-way: a withdrawn
+        locus is never reinstated (a second call is a no-op)."""
         reason = (reason or "").strip()
         if not reason:
             raise ValueError("a withdrawal needs a stated reason")
@@ -172,4 +246,27 @@ class LocusRegistryEntry(models.Model):
         self.withdrawn_by = by if (by is not None and getattr(by, "pk", None)) else None
         self.withdrawn_reason = reason
         self.save(update_fields=["status", "withdrawn_at", "withdrawn_by", "withdrawn_reason"])
+        return self
+
+    def redact(self, reason: str, by=None):
+        """Staff take-down (rulings 2026-10-21): the recipe text and the minter
+        stop being shown anywhere; the row, its PID and its canonical bytes stay
+        (the PID is their hash). Write-once: a second call keeps the first.
+        ``reason`` is recorded for staff and never displayed publicly."""
+        reason = (reason or "").strip()
+        if not reason:
+            raise ValueError("a redaction needs a stated reason")
+        if self.is_redacted:
+            return self
+        self.redacted_at = timezone.now()
+        self.redacted_by = by if (by is not None and getattr(by, "pk", None)) else None
+        self.redaction_reason = reason
+        self.save(update_fields=["redacted_at", "redacted_by", "redaction_reason"])
+        return self
+
+    def hide_minter(self):
+        """The minter's name stops being shown (true -> false only)."""
+        if self.minter_public:
+            self.minter_public = False
+            self.save(update_fields=["minter_public"])
         return self

@@ -11,7 +11,8 @@
     "audit:licenses": "node scripts/audit-js-licenses.js",
     "test:myd": "node scripts/check-myd-contracts.js",
     "test:symphonym": "node scripts/check-symphonym-tokeniser.mjs",
-    "test:locus-recipe": "node scripts/check-locus-recipe.mjs"
+    "test:locus-recipe": "node scripts/check-locus-recipe.mjs",
+    "test:cluster-parity": "node --no-warnings scripts/check-cluster-parity.mjs"
   },
   "dependencies": {
     "@citation-js/plugin-csl": "^0.7.14",

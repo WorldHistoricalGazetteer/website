@@ -15,7 +15,8 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.test import TestCase
+from django.conf import settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from places.concordance import (
@@ -40,6 +41,17 @@ def fake_fetch(ids, user=None, allow_anonymous=False, meta=None):
 
 
 fake_fetch.calls = []
+
+# The record group reads the SHARED concordance cache (places.concordance.cached_concordance);
+# the default cache is file-based and outlives a run, so classes that go through it get a
+# private in-memory one, cleared per test.
+LOCMEM = {**settings.CACHES, "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                                         "LOCATION": "conc-tests"}}
+
+
+def _clear_cache():
+    from django.core.cache import cache
+    cache.clear()
 
 
 def failing_fetch(ids, user=None, allow_anonymous=False, meta=None):
@@ -372,6 +384,7 @@ class ConcordanceTests(TestCase):
         self.assertEqual(ids, {self.A.id, self.F.id, self.G.id, self.H.id})
 
 
+@override_settings(CACHES=LOCMEM)
 class HubTruncationTests(TestCase):
     """Review 2026-10-21: tiers 2 and 3 shared one LIMIT with no ORDER BY, so the
     survivors were arbitrary and co-citers could crowd every inbound attester out;
@@ -414,6 +427,7 @@ class HubTruncationTests(TestCase):
         cls.small_attester = p.pk
 
     def setUp(self):
+        _clear_cache()
         for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
             p = patch(f"places.concordance.{name}", val)
             p.start()
@@ -459,3 +473,254 @@ class HubTruncationTests(TestCase):
             env = {p.pk: self.client.get(f"/atlas/place/{p.pk}/environment/").json() for p in (self.Hub, self.Small)}
         self.assertEqual((env[self.Hub.pk]["truncated"], env[self.Small.pk]["truncated"]), (True, False))
         self.assertEqual(env[self.Small.pk]["status"], "ok")
+
+
+@override_settings(CACHES=LOCMEM)
+class PlaceholderIdentifierTests(TestCase):
+    """Ruling 2026-10-21 (SG, after the dev walkthrough): a placeholder identifier
+    (``wd:None``: 6,235 links on dev, 6,240 on prod, all ``wd:None``) is not a real
+    identifier. It is listed FLAGGED in the record's own outbound tier and never
+    aggregated, looked up, co-cited, mapped, glossed or sent to EDOPS. Before the fix it
+    was one identifier co-cited by every record carrying it: a false hub. Caps are
+    patched small (5 / 3) and the hub is larger than both."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from places.models import Place, PlaceGeom, PlaceLink
+
+        user = get_user_model().objects.create_user(username="ph_owner", email="ph@example.org", password="pw",
+                                                    given_name="P", surname="H")
+        cls.user = user
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=user, label="ph325", title="Ph ds", description="D", creator="X",
+                                        public=True, ds_status="indexed", uri_base="https://example.org/p/")
+        for ns in ("gn", "wd"):
+            GazetteerRegistryEntry.objects.update_or_create(
+                id=ns, defaults=dict(name=ns, namespace=ns, entry_class="authority", status="published"))
+
+        def place(title, src, links):
+            p = Place.objects.create(title=title, src_id=src, dataset=ds, ccodes=[])
+            PlaceGeom.objects.create(place=p, geom=Point(1.0, 2.0, srid=4326),
+                                     jsonb={"type": "Point", "coordinates": [1.0, 2.0]})
+            for t, ident in links:
+                PlaceLink.objects.create(place=p, jsonb={"type": t, "identifier": ident})
+            return p
+        # Hub of placeholder carriers, created FIRST (so a cap would be hit by them), in
+        # several spellings, one with a src_id that is itself the literal "None".
+        spellings = ["wd:None", " WD:none ", "wd:NULL", "wd:nan", "wd:undefined", "wd:", "None"]
+        cls.hub = [place(f"Carrier {i}", "None" if i == 0 else f"K{i}",
+                         [("closeMatch", spellings[i % len(spellings)])]).pk for i in range(12)]
+        cls.R = place("Real", "R1", [("closeMatch", "wd:None"), ("exactMatch", "gn:4300"),
+                                     ("closeMatch", "gn:None")])
+        # A record whose own src_id is "None": its wd:None is NOT a self-link.
+        cls.S = place("Src None", "None", [("closeMatch", "wd:None")])
+        # Paired presence: a real identifier IS co-cited.
+        cls.cociter = place("Real cociter", "Q1", [("closeMatch", "https://www.geonames.org/4300")]).pk
+
+    def setUp(self):
+        _clear_cache()
+        for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
+            p = patch(f"places.concordance.{name}", val)
+            p.start()
+            self.addCleanup(p.stop)
+        fake_fetch.calls = []
+        GATEWAY_DB["gn:4300"] = {"place_id": "gn:4300", "title": "Real Gn", "namespace": "gn",
+                                 "repr_point": [1.1, 2.1], "geometries": [{"repr_point": [1.1, 2.1]}]}
+        self.addCleanup(GATEWAY_DB.pop, "gn:4300", None)
+
+    def build(self, place):
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            return build_concordance(place, user=self.user)
+
+    def test_detection(self):
+        from places.concordance import is_placeholder_identifier
+        for s in ("wd:None", " WD:none ", "gn:NULL", "tgn:NaN", "wd:undefined", "wd:", "wd: ", "None", "null",
+                  "", "   ", None, "whg:None"):
+            self.assertTrue(is_placeholder_identifier(s), repr(s))
+        for s in ("wd:Q1", "gn:100", "wd:Nonesuch", "none:1", "https://example.org/None", "tgn:7000"):
+            self.assertFalse(is_placeholder_identifier(s), repr(s))
+
+    def test_placeholder_is_never_a_self_link(self):
+        self.assertFalse(is_self_link("wd:None", 5, "None"))
+        self.assertFalse(is_self_link("None", 5, "None"))
+        self.assertTrue(is_self_link("tgn:7000", 5, "7000"))       # presence: the rule still works
+
+    def test_listed_flagged_in_tier1_never_aggregated(self):
+        c = self.build(self.R)
+        out = self.by_ident(c["outbound"])
+        ph = out["wd:None"]
+        self.assertEqual((ph["tier"], ph["aggregates"], ph["target"]["status"]), (1, False, "placeholder"))
+        self.assertTrue(ph.get("placeholder"))
+        self.assertEqual(out["gn:None"]["target"]["status"], "placeholder")
+        real = out["gn:4300"]                                      # paired: the real one resolves
+        self.assertEqual((real["aggregates"], real["target"]["status"]), (True, "resolved"))
+        agg = {m["place_id"] for m in c["aggregate"]}
+        self.assertIn("gn:4300", agg)
+        self.assertFalse({"wd:None", "gn:None"} & agg)
+        asked = {i for call in fake_fetch.calls for i in call}
+        self.assertIn("gn:4300", asked)
+        self.assertFalse({"wd:None", "gn:None"} & asked)            # never looked up
+
+    def test_no_cocitation_hub_and_no_truncation_from_it(self):
+        c = self.build(self.R)
+        cocited = {e["record"]["place_id"] for e in c["cocited"]}
+        self.assertIn(self.cociter, cocited)                        # presence: real co-citation
+        self.assertFalse(set(self.hub) & cocited)                   # absence: no placeholder hub
+        self.assertEqual({e["cocited_identifier"] for e in c["cocited"]}, {"gn:4300"})
+        self.assertEqual(c["inbound"], [])
+        self.assertEqual(c["truncated"], {"inbound": False, "cocited": False})
+        # The src_id-"None" record: its wd:None is flagged, not a self-link, so the hub
+        # does not become its inbound tier.
+        s = self.build(self.S)
+        self.assertEqual(s["excluded_self_links"], 0)
+        self.assertEqual([e["target"]["status"] for e in s["outbound"]], ["placeholder"])
+        self.assertEqual((s["inbound"], s["cocited"]), ([], []))
+        self.assertEqual(s["truncated"], {"inbound": False, "cocited": False})
+        self.assertNotIn("wd:None", s["self_identifiers"])
+
+    def test_resolve_targets_answers_placeholder_without_asking(self):
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            r = resolve_targets(["wd:None", "gn:4300"], user=self.user)
+        self.assertEqual(r["wd:None"]["status"], "placeholder")
+        self.assertEqual(r["gn:4300"]["status"], "resolved")
+        self.assertNotIn("wd:None", {i for call in fake_fetch.calls for i in call})
+
+    def test_group_gloss_and_edops_input_exclude_it(self):
+        from places.gloss import build_gloss
+        from places.record_group import build_record_group, offsite_members
+        with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+            g = build_record_group(self.R, user=self.user)
+        keys = [m["key"] for m in g["members"]]
+        self.assertIn("gn:4300", keys)                              # presence
+        self.assertFalse({"wd:None", "gn:None"} & set(keys))
+        self.assertEqual(g["n_equivalents"], 1)
+        self.assertEqual(g["unresolved"], 0)
+        self.assertNotIn("None", repr([m["key"] for m in offsite_members(g["members"])]))
+        gl = build_gloss(g["members"], unresolved=g["unresolved"], truncated=g["truncated"])
+        self.assertNotIn("wd:None", repr(gl))
+
+    by_ident = staticmethod(lambda entries: {e["identifier"]: e for e in entries})
+
+
+@override_settings(CACHES=LOCMEM)
+class AnonymousGatewayTests(TestCase):
+    """Ruling SG 2026-10-21: on the public Record page (V4_LANDING_ENABLED on) the
+    concordance asks the CRC gateway on behalf of a signed-out visitor ONLY for
+    namespaces whose registry row is openly redistributable: the rule the anonymous
+    ``/entity/place:<ns>:<id>/api`` path enforces (``redistributable``, else 451),
+    plus anonymous visibility (never embargoed or unpublished) and a recorded licence
+    (fail closed when it is NULL)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from licensing.models import License
+        from places.models import Place, PlaceLink
+
+        cls.user = get_user_model().objects.create_user(username="an_user", email="an@example.org", password="pw",
+                                                        given_name="A", surname="N")
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=cls.user, label="anon325", title="Anon ds", description="D",
+                                        creator="X", public=True, ds_status="indexed",
+                                        uri_base="https://example.org/p/")
+        cc, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        rows = {  # ns: (status, redistributable, licence)
+            "gn": ("published", True, cc), "wd": ("published", True, cc),
+            "aem": ("embargoed", True, cc),             # embargoed: never for anonymous
+            "anr": ("published", False, cc),            # not redistributable (the 451 rule)
+            "anl": ("published", True, None),           # licence unknown: fail closed
+            "adr": ("draft", True, cc),                 # not public
+        }
+        for ns, (st, red, lic) in rows.items():
+            GazetteerRegistryEntry.objects.update_or_create(
+                id=ns, defaults=dict(name=ns, namespace=ns, entry_class="authority", status=st,
+                                     redistributable=red, license=lic,
+                                     embargo_release_at=(timezone.now() + timedelta(days=30)) if st == "embargoed"
+                                     else None))
+        cls.R = Place.objects.create(title="Anon R", src_id="AR1", dataset=ds, ccodes=[])
+        cls.idents = ["gn:100", "wd:Q5", "aem:1", "anr:1", "anl:1", "adr:1"]
+        for ident in cls.idents:
+            PlaceLink.objects.create(place=cls.R, jsonb={"type": "closeMatch", "identifier": ident})
+
+    def setUp(self):
+        _clear_cache()
+        self.calls = []
+
+        def fetch(ids, user=None, allow_anonymous=False, meta=None):
+            self.calls.append((tuple(ids), bool(allow_anonymous), bool(getattr(user, "is_authenticated", False))))
+            if not allow_anonymous and not getattr(user, "is_authenticated", False):
+                if meta is not None:
+                    meta["disabled"], meta["disabled_reason"] = True, "anonymous"
+                return {}
+            return {i: {"place_id": i, "title": f"T {i}", "namespace": i.split(":")[0],
+                        "repr_point": [1.0, 1.0]} for i in ids}
+        p = patch("api.crc_client.crc_fetch_places", side_effect=fetch)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def statuses(self, user):
+        from django.contrib.auth.models import AnonymousUser
+        c = build_concordance(self.R, user=user if user is not None else AnonymousUser())
+        return {e["identifier"]: (e["target"]["status"], e["target"].get("reason")) for e in c["outbound"]}
+
+    def asked(self, allow_anonymous=None):
+        return {i for ids, anon, _auth in self.calls for i in ids if allow_anonymous is None or anon == allow_anonymous}
+
+    def test_namespace_rule(self):
+        from places.concordance import anonymous_gateway_namespaces
+        ns = anonymous_gateway_namespaces()
+        self.assertTrue({"gn", "wd"} <= ns)                            # presence
+        self.assertFalse({"aem", "anr", "anl", "adr", "whg"} & ns)    # absence
+
+    def test_anonymous_flag_on_resolves_open_namespaces_only(self):
+        with self.settings(V4_LANDING_ENABLED=True):
+            st = self.statuses(None)
+        self.assertEqual(st["gn:100"], ("resolved", None))
+        self.assertEqual(st["wd:Q5"], ("resolved", None))
+        self.assertEqual(self.asked(allow_anonymous=True), {"gn:100", "wd:Q5"})
+        self.assertEqual(st["anr:1"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(st["anl:1"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(st["aem:1"][0], "not_held")        # not even visible to an anonymous caller
+        self.assertEqual(st["adr:1"][0], "not_held")
+        self.assertFalse({"aem:1", "anr:1", "anl:1", "adr:1"} & self.asked(allow_anonymous=True))
+
+    def test_anonymous_flag_off_unchanged(self):
+        with self.settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):  # the alias too (review #5)
+            st = self.statuses(None)
+        self.assertEqual(st["gn:100"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(self.asked(allow_anonymous=True), set())
+        self.assertEqual(st["aem:1"][0], "not_held")
+
+    def test_signed_in_unchanged(self):
+        with self.settings(V4_LANDING_ENABLED=True):
+            st = self.statuses(self.user)
+        self.assertEqual(self.asked(allow_anonymous=True), set())       # never the anonymous opt-in
+        self.assertEqual(self.asked(allow_anonymous=False), {"gn:100", "wd:Q5", "anr:1", "anl:1"})
+        for i in ("gn:100", "wd:Q5", "anr:1", "anl:1"):
+            self.assertEqual(st[i][0], "resolved")
+        self.assertEqual(st["aem:1"][0], "not_held")                    # embargo: beta only
+
+    def test_anonymous_endpoint(self):
+        from django.core.cache import cache
+        cache.clear()
+        with self.settings(V4_LANDING_ENABLED=True):
+            data = self.client.get(f"/atlas/place/{self.R.pk}/concordance/").json()
+        st = {e["identifier"]: e["target"]["status"] for e in data["outbound"]}
+        self.assertEqual((st["gn:100"], st["anr:1"]), ("resolved", "gateway_disabled"))
+        self.assertIn("gn:100", {m["place_id"] for m in data["aggregate"]})
+        self.assertNotIn("anr:1", {m["place_id"] for m in data["aggregate"]})
+
+    def test_anonymous_group_reads_the_same_namespaces(self):
+        from django.contrib.auth.models import AnonymousUser
+        from places.record_group import build_record_group
+        with self.settings(V4_LANDING_ENABLED=True):
+            g = build_record_group(self.R, user=AnonymousUser())
+        gw = {m["key"]: m["detail"] for m in g["members"] if m["via"] == "gateway"}
+        self.assertEqual(gw, {"gn:100": "full", "wd:Q5": "full"})
+        self.assertEqual(self.asked(allow_anonymous=True), {"gn:100", "wd:Q5"})
+        # Without the opt-in only the namespaces the rule refuses were offered (and the
+        # fake, like the real client, answered them with nothing).
+        self.assertEqual(self.asked(allow_anonymous=False), {"anr:1", "anl:1"})

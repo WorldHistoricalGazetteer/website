@@ -1,7 +1,9 @@
 """Minting and lookup for the locus registry (place#172, place#325 Stage 4).
 
-Everything here is OFF unless ``settings.LOCUS_MINTING_ENABLED`` is true
-(default False; absent on prod): v4 changes nothing public until release.
+Everything here is OFF unless the v4 release switch is on
+(``places.v4_landing.v4_landing_enabled``: ``V4_LANDING_ENABLED``, or its
+deprecated alias ``LOCUS_MINTING_ENABLED``; both absent on prod): v4 changes
+nothing public until release.
 Callers check :func:`minting_enabled` before doing anything that could write.
 
 Two ways a row comes into being, and only two:
@@ -25,7 +27,6 @@ import json
 from datetime import timedelta
 from typing import Optional
 
-from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
@@ -72,7 +73,10 @@ class LookupError_(Exception):
 
 
 def minting_enabled() -> bool:
-    return bool(getattr(settings, "LOCUS_MINTING_ENABLED", False))
+    """The v4 release switch (ruling 2026-10-21: one switch, not two);
+    ``LOCUS_MINTING_ENABLED`` is honoured as its deprecated alias there."""
+    from places.v4_landing import v4_landing_enabled
+    return v4_landing_enabled()
 
 
 # ---------------------------------------------------------------- rate limit
@@ -129,8 +133,14 @@ def existing_for_recipe(recipe) -> tuple[Optional[LocusRegistryEntry], dict]:
     return entry, binding
 
 
-def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL) -> tuple[LocusRegistryEntry, bool]:
+def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL,
+                minter_public: bool = False) -> tuple[LocusRegistryEntry, bool]:
     """Bind the recipe's PID to its canonical bytes. ``(entry, created)``.
+
+    ``minter_public`` (the modal's checkbox, default off) is written with the
+    row and only honoured when this call CREATES it: an idempotent re-mint,
+    by anyone, never changes the first minter's choice. It can later only be
+    turned off (``LocusRegistryEntry.hide_minter``; migration 0028).
 
     Raises ``RecipeError`` (invalid recipe), ``LocusCollision``,
     ``MintRateLimited``, or ``ValueError`` when ``user`` is not a signed-in
@@ -160,7 +170,7 @@ def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL) -> tuple[
                 pid=binding["pid"], kind=LocusRegistryEntry.KIND_RECIPE, version=RECIPE_VERSION,
                 canonical=binding["canonical"], digest=binding["digest"], token=binding["token"],
                 members=list(binding["recipe"]["members"]),
-                minted_by=user, minted_via=via,
+                minted_by=user, minted_via=via, minter_public=minter_public is True,
             )
             return entry, True
     except IntegrityError:
@@ -181,7 +191,10 @@ def overlapping(members, exclude_pid: Optional[str] = None, limit: int = 10) -> 
     members = [m for m in (members or []) if isinstance(m, str) and m]
     if not members:
         return []
-    qs = LocusRegistryEntry.objects.filter(members__overlap=members)
+    # A withdrawn or redacted locus is never offered: it cannot be reused, and
+    # naming the members it shares would disclose part of a suppressed recipe.
+    qs = (LocusRegistryEntry.objects.filter(members__overlap=members)
+          .filter(status=LocusRegistryEntry.STATUS_ACTIVE, redacted_at__isnull=True))
     if exclude_pid:
         qs = qs.exclude(pk=exclude_pid)
     out = []

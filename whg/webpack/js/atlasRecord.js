@@ -13,6 +13,8 @@
 //  - tier 3 is worded as co-citation, not identity;
 //  - an unresolved target says WHY (not held / not found / index unreachable),
 //    and an unreachable index is never reported as absence (place#272);
+//  - a placeholder identifier (`wd:None`) is flagged as one, never as "not found"
+//    (ruling 2026-10-21: show flagged, never aggregate);
 //  - the empty concordance (the common case) leads with Explore similar records.
 //
 // Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, baseMap}.
@@ -80,6 +82,10 @@ function targetStatus(e) {
     const t = e.target || {};
     const ns = e.namespace ? `<code>${esc(e.namespace)}</code>` : 'this kind of identifier';
     switch (t.status) {
+        case 'placeholder':
+            // places.concordance.is_placeholder_identifier: `wd:None` and the like. Not an
+            // identifier, so not "WHG's index holds no record": nothing was looked up.
+            return { cls: 'placeholder', html: 'Placeholder, not a real identifier: the contributor’s data has no value here. It is listed so the gap can be seen, and is not looked up, mapped or counted.' };
         case 'resolved': {
             const recs = (t.records || []).map((r) => recordLabel(r, t.via)).join('; ');
             const mapped = !e.aggregates
@@ -100,10 +106,11 @@ function targetStatus(e) {
         case 'gateway_disabled':
             // Two causes (places.concordance.resolve_targets sets t.reason): only
             // 'not_configured' may say "not configured". A signed-out visitor (the
-            // Record page is public once V4_LANDING_ENABLED is on) is not looked up
-            // because WHG's index answers signed-in users only.
+            // Record page is public once V4_LANDING_ENABLED is on) is looked up for only
+            // in openly redistributable sources (ruling 2026-10-21;
+            // places.concordance.anonymous_gateway_namespaces); this was not one.
             if (t.reason === 'anonymous') {
-                return { cls: 'unavailable', html: 'Not looked up for signed-out visitors: WHG’s index is asked only for signed-in users. Sign in to see it. That is not a finding that it is absent.' };
+                return { cls: 'unavailable', html: 'Not looked up for signed-out visitors: for them WHG’s index is asked only about sources recorded as openly redistributable, and this is not one. Sign in to see it. That is not a finding that it is absent.' };
             }
             if (t.reason === 'not_configured') {
                 return { cls: 'unavailable', html: 'WHG’s index was not asked (not configured on this server), so this was not looked up. That is not a finding that it is absent.' };
@@ -115,7 +122,7 @@ function targetStatus(e) {
 }
 
 function identifierHTML(e) {
-    const shown = e.identifier || e.identifier_raw || '';
+    const shown = e.identifier || e.identifier_raw || (e.placeholder ? '(empty)' : '');
     if (isHttp(e.identifier_raw)) {
         return `<a href="${esc(e.identifier_raw)}" target="_blank" rel="noopener noreferrer"><code>${esc(shown)}</code></a>`;
     }
@@ -132,8 +139,9 @@ function outboundItem(e) {
         </li>`;
     }
     const st = targetStatus(e);
-    return `<li class="conc-entry" data-tier="1" data-source="place_link" data-status="${esc((e.target || {}).status || '')}">
-        ${typeBadge(e)} ${identifierHTML(e)}
+    const flag = e.placeholder ? ' <span class="badge conc-placeholder-badge">placeholder</span>' : '';
+    return `<li class="conc-entry${e.placeholder ? ' conc-placeholder' : ''}" data-tier="1" data-source="place_link" data-status="${esc((e.target || {}).status || '')}">
+        ${typeBadge(e)} ${identifierHTML(e)}${flag}
         <div class="conc-meta">${provenanceBadge(e)}</div>
         <div class="conc-target conc-target-${st.cls}">${st.html}</div>
     </li>`;
@@ -253,8 +261,38 @@ function drawMap(fc) {
         document.getElementById('concordance_map_note').textContent = 'The map could not be loaded on this page.';
         return;
     }
+    const container = document.getElementById('concordance_map');
     const map = new whgMaplibre.Map({ container: 'concordance_map', maxZoom: 12 });
     window.__whgRecordMap = map;
+
+    // The extent of the points, fitted to the canvas as it is NOW.
+    let dataOn = false;
+    const fit = () => {
+        const coords = fc.features.map((f) => f.geometry.coordinates);
+        const lons = coords.map((c) => c[0]);
+        const lats = coords.map((c) => c[1]);
+        const sw = [Math.min(...lons), Math.min(...lats)];
+        const ne = [Math.max(...lons), Math.max(...lats)];
+        if (sw[0] === ne[0] && sw[1] === ne[1]) map.jumpTo({ center: sw, zoom: 6 });
+        else map.fitBounds([sw, ne], { padding: 40, maxZoom: 10, duration: 0 });
+    };
+    // Dev walkthrough 2026-10-21: the canvas stayed 400x300 (MapLibre's fallback for a
+    // zero-size container) in a ~1294 px box, because the map was created while the
+    // section was still hidden. render() now unhides it first, and this keeps the
+    // canvas tracking its container whenever its size changes (layout settling,
+    // window resize, a font or the enrichment section loading above it), refitting
+    // the points to the new size.
+    let lastSize = '';
+    const track = () => {
+        const size = `${container.clientWidth}x${container.clientHeight}`;
+        if (size === lastSize || !container.clientWidth) return;
+        lastSize = size;
+        map.resize();
+        if (dataOn) fit();
+    };
+    if (window.ResizeObserver) new ResizeObserver(track).observe(container);
+    else window.addEventListener('resize', track);
+    requestAnimationFrame(track);
 
     // If the base style itself cannot be fetched, MapLibre never fires `load`
     // and the points would never be drawn. Fall back to a plain background so
@@ -291,13 +329,10 @@ function drawMap(fc) {
             filter: ['==', ['get', 'role'], 'record'],
             paint: { 'circle-radius': 8, 'circle-color': '#c53030', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 },
         });
-        const coords = fc.features.map((f) => f.geometry.coordinates);
-        const lons = coords.map((c) => c[0]);
-        const lats = coords.map((c) => c[1]);
-        const sw = [Math.min(...lons), Math.min(...lats)];
-        const ne = [Math.max(...lons), Math.max(...lats)];
-        if (sw[0] === ne[0] && sw[1] === ne[1]) map.jumpTo({ center: sw, zoom: 6 });
-        else map.fitBounds([sw, ne], { padding: 40, maxZoom: 10, duration: 0 });
+        map.resize();
+        lastSize = `${container.clientWidth}x${container.clientHeight}`;
+        dataOn = true;
+        fit();
 
         const popup = new whgMaplibre.Popup({ closeButton: true });
         ['concordance-members', 'concordance-record'].forEach((layer) => {
@@ -360,6 +395,10 @@ function render(root, data) {
         h += `<div class="conc-explore-foot mt-3">${exploreButton(root, false)}</div>`;
         body.innerHTML = h;
         state.concordance = 'ready';
+        // Shown BEFORE the map is created: a map made in a hidden (zero-width)
+        // container draws a 400x300 canvas (drawMap also tracks later resizes).
+        status.hidden = true;
+        body.hidden = false;
         if (members) drawMap(fc);
     }
     status.hidden = true;

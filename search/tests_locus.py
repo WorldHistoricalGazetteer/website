@@ -200,6 +200,9 @@ class PageTokenTests(LocusBase):
         super().setUp()
         self.client.force_login(self.beta)
 
+    # Assumes the v4 release switch is off: say so, clearing the alias too, so the test
+    # holds where the env sets either (dev sets both; place#325 review #5).
+    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
     def test_valid_token_renders_recipe_and_members(self):
         resp = self.page(token(FULL, members=["wd:Q64", "gn:1", "tgn:7003712"]))
         self.assertEqual(resp.status_code, 200)

@@ -40,10 +40,13 @@ def _is_enabled(user=None, allow_anonymous: bool = False) -> bool:
     This keeps gating purely environment-based: configure the URL on dev
     for testing, leave it unset on production until ready to go live.
 
-    ``allow_anonymous`` exists for ONE caller: persistent-identifier
+    ``allow_anonymous`` exists for TWO callers: persistent-identifier
     resolution (``api.views_entity``), where a w3id.org 303 delivers a
-    linked-data client carrying no cookie, no token and no CSRF header. It
-    must stay opt-in per call — every other gateway path is authenticated
+    linked-data client carrying no cookie, no token and no CSRF header; and
+    the public Record page's concordance (place#325, ruling SG 2026-10-21),
+    which sets it only with ``V4_LANDING_ENABLED`` on and only for openly
+    redistributable namespaces (``places.concordance.anonymous_gateway_namespaces``).
+    It must stay opt-in per call — every other gateway path is authenticated
     by design, and Atlas itself is still beta-gated.
     """
     gateway_url = getattr(settings, "CRC_GATEWAY_URL", "")

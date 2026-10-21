@@ -6,7 +6,7 @@ from django.conf import settings
 from django.views.generic.base import TemplateView, RedirectView
 
 from . import views
-from .v4_landing import portal_pid_view
+from .v4_landing import legacy_portal_view, portal_pid_view, portal_whg_id_view
 from elastic.es_utils import fetch
 
 # place actions
@@ -19,8 +19,12 @@ urlpatterns = [
     # Record URI (302 until the v4 release: v4_landing.PORTAL_REDIRECT_STATUS); off,
     # the wrapper returns the portal's own response untouched.
     path('portal/<int:pid>/', portal_pid_view(views.PlacePortalView.as_view()), name='place-portal-pid'),
-    path('portal/<str:encoded_ids>/', views.PlacePortalView.as_view(), name='place-portal-multipid'),
-    path('<int:whg_id>/portal/', views.PlacePortalView.as_view(), name='place-portal-whg-id'),
+    # With V4_LANDING_ENABLED on: the multi-pid portal keeps serving, labelled legacy;
+    # the whg_id portal redirects to its frozen legacy locus when the snapshot holds it
+    # (places/v4_landing.py, ruling 2026-10-21). Off: the legacy responses untouched.
+    path('portal/<str:encoded_ids>/', legacy_portal_view(views.PlacePortalView.as_view()),
+         name='place-portal-multipid'),
+    path('<int:whg_id>/portal/', portal_whg_id_view(views.PlacePortalView.as_view()), name='place-portal-whg-id'),
 
     # added for sessions approach
     path('set-current-result/', views.SetCurrentResultView.as_view(), name='set-current-result'),
