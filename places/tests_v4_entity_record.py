@@ -105,6 +105,29 @@ class EntityRecordOnTests(_Gatewayless):
         self.assertEqual(self.as_user(self.plain, f"/entity/place:{self.Pub.pk}/api").status_code, 200)
 
 
+@ON
+class EntityRecordThrottleTests(_Gatewayless):
+    """Review #6: the anonymous Record PAGE is not held to the 60/min/IP identifier-
+    resolution throttle (shared-NAT visitors would get a DRF 429 JSON instead of a page);
+    it has its own, higher rate. The JSON branch keeps the resolution throttle."""
+
+    def test_html_has_its_own_higher_limit_and_json_keeps_the_old_one(self):
+        from api.views_entity import EntityRecordPageAnonThrottle, EntityResolveAnonThrottle
+        url = f"/entity/place:{self.Pub.pk}/"
+        with patch.object(EntityResolveAnonThrottle, "rate", "2/min"):
+            html = [self.anon(url, HTTP_ACCEPT="text/html").status_code for _ in range(4)]
+            js = [self.anon(url, HTTP_ACCEPT="application/json").status_code for _ in range(3)]
+        self.assertEqual(html, [200, 200, 200, 200])
+        self.assertEqual(js, [200, 200, 429])
+        from django.core.cache import cache
+        cache.clear()
+        with patch.object(EntityRecordPageAnonThrottle, "rate", "2/min"):   # the page's own limit exists
+            html = [self.anon(url, HTTP_ACCEPT="text/html").status_code for _ in range(3)]
+        self.assertEqual(html, [200, 200, 429])
+        self.assertGreater(int(EntityRecordPageAnonThrottle.rate.split("/")[0]),
+                           int(EntityResolveAnonThrottle.rate.split("/")[0]))
+
+
 @OFF
 class EntityRecordOffTests(_Gatewayless):
 

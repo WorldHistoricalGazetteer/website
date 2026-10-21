@@ -470,6 +470,17 @@ class EntityResolveAnonThrottle(AnonRateThrottle):
     rate = "60/min"
 
 
+class EntityRecordPageAnonThrottle(AnonRateThrottle):
+    """Per-IP ceiling on the anonymous Record PAGE at ``/entity/place:<pk>/`` (HTML,
+    v4 release switch on; place#325 review #6). A human page, so far higher than the
+    identifier-resolution rate: visitors behind one shared NAT (a classroom, a
+    library) must get the page, not a DRF 429 JSON body. Its own ``scope`` keeps its
+    counts apart from ``EntityResolveAnonThrottle``'s (both would otherwise share
+    AnonRateThrottle's "anon" cache key)."""
+    scope = "entity_record_page"
+    rate = "600/min"
+
+
 def anonymous_resolution_allowed(request, entity_id, contributed_ok=False) -> bool:
     """True when this request may proceed without authentication.
 
@@ -531,6 +542,20 @@ class EntityDetailView(PublicEntityReadAPIView):
     # place#271: only redirects, so it may resolve a PUBLIC contributed record
     # for an anonymous caller once V4_LANDING_ENABLED is on.
     anonymous_contributed_ok = True
+
+    def get_throttles(self):
+        """With the switch on, a contributed place asked for as HTML is the Record
+        PAGE (record_entity_response): it gets the page throttle, not the 60/min
+        resolution one. Content negotiation has already run (DRF's initial() does it
+        before check_throttles). Everything else (JSON, /api, authority ids, other
+        types, the switch off) keeps EntityResolveAnonThrottle exactly as before."""
+        from places.v4_landing import v4_landing_enabled
+        renderer = getattr(self.request, "accepted_renderer", None)
+        obj_type, _, obj_id = str(self.kwargs.get("entity_id") or "").partition(":")
+        if (v4_landing_enabled() and getattr(renderer, "media_type", "") == "text/html"
+                and obj_type == "place" and obj_id and not is_crc_place_id(obj_id)):
+            return [EntityRecordPageAnonThrottle()]
+        return super().get_throttles()
 
     def get(self, request, entity_id, *args, **kwargs):
 
