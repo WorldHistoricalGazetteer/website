@@ -307,7 +307,8 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     does not exist get the identical resolution (same status, ``via``, empty
     records), so the answer reveals nothing about private data.
     ``gateway_unavailable`` / ``gateway_disabled`` are NOT absence (place#272):
-    the gateway could not be, or was not, asked.
+    the gateway could not be, or was not, asked. ``gateway_disabled`` carries
+    ``reason``: ``"not_configured"`` or ``"anonymous"`` (a signed-out caller).
     """
     from places.models import Place, PlaceLink
 
@@ -382,8 +383,13 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
             meta: dict = {}
             got = crc_fetch_places(batch, user=user, meta=meta)
             if meta.get("disabled"):
+                # Two causes, worded differently on the page: the server has no
+                # gateway ("not_configured"), or the caller is signed out
+                # ("anonymous"; allow_anonymous is a licensing decision, not taken).
                 for c in batch:
-                    out[c] = blank("gateway_disabled", "gateway")
+                    r = blank("gateway_disabled", "gateway")
+                    r["reason"] = meta.get("disabled_reason") or "unknown"
+                    out[c] = r
                 continue
             if meta.get("error"):
                 for c in batch:

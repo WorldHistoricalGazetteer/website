@@ -327,6 +327,21 @@ class ConcordanceTests(TestCase):
         self.assertEqual(out["gn:100"]["target"]["status"], "gateway_disabled")
         self.assertEqual(out["tgn:7000"]["target"]["status"], "resolved")
 
+    def test_gateway_disabled_says_which_cause(self):
+        """Review 2026-10-21: a signed-out visitor was told the index is "not
+        configured on this server". The REAL crc_fetch_places decides here (it calls
+        nothing in either case: anonymous, or no CRC_GATEWAY_URL)."""
+        from django.test import override_settings
+        with override_settings(CRC_GATEWAY_URL="http://gw.invalid"), \
+                patch("requests.post", side_effect=AssertionError("network")):
+            anon = resolve_targets(["gn:100", "tgn:7000"], user=None)
+        with override_settings(CRC_GATEWAY_URL=""), patch("requests.post", side_effect=AssertionError("network")):
+            unconf = resolve_targets(["gn:100"], user=self.user)
+        self.assertEqual((anon["gn:100"]["status"], anon["gn:100"]["reason"]), ("gateway_disabled", "anonymous"))
+        self.assertEqual((unconf["gn:100"]["status"], unconf["gn:100"]["reason"]),
+                         ("gateway_disabled", "not_configured"))
+        self.assertEqual(anon["tgn:7000"]["status"], "resolved")            # presence: Postgres still answers
+
     def test_resolve_targets_every_input_answered(self):
         with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             r = resolve_targets(["tgn:7000", "gn:100", "viaf:1", f"whg:{self.F.pk}"], user=self.user)

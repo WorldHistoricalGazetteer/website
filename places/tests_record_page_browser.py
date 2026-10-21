@@ -148,16 +148,18 @@ class RecordPageBrowserTests(LiveServerTestCase):
         CloseMatch.objects.create(place_a=self.A, place_b=self.F, created_by=self.beta, basis="imported")
 
     # ---- harness ----------------------------------------------------------
-    def new_page(self, block_bundle=False, base_style="fixture"):
+    def new_page(self, block_bundle=False, base_style="fixture", anonymous=False):
         """``base_style``: "fixture" serves a minimal style for the tileserver's
         style.json (from a localhost origin the real one is CORS-blocked, and
-        this tests our layers, not the tileserver); "abort" makes it fail."""
-        c = Client()
-        c.force_login(self.beta)
+        this tests our layers, not the tileserver); "abort" makes it fail.
+        ``anonymous``: no session cookie (a signed-out visitor)."""
         ctx = self.browser.new_context(viewport={"width": 1280, "height": 1000})
-        ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME,
-                          "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
-                          "url": self.live_server_url}])
+        if not anonymous:
+            c = Client()
+            c.force_login(self.beta)
+            ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME,
+                              "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
+                              "url": self.live_server_url}])
         page = ctx.new_page()
         page.route("**/*", lambda route: route.abort()
                    if any(h in route.request.url for h in BLOCKED_HOSTS)
@@ -339,6 +341,41 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("not a finding that it is absent", d["gn:100"])
         self.assertNotIn("holds no record", d["gn:100"])
         self.assertIn("not_held", d["viaf:55"])
+
+    def _gn100_entry(self, page):
+        return page.evaluate("""() => { const e = Array.from(
+            document.querySelectorAll('#concordance_tier1 .conc-entry[data-source="place_link"]'))
+            .find(x => (x.querySelector('code') || {}).textContent === 'gn:100');
+            return e ? e.dataset.status + ' :: ' + e.textContent : null; }""")
+
+    @override_settings(V4_LANDING_ENABLED=True, CRC_GATEWAY_URL="http://gateway.invalid")
+    def test_signed_out_visitor_is_not_told_not_configured(self):
+        """Review 2026-10-21: the gateway IS configured; a signed-out visitor is simply
+        not looked up for. The real crc_fetch_places decides (and calls nothing)."""
+        page = self.new_page(anonymous=True)
+        with patch("requests.post", side_effect=AssertionError("no network from tests")):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/#concordance")
+            ok = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 45000)
+        self.shot(page, "record_signed_out_gateway")
+        text = self._gn100_entry(page)
+        self.assertTrue(ok)
+        self.assertIn("gateway_disabled", text)
+        self.assertIn("Not looked up for signed-out visitors", text)
+        self.assertIn("Sign in to see it", text)
+        self.assertNotIn("not configured", text)
+        self.assertIn("Record B", page.inner_text("#concordance_tier2"))       # the rest still renders
+
+    @override_settings(CRC_GATEWAY_URL="")
+    def test_unconfigured_server_says_not_configured(self):
+        page = self.new_page()
+        with patch("requests.post", side_effect=AssertionError("no network from tests")):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/#concordance")
+            ok = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 45000)
+        text = self._gn100_entry(page)
+        self.assertTrue(ok)
+        self.assertIn("gateway_disabled", text)
+        self.assertIn("not configured on this server", text)
+        self.assertNotIn("signed-out", text)
 
     @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
     def test_default_cluster_link_resolves(self):

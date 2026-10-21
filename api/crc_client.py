@@ -59,6 +59,16 @@ def _is_enabled(user=None, allow_anonymous: bool = False) -> bool:
     return True
 
 
+def _disabled_reason() -> str:
+    """Why ``_is_enabled`` said no: ``"not_configured"`` (no ``CRC_GATEWAY_URL``
+    on this server) or ``"anonymous"`` (configured, but this caller is signed out
+    and the call did not opt into anonymous access). The page words them
+    differently: only the first is "not configured" (place#325 review)."""
+    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+        return "not_configured"
+    return "anonymous"
+
+
 def _gateway_url() -> str:
     return settings.CRC_GATEWAY_URL.rstrip("/")
 
@@ -763,7 +773,8 @@ def crc_fetch_places(place_ids: list[str], user=None,
         meta: Optional dict, populated in place. On any gateway failure this
             records ``meta["error"]`` as ``timeout`` / ``connection`` / ``http`` /
             ``unexpected``, and ``meta["disabled"] = True`` when the gateway was
-            never called at all.
+            never called at all, with ``meta["disabled_reason"]`` saying why
+            (``_disabled_reason``).
 
     Returns:
         Dict mapping each place_id to its data dict (with keys like
@@ -781,6 +792,7 @@ def crc_fetch_places(place_ids: list[str], user=None,
     if not _is_enabled(user, allow_anonymous=allow_anonymous):
         if meta is not None:
             meta["disabled"] = True
+            meta["disabled_reason"] = _disabled_reason()
         return {}
 
     if not place_ids:
