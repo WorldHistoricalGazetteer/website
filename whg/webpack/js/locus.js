@@ -178,6 +178,20 @@ function renderFailure(kind, data) {
     el.innerHTML = `<div class="locus-empty ${cls}">${failureHtml(kind, 'The re-run')}</div>`;
 }
 
+// The generic-name stoplist is NOT part of the recipe (place#325 ruling 3): it is
+// the gateway's current list, taken from the response this page resolved against.
+function renderStoplist(stoplist) {
+    const el = document.getElementById('locus_stoplist');
+    if (!el) return;
+    const n = stoplist.length;
+    if (!n) {
+        el.innerHTML = 'none (the gateway sent no list with this re-run)';
+        return;
+    }
+    el.innerHTML = `<details class="locus-stoplist"><summary>${n} name${n === 1 ? '' : 's'}: the gateway's current list</summary>`
+        + `<div class="locus-stoplist-body">${stoplist.map((s) => `<span class="locus-chip">${escapeHtml(s)}</span>`).join('')}</div></details>`;
+}
+
 // ── boot ───────────────────────────────────────────────────────────────────
 async function resolve(root, recipe) {
     const token = root.dataset.token;
@@ -200,6 +214,7 @@ async function resolve(root, recipe) {
         return;
     }
     const out = resolveRecipe(recipe, data);
+    renderStoplist(out.stoplist);
     renderResult(recipe, data, out);
     const { fc, indexByPid } = hitsToFC(out.hits);
     const highlight = out.selection.cluster
@@ -216,6 +231,7 @@ async function resolve(root, recipe) {
         clusterCount: out.clusters.length,
         recordUrls: data.record_urls || {},
         params: out.params,
+        stoplistCount: out.stoplist.length,
     });
 }
 

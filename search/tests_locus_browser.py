@@ -41,7 +41,7 @@ from django.contrib.auth import get_user_model
 from django.test import LiveServerTestCase, override_settings
 
 from places import locus_recipe as lr
-from search.tests_locus import (GATEWAY, PARAMS, POST, STOPLIST, FakeGateway, _Resp)
+from search.tests_locus import (GATEWAY, PARAMS, POST, SEARCH_OK, STOPLIST, TOKEN_CEILING, FakeGateway, _Resp)
 
 try:
     from playwright.sync_api import sync_playwright
@@ -208,7 +208,15 @@ class LocusBrowserTests(LiveServerTestCase):
         self.assertEqual(from_token["members"], ["gn:1", "wd:Q64"])
         self.assertEqual(from_token["clustering"]["theta"], theta_shown)
         self.assertEqual(from_token["clustering"]["weights"], PARAMS["weights"])
-        self.assertEqual(from_token["clustering"]["stoplist"], sorted(STOPLIST))
+        # Ruling 3: the stoplist is not in the card's recipe, though the response the
+        # card was built beside carried the gateway's real 500-entry list, so the
+        # token is short (it was ~10.5k characters and would 414 with it).
+        self.assertEqual(len(SEARCH_OK["toponym_stoplist"]), 500)
+        self.assertNotIn("stoplist", from_token["clustering"])
+        self.assertIn("same_ns_penalty", from_token["clustering"])
+        self.assertLess(len(tok), TOKEN_CEILING, len(tok))
+        print(f"\n[locus browser] card token {len(tok)} chars; request line "
+              f"{len('GET ' + multi['href'] + ' HTTP/1.1')} bytes")
         pid_from_token = lr.recipe_pid(from_token)
 
         # (b) Built independently in Python from the body the gateway RECEIVED,
@@ -220,7 +228,7 @@ class LocusBrowserTests(LiveServerTestCase):
             "clustering": {
                 "weights": PARAMS["weights"], "theta": theta_shown,
                 "tau_name": PARAMS["thresholds"]["tau_name"], "tau_link": PARAMS["thresholds"]["tau_link"],
-                "same_ns_penalty": PARAMS["same_ns_penalty"], "respect_distinct": True, "stoplist": STOPLIST,
+                "same_ns_penalty": PARAMS["same_ns_penalty"], "respect_distinct": True,
             },
             "members": multi["pids"],
         }
@@ -251,6 +259,8 @@ class LocusBrowserTests(LiveServerTestCase):
         self.assertEqual(state["missing"], [])
         self.assertEqual(state["hitCount"], 3)
         self.assertEqual(state["clusterCount"], 2)
+        # The resolver clustered with the gateway's stoplist from ITS response.
+        self.assertEqual(state["stoplistCount"], len(STOPLIST))
         self.assertEqual(len(self.gateway.bodies), 2, "the page should have re-run the retrieval once")
         self.assertEqual(self.gateway.bodies[1], body, "the re-run must send the body the recipe was made from")
 
@@ -259,6 +269,9 @@ class LocusBrowserTests(LiveServerTestCase):
         text = page.evaluate("document.getElementById('locus_page').innerText")
         self.assertIn("shareable but not permanent", text)
         self.assertIn("2 of the recipe's 2 members are among them", text)
+        stop_cell = page.evaluate("document.getElementById('locus_stoplist').innerText")
+        self.assertIn("500 names: the gateway's current list", stop_cell)
+        self.assertNotIn("once the re-run loads", stop_cell)
         self.assertTrue(page.evaluate("document.getElementById('locus_mint').disabled"))
         self.assertNotRegex(text, r"\b[0-9A-HJKMNP-TV-Y]{4}-[0-9A-HJKMNP-TV-Y]{4}-[0-9A-HJKMNP-TV-Y]{4}\b")
         good_member_count = len(links)
@@ -296,8 +309,7 @@ class LocusBrowserTests(LiveServerTestCase):
         self.client.force_login(normal)
         tok = lr.encode_recipe_token({"v": 1, "retrieval": {"query": "Berlin", "mode": "in", "size": 100},
                                       "clustering": {"weights": PARAMS["weights"], "theta": 0.5, "tau_name": 0.7,
-                                                     "tau_link": 1, "same_ns_penalty": 0.1, "respect_distinct": True,
-                                                     "stoplist": []},
+                                                     "tau_link": 1, "same_ns_penalty": 0.1, "respect_distinct": True},
                                       "members": ["gn:1"]})
         self.assertEqual(self.client.get("/atlas/locus/", {"r": tok}).status_code, 404)
         self.assertEqual(self.client.post("/atlas/locus/resolve/", data=json.dumps({"r": tok}),

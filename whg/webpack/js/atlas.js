@@ -3064,7 +3064,8 @@ function locusRecipeFor(cluster, params) {
             tau_link: shipped.tau_link ?? DEFAULT_PARAMS.thresholds.tau_link,
             same_ns_penalty: params.sameNsMargin,
             respect_distinct: true,   // clusterHits' default; this page never overrides it
-            stoplist: gatewayData.toponym_stoplist || [],
+            // NO stoplist: it is gateway data, taken from the gateway response at
+            // resolve time, not part of the recipe or its PID (place#325 ruling 3).
         },
         members: (cluster.memberIds || []).slice(),
     };

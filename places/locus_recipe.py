@@ -47,9 +47,8 @@ Recipe, version 1
         "tau_name": 0.75,
         "tau_link": 1,
         "same_ns_penalty": 0.15,
-        "respect_distinct": true,
-        "stoplist": ["city", "köln"]         # lower, sorted by code point, unique; may be empty
-      },
+        "respect_distinct": true
+      },                                     # NO stoplist: see "The stoplist is not in the recipe"
       "members": ["gn:2950159", "wd:Q64"]    # >= 1; sorted by code point, unique
     }
 
@@ -66,7 +65,7 @@ Canonical form
   emitted as the minimal decimal: no exponent, no trailing zeros, no ``+``, ``-0`` is
   ``0``, integral values have no ``.0``. Integers (``size``, years, ``aat_types``)
   are emitted as integers. NaN/Infinity and booleans-as-numbers are errors.
-* Lists whose order carries no meaning (``members``, ``stoplist``, ``ccodes``,
+* Lists whose order carries no meaning (``members``, ``ccodes``,
   ``types``, ``aat_types``, ``namespaces``, ``contained_in``, GeometryCollection
   members) are de-duplicated and sorted by code point (ints numerically; geometries
   by their canonical JSON). Polygon ring and vertex order IS kept: two rings with the
@@ -78,7 +77,7 @@ Canonical form
   geometry is unwrapped to that geometry. Nothing in ``clustering`` is ever defaulted:
   the calibrated defaults are recalibrated offline, so a recipe that leaned on "the
   default θ" would change meaning (place#172: literal values, never a params version).
-* Enumerations, namespaces, the namespace segment of a place id, and stoplist entries
+* Enumerations, namespaces and the namespace segment of a place id
   are lower-cased; country codes are upper-cased. The local segment of a place id
   (after the first colon) is kept verbatim (``wd:Q64`` is not ``wd:q64``). A leading
   ``place:`` on an id is stripped.
@@ -87,6 +86,37 @@ Canonical form
   ``must_link`` ...) has a place in a recipe: user judgements are attestations, never
   forced merges (place#306). Authority hard links reach the clusterer from the index
   at resolution time, not from the recipe.
+
+The stoplist is not in the recipe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Ruled by SG on 2026-10-21 (place#325 Stage 1, ruling 3: "take it out of the hash").
+``clustering.stoplist`` is REJECTED as an unknown key, with a message naming this
+ruling, so a client still sending it fails loudly instead of hashing differently.
+
+* A locus PID names a RECIPE that is re-run on every visit, not a frozen member list.
+  What the recipe retrieves already depends on the index as it stands at resolve time.
+* The gateway's ``toponym_stoplist`` (500 generic high-frequency names, e.g. "село",
+  "Mill Creek", that scale the name signal x0.2 in ``clustering.js``) is gateway DATA,
+  like the index itself. At resolve time it is a fixed resolver contract: the
+  resolver takes it from the gateway's search response
+  (``whg/webpack/js/locus_resolve.js`` ``clusteringArgs(recipe, stoplist)``), exactly
+  as the Atlas does when it renders the cluster the recipe was made from.
+* The parameters a user TUNES (``weights``, ``theta``, ``tau_*``, ``same_ns_penalty``,
+  ``respect_distinct``) stay in the hash as literals.
+* Measured: with the 500-entry list inside it, a cluster-card token was ~10,488
+  characters and would 414 under nginx's default 8k request-line limit (gunicorn's
+  own default, 4094 bytes, is tighter still and sits behind it). Without it: 366
+  characters for a plain name search (the browser harness's card), 711 for the
+  ``atlas_default`` vector (viewport polygon + temporal window + four members).
+  ``places.tests_locus_recipe``, ``search.tests_locus`` and the browser test assert a
+  2000-character ceiling beside a response carrying the real 500-entry list.
+* What can still make a token long is ``bounds``: an Atlas area selection that is
+  not all gateway-exact regions sends the region polygons themselves, and those
+  vertices go into the recipe. Such a token can exceed 4094 bytes; that is not
+  addressed here.
+* No locus had been minted when this was changed, so the change was made in place at
+  ``"v":1`` rather than as a version 2. Any PID or token computed before 2026-10-21
+  with a ``stoplist`` member is void (none was ever published or registered).
 
 Hash and PID
 ~~~~~~~~~~~~
@@ -185,8 +215,14 @@ _RETRIEVAL_KEYS = frozenset({
 })
 _TEMPORAL_KEYS = frozenset({"start", "end", "mode", "undated"})
 _CLUSTERING_KEYS = frozenset({
-    "weights", "theta", "tau_name", "tau_link", "same_ns_penalty", "respect_distinct", "stoplist",
+    "weights", "theta", "tau_name", "tau_link", "same_ns_penalty", "respect_distinct",
 })
+# Keys that used to be in a recipe and were ruled out. Rejected like any unknown key,
+# but the message says why, so an old client fails with a reason.
+RETIRED_CLUSTERING_KEYS = {
+    "stoplist": ("is not part of a recipe: the generic-name stoplist is gateway data, taken "
+                 "from the gateway response at resolve time (place#325 ruling 3, 2026-10-21)"),
+}
 
 # Exactly JavaScript's \s, written out so both languages collapse the same characters.
 _WS_RE = re.compile("[\t\n\x0b\x0c\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+")
@@ -492,6 +528,10 @@ def _parse_retrieval(r, path: str) -> dict:
 
 
 def _parse_clustering(c, path: str) -> dict:
+    if isinstance(c, dict):
+        for k, why in RETIRED_CLUSTERING_KEYS.items():
+            if k in c:
+                raise RecipeError(f"{path}.{k}", why)
     c = _object(c, path, _CLUSTERING_KEYS)
     for k in sorted(_CLUSTERING_KEYS):
         if k not in c or c[k] is None:
@@ -502,11 +542,9 @@ def _parse_clustering(c, path: str) -> dict:
         if k not in w or w[k] is None:
             raise RecipeError(f"{path}.weights.{k}", "is required")
         weights[k] = _number(w[k], f"{path}.weights.{k}", SCALAR_DP, 0.0, 1.0)
-    stop = _sorted_unique_strings(c["stoplist"], f"{path}.stoplist", lambda v, p: _text(v, p, lower=True))
     return {
         "respect_distinct": _boolean(c["respect_distinct"], f"{path}.respect_distinct"),
         "same_ns_penalty": _number(c["same_ns_penalty"], f"{path}.same_ns_penalty", SCALAR_DP, 0.0, 1.0),
-        "stoplist": stop,
         "tau_link": _number(c["tau_link"], f"{path}.tau_link", SCALAR_DP, 0.0, 1.0),
         "tau_name": _number(c["tau_name"], f"{path}.tau_name", SCALAR_DP, 0.0, 1.0),
         "theta": _number(c["theta"], f"{path}.theta", SCALAR_DP, 0.0, 1.0),

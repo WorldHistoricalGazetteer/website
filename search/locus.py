@@ -170,7 +170,11 @@ def _year(y) -> str:
 
 
 def describe_recipe(recipe: dict) -> dict:
-    """Human-readable rows for the page. ``recipe`` is canonical (parsed)."""
+    """Human-readable rows for the page. ``recipe`` is canonical (parsed).
+
+    There is no stoplist row here: the stoplist is not part of a recipe
+    (place#325 ruling 3). The page shows the gateway's CURRENT list, from the
+    resolver's response, in a row ``locus.js`` fills."""
     r = recipe["retrieval"]
     c = recipe["clustering"]
     retrieval = []
@@ -217,8 +221,6 @@ def describe_recipe(recipe: dict) -> dict:
         "retrieval": retrieval,
         "weights": weights,
         "clustering": clustering,
-        "stoplist": list(c["stoplist"]),
-        "stoplist_count": len(c["stoplist"]),
         "members": list(recipe["members"]),
     }
 

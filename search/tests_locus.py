@@ -15,9 +15,11 @@ is asserted against the body the fake actually received.
 """
 import copy
 import json
+import os
 from unittest.mock import patch
 
 import requests
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -47,7 +49,13 @@ PARAMS = {
                    "theta_synth_structural": 0.6, "tau_name": 0.71, "tau_link": 0.9},
     "same_ns_penalty": 0.12,
 }
-STOPLIST = ["city", "ville", "stadt"]
+# The gateway's REAL 500-entry toponym_stoplist (captured 2026-10-21): the
+# resolver must take it from the response (place#325 ruling 3), and a token must
+# stay short beside it (the 414 it once caused).
+with open(os.path.join(settings.BASE_DIR, "scripts", "fixtures", "gateway_toponym_stoplist.json"),
+          encoding="utf-8") as _f:
+    STOPLIST = json.load(_f)["toponym_stoplist"]
+TOKEN_CEILING = 2000   # characters; gunicorn's request-line default is 4094 bytes, nginx's 8k
 EMB_A = [100, -20, 30, 5]
 EMB_B = [-40, 90, 10, 0]
 HITS = [
@@ -86,7 +94,7 @@ class FakeGateway:
 
 CLUSTERING = {
     "weights": PARAMS["weights"], "theta": 0.33, "tau_name": 0.71, "tau_link": 0.9,
-    "same_ns_penalty": 0.12, "respect_distinct": True, "stoplist": STOPLIST,
+    "same_ns_penalty": 0.12, "respect_distinct": True,
 }
 VIEWPORT = {"type": "Polygon", "coordinates": [[
     [13.0881224999999, 52.3382448], [13.7611609, 52.3382448],
@@ -162,6 +170,22 @@ class GateTests(LocusBase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(len(resp.json()["hits"]), 3)
         self.assertEqual(len(self.gateway.bodies), 1)
+        # The resolver hands the browser the gateway's own stoplist (ruling 3); the
+        # recipe it echoes carries none.
+        self.assertEqual(resp.json()["toponym_stoplist"], STOPLIST)
+        self.assertEqual(len(resp.json()["toponym_stoplist"]), 500)
+        self.assertIn("theta", resp.json()["recipe"]["clustering"])
+        self.assertNotIn("stoplist", resp.json()["recipe"]["clustering"])
+
+    def test_tokens_stay_under_the_request_line_ceiling(self):
+        """Every retrieval shape, beside a response carrying the real 500-entry
+        stoplist, gives a token far under the request-line limits."""
+        self.assertEqual(len(SEARCH_OK["toponym_stoplist"]), 500)
+        lengths = {name: len(token(r, members=[f"whg:{100 + i}:s{i}" for i in range(12)]))
+                   for name, r in (("simple", SIMPLE), ("full", FULL), ("sweep", SWEEP), ("end_only", END_ONLY))}
+        for name, n in lengths.items():
+            self.assertLess(n, TOKEN_CEILING, name)
+        self.assertGreater(min(lengths.values()), 100)   # a real token, not an empty string
 
     def test_resolve_needs_post(self):
         self.client.force_login(self.beta)
@@ -190,7 +214,13 @@ class PageTokenTests(LocusBase):
         self.assertIn("500 BCE to 1500", html)
         self.assertIn("undated records included", html)
         self.assertIn("osm:r62422", html)
-        self.assertIn("3 names", html)                         # stoplist count
+        # The stoplist is not in the recipe (ruling 3): the row is a placeholder the
+        # page script fills from the re-run, and no entry of the list is in the page.
+        self.assertIn('id="locus_stoplist"', html)
+        self.assertIn("not in the recipe", html)
+        self.assertIn("Berlin", html)
+        self.assertNotIn(STOPLIST[0], html)
+        self.assertNotIn(STOPLIST[-1], html)
         self.assertNotIn("locus-error", html)
         # The page never presents a would-be PID as an identifier.
         self.assertNotRegex(html, r"\b[0-9A-HJKMNP-TV-Y]{4}-[0-9A-HJKMNP-TV-Y]{4}-[0-9A-HJKMNP-TV-Y]{4}\b")
@@ -386,7 +416,9 @@ class DescribeTests(TestCase):
                                   "Within", "Contained in", "Spatial relation", "When"])
         self.assertEqual(dict(d["weights"])["Name"], "0.41")
         self.assertEqual(dict(d["clustering"])["Merge threshold (θ)"], "0.33")
-        self.assertEqual(d["stoplist_count"], 3)
+        self.assertNotIn("stoplist", d)
+        self.assertNotIn("stoplist_count", d)
+        self.assertIn("clustering", d)
         self.assertEqual(d["members"], ["gn:1", "wd:Q64"])
         s = describe_recipe(lr.parse_recipe(recipe(SWEEP)))
         self.assertIn("spatial sweep", s["retrieval"][0][1])

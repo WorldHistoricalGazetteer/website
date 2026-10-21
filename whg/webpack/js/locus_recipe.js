@@ -40,7 +40,14 @@ const RETRIEVAL_KEYS = new Set(['query', 'mode', 'size', 'ccodes', 'types', 'aat
 	'bounds', 'contained_in', 'containment', 'relation', 'temporal']);
 const TEMPORAL_KEYS = new Set(['start', 'end', 'mode', 'undated']);
 const CLUSTERING_KEYS = new Set(['weights', 'theta', 'tau_name', 'tau_link', 'same_ns_penalty',
-	'respect_distinct', 'stoplist']);
+	'respect_distinct']);
+// Ruled out of the recipe (place#325 Stage 1 ruling 3, SG 2026-10-21): the generic-name
+// stoplist is gateway data, taken from the gateway response at resolve time, not hashed.
+// Rejected with a reason so an old caller fails loudly. Same text as the Python module.
+const RETIRED_CLUSTERING_KEYS = {
+	stoplist: 'is not part of a recipe: the generic-name stoplist is gateway data, taken '
+		+ 'from the gateway response at resolve time (place#325 ruling 3, 2026-10-21)',
+};
 
 // Exactly \s, written out so it is visibly the same class as the Python regex.
 const WS_RE = /[\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+/g;
@@ -310,6 +317,11 @@ function parseRetrieval(r, path) {
 }
 
 function parseClustering(c, path) {
+	if (isPlainObject(c)) {
+		for (const [k, why] of Object.entries(RETIRED_CLUSTERING_KEYS)) {
+			if (Object.prototype.hasOwnProperty.call(c, k)) throw new RecipeError(`${path}.${k}`, why);
+		}
+	}
 	c = object(c, path, CLUSTERING_KEYS);
 	for (const k of Array.from(CLUSTERING_KEYS).sort()) {
 		if (!has(c, k)) throw new RecipeError(`${path}.${k}`, 'is required (clustering parameters are always literal)');
@@ -320,11 +332,9 @@ function parseClustering(c, path) {
 		if (!has(w, k)) throw new RecipeError(`${path}.weights.${k}`, 'is required');
 		weights[k] = number(w[k], `${path}.weights.${k}`, SCALAR_DP, 0, 1);
 	}
-	const stoplist = sortedUniqueStrings(c.stoplist, `${path}.stoplist`, (v, p) => text(v, p, { lower: true }));
 	return {
 		respect_distinct: boolean(c.respect_distinct, `${path}.respect_distinct`),
 		same_ns_penalty: number(c.same_ns_penalty, `${path}.same_ns_penalty`, SCALAR_DP, 0, 1),
-		stoplist,
 		tau_link: number(c.tau_link, `${path}.tau_link`, SCALAR_DP, 0, 1),
 		tau_name: number(c.tau_name, `${path}.tau_name`, SCALAR_DP, 0, 1),
 		theta: number(c.theta, `${path}.theta`, SCALAR_DP, 0, 1),

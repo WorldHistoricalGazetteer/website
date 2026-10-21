@@ -39,7 +39,7 @@ const expect = (name, what, got, want) => {
 	checks++;
 	if (got !== want) failures.push(`${name}: ${what}\n    got  ${JSON.stringify(got)}\n    want ${JSON.stringify(want)}`);
 };
-const expectError = (name, what, fn, wantPath) => {
+const expectError = (name, what, fn, wantPath, wantMessage) => {
 	checks++;
 	try {
 		fn();
@@ -47,6 +47,9 @@ const expectError = (name, what, fn, wantPath) => {
 	} catch (e) {
 		if (!(e instanceof RecipeError)) failures.push(`${name}: ${what} threw ${e && e.name}: ${e && e.message}`);
 		else if (e.path !== wantPath) failures.push(`${name}: ${what} rejected at ${JSON.stringify(e.path)}, want ${JSON.stringify(wantPath)} (${e.msg})`);
+		// Only where the vector asks: most messages are worded per language; a retired
+		// key's reason (place#325 ruling 3) is the same sentence in both.
+		else if (wantMessage !== undefined && e.msg !== wantMessage) failures.push(`${name}: ${what} message ${JSON.stringify(e.msg)}, want ${JSON.stringify(wantMessage)}`);
 	}
 };
 
@@ -74,7 +77,7 @@ const byName = Object.fromEntries(fixture.valid.map((v) => [v.name, v]));
 expect('equivalence', 'noisy == default (pid)', await recipePid(byName.atlas_default_reordered_noisy.input), await recipePid(byName.atlas_default.input));
 expect('equivalence', 'sweep != default (pid)', (await recipePid(byName.spatial_sweep_no_query.input)) !== (await recipePid(byName.atlas_default.input)), true);
 
-for (const v of fixture.invalid) expectError(v.name, 'invalid recipe', () => parseRecipe(v.input), v.error_path);
+for (const v of fixture.invalid) expectError(v.name, 'invalid recipe', () => parseRecipe(v.input), v.error_path, v.check_message ? v.error : undefined);
 
 for (const a of fixture.adapter) {
 	if (a.error_path !== undefined) {

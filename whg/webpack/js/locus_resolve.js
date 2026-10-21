@@ -23,14 +23,30 @@
 //   5. no survivor → nothing is selected ("no_members_survive"), with the
 //      re-run's cluster count so the reader can see the recipe still retrieves.
 //
-// Clustering parameters are taken ONLY from the recipe. The gateway's shipped
-// clustering_params and toponym_stoplist are NOT consulted here: a recipe that
-// leaned on "today's defaults" would change meaning when they are recalibrated.
+// The TUNED clustering parameters (weights, θ, τ, same-namespace margin,
+// respect_distinct) are taken ONLY from the recipe. The gateway's shipped
+// clustering_params are NOT consulted: a recipe that leaned on "today's
+// defaults" would change meaning when they are recalibrated.
+//
+// The generic-name stoplist is the exception, by ruling (place#325 Stage 1
+// ruling 3, SG 2026-10-21): it is gateway DATA, like the index the retrieval
+// runs against, so it is not in the recipe or its hash. It is a fixed resolver
+// contract instead: the resolver ALWAYS uses the toponym_stoplist of the
+// gateway response it is resolving against (the same list the Atlas passed to
+// clusterHits when the card was rendered), never a list from anywhere else.
 
 import { clusterHits } from './clustering.js';
 
-/** The clusterHits() arguments a recipe's literal parameters imply. */
-export function clusteringArgs(recipe) {
+/** The stoplist a resolver must use for `data` (a gateway search response): its
+ *  own toponym_stoplist, or [] when the gateway sent none. */
+export function gatewayStoplist(data) {
+	const s = data && data.toponym_stoplist;
+	return Array.isArray(s) ? s.slice() : [];
+}
+
+/** The clusterHits() arguments a recipe's literal parameters imply, with the
+ *  gateway's current `stoplist` (from the response being resolved; ruling 3). */
+export function clusteringArgs(recipe, stoplist) {
 	const c = recipe.clustering;
 	return {
 		params: {
@@ -43,13 +59,14 @@ export function clusteringArgs(recipe) {
 		theta: c.theta,
 		sameNsPenalty: c.same_ns_penalty,
 		respectDistinct: c.respect_distinct,
-		stoplist: c.stoplist.slice(),
+		stoplist: Array.isArray(stoplist) ? stoplist.slice() : [],
 	};
 }
 
-/** Re-run the clusterer over `hits`/`edges` with the recipe's literal parameters. */
-export function runRecipe(recipe, hits, edges) {
-	return clusterHits({ hits: hits || [], edges: edges || [], ...clusteringArgs(recipe) });
+/** Re-run the clusterer over `hits`/`edges` with the recipe's literal parameters
+ *  and the gateway's current `stoplist`. */
+export function runRecipe(recipe, hits, edges, stoplist) {
+	return clusterHits({ hits: hits || [], edges: edges || [], ...clusteringArgs(recipe, stoplist) });
 }
 
 function latLngOf(hit) {
@@ -150,14 +167,16 @@ export function selectLocusCluster(clusters, members, hits) {
 
 /**
  * Resolve a recipe end to end: cluster, then select. `data` is the resolver's
- * JSON (hits, edges). Returns the clustering output plus the selection.
+ * JSON (hits, edges, toponym_stoplist). Returns the clustering output plus the
+ * selection and the stoplist that was used (the gateway's, from `data`).
  */
 export function resolveRecipe(recipe, data) {
 	const hits = (data && data.hits) || [];
 	const edges = (data && data.edges) || [];
-	const run = runRecipe(recipe, hits, edges);
+	const stoplist = gatewayStoplist(data);
+	const run = runRecipe(recipe, hits, edges, stoplist);
 	const selection = selectLocusCluster(run.clusters, recipe.members, hits);
-	return { ...run, selection, hits };
+	return { ...run, selection, hits, stoplist };
 }
 
-export default { clusteringArgs, runRecipe, selectLocusCluster, resolveRecipe, canonicalMemberId };
+export default { clusteringArgs, gatewayStoplist, runRecipe, selectLocusCluster, resolveRecipe, canonicalMemberId };

@@ -19,12 +19,14 @@ from django.test import SimpleTestCase
 from places import locus_recipe as lr
 
 FIXTURE = os.path.join(settings.BASE_DIR, "scripts", "fixtures", "locus_recipe_vectors.json")
+# The gateway's real 500-entry toponym_stoplist, captured 2026-10-21 (test data only).
+GATEWAY_STOPLIST_FIXTURE = os.path.join(settings.BASE_DIR, "scripts", "fixtures", "gateway_toponym_stoplist.json")
 JS_CHECKER = os.path.join(settings.BASE_DIR, "scripts", "check-locus-recipe.mjs")
 
 CLUSTERING = {
     "weights": {"name": 0.35, "spatial": 0.20, "temporal": 0.15, "type": 0.15, "link": 0.15},
     "theta": 0.65, "tau_name": 0.75, "tau_link": 1.0, "same_ns_penalty": 0.15,
-    "respect_distinct": True, "stoplist": ["city", "town"],
+    "respect_distinct": True,
 }
 VIEWPORT = {"type": "Polygon", "coordinates": [[
     [13.0881224999999, 52.3382448], [13.7611609, 52.3382448],
@@ -79,7 +81,6 @@ class CanonicalFormTests(SimpleTestCase):
         noisy = {
             "members": ["place:TGN:7003712", " wd:Q64", "gn:2950159", "wd:Q64"],   # prefix, case, dupes, order
             "clustering": {
-                "stoplist": ["TOWN", "city", "City"],
                 "respect_distinct": True, "same_ns_penalty": 0.15000000000000002, "tau_link": 1,
                 "tau_name": 0.75, "theta": 0.650000001,
                 "weights": {"type": 0.15, "link": 0.15, "temporal": 0.15, "spatial": 0.2000000000001, "name": 0.35},
@@ -110,7 +111,6 @@ class CanonicalFormTests(SimpleTestCase):
             "tau_link": {"clustering.tau_link": 0.9},
             "same_ns_penalty": {"clustering.same_ns_penalty": 0},
             "respect_distinct": {"clustering.respect_distinct": False},
-            "stoplist": {"clustering.stoplist": ["city"]},
             "member_added": {"members": BASE["members"] + ["gn:1"]},
             "member_removed": {"members": BASE["members"][:-1]},
             "member_local_case": {"members": ["gn:2950159", "wd:q64", "tgn:7003712"]},
@@ -264,7 +264,6 @@ class ValidationTests(SimpleTestCase):
         self.assertRejected(recipe(**{"clustering.theta": float("nan")}), "clustering.theta")
         self.assertRejected(recipe(**{"clustering.theta": "0.65"}), "clustering.theta")
         self.assertRejected(recipe(**{"clustering.weights": {"name": 1}}), "clustering.weights.link")
-        self.assertRejected(recipe(**{"clustering.stoplist": ["city", " "]}), "clustering.stoplist[1]")
         self.assertRejected(recipe(**{"clustering.respect_distinct": 1}), "clustering.respect_distinct")
         self.assertRejected(recipe(**{"retrieval.mode": "regex"}), "retrieval.mode")
         self.assertRejected(recipe(**{"retrieval.size": 0}), "retrieval.size")
@@ -310,6 +309,54 @@ class ValidationTests(SimpleTestCase):
         nan = lr.canonical_json(BASE).replace('"theta":0.65', '"theta":NaN')
         with self.assertRaises(lr.RecipeError):
             lr.decode_recipe_token(token_of(nan))
+
+
+def load_gateway_stoplist():
+    with open(GATEWAY_STOPLIST_FIXTURE, encoding="utf-8") as f:
+        return json.load(f)["toponym_stoplist"]
+
+
+class StoplistRulingTests(SimpleTestCase):
+    """place#325 Stage 1 ruling 3 (SG, 2026-10-21): the stoplist is gateway data, not hashed."""
+
+    def test_a_recipe_carrying_a_stoplist_is_refused_with_the_ruling(self):
+        self.assertEqual(lr.parse_recipe(BASE)["clustering"]["theta"], 0.65)     # without it: accepted
+        self.assertNotIn("stoplist", lr.parse_recipe(BASE)["clustering"])
+        for value in (["city", "town"], [], "city"):
+            with self.assertRaises(lr.RecipeError) as cm:
+                lr.parse_recipe(recipe(**{"clustering.stoplist": value}))
+            self.assertEqual(cm.exception.path, "clustering.stoplist")
+            self.assertIn("place#325 ruling 3", cm.exception.message)
+            self.assertIn("gateway", cm.exception.message)
+        # The reason is the retired-key message, not the generic one other keys get.
+        with self.assertRaises(lr.RecipeError) as cm:
+            lr.parse_recipe(recipe(**{"clustering.stoplists": ["city"]}))
+        self.assertEqual(cm.exception.message, "unknown key")
+
+    def test_token_from_a_response_with_the_real_gateway_stoplist_stays_short(self):
+        """The 414 cannot return: a cluster-card recipe built beside a response that
+        carries the gateway's real 500-entry stoplist is far under the request-line
+        limits (gunicorn 4094 bytes by default, nginx 8k), because the list stays out."""
+        stoplist = load_gateway_stoplist()
+        self.assertEqual(len(stoplist), 500)                               # the fixture is the real list
+        response = {   # what /atlas/search/ hands the card: the request echo plus the clustering fuel
+            "request": {"query": "Berlin", "mode": "in", "size": 100, "geom": "full",
+                        "include_hard_links": True, "include_clustering_fields": True,
+                        "include_embeddings": True, "bounds": VIEWPORT, "start_year": 1200,
+                        "end_year": 1900, "undated": True, "temporal_mode": "possibly"},
+            "toponym_stoplist": stoplist,
+        }
+        members = [f"whg:{1000 + i}:src-{i}" for i in range(10)] + ["gn:2950159", "wd:Q64", "tgn:7003712"]
+        r = {"v": 1, "retrieval": lr.retrieval_from_search_body(response["request"]),
+             "clustering": CLUSTERING, "members": members}
+        token = lr.encode_recipe_token(r)
+        request_line = f"GET /atlas/locus/?r={token} HTTP/1.1"
+        self.assertLess(len(token), 2000, len(token))
+        self.assertLess(len(request_line), 4094)
+        # ...and the ceiling is one the old design broke: the same recipe with the list
+        # inside it (as it was before the ruling) is over nginx's 8k on its own.
+        old_bytes = lr.canonical_json(r)[:-1].encode() + b',"stoplist":' + json.dumps(stoplist, ensure_ascii=False).encode() + b"}"
+        self.assertGreater(len(base64.urlsafe_b64encode(old_bytes)), 8192)
 
 
 class PidTests(SimpleTestCase):
@@ -443,6 +490,9 @@ class VectorFixtureTests(SimpleTestCase):
             with self.assertRaises(lr.RecipeError, msg=v["name"]) as cm:
                 lr.parse_recipe(v["input"])
             self.assertEqual(cm.exception.path, v["error_path"], v["name"])
+            if v.get("check_message"):
+                self.assertEqual(cm.exception.message, v["error"], v["name"])
+        self.assertIn("stoplist_retired", {v["name"] for v in fx["invalid"] if v.get("check_message")})
         for a in fx["adapter"]:
             if "error_path" in a:
                 with self.assertRaises(lr.RecipeError) as cm:

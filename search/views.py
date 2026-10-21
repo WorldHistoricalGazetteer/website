@@ -785,7 +785,9 @@ def atlas_locus_resolve(request):
     echo, 503/504 when the gateway could not be asked) plus ``recipe`` (the
     canonical recipe the token decoded to) and ``record_urls`` (each hit's
     record page). The browser then clusters with the recipe's LITERAL
-    parameters and picks the cluster the recipe meant (locus_resolve.js).
+    parameters and THIS response's ``toponym_stoplist`` (the gateway's current
+    list: not part of the recipe, place#325 ruling 3), and picks the cluster the
+    recipe meant (locus_resolve.js).
 
     Before answering, the body that was actually sent is re-read through the
     recipe adapter and must canonicalise to the recipe's own retrieval; a

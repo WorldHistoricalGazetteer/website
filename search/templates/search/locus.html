@@ -96,12 +96,13 @@
         {% for label, value in summary.clustering %}
         <tr><th>{{ label }}</th><td>{{ value }}</td></tr>
         {% endfor %}
-        <tr><th>Generic-name stoplist</th>
-          <td>{% if summary.stoplist_count %}
-            <details class="locus-stoplist"><summary>{{ summary.stoplist_count }} name{{ summary.stoplist_count|pluralize }}</summary>
-              <div class="locus-stoplist-body">{% for s in summary.stoplist %}<span class="locus-chip">{{ s }}</span>{% endfor %}</div>
-            </details>
-            {% else %}none{% endif %}</td></tr>
+        {% comment %}
+          Not part of the recipe or its PID (place#325 ruling 3, 2026-10-21): the
+          stoplist is gateway data, so locus.js fills this row from the re-run's
+          response and labels it as the gateway's current list.
+        {% endcomment %}
+        <tr><th>Generic-name stoplist <span class="text-muted small">(not in the recipe)</span></th>
+          <td id="locus_stoplist" class="text-muted">the gateway's current list, once the re-run loads&hellip;</td></tr>
       </table>
 
       <h3 class="locus-h3">Members when the recipe was made</h3>
