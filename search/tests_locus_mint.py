@@ -49,6 +49,9 @@ class MintBase(LocusBase):
         return self.client.get(f"/entity/locus:{pid}/" + ("api" if api else ""), HTTP_ACCEPT=accept)
 
 
+# Off explicitly (both names: LOCUS_MINTING_ENABLED is the switch's alias), so this
+# holds in an environment that sets either, such as dev (review #5).
+@override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
 class OffByDefaultTests(MintBase):
     def test_everything_is_404_when_off(self):
         self.assertFalse(registry.minting_enabled())

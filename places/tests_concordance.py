@@ -688,7 +688,7 @@ class AnonymousGatewayTests(TestCase):
         self.assertFalse({"aem:1", "anr:1", "anl:1", "adr:1"} & self.asked(allow_anonymous=True))
 
     def test_anonymous_flag_off_unchanged(self):
-        with self.settings(V4_LANDING_ENABLED=False):
+        with self.settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):  # the alias too (review #5)
             st = self.statuses(None)
         self.assertEqual(st["gn:100"], ("gateway_disabled", "anonymous"))
         self.assertEqual(self.asked(allow_anonymous=True), set())

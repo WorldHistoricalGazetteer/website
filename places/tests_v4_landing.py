@@ -28,7 +28,9 @@ from places.v4_landing import PORTAL_REDIRECT_STATUS, PORTAL_REDIRECTS, portal_p
 
 LOCMEM = {**settings.CACHES,
           "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "v4l"}}
-OFF = override_settings(V4_LANDING_ENABLED=False, CACHES=LOCMEM)
+# OFF must clear BOTH names: LOCUS_MINTING_ENABLED is the release switch's alias, and
+# dev's env sets both, so an OFF that cleared only one would still be on there (review #5).
+OFF = override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False, CACHES=LOCMEM)
 ON = override_settings(V4_LANDING_ENABLED=True, CACHES=LOCMEM)
 
 
@@ -95,7 +97,7 @@ class _Fixture(TestCase):
 class SwitchOffTests(_Fixture):
     """Nothing public changes: each route's legacy answer, pinned."""
 
-    def test_setting_reads_off(self):
+    def test_setting_reads_off(self):  # under OFF, which clears both names
         self.assertFalse(v4_landing_enabled())
         with override_settings(V4_LANDING_ENABLED=True):
             self.assertTrue(v4_landing_enabled())
@@ -205,7 +207,7 @@ class SwitchOnTests(_Fixture):
         (back) to the portal, which then serves the portal's own answer."""
         r = self.anon(f"/places/portal/{self.Pub.pk}/")
         self.assertNotEqual(r.status_code, 301)
-        with override_settings(V4_LANDING_ENABLED=False):
+        with override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):
             r = self.as_user(self.plain, f"/entity/place:{self.Pub.pk}/")
             self.assertEqual((r.status_code, r["Location"]), (302, f"/places/portal/{self.Pub.pk}/"))
             r = self.as_user(self.plain, f"/places/portal/{self.Pub.pk}/")
