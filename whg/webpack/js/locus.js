@@ -1,4 +1,5 @@
-// locus.js — the unminted locus page, /atlas/locus/?r=<token> (place#325 Stage 2, place#172).
+// locus.js — the locus page: unminted, /atlas/locus/?r=<token>, and minted,
+// /entity/locus:<PID>/ (place#325 Stages 2 and 4, place#172).
 //
 // The server has already decoded and validated the recipe (a bad token renders
 // an error page and this script finds no recipe to run). This script:
@@ -8,8 +9,15 @@
 //      parameters (locus_resolve.js → clustering.js, the one clusterer there is);
 //   3. picks the cluster the recipe meant (the fixed plurality rule) and shows
 //      its current members, each linking to its record page, on a map.
-// Nothing is minted or stored: the page says so, and the Mint action is disabled
-// until Stage 4 exists.
+// Both pages run the same recipe the same way; only the identity block differs.
+//
+// Minting (Stage 4, only when the server rendered data-mint-url, i.e.
+// LOCUS_MINTING_ENABLED and a signed-in beta user): the Mint button opens the
+// modal the server rendered, which says what is being minted (the RECIPE,
+// re-run on every visit, never the member list shown), lists existing loci
+// sharing members, and needs an explicit confirmation before it POSTs
+// {r: token, confirm: true} to /atlas/locus/mint/. On success the browser goes
+// to the canonical /entity/locus:<PID>/ URI. A withdrawn locus is not re-run.
 
 import bbox from '@turf/bbox';
 import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
@@ -216,6 +224,7 @@ async function resolve(root, recipe) {
     const out = resolveRecipe(recipe, data);
     renderStoplist(out.stoplist);
     renderResult(recipe, data, out);
+    // place#325 Stage 3: describe the selected cluster's current members (gloss + EDOPS).
     const { fc, indexByPid } = hitsToFC(out.hits);
     const highlight = out.selection.cluster
         ? (out.selection.cluster.memberIds || []).map((id) => indexByPid.get(canonicalMemberId(id))).filter((i) => i != null)
@@ -235,7 +244,16 @@ async function resolve(root, recipe) {
     });
 }
 
-function initControls() {
+function copyText(text, doneMessage) {
+    const done = () => atlasNotice(doneMessage, { level: 'info' });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => atlasNotice('Copy failed; copy it from the page instead.', { level: 'warning' }));
+    } else {
+        atlasNotice('Copy it from the page instead.', { level: 'warning' });
+    }
+}
+
+function initControls(root) {
     try {
         const bs = window.bootstrap;
         if (bs && bs.Tooltip) {
@@ -246,24 +264,114 @@ function initControls() {
     const copy = document.getElementById('locus_copy_link');
     if (copy) {
         copy.addEventListener('click', () => {
-            const href = window.location.href;
-            const done = () => atlasNotice('Link copied. It is shareable but not permanent.', { level: 'info' });
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(href).then(done, () => atlasNotice('Copy the address from the address bar.', { level: 'warning' }));
-            } else {
-                atlasNotice('Copy the address from the address bar.', { level: 'warning' });
-            }
+            const minted = !!(root && root.dataset.pid);
+            copyText(window.location.href, minted ? 'Link copied.' : 'Link copied. It is shareable but not permanent.');
         });
     }
+    const copyPid = document.getElementById('locus_copy_pid');
+    if (copyPid && root && root.dataset.entityUrl) {
+        copyPid.addEventListener('click', () => copyText(root.dataset.entityUrl, 'Identifier copied. It is permanent; its membership is not.'));
+    }
+    initMinting(root);
+}
+
+// ── minting (Stage 4) ──────────────────────────────────────────────────────
+function overlapHtml(pre) {
+    const parts = [];
+    if (pre.minted) {
+        parts.push(`<p class="mb-1"><strong>This exact recipe is already minted</strong> as <a href="${escapeHtml(pre.minted.path)}">${escapeHtml(pre.minted.pid)}</a>; minting again returns it.</p>`);
+    }
+    const ov = Array.isArray(pre.overlapping) ? pre.overlapping : [];
+    if (ov.length) {
+        parts.push(`<p class="mb-1"><strong>${ov.length} existing ${ov.length === 1 ? 'locus shares' : 'loci share'} members with this recipe.</strong> Reusing one is better than minting another when it already says what you mean:</p><ul>`
+            + ov.map((o) => `<li><a href="${escapeHtml(o.url)}">${escapeHtml(o.pid)}</a> (${o.shared.length} shared of its ${o.member_count}; ${escapeHtml(o.status)}${o.kind === 'legacy' ? ', legacy' : ''})</li>`).join('')
+            + '</ul>');
+    }
+    return parts.join('');
+}
+
+function initMinting(root) {
+    const btn = document.getElementById('locus_mint');
+    const modalEl = document.getElementById('locus_mint_modal');
+    if (!root || !root.dataset.mintUrl || !btn || btn.disabled || !modalEl) return;
+    const bs = window.bootstrap;
+    if (!bs || !bs.Modal) { console.warn('Locus: Bootstrap Modal is not available; minting disabled'); return; }
+    const url = root.dataset.mintUrl;
+    const token = root.dataset.token;
+    const confirmBox = document.getElementById('locus_mint_confirm');
+    const go = document.getElementById('locus_mint_go');
+    const errEl = document.getElementById('locus_mint_error');
+    const overlapEl = document.getElementById('locus_mint_overlap');
+    const allowanceEl = document.getElementById('locus_mint_allowance');
+    const modal = bs.Modal.getOrCreateInstance(modalEl);
+    const setError = (msg) => { errEl.textContent = msg || ''; };
+
+    confirmBox.addEventListener('change', () => { go.disabled = !confirmBox.checked; });
+
+    btn.addEventListener('click', async () => {
+        confirmBox.checked = false;
+        go.disabled = true;
+        setError('');
+        overlapEl.innerHTML = '';
+        allowanceEl.textContent = '';
+        modal.show();
+        const { kind, data } = await fetchJSON(`${url}?r=${encodeURIComponent(token)}`, { timeoutMs: 15000 });
+        if (kind !== 'ok' || !data || data.error) {
+            setError(data && data.detail ? data.detail : 'The minting service could not be reached. Nothing was minted.');
+            publish({ mint: 'preflight_failed', kind, error: data && data.error });
+            return;
+        }
+        overlapEl.innerHTML = overlapHtml(data);
+        if (data.allowance) {
+            allowanceEl.textContent = `You may mint ${data.allowance.hour} more this hour (${data.allowance.day} today).`;
+            if (data.allowance.hour < 1 || data.allowance.day < 1) {
+                setError('You have reached your minting limit for now.');
+                confirmBox.disabled = true;
+            }
+        }
+        publish({ mint: 'preflight', pid: data.pid, overlapping: (data.overlapping || []).length, already: !!data.minted });
+    });
+
+    go.addEventListener('click', async () => {
+        if (!confirmBox.checked) return;
+        go.disabled = true;
+        setError('');
+        const { kind, status, data } = await fetchJSON(url, {
+            method: 'POST',
+            body: JSON.stringify({ r: token, confirm: true }),
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': window.csrfToken || '' },
+            timeoutMs: 20000,
+        });
+        if (kind !== 'ok' || !data || data.error || !data.path) {
+            const msg = data && data.error === 'rate limited' ? `Minting limit reached; try again in ${Math.ceil((data.retry_after || 60) / 60)} min.`
+                : data && data.error === 'collision' ? 'This recipe hashes to a PID already bound to a different recipe; it cannot be minted. Please report it.'
+                : (data && (data.detail || data.message)) || 'Minting failed; nothing was minted.';
+            setError(msg);
+            go.disabled = !confirmBox.checked;
+            publish({ mint: 'failed', status, error: data && data.error });
+            return;
+        }
+        publish({ mint: data.created ? 'minted' : 'existing', pid: data.pid, path: data.path });
+        atlasNotice(data.created ? `Minted ${data.pid}.` : `${data.pid} was already minted for this recipe.`, { level: 'info' });
+        window.location.assign(data.path);
+    });
 }
 
 function init() {
     const root = document.getElementById('locus_page');
     const holder = document.getElementById('locus_recipe');
-    if (!root || !holder) { publish({ resolved: false, kind: 'no_recipe' }); return; }   // the error page
+    if (!root || !holder) {                       // the error page, or a frozen legacy locus
+        initControls(root);
+        publish({ resolved: false, kind: 'no_recipe' });
+        return;
+    }
     let recipe;
     try { recipe = JSON.parse(holder.textContent); } catch (e) { publish({ resolved: false, kind: 'bad_recipe_json' }); return; }
-    initControls();
+    initControls(root);
+    if (root.dataset.withdrawn === '1') {         // a tombstone (place#308): shown, never re-run
+        publish({ resolved: false, kind: 'withdrawn', pid: root.dataset.pid });
+        return;
+    }
     initMap();
     resolve(root, recipe);
 }

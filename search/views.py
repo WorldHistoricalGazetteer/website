@@ -760,6 +760,7 @@ def atlas_locus(request):
     """
     from django.shortcuts import render
     from search.locus import LOCUS_TOKEN_PARAM, describe_recipe, load_token
+    from search.views_locus import minting_context
     refused = _locus_gate(request)
     if refused is not None:
         return refused
@@ -775,6 +776,9 @@ def atlas_locus(request):
         "token_was_normalised": canonical_token != token,
         "summary": describe_recipe(recipe),
         "resolve_url": "/atlas/locus/resolve/",
+        # Stage 4: {"enabled": False} unless settings.LOCUS_MINTING_ENABLED, in
+        # which case the page offers the mint modal (search/views_locus.py).
+        "minting": minting_context(recipe, canonical_token),
     })
 
 
