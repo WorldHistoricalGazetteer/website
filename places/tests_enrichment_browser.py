@@ -94,12 +94,13 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         pp.start()
         self.addCleanup(pp.stop)
 
-    def new_page(self, block=None, user=None):
-        c = Client()
-        c.force_login(user or self.beta)
+    def new_page(self, block=None, user=None, anonymous=False):
         ctx = self.browser.new_context(viewport={"width": 1280, "height": 1000})
-        ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME, "value": c.cookies[settings.SESSION_COOKIE_NAME].value,
-                          "url": self.live_server_url}])
+        if not anonymous:
+            c = Client()
+            c.force_login(user or self.beta)
+            ctx.add_cookies([{"name": settings.SESSION_COOKIE_NAME,
+                              "value": c.cookies[settings.SESSION_COOKIE_NAME].value, "url": self.live_server_url}])
         # Closed before the live server's teardown flush, so no in-flight request of
         # this page races the table truncation.
         self.addCleanup(ctx.close)
@@ -266,11 +267,38 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertIn("Country code DE in every record.", d["gloss"])
         self.assertNotIn("US", d["gloss"])                  # the other Berlin is another cluster
         self.assertIn("an area", d["env"])
+        self.assertIn("BasinATLAS level 6", d["env"])
+        self.assertNotIn("level 8", d["env"])
         self.assertIn("tight: 50", d["env"])
         self.assertNotIn("Based on the first", d["gloss"] + d["env"])   # no cap note under the cap
         self.assertEqual(sorted(d["selected"]), ["gn:1", "wd:Q64"])
         self.assertEqual(len(t.calls), 1)
         self.assertEqual(self.external, [])
+
+    @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
+    def test_locus_per_member_scope_names_basinatlas_level_8(self):
+        """Issue 325 (status 2026-10-21): the Locus page's per-member text ("each record's
+        own basin") did not say which BasinATLAS level. It now says level 8, read from the
+        server's plan (api.edop_client.BASIN_LEVEL), even when EDOPS is down. The two
+        Berlins are ~1.3 km apart; LOCUS_TIGHT_KM is patched below that, so the
+        same cluster is described per member (test_locus_page_sections: one area, level 6)."""
+        from search.tests_locus import FakeGateway, token
+        t = FakeTransport((503, ""), (503, ""))
+        page = self.new_page()
+        with patch("api.crc_client.requests.post", side_effect=FakeGateway()), \
+                patch("api.edop_client.LOCUS_TIGHT_KM", 0.5), \
+                patch("api.edop_client._requests_transport", side_effect=t):
+            page.goto(f"{self.live_server_url}/atlas/locus/?r={token()}")
+            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", 45000)
+            env = page.evaluate("() => (document.querySelector('#locus_environment') || {}).innerText || ''")
+            self.shot(page, "locus_environment_per_member", "#locus_environment")
+        self.assertTrue(ok, f"errors={self.errors}")
+        self.assertIn("each record's own basin", env)
+        self.assertIn("BasinATLAS level 8", env)
+        self.assertNotIn("level 6", env)
+        self.assertIn("could not be reached", env)           # the level came from the plan, not an answer
+        self.assertEqual({c["params"]["level"] for c in t.calls}, {8})
+        self.assertEqual(len(t.calls), 2)
 
     @override_settings(CRC_GATEWAY_URL="http://gateway.invalid", CRC_GATEWAY_TIMEOUT=2)
     def test_locus_over_200_members_posts_a_deterministic_200_and_says_so(self):
@@ -315,29 +343,103 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertIn("200 records currently in this cluster", d["gloss"])
         self.assertEqual(self.external, [])
 
+    def _public_fixture(self):
+        """The anonymous gateway rule needs an openly redistributable, licensed row
+        (places.concordance.anonymous_gateway_namespaces); emb:7 is an EMBARGOED
+        namespace's record that Record A also claims, which only a beta user sees."""
+        from api.models import GazetteerRegistryEntry
+        from licensing.models import License
+        from places.models import PlaceLink
+        lic, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        GazetteerRegistryEntry.objects.filter(id="gn").update(redistributable=True, license=lic)
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="emb", defaults=dict(name="Embargoed Source", namespace="emb", entry_class="authority",
+                                    status="embargoed", redistributable=True, license=lic))
+        PlaceLink.objects.create(place=self.A, jsonb={"type": "closeMatch", "identifier": "emb:7"})
+        GATEWAY_DB["emb:7"] = {"place_id": "emb:7", "title": "Embargoed Town", "namespace": "emb",
+                               "repr_point": [0.5, 51.6], "names": [{"label": "Embargoed Town"}], "types": [],
+                               "ccodes": ["GB"], "geometries": [{"type": "Point", "coordinates": [0.5, 51.6]}]}
+        self.addCleanup(GATEWAY_DB.pop, "emb:7", None)
+
+    def honest_fetch(self, ids, user=None, allow_anonymous=False, meta=None):
+        """crc_fetch_places as it behaves: a signed-out caller only with the opt-in."""
+        if not getattr(user, "is_authenticated", False) and not allow_anonymous:
+            if meta is not None:
+                meta.update(disabled=True, disabled_reason="anonymous")
+            return {}
+        return fake_fetch(ids)
+
+    def public_page_checks(self, page, path, t):
+        with patch("api.edop_client._requests_transport", side_effect=t), \
+                patch("api.crc_client.crc_fetch_places", side_effect=self.honest_fetch):
+            page.goto(f"{self.live_server_url}{path}")
+            r, d = self.record_checks(page)
+            d.update(page.evaluate("""() => ({
+                navAbout: !!document.querySelector('a[href="#record_gloss"]'),
+                publicAttr: (document.getElementById('record_gloss') || {dataset: {}}).dataset.enrichment,
+                conc: window.__whgRecord && window.__whgRecord.concordance})"""))
+        return r, d
+
     @override_settings(V4_LANDING_ENABLED=True)
-    def test_open_record_page_shows_no_enrichment_to_non_beta(self):
-        """With Stage 4's switch on the Record page is open to everyone; the gloss and
-        EDOPS stay beta-only: absent for a non-beta user, beside the concordance, which
-        is present on the same page."""
+    def test_signed_out_visitor_sees_both_sections_with_the_switch_on(self):
+        """Ruling 2026-10-21: the gloss and environment are public at release. A
+        signed-out visitor gets both sections, describing only what an anonymous
+        caller may see: the embargoed namespace's member is absent from the gloss
+        and from what was sent to EDOPS; the open gateway member is present."""
+        self._public_fixture()
+        t = FakeTransport(AREA)
+        page = self.new_page(anonymous=True)
+        r, d = self.public_page_checks(page, f"/atlas/place/{self.A.pk}/", t)
+        self.shot(page, "record_public_anonymous", "#record_environment")
+        failed = {k: v for k, v in r.items() if not v}
+        self.assertEqual(failed, {}, f"{failed}; dom={d}; errors={self.errors}")
+        self.assertEqual((d["navAbout"], d["publicAttr"]), (True, "public"))
+        self.assertNotIn("Embargoed", d["gloss"] + d["env"])               # absence beside gloss_text (presence)
+        self.assertNotIn("not public yet", d["env"])                        # nothing withheld: never in the group
+        self.assertEqual(len(t.calls), 1)
+        self.assertNotIn("0.5 51.6", t.calls[0]["params"]["geom_wkt"])
+        self.assertEqual(self.external, [])
+        self.assertEqual(self.errors, [])
+
+    @override_settings(V4_LANDING_ENABLED=True)
+    def test_open_record_page_shows_public_sections_to_non_beta(self):
+        """The same for a signed-in user without beta access (the switch, not the
+        account, opens them)."""
+        self._public_fixture()
         plain = get_user_model().objects.create_user(username="enb_plain", email="enbp@example.org", password="pw",
                                                     given_name="P", surname="L")
         t = FakeTransport(AREA)
         page = self.new_page(user=plain)
-        with patch("api.edop_client._requests_transport", side_effect=t), \
-                patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
+        r, d = self.public_page_checks(page, f"/atlas/place/{self.A.pk}/", t)
+        failed = {k: v for k, v in r.items() if not v}
+        self.assertEqual(failed, {}, f"{failed}; dom={d}; errors={self.errors}")
+        self.assertEqual(d["publicAttr"], "public")
+        self.assertNotIn("Embargoed", d["gloss"] + d["env"])
+        self.assertEqual(len(t.calls), 1)
+
+    @override_settings(V4_LANDING_ENABLED=True)
+    def test_beta_page_is_unchanged_with_the_switch_on(self):
+        """A beta user's page: no public marker, and the embargoed member is described
+        to them in the gloss (by design) but not sent to EDOPS (said so)."""
+        self._public_fixture()
+        t = FakeTransport(AREA)
+        page = self.new_page()
+        r, d = self.public_page_checks(page, f"/atlas/place/{self.A.pk}/", t)
+        self.assertTrue(r["gloss_ready"] and r["env_ready"], d)
+        self.assertIsNone(d["publicAttr"])
+        self.assertIn("Embargoed Source", d["gloss"])
+        self.assertIn("not public yet", d["env"])
+
+    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    def test_signed_out_visitor_gets_nothing_with_the_switch_off(self):
+        t = FakeTransport(AREA)
+        page = self.new_page(anonymous=True)
+        with patch("api.edop_client._requests_transport", side_effect=t):
             page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/")
-            conc = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 30000)
-            d = page.evaluate("""() => ({h1: (document.querySelector('#atlas_record h1') || {}).textContent,
-                conc: !!document.querySelector('#concordance_tier1'),
-                gloss: !!document.getElementById('record_gloss'), env: !!document.getElementById('record_environment'),
-                navAbout: !!document.querySelector('a[href="#record_gloss"]'),
-                enr: window.__whgEnrichment})""")
-        self.assertTrue(conc)
-        self.assertEqual(d["h1"], "Record A")
-        self.assertTrue(d["conc"])
-        self.assertEqual((d["gloss"], d["env"], d["navAbout"]), (False, False, False))
-        self.assertEqual(d["enr"]["environment"], "idle")
+            d = page.evaluate("""() => ({url: location.pathname,
+                gloss: !!document.getElementById('record_gloss'), env: !!document.getElementById('record_environment')})""")
+        self.assertTrue(d["url"].startswith("/accounts/login") or "login" in d["url"], d)     # presence: the login page
+        self.assertEqual((d["gloss"], d["env"]), (False, False))
         self.assertEqual(t.calls, [])
 
     def test_harness_can_fail(self):

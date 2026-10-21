@@ -9,6 +9,7 @@ from .reconcile import ReconciliationView, SuggestEntityView, ExtendProposeView,
     AuthorityDatasetsView, DummyView, PeriodSuggestView
 from .views_entity import CustomSwaggerUIView, EntityDetailView, EntityFeatureView, EntityPreviewView, \
     EntityUpdateView, EntityDeleteView, EntityCreateView
+from .views_context import whg_context
 from .views_locus import locus_entity, locus_entity_api
 from .views_indexing import (
     ContributorAttestationView,
@@ -45,6 +46,10 @@ urlpatterns = [
     path('reconcile/periods/suggest', PeriodSuggestView.as_view(), name='reconcile-period-suggest'),
     path("suggest/entity", SuggestEntityView.as_view(), name="suggest_entity"),
     path("suggest/property", SuggestPropertyView.as_view(), name="suggest_property"),
+
+    # place#325 (ruling 2026-10-21): the provisional JSON-LD context of the locus and
+    # record documents. Always served (not behind the release switch): it reveals nothing.
+    path("ns/whg-context.jsonld", whg_context, name="whg-jsonld-context"),
 
     # place#172 / place#325 Stage 4: /entity/locus:<PID> (content-negotiated) and
     # its /api alias. Listed BEFORE the generic entity routes so the `locus`

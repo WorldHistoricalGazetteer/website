@@ -174,9 +174,9 @@ RECORD_STATEMENT = (
     "A place: identifier names a gazetteer record: one contributor's account of a place, "
     "not the place itself (place#325)."
 )
-# Placeholder vocabulary, as for the locus document (api/views_locus.LOCUS_CONTEXT):
-# WHG has not yet published a term for a Record; an open question for SG.
-RECORD_CONTEXT = {"@vocab": "https://whgazetteer.org/ns/record#"}
+# The @context is WHG's minimal provisional context (/ns/whg-context.jsonld,
+# api.views_context; ruling 2026-10-21), shared with the locus document. It replaced
+# the placeholder ``@vocab`` https://whgazetteer.org/ns/record#, which resolved nowhere.
 
 
 def _concordance_entry(e: dict, request) -> dict:
@@ -204,10 +204,11 @@ def _concordance_entry(e: dict, request) -> dict:
 def record_document(request, place) -> dict:
     """The JSON(-LD) representation of a Record at its entity URI: small and honest.
     The full LPF stays at ``/api`` (closed to anonymous callers: licensing, #271)."""
+    from api.views_context import whg_context_url
     from places.concordance import cached_concordance
     ds = place.dataset
     doc = {
-        "@context": RECORD_CONTEXT,
+        "@context": whg_context_url(request),
         "@id": request.build_absolute_uri(record_uri(place.pk)),
         "@type": "Record",
         "statement": RECORD_STATEMENT,
