@@ -20,8 +20,12 @@ index could not return is ``unavailable``, and the gloss must say "not known", n
 "none". The record itself and Postgres members are always ``full``.
 
 Cost: ``build_concordance`` (0.3-3 s on prod) plus one gateway call for the gateway
-members' details. Two endpoints read the group, so it is cached ``GROUP_CACHE_TTL``
-seconds per (record, user): the user matters only for gateway namespace embargoes.
+members' details. The concordance is the SAME cached one the Record page's concordance
+endpoint serves (``places.concordance.cached_concordance``, one build per record and
+viewer class), and the group is cached ``GROUP_CACHE_TTL`` seconds per (record,
+``viewer_class``): beta, signed in, or anonymous. The class is all the group can depend
+on (gateway namespace embargoes, and whether the gateway is asked at all), so a beta
+user's group, which may hold embargoed members, is never served to a lesser viewer.
 """
 from __future__ import annotations
 
@@ -31,8 +35,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-GROUP_CACHE_TTL = 300
-GROUP_CACHE_VERSION = 3  # 2: members carry ``offsite`` (mark_offsite); 3: ``truncated``
+GROUP_CACHE_TTL = 120     # = CONCORDANCE_CACHE_TTL: the group cannot outlive its concordance by much
+GROUP_CACHE_VERSION = 4  # 2: members carry ``offsite`` (mark_offsite); 3: ``truncated``; 4: viewer class
 GATEWAY_BATCH = 50
 
 # GeoNames feature classes: the only gateway namespace whose `types.label` is a place
@@ -294,8 +298,8 @@ def build_record_group(place, user=None) -> dict:
     """``{"public": bool, "members": [member], "n_equivalents": int}``; the record
     first. Not public -> ``{"public": False, "members": []}``: like the concordance,
     nothing is looked up (and no coordinate is sent anywhere)."""
-    from places.concordance import build_concordance
-    conc = build_concordance(place, user=user)
+    from places.concordance import cached_concordance
+    conc = cached_concordance(place, user=user)
     if conc is None:
         return {"public": False, "members": [], "n_equivalents": 0, "unresolved": 0, "truncated": False}
     agg = conc.get("aggregate") or []
@@ -330,15 +334,20 @@ def build_record_group(place, user=None) -> dict:
 
 
 def record_group(place, user=None) -> dict:
-    """``build_record_group``, cached ``GROUP_CACHE_TTL`` s per (record, user)."""
+    """``build_record_group``, cached ``GROUP_CACHE_TTL`` s per (record, viewer class)."""
     from django.core.cache import cache
-    uid = getattr(user, "pk", None) if getattr(user, "is_authenticated", False) else "anon"
-    key = f"record_group:v{GROUP_CACHE_VERSION}:{place.pk}:{uid}"
+    from api.dataset_access import visible_places_q
+    from places.concordance import viewer_class
+    from places.models import Place
+    key = f"record_group:v{GROUP_CACHE_VERSION}:{place.pk}:{viewer_class(user)}"
     try:
         hit = cache.get(key)
     except Exception:  # noqa: BLE001
         hit = None
     if isinstance(hit, dict):
+        # A record that stopped being public stops being described at once.
+        if hit.get("public") and not Place.objects.filter(pk=place.pk).filter(visible_places_q(None)).exists():
+            return {"public": False, "members": [], "n_equivalents": 0, "unresolved": 0, "truncated": False}
         return hit
     group = build_record_group(place, user=user)
     # A gateway outage must not pin a thin group in the cache for five minutes.

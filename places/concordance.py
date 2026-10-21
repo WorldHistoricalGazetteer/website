@@ -513,6 +513,73 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
 
 
 # ---------------------------------------------------------------------------
+# The shared cache (concordance endpoint + record group)
+# ---------------------------------------------------------------------------
+
+# The Record page's concordance endpoint and both enrichment endpoints read the same
+# concordance; built once per (record, viewer class) and kept this long. Short, because
+# a link edit or a dataset going private is then visible within two minutes; and the
+# record's own visibility is re-checked on every hit, so a record that stops being
+# public stops rendering at once.
+CONCORDANCE_CACHE_TTL = 120
+CONCORDANCE_CACHE_VERSION = 1
+
+
+def viewer_class(user) -> str:
+    """What a concordance can depend on about its viewer, and nothing finer:
+
+    * ``beta``: ``can_access_beta``; embargoed gateway namespaces are visible
+      (``GazetteerRegistryEntry.visible_to``);
+    * ``signed_in``: any other signed-in user; the gateway is asked about every
+      namespace an anonymous caller may see;
+    * ``anonymous_open`` / ``anonymous``: signed out, with the public Record page on
+      (``anonymous_gateway_namespaces`` only) or off (no gateway at all).
+
+    The concordance never depends on WHO the user is beyond this (WHG records always
+    pass the anonymous visibility rule), so users of one class share one entry, and a
+    privileged class's entry is never read for a lesser one."""
+    if getattr(user, "is_authenticated", False):
+        return "beta" if getattr(user, "can_access_beta", False) else "signed_in"
+    return "anonymous_open" if _anonymous_open(user) else "anonymous"
+
+
+def concordance_cache_key(place_pk: int, user) -> str:
+    return f"concordance:v{CONCORDANCE_CACHE_VERSION}:{int(place_pk)}:{viewer_class(user)}"
+
+
+def _cacheable(conc: dict) -> bool:
+    """Not when an index outage thinned it: a gateway that could not be reached must
+    not pin a smaller concordance for the TTL."""
+    return not any((e.get("target") or {}).get("status") == "gateway_unavailable"
+                   for e in conc.get("outbound") or [])
+
+
+def cached_concordance(place, user=None) -> Optional[dict]:
+    """``build_concordance(place, user)``, shared by the concordance endpoint and the
+    record group (``places.record_group``) for ``CONCORDANCE_CACHE_TTL`` seconds per
+    (record, ``viewer_class``). Returns a fresh copy the caller may change."""
+    import copy
+    from django.core.cache import cache
+    from places.models import Place
+    key = concordance_cache_key(place.pk, user)
+    try:
+        hit = cache.get(key)
+    except Exception:  # noqa: BLE001 — a broken cache must not break the page
+        hit = None
+    if isinstance(hit, dict):
+        if not Place.objects.filter(id=place.id).filter(_visible_places_q()).exists():
+            return None
+        return copy.deepcopy(hit)
+    conc = build_concordance(place, user=user)
+    if conc is not None and _cacheable(conc):
+        try:
+            cache.set(key, conc, CONCORDANCE_CACHE_TTL)
+        except Exception:  # noqa: BLE001
+            pass
+    return copy.deepcopy(conc)
+
+
+# ---------------------------------------------------------------------------
 # The concordance
 # ---------------------------------------------------------------------------
 

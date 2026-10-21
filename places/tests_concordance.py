@@ -15,7 +15,8 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
-from django.test import TestCase
+from django.conf import settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from places.concordance import (
@@ -40,6 +41,17 @@ def fake_fetch(ids, user=None, allow_anonymous=False, meta=None):
 
 
 fake_fetch.calls = []
+
+# The record group reads the SHARED concordance cache (places.concordance.cached_concordance);
+# the default cache is file-based and outlives a run, so classes that go through it get a
+# private in-memory one, cleared per test.
+LOCMEM = {**settings.CACHES, "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+                                         "LOCATION": "conc-tests"}}
+
+
+def _clear_cache():
+    from django.core.cache import cache
+    cache.clear()
 
 
 def failing_fetch(ids, user=None, allow_anonymous=False, meta=None):
@@ -372,6 +384,7 @@ class ConcordanceTests(TestCase):
         self.assertEqual(ids, {self.A.id, self.F.id, self.G.id, self.H.id})
 
 
+@override_settings(CACHES=LOCMEM)
 class HubTruncationTests(TestCase):
     """Review 2026-10-21: tiers 2 and 3 shared one LIMIT with no ORDER BY, so the
     survivors were arbitrary and co-citers could crowd every inbound attester out;
@@ -414,6 +427,7 @@ class HubTruncationTests(TestCase):
         cls.small_attester = p.pk
 
     def setUp(self):
+        _clear_cache()
         for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
             p = patch(f"places.concordance.{name}", val)
             p.start()
@@ -461,6 +475,7 @@ class HubTruncationTests(TestCase):
         self.assertEqual(env[self.Small.pk]["status"], "ok")
 
 
+@override_settings(CACHES=LOCMEM)
 class PlaceholderIdentifierTests(TestCase):
     """Ruling 2026-10-21 (SG, after the dev walkthrough): a placeholder identifier
     (``wd:None``: 6,235 links on dev, 6,240 on prod, all ``wd:None``) is not a real
@@ -505,6 +520,7 @@ class PlaceholderIdentifierTests(TestCase):
         cls.cociter = place("Real cociter", "Q1", [("closeMatch", "https://www.geonames.org/4300")]).pk
 
     def setUp(self):
+        _clear_cache()
         for name, val in (("INBOUND_LIMIT", 5), ("COCITED_LIMIT", 3)):
             p = patch(f"places.concordance.{name}", val)
             p.start()
@@ -588,6 +604,7 @@ class PlaceholderIdentifierTests(TestCase):
     by_ident = staticmethod(lambda entries: {e["identifier"]: e for e in entries})
 
 
+@override_settings(CACHES=LOCMEM)
 class AnonymousGatewayTests(TestCase):
     """Ruling SG 2026-10-21: on the public Record page (V4_LANDING_ENABLED on) the
     concordance asks the CRC gateway on behalf of a signed-out visitor ONLY for
@@ -629,6 +646,7 @@ class AnonymousGatewayTests(TestCase):
             PlaceLink.objects.create(place=cls.R, jsonb={"type": "closeMatch", "identifier": ident})
 
     def setUp(self):
+        _clear_cache()
         self.calls = []
 
         def fetch(ids, user=None, allow_anonymous=False, meta=None):

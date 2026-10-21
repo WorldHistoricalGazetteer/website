@@ -312,10 +312,12 @@ def atlas_record_concordance(request, pk):
     except Http404:
         return JsonResponse({"error": "not found", "id": pk}, status=404)
 
-    from places.concordance import PROVENANCE_LABELS, _repr_points, build_concordance
+    from places.concordance import PROVENANCE_LABELS, _repr_points, cached_concordance
 
     t0 = time.monotonic()
-    conc = build_concordance(place, user=request.user)
+    # Shared with the gloss and environment endpoints (one build per record and viewer
+    # class; places.concordance.cached_concordance).
+    conc = cached_concordance(place, user=request.user)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if conc is None:
         return JsonResponse({"public": False, "place_id": place.pk, "elapsed_ms": elapsed_ms})

@@ -344,3 +344,124 @@ class EnrichmentViewTests(TestCase):
         # The gloss of the same posting keeps every member (not sent off-site).
         g = self.post("/atlas/locus/gloss/", {"members": members}).json()
         self.assertEqual(g["gloss"]["n_records"], 6)
+
+
+@override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=True)
+class SharedGroupCacheTests(TestCase):
+    """Defaults applied 2026-10-21 (SG): the concordance and enrichment endpoints share
+    one group cache. One build per (record, viewer class) per TTL; the class (beta /
+    signed in / anonymous) is in the key, so a beta user's group, which may hold an
+    embargoed namespace's member, is never served to a lesser viewer."""
+
+    def setUp(self):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from licensing.models import License
+        from places.models import Place, PlaceGeom, PlaceLink
+
+        caches["default"].clear()
+        User = get_user_model()
+        self.beta = User.objects.create_user(username="gc_beta", email="gc_beta@example.org", password="pw",
+                                             given_name="G", surname="Beta", role="beta_tester")
+        self.plain = User.objects.create_user(username="gc_plain", email="gc_plain@example.org", password="pw",
+                                              given_name="G", surname="Plain")
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=self.beta, label="gc325", title="GC", description="D", creator="X",
+                                        public=True, ds_status="indexed", uri_base="https://example.org/places/")
+        lic, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="gn", defaults=dict(name="GeoNames", namespace="gn", entry_class="authority", status="published",
+                                   redistributable=True, license=lic))
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="emb", defaults=dict(name="Embargoed Source", namespace="emb", entry_class="authority",
+                                    status="embargoed", redistributable=True, license=lic))
+        self.A = Place.objects.create(title="Cache A", src_id="CA1", dataset=ds, ccodes=["GB"])
+        PlaceGeom.objects.create(place=self.A, geom=Point(-0.1278, 51.5074, srid=4326), jsonb={"type": "Point"})
+        for ident in ("gn:100", "emb:7"):
+            PlaceLink.objects.create(place=self.A, jsonb={"type": "closeMatch", "identifier": ident})
+        from places import concordance
+        self.builds = []
+        real = concordance.build_concordance
+
+        def counting(place, user=None, **kw):
+            self.builds.append(getattr(user, "username", None) or "anonymous")
+            return real(place, user=user, **kw)
+        p = patch("places.concordance.build_concordance", side_effect=counting)
+        p.start()
+        self.addCleanup(p.stop)
+        p = patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def get(self, path, user=None):
+        self.client.logout()
+        if user is not None:
+            self.client.force_login(user)
+        with patch("api.edop_client._requests_transport", side_effect=FakeTransport(BASIN)):
+            return self.client.get(path).json()
+
+    def members(self, data):
+        return {m["place_id"] for m in data.get("aggregate") or []}
+
+    def test_one_build_serves_concordance_gloss_and_environment(self):
+        base = f"/atlas/place/{self.A.pk}"
+        conc = self.get(f"{base}/concordance/", self.beta)
+        gloss = self.get(f"{base}/gloss/", self.beta)
+        env = self.get(f"{base}/environment/", self.beta)
+        conc2 = self.get(f"{base}/concordance/", self.beta)
+        self.assertEqual(self.builds, ["gc_beta"])                       # ONE build for four requests
+        self.assertIn("gn:100", self.members(conc))
+        self.assertEqual(conc2["aggregate"], conc["aggregate"])
+        self.assertEqual({m["key"] for m in gloss["members"]}, {f"whg:{self.A.pk}", "gn:100", "emb:7"})
+        self.assertEqual(env["status"], "ok")
+
+    def test_viewer_class_isolation(self):
+        base = f"/atlas/place/{self.A.pk}"
+        beta = self.get(f"{base}/concordance/", self.beta)               # warms the beta entry first
+        anon = self.get(f"{base}/concordance/")
+        plain = self.get(f"{base}/concordance/", self.plain)
+        # presence: the beta user's group has the embargoed namespace's member ...
+        self.assertIn("emb:7", self.members(beta))
+        # ... absence: neither lesser viewer is served it, and each was built for itself
+        self.assertNotIn("emb:7", self.members(anon))
+        self.assertNotIn("emb:7", self.members(plain))
+        self.assertIn("gn:100", self.members(anon))                      # (open namespace, flag on)
+        self.assertIn("gn:100", self.members(plain))
+        self.assertEqual(self.builds, ["gc_beta", "anonymous", "gc_plain"])
+        # A second beta user shares the beta entry (the class, not the person, is keyed).
+        other = get_user_model().objects.create_user(username="gc_beta2", email="gc_b2@example.org", password="pw",
+                                                     given_name="G", surname="B2", role="beta_tester")
+        self.assertIn("emb:7", self.members(self.get(f"{base}/concordance/", other)))
+        self.assertEqual(len(self.builds), 3)
+
+    def test_gateway_failure_is_not_cached(self):
+        base = f"/atlas/place/{self.A.pk}"
+        with patch("api.crc_client.crc_fetch_places", side_effect=failing_fetch):
+            down = self.get(f"{base}/concordance/", self.beta)
+        up = self.get(f"{base}/concordance/", self.beta)
+        self.assertNotIn("gn:100", self.members(down))
+        self.assertIn("gn:100", self.members(up))
+        self.assertEqual(len(self.builds), 2)
+
+    def test_a_record_made_private_stops_rendering_from_cache(self):
+        base = f"/atlas/place/{self.A.pk}"
+        self.assertTrue(self.get(f"{base}/concordance/", self.beta)["public"])
+        self.A.dataset.public = False
+        self.A.dataset.save(update_fields=["public"])
+        again = self.get(f"{base}/concordance/", self.beta)
+        self.assertFalse(again.get("public"))
+        self.assertNotIn("aggregate", again)
+
+    def test_group_cache_is_keyed_by_viewer_class(self):
+        """The enrichment endpoints are beta-only today, but the group cache must not
+        rely on that: record_group itself keys by viewer class."""
+        from django.contrib.auth.models import AnonymousUser
+        from places.record_group import record_group
+        beta = record_group(self.A, user=self.beta)
+        anon = record_group(self.A, user=AnonymousUser())
+        keys = lambda g: {m["key"] for m in g["members"]}  # noqa: E731
+        self.assertIn("emb:7", keys(beta))                              # presence
+        self.assertNotIn("emb:7", keys(anon))                           # absence
+        self.assertIn("gn:100", keys(anon))
+        self.assertIs(record_group(self.A, user=self.beta)["members"][0]["is_record"], True)
+        self.assertEqual(self.builds, ["gc_beta", "anonymous"])
