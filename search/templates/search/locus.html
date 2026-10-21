@@ -74,7 +74,7 @@
     </div>
     <div class="locus-actions">
       <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_pid"
-              data-bs-toggle="tooltip" title="Copy the permanent address of this locus">
+              data-bs-toggle="tooltip" data-bs-title="Copy the permanent address of this locus">
         <i class="fas fa-link me-1"></i>Copy identifier
       </button>
     </div>
@@ -106,7 +106,7 @@
     </div>
     <div class="locus-actions">
       <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_pid"
-              data-bs-toggle="tooltip" title="Copy the permanent address of this locus">
+              data-bs-toggle="tooltip" data-bs-title="Copy the permanent address of this locus">
         <i class="fas fa-link me-1"></i>Copy identifier
       </button>
     </div>
@@ -130,6 +130,9 @@
         <i class="fas fa-layer-group me-2"></i>Locus{% if locus_entry %} {{ locus_entry.pid }}{% endif %}
         {% if locus_entry %}
         <span class="locus-minted-badge" title="A permanent identifier has been minted for this recipe">minted</span>
+        {% elif minting.enabled and minting.existing %}
+        <a class="locus-minted-badge text-decoration-none" href="{{ minting.existing.path }}"
+           title="This exact recipe has a permanent identifier: {{ minting.existing.pid }}">minted as {{ minting.existing.pid }}</a>
         {% else %}
         <span class="locus-unminted-badge" title="No identifier has been minted for this cluster">unminted</span>
         {% endif %}
@@ -164,29 +167,29 @@
     <div class="locus-actions">
       {% if locus_entry %}
       <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_pid"
-              data-bs-toggle="tooltip" title="Copy the permanent address of this locus">
+              data-bs-toggle="tooltip" data-bs-title="Copy the permanent address of this locus">
         <i class="fas fa-link me-1"></i>Copy identifier
       </button>
       {% elif minting.enabled and minting.existing %}
       <a class="btn btn-outline-success btn-sm" id="locus_mint" href="{{ minting.existing.path }}"
-         data-bs-toggle="tooltip" title="This exact recipe is already minted as {{ minting.existing.pid }}">
+         data-bs-toggle="tooltip" data-bs-title="This exact recipe is already minted as {{ minting.existing.pid }}">
         <i class="fas fa-stamp me-1"></i>Already minted: {{ minting.existing.pid }}
       </a>
       {% elif minting.enabled and minting.collision %}
       <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip"
-            title="The PID this recipe hashes to is already bound to a different recipe. Please report it.">
+            data-bs-title="The PID this recipe hashes to is already bound to a different recipe. Please report it.">
         <button type="button" class="btn btn-outline-danger btn-sm" id="locus_mint" disabled style="pointer-events: none;">
           <i class="fas fa-stamp me-1"></i>Cannot mint (collision)
         </button>
       </span>
       {% elif minting.enabled %}
       <button type="button" class="btn btn-outline-success btn-sm" id="locus_mint"
-              data-bs-toggle="tooltip" title="Mint a permanent /entity/locus: identifier for this recipe">
+              data-bs-toggle="tooltip" data-bs-title="Mint a permanent /entity/locus: identifier for this recipe">
         <i class="fas fa-stamp me-1"></i>Mint a citable locus
       </button>
       {% else %}
       <span class="d-inline-block" tabindex="0" data-bs-toggle="tooltip"
-            title="Minting a citable locus (a permanent /entity/locus: identifier) arrives with the v4 release. Until then this page can be shared but not cited.">
+            data-bs-title="Minting a citable locus (a permanent /entity/locus: identifier) arrives with the v4 release. Until then this page can be shared but not cited.">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="locus_mint" disabled
                 style="pointer-events: none;">
           <i class="fas fa-stamp me-1"></i>Mint a citable locus
@@ -194,7 +197,7 @@
       </span>
       {% endif %}
       <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_link"
-              data-bs-toggle="tooltip" title="Copy this page's address">
+              data-bs-toggle="tooltip" data-bs-title="Copy this page's address">
         <i class="fas fa-link me-1"></i>Copy link
       </button>
     </div>

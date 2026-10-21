@@ -258,13 +258,8 @@ function copyText(text, doneMessage) {
 }
 
 function initControls(root) {
-    try {
-        const bs = window.bootstrap;
-        if (bs && bs.Tooltip) {
-            document.querySelectorAll('#locus_page [data-bs-toggle="tooltip"]')
-                .forEach((el) => bs.Tooltip.getOrCreateInstance(el, { trigger: 'hover' }));
-        }
-    } catch (e) { /* tooltips are advisory */ }
+    // Tooltips: the site-wide delegated one on <body> (base.js) covers [data-bs-toggle="tooltip"];
+    // a second instance here doubled them, and text goes in data-bs-title, not title.
     const copy = document.getElementById('locus_copy_link');
     if (copy) {
         copy.addEventListener('click', () => {

@@ -3076,7 +3076,7 @@ function locusLinkHtml(cluster, ci, params, debugSink) {
         if (debugSink) debugSink.recipes.set(ci, recipe);
         const url = `${LOCUS_PAGE_URL}?${LOCUS_TOKEN_PARAM}=${token}`;
         return `<a class="cluster-locus-open" href="${escapeHtml(url)}" target="_blank" rel="noopener" `
-            + `title="Open as a shareable (unminted) locus page" aria-label="Open as a shareable locus page">`
+            + `title="Open as a shareable (unminted) locus page, in a new tab" aria-label="Open as a shareable locus page, in a new tab">`
             + `<i class="fas fa-share-nodes"></i></a>`;
     } catch (e) {
         // Loud, not silent: a filter the recipe does not know must not vanish

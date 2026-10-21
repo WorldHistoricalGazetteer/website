@@ -196,6 +196,12 @@ class MintFlowTests(MintBase):
         self.assertIn(f"Already minted: {pid}", html)
         self.assertIn(f'href="/entity/locus:{pid}/"', html)
         self.assertNotIn('id="locus_mint_modal"', html)
+        # The badge no longer says "unminted" next to an existing PID, and points at it.
+        self.assertNotIn('class="locus-unminted-badge"', html)
+        self.assertIn(f'minted as {pid}</a>', html)
+        # Tooltip text lives in data-bs-title: base.js leaves a `title` attribute in place,
+        # so the browser's own tooltip would show beside Bootstrap's.
+        self.assertNotRegex(html, r'data-bs-toggle="tooltip"\s+title=')
 
     def test_preflight_reports_pid_existing_and_overlap(self):
         tok = token()
