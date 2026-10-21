@@ -47,6 +47,33 @@ class EntitySwitchOnTests(_Fixture):
         r = self.as_user(self.owner, f"/entity/place:{self.Priv.pk}/")
         self.assertEqual((r.status_code, r["Location"]), (302, f"/atlas/place/{self.Priv.pk}/"))
 
+    def test_every_identifier_form_withholds_alike(self):
+        """Review 2026-10-21: a src_id that does not exist reached the integer pk
+        filter and 500'd, while a private one 404'd: an anonymous existence oracle.
+        Each of the four forms (pk, whg:pk, whg:ds:src, malformed) is tested with a
+        public record that resolves beside private, embargoed and missing ones that
+        must answer the same status AND the same body, under both Accept types."""
+        P, ds = self.Pub, self.ds_pub
+        present = (str(P.pk), f"whg:{P.pk}", f"whg:{ds.pk}:P1")
+        withheld = (
+            str(self.Priv.pk), str(self.Emb.pk), str(self.missing),                      # <pk>
+            f"whg:{self.Priv.pk}", f"whg:{self.Emb.pk}", f"whg:{self.missing}",          # whg:<pk>
+            f"whg:{self.ds_priv.pk}:S1", f"whg:{self.ds_emb.pk}:E1",                     # whg:<ds>:<src>
+            f"whg:{self.ds_priv.pk}:NOPE", f"whg:{ds.pk}:NOPE", "whg:999999:X",
+            "whg:abc", "whg:", f"whg:{ds.pk}:", "9" * 30, "whg:" + "9" * 30,         # malformed
+        )
+        self.client.raise_request_exception = False  # a 500 must fail here, not error
+        for accept in ("application/json", "text/html"):
+            for ident in present:
+                r = self.anon(f"/entity/place:{ident}/", HTTP_ACCEPT=accept)
+                self.assertEqual((r.status_code, r["Location"]), (302, f"/atlas/place/{P.pk}/"), ident)
+            answers = {}
+            for ident in withheld:
+                r = self.anon(f"/entity/place:{ident}/", HTTP_ACCEPT=accept)
+                answers.setdefault((r.status_code, r.content), []).append(ident)
+            self.assertEqual(len(answers), 1, (accept, answers))
+            self.assertEqual(next(iter(answers))[0], 404, (accept, answers))
+
     def test_entity_api_stays_closed_to_anonymous_contributed(self):
         r = self.anon(f"/entity/place:{self.Pub.pk}/api")
         self.assertEqual(r.status_code, 401)

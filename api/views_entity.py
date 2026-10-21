@@ -365,13 +365,24 @@ def _place_lookup_id(obj_type, raw_id):
 
     Place ids are namespaced — ``whg:<dataset_id>:<src_id>`` — while the ORM keys
     on the primary key; ids emitted before namespacing (``whg:<pk>``, or a bare
-    number) resolve too, so links already held keep working. Non-place types and
-    unresolvable ids pass through untouched, to 404 as they did before.
+    number) resolve too, so links already held keep working. Non-place types pass
+    through untouched.
+
+    An unresolvable PLACE id raises Http404 here, with the text
+    ``get_object_or_404`` uses. It used to pass through and reach the integer pk
+    filter, which 500'd (``whg:<ds>:<missing src>``, ``whg:abc``) while a
+    private record 404'd: anonymous callers could test whether a private record
+    exists (review of place#325, 2026-10-21). Private, embargoed, missing and
+    malformed must be one answer, status and body
+    (places/tests_v4_entity_271.py).
     """
     if obj_type != "place":
         return raw_id
     pk = resolve_legacy_place_pk(raw_id)
-    return pk if pk is not None else raw_id
+    if pk is None:
+        from places.models import Place
+        raise Http404("No %s matches the given query." % Place._meta.object_name)
+    return pk
 
 
 # ---------------------------------------------------------------------------
