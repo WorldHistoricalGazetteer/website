@@ -613,14 +613,34 @@ def is_tight(points: Iterable, limit_km: float = LOCUS_TIGHT_KM) -> bool:
     return span_km(points) <= limit_km
 
 
-def hull_wkt(geoms) -> Optional[str]:
-    """POLYGON WKT of the convex hull of ``geoms`` (GEOSGeometry, SRID 4326), buffered if
-    degenerate and simplified to at most MAX_HULL_VERTICES vertices; None if empty."""
-    from django.contrib.gis.geos import GeometryCollection
-    gs = [g for g in geoms if g is not None and not g.empty]
-    if not gs:
-        return None
-    hull = GeometryCollection(*[g.clone() for g in gs], srid=4326).convex_hull
+def _vertices(g) -> list:
+    """Every [lon, lat] vertex of a GEOS geometry (the hull of a set of geometries is
+    the hull of their vertices)."""
+    out = []
+
+    def walk(c):
+        if c and isinstance(c[0], (int, float)):
+            out.append((float(c[0]), float(c[1])))
+        else:
+            for x in c:
+                walk(x)
+    walk(json.loads(g.json).get("coordinates") or [])
+    return out
+
+
+def crosses_antimeridian(lons) -> bool:
+    """True when the points are closer together across 180 degrees than across 0: their
+    longitude range exceeds 180 in [-180, 180] and is smaller once negative longitudes
+    are shifted by +360. (A cluster whose great-circle span is tight, but which
+    straddles the antimeridian, would otherwise get a hull around the rest of the world.)"""
+    lons = list(lons)
+    if not lons or max(lons) - min(lons) <= 180:
+        return False
+    shifted = [x + 360 if x < 0 else x for x in lons]
+    return max(shifted) - min(shifted) < max(lons) - min(lons)
+
+
+def _simplified_hull(hull):
     if hull.geom_type != "Polygon":
         hull = hull.buffer(DEGENERATE_HULL_BUFFER_DEG).convex_hull
     tol = 0.0005
@@ -629,9 +649,46 @@ def hull_wkt(geoms) -> Optional[str]:
         if simpler.geom_type == "Polygon" and not simpler.empty:
             hull = simpler
         tol *= 2
-    ring = hull.exterior_ring.coords
+    return hull
+
+
+def hull_wkt(geoms) -> Optional[str]:
+    """WKT of the convex hull of ``geoms`` (GEOSGeometry, SRID 4326), buffered if
+    degenerate and simplified to at most MAX_HULL_VERTICES vertices; None if empty.
+
+    POLYGON normally. Across the antimeridian (``crosses_antimeridian``) the hull is
+    taken with negative longitudes shifted by +360, then cut at 180 and the eastern
+    part shifted back, giving a MULTIPOLYGON whose parts each stay in [-180, 180]:
+    EDOPS takes lon only in [-180, 180] and accepts POLYGON or MULTIPOLYGON (openapi
+    v0.4, scripts/fixtures/edop/openapi_v0.4.json), so a 0-360 frame is not sent."""
+    from django.contrib.gis.geos import GeometryCollection, MultiPoint, Point, Polygon
+    gs = [g for g in geoms if g is not None and not g.empty]
+    if not gs:
+        return None
     fmt = f"{{:.{WKT_DECIMALS}f}} {{:.{WKT_DECIMALS}f}}"
-    return "POLYGON((" + ",".join(fmt.format(x, y) for x, y in ring) + "))"
+
+    def ring_text(poly):
+        return "((" + ",".join(fmt.format(x, y) for x, y in poly.exterior_ring.coords) + "))"
+
+    verts = [v for g in gs for v in _vertices(g)]
+    if verts and crosses_antimeridian(x for x, _y in verts):
+        pts = [Point(x + 360 if x < 0 else x, y, srid=4326) for x, y in verts]
+        hull = _simplified_hull(MultiPoint(*pts, srid=4326).convex_hull)
+        (x0, y0, x1, y1) = hull.extent
+        west = hull.intersection(Polygon.from_bbox((x0 - 1, y0 - 1, 180.0, y1 + 1)))
+        east = hull.intersection(Polygon.from_bbox((180.0, y0 - 1, x1 + 1, y1 + 1)))
+        parts = []
+        for part, shift in ((west, 0.0), (east, -360.0)):
+            for poly in (part if part.geom_type == "MultiPolygon" else [part]):
+                if poly.geom_type == "Polygon" and not poly.empty and poly.area > 0:
+                    moved = Polygon([(x + shift, y) for x, y in poly.exterior_ring.coords], srid=4326)
+                    parts.append(moved)
+        if len(parts) == 1:
+            return "POLYGON" + ring_text(parts[0])
+        if parts:
+            return "MULTIPOLYGON(" + ",".join(ring_text(p) for p in parts) + ")"
+    hull = _simplified_hull(GeometryCollection(*[g.clone() for g in gs], srid=4326).convex_hull)
+    return "POLYGON" + ring_text(hull)
 
 
 # ---------------------------------------------------------------------------

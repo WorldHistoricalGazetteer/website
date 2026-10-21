@@ -327,6 +327,43 @@ class GeometryAndPlanTests(SimpleTestCase):
         none = edop.plan_concordance([{"repr_point": None}])
         self.assertEqual((none["kind"], none["requests"]), ("no_location", []))
 
+    def test_antimeridian_clusters_get_a_sane_area(self):
+        """Review 2026-10-21: a cluster across 180 degrees (Fiji, the Aleutians, Chukotka)
+        is tight by great-circle distance, but its planar hull spanned ~360 degrees of
+        longitude, i.e. the rest of the world. EDOPS takes lon in [-180, 180] and a
+        POLYGON or MULTIPOLYGON (openapi v0.4), so the hull is split at the antimeridian
+        into a MULTIPOLYGON whose parts each stay inside [-180, 180]."""
+        from django.contrib.gis.geos import GEOSGeometry, Point
+
+        def check(points, label):
+            loc = edop.plan_locus([{"key": f"k{i}", "repr_point": list(p)} for i, p in enumerate(points)])
+            conc = edop.plan_concordance([{"repr_point": list(p), "geometry": Point(*p, srid=4326)}
+                                          for p in points])
+            for plan in (loc, conc):
+                self.assertEqual(plan["kind"], "area", label)
+                wkt = plan["requests"][0]["geom_wkt"]
+                self.assertTrue(wkt.startswith("MULTIPOLYGON((("), (label, wkt))
+                g = GEOSGeometry(wkt, srid=4326)
+                self.assertTrue(g.valid, label)
+                xs = [x for poly in g for ring in poly for x, _y in ring]
+                self.assertTrue(all(-180 <= x <= 180 for x in xs), (label, wkt))
+                self.assertLess(g.area, 5.0, (label, wkt))            # a few square degrees, not the globe
+                for p in points:                                     # presence: every member is covered
+                    self.assertTrue(g.buffer(1e-4).contains(Point(*p, srid=4326)), (label, p))
+                self.assertFalse(g.contains(Point(0, points[0][1], srid=4326)), label)   # absence
+        # Each within LOCUS_TIGHT_KM (50 km) by great circle, so the locus plan is one area too.
+        check([(179.9, -16.5), (-179.9, -16.6), (179.85, -16.7), (-179.85, -16.75)], "Fiji")
+        check([(179.8, 51.8), (-179.9, 51.9), (-179.7, 51.85)], "Aleutians")
+        check([(179.8, 66.0), (-179.9, 65.8)], "Chukotka")
+        # Presence beside it: an ordinary cluster is the same plain POLYGON as before.
+        near = edop.plan_locus([{"key": "a", "repr_point": [0, 0]}, {"key": "b", "repr_point": [0.1, 0.1]},
+                                {"key": "c", "repr_point": [0.2, 0]}])
+        wkt = near["requests"][0]["geom_wkt"]
+        self.assertTrue(wkt.startswith("POLYGON(("), wkt)
+        self.assertEqual(wkt, edop.hull_wkt([Point(0, 0, srid=4326), Point(0.1, 0.1, srid=4326),
+                                             Point(0.2, 0, srid=4326)]))
+        self.assertAlmostEqual(GEOSGeometry(wkt).area, 0.01, places=6)
+
     def test_locus_plans(self):
         def m(key, x, y, years=None):
             return {"key": key, "repr_point": [x, y], "years": years}
