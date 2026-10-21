@@ -177,15 +177,23 @@ def gateway_members(aggregate_entries: list, user=None) -> list:
     from api.models import GazetteerRegistryEntry
     from django.contrib.gis.geos import GEOSGeometry
 
+    from places.concordance import _anonymous_open, anonymous_gateway_namespaces
+
     ids = [str(m["place_id"]) for m in aggregate_entries]
     got, status = {}, "full"
-    for i in range(0, len(ids), GATEWAY_BATCH):
-        meta: dict = {}
-        got.update(crc_fetch_places(ids[i:i + GATEWAY_BATCH], user=user, meta=meta) or {})
-        if meta.get("disabled"):
-            status = "disabled"
-        elif meta.get("error"):
-            status = "unavailable"
+    # The concordance's anonymous rule (anonymous_gateway_namespaces), so a signed-out
+    # visitor's group reads details from exactly the namespaces its concordance asked.
+    open_ns = anonymous_gateway_namespaces() if (ids and _anonymous_open(user)) else set()
+    groups = [([i for i in ids if i.split(":", 1)[0] in open_ns], True),
+              ([i for i in ids if i.split(":", 1)[0] not in open_ns], False)]
+    for grp, anon in groups:
+        for i in range(0, len(grp), GATEWAY_BATCH):
+            meta: dict = {}
+            got.update(crc_fetch_places(grp[i:i + GATEWAY_BATCH], user=user, allow_anonymous=anon, meta=meta) or {})
+            if meta.get("disabled"):
+                status = "disabled"
+            elif meta.get("error"):
+                status = "unavailable"
     names_by_ns = dict(GazetteerRegistryEntry.objects.visible_to(user)
                        .filter(namespace__in={i.split(":", 1)[0] for i in ids})
                        .exclude(entry_class="dataset").values_list("namespace", "name"))

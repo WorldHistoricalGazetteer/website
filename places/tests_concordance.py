@@ -586,3 +586,123 @@ class PlaceholderIdentifierTests(TestCase):
         self.assertNotIn("wd:None", repr(gl))
 
     by_ident = staticmethod(lambda entries: {e["identifier"]: e for e in entries})
+
+
+class AnonymousGatewayTests(TestCase):
+    """Ruling SG 2026-10-21: on the public Record page (V4_LANDING_ENABLED on) the
+    concordance asks the CRC gateway on behalf of a signed-out visitor ONLY for
+    namespaces whose registry row is openly redistributable: the rule the anonymous
+    ``/entity/place:<ns>:<id>/api`` path enforces (``redistributable``, else 451),
+    plus anonymous visibility (never embargoed or unpublished) and a recorded licence
+    (fail closed when it is NULL)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from api.models import GazetteerRegistryEntry
+        from datasets.models import Dataset
+        from licensing.models import License
+        from places.models import Place, PlaceLink
+
+        cls.user = get_user_model().objects.create_user(username="an_user", email="an@example.org", password="pw",
+                                                        given_name="A", surname="N")
+        with patch("datasets.signals.doi"):
+            ds = Dataset.objects.create(owner=cls.user, label="anon325", title="Anon ds", description="D",
+                                        creator="X", public=True, ds_status="indexed",
+                                        uri_base="https://example.org/p/")
+        cc, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        rows = {  # ns: (status, redistributable, licence)
+            "gn": ("published", True, cc), "wd": ("published", True, cc),
+            "aem": ("embargoed", True, cc),             # embargoed: never for anonymous
+            "anr": ("published", False, cc),            # not redistributable (the 451 rule)
+            "anl": ("published", True, None),           # licence unknown: fail closed
+            "adr": ("draft", True, cc),                 # not public
+        }
+        for ns, (st, red, lic) in rows.items():
+            GazetteerRegistryEntry.objects.update_or_create(
+                id=ns, defaults=dict(name=ns, namespace=ns, entry_class="authority", status=st,
+                                     redistributable=red, license=lic,
+                                     embargo_release_at=(timezone.now() + timedelta(days=30)) if st == "embargoed"
+                                     else None))
+        cls.R = Place.objects.create(title="Anon R", src_id="AR1", dataset=ds, ccodes=[])
+        cls.idents = ["gn:100", "wd:Q5", "aem:1", "anr:1", "anl:1", "adr:1"]
+        for ident in cls.idents:
+            PlaceLink.objects.create(place=cls.R, jsonb={"type": "closeMatch", "identifier": ident})
+
+    def setUp(self):
+        self.calls = []
+
+        def fetch(ids, user=None, allow_anonymous=False, meta=None):
+            self.calls.append((tuple(ids), bool(allow_anonymous), bool(getattr(user, "is_authenticated", False))))
+            if not allow_anonymous and not getattr(user, "is_authenticated", False):
+                if meta is not None:
+                    meta["disabled"], meta["disabled_reason"] = True, "anonymous"
+                return {}
+            return {i: {"place_id": i, "title": f"T {i}", "namespace": i.split(":")[0],
+                        "repr_point": [1.0, 1.0]} for i in ids}
+        p = patch("api.crc_client.crc_fetch_places", side_effect=fetch)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def statuses(self, user):
+        from django.contrib.auth.models import AnonymousUser
+        c = build_concordance(self.R, user=user if user is not None else AnonymousUser())
+        return {e["identifier"]: (e["target"]["status"], e["target"].get("reason")) for e in c["outbound"]}
+
+    def asked(self, allow_anonymous=None):
+        return {i for ids, anon, _auth in self.calls for i in ids if allow_anonymous is None or anon == allow_anonymous}
+
+    def test_namespace_rule(self):
+        from places.concordance import anonymous_gateway_namespaces
+        ns = anonymous_gateway_namespaces()
+        self.assertTrue({"gn", "wd"} <= ns)                            # presence
+        self.assertFalse({"aem", "anr", "anl", "adr", "whg"} & ns)    # absence
+
+    def test_anonymous_flag_on_resolves_open_namespaces_only(self):
+        with self.settings(V4_LANDING_ENABLED=True):
+            st = self.statuses(None)
+        self.assertEqual(st["gn:100"], ("resolved", None))
+        self.assertEqual(st["wd:Q5"], ("resolved", None))
+        self.assertEqual(self.asked(allow_anonymous=True), {"gn:100", "wd:Q5"})
+        self.assertEqual(st["anr:1"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(st["anl:1"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(st["aem:1"][0], "not_held")        # not even visible to an anonymous caller
+        self.assertEqual(st["adr:1"][0], "not_held")
+        self.assertFalse({"aem:1", "anr:1", "anl:1", "adr:1"} & self.asked(allow_anonymous=True))
+
+    def test_anonymous_flag_off_unchanged(self):
+        with self.settings(V4_LANDING_ENABLED=False):
+            st = self.statuses(None)
+        self.assertEqual(st["gn:100"], ("gateway_disabled", "anonymous"))
+        self.assertEqual(self.asked(allow_anonymous=True), set())
+        self.assertEqual(st["aem:1"][0], "not_held")
+
+    def test_signed_in_unchanged(self):
+        with self.settings(V4_LANDING_ENABLED=True):
+            st = self.statuses(self.user)
+        self.assertEqual(self.asked(allow_anonymous=True), set())       # never the anonymous opt-in
+        self.assertEqual(self.asked(allow_anonymous=False), {"gn:100", "wd:Q5", "anr:1", "anl:1"})
+        for i in ("gn:100", "wd:Q5", "anr:1", "anl:1"):
+            self.assertEqual(st[i][0], "resolved")
+        self.assertEqual(st["aem:1"][0], "not_held")                    # embargo: beta only
+
+    def test_anonymous_endpoint(self):
+        from django.core.cache import cache
+        cache.clear()
+        with self.settings(V4_LANDING_ENABLED=True):
+            data = self.client.get(f"/atlas/place/{self.R.pk}/concordance/").json()
+        st = {e["identifier"]: e["target"]["status"] for e in data["outbound"]}
+        self.assertEqual((st["gn:100"], st["anr:1"]), ("resolved", "gateway_disabled"))
+        self.assertIn("gn:100", {m["place_id"] for m in data["aggregate"]})
+        self.assertNotIn("anr:1", {m["place_id"] for m in data["aggregate"]})
+
+    def test_anonymous_group_reads_the_same_namespaces(self):
+        from django.contrib.auth.models import AnonymousUser
+        from places.record_group import build_record_group
+        with self.settings(V4_LANDING_ENABLED=True):
+            g = build_record_group(self.R, user=AnonymousUser())
+        gw = {m["key"]: m["detail"] for m in g["members"] if m["via"] == "gateway"}
+        self.assertEqual(gw, {"gn:100": "full", "wd:Q5": "full"})
+        self.assertEqual(self.asked(allow_anonymous=True), {"gn:100", "wd:Q5"})
+        # Without the opt-in only the namespaces the rule refuses were offered (and the
+        # fake, like the real client, answered them with nothing).
+        self.assertEqual(self.asked(allow_anonymous=False), {"anr:1", "anl:1"})

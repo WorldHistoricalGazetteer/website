@@ -397,6 +397,34 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertNotIn("not configured", text)
         self.assertIn("Record B", page.inner_text("#concordance_tier2"))       # the rest still renders
 
+    @override_settings(V4_LANDING_ENABLED=True, CRC_GATEWAY_URL="http://gateway.invalid")
+    def test_signed_out_visitor_sees_open_namespaces_resolved(self):
+        """Ruling 2026-10-21: an openly redistributable namespace (licence recorded,
+        redistributable, published) IS looked up for a signed-out visitor; the same page
+        with the licence unknown is not (the test above)."""
+        from api.models import GazetteerRegistryEntry
+        from licensing.models import License
+        lic, _ = License.objects.get_or_create(spdx_id="CC-BY-4.0", defaults={"label": "CC BY 4.0"})
+        GazetteerRegistryEntry.objects.filter(id="gn").update(license=lic, redistributable=True)
+        asked = []
+
+        def fetch(ids, user=None, allow_anonymous=False, meta=None):
+            asked.append((tuple(ids), allow_anonymous))
+            return fake_fetch(ids) if allow_anonymous else {}
+        page = self.new_page(anonymous=True)
+        with patch("api.crc_client.crc_fetch_places", side_effect=fetch):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/#concordance")
+            ok = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 45000)
+            mapped = self.wait_for(page, "window.__whgRecord.mapDrawn >= 1", 30000)
+        text = self._gn100_entry(page)
+        self.assertTrue(ok)
+        self.assertIn("resolved", text)
+        self.assertIn("Gateway Town", text)
+        self.assertNotIn("signed-out", text)
+        self.assertEqual(asked, [(("gn:100",), True)])
+        self.assertTrue(mapped)
+        self.assertEqual(page.evaluate("window.__whgRecord.mapped"), 2)       # Gateway Town + Record B
+
     @override_settings(CRC_GATEWAY_URL="")
     def test_unconfigured_server_says_not_configured(self):
         page = self.new_page()

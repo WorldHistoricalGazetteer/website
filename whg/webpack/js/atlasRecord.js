@@ -106,10 +106,11 @@ function targetStatus(e) {
         case 'gateway_disabled':
             // Two causes (places.concordance.resolve_targets sets t.reason): only
             // 'not_configured' may say "not configured". A signed-out visitor (the
-            // Record page is public once V4_LANDING_ENABLED is on) is not looked up
-            // because WHG's index answers signed-in users only.
+            // Record page is public once V4_LANDING_ENABLED is on) is looked up for only
+            // in openly redistributable sources (ruling 2026-10-21;
+            // places.concordance.anonymous_gateway_namespaces); this was not one.
             if (t.reason === 'anonymous') {
-                return { cls: 'unavailable', html: 'Not looked up for signed-out visitors: WHG’s index is asked only for signed-in users. Sign in to see it. That is not a finding that it is absent.' };
+                return { cls: 'unavailable', html: 'Not looked up for signed-out visitors: for them WHG’s index is asked only about sources recorded as openly redistributable, and this is not one. Sign in to see it. That is not a finding that it is absent.' };
             }
             if (t.reason === 'not_configured') {
                 return { cls: 'unavailable', html: 'WHG’s index was not asked (not configured on this server), so this was not looked up. That is not a finding that it is absent.' };

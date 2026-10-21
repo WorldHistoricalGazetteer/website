@@ -310,6 +310,48 @@ def gateway_namespaces(user=None) -> set[str]:
     )
 
 
+def anonymous_gateway_namespaces() -> set[str]:
+    """Namespaces the CRC gateway may be asked about on behalf of a SIGNED-OUT visitor
+    of the public Record page (ruling SG 2026-10-21: "only for public-licence
+    namespaces"; openly redistributable registry rows, never embargoed ones).
+
+    The rule is the one the anonymous ``/entity/place:<ns>:<id>/api`` path already
+    enforces (``api.views_entity``: answered anonymously, but 451 when the registry
+    row says ``redistributable`` is False), made fail-closed for this caller:
+
+    * an ``authority`` row visible to an anonymous caller (``visible_to(None)``:
+      published, or an embargo whose release date has passed; never ``embargoed``,
+      ``draft``, ``pending`` ...);
+    * ``redistributable`` is True;
+    * a licence is recorded (``license`` not NULL): unknown terms are not open terms;
+    * and no other authority row for the namespace fails any of these.
+
+    ``license.permits_commercial`` is deliberately NOT required (it is NULLABLE, and
+    a non-commercial licence is still redistributable by WHG, which is
+    non-commercial); ``redistributable`` is the registry's legal determination."""
+    from api.models import GazetteerRegistryEntry
+    rows = GazetteerRegistryEntry.objects.filter(entry_class="authority").exclude(namespace__in=["", WHG_NS])
+    ok = set(rows.visible_to(None).filter(redistributable=True, license__isnull=False)
+             .values_list("namespace", flat=True))
+    if not ok:
+        return set()
+    visible_ids = set(rows.visible_to(None).filter(namespace__in=ok).values_list("id", flat=True))
+    bad = set(rows.filter(namespace__in=ok).filter(Q(redistributable=False) | Q(license__isnull=True))
+              .values_list("namespace", flat=True))
+    bad |= set(rows.filter(namespace__in=ok).exclude(id__in=visible_ids).values_list("namespace", flat=True))
+    return ok - bad
+
+
+def _anonymous_open(user) -> bool:
+    """True when ``user`` is signed out AND the public Record page is on, i.e. when
+    ``anonymous_gateway_namespaces`` may be asked for. Flag off: unchanged (no
+    anonymous gateway call at all)."""
+    if getattr(user, "is_authenticated", False):
+        return False
+    from places.v4_landing import v4_landing_enabled
+    return v4_landing_enabled()
+
+
 def _gateway_has_geometry(rec: dict) -> bool:
     if rec.get("repr_point"):
         return True
@@ -350,7 +392,9 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     records), so the answer reveals nothing about private data.
     ``gateway_unavailable`` / ``gateway_disabled`` are NOT absence (place#272):
     the gateway could not be, or was not, asked. ``gateway_disabled`` carries
-    ``reason``: ``"not_configured"`` or ``"anonymous"`` (a signed-out caller).
+    ``reason``: ``"not_configured"`` or ``"anonymous"`` (a signed-out caller, for a
+    namespace ``anonymous_gateway_namespaces`` does not admit, or with the public
+    Record page off).
     """
     from places.models import Place, PlaceLink
 
@@ -418,6 +462,10 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
     rest = [c for c in curies if c not in out]
     ns_held = gateway_namespaces(user) if (use_gateway and rest) else set()
     to_ask = [c for c in rest if parsed[c][1] in ns_held]
+    # A signed-out visitor of the public Record page: the gateway is asked, with the
+    # anonymous opt-in, about openly redistributable namespaces only; the rest stay
+    # "gateway_disabled / anonymous" exactly as before (ruling SG 2026-10-21).
+    open_ns = anonymous_gateway_namespaces() if (to_ask and _anonymous_open(user)) else set()
     for c in rest:
         if parsed[c][1] == WHG_NS:
             # Private or non-existent: one answer for both (never which).
@@ -426,14 +474,17 @@ def resolve_targets(curies: Iterable[str], user=None, use_gateway: bool = True,
             out[c] = blank("not_held")
     if to_ask:
         from api.crc_client import crc_fetch_places
-        for i in range(0, len(to_ask), GATEWAY_BATCH):
-            batch = to_ask[i:i + GATEWAY_BATCH]
+        groups = [([c for c in to_ask if parsed[c][1] in open_ns], True),
+                  ([c for c in to_ask if parsed[c][1] not in open_ns], False)]
+        batches = [(grp[i:i + GATEWAY_BATCH], anon) for grp, anon in groups
+                   for i in range(0, len(grp), GATEWAY_BATCH)]
+        for batch, anon in batches:
             meta: dict = {}
-            got = crc_fetch_places(batch, user=user, meta=meta)
+            got = crc_fetch_places(batch, user=user, allow_anonymous=anon, meta=meta)
             if meta.get("disabled"):
                 # Two causes, worded differently on the page: the server has no
                 # gateway ("not_configured"), or the caller is signed out
-                # ("anonymous"; allow_anonymous is a licensing decision, not taken).
+                # ("anonymous": a namespace not openly redistributable, or the flag off).
                 for c in batch:
                     r = blank("gateway_disabled", "gateway")
                     r["reason"] = meta.get("disabled_reason") or "unknown"
@@ -502,8 +553,9 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
     is not public (private and embargoed datasets never render).
 
     ``user`` is used ONLY to call the CRC gateway (which refuses anonymous
-    callers) and to apply namespace embargoes there; it never widens which
-    WHG records appear. Shape::
+    callers unless the public Record page is on, and then only for openly
+    redistributable namespaces: ``anonymous_gateway_namespaces``) and to apply
+    namespace embargoes there; it never widens which WHG records appear. Shape::
 
         {"record": {...}, "self_identifiers": [...], "excluded_self_links": int,
          "outbound": [entry], "inbound": [entry], "cocited": [entry],
