@@ -20,7 +20,7 @@
 {% block content %}
 <div class="container locus-container" id="locus_page"
      data-token="{{ token }}" data-resolve-url="{{ resolve_url|default:'/atlas/locus/resolve/' }}"
-     {% if locus_entry %}data-pid="{{ locus_entry.pid }}" data-entity-url="{{ locus_entry.url }}" data-withdrawn="{% if locus_entry.withdrawn %}1{% else %}0{% endif %}"{% endif %}
+     {% if locus_entry %}data-pid="{{ locus_entry.pid }}" data-entity-url="{{ locus_entry.url }}" data-withdrawn="{% if locus_entry.suppressed %}1{% else %}0{% endif %}"{% endif %}
      {% if minting.enabled and minting.pid and not minting.existing and not minting.collision %}data-mint-url="{{ minting.mint_url }}" data-mint-pid="{{ minting.pid }}"{% endif %}>
 
   {% if error %}
@@ -46,6 +46,41 @@
     {% endif %}
   </div>
 
+  {% elif tombstone %}
+  {% comment %}
+    A withdrawn or redacted locus (rulings 2026-10-21): PID, status, reason and
+    dates ONLY. No recipe, token, membership or minter is in this context, so
+    none can be rendered; the canonical bytes stay in the registry unshown.
+  {% endcomment %}
+  <div class="locus-head">
+    <div>
+      <h1 class="locus-h1">
+        <i class="fas fa-layer-group me-2"></i>Locus {{ locus_entry.pid }}
+        <span class="locus-frozen-badge">{% if locus_entry.withdrawn %}withdrawn{% else %}redacted{% endif %}</span>
+      </h1>
+      <p class="locus-promise">
+        <strong>This identifier stays in the registry and is never reused.</strong>
+        {% if locus_entry.withdrawn %}This locus has been withdrawn{% else %}This locus has been redacted by WHG staff{% endif %}:
+        its recipe is no longer shown or re-run.
+      </p>
+      <p class="small text-muted mb-1">Status: {{ locus_entry.status }}. Minted {{ locus_entry.minted_at|date:"Y-m-d" }}.</p>
+    </div>
+    <div class="locus-actions">
+      <button type="button" class="btn btn-outline-primary btn-sm" id="locus_copy_pid"
+              data-bs-toggle="tooltip" title="Copy the permanent address of this locus">
+        <i class="fas fa-link me-1"></i>Copy identifier
+      </button>
+    </div>
+  </div>
+  {% if locus_entry.withdrawn %}
+  <div class="locus-withdrawn" role="status"><i class="fas fa-ban me-1"></i><strong>Withdrawn</strong>
+    {{ locus_entry.withdrawn_at|date:"Y-m-d" }}: {{ locus_entry.withdrawn_reason }}</div>
+  {% endif %}
+  {% if locus_entry.redacted %}
+  <div class="locus-withdrawn" role="status"><i class="fas fa-eye-slash me-1"></i><strong>Redacted</strong>
+    {{ locus_entry.redacted_at|date:"Y-m-d" }} by WHG staff.</div>
+  {% endif %}
+
   {% elif legacy %}
   {# A legacy whg_id admitted as a FROZEN locus (place#172): no recipe, captured membership. #}
   <div class="locus-head">
@@ -69,10 +104,6 @@
       </button>
     </div>
   </div>
-  {% if locus_entry.withdrawn %}
-  <div class="locus-withdrawn" role="status"><i class="fas fa-ban me-1"></i><strong>Withdrawn</strong>
-    {{ locus_entry.withdrawn_at|date:"Y-m-d" }}: {{ locus_entry.withdrawn_reason }}. The identifier stays in the registry.</div>
-  {% endif %}
   <h2 class="locus-h2 mt-3">Captured membership ({{ legacy.captured_count }} record{{ legacy.captured_count|pluralize }})</h2>
   <ul class="locus-cluster-members" id="locus_legacy_members">
     {% for m in legacy.members %}
@@ -105,6 +136,15 @@
       </p>
       <p class="small text-muted mb-1">Minted {{ locus_entry.minted_at|date:"Y-m-d H:i" }} UTC{% if locus_entry.minted_by %} by {{ locus_entry.minted_by }}{% endif %}.
         Cite as <code class="locus-cite">{{ locus_entry.url }}</code></p>
+      {% if locus_entry.can_hide_minter %}
+      {# Only the minter sees this: their name is shown because they chose it; they may stop it (never restart it). #}
+      <form method="post" action="/atlas/locus/attribution/" class="small mb-1" id="locus_hide_minter">
+        {% csrf_token %}<input type="hidden" name="pid" value="{{ locus_entry.pid }}"><input type="hidden" name="public" value="0">
+        You minted this locus and chose to be named.
+        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Stop showing my name</button>
+        (it will say &ldquo;a WHG contributor&rdquo;; this cannot be undone).
+      </form>
+      {% endif %}
       {% else %}
       <p class="locus-promise">
         <strong>This page is shareable but not permanent.</strong> It carries a recipe, not an identifier:
@@ -153,12 +193,6 @@
     </div>
   </div>
 
-  {% if locus_entry.withdrawn %}
-  <div class="locus-withdrawn" role="status"><i class="fas fa-ban me-1"></i><strong>Withdrawn</strong>
-    {{ locus_entry.withdrawn_at|date:"Y-m-d" }}: {{ locus_entry.withdrawn_reason }}. The recipe below stays public;
-    it is no longer re-run, and the identifier stays in the registry and is never reused.</div>
-  {% endif %}
-
   {% if token_was_normalised %}
   <p class="locus-note small text-muted">The address was normalised: the recipe it carried was valid but not
     in canonical form, and the canonical form is what this page uses.</p>
@@ -168,11 +202,7 @@
     <section class="locus-result-col">
       <div id="locus_map"></div>
       <div id="locus_result" class="locus-result" aria-live="polite">
-        {% if locus_entry.withdrawn %}
-        <p class="locus-status">Not re-run: this locus is withdrawn.</p>
-        {% else %}
         <p class="locus-status"><i class="fas fa-spinner fa-spin me-1"></i>Re-running the recipe…</p>
-        {% endif %}
       </div>
     </section>
 
@@ -262,6 +292,14 @@
               I understand that this identifier names the recipe, re-run on every visit, and not a frozen list of
               records; that it is permanent; and that the minting act (my account and the time) is recorded as its
               provenance.
+            </label>
+          </div>
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="locus_mint_public">
+            <label class="form-check-label" for="locus_mint_public">
+              Show my name as the minter on the locus page (optional). Unticked, the page says
+              &ldquo;a WHG contributor&rdquo;; WHG staff can see who minted it either way. You can hide your name
+              later, but cannot add it after minting.
             </label>
           </div>
           <div id="locus_mint_error" class="text-danger small mt-2" role="alert"></div>

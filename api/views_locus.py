@@ -29,9 +29,14 @@ What a dereference does with the identifier:
   ``LegacyUnionRecord`` snapshot as a FROZEN locus (no recipe; its captured
   membership), per place#172; 404 when the snapshot has no such id.
 
-Tombstones (place#308): a withdrawn locus still answers 200 at its URI in
-every representation, with its recipe, status, reason and date; it is not
-re-run.
+Tombstones (place#308) and take-down (rulings 2026-10-21): a withdrawn locus,
+and one redacted by staff (active or withdrawn), still answers 200 at its URI
+in every representation, with ``X-WHG-Locus-Status: withdrawn`` (or
+``redacted``), and shows ONLY its PID, status, withdrawal reason and dates:
+no recipe, no token, no recipe page link, no ``current``, no captured
+membership, no minter. It is not re-run. The canonical bytes stay in the
+registry (the PID is their hash) and are never displayed. A redaction's
+reason is staff-only and is not shown.
 
 The JSON representation is honest about what the server can and cannot say.
 The retrieval half of a recipe runs here (the same gateway call the page
@@ -223,9 +228,47 @@ def _current(recipe, user) -> dict:
     return out
 
 
+SUPPRESSED_STATEMENT = (
+    "This locus has been withdrawn or redacted. Its identifier stays in the registry and is never "
+    "reused, but its recipe is no longer shown or re-run."
+)
+
+
+def suppressed_document(entry, ctx) -> dict:
+    """A withdrawn or redacted locus: PID, status, reason, dates; nothing else.
+    Built from an allow-list, so a field added to the full document later
+    cannot leak into a tombstone by default."""
+    doc = {
+        "@context": LOCUS_CONTEXT,
+        "@id": ctx["url"],
+        "@type": "Locus",
+        "pid": entry.pid,
+        "status": entry.status,
+        "minted": {"at": entry.minted_at.isoformat()},
+        "statement": SUPPRESSED_STATEMENT,
+    }
+    if entry.is_withdrawn:
+        doc["withdrawn"] = {"at": entry.withdrawn_at.isoformat() if entry.withdrawn_at else None,
+                            "reason": entry.withdrawn_reason}
+    if entry.is_redacted:
+        doc["redacted"] = {"at": entry.redacted_at.isoformat()}   # the reason is staff-only
+    return doc
+
+
+def status_header(entry) -> str | None:
+    """``X-WHG-Locus-Status``: withdrawn wins over redacted; None when neither."""
+    if entry.is_withdrawn:
+        return "withdrawn"
+    if entry.is_redacted:
+        return "redacted"
+    return None
+
+
 def locus_document(request, entry, resolve: bool = True) -> dict:
     """The JSON(-LD) representation of a registry entry."""
     ctx = entry_context(entry, request)
+    if entry.is_suppressed:
+        return suppressed_document(entry, ctx)
     doc = {
         "@context": LOCUS_CONTEXT,
         "@id": ctx["url"],
@@ -241,18 +284,14 @@ def locus_document(request, entry, resolve: bool = True) -> dict:
             "recipe": "public, carried in full in this document" if entry.kind == entry.KIND_RECIPE else None,
         },
     }
-    if entry.is_withdrawn:
-        doc["withdrawn"] = {"at": entry.withdrawn_at.isoformat() if entry.withdrawn_at else None,
-                            "reason": entry.withdrawn_reason}
     if entry.kind == entry.KIND_RECIPE:
         recipe = registry.entry_recipe(entry)
         doc["recipe"] = recipe
         doc["recipe_token"] = entry.token
         doc["recipe_page"] = request.build_absolute_uri(f"/atlas/locus/?r={entry.token}")
-        if entry.is_withdrawn or not resolve:
+        if not resolve:
             doc["current"] = {"frozen": False, "statement": MEMBERSHIP_STATEMENT, "resolved": False,
-                              "note": "withdrawn: the recipe stays public and is not re-run"
-                              if entry.is_withdrawn else "not resolved"}
+                              "note": "not resolved"}
         elif recipe is not None:
             doc["current"] = _current(recipe, request.user)
     else:
@@ -310,22 +349,35 @@ def _locus_entity(request, pid, force_json: bool = False):
     if created:
         logger.info("locus dereference minted legacy locus %s", entry.pid)
 
+    header = status_header(entry)
     if html:
-        if entry.kind == entry.KIND_RECIPE:
-            recipe = registry.entry_recipe(entry)
-            if recipe is None:   # cannot happen for bytes the parser produced; say so rather than 500
-                return _json({"error": "unreadable", "detail": "stored recipe does not parse"}, status=500, media=JSON)
-            return render_locus_page(request, recipe, entry.token, entry=entry)
-        from django.shortcuts import render
-        ctx = {"locus_entry": entry_context(entry, request), "legacy": _legacy_members(entry, request.user),
-               "minting": {"enabled": False}}
-        return render(request, "search/locus.html", ctx)
+        resp = _locus_html(request, entry)
+        if header:
+            resp["X-WHG-Locus-Status"] = header
+        return resp
 
     resp = _json(locus_document(request, entry), media=JSONLD if _accept_choice(
         request.META.get("HTTP_ACCEPT", ""), force_json) == JSONLD else JSON)
-    if entry.is_withdrawn:
-        resp["X-WHG-Locus-Status"] = "withdrawn"
+    if header:
+        resp["X-WHG-Locus-Status"] = header
     return resp
+
+
+def _locus_html(request, entry):
+    from django.shortcuts import render
+    if entry.is_suppressed:
+        # The tombstone: rendered without the recipe, its token or any membership,
+        # so nothing of the suppressed text reaches the page or its script.
+        return render(request, "search/locus.html", {"locus_entry": entry_context(entry, request),
+                                                     "tombstone": True, "minting": {"enabled": False}})
+    if entry.kind == entry.KIND_RECIPE:
+        recipe = registry.entry_recipe(entry)
+        if recipe is None:   # cannot happen for bytes the parser produced; say so rather than 500
+            return _json({"error": "unreadable", "detail": "stored recipe does not parse"}, status=500, media=JSON)
+        return render_locus_page(request, recipe, entry.token, entry=entry)
+    ctx = {"locus_entry": entry_context(entry, request), "legacy": _legacy_members(entry, request.user),
+           "minting": {"enabled": False}}
+    return render(request, "search/locus.html", ctx)
 
 
 def locus_entity_api(request, pid):

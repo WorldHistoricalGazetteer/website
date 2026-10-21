@@ -9,7 +9,7 @@ from search.views import (AtlasPageView, atlas_search, atlas_place,
                           atlas_boundaries, atlas_geometry,
                           atlas_registry_coverage, atlas_status,
                           atlas_locus, atlas_locus_resolve)
-from search.views_locus import atlas_locus_mint
+from search.views_locus import atlas_locus_attribution, atlas_locus_mint
 from places.views_record import atlas_record_concordance, atlas_record_page
 from places.views_enrichment import (atlas_locus_environment, atlas_locus_gloss,
                                      atlas_record_environment, atlas_record_gloss)
@@ -37,6 +37,8 @@ urlpatterns = [
     # place#325 Stage 4: minting (GET preflight, POST mint); 404 unless
     # settings.LOCUS_MINTING_ENABLED, beta-gated when on (search/views_locus.py).
     path('locus/mint/', atlas_locus_mint, name='atlas-locus-mint'),
+    # The minter hides their name on a locus they minted (true -> false only).
+    path('locus/attribution/', atlas_locus_attribution, name='atlas-locus-attribution'),
     path('boundaries/', atlas_boundaries, name='atlas-boundaries'),
     path('geometry/', atlas_geometry, name='atlas-geometry'),
     path('status/', atlas_status, name='atlas-status'),

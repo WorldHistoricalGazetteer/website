@@ -129,8 +129,14 @@ def existing_for_recipe(recipe) -> tuple[Optional[LocusRegistryEntry], dict]:
     return entry, binding
 
 
-def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL) -> tuple[LocusRegistryEntry, bool]:
+def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL,
+                minter_public: bool = False) -> tuple[LocusRegistryEntry, bool]:
     """Bind the recipe's PID to its canonical bytes. ``(entry, created)``.
+
+    ``minter_public`` (the modal's checkbox, default off) is written with the
+    row and only honoured when this call CREATES it: an idempotent re-mint,
+    by anyone, never changes the first minter's choice. It can later only be
+    turned off (``LocusRegistryEntry.hide_minter``; migration 0028).
 
     Raises ``RecipeError`` (invalid recipe), ``LocusCollision``,
     ``MintRateLimited``, or ``ValueError`` when ``user`` is not a signed-in
@@ -160,7 +166,7 @@ def mint_recipe(recipe, user, via: str = LocusRegistryEntry.VIA_MODAL) -> tuple[
                 pid=binding["pid"], kind=LocusRegistryEntry.KIND_RECIPE, version=RECIPE_VERSION,
                 canonical=binding["canonical"], digest=binding["digest"], token=binding["token"],
                 members=list(binding["recipe"]["members"]),
-                minted_by=user, minted_via=via,
+                minted_by=user, minted_via=via, minter_public=minter_public is True,
             )
             return entry, True
     except IntegrityError:
@@ -181,7 +187,10 @@ def overlapping(members, exclude_pid: Optional[str] = None, limit: int = 10) -> 
     members = [m for m in (members or []) if isinstance(m, str) and m]
     if not members:
         return []
-    qs = LocusRegistryEntry.objects.filter(members__overlap=members)
+    # A withdrawn or redacted locus is never offered: it cannot be reused, and
+    # naming the members it shares would disclose part of a suppressed recipe.
+    qs = (LocusRegistryEntry.objects.filter(members__overlap=members)
+          .filter(status=LocusRegistryEntry.STATUS_ACTIVE, redacted_at__isnull=True))
     if exclude_pid:
         qs = qs.exclude(pk=exclude_pid)
     out = []

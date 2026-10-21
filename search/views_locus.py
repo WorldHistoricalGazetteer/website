@@ -22,9 +22,9 @@ from __future__ import annotations
 import json
 import logging
 
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
 from places import locus_registry as registry
 from places.locus_recipe import RecipeError
@@ -33,6 +33,7 @@ from search.locus import LOCUS_TOKEN_PARAM, describe_recipe, load_token
 logger = logging.getLogger(__name__)
 
 MINT_URL = "/atlas/locus/mint/"
+ATTRIBUTION_URL = "/atlas/locus/attribution/"
 RESOLVE_URL = "/atlas/locus/resolve/"
 
 
@@ -45,23 +46,51 @@ def _beta_json_gate(request):
     return None
 
 
+ANONYMOUS_MINTER = "a WHG contributor"
+
+
 def minted_by_name(entry) -> str:
+    """The minter's real display name. For staff and the minter's own view
+    only: what the public sees is :func:`public_minter_name`."""
     u = entry.minted_by
     if u is None:
         return ""
     return (getattr(u, "name", "") or getattr(u, "username", "") or "").strip()
 
 
+def public_minter_name(entry) -> str:
+    """The minter as the page and the JSON show them (rulings 2026-10-21): their
+    name only if they opted in at mint time (``minter_public``), otherwise
+    "a WHG contributor". "" when no account is attached (a legacy row minted on
+    dereference, or a deleted account) and for a suppressed (withdrawn or
+    redacted) row, which shows no minter at all."""
+    if entry.minted_by_id is None or entry.is_suppressed:
+        return ""
+    if entry.minter_public:
+        return minted_by_name(entry) or ANONYMOUS_MINTER
+    return ANONYMOUS_MINTER
+
+
 def entry_context(entry, request=None) -> dict:
-    """The registry row as the page and the JSON representation show it."""
+    """The registry row as the page and the JSON representation show it.
+    Nothing here reveals the recipe; a suppressed row's context carries no
+    minter either."""
     path = entry.entity_path
+    user = getattr(request, "user", None)
+    is_minter = bool(user is not None and user.is_authenticated and entry.minted_by_id == user.pk)
     return {
         "pid": entry.pid,
         "kind": entry.kind,
         "status": entry.status,
         "withdrawn": entry.is_withdrawn,
+        "redacted": entry.is_redacted,
+        "redacted_at": entry.redacted_at,
+        "suppressed": entry.is_suppressed,
         "minted_at": entry.minted_at,
-        "minted_by": minted_by_name(entry),
+        "minted_by": public_minter_name(entry),
+        "minter_public": entry.minter_public,
+        # The minter, viewing their own locus, is offered the retraction.
+        "can_hide_minter": is_minter and entry.minter_public and not entry.is_suppressed,
         "minted_via": entry.minted_via,
         "withdrawn_at": entry.withdrawn_at,
         "withdrawn_reason": entry.withdrawn_reason,
@@ -152,7 +181,9 @@ def atlas_locus_mint(request):
                              "detail": "send confirm: true to mint; the PID names the recipe, "
                                        "re-run on every visit, not the records shown"}, status=400)
     try:
-        entry, created = registry.mint_recipe(recipe, request.user)
+        # Opt-in name: only a JSON boolean true (the modal's checkbox) opts in.
+        entry, created = registry.mint_recipe(recipe, request.user,
+                                              minter_public=payload.get("minter_public") is True)
     except registry.MintRateLimited as exc:
         resp = JsonResponse({"error": "rate limited", "detail": str(exc),
                              "retry_after": exc.retry_after}, status=429)
@@ -169,6 +200,46 @@ def atlas_locus_mint(request):
         "path": entry.entity_path,
         "minted": entry_context(entry, request),
     }, status=201 if created else 200)
+
+
+@require_POST
+def atlas_locus_attribution(request):
+    """``POST /atlas/locus/attribution/`` ``pid=<PID>&public=0``: the minter
+    stops their name being shown (``minter_public`` true -> false). Only the
+    minter may ask (403 otherwise); ``public=1`` is refused (400): a name is
+    published only by the consent given in the mint modal, never afterwards
+    (migration 0028 enforces the same at the database). A form post is
+    answered with a 303 back to the locus; a JSON post with JSON."""
+    refused = _beta_json_gate(request)
+    if refused is not None:
+        return refused
+    wants_json = (request.content_type or "").startswith("application/json")
+    if wants_json:
+        try:
+            data = json.loads(request.body or b"{}")
+        except (ValueError, TypeError):
+            data = {}
+        data = data if isinstance(data, dict) else {}
+        pid_text, public = str(data.get("pid") or ""), data.get("public")
+        public = "1" if public is True else "0" if public is False else str(public or "")
+    else:
+        pid_text, public = request.POST.get("pid", ""), request.POST.get("public", "")
+    try:
+        entry, _ = registry.lookup(pid_text, mint_legacy_on_dereference=False)
+    except registry.LookupError_ as exc:
+        return JsonResponse({"error": "not found" if exc.status == 404 else "bad request",
+                             "detail": exc.message}, status=exc.status)
+    if entry.minted_by_id is None or entry.minted_by_id != request.user.pk:
+        return JsonResponse({"error": "only the minter may change how they are named"}, status=403)
+    if public != "0":
+        return JsonResponse({"error": "a name can only be hidden after minting",
+                             "detail": "send public=0; showing a name needs the consent given when minting"},
+                            status=400)
+    entry.hide_minter()
+    logger.info("locus attribution: user %s hid their name on %s", request.user.pk, entry.pid)
+    if wants_json:
+        return JsonResponse({"pid": entry.pid, "minter_public": False})
+    return HttpResponseRedirect(entry.entity_path, status=303)
 
 
 MINT_STATEMENT = (

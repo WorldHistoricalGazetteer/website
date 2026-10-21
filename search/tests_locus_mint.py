@@ -226,7 +226,7 @@ class MintFlowTests(MintBase):
         self.assertTrue(data["created"])
         self.assertEqual(data["path"], f"/entity/locus:{pid}/")
         self.assertTrue(data["url"].endswith(f"/entity/locus:{pid}/"))
-        self.assertEqual(data["minted"]["minted_by"], self.beta.name or self.beta.username)
+        self.assertEqual(data["minted"]["minted_by"], "a WHG contributor")   # the name is opt-in
         again = self.mint(tok)
         self.assertEqual(again.status_code, 200)
         self.assertFalse(again.json()["created"])
@@ -323,7 +323,7 @@ class EntityLocusTests(MintBase):
         self.assertEqual(doc["status"], "active")
         self.assertEqual(doc["recipe"], lr.parse_recipe(recipe(SIMPLE)))
         self.assertEqual(doc["recipe_token"], self.entry.token)
-        self.assertEqual(doc["minted"]["by"], self.beta.name or self.beta.username)
+        self.assertEqual(doc["minted"]["by"], "a WHG contributor")   # not opted in (rulings 2026-10-21)
         cur = doc["current"]
         self.assertFalse(cur["frozen"])
         self.assertIn("re-run", cur["statement"])
@@ -379,14 +379,18 @@ class EntityLocusTests(MintBase):
         doc = json.loads(resp.content)
         self.assertEqual(doc["status"], "withdrawn")
         self.assertEqual(doc["withdrawn"]["reason"], "Withdrawn on request of the minter (test).")
-        self.assertEqual(doc["recipe"], lr.parse_recipe(recipe(SIMPLE)))   # the recipe stays public
-        self.assertFalse(doc["current"]["resolved"])
+        # Rulings 2026-10-21: the recipe text is suppressed (search.tests_locus_redaction pairs
+        # each absence with its presence on an active locus).
+        self.assertNotIn("recipe", doc)
+        self.assertNotIn("current", doc)
         self.assertEqual(html_resp.status_code, 200)
+        self.assertEqual(html_resp["X-WHG-Locus-Status"], "withdrawn")
         html = html_resp.content.decode()
         self.assertIn("Withdrawn", html)
         self.assertIn("request of the minter", html)
         self.assertIn('data-withdrawn="1"', html)
-        self.assertIn("Not re-run", html)
+        self.assertIn("no longer shown or re-run", html)
+        self.assertNotIn('id="locus_recipe"', html)
         # Still minted, still refused a re-bind, still the same PID.
         e, created = registry.mint_recipe(recipe(SIMPLE), self.normal)
         self.assertFalse(created)
