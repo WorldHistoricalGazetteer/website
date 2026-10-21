@@ -11,7 +11,9 @@ the generic entity views, which answered it before this route existed (anonymous
 it is on, the route is beta-gated like the
 locus page: an anonymous browser is sent to sign in and back, an anonymous
 machine client gets 401 JSON, a signed-in user without beta access gets 404.
-Public (anonymous) dereference is the release's business, with place#271.
+Public (anonymous) dereference is the release's business, with place#271; the
+exception is a LEGACY whg_id (frozen locus), open to everyone when the switch is
+on because ``/places/<whg_id>/portal/`` redirects there (ruling 2026-10-21).
 
 Content negotiation on ``Accept``:
 
@@ -319,9 +321,15 @@ def locus_document(request, entry, resolve: bool = True) -> dict:
 
 # ---------------------------------------------------------------- the view
 
-def _gate(request, html: bool):
+def _gate(request, html: bool, pid: str = ""):
     if not registry.minting_enabled():
         raise Http404()
+    # A LEGACY whg_id (frozen locus) dereferences for everyone once the switch is on:
+    # /places/<whg_id>/portal/ redirects there publicly (ruling 2026-10-21), and its
+    # members are filtered by the viewer's visibility rule. Recipe loci stay beta.
+    from places.locus_recipe import is_legacy_locus_id
+    if is_legacy_locus_id(pid or ""):
+        return None
     if not request.user.is_authenticated:
         if html:
             return redirect_to_login(request.get_full_path())
@@ -350,7 +358,7 @@ def locus_entity(request, pid, force_json: bool = False):
 @require_GET
 def _locus_entity(request, pid, force_json: bool = False):
     html = _wants_html(request, force_json)
-    refused = _gate(request, html)
+    refused = _gate(request, html, pid)
     if refused is not None:
         return refused
     try:

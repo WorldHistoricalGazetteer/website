@@ -28,7 +28,7 @@
 
 {% block content %}
 
-  <main id="dataset_content" class="container-md">
+  <main id="dataset_content" class="container-md">{% if legacy_portal %}<div id="legacy_portal_banner" class="alert alert-secondary small py-1 px-2 my-2" role="note">This is a legacy page from WHG v3, kept so old links keep working. Each record listed has its own page; select one to open it.</div>{% endif %}
     <div class="row">
       <!-- Left column with the main content -->
       <div id="textContent" class="col-md-6 mb-3 mb-md-0 ps-md-0 pe-md-1">

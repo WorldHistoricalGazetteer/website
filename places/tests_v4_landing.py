@@ -116,6 +116,18 @@ class SwitchOffTests(_Fixture):
             self.assertEqual((r.status_code, r["Location"]), (302, "/entity/place:1/"))
         self.assertEqual(len(calls), 1)
 
+    def test_portal_wrappers_return_the_legacy_response_object_when_off(self):
+        from places.models import LegacyUnionRecord
+        from places.v4_landing import legacy_portal_view, portal_whg_id_view
+        LegacyUnionRecord.objects.create(whg_id=14047598, place_ids=[self.Pub.pk], titles=["Public Town"])
+        sentinel = HttpResponse(b"legacy bytes", status=299)
+        req = RequestFactory().get("/places/14047598/portal/")
+        self.assertIs(portal_whg_id_view(lambda r, **kw: sentinel)(req, whg_id=14047598), sentinel)
+        self.assertIs(legacy_portal_view(lambda r, **kw: sentinel)(req, encoded_ids="1,2"), sentinel)
+        with override_settings(V4_LANDING_ENABLED=True):   # the control
+            r = portal_whg_id_view(lambda r, **kw: sentinel)(req, whg_id=14047598)
+            self.assertEqual((r.status_code, r["Location"]), (PORTAL_REDIRECT_STATUS, "/entity/locus:14047598/"))
+
     def test_routes_are_wrapped_around_the_original_views(self):
         from places.views import PlacePortalView
         m = resolve(f"/places/portal/{self.Pub.pk}/")
@@ -137,13 +149,17 @@ class SwitchOffTests(_Fixture):
         self.assertEqual((r.status_code, r["Location"]), (302, f"/places/portal/{self.Pub.pk}/?q=1"))
 
     def test_whg_id_and_multipid_routes(self):
+        from places.models import LegacyUnionRecord
+        LegacyUnionRecord.objects.create(whg_id=14047598, place_ids=[self.Pub.pk], titles=["Public Town"])
         with patch("places.views.findPortalPlaces", return_value=[self.Pub.pk, self.Pub2.pk]):
-            r = self.anon("/places/14047598/portal/")
+            r = self.anon("/places/14047598/portal/")      # in the snapshot, but the switch is off
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Public Town")
+        self.assertNotContains(r, 'id="legacy_portal_banner"')
         r = self.anon(f"/places/portal/{self.Pub.pk},{self.Pub2.pk}/")
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Other Town")
+        self.assertNotContains(r, 'id="legacy_portal_banner"')
 
     def test_record_page_stays_beta(self):
         url = f"/atlas/place/{self.Pub.pk}/"
@@ -196,14 +212,40 @@ class SwitchOnTests(_Fixture):
             self.assertEqual((r.status_code, r["Location"]), (302, f"/places/{self.Pub.pk}/detail"))
 
     def test_pending_routes_keep_serving_the_legacy_portal(self):
-        pending = {row["name"] for row in PORTAL_REDIRECTS if row["target"] is None}
-        self.assertEqual(pending, {"places:place-portal-whg-id", "places:place-portal-multipid",
-                                   "places:place-portal"})
+        """Ruling 2026-10-21: the multi-pid portal keeps working, labelled legacy, no 410;
+        a whg_id NOT in the snapshot keeps the legacy portal too, labelled."""
+        pending = {row["name"] for row in PORTAL_REDIRECTS if row["target"] is None and row["status"] is None}
+        self.assertEqual(pending, {"places:place-portal-multipid", "places:place-portal"})
         with patch("places.views.findPortalPlaces", return_value=[self.Pub.pk]):
-            r = self.anon("/places/14047598/portal/")
+            r = self.anon("/places/14047598/portal/")              # not in LegacyUnionRecord
+        self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Public Town")
+        self.assertContains(r, 'id="legacy_portal_banner"')
         r = self.anon(f"/places/portal/{self.Pub.pk},{self.Pub2.pk}/")
+        self.assertEqual(r.status_code, 200)
         self.assertContains(r, "Other Town")
+        self.assertContains(r, 'id="legacy_portal_banner"')
+
+    def test_whg_id_portal_redirects_to_the_frozen_legacy_locus_when_it_resolves(self):
+        from places.models import LegacyUnionRecord
+        LegacyUnionRecord.objects.create(whg_id=14047599, place_ids=[self.Pub.pk, self.Priv.pk],
+                                         titles=["Public Town", "Secret Town"])
+        r = self.anon("/places/14047599/portal/")
+        self.assertEqual((r.status_code, r["Location"]), (PORTAL_REDIRECT_STATUS, "/entity/locus:14047599/"))
+        # The target is public for a LEGACY locus (it is the target of a public redirect),
+        # members filtered by the anonymous visibility rule.
+        page = self.anon(r["Location"], HTTP_ACCEPT="text/html")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "legacy, frozen")
+        self.assertContains(page, "Public Town")
+        self.assertNotContains(page, "Secret Town")
+        # The query string is not carried to the locus (the portal's were UI state); and a
+        # whg_id that is not 1NNNNNNN, or not in the snapshot, is not redirected.
+        with patch("places.views.findPortalPlaces", return_value=[self.Pub.pk]):
+            self.assertEqual(self.anon("/places/14047598/portal/").status_code, 200)
+            self.assertEqual(self.anon("/places/94047599/portal/").status_code, 200)
+        # Recipe loci stay beta-gated: anonymous JSON on a recipe-shaped PID is 401.
+        self.assertEqual(self.anon("/entity/locus:ABCD-EFGH-JKMN/", HTTP_ACCEPT="application/json").status_code, 401)
 
     def test_record_page_public_for_public_records_only(self):
         r = self.anon(f"/atlas/place/{self.Pub.pk}/")

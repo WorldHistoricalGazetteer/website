@@ -35,7 +35,9 @@ from django.urls import reverse
 SETTING = "V4_LANDING_ENABLED"
 
 # 302 (not cached) until the v4 release. The issue's "permanent redirects" (#172,
-# place#325) become 301 AT the release, by changing this one constant: a 301 is
+# place#325) become 301 AT the release, by changing this one constant (it governs
+# every redirect in this module: the portal pid routes AND the whg_id portal ->
+# /entity/locus:<whg_id>/): a 301 is
 # cached by browsers indefinitely, so a 301 served while the switch can still be
 # turned off would outlive it. With the switch off, /entity/place:<pk>/ 302s back
 # to /places/portal/<pk>/, which a cached 301 sends to /entity/place:<pk>/ again:
@@ -75,17 +77,65 @@ PORTAL_REDIRECTS = (
      "target": "/entity/place:<pid>/", "status": PORTAL_REDIRECT_STATUS,
      "why": "Today a 302 to the portal pid form; points straight at the record instead."},
     {"route": "/places/<int:whg_id>/portal/", "name": "places:place-portal-whg-id",
-     "target": None, "status": None,
-     "why": "#172: the frozen legacy locus /entity/locus:<whg_id>. Not yet public "
-            "(Stage 4a, LOCUS_MINTING_ENABLED and beta-gated). Open question for SG."},
+     "target": "/entity/locus:<whg_id>/", "status": PORTAL_REDIRECT_STATUS,
+     "why": "#172 / ruling 2026-10-21: the frozen legacy locus, ONLY when the whg_id is in "
+            "the LegacyUnionRecord snapshot (so the locus resolves); otherwise the legacy "
+            "portal keeps serving, labelled legacy. Legacy loci dereference publicly with the "
+            "switch on (they are the target of this public redirect); recipe loci stay beta."},
     {"route": "/places/portal/<str:encoded_ids>/", "name": "places:place-portal-multipid",
      "target": None, "status": None,
-     "why": "An arbitrary list of records (and the whg_id form's canonical). No v4 page "
-            "shows a list of records that is not a locus. Open question for SG."},
+     "why": "Ruling 2026-10-21: keeps serving the legacy portal, labelled legacy (a banner); "
+            "no 410. No v4 page shows a list of records that is not a locus."},
     {"route": "/places/portal/", "name": "places:place-portal",
      "target": None, "status": None,
      "why": "Session-scoped: redirects to the multi-pid form, so it follows that row."},
+    # Not a portal route, listed because the switch changes it too: with the switch
+    # on, /entity/place:<pk>/ RENDERS the Record page (content-negotiated) instead of
+    # redirecting; /atlas/place/<pk>/ keeps working (beta preview) and its canonical
+    # link names the entity URI. Off: the legacy 302 to /places/portal/<pk>/.
+    {"route": "/entity/place:<pk>/", "name": "entity-detail",
+     "target": None, "status": 200,
+     "why": "Ruling 2026-10-21: the Record page itself at the v4 release (api/views_entity.py)."},
 )
+
+
+def _redirect(url):
+    cls = HttpResponsePermanentRedirect if PORTAL_REDIRECT_STATUS == 301 else HttpResponseRedirect
+    return cls(url)
+
+
+def legacy_portal_view(legacy_view):
+    """A portal route that keeps serving the v3.2 page with the switch on, labelled
+    legacy (ruling 2026-10-21): on, ``legacy_portal`` is added to the TemplateResponse's
+    context, which ``place_portal.html`` turns into a small banner; off, the legacy
+    response object is returned untouched (so the bytes are the pre-branch bytes)."""
+    def view(request, *args, **kwargs):
+        resp = legacy_view(request, *args, **kwargs)
+        if v4_landing_enabled() and getattr(resp, "context_data", None) is not None \
+                and not getattr(resp, "is_rendered", True):
+            resp.context_data["legacy_portal"] = True
+        return resp
+    view.legacy_view = legacy_view
+    return view
+
+
+def portal_whg_id_view(legacy_view):
+    """``/places/<whg_id>/portal/``: on, a ``PORTAL_REDIRECT_STATUS`` redirect to the
+    frozen legacy locus ``/entity/locus:<whg_id>/`` when that locus resolves (the
+    whg_id is ``1NNNNNNN`` and in the ``LegacyUnionRecord`` snapshot); otherwise,
+    and always when off, the legacy portal (labelled legacy when on)."""
+    labelled = legacy_portal_view(legacy_view)
+
+    def view(request, *args, **kwargs):
+        if v4_landing_enabled():
+            from places.locus_recipe import is_legacy_locus_id
+            from places.models import LegacyUnionRecord
+            whg_id = str(kwargs.get("whg_id", ""))
+            if is_legacy_locus_id(whg_id) and LegacyUnionRecord.objects.filter(pk=int(whg_id)).exists():
+                return _redirect(reverse("entity-locus", kwargs={"pid": whg_id}))
+        return labelled(request, *args, **kwargs)
+    view.legacy_view = legacy_view
+    return view
 
 
 def portal_pid_view(legacy_view):
@@ -100,8 +150,7 @@ def portal_pid_view(legacy_view):
             qs = request.META.get("QUERY_STRING", "")
             if qs:
                 url = f"{url}?{qs}"
-            cls = HttpResponsePermanentRedirect if PORTAL_REDIRECT_STATUS == 301 else HttpResponseRedirect
-            return cls(url)
+            return _redirect(url)
         return legacy_view(request, *args, **kwargs)
     view.legacy_view = legacy_view
     return view
