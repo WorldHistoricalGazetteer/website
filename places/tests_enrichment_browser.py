@@ -76,6 +76,10 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                                        uri_base="https://example.org/places/")
         GazetteerRegistryEntry.objects.update_or_create(
             id="gn", defaults=dict(name="GeoNames", namespace="gn", entry_class="authority", status="published"))
+        # wd too: the locus cluster has a wd member, and only a namespace an anonymous
+        # caller can see may be sent to EDOPS (places.record_group.mark_offsite).
+        GazetteerRegistryEntry.objects.update_or_create(
+            id="wd", defaults=dict(name="Wikidata", namespace="wd", entry_class="authority", status="published"))
 
         def place(title, src, xy, links=(), minmax=None):
             p = Place.objects.create(title=title, src_id=src, dataset=a, ccodes=["GB"], minmax=minmax)
@@ -191,7 +195,34 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertIn("Drought index (PDSI), mean", d["env"])
         self.assertTrue(d["t"])
         self.assertIn("This record alone", d["gloss"])
+        self.assertNotIn("This group is partial", d["env"])                # cf. test_partial_group_...
+        self.assertNotIn("describes part of the group", d["gloss"])
         self.assertEqual(t.calls[0]["params"]["from_year"], 1600)
+
+    def test_partial_group_is_said_in_both_sections(self):
+        """Review 2026-10-21 (#3): a group whose inbound attestations hit the cap is
+        partial, and both sections say so. INBOUND_LIMIT is patched to 1 with two
+        attesters; test_single_record_basin_with_band_t is the same record's page
+        without the note (asserted there)."""
+        from places.models import Place, PlaceGeom, PlaceLink
+        for i in range(2):
+            p = Place.objects.create(title=f"Attester {i}", src_id=f"T{i}", dataset=self.Lonely.dataset, ccodes=[])
+            PlaceGeom.objects.create(place=p, geom=Point(-0.1278, 51.5074, srid=4326),
+                                     jsonb={"type": "Point", "coordinates": [-0.1278, 51.5074]})
+            PlaceLink.objects.create(place=p, jsonb={"type": "closeMatch", "identifier": f"whg:{self.Lonely.pk}"})
+        page = self.new_page()
+        with patch("api.edop_client._requests_transport", side_effect=FakeTransport(BASIN_T)), \
+                patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch), \
+                patch("places.concordance.INBOUND_LIMIT", 1):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#record_environment")
+            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready' "
+                                     "&& window.__whgEnrichment.gloss === 'ready'", 30000)
+            d = page.evaluate("""() => ({env: document.querySelector('#record_environment .enr-body').innerText,
+                gloss: document.querySelector('#record_gloss .enr-body').innerText})""")
+        self.assertTrue(ok)
+        self.assertIn("This group is partial", d["env"])
+        self.assertIn("describes part of the group", d["gloss"])
+        self.assertIn("This record and 1 attested equivalent", d["gloss"])     # the one read
 
     def test_edops_unreachable_is_not_no_data(self):
         page = self.new_page()
@@ -256,7 +287,8 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         page = self.new_page()
         posted = []
         page.on("request", lambda r: posted.append((r.url, r.post_data))
-                if "/atlas/locus/" in r.url and r.method == "POST" else None)
+                if ("/atlas/locus/gloss/" in r.url or "/atlas/locus/environment/" in r.url)
+                and r.method == "POST" else None)
         tok = lr.encode_recipe_token(recipe({"query": "Berlin", "mode": "in", "size": 250}))
         with patch("api.crc_client.requests.post", side_effect=gw), \
                 patch("api.edop_client._requests_transport", side_effect=t):
