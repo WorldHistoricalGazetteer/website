@@ -464,7 +464,7 @@ export function decodeRecipeToken(token) {
 
 // ----------------------------------------------------------------------------- adapter
 
-const BODY_FIXED = new Set(['geom', 'include_hard_links', 'include_clustering_fields', 'include_embeddings']);
+const BODY_FIXED = new Set(['geom', 'include_hard_links', 'include_clustering_fields', 'include_embeddings', 'include_links']);
 const BODY_DIRECT = new Set(['query', 'mode', 'size', 'ccodes', 'types', 'aat_types', 'namespaces',
 	'bounds', 'contained_in', 'containment', 'relation']);
 const BODY_TEMPORAL = { start_year: 'start', end_year: 'end', undated: 'undated', temporal_mode: 'mode' };
