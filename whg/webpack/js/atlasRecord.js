@@ -15,16 +15,34 @@
 //    and an unreachable index is never reported as absence (place#272);
 //  - a placeholder identifier (`wd:None`) is flagged as one, never as "not found"
 //    (ruling 2026-10-21: show flagged, never aggregate);
-//  - the empty concordance (the common case) leads with Explore similar records.
+//  - the empty concordance (the common case) points to the header's Explore similar
+//    records, the page's one such button (round 2);
+//  - records that share a point are never hidden by each other: a click on a point
+//    lists every record at it, and a shared point is ringed and counted (Stage 5).
 //
-// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, baseMap}.
-// `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background).
+// Layout (Stage 5): the shared two-column shell of recordShell.css. The map lives in
+// the right column's square .rs-map box (#concordance_map_box, shown only when there is
+// something to map), its summary and legend directly under it (#concordance_map_notes);
+// the tier lists stay in the left column's #concordance. "About this group" (gloss
+// cards), the Wikipedia block of the "Elsewhere" card and the on-demand Environment
+// card come from enrichment.js; EDOPS is asked only when the visitor clicks.
+//
+// Round 2 (Stephen's review 2026-10-22): the three tier lists are folds (<details>), closed
+// at first with their totals in the header, as the template's Links and Related places are;
+// a fragment link into a closed fold opens it first (initFolds).
+//
+// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, stacks, baseMap, sections}.
+// `sections` is keyed links|related|outbound|inbound|cocited: {total, truncated, toggle, open}.
+// `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background);
+// `stacks` is the number of points shared by more than one mapped record.
 // `concordance` ends as 'ready' | 'empty' | 'not_public' | 'error'.
 
+// enrichment.js first: it brings the shared shell css, which this page's css refines.
+import { loadGlossCards, mountEnvironmentCard, recordFetcher, renderWikipediaLinks } from './enrichment.js';
 import '../css/atlasRecord.css';
-import { initRecordEnrichment } from './enrichment.js';   // place#325 Stage 3: gloss + EDOPS
 
-const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, baseMap: null });
+const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, stacks: 0, baseMap: null,
+    sections: {} });
 const FETCH_TIMEOUT_MS = 60000;
 const BASEMAP_TIMEOUT_MS = 20000;
 // whg_maplibre's own `load` handler reads style.metadata, so it must exist.
@@ -166,47 +184,62 @@ function inboundItem(e) {
     </li>`;
 }
 
-function cocitedGroups(entries) {
+// Tier 3 grouped BY RECORD (dev walkthrough 2026-10-21: grouped by identifier, the same
+// four records repeated under eight identifiers). Rendering only: the entries are the
+// endpoint's, uncounted and unaggregated, in its order (place id, then link id).
+function cocitedByRecord(entries) {
     const groups = new Map();
     entries.forEach((e) => {
-        const k = e.cocited_identifier || e.identifier;
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push(e);
+        const rec = e.record || {};
+        const k = String(rec.place_id);
+        if (!groups.has(k)) groups.set(k, { record: rec, links: [] });
+        groups.get(k).links.push(e);
     });
     return groups;
 }
 
+// A fold (round 2, Stephen's review 2026-10-22): a list closed at first, its total in the
+// header, as <details>/<summary> like the server-rendered Links and Related places. A list
+// with nothing in it is no fold: the heading says (0) and `empty` says why. `truncated`
+// (the endpoint's cap was reached) shows as "n+" in the header, and the body says so too.
+function foldHTML({ id, cls, key, title, total, unit = '', truncated = false, body, empty }) {
+    const noun = unit ? ` ${unit}${total === 1 ? '' : 's'}` : '';
+    const count = truncated
+        ? `(${total}+${noun}<span class="visually-hidden">: the list is capped</span>)`
+        : `(${total}${noun})`;
+    const attrs = `id="${id}" class="conc-tier ${cls}${total ? ' rec-fold' : ''}" data-section="${key}" data-total="${total}"`
+        + ` data-truncated="${truncated}" data-collapsed="${total ? 'true' : 'none'}"`;
+    const head = `<h3 class="h6 rec-fold-title">${esc(title)} <span class="rec-fold-count">${count}</span></h3>`;
+    if (!total) return `<div ${attrs}>${head}<p class="small text-muted mb-0">${empty}</p></div>`;
+    return `<details ${attrs}><summary class="rec-fold-head">`
+        + `<i class="fa-solid fa-chevron-right rec-fold-chevron" aria-hidden="true"></i>${head}</summary>`
+        + `<div class="rec-fold-body">${body}</div></details>`;
+}
+
 function cocitedHTML(entries, truncated) {
-    if (!entries.length) return '';
-    let h = `<div class="conc-tier conc-tier-3" id="concordance_tier3">
-        <h3 class="h6">Co-cited: also linked to the same identifiers</h3>
-        <p class="small text-muted">These records cite an identifier this record also cites. That is co-citation, not identity:
-        nobody has said they are the same place as this record, so they are listed here and left off the map.</p>`;
-    cocitedGroups(entries).forEach((list, ident) => {
-        h += `<div class="conc-cocited-group" data-identifier="${esc(ident)}">
-            <p class="mb-1">Also linked to <code>${esc(ident)}</code> by:</p><ul class="conc-list">`;
-        list.forEach((e) => {
-            const rec = e.record || {};
-            h += `<li class="conc-entry" data-tier="3">${recordLabel(rec, 'postgres')}
-                <div class="conc-meta">its link: ${typeBadge(e)} · ${provenanceBadge(e)}</div></li>`;
-        });
-        h += '</ul></div>';
+    const groups = cocitedByRecord(entries);
+    let h = `<p class="small text-muted">These records cite an identifier this record also cites. That is co-citation, not identity:
+        nobody has said they are the same place as this record, so they are listed here and left off the map.</p>
+        <ul class="conc-list">`;
+    groups.forEach(({ record, links }, pid) => {
+        const shared = [...new Set(links.map((e) => e.cocited_identifier || e.identifier))];
+        const items = links.map((e) => `<li data-identifier="${esc(e.cocited_identifier || e.identifier)}">${typeBadge(e)}
+            <code>${esc(e.cocited_identifier || e.identifier)}</code> · ${provenanceBadge(e)}</li>`).join('');
+        h += `<li class="conc-entry conc-cocited-record" data-tier="3" data-place-id="${esc(pid)}"
+                data-identifiers="${esc(shared.join(' '))}">${recordLabel(record, 'postgres')}
+            <div class="conc-meta">shares ${shared.length === 1 ? 'one identifier' : `${shared.length} identifiers`} with this record; its link${links.length === 1 ? '' : 's'}:</div>
+            <ul class="conc-cocited-links">${items}</ul></li>`;
     });
+    h += '</ul>';
     if (truncated) h += '<p class="small text-muted">More records co-cite these identifiers than are listed here.</p>';
-    return h + '</div>';
+    // Counted in RECORDS (the grouping above), never in shared identifiers.
+    return foldHTML({ id: 'concordance_tier3', cls: 'conc-tier-3', key: 'cocited',
+        title: 'Co-cited: also linked to the same identifiers', total: groups.size, unit: 'record', truncated,
+        body: h, empty: 'No other public record, beyond those listed above, cites an identifier this record cites.' });
 }
 
-function exploreButton(root, primary) {
-    const url = root.dataset.exploreUrl;
-    const seeded = (root.dataset.exploreSeededBy || '').split(',').filter(Boolean);
-    const hint = seeded.includes('name')
-        ? `Searches the Atlas for records named like “${esc(root.dataset.recordTitle)}”.`
-        : 'Opens the Atlas search.';
-    return `<a class="btn ${primary ? 'btn-primary' : 'btn-outline-primary btn-sm'} conc-explore" href="${esc(url)}">
-        <i class="fas fa-magnifying-glass me-1"></i>Explore similar records</a>
-        <span class="small text-muted ms-2 conc-explore-hint">${hint}</span>`;
-}
-
+// "Explore similar records" is the header's (#explore_similar_header), once on the page
+// (round 2: it was also repeated at the foot of the Concordance).
 function emptyStateHTML(root, data) {
     const excluded = data.excluded_self_links
         ? `<li>${data.excluded_self_links} link${data.excluded_self_links === 1 ? '' : 's'} naming this record itself, which ${data.excluded_self_links === 1 ? 'is' : 'are'} not ${data.excluded_self_links === 1 ? 'an attestation' : 'attestations'}, ${data.excluded_self_links === 1 ? 'was' : 'were'} left out.</li>`
@@ -214,9 +247,9 @@ function emptyStateHTML(root, data) {
     return `<div class="conc-empty" id="concordance_empty">
         <div class="conc-empty-lead">
             <h3 class="h6 mb-2">No other record is attested to be this place, yet</h3>
-            <p class="mb-3">That is the common case: most records in WHG have no attested equivalents. Records that may describe
-            the same place can still be found by searching for them.</p>
-            <div>${exploreButton(root, true)}</div>
+            <p class="mb-0">That is the common case: most records in WHG have no attested equivalents. Records that may describe
+            the same place can still be found by searching for them, with <a href="#explore_similar_header"
+            class="conc-explore-ref">Explore similar records</a> at the top of this page.</p>
         </div>
         <ul class="small text-muted mt-3 mb-0">
             <li>This record cites no identifier for the same place, and no other public record cites this one.</li>
@@ -226,36 +259,86 @@ function emptyStateHTML(root, data) {
     </div>`;
 }
 
-function summaryHTML(data, mappable) {
+// The literal counts (fix a/d of place#325 Stage 5): `mappable` counts attested
+// equivalents with a point and EXCLUDES this record's own point, which the sentence
+// then names separately, and only when the record has one.
+function summaryHTML(data, mappable, recordOnMap) {
     const agg = data.aggregate || [];
     const n = agg.length;
-    return `<p class="conc-summary">
+    const own = mappable
+        ? (recordOnMap ? ', plus this record.' : '. This record itself has no location, so it is not on the map.')
+        : '.';
+    return `<p class="conc-summary mb-1" id="concordance_summary">
         <strong>${n}</strong> attested equivalent${n === 1 ? '' : 's'}
-        <span class="text-muted">(exactMatch or closeMatch, from this record or about it)</span>,
-        <strong>${mappable}</strong> on the map.
-        ${(data.outbound.length + data.inbound.length) > n ? '<span class="text-muted">Other links are listed below with what became of each.</span>' : ''}
+        (exactMatch or closeMatch, from this record or about it),
+        <strong>${mappable}</strong> on the map${own}
+        ${(data.outbound.length + data.inbound.length) > n ? 'Other links are listed with what became of each.' : ''}
     </p>`;
 }
 
 // ── the map: aggregated subset + this record; never tier 3 ──────────────────
+// Records at the SAME point (exact coordinates: e.g. a TGN and a GeoNames record both
+// at 22°E 39°N) are drawn on top of each other, and MapLibre hit-tests the top one only,
+// so the page keeps its own groups by coordinate: `groups` maps a point's key to every
+// record at it, and the popup lists the group, never just the clicked feature.
+function pointKey(p) {
+    return `${p[0]},${p[1]}`;
+}
+
 function aggregateFeatures(data) {
     const feats = [];
+    const groups = new Map();
+    const add = (coords, props, entry) => {
+        const key = pointKey(coords);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ ...entry, coordinates: coords });
+        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: { ...props, key } });
+    };
     const rp = data.record && data.record.repr_point;
-    if (Array.isArray(rp) && rp.length === 2) {
-        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: rp },
-            properties: { role: 'record', title: data.record.title || '', href: '' } });
+    if (Array.isArray(rp) && rp.length === 2 && rp.every(Number.isFinite)) {
+        const title = data.record.title || '';
+        add(rp, { role: 'record', title, href: '' }, { role: 'record', title, href: '', where: '' });
     }
     (data.aggregate || []).forEach((m) => {
         const p = m.repr_point;
         if (!(Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))) return;
-        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: p },
-            properties: { role: 'member', title: m.title || String(m.place_id), href: memberHref(m, m.via) || '',
-                tiers: (m.tiers || []).join(',') } });
+        const title = m.title || String(m.place_id);
+        const href = memberHref(m, m.via) || '';
+        add(p, { role: 'member', title, href, tiers: (m.tiers || []).join(',') },
+            { role: 'member', title, href, where: m.dataset_title || m.namespace || '' });
     });
-    return { type: 'FeatureCollection', features: feats };
+    groups.forEach((list) => list.sort((a, b) => (a.role === 'record' ? -1 : 0) - (b.role === 'record' ? -1 : 0)));
+    feats.forEach((f) => { f.properties.count = groups.get(f.properties.key).length; });
+    // One point per shared coordinate, for the ring under the stack.
+    const stacks = [];
+    groups.forEach((list, key) => {
+        if (list.length > 1) {
+            stacks.push({ type: 'Feature', geometry: { type: 'Point', coordinates: list[0].coordinates },
+                properties: { key, count: list.length } });
+        }
+    });
+    return { fc: { type: 'FeatureCollection', features: feats },
+        stacks: { type: 'FeatureCollection', features: stacks }, groups };
 }
 
-function drawMap(fc) {
+function popupItem(r) {
+    if (r.role === 'record') return `<li data-role="record">${esc(r.title)} <span class="text-muted">(this record)</span></li>`;
+    const name = r.href ? `<a href="${esc(r.href)}">${esc(r.title)}</a>` : esc(r.title);
+    const where = r.where ? ` <span class="text-muted">${esc(r.where)}</span>` : '';
+    return `<li data-role="member">${name}${where}</li>`;
+}
+
+function popupHTML(records) {
+    const head = records.length > 1
+        ? `<p class="conc-popup-head mb-1"><strong>${records.length} records at this point</strong></p>` : '';
+    return `<div class="conc-popup" data-count="${records.length}">${head}
+        <ul class="conc-popup-list">${records.map(popupItem).join('')}</ul></div>`;
+}
+
+const POINT_LAYERS = ['concordance-stacks', 'concordance-members', 'concordance-record'];
+const HIT_PX = 6;
+
+function drawMap({ fc, stacks, groups }) {
     const whgMaplibre = window.whg_maplibre;
     if (!whgMaplibre || !whgMaplibre.Map) {
         document.getElementById('concordance_map_note').textContent = 'The map could not be loaded on this page.';
@@ -319,6 +402,13 @@ function drawMap(fc) {
         clearTimeout(fallbackTimer);
         if (!fellBack) state.baseMap = 'loaded';
         map.addSource('concordance', { type: 'geojson', data: fc });
+        map.addSource('concordance-stacks', { type: 'geojson', data: stacks });
+        // A shared point: a dark ring round the stack, under the dots, and a count badge.
+        map.addLayer({
+            id: 'concordance-stacks', type: 'circle', source: 'concordance-stacks',
+            paint: { 'circle-radius': 13, 'circle-color': 'rgba(255,255,255,0.65)',
+                'circle-stroke-color': '#1a202c', 'circle-stroke-width': 2 },
+        });
         map.addLayer({
             id: 'concordance-members', type: 'circle', source: 'concordance',
             filter: ['==', ['get', 'role'], 'member'],
@@ -334,16 +424,35 @@ function drawMap(fc) {
         dataOn = true;
         fit();
 
-        const popup = new whgMaplibre.Popup({ closeButton: true });
-        ['concordance-members', 'concordance-record'].forEach((layer) => {
-            map.on('click', layer, (ev) => {
-                const f = ev.features && ev.features[0];
-                if (!f) return;
-                const p = f.properties || {};
-                const label = p.role === 'record' ? `${esc(p.title)} <span class="text-muted">(this record)</span>`
-                    : (p.href ? `<a href="${esc(p.href)}">${esc(p.title)}</a>` : esc(p.title));
-                popup.setLngLat(f.geometry.coordinates).setHTML(label).addTo(map);
+        // The badges are DOM markers, not a symbol layer: the plain-background fallback
+        // style has no glyphs, and the count must show on it too.
+        if (whgMaplibre.Marker) {
+            stacks.features.forEach((f) => {
+                const el = document.createElement('span');
+                el.className = 'conc-stack-badge';
+                el.dataset.key = f.properties.key;
+                el.textContent = String(f.properties.count);
+                el.setAttribute('aria-hidden', 'true');
+                new whgMaplibre.Marker({ element: el, anchor: 'bottom-left', offset: [6, -6] })
+                    .setLngLat(f.geometry.coordinates).addTo(map);
             });
+        }
+
+        // One click handler for all three layers: every point drawn within a few pixels of
+        // the click, then every record of each such point's group (our own array, not the
+        // features MapLibre happened to hit).
+        const popup = new whgMaplibre.Popup({ closeButton: true });
+        window.__whgRecordPopup = popup;
+        map.on('click', (ev) => {
+            const { x, y } = ev.point;
+            const hits = map.queryRenderedFeatures([[x - HIT_PX, y - HIT_PX], [x + HIT_PX, y + HIT_PX]],
+                { layers: POINT_LAYERS });
+            const keys = [...new Set(hits.map((f) => f.properties && f.properties.key).filter((k) => groups.has(k)))];
+            if (!keys.length) return;
+            const records = keys.flatMap((k) => groups.get(k));
+            popup.setLngLat(groups.get(keys[0])[0].coordinates).setHTML(popupHTML(records)).addTo(map);
+        });
+        POINT_LAYERS.forEach((layer) => {
             map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
         });
@@ -358,51 +467,117 @@ function render(root, data) {
 
     if (!data.public) {
         body.innerHTML = `<div class="conc-empty conc-not-public">
-            <p class="mb-2">Concordances are shown for records in public datasets only, and this record's dataset is not public.
-            Nothing has been looked up.</p>${exploreButton(root, false)}</div>`;
+            <p class="mb-0">Concordances are shown for records in public datasets only, and this record's dataset is not public.
+            Nothing has been looked up.</p></div>`;
         state.concordance = 'not_public';
     } else if (!data.outbound.length && !data.inbound.length) {
         body.innerHTML = emptyStateHTML(root, data);
         state.concordance = 'empty';
     } else {
-        const fc = aggregateFeatures(data);
+        const mapData = aggregateFeatures(data);
+        const { fc } = mapData;
         const members = fc.features.filter((f) => f.properties.role === 'member').length;
+        const recordOnMap = fc.features.some((f) => f.properties.role === 'record');
         state.mapped = members;
-        let h = summaryHTML(data, members);
+        state.stacks = mapData.stacks.features.length;
+        // The summary and legend go under the map, in the right column (Stage 5).
+        let notes = summaryHTML(data, members, recordOnMap);
         if (members) {
-            h += `<div class="conc-map-wrap"><div id="concordance_map" class="conc-map"></div>
-                <p id="concordance_map_note" class="small text-muted mt-1 mb-0">
+            const ring = state.stacks
+                ? `<br><span class="conc-key conc-key-stack"></span> more than one record at the same point
+                   (the number says how many; click it to list them).` : '';
+            notes += `<p id="concordance_map_note" class="mb-0">
                 <span class="conc-key conc-key-record"></span> this record
                 <span class="conc-key conc-key-member ms-2"></span> attested equivalents (exactMatch, closeMatch).
-                Co-cited records are not shown.</p></div>`;
+                Co-cited records are not shown.${ring}</p>`;
         } else {
-            h += '<p id="concordance_map_note" class="small text-muted">No attested equivalent has a location WHG holds, so there is nothing to map.</p>';
+            notes += '<p id="concordance_map_note" class="mb-0">No attested equivalent has a location WHG holds, so there is nothing to map.</p>';
         }
-        h += `<div class="conc-tier conc-tier-1" id="concordance_tier1">
-            <h3 class="h6">Outbound: this record's own attestations</h3>`;
-        h += data.outbound.length
-            ? `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`
-            : '<p class="small text-muted">This record attests no equivalents of its own.</p>';
-        h += '</div>';
-        h += `<div class="conc-tier conc-tier-2" id="concordance_tier2">
-            <h3 class="h6">Inbound: other records that say they are this place</h3>`;
-        h += data.inbound.length
-            ? `<ul class="conc-list">${data.inbound.map(inboundItem).join('')}</ul>`
-            : '<p class="small text-muted">No other public record attests that it is this place.</p>';
-        if (data.truncated && data.truncated.inbound) h += '<p class="small text-muted">More records attest this than are listed here.</p>';
-        h += '</div>';
-        h += cocitedHTML(data.cocited || [], data.truncated && data.truncated.cocited);
-        h += `<div class="conc-explore-foot mt-3">${exploreButton(root, false)}</div>`;
+        const notesEl = document.getElementById('concordance_map_notes');
+        const box = document.getElementById('concordance_map_box');
+        if (notesEl) {
+            notesEl.innerHTML = notes;
+            notesEl.hidden = false;
+        }
+        // Totals: every listed outbound row (placeholders and not-held ones included, as
+        // they are listed), every inbound record entry, co-cited RECORDS.
+        const inTrunc = !!(data.truncated && data.truncated.inbound);
+        let h = foldHTML({ id: 'concordance_tier1', cls: 'conc-tier-1', key: 'outbound',
+            title: "Outbound: this record's own attestations", total: data.outbound.length,
+            body: `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`,
+            empty: 'This record attests no equivalents of its own.' });
+        h += foldHTML({ id: 'concordance_tier2', cls: 'conc-tier-2', key: 'inbound',
+            title: 'Inbound: other records that say they are this place', total: data.inbound.length, truncated: inTrunc,
+            body: `<ul class="conc-list">${data.inbound.map(inboundItem).join('')}</ul>`
+                + (inTrunc ? '<p class="small text-muted">More records attest this than are listed here.</p>' : ''),
+            empty: 'No other public record attests that it is this place.' });
+        h += cocitedHTML(data.cocited || [], !!(data.truncated && data.truncated.cocited));
         body.innerHTML = h;
         state.concordance = 'ready';
         // Shown BEFORE the map is created: a map made in a hidden (zero-width)
         // container draws a 400x300 canvas (drawMap also tracks later resizes).
         status.hidden = true;
         body.hidden = false;
-        if (members) drawMap(fc);
+        if (members && box) {
+            box.innerHTML = '<div id="concordance_map" class="rs-map-canvas"></div>';
+            box.hidden = false;
+            drawMap(mapData);
+        }
     }
     status.hidden = true;
     body.hidden = false;
+    syncSections();
+    followHash(true);           // a #concordance_tier* link that arrived before the lists did
+}
+
+// ── folds: test flags, and fragment links into a closed one ─────────────────
+// window.__whgRecord.sections[key] = {total, truncated, toggle, open}; `toggle` false is
+// the zero case (a plain block); `open` null there. data-collapsed mirrors it on the block.
+function syncSections() {
+    const out = {};
+    document.querySelectorAll('#atlas_record [data-section]').forEach((el) => {
+        const toggle = el.tagName === 'DETAILS';
+        if (toggle) el.dataset.collapsed = String(!el.open);
+        out[el.dataset.section] = { total: Number(el.dataset.total), truncated: el.dataset.truncated === 'true',
+            toggle, open: toggle ? el.open : null };
+    });
+    state.sections = out;
+}
+
+// Open every closed fold round `el` (or `el` itself), so a link to it lands on something seen.
+function openFoldsAround(el) {
+    let opened = false;
+    for (let d = el && el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+        if (!d.open) { d.open = true; opened = true; }
+    }
+    if (opened) syncSections();
+    return opened;
+}
+
+function hashTarget(hash) {
+    let id = (hash || '').replace(/^#/, '');
+    try { id = decodeURIComponent(id); } catch (e) { /* keep it raw */ }
+    return id ? document.getElementById(id) : null;
+}
+
+function followHash(scroll) {
+    const t = hashTarget(location.hash);
+    if (t && openFoldsAround(t) && scroll) t.scrollIntoView();
+}
+
+function initFolds() {
+    syncSections();
+    // `toggle` does not bubble: listen in the capture phase for every fold, now and later.
+    document.addEventListener('toggle', (e) => {
+        if (e.target && e.target.matches && e.target.matches('#atlas_record details[data-section]')) syncSections();
+    }, true);
+    // An in-page link: open the fold first, then let the browser follow it to a visible target.
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]');
+        if (a) openFoldsAround(hashTarget(a.getAttribute('href')));
+    });
+    window.addEventListener('hashchange', () => followHash(true));
+    followHash(true);
 }
 
 function renderError(root, message) {
@@ -440,10 +615,41 @@ function load(root) {
         });
 }
 
+// ── "About this group", Wikipedia, Environment (place#325 Stage 3, reshaped in Stage 5) ──
+// The server renders #record_gloss and #record_environment only for a beta user, or for
+// anyone with the v4 release switch on (then marked data-enrichment="public" and served
+// by the public, throttled endpoints): their presence is the gate. The gloss loads with
+// the page; the environment endpoint (EDOPS) only when the card's button is clicked.
+function initEnrichment() {
+    const gloss = document.getElementById('record_gloss');
+    const env = document.getElementById('record_environment');
+    if (gloss && gloss.dataset.endpoint) {
+        loadGlossCards(gloss.querySelector('.enr-body'), recordFetcher(gloss.dataset.endpoint), {
+            kind: 'concordance',
+            onData: (json) => {
+                // Wikipedia links held in the group's Wikidata records, following their
+                // visibility (views_enrichment.atlas_record_gloss). Only where known.
+                const card = document.getElementById('record_elsewhere');
+                const slot = document.getElementById('record_wikipedia');
+                if (!card || !slot) return;
+                renderWikipediaLinks(slot, json.wikipedia, { total: json.wikipedia_total, headingTag: 'h3' });
+                if (slot.childElementCount) card.hidden = false;
+            },
+        });
+    }
+    if (env && env.dataset.endpoint) {
+        mountEnvironmentCard(env, { fetchEnvironment: recordFetcher(env.dataset.endpoint), title: 'Environment',
+            invitation: 'River basin, climate and land-use figures for where this group of records lies, from EDOPS, '
+                + 'a research service outside WHG. Nothing is looked up or sent until you ask.',
+            headingTag: 'h2' });
+    }
+}
+
 function init() {
+    initFolds();
     const root = document.getElementById('concordance');
     if (root && root.dataset.endpoint) load(root);
-    initRecordEnrichment();
+    initEnrichment();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

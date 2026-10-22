@@ -32,6 +32,16 @@ from typing import Optional
 GLOSS_VERSION = 1
 MAX_NAMES_SHOWN = 6
 MAX_TYPES_SHOWN = 5
+MAX_SOURCES_SHOWN = 8
+
+# place#325 Stage 5: the same sentences, grouped by what they are about, so a page can
+# show one card per aspect. Order and titles are the cards'; ``text`` is the sentence(s)
+# ``sentences`` already says for that aspect, verbatim (``countries`` also carries the
+# contributed part-of sentence: both say where). ``unknown`` carries the
+# "Not known from these records" bullets as ``items``.
+FACET_KEYS = ("sources", "names", "type", "countries", "dates", "unknown")
+FACET_TITLES = {"sources": "Sources", "names": "Names", "type": "Type", "countries": "Countries",
+                "dates": "Dates", "unknown": "Not known from these records"}
 
 
 def _norm(s: str) -> str:
@@ -67,7 +77,12 @@ def _overlap(a, b) -> bool:
 
 def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0,
                 truncated: bool = False) -> dict:
-    """``{"version", "kind", "n_records", "sentences", "unknown", "limits", "facts"}``.
+    """``{"version", "kind", "n_records", "sentences", "unknown", "limits", "facts", "facets"}``.
+
+    ``facets`` (additive, place#325 Stage 5): ``[{"key", "title", "text", "items"?}]`` in
+    ``FACET_KEYS`` order, one per aspect that has something to say; ``text`` is that
+    aspect's sentence(s) from ``sentences`` joined by a space (``""`` for ``unknown``),
+    ``items`` a short ``[{"label", "count"?}]`` list where one is natural.
 
     ``kind``: ``"concordance"`` (the record plus its attested equivalents; the record is
     the member with ``is_record``) or ``"locus"`` (a soft cluster's current members).
@@ -77,30 +92,38 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
     (``places.concordance.INBOUND_LIMIT``), so ``members`` is part of the group."""
     n = len(members)
     out = {"version": GLOSS_VERSION, "kind": kind, "n_records": n, "sentences": [], "unknown": [],
-           "limits": [], "facts": {}}
+           "limits": [], "facts": {}, "facets": []}
     if not n:
         out["unknown"].append("There are no records to describe.")
+        out["facets"] = _facets({}, {}, out["unknown"])
         return out
     known = [m for m in members if m.get("detail", "full") == "full"]
     unread = n - len(known)
     s = out["sentences"]
+    said: dict[str, list] = {}      # facet key -> its sentences, in the order said
+    items: dict[str, list] = {}
+
+    def say(key, sentence):
+        s.append(sentence)
+        said.setdefault(key, []).append(sentence)
 
     # ---- who: records and sources ------------------------------------------
     sources = Counter(m.get("source") or m.get("namespace") or "unknown source" for m in members)
     out["facts"]["sources"] = dict(sources)
-    src = _list(_counted(sources, 8)) if len(sources) > 1 else next(iter(sources))
+    src = _list(_counted(sources, MAX_SOURCES_SHOWN)) if len(sources) > 1 else next(iter(sources))
+    items["sources"] = [{"label": label, "count": c} for label, c in sources.most_common(MAX_SOURCES_SHOWN)]
     if kind == "concordance":
         eq = n - 1
         if eq == 0:
-            s.append(f"This record alone, from {src}: no other record is attested to be the same place, "
-                     "so this describes one contributor's account.")
+            say("sources", f"This record alone, from {src}: no other record is attested to be the same place, "
+                           "so this describes one contributor's account.")
         else:
-            s.append(f"This record and {eq} attested equivalent{'s' if eq != 1 else ''} "
-                     f"(exactMatch or closeMatch), {n} records from {len(sources)} source"
-                     f"{'s' if len(sources) != 1 else ''}: {src}.")
+            say("sources", f"This record and {eq} attested equivalent{'s' if eq != 1 else ''} "
+                           f"(exactMatch or closeMatch), {n} records from {len(sources)} source"
+                           f"{'s' if len(sources) != 1 else ''}: {src}.")
     else:
-        s.append(f"{n} record{'s' if n != 1 else ''} currently in this cluster, from {len(sources)} source"
-                 f"{'s' if len(sources) != 1 else ''}: {src}.")
+        say("sources", f"{n} record{'s' if n != 1 else ''} currently in this cluster, from {len(sources)} source"
+                       f"{'s' if len(sources) != 1 else ''}: {src}.")
 
     # ---- names -------------------------------------------------------------
     per_record = Counter()
@@ -124,7 +147,9 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
             shown = [f"“{o}”" for o in others[:MAX_NAMES_SHOWN]]
             more = len(others) - len(shown)
             clause += f"; also {_list(shown)}" + (f" and {more} other name{'s' if more != 1 else ''}" if more else "")
-        s.append(clause + ".")
+        say("names", clause + ".")
+        items["names"] = [{"label": display[k].most_common(1)[0][0], "count": c}
+                          for k, c in per_record.most_common(MAX_NAMES_SHOWN + 1)]
         out["facts"]["names"] = {"most_common": top, "in_records": top_n, "distinct": len(per_record)}
 
     # ---- types -------------------------------------------------------------
@@ -146,7 +171,8 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
         clause = f"Typed as {_list(shown)}" + (f", and {more} other type{'s' if more != 1 else ''}" if more else "")
         if len(types) > 1:
             clause += "; the records do not all use the same type"
-        s.append(clause + ".")
+        say("type", clause + ".")
+        items["type"] = [{"label": labels[k], "count": v} for k, v in types.most_common(MAX_TYPES_SHOWN)]
     if untyped:
         out["unknown"].append("No record carries a place type." if untyped == len(known) > 1 else
                               f"{_of(untyped, len(known)).capitalize()} carr{'ies' if untyped == 1 else 'y'} no place type.")
@@ -158,10 +184,11 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
     out["facts"]["ccodes"] = dict(codes)
     if codes:
         if len(set(with_cc)) == 1:
-            s.append(f"Country code{'s' if len(with_cc[0]) > 1 else ''} {', '.join(with_cc[0])} in "
-                     f"{_of(len(with_cc), len(known))}" + (" that has one" if len(with_cc) < len(known) else "") + ".")
+            say("countries", f"Country code{'s' if len(with_cc[0]) > 1 else ''} {', '.join(with_cc[0])} in "
+                             f"{_of(len(with_cc), len(known))}" + (" that has one" if len(with_cc) < len(known) else "") + ".")
         else:
-            s.append(f"The records disagree on country: {_list(_counted(codes, 8))}.")
+            say("countries", f"The records disagree on country: {_list(_counted(codes, 8))}.")
+        items["countries"] = [{"label": c, "count": v} for c, v in codes.most_common(8)]
     if len(with_cc) < len(known):
         k = len(known) - len(with_cc)
         out["unknown"].append("No record has a country code." if k == len(known) > 1 else
@@ -172,8 +199,8 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
             parts[p] += 1
     out["facts"]["part_of"] = dict(parts)
     if parts:
-        s.append("Part of " + _list([f"{p} (according to {v} record{'s' if v != 1 else ''})"
-                                     for p, v in parts.most_common(5)]) + ".")
+        say("countries", "Part of " + _list([f"{p} (according to {v} record{'s' if v != 1 else ''})"
+                                                  for p, v in parts.most_common(5)]) + ".")
     else:
         out["unknown"].append("No record names a place that contains it. That is not evidence that nothing "
                               "does: containment in WHG is read only where a source states it, and is incomplete.")
@@ -187,7 +214,7 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
         disjoint = any(not _overlap(spans[i], spans[j]) for i in range(len(spans)) for j in range(i + 1, len(spans)))
         if disjoint:
             clause += "; some records' dates do not overlap at all"
-        s.append(clause + ".")
+        say("dates", clause + ".")
         out["facts"]["span"] = [lo, hi]
         out["facts"]["dates_disjoint"] = disjoint
     if len(spans) < len(known):
@@ -214,6 +241,25 @@ def build_gloss(members: list, *, kind: str = "concordance", unresolved: int = 0
         "Place types from WHG's search index are GeoNames feature classes only; other sources' types there are not "
         "yet readable (place#267).",
     ]
+    out["facets"] = _facets(said, items, out["unknown"])
+    return out
+
+
+def _facets(said: dict, items: dict, unknown: list) -> list:
+    """``build_gloss``'s ``facets``: the sentences already said, grouped by aspect."""
+    out = []
+    for key in FACET_KEYS:
+        if key == "unknown":
+            if unknown:
+                out.append({"key": key, "title": FACET_TITLES[key], "text": "",
+                            "items": [{"label": u} for u in unknown]})
+            continue
+        if not said.get(key):
+            continue
+        f = {"key": key, "title": FACET_TITLES[key], "text": " ".join(said[key])}
+        if items.get(key):
+            f["items"] = items[key]
+        out.append(f)
     return out
 
 
@@ -236,9 +282,16 @@ def member_from_hit(hit: dict) -> Optional[dict]:
     years = years_from_gateway(hit)
     ccodes = sorted({str(c)[:3] for c in (hit.get("ccodes") or [])[:20] if isinstance(c, str) and c})
     names = gateway_names({"names": (hit.get("names") or [])[:50]})
-    return {"key": pid, "place_id": pid, "title": title, "source": ns or "unknown source", "namespace": ns,
-            "via": "gateway", "is_record": False,
-            "names": list(dict.fromkeys([title] + [x[:300] for x in names])),
-            "types": gateway_types({"types": (hit.get("types") or [])[:30]}, ns)[:30],
-            "ccodes": ccodes, "years": years, "part_of": [], "repr_point": point, "hull_wkt": None,
-            "detail": "full"}
+    out = {"key": pid, "place_id": pid, "title": title, "source": ns or "unknown source", "namespace": ns,
+           "via": "gateway", "is_record": False,
+           "names": list(dict.fromkeys([title] + [x[:300] for x in names])),
+           "types": gateway_types({"types": (hit.get("types") or [])[:30]}, ns)[:30],
+           "ccodes": ccodes, "years": years, "part_of": [], "repr_point": point, "hull_wkt": None,
+           "detail": "full"}
+    # place#325 Stage 5: a wd: hit's Wikipedia sitelinks, only if the hit carried `links`
+    # (the gateway SEARCH model does not declare them today, so none do: see
+    # places.wikipedia_links). Read through the same strict URL parser, capped.
+    if ns.lower() == "wd" and isinstance(hit.get("links"), list):
+        from places.wikipedia_links import member_wikipedia
+        out["wikipedia"] = member_wikipedia(hit["links"][:400])
+    return out

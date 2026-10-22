@@ -334,6 +334,12 @@ def crc_search_status(options: dict, user=None,
         "include_embeddings": True,
     }
 
+    # Opt-in (place#325): the gateway's `links` per hit (Wikidata sitelinks, authority
+    # links). Only the Locus resolver asks: it is up to ~170 KB more per 100 hits, and the
+    # Atlas search does not need it. Not part of any recipe (locus_recipe._BODY_FIXED).
+    if options.get("include_links"):
+        body["include_links"] = True
+
     # Browse mode (Atlas Place List): enumerate a whole gazetteer with no query
     # — the gateway returns a namespace-filtered, alphabetically-ordered match-all
     # with a real total and offset pagination. Ignored by the gateway when a query

@@ -716,7 +716,7 @@ def decode_recipe_token(token: str) -> dict:
 
 # --------------------------------------------------------------------------- adapter
 
-_BODY_FIXED = frozenset({"geom", "include_hard_links", "include_clustering_fields", "include_embeddings"})
+_BODY_FIXED = frozenset({"geom", "include_hard_links", "include_clustering_fields", "include_embeddings", "include_links"})
 _BODY_DIRECT = frozenset({"query", "mode", "size", "ccodes", "types", "aat_types", "namespaces",
                           "bounds", "contained_in", "containment", "relation"})
 _BODY_TEMPORAL = {"start_year": "start", "end_year": "end", "undated": "undated", "temporal_mode": "mode"}

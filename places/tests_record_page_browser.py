@@ -29,6 +29,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
 
+# place#325 Stage 5: WHG_RECORD_BUNDLE_DIR serves the page bundle from a scratch build.
+from places.tests_record_layout_browser import BUNDLE_DIR, bundle_route
+
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 SHOTS = os.environ.get("WHG_BROWSER_SHOTS")
 BLOCKED_HOSTS = ("analytics.whgazetteer.org", "errors.whgazetteer.org", "plausible")
@@ -170,7 +173,8 @@ class RecordPageBrowserTests(LiveServerTestCase):
         page.route("**/*", lambda route: route.abort()
                    if any(h in route.request.url for h in BLOCKED_HOSTS)
                    or (block_bundle and "atlas_record.bundle.js" in route.request.url)
-                   else route.continue_())
+                   else (bundle_route(route, route.request) if BUNDLE_DIR and "/atlas_record.bundle." in route.request.url
+                         else route.continue_()))
         self.page_errors, self.console = [], []
         if base_style == "fixture":
             page.route("**/styles/**/style.json", lambda route: route.fulfill(
@@ -208,8 +212,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
               tier1: t('#concordance_tier1 .conc-entry'),
               tier2: t('#concordance_tier2 .conc-entry'),
               tier3: t('#concordance_tier3 .conc-entry'),
-              groups: Array.from(document.querySelectorAll('#concordance_tier3 .conc-cocited-group'))
-                        .map(g => g.dataset.identifier),
+              // Stage 5: grouped by record, each with the identifiers it shares with this one.
+              groups: Array.from(document.querySelectorAll('#concordance_tier3 .conc-cocited-record'))
+                        .map(g => g.dataset.identifiers),
               tier3intro: (document.querySelector('#concordance_tier3') || {}).textContent || '',
             };
         }""")
@@ -226,14 +231,16 @@ class RecordPageBrowserTests(LiveServerTestCase):
             all(w and w["status"] == "unavailable" for w in whg) and whg[0] == whg[1]
             and "may be private, or may no longer exist" in whg[0]["text"]
             and "WHG does not hold records for" not in whg[0]["text"]
-            and "Hidden Thing" not in page.evaluate("document.body.innerText"))
+            # textContent, not innerText: since round 2 the lists are closed folds, and an
+            # absence read from rendered text only would hold for anything in a closed one.
+            and "Hidden Thing" not in page.evaluate("document.body.textContent"))
         ph = page.evaluate("""() => { const e = Array.from(document.querySelectorAll('#concordance_tier1 .conc-entry'))
             .find(x => (x.querySelector('code') || {}).textContent === 'wd:None');
             return e ? {status: e.dataset.status, text: e.textContent,
                         badge: !!e.querySelector('.conc-placeholder-badge')} : null; }""")
         results["tier1_placeholder_flagged"] = bool(ph) and ph["status"] == "placeholder" and ph["badge"] \
             and "Placeholder, not a real identifier" in ph["text"] and "holds no record" not in ph["text"] \
-            and "Placeholder Carrier" not in page.evaluate("document.body.innerText")
+            and "Placeholder Carrier" not in page.evaluate("document.body.textContent")
         tier2 = " | ".join(dom["tier2"])
         results["tier2_attributed"] = ("Attested by Dataset b" in tier2 and "Record B" in tier2
                                        and "Record C" not in tier2)
@@ -273,7 +280,8 @@ class RecordPageBrowserTests(LiveServerTestCase):
             const c = map.getCanvas();
             return {box: el.clientWidth, boxH: el.clientHeight, css: c.clientWidth, cssH: c.clientHeight}; }""")
         self.map_size = size
-        results["map_canvas_fills_container"] = bool(size) and size["box"] > 600 \
+        # Stage 5: the map is the right column's square box (~450 px at 1280 wide).
+        results["map_canvas_fills_container"] = bool(size) and size["box"] > 300 \
             and abs(size["css"] - size["box"]) <= 2 and abs(size["cssH"] - size["boxH"]) <= 2
         results["map_rendered_members"] = bool(m) and {"Gateway Town", "Record B"} <= set(m["rendered"]) \
             and "Record C" not in m["rendered"]
@@ -291,14 +299,23 @@ class RecordPageBrowserTests(LiveServerTestCase):
                          f"diag={self.map_diag}; errors={self.page_errors}; console={self.console[-25:]}")
         self.assertEqual(self.page_errors, [])
         # ... and keeps tracking it when the container changes size later.
-        page.set_viewport_size({"width": 820, "height": 1000})
-        tracked = self.wait_for(page, """() => { const el = document.getElementById('concordance_map');
-            const c = window.__whgRecordMap.getCanvas();
-            return el.clientWidth < 800 && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""", 5000)
+        # (Stage 5: narrower, still two columns; below 992 px the map takes the full width.)
+        page.set_viewport_size({"width": 1100, "height": 1000})
+        tracked = self._tracked(page, self.map_size["box"])
         after = page.evaluate("""() => [document.getElementById('concordance_map').clientWidth,
                                         window.__whgRecordMap.getCanvas().clientWidth]""")
         self.assertTrue(tracked, f"canvas did not follow its container: {after} (before: {self.map_size})")
         self.assertLess(after[0], self.map_size["box"])                   # the container did shrink
+
+    def _tracked(self, page, before):
+        try:
+            page.wait_for_function("""(before) => { const el = document.getElementById('concordance_map');
+                const c = window.__whgRecordMap.getCanvas();
+                return el.clientWidth < before && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""",
+                                   arg=before, timeout=5000)
+            return True
+        except Exception:  # noqa: BLE001 — a timeout is a finding
+            return False
 
     def test_unreachable_base_map_still_maps(self):
         """The base style failing outright falls back to a plain background, and
@@ -340,7 +357,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertTrue(ready)
         self.assertTrue(spinner_after)
 
-    def test_empty_state_leads_with_explore(self):
+    def test_empty_state_points_to_the_header_explore(self):
+        """Round 2: the page's one Explore button is the header's; the empty state names it
+        and links to it, and carries no button of its own."""
         page = self.new_page()
         with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#concordance")
@@ -348,16 +367,20 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.shot(page, "record_empty_concordance")
         d = page.evaluate("""() => {
             const e = document.getElementById('concordance_empty');
-            const firstAction = e && e.querySelector('a, button');
-            return {exists: !!e, first: firstAction && firstAction.textContent.trim(),
-                    href: firstAction && firstAction.getAttribute('href'),
-                    primary: !!(firstAction && firstAction.classList.contains('btn-primary')),
+            const ref = e && e.querySelector('a');
+            const header = document.getElementById('explore_similar_header');
+            return {exists: !!e, ref: ref && ref.textContent.trim(), refHref: ref && ref.getAttribute('href'),
+                    buttons: e ? e.querySelectorAll('.btn, button').length : null,
+                    header: header && header.getAttribute('href'),
+                    explore: Array.from(document.querySelectorAll('#atlas_record .btn'))
+                        .filter(b => /Explore similar records/.test(b.textContent)).length,
                     map: !!document.getElementById('concordance_map'),
                     tiers: document.querySelectorAll('.conc-tier').length};
         }""")
         self.assertTrue(ok)
-        self.assertEqual(d, {"exists": True, "first": "Explore similar records", "href": "/atlas/Lonely%20Place",
-                             "primary": True, "map": False, "tiers": 0})
+        self.assertEqual(d, {"exists": True, "ref": "Explore similar records", "refHref": "#explore_similar_header",
+                             "buttons": 0, "header": "/atlas/Lonely%20Place", "explore": 1, "map": False,
+                             "tiers": 0})
 
     def test_gateway_unreachable_is_not_absence(self):
         page = self.new_page()
@@ -395,7 +418,7 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("Not looked up for signed-out visitors", text)
         self.assertIn("Sign in to see it", text)
         self.assertNotIn("not configured", text)
-        self.assertIn("Record B", page.inner_text("#concordance_tier2"))       # the rest still renders
+        self.assertIn("Record B", page.text_content("#concordance_tier2"))     # the rest still renders
 
     @override_settings(V4_LANDING_ENABLED=True, CRC_GATEWAY_URL="http://gateway.invalid")
     def test_signed_out_visitor_sees_open_namespaces_resolved(self):

@@ -689,7 +689,8 @@ def schema_document(request, name):
         raise Http404(f"No such schema: {name}")
     response = HttpResponse(body, content_type=content_type)
     # Schemas are versioned by filename, so they can be cached hard. CORS is open
-    # because the point of a resolvable $id is that someone else's validator fetches it.
+    # because the point of a resolvable $id is that someone else's validator fetches it,
+    # but nginx already adds `Access-Control-Allow-Origin: *` to every GET (location /,
+    # `always`): a second copy from Django makes it "*, *", which browsers reject.
     response['Cache-Control'] = 'public, max-age=86400'
-    response['Access-Control-Allow-Origin'] = '*'
     return response

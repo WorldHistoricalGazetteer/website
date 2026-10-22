@@ -278,6 +278,7 @@ def atlas_record_page(request, pk):
     timespans = [f"{a} to {b}" if a != b else str(a) for a, b in (record.get("timespans") or [])
                  if a is not None]
     explore = explore_similar_url(place)
+    links = _display_links(record.get("links"))
     context = {
         "place": place,
         "dataset": place.dataset,
@@ -285,7 +286,10 @@ def atlas_record_page(request, pk):
         "variants": [n for n in record.get("names") or [] if n.get("label")],
         "type_labels": [t["label"] for t in record.get("types") or [] if t.get("label")],
         "timespan_labels": timespans,
-        "links": _display_links(record.get("links")),
+        "links": links,
+        # The right column's "Elsewhere" card (place#325 Stage 5): the contributed links
+        # that are web addresses, the same hrefs "Links, as contributed" renders.
+        "outward_links": [l for l in links if l["href"]],
         "related": _display_related(record.get("related")),
         "descriptions": _display_descriptions(record.get("descriptions")),
         "depictions": _display_depictions(record.get("depictions")),

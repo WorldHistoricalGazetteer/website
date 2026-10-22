@@ -284,6 +284,7 @@ class SearchEchoTests(LocusBase):
         self.assertEqual(len(self.gateway.bodies), 1)
         self.assertEqual(data["request"], self.gateway.bodies[0])
         self.assertIn("include_clustering_fields", data["request"])   # the fixed flags travel too
+        self.assertNotIn("include_links", data["request"])            # ... but links are the resolver's opt-in, not the Atlas search's
         parsed = lr.parse_recipe(recipe(lr.retrieval_from_search_body(data["request"])))
         self.assertEqual(parsed["retrieval"], {
             "query": "Berlin", "mode": "in", "size": 50, "ccodes": ["DE"],
@@ -330,6 +331,9 @@ class ResolveRoundTripTests(LocusBase):
                 # (3) the fixed-contract flags are present on the wire but not in the recipe
                 self.assertIs(body["include_embeddings"], True)
                 self.assertNotIn("include_embeddings", again["retrieval"])
+                # include_links is the same kind of flag, asked for by the resolver only (place#325)
+                self.assertIs(body["include_links"], True)
+                self.assertNotIn("include_links", again["retrieval"])
 
     def test_options_builder_direct(self):
         """The inverse adapter alone, without a view: a changed value must show."""

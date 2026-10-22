@@ -142,7 +142,14 @@
 </div>
 <body>
 <header>
-    <nav class="navbar navbar-expand-lg bg-white">
+    {% comment %}
+      The menu expands at lg (992 px) for everyone except beta users, whose Atlas, Gazetteers and
+      Workbench pills make it ~1150 px wide: inside lg's 960 px container it overflowed and the whole
+      page scrolled sideways between 992 and 1199 px. They get the hamburger up to xl (1200 px).
+      When those items are ungated, widen this condition to match (main/tests_navbar_overflow.py
+      fails if any visitor's menu overflows). The mb-*-0 and d-*-none below follow the same split.
+    {% endcomment %}
+    <nav class="navbar navbar-expand-{% if user.can_access_beta %}xl{% else %}lg{% endif %} bg-white">
         <div class="container">
             <a href="/">
                 <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" width="50" height="38">
@@ -153,7 +160,7 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse smallish pt-2" id="navbarSupportedContent">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav me-auto mb-2 mb-{% if user.can_access_beta %}xl{% else %}lg{% endif %}-0">
                     <div id="links_home">
                         <a id="version_badge"
                            href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
@@ -230,7 +237,7 @@
                         <a class="nav-link px-1" id="atlas-report-snag" href="{% url 'beta-snag' %}"
                            aria-label="Report a snag"
                            title="Found a bug in the Atlas or Gazetteers beta? Report it here. Your page, search state, browser and a diagnostic session id are attached automatically.">
-                            <i class="fas fa-bug"></i><span class="d-lg-none ms-1">Report a snag</span>
+                            <i class="fas fa-bug"></i><span class="d-xl-none ms-1">Report a snag</span>
                         </a>
                     </li>
                     {% endif %}

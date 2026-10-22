@@ -824,6 +824,7 @@ def atlas_locus_resolve(request):
         return suppressed_json(gone)
 
     options = search_options_for_retrieval(recipe["retrieval"])
+    options["include_links"] = True     # Wikipedia links for the cluster's wd: members (not in the recipe)
     resp = _gateway_search_response(options, request.user, extra={"recipe": recipe})
     if resp.status_code != 200:
         return resp

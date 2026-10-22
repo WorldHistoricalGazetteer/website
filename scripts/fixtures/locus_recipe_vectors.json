@@ -3411,6 +3411,7 @@
     "include_hard_links": true,
     "include_clustering_fields": true,
     "include_embeddings": true,
+    "include_links": true,
     "ccodes": [
      "DE"
     ],

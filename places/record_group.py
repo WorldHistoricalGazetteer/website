@@ -13,7 +13,10 @@ Member (plain, JSON-able)::
      "postgres" | "gateway", "is_record": bool, "names": [str], "types": [str],
      "ccodes": [str], "years": [start, end] | None, "part_of": [str],
      "repr_point": [lon, lat] | None, "hull_wkt": str | None, "detail": "full" |
-     "unavailable" | "disabled"}
+     "unavailable" | "disabled", "wikipedia"?: [{"lang", "url", "title"}]}
+
+``wikipedia`` is present only on a ``wd:`` gateway member whose ``/api/places`` answer
+carried ``links`` (``places.wikipedia_links``).
 
 ``detail`` says whether the attributes were read: a gateway member whose details the
 index could not return is ``unavailable``, and the gloss must say "not known", never
@@ -36,7 +39,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 GROUP_CACHE_TTL = 120     # = CONCORDANCE_CACHE_TTL: the group cannot outlive its concordance by much
-GROUP_CACHE_VERSION = 4  # 2: members carry ``offsite`` (mark_offsite); 3: ``truncated``; 4: viewer class
+GROUP_CACHE_VERSION = 5  # 2: members carry ``offsite`` (mark_offsite); 3: ``truncated``; 4: viewer class;
+#                          5: wd: gateway members carry ``wikipedia`` (place#325 Stage 5)
 GATEWAY_BATCH = 50
 
 # GeoNames feature classes: the only gateway namespace whose `types.label` is a place
@@ -224,14 +228,21 @@ def gateway_members(aggregate_entries: list, user=None) -> list:
                     except Exception:  # noqa: BLE001
                         pass
         _rp, hull = _point_and_hull(geoms)
-        out.append({**base,
-                    "title": rec.get("title") or base["title"],
-                    "names": list(dict.fromkeys([_clean(rec.get("title") or base["title"])] + gateway_names(rec))),
-                    "types": gateway_types(rec, ns),
-                    "ccodes": sorted({c for c in (rec.get("ccodes") or []) if c}),
-                    "years": years_from_gateway(rec),
-                    "repr_point": rec.get("repr_point") or base["repr_point"],
-                    "hull_wkt": hull, "detail": "full"})
+        member = {**base,
+                  "title": rec.get("title") or base["title"],
+                  "names": list(dict.fromkeys([_clean(rec.get("title") or base["title"])] + gateway_names(rec))),
+                  "types": gateway_types(rec, ns),
+                  "ccodes": sorted({c for c in (rec.get("ccodes") or []) if c}),
+                  "years": years_from_gateway(rec),
+                  "repr_point": rec.get("repr_point") or base["repr_point"],
+                  "hull_wkt": hull, "detail": "full"}
+        # place#325 Stage 5: the Wikipedia sitelinks a wd: record holds, read from the
+        # SAME /api/places answer (its PlaceDetail model declares `links`; no extra call).
+        # Only wd: members (places.wikipedia_links says why), and only when `links` came back.
+        if ns.lower() == "wd" and isinstance(rec.get("links"), list):
+            from places.wikipedia_links import member_wikipedia
+            member["wikipedia"] = member_wikipedia(rec["links"])
+        out.append(member)
     return out
 
 

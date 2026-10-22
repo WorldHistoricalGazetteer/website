@@ -1413,10 +1413,19 @@ Promise.all([
     });
 
     // ── Handle pre-populated toponym from URL ──
+    // Mode FIRST, then the text: switchSearchMode() ends by clearing the input,
+    // so the old order (text, then mode) searched an empty box and stopped at
+    // "need a search term" with nothing on screen. The mode goes through the
+    // Places toggle's own click so the toggle shows Places, not Areas. The
+    // boot has already waited for the map, so the search runs now, once.
     if (typeof atlas_toponym !== 'undefined' && atlas_toponym) {
+        const placesBtn = document.querySelector(
+            '.search-mode-toggle .btn[data-search-mode="toponyms"]'
+        );
+        if (placesBtn) placesBtn.click();
+        else switchSearchMode('toponyms');
         searchInput.value = atlas_toponym;
-        switchSearchMode('toponyms');
-        setTimeout(() => initiateToponymSearch(), 300);
+        initiateToponymSearch();
     }
 
     // ── Handle Gazetteers deep link from sitewide navbar ──
@@ -3076,7 +3085,7 @@ function locusLinkHtml(cluster, ci, params, debugSink) {
         if (debugSink) debugSink.recipes.set(ci, recipe);
         const url = `${LOCUS_PAGE_URL}?${LOCUS_TOKEN_PARAM}=${token}`;
         return `<a class="cluster-locus-open" href="${escapeHtml(url)}" target="_blank" rel="noopener" `
-            + `title="Open as a shareable (unminted) locus page" aria-label="Open as a shareable locus page">`
+            + `title="Open as a shareable (unminted) locus page, in a new tab" aria-label="Open as a shareable locus page, in a new tab">`
             + `<i class="fas fa-share-nodes"></i></a>`;
     } catch (e) {
         // Loud, not silent: a filter the recipe does not know must not vanish

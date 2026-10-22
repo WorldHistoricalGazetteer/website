@@ -31,7 +31,17 @@
     <span class="badge bg-warning text-dark ms-2">beta preview</span>
   </nav>
 
-  <header class="atlas-record-header">
+  {% comment %}
+    place#325 Stage 5: the shared two-column shell (whg/webpack/css/recordShell.css), as
+    on the Locus page. LEFT: header, the record, "About this group", the concordance
+    lists. RIGHT: the concordance map (square), its summary and legend, "Elsewhere",
+    Environment. Below lg one column: header, map, the rest of the left, the rest of
+    the right. The two columns are plain divs (display: contents below lg).
+  {% endcomment %}
+  <div class="rs-layout">
+  <div class="rs-main">
+
+  <header class="rs-header atlas-record-header">
     <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
       <div>
         <h1 class="h3 mb-1">{{ place.title }}</h1>
@@ -72,16 +82,26 @@
     </div>
     <ul class="nav nav-pills nav-sm mt-3 atlas-record-tabs">
       <li class="nav-item"><a class="nav-link" href="#record">Record</a></li>
-      <li class="nav-item"><a class="nav-link" href="#concordance">Concordance</a></li>
       {% if user.can_access_beta or enrichment_public %}
       <li class="nav-item"><a class="nav-link" href="#record_gloss">About</a></li>
+      {% endif %}
+      <li class="nav-item"><a class="nav-link" href="#concordance">Concordance</a></li>
+      {% if user.can_access_beta or enrichment_public %}
       <li class="nav-item"><a class="nav-link" href="#record_environment">Environment</a></li>
       {% endif %}
     </ul>
   </header>
 
+  {% comment %}
+    place#325 Stage 5, round 2 (Stephen's review 2026-10-22): the left column reads Record,
+    About this group, Concordance, each under the same rule (.atlas-record-divided). The
+    longer lists are folds, closed at first, their totals in the header: native
+    details/summary, so they open without the page's script and a fragment link can open
+    them (atlasRecord.js also opens the fold round any #target before following it). A
+    list with nothing in it is no fold: its heading says (0) and the sentence says why.
+  {% endcomment %}
   {# ---------------- the record: one contributor's account ---------------- #}
-  <section id="record" class="atlas-record-section" aria-labelledby="record_heading">
+  <section id="record" class="atlas-record-section atlas-record-divided" aria-labelledby="record_heading">
     <h2 id="record_heading" class="h5">Record</h2>
     <dl class="row atlas-record-facts mb-0">
       <dt class="col-sm-3">Identifier</dt>
@@ -147,47 +167,74 @@
       {% endif %}
     </div>
 
-    <div id="record_links" class="atlas-record-block">
-      <h3 class="h6">Links, as contributed</h3>
-      {% if links %}
-        <p class="small text-muted mb-1">The identifiers this record cites, exactly as its dataset has them. The Concordance below says what each one leads to.</p>
-        <ul class="list-unstyled atlas-record-links">
-          {% for l in links %}
-            <li><span class="badge text-bg-light border me-1">{{ l.type }}</span>
-              {% if l.href %}<a href="{{ l.href }}" target="_blank" rel="noopener noreferrer">{{ l.identifier }}</a>{% else %}<code>{{ l.identifier }}</code>{% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
+    {% if links %}
+      <details id="record_links" class="atlas-record-block rec-fold" data-section="links" data-total="{{ links|length }}" data-collapsed="true">
+        <summary class="rec-fold-head"><i class="fa-solid fa-chevron-right rec-fold-chevron" aria-hidden="true"></i><h3 class="h6 rec-fold-title">Links, as contributed <span class="rec-fold-count">({{ links|length }})</span></h3></summary>
+        <div class="rec-fold-body">
+          <p class="small text-muted mb-1">The identifiers this record cites, exactly as its dataset has them. The Concordance's <a href="#concordance_tier1">outbound list</a> says what each one leads to.</p>
+          <ul class="list-unstyled atlas-record-links">
+            {% for l in links %}
+              <li><span class="badge text-bg-light border me-1">{{ l.type }}</span>
+                {% if l.href %}<a href="{{ l.href }}" target="_blank" rel="noopener noreferrer">{{ l.identifier }}</a>{% else %}<code>{{ l.identifier }}</code>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </details>
+    {% else %}
+      <div id="record_links" class="atlas-record-block" data-section="links" data-total="0" data-collapsed="none">
+        <h3 class="h6 rec-fold-title">Links, as contributed <span class="rec-fold-count">(0)</span></h3>
         <p class="text-muted small mb-0">This record cites no other identifiers.</p>
-      {% endif %}
-    </div>
+      </div>
+    {% endif %}
 
-    <div id="record_related" class="atlas-record-block">
-      <h3 class="h6">Related places</h3>
-      {% if related %}
-        <ul class="list-unstyled atlas-record-related">
-          {% for r in related %}
-            <li><span class="badge text-bg-light border me-1">{{ r.relation }}</span>
-              {% if r.href %}<a href="{{ r.href }}" target="_blank" rel="noopener noreferrer">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}
-              {% if r.when %}<span class="small text-muted ms-1">{{ r.when }}</span>{% endif %}
-              {% if r.citation %}<span class="small text-muted ms-1">({{ r.citation }})</span>{% endif %}
-            </li>
-          {% endfor %}
-        </ul>
-        <p class="small text-muted mb-0">Relations such as part-of are not identity: they are not part of the Concordance.</p>
-      {% else %}
+    {% if related %}
+      <details id="record_related" class="atlas-record-block rec-fold" data-section="related" data-total="{{ related|length }}" data-collapsed="true">
+        <summary class="rec-fold-head"><i class="fa-solid fa-chevron-right rec-fold-chevron" aria-hidden="true"></i><h3 class="h6 rec-fold-title">Related places <span class="rec-fold-count">({{ related|length }})</span></h3></summary>
+        <div class="rec-fold-body">
+          <ul class="list-unstyled atlas-record-related">
+            {% for r in related %}
+              <li><span class="badge text-bg-light border me-1">{{ r.relation }}</span>
+                {% if r.href %}<a href="{{ r.href }}" target="_blank" rel="noopener noreferrer">{{ r.label }}</a>{% else %}{{ r.label }}{% endif %}
+                {% if r.when %}<span class="small text-muted ms-1">{{ r.when }}</span>{% endif %}
+                {% if r.citation %}<span class="small text-muted ms-1">({{ r.citation }})</span>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+          <p class="small text-muted mb-0">Relations such as part-of are not identity: they are not part of the Concordance.</p>
+        </div>
+      </details>
+    {% else %}
+      <div id="record_related" class="atlas-record-block" data-section="related" data-total="0" data-collapsed="none">
+        <h3 class="h6 rec-fold-title">Related places <span class="rec-fold-count">(0)</span></h3>
         <p class="text-muted small mb-0">This record names no related places.</p>
-      {% endif %}
-    </div>
+      </div>
+    {% endif %}
   </section>
 
+  {% if user.can_access_beta or enrichment_public %}
+  {% comment %}
+    place#325 Stage 3: beta users always; everyone else only with the v4 release switch
+    on (ruling 2026-10-21: public at release, anonymous visitors too). The public
+    parts carry data-enrichment="public" (the beta page carries no marker), and
+    their endpoints describe only what an anonymous caller may see, under their own
+    throttle. Both describe the GROUP (this record plus the concordance's
+    aggregated subset: exactMatch/closeMatch, tiers 1-2; never co-cited records).
+    Filled by atlasRecord.js with enrichment.js from places/views_enrichment.py; the
+    environment endpoint (EDOPS) only when the visitor asks (Stage 5).
+  {% endcomment %}
+  <section id="record_gloss" class="atlas-record-section atlas-record-divided" aria-labelledby="record_gloss_heading"
+           data-endpoint="{% url 'atlas-record-gloss' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
+    <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
+    <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
+      say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
+    <div class="enr-body"></div>
+  </section>
+  {% endif %}
+
   {# ---------------- the concordance: attestations about the record ---------------- #}
-  <section id="concordance" class="atlas-record-section" aria-labelledby="concordance_heading"
-           data-endpoint="{{ concordance_endpoint }}"
-           data-explore-url="{{ explore_similar.url }}"
-           data-explore-seeded-by="{{ explore_similar.seeded_by|join:',' }}"
-           data-record-title="{{ place.title }}">
+  <section id="concordance" class="atlas-record-section atlas-record-divided" aria-labelledby="concordance_heading"
+           data-endpoint="{{ concordance_endpoint }}">
     <h2 id="concordance_heading" class="h5">Concordance</h2>
     <p class="small text-muted">
       The records attested to be the same place as this one, one step from it.
@@ -200,33 +247,39 @@
     <div id="concordance_body" hidden></div>
   </section>
 
-  {% if user.can_access_beta or enrichment_public %}
-  {% comment %}
-    place#325 Stage 3: beta users always; everyone else only with the v4 release switch
-    on (ruling 2026-10-21: public at release, anonymous visitors too). The public
-    sections carry data-enrichment="public" (the beta page's bytes are unchanged), and
-    their endpoints describe only what an anonymous caller may see, under their own
-    throttle. Both describe the GROUP (this record plus the concordance's
-    aggregated subset: exactMatch/closeMatch, tiers 1-2; never co-cited records).
-    Filled by enrichment.js from places/views_enrichment.py.
-  {% endcomment %}
-  <section id="record_gloss" class="atlas-record-section enr-section" aria-labelledby="record_gloss_heading"
-           data-endpoint="{% url 'atlas-record-gloss' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
-    <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
-    <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
-      say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
-    <div class="enr-body"></div>
-  </section>
+  </div>{# .rs-main #}
 
-  <section id="record_environment" class="atlas-record-section enr-section" aria-labelledby="record_environment_heading"
-           data-endpoint="{% url 'atlas-record-environment' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
-    <h2 id="record_environment_heading" class="h5">Environmental signature <span class="enr-badge">EDOPS</span></h2>
-    <p class="small text-muted">The environment of the drainage basin (or area) where this group lies, from
-      <a href="https://computingplace.org/" target="_blank" rel="noopener noreferrer">EDOPS, Computing Place</a>.
-      Mostly present-day conditions: read the note on each band.</p>
-    <div class="enr-body"></div>
-  </section>
-  {% endif %}
+  <div class="rs-side">
+    {% comment %}
+      The concordance map: shown (and the map created) only once there is something to
+      map, so the common empty case has no blank square. The notes under it (summary and
+      legend) stay directly under the map in the one-column layout too (atlasRecord.css).
+    {% endcomment %}
+    <div id="concordance_map_box" class="rs-map" hidden></div>
+    <div id="concordance_map_notes" class="conc-map-notes rs-muted small" hidden></div>
+
+    <div id="record_elsewhere" class="rs-card rs-icon-links"{% if not outward_links %} hidden{% endif %}>
+      <h2 class="rs-card-title"><i class="fa-solid fa-arrow-up-right-from-square rs-icon" aria-hidden="true"></i>Elsewhere</h2>
+      <div id="record_wikipedia"></div>
+      {% if outward_links %}
+        <div id="record_outward_links">
+          <h3 class="rs-card-subtitle"><i class="fa-solid fa-link rs-icon" aria-hidden="true"></i>Cited by this record</h3>
+          <p class="small rs-muted mb-1">The web addresses among this record's links, as contributed.</p>
+          <ul class="list-unstyled mb-0 atlas-record-outward">
+            {% for l in outward_links %}
+              <li><span class="badge text-bg-light border me-1">{{ l.type }}</span><a href="{{ l.href }}" target="_blank" rel="noopener noreferrer">{{ l.identifier }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if user.can_access_beta or enrichment_public %}
+      <div id="record_environment" class="atlas-record-env"
+           data-endpoint="{% url 'atlas-record-environment' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}></div>
+    {% endif %}
+  </div>{# .rs-side #}
+  </div>{# .rs-layout #}
 
 </main>
 {% endblock %}
