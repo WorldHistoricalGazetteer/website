@@ -562,10 +562,10 @@ def atlas_search(request):
     except (ValueError, TypeError):
         options = {}
 
-    return _gateway_search_response(options, request.user)
+    return _gateway_search_response(options, request.user, hit_record_urls=True)
 
 
-def _gateway_search_response(options, user, extra=None):
+def _gateway_search_response(options, user, extra=None, hit_record_urls=False):
     """Run one gateway search for a beta user and answer as ``atlas_search``
     always has; shared with the locus resolver. ``extra`` is merged into a
     successful (or timed-out) body.
@@ -597,6 +597,8 @@ def _gateway_search_response(options, user, extra=None):
         # modify your search".
         return _gateway_failure_response(failure or "error", **empty)
     _withhold_contributed_hits(data, user)
+    if hit_record_urls:
+        _add_hit_record_urls(data, user)
     data["request"] = meta.get("request")
     data.update(extra)
     data["gateway"] = True
@@ -632,6 +634,40 @@ def _withhold_contributed_hits(data, user):
         # never enumerated.
         data["withheld"] = {"count": len(dropped),
                             "reason": "records in datasets not visible to this account"}
+    return data
+
+
+def _add_hit_record_urls(data, user):
+    """place#325: ``record_url`` (``/atlas/place/<pk>/``) on each contributed
+    hit that has a beta Record page, for the Atlas's per-record "Record" action
+    (Place List rows; gazetteerInteraction.js recordActionsHtml). Beta viewers
+    only (the endpoint is beta-gated already; checked again so the rule lives
+    with the field). Authority hits get nothing: they have no Record page, and
+    ``_record_urls_for_hits``'s ``/entity/`` fallback is not one.
+
+    Visibility: runs after ``_withhold_contributed_hits``, and checks the
+    viewer's circle again itself (``hidden_datasets``, the complement of the
+    ``visible_places_q`` that ``get_visible_place_or_404`` applies), so a pk is
+    never put on a hit whose dataset this viewer cannot see. Computed per
+    request: nothing here is cached (the gateway response is not cached either).
+    At most two queries per response, none when there is no ``whg:`` hit.
+    Mutates ``data``."""
+    if not (getattr(user, "is_authenticated", False) and getattr(user, "can_access_beta", False)):
+        return data
+    hits = data.get("hits")
+    if not isinstance(hits, list):
+        return data
+    contributed = [h for h in hits
+                   if isinstance(h, dict) and str(h.get("place_id") or "").lower().startswith("whg:")]
+    if not contributed:
+        return data
+    hidden = hidden_datasets(user)
+    visible = [h for h in contributed if not hidden.hides_contributed_id(str(h.get("place_id")))]
+    urls = _record_urls_for_hits(visible)
+    for h in visible:
+        url = urls.get(str(h.get("place_id")))
+        if url and url.startswith("/atlas/place/"):
+            h["record_url"] = url
     return data
 
 

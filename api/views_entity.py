@@ -610,6 +610,42 @@ class EntityDetailView(PublicEntityReadAPIView):
         return HttpResponseRedirect(url)
 
 
+def _popup_beta_viewer(request):
+    """The signed-in BETA user behind a popup request, or None.
+
+    The Atlas popup sends ``X-CSRFToken``, so ``TokenQueryOrBearerAuthentication``
+    answers first with a ``CSRFUser`` (anonymous, CSRF already enforced) even for
+    a signed-in visitor, and DRF hands that to ``request.user``. The session
+    behind the same request is read here for the beta check only; which record
+    is served is still decided by ``request.user`` as before."""
+    user = getattr(request, "user", None)
+    if user is None or getattr(user, "is_anonymous", True):
+        from django.contrib.auth import get_user
+        try:
+            user = get_user(request._request)
+        except Exception:  # noqa: BLE001 — no session: no beta viewer
+            return None
+    if getattr(user, "is_authenticated", False) and getattr(user, "can_access_beta", False):
+        return user
+    return None
+
+
+def _popup_record_url(request, place):
+    """``/atlas/place/<pk>/`` (the beta Record page) for a contributed ``place``
+    already served to this request, when the viewer is a beta user who may see
+    it (``get_visible_place_or_404``, the Record page's own rule); else None."""
+    viewer = _popup_beta_viewer(request)
+    if viewer is None:
+        return None
+    from api.dataset_access import get_visible_place_or_404
+    from django.urls import NoReverseMatch
+    try:
+        get_visible_place_or_404(viewer, pk=place.pk)
+        return reverse("atlas-record", kwargs={"pk": place.pk})
+    except (Http404, NoReverseMatch):
+        return None
+
+
 @method_decorator(csrf_exempt, name='dispatch')
 @entity_schema('feature')
 class EntityFeatureView(PublicEntityReadAPIView):
@@ -699,6 +735,12 @@ class EntityFeatureView(PublicEntityReadAPIView):
             # Transform legacy place serializer output into proper LPF
             if obj_type == "place":
                 data = _legacy_place_to_lpf(data, request=request)
+                # place#325: the Atlas popup's beta "Record" action. Popup variant
+                # and beta viewers only; every other response is unchanged.
+                if request.GET.get('variant') == 'popup':
+                    record_url = _popup_record_url(request, obj)
+                    if record_url:
+                        data["record_url"] = record_url
             return Response(data, status=status.HTTP_200_OK)
 
         # Cache-aware streaming response (shared with the Atlas gazetteer-panel
