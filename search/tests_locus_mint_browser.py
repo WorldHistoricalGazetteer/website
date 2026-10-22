@@ -46,7 +46,7 @@ except ImportError:  # pragma: no cover
 
 @unittest.skipUnless(HAVE_PLAYWRIGHT, "playwright is not importable here")
 @unittest.skipUnless(os.environ.get("WHG_BROWSER_TESTS") == "1", "set WHG_BROWSER_TESTS=1 to run browser tests")
-@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2, LOCUS_MINTING_ENABLED=True)
+@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2, V4_LANDING_ENABLED=True)
 class LocusMintBrowserTests(LiveServerTestCase):
     @classmethod
     def setUpClass(cls):
@@ -144,7 +144,7 @@ class LocusMintBrowserTests(LiveServerTestCase):
     def test_with_the_setting_off_nothing_can_be_minted(self):
         tok = token(SIMPLE)
         page, console = self._page()
-        with override_settings(LOCUS_MINTING_ENABLED=False, V4_LANDING_ENABLED=False):
+        with override_settings(V4_LANDING_ENABLED=False):
             page.goto(self.live_server_url + "/atlas/locus/?r=" + tok)
             state = _poll(page, "window.__whgLocus && window.__whgLocus.resolved !== undefined && window.__whgLocus", 60)
             self.assertTrue(state and state.get("resolved"), f"page never resolved: {state}; console: {console[-8:]}")

@@ -579,7 +579,7 @@ class _PublicFixture(TestCase):
         return self.call(f"/atlas/place/{pk}/environment/", **kw)
 
 
-@override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+@override_settings(CACHES=LOCMEM, EDOP_ENABLED=True, V4_LANDING_ENABLED=False)
 class PublicEnrichmentSwitchOffTests(_PublicFixture):
     def test_off_anonymous_and_non_beta_get_todays_403_bytes(self):
         t = FakeTransport(AREA)
@@ -743,7 +743,7 @@ class PublicSectionsTemplateTests(_PublicFixture):
         self.assertIn('id="record_gloss"', beta)                       # presence
         self.assertNotIn("data-enrichment", beta)                      # absence: beta unchanged
 
-    @override_settings(CACHES=LOCMEM, V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(CACHES=LOCMEM, V4_LANDING_ENABLED=False)
     def test_off(self):
         self.assertEqual(self.page().status_code, 302)                 # to sign in, as today
         self.assertEqual(self.page(self.plain).status_code, 404)

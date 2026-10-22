@@ -174,7 +174,7 @@ class LocusBrowserTests(LiveServerTestCase):
 
     # Assumes the v4 release switch is off: say so, clearing the alias too, so the test
     # holds where the env sets either (dev sets both; place#325 review #5).
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_card_token_agrees_with_the_server_and_the_page_resolves_it(self):
         ctx = self._context()
         page = ctx.new_page()

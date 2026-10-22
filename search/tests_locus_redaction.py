@@ -35,7 +35,7 @@ QUERY = {**SIMPLE, "query": "Xanadurecipe"}
 SECRETS = ("Xanadurecipe", "Q98765", "gn:7777777")
 
 
-@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class TombstoneTests(LocusBase):
     def setUp(self):
         super().setUp()
@@ -177,7 +177,7 @@ class TombstoneTests(LocusBase):
         self.assertNotIn(self.control.pid, [o["pid"] for o in after])
 
 
-@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class AttributionTests(LocusBase):
     def setUp(self):
         super().setUp()
@@ -242,7 +242,7 @@ class AttributionTests(LocusBase):
         self.assertNotIn('action="/atlas/locus/attribution/"', html)
 
 
-@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class ShareLinkSuppressionTests(LocusBase):
     """Review of 02e133ddb..staging, #1: a take-down must also cover the recipe's own
     share link (/atlas/locus/?r=), the resolver and the mint preflight/POST, which all
@@ -312,7 +312,7 @@ class ShareLinkSuppressionTests(LocusBase):
         self.assert_suppressed("redacted")
 
 
-@override_settings(V4_LANDING_ENABLED=True, LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class AttributionGateTests(LocusBase):
     """Review #3: consent can be withdrawn by a minter who has since lost beta access."""
 
@@ -331,5 +331,5 @@ class AttributionGateTests(LocusBase):
         self.client.force_login(self.beta)                                    # the minter, no beta now
         self.assertEqual(self.client.post(url, {"pid": e.pid, "public": "0"}).status_code, 303)
         self.assertFalse(LocusRegistryEntry.objects.get(pk=e.pk).minter_public)
-        with override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):
+        with override_settings(V4_LANDING_ENABLED=False):
             self.assertEqual(self.client.post(url, {"pid": e.pid, "public": "0"}).status_code, 404)

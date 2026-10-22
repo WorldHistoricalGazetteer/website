@@ -97,7 +97,7 @@ class ContextDocumentTests(_Fixture):
     def test_served_with_the_switch_on(self):
         self.check_served()
 
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False, CACHES=LOCMEM)
+    @override_settings(V4_LANDING_ENABLED=False, CACHES=LOCMEM)
     def test_served_with_the_switch_off_too(self):
         """A context reveals nothing, so it is not behind the release switch."""
         self.check_served()

@@ -473,7 +473,7 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         self.assertIn("Embargoed Source", d["gloss"])
         self.assertIn("not public yet", d["env"])
 
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_signed_out_visitor_gets_nothing_with_the_switch_off(self):
         t = FakeTransport(AREA)
         page = self.new_page(anonymous=True)

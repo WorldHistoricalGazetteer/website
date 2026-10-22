@@ -164,7 +164,7 @@ class RecordPageTests(TestCase):
     # ---- the beta gate ---------------------------------------------------
     # Assumes the v4 release switch is off: say so, clearing the alias too, so the test
     # holds where the env sets either (dev sets both; place#325 review #5).
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_gate(self):
         r = self.page(self.A)
         self.assertEqual(r.status_code, 302)

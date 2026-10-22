@@ -88,7 +88,7 @@ class LayoutBase(LocusBase):
 
 class RecipeLayoutTests(LayoutBase):
     # Assumes the v4 release switch is off: say so, clearing the alias too (review #5).
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_unminted_page_uses_the_shell_and_hides_the_recipe_in_a_modal(self):
         s = soup(self.html(token(FULL, members=["wd:Q64", "gn:1", "tgn:7003712"])))
         layout, main, side = shell(s)
@@ -116,7 +116,7 @@ class RecipeLayoutTests(LayoutBase):
         self.assertEqual([m["data-member"] for m in s.select("#locus_recipe_members .locus-member-id")],
                          ["gn:1", "tgn:7003712", "wd:Q64"])
 
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_beta_slots_are_rendered_closed_and_in_their_columns(self):
         s = soup(self.html(token()))
         _, main, side = shell(s)
@@ -153,7 +153,7 @@ class RecipeLayoutTests(LayoutBase):
                 self.assertEqual(s.find(id=el_id) is not None, expect, (el_id, user))
 
 
-@override_settings(LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class VariantLayoutTests(LayoutBase):
     def test_minted_recipe_locus(self):
         entry, _ = registry.mint_recipe(recipe(SIMPLE), self.beta)
