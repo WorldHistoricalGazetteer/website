@@ -14,7 +14,9 @@ Two conventions to preserve:
   by scanning (the column is encrypted and unqueryable).
 """
 import datetime
+import re
 
+from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.db.models import Count
@@ -23,7 +25,7 @@ from django.utils.html import format_html
 
 from users.models import email_lookup_hash
 
-from . import privacy
+from . import privacy, tracking
 from .admin_links import (
     RegistryChoiceField, RegistryMultipleChoiceField, UserNameChoiceField,
     add_hint, changelist_url, panel, user_label,
@@ -546,6 +548,72 @@ class ReviewInline(admin.TabularInline):
     show_change_link = True
 
 
+class TrackedDatasetForm(forms.ModelForm):
+    """Adds "start from a dataset already on WHG" to the add form.
+
+    A contributor's upload is a ``datasets.Dataset`` that GRACE knows nothing
+    about until someone says so. Choosing it here fills the title, count and
+    Register link from the upload and records which one it was, so a review
+    can be started without retyping anything. It is also what the + beside the
+    Dataset field on a Review opens.
+    """
+
+    start_from = forms.ModelChoiceField(
+        queryset=None, required=False,
+        label="Start from a dataset already on WHG",
+        help_text="Datasets submitted to WHG that GRACE is not yet tracking. "
+                  "Pick one and the title, record count and Register link are "
+                  "filled in for you; leave blank for a prospect we are only "
+                  "chasing.",
+    )
+
+    class Meta:
+        model = TrackedDataset
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk is not None:
+            # Declared fields survive ModelAdmin's field restriction, so drop
+            # it on an existing record rather than leave a dead picker.
+            self.fields.pop("start_from", None)
+            return
+        from datasets.models import Dataset
+        taken = set()
+        for notes in TrackedDataset.objects.filter(
+                notes__contains="[whg-dataset:").values_list("notes", flat=True):
+            taken.update(re.findall(r"\[whg-dataset:(\d+)\]", notes))
+        taken.update(
+            str(r).split(":", 1)[1] for r in TrackedDataset.objects.filter(
+                registry__id__startswith="whg:").values_list(
+                "registry_id", flat=True))
+        field = self.fields["start_from"]
+        field.queryset = (Dataset.objects.exclude(pk__in=[int(t) for t in taken
+                                                          if t.isdigit()])
+                          .order_by("-id"))
+        field.label_from_instance = lambda d: f"#{d.pk}  {d.title}  ({d.label})"
+
+    def clean(self):
+        data = super().clean()
+        dataset = data.get("start_from")
+        if dataset is None:
+            return data
+        # Work on a scratch record and copy the results back into
+        # cleaned_data: ModelForm writes cleaned_data over the instance after
+        # clean(), so filling the instance directly would be undone.
+        scratch = tracking.fill_from_dataset(TrackedDataset(
+            title=data.get("title") or "", registry=data.get("registry"),
+            expected_record_count=data.get("expected_record_count"),
+            on_radar_since=data.get("on_radar_since"),
+            notes=data.get("notes") or ""), dataset)
+        for name in ("title", "registry", "expected_record_count",
+                     "on_radar_since", "notes"):
+            data[name] = getattr(scratch, name)
+        # The title field was required and empty when this was chosen.
+        self._errors.pop("title", None)
+        return data
+
+
 @admin.register(TrackedDataset)
 class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     list_display = ("title", "kind", "stage", "owner", "permission_status",
@@ -563,6 +631,7 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
     filter_horizontal = ("regions", "people", "reconciled_against")
     readonly_fields = ("registry_readout", "created_at", "updated_at")
     inlines = [ReviewInline]
+    form = TrackedDatasetForm
 
     fieldsets = (
         ("What it is", {
@@ -606,6 +675,29 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
         ("Provenance", {"classes": ("collapse",),
                         "fields": ("added_by", "created_at", "updated_at")}),
     )
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = super().get_fieldsets(request, obj)
+        if obj is not None:
+            return fieldsets
+        # Only meaningful when creating; on an existing record it would
+        # suggest the link can be changed here, and it cannot.
+        first = fieldsets[0]
+        return ((first[0], {**first[1],
+                            "fields": ("start_from", *first[1]["fields"])}),
+                *fieldsets[1:])
+
+    def save_model(self, request, obj, form, change):
+        if not change and obj.added_by_id is None:
+            obj.added_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        wanted = request.GET.get("start_from")
+        if wanted and wanted.isdigit():
+            initial["start_from"] = int(wanted)
+        return initial
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related(

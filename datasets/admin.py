@@ -1,4 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from .forms import DatasetAdminForm
 from .models import Dataset, DatasetFile, Hit
 from guardian.admin import GuardedModelAdmin
@@ -17,6 +17,22 @@ class DatasetAdmin(admin.ModelAdmin):
     autocomplete_fields = ('license',)
     search_fields = ('title','label')
     inlines = [ContributionInline]
+    actions = ['track_in_grace']
+
+    @admin.action(description='Track in GRACE (so it can be reviewed and followed up)')
+    def track_in_grace(self, request, queryset):
+        # Lazy import: GRACE depends on datasets, never the reverse at import time.
+        from grace.tracking import track_dataset
+        made = found = 0
+        for dataset in queryset:
+            _, created = track_dataset(dataset, added_by=request.user)
+            made += created
+            found += not created
+        self.message_user(
+            request,
+            f'GRACE: {made} dataset(s) now tracked'
+            + (f'; {found} already were.' if found else '.'),
+            messages.SUCCESS)
 admin.site.register(Dataset, DatasetAdmin)
 # admin.site.register(Dataset)
 

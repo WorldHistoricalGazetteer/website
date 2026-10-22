@@ -31,6 +31,7 @@ The registers are Catalogue · Engagement · Pipeline, plus Content; the
 grouping lives in ``admin_site.py``.
 """
 import datetime
+import re
 
 from django.conf import settings
 from django.contrib.postgres.fields import ArrayField
@@ -784,7 +785,10 @@ class TrackedDataset(TimeStampedModel):
         if self.registry_id and str(self.registry_id).startswith("whg:"):
             tail = str(self.registry_id).split(":", 1)[1]
             return int(tail) if tail.isdigit() else None
-        return None
+        # No Register row yet (it is pushed by indexing, so a fresh upload has
+        # none): fall back to the marker ``tracking.track_dataset`` writes.
+        found = re.search(r"\[whg-dataset:(\d+)\]", self.notes or "")
+        return int(found.group(1)) if found else None
 
     @property
     def whg_url(self):
