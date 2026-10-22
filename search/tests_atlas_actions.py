@@ -165,7 +165,8 @@ class PopupRecordUrlTests(ActionsBase):
         resp = self._popup(self.pid_public, **CSRF)
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["record_url"], f"/atlas/place/{self.p_public.id}/")
-        self.assertEqual(resp.json()["properties"]["title"], "Isfahan")
+        # place#329: the popup variant is the flat popup shape (title at the top level).
+        self.assertEqual(resp.json()["title"], "Isfahan")
         # Same viewer, same record, without the variant: no url (only the popup asks).
         self.assertNotIn("record_url", self._popup(self.pid_public, popup=False, **CSRF).json())
         # Session only (SessionAuthentication): the same answer.
@@ -182,17 +183,22 @@ class PopupRecordUrlTests(ActionsBase):
         self.assertIn("record_url", self._popup(self.pid_public, **CSRF).json())
 
     def test_anonymous_and_non_beta_responses_are_unchanged(self):
-        """Byte-identical to the same request without ``variant=popup``, which
-        the legacy path ignored before this change; the beta viewer's popup
-        on the same record differs by exactly ``record_url``."""
+        """Anonymous and non-beta viewers get the same popup bytes, with no
+        ``record_url``; the beta viewer's popup on the same record differs by
+        exactly ``record_url``. (Since place#329 the popup variant is the flat
+        popup shape, so it is no longer equal to the LPF answer without the
+        variant; the LPF answer is the same for both viewers.)"""
         anon_popup = self._popup(self.pid_public, **CSRF)
         anon_plain = self._popup(self.pid_public, popup=False, **CSRF)
         self.assertEqual(anon_popup.status_code, 200)
-        self.assertEqual(anon_popup.content, anon_plain.content)
+        self.assertEqual(anon_popup.json()["place_id"], self.pid_public)
+        self.assertEqual(anon_plain.json()["properties"]["title"], "Isfahan")
         self.assertNotIn(b"record_url", anon_popup.content)
+        self.assertNotIn(b"record_url", anon_plain.content)
         self.client.force_login(self.normal)
         normal_popup = self._popup(self.pid_public, **CSRF)
-        self.assertEqual(normal_popup.content, self._popup(self.pid_public, popup=False, **CSRF).content)
+        self.assertEqual(normal_popup.content, anon_popup.content)
+        self.assertEqual(self._popup(self.pid_public, popup=False, **CSRF).content, anon_plain.content)
         self.assertNotIn(b"record_url", normal_popup.content)
         self.client.force_login(self.beta)
         beta = self._popup(self.pid_public, **CSRF).json()
