@@ -1794,7 +1794,9 @@ a.pl-chip.pl-aat { cursor: pointer; }
     min-width: 260px;
     display: flex;
     flex-direction: column;
-    max-height: 70vh;
+    /* On a narrow screen the popup fit (gazetteerInteraction.js, place#331) caps
+       this to the map's clear area when the popup would not otherwise fit. */
+    max-height: var(--whg-popup-max-h, 70vh);
 }
 
 .whg-gazetteer-popup .popup-loading {
@@ -2383,6 +2385,19 @@ a.pl-chip.pl-aat { cursor: pointer; }
         width: 100%;
         justify-content: center;
         margin-top: 4px;
+    }
+}
+
+/* Narrow screens, a place popup open that the clear part of the map cannot
+   hold (a landscape phone): the floating controls fold down to the search-input
+   row until the popup closes. Set and cleared by gazetteerInteraction.js
+   (place#331); the date filter and selections stay in force, only hidden. */
+@media (max-width: 991.98px) {
+    #floating_search.popup-compact .search-mode-toggle,
+    #floating_search.popup-compact .atlas-control-buttons,
+    #floating_search.popup-compact #selection_chips,
+    #floating_search.popup-compact #temporal_control {
+        display: none !important;
     }
 }
 
