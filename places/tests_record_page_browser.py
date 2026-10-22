@@ -231,14 +231,16 @@ class RecordPageBrowserTests(LiveServerTestCase):
             all(w and w["status"] == "unavailable" for w in whg) and whg[0] == whg[1]
             and "may be private, or may no longer exist" in whg[0]["text"]
             and "WHG does not hold records for" not in whg[0]["text"]
-            and "Hidden Thing" not in page.evaluate("document.body.innerText"))
+            # textContent, not innerText: since round 2 the lists are closed folds, and an
+            # absence read from rendered text only would hold for anything in a closed one.
+            and "Hidden Thing" not in page.evaluate("document.body.textContent"))
         ph = page.evaluate("""() => { const e = Array.from(document.querySelectorAll('#concordance_tier1 .conc-entry'))
             .find(x => (x.querySelector('code') || {}).textContent === 'wd:None');
             return e ? {status: e.dataset.status, text: e.textContent,
                         badge: !!e.querySelector('.conc-placeholder-badge')} : null; }""")
         results["tier1_placeholder_flagged"] = bool(ph) and ph["status"] == "placeholder" and ph["badge"] \
             and "Placeholder, not a real identifier" in ph["text"] and "holds no record" not in ph["text"] \
-            and "Placeholder Carrier" not in page.evaluate("document.body.innerText")
+            and "Placeholder Carrier" not in page.evaluate("document.body.textContent")
         tier2 = " | ".join(dom["tier2"])
         results["tier2_attributed"] = ("Attested by Dataset b" in tier2 and "Record B" in tier2
                                        and "Record C" not in tier2)
@@ -355,7 +357,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertTrue(ready)
         self.assertTrue(spinner_after)
 
-    def test_empty_state_leads_with_explore(self):
+    def test_empty_state_points_to_the_header_explore(self):
+        """Round 2: the page's one Explore button is the header's; the empty state names it
+        and links to it, and carries no button of its own."""
         page = self.new_page()
         with patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#concordance")
@@ -363,16 +367,20 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.shot(page, "record_empty_concordance")
         d = page.evaluate("""() => {
             const e = document.getElementById('concordance_empty');
-            const firstAction = e && e.querySelector('a, button');
-            return {exists: !!e, first: firstAction && firstAction.textContent.trim(),
-                    href: firstAction && firstAction.getAttribute('href'),
-                    primary: !!(firstAction && firstAction.classList.contains('btn-primary')),
+            const ref = e && e.querySelector('a');
+            const header = document.getElementById('explore_similar_header');
+            return {exists: !!e, ref: ref && ref.textContent.trim(), refHref: ref && ref.getAttribute('href'),
+                    buttons: e ? e.querySelectorAll('.btn, button').length : null,
+                    header: header && header.getAttribute('href'),
+                    explore: Array.from(document.querySelectorAll('#atlas_record .btn'))
+                        .filter(b => /Explore similar records/.test(b.textContent)).length,
                     map: !!document.getElementById('concordance_map'),
                     tiers: document.querySelectorAll('.conc-tier').length};
         }""")
         self.assertTrue(ok)
-        self.assertEqual(d, {"exists": True, "first": "Explore similar records", "href": "/atlas/Lonely%20Place",
-                             "primary": True, "map": False, "tiers": 0})
+        self.assertEqual(d, {"exists": True, "ref": "Explore similar records", "refHref": "#explore_similar_header",
+                             "buttons": 0, "header": "/atlas/Lonely%20Place", "explore": 1, "map": False,
+                             "tiers": 0})
 
     def test_gateway_unreachable_is_not_absence(self):
         page = self.new_page()
@@ -410,7 +418,7 @@ class RecordPageBrowserTests(LiveServerTestCase):
         self.assertIn("Not looked up for signed-out visitors", text)
         self.assertIn("Sign in to see it", text)
         self.assertNotIn("not configured", text)
-        self.assertIn("Record B", page.inner_text("#concordance_tier2"))       # the rest still renders
+        self.assertIn("Record B", page.text_content("#concordance_tier2"))     # the rest still renders
 
     @override_settings(V4_LANDING_ENABLED=True, CRC_GATEWAY_URL="http://gateway.invalid")
     def test_signed_out_visitor_sees_open_namespaces_resolved(self):

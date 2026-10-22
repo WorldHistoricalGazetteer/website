@@ -214,13 +214,14 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
             r["map_tops_side"] = abs(m["t"] - d["side"]["t"]) <= 1
             r["map_square"] = abs(m["w"] - m["h"]) <= 1
             r["side_order"] = m["b"] <= d["elsewhere"]["t"] <= d["env"]["t"]
-            r["main_order"] = d["header"]["b"] <= d["record"]["t"] <= d["conc"]["t"] <= d["gloss"]["t"]
+            # Round 2: Record, About this group, Concordance.
+            r["main_order"] = d["header"]["b"] <= d["record"]["t"] <= d["gloss"]["t"] <= d["conc"]["t"]
             r["side_narrower"] = d["side"]["w"] < d["main"]["w"]
         else:
             # One column: header, map (with its notes), the left column's sections, then the cards.
             r["stacked_order"] = (d["header"]["b"] <= m["t"] and d["notes"]["b"] <= d["record"]["t"]
-                                  and d["record"]["b"] <= d["conc"]["t"] <= d["gloss"]["t"]
-                                  and d["gloss"]["b"] <= d["elsewhere"]["t"] <= d["env"]["t"])
+                                  and d["record"]["b"] <= d["gloss"]["t"] <= d["conc"]["t"]
+                                  and d["conc"]["b"] <= d["elsewhere"]["t"] <= d["env"]["t"])
             r["map_full_width"] = abs(m["w"] - d["record"]["w"]) <= 2
             r["map_square_or_capped"] = abs(m["w"] - m["h"]) <= 1 if m["w"] <= 560 else abs(m["h"] - 560) <= 1
         return r, d
@@ -349,6 +350,8 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
     def test_cocited_grouped_by_record(self):
         page = self.new_page(1280)
         ready, _g = self.open(page)
+        self.assertTrue(ready)
+        page.click("#concordance_tier3 > summary")          # a fold since round 2: read it open
         d = page.evaluate("""() => ({
             records: Array.from(document.querySelectorAll('#concordance_tier3 .conc-cocited-record'))
                 .map(e => ({id: e.dataset.placeId, idents: e.dataset.identifiers, text: e.innerText,
@@ -381,6 +384,203 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
         self.assertIn("Links held in WHG's Wikidata record", d["text"])
         self.assertEqual(d["web"], ["https://example.org/larissa"])
         self.assertIn("sources", d["facets"])                                           # the gloss as cards
+
+    # ---- round 2 (Stephen's review 2026-10-22): folds, order, rules, one Explore ----------
+    FOLDS = """() => { const out = {};
+        document.querySelectorAll('#atlas_record [data-section]').forEach((el) => {
+            const sum = el.querySelector(':scope > summary');
+            const body = el.querySelector(':scope > .rec-fold-body');
+            const head = el.querySelector('.rec-fold-title');
+            out[el.dataset.section] = {tag: el.tagName, open: el.tagName === 'DETAILS' ? el.open : null,
+                collapsed: el.dataset.collapsed, total: el.dataset.total,
+                head: head ? head.innerText.replace(/\\s+/g, ' ').trim() : null,
+                summary: !!sum, bodyShown: body ? body.checkVisibility() : null,
+                chevron: sum && sum.querySelector('.rec-fold-chevron')
+                    ? getComputedStyle(sum.querySelector('.rec-fold-chevron')).transform : null,
+                text: el.innerText}; });
+        return {folds: out, flags: (window.__whgRecord || {}).sections || null,
+                entries: {outbound: document.querySelectorAll('#concordance_tier1 .conc-entry').length,
+                          links: document.querySelectorAll('#record_links .atlas-record-links li').length,
+                          cocited: document.querySelectorAll('#concordance_tier3 .conc-cocited-record').length}}; }"""
+
+    def test_folds_start_closed_with_their_totals(self):
+        page = self.new_page(1280)
+        ready, _g = self.open(page)
+        self.assertTrue(ready, self.errors)
+        d = page.evaluate(self.FOLDS)
+        f, n = d["folds"], d["entries"]
+        self.assertEqual(sorted(f), ["cocited", "inbound", "links", "outbound", "related"])
+        for key in ("links", "outbound", "cocited"):                          # the toggles
+            self.assertEqual((f[key]["tag"], f[key]["open"], f[key]["collapsed"], f[key]["summary"],
+                              f[key]["bodyShown"]), ("DETAILS", False, "true", True, False), key)
+        # The totals: the lists' own lengths (counted from the DOM, which holds them closed).
+        self.assertEqual((n["links"], n["outbound"], n["cocited"]), (5, 5, 2))
+        self.assertTrue(f["links"]["head"].startswith("Links, as contributed (5)"), f["links"]["head"])
+        self.assertTrue(f["outbound"]["head"].startswith("Outbound: this record's own attestations (5)"),
+                        f["outbound"]["head"])
+        self.assertTrue(f["cocited"]["head"].endswith("(2 records)"), f["cocited"]["head"])  # records, not ids
+        self.assertEqual({k: (v["total"], v["toggle"], v["open"]) for k, v in d["flags"].items()},
+                         {"links": (5, True, False), "related": (0, False, None), "outbound": (5, True, False),
+                          "inbound": (0, False, None), "cocited": (2, True, False)})
+        self.assertNotIn("Cociter 1", f["cocited"]["text"])                   # closed: the list is not shown
+        self.assertIn("Co-cited", f["cocited"]["text"])                       # ...its header is
+
+    def test_zero_lists_are_not_toggles(self):
+        page = self.new_page(1280)
+        ready, _g = self.open(page)
+        self.assertTrue(ready, self.errors)
+        f = page.evaluate(self.FOLDS)["folds"]
+        for key, sentence in (("inbound", "No other public record attests that it is this place."),
+                              ("related", "This record names no related places.")):
+            self.assertEqual((f[key]["tag"], f[key]["summary"], f[key]["collapsed"], f[key]["chevron"]),
+                             ("DIV", False, "none", None), key)
+            self.assertTrue(f[key]["head"].endswith("(0)"), f[key]["head"])
+            self.assertIn(sentence, f[key]["text"])                           # shown, not folded away
+        self.assertEqual(f["links"]["tag"], "DETAILS")                         # presence beside the absences
+        self.assertEqual(page.locator("#concordance_tier2 summary, #record_related summary").count(), 0)
+
+    def test_toggling_opens_and_closes(self):
+        page = self.new_page(1280)
+        ready, _g = self.open(page)
+        self.assertTrue(ready, self.errors)
+        # Keyboard first (a mouse click would make the browser hide the focus ring): the
+        # summary is reached with Tab, shows a focus ring, and Enter / Space toggle it.
+        page.evaluate("document.getElementById('record_heading').tabIndex = -1")   # a start point
+        page.focus("#record_heading")
+        reached = False
+        for _ in range(40):
+            page.keyboard.press("Tab")
+            if page.evaluate("document.activeElement === document.querySelector('#record_links > summary')"):
+                reached = True
+                break
+        ring = page.evaluate("""() => { const s = document.querySelector('#record_links > summary');
+            const c = getComputedStyle(s); return {focused: document.activeElement === s,
+            outline: c.outlineStyle + ' ' + c.outlineWidth}; }""")
+        page.keyboard.press("Enter")
+        by_enter = page.evaluate("document.getElementById('record_links').open")
+        page.keyboard.press("Space")
+        by_space = page.evaluate("document.getElementById('record_links').open")
+        page.click("#concordance_tier3 > summary")
+        page.wait_for_timeout(400)                                            # the chevron's transition
+        opened = page.evaluate(self.FOLDS)
+        self.shot(page, "record_fold_open")
+        page.click("#concordance_tier3 > summary")
+        page.wait_for_timeout(400)
+        closed = page.evaluate(self.FOLDS)
+        o, c = opened["folds"]["cocited"], closed["folds"]["cocited"]
+        self.assertEqual((o["open"], o["collapsed"], o["bodyShown"]), (True, "false", True))
+        self.assertIn("Cociter 1", o["text"])
+        self.assertEqual(opened["flags"]["cocited"]["open"], True)
+        self.assertNotEqual(o["chevron"], c["chevron"])                      # it turns
+        self.assertEqual(o["chevron"], "matrix(0, 1, -1, 0, 0, 0)")          # 90 degrees
+        self.assertEqual((c["open"], c["collapsed"], c["bodyShown"]), (False, "true", False))
+        self.assertEqual(closed["flags"]["cocited"]["open"], False)
+        self.assertNotIn("Cociter 1", c["text"])
+        self.assertTrue(reached and ring["focused"])
+        self.assertTrue(ring["outline"].startswith("solid"), ring)
+        self.assertEqual((by_enter, by_space), (True, False))
+
+    def test_section_order_and_dividers(self):
+        page = self.new_page(1280)
+        ready, gloss = self.open(page)
+        self.assertTrue(ready and gloss, self.errors)
+        d = page.evaluate("""() => { const s = (id) => { const e = document.getElementById(id);
+                const c = getComputedStyle(e); const h = e.querySelector('h2');
+                return {top: e.getBoundingClientRect().top + scrollY, border: c.borderTopStyle,
+                        width: parseFloat(c.borderTopWidth), color: c.borderTopColor,
+                        gap: h.getBoundingClientRect().top - e.getBoundingClientRect().top}; };
+            return {record: s('record'), gloss: s('record_gloss'), conc: s('concordance'),
+                    nav: Array.from(document.querySelectorAll('.atlas-record-tabs a')).map(a => a.getAttribute('href'))}; }""")
+        self.assertLess(d["record"]["top"], d["gloss"]["top"])
+        self.assertLess(d["gloss"]["top"], d["conc"]["top"])
+        self.assertEqual(d["nav"], ["#record", "#record_gloss", "#concordance", "#record_environment"])
+        for k in ("record", "gloss", "conc"):
+            self.assertEqual((d[k]["border"], d[k]["width"]), ("solid", 1.0), k)
+            self.assertGreaterEqual(d[k]["gap"], 12, k)                        # room between rule and heading
+        self.assertEqual(len({d[k]["color"] for k in ("record", "gloss", "conc")}), 1)   # one shared rule
+
+    def test_a_link_into_a_closed_fold_opens_it(self):
+        # (a) arriving with a fragment for a list the script renders later;
+        page = self.new_page(1280)
+        with patch("api.edop_client._requests_transport", side_effect=self.transport):
+            page.goto(f"{self.live_server_url}/atlas/place/{self.R.pk}/#concordance_tier3")
+            ready = self.wait_for(page, "window.__whgRecord && window.__whgRecord.concordance === 'ready'", 45000)
+        # The page scrolls smoothly (Bootstrap's scroll-behavior), so wait for it to arrive.
+        self.wait_for(page, """() => { const r = document.getElementById('concordance_tier3').getBoundingClientRect();
+            return r.top >= 0 && r.top < innerHeight; }""", 5000)
+        arrived = page.evaluate("""() => { const e = document.getElementById('concordance_tier3');
+            const r = e.getBoundingClientRect(); return {open: e.open, inView: r.top >= 0 && r.top < innerHeight}; }""")
+        # (b) an in-page link (the Links block's "outbound list") into the closed outbound fold.
+        page.click("#record_links > summary")
+        before = page.evaluate("document.getElementById('concordance_tier1').open")
+        page.click("#record_links a[href='#concordance_tier1']")
+        page.wait_for_timeout(300)
+        clicked = page.evaluate("""() => { const e = document.getElementById('concordance_tier1');
+            return {open: e.open, shown: e.querySelector('.rec-fold-body').checkVisibility(), flag: window.__whgRecord.sections.outbound.open,
+                    hash: location.hash}; }""")
+        self.assertTrue(ready, self.errors)
+        self.assertEqual(arrived, {"open": True, "inView": True})
+        self.assertFalse(before)                                              # it WAS closed
+        self.assertEqual(clicked, {"open": True, "shown": True, "flag": True, "hash": "#concordance_tier1"})
+
+    def test_truncated_lists_say_so_in_the_header(self):
+        """The endpoint's caps (500 inbound rows, 200 co-cited) are not fixtured: the
+        payload's ``truncated`` flags are set on the real response in flight."""
+        page = self.new_page(1280)
+
+        def flag(route):
+            resp = route.fetch()
+            data = resp.json()
+            data["truncated"] = {"inbound": True, "cocited": True}
+            # An inbound entry, so the inbound list is a fold (the fixture has none).
+            data["inbound"] = [{"source": "place_link", "direction": "inbound", "identifier": "whg:x",
+                                "link_type": "closeMatch", "aggregates": True, "provenance": {"basis": "imported"},
+                                "record": {"place_id": self.C[0].pk, "title": "Cociter 1", "dataset_title": "Dataset b",
+                                           "has_geometry": False}}]
+            route.fulfill(response=resp, body=json.dumps(data))
+        page.route("**/concordance/", flag)
+        ready, _g = self.open(page)
+        self.assertTrue(ready, self.errors)
+        d = page.evaluate(self.FOLDS)
+        f = d["folds"]
+        self.assertIn("this place (1+", f["inbound"]["head"])
+        self.assertIn("the list is capped", f["inbound"]["head"])
+        self.assertIn("(2+ records", f["cocited"]["head"])
+        self.assertEqual((d["flags"]["inbound"]["truncated"], d["flags"]["cocited"]["truncated"],
+                          d["flags"]["outbound"]["truncated"]), (True, True, False))
+        self.assertNotIn("+", f["outbound"]["head"])                          # presence beside: not capped
+        page.click("#concordance_tier2 > summary")
+        self.assertIn("More records attest this than are listed here.", page.inner_text("#concordance_tier2"))
+
+    def test_one_explore_button(self):
+        page = self.new_page(1280)
+        ready, _g = self.open(page)
+        self.assertTrue(ready, self.errors)
+        page.evaluate("document.querySelectorAll('#atlas_record details').forEach(d => { d.open = true; })")
+        d = page.evaluate("""() => Array.from(document.querySelectorAll('#atlas_record a, #atlas_record button'))
+            .filter(e => /Explore similar records/.test(e.textContent)).map(e => e.id || e.className)""")
+        self.assertEqual(d, ["explore_similar_header"])
+
+    def test_folds_at_four_widths(self):
+        """No horizontal overflow at any width, closed and with every fold open; screenshots of both."""
+        failures = {}
+        for width in (1280, 992, 768, 390):
+            page = self.new_page(width)
+            ready, gloss = self.open(page)
+            closed = page.evaluate(self.RECTS)
+            self.shot(page, f"record_r2_{width}_collapsed")
+            page.evaluate("document.querySelectorAll('#atlas_record details').forEach(d => { d.open = true; })")
+            page.wait_for_timeout(300)
+            opened = page.evaluate(self.RECTS)
+            self.shot(page, f"record_r2_{width}_expanded")
+            r = {"ready": ready, "gloss": gloss, "closed_no_overflow": closed["overflow"] == [],
+                 "open_no_overflow": opened["overflow"] == [],
+                 "open_is_longer": opened["conc"]["h"] > closed["conc"]["h"] and opened["record"]["h"] > closed["record"]["h"]}
+            bad = {k: v for k, v in r.items() if not v}
+            if bad:
+                failures[width] = (bad, closed["overflow"], opened["overflow"])
+        self.assertEqual(failures, {}, f"errors={self.errors}")
+        self.assertEqual(self.errors, [])
 
     def test_harness_can_fail(self):
         """The layout, wording and environment checks against a page whose bundle never

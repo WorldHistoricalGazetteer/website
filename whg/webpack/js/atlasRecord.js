@@ -15,7 +15,8 @@
 //    and an unreachable index is never reported as absence (place#272);
 //  - a placeholder identifier (`wd:None`) is flagged as one, never as "not found"
 //    (ruling 2026-10-21: show flagged, never aggregate);
-//  - the empty concordance (the common case) leads with Explore similar records;
+//  - the empty concordance (the common case) points to the header's Explore similar
+//    records, the page's one such button (round 2);
 //  - records that share a point are never hidden by each other: a click on a point
 //    lists every record at it, and a shared point is ringed and counted (Stage 5).
 //
@@ -26,7 +27,12 @@
 // cards), the Wikipedia block of the "Elsewhere" card and the on-demand Environment
 // card come from enrichment.js; EDOPS is asked only when the visitor clicks.
 //
-// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, stacks, baseMap}.
+// Round 2 (Stephen's review 2026-10-22): the three tier lists are folds (<details>), closed
+// at first with their totals in the header, as the template's Links and Related places are;
+// a fragment link into a closed fold opens it first (initFolds).
+//
+// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, stacks, baseMap, sections}.
+// `sections` is keyed links|related|outbound|inbound|cocited: {total, truncated, toggle, open}.
 // `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background);
 // `stacks` is the number of points shared by more than one mapped record.
 // `concordance` ends as 'ready' | 'empty' | 'not_public' | 'error'.
@@ -35,7 +41,8 @@
 import { loadGlossCards, mountEnvironmentCard, recordFetcher, renderWikipediaLinks } from './enrichment.js';
 import '../css/atlasRecord.css';
 
-const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, stacks: 0, baseMap: null });
+const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, stacks: 0, baseMap: null,
+    sections: {} });
 const FETCH_TIMEOUT_MS = 60000;
 const BASEMAP_TIMEOUT_MS = 20000;
 // whg_maplibre's own `load` handler reads style.metadata, so it must exist.
@@ -191,14 +198,30 @@ function cocitedByRecord(entries) {
     return groups;
 }
 
+// A fold (round 2, Stephen's review 2026-10-22): a list closed at first, its total in the
+// header, as <details>/<summary> like the server-rendered Links and Related places. A list
+// with nothing in it is no fold: the heading says (0) and `empty` says why. `truncated`
+// (the endpoint's cap was reached) shows as "n+" in the header, and the body says so too.
+function foldHTML({ id, cls, key, title, total, unit = '', truncated = false, body, empty }) {
+    const noun = unit ? ` ${unit}${total === 1 ? '' : 's'}` : '';
+    const count = truncated
+        ? `(${total}+${noun}<span class="visually-hidden">: the list is capped</span>)`
+        : `(${total}${noun})`;
+    const attrs = `id="${id}" class="conc-tier ${cls}${total ? ' rec-fold' : ''}" data-section="${key}" data-total="${total}"`
+        + ` data-truncated="${truncated}" data-collapsed="${total ? 'true' : 'none'}"`;
+    const head = `<h3 class="h6 rec-fold-title">${esc(title)} <span class="rec-fold-count">${count}</span></h3>`;
+    if (!total) return `<div ${attrs}>${head}<p class="small text-muted mb-0">${empty}</p></div>`;
+    return `<details ${attrs}><summary class="rec-fold-head">`
+        + `<i class="fa-solid fa-chevron-right rec-fold-chevron" aria-hidden="true"></i>${head}</summary>`
+        + `<div class="rec-fold-body">${body}</div></details>`;
+}
+
 function cocitedHTML(entries, truncated) {
-    if (!entries.length) return '';
-    let h = `<div class="conc-tier conc-tier-3" id="concordance_tier3">
-        <h3 class="h6">Co-cited: also linked to the same identifiers</h3>
-        <p class="small text-muted">These records cite an identifier this record also cites. That is co-citation, not identity:
+    const groups = cocitedByRecord(entries);
+    let h = `<p class="small text-muted">These records cite an identifier this record also cites. That is co-citation, not identity:
         nobody has said they are the same place as this record, so they are listed here and left off the map.</p>
         <ul class="conc-list">`;
-    cocitedByRecord(entries).forEach(({ record, links }, pid) => {
+    groups.forEach(({ record, links }, pid) => {
         const shared = [...new Set(links.map((e) => e.cocited_identifier || e.identifier))];
         const items = links.map((e) => `<li data-identifier="${esc(e.cocited_identifier || e.identifier)}">${typeBadge(e)}
             <code>${esc(e.cocited_identifier || e.identifier)}</code> · ${provenanceBadge(e)}</li>`).join('');
@@ -209,20 +232,14 @@ function cocitedHTML(entries, truncated) {
     });
     h += '</ul>';
     if (truncated) h += '<p class="small text-muted">More records co-cite these identifiers than are listed here.</p>';
-    return h + '</div>';
+    // Counted in RECORDS (the grouping above), never in shared identifiers.
+    return foldHTML({ id: 'concordance_tier3', cls: 'conc-tier-3', key: 'cocited',
+        title: 'Co-cited: also linked to the same identifiers', total: groups.size, unit: 'record', truncated,
+        body: h, empty: 'No other public record, beyond those listed above, cites an identifier this record cites.' });
 }
 
-function exploreButton(root, primary) {
-    const url = root.dataset.exploreUrl;
-    const seeded = (root.dataset.exploreSeededBy || '').split(',').filter(Boolean);
-    const hint = seeded.includes('name')
-        ? `Searches the Atlas for records named like “${esc(root.dataset.recordTitle)}”.`
-        : 'Opens the Atlas search.';
-    return `<a class="btn ${primary ? 'btn-primary' : 'btn-outline-primary btn-sm'} conc-explore" href="${esc(url)}">
-        <i class="fas fa-magnifying-glass me-1"></i>Explore similar records</a>
-        <span class="small text-muted ms-2 conc-explore-hint">${hint}</span>`;
-}
-
+// "Explore similar records" is the header's (#explore_similar_header), once on the page
+// (round 2: it was also repeated at the foot of the Concordance).
 function emptyStateHTML(root, data) {
     const excluded = data.excluded_self_links
         ? `<li>${data.excluded_self_links} link${data.excluded_self_links === 1 ? '' : 's'} naming this record itself, which ${data.excluded_self_links === 1 ? 'is' : 'are'} not ${data.excluded_self_links === 1 ? 'an attestation' : 'attestations'}, ${data.excluded_self_links === 1 ? 'was' : 'were'} left out.</li>`
@@ -230,9 +247,9 @@ function emptyStateHTML(root, data) {
     return `<div class="conc-empty" id="concordance_empty">
         <div class="conc-empty-lead">
             <h3 class="h6 mb-2">No other record is attested to be this place, yet</h3>
-            <p class="mb-3">That is the common case: most records in WHG have no attested equivalents. Records that may describe
-            the same place can still be found by searching for them.</p>
-            <div>${exploreButton(root, true)}</div>
+            <p class="mb-0">That is the common case: most records in WHG have no attested equivalents. Records that may describe
+            the same place can still be found by searching for them, with <a href="#explore_similar_header"
+            class="conc-explore-ref">Explore similar records</a> at the top of this page.</p>
         </div>
         <ul class="small text-muted mt-3 mb-0">
             <li>This record cites no identifier for the same place, and no other public record cites this one.</li>
@@ -450,8 +467,8 @@ function render(root, data) {
 
     if (!data.public) {
         body.innerHTML = `<div class="conc-empty conc-not-public">
-            <p class="mb-2">Concordances are shown for records in public datasets only, and this record's dataset is not public.
-            Nothing has been looked up.</p>${exploreButton(root, false)}</div>`;
+            <p class="mb-0">Concordances are shown for records in public datasets only, and this record's dataset is not public.
+            Nothing has been looked up.</p></div>`;
         state.concordance = 'not_public';
     } else if (!data.outbound.length && !data.inbound.length) {
         body.innerHTML = emptyStateHTML(root, data);
@@ -482,21 +499,19 @@ function render(root, data) {
             notesEl.innerHTML = notes;
             notesEl.hidden = false;
         }
-        let h = `<div class="conc-tier conc-tier-1" id="concordance_tier1">
-            <h3 class="h6">Outbound: this record's own attestations</h3>`;
-        h += data.outbound.length
-            ? `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`
-            : '<p class="small text-muted">This record attests no equivalents of its own.</p>';
-        h += '</div>';
-        h += `<div class="conc-tier conc-tier-2" id="concordance_tier2">
-            <h3 class="h6">Inbound: other records that say they are this place</h3>`;
-        h += data.inbound.length
-            ? `<ul class="conc-list">${data.inbound.map(inboundItem).join('')}</ul>`
-            : '<p class="small text-muted">No other public record attests that it is this place.</p>';
-        if (data.truncated && data.truncated.inbound) h += '<p class="small text-muted">More records attest this than are listed here.</p>';
-        h += '</div>';
-        h += cocitedHTML(data.cocited || [], data.truncated && data.truncated.cocited);
-        h += `<div class="conc-explore-foot mt-3">${exploreButton(root, false)}</div>`;
+        // Totals: every listed outbound row (placeholders and not-held ones included, as
+        // they are listed), every inbound record entry, co-cited RECORDS.
+        const inTrunc = !!(data.truncated && data.truncated.inbound);
+        let h = foldHTML({ id: 'concordance_tier1', cls: 'conc-tier-1', key: 'outbound',
+            title: "Outbound: this record's own attestations", total: data.outbound.length,
+            body: `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`,
+            empty: 'This record attests no equivalents of its own.' });
+        h += foldHTML({ id: 'concordance_tier2', cls: 'conc-tier-2', key: 'inbound',
+            title: 'Inbound: other records that say they are this place', total: data.inbound.length, truncated: inTrunc,
+            body: `<ul class="conc-list">${data.inbound.map(inboundItem).join('')}</ul>`
+                + (inTrunc ? '<p class="small text-muted">More records attest this than are listed here.</p>' : ''),
+            empty: 'No other public record attests that it is this place.' });
+        h += cocitedHTML(data.cocited || [], !!(data.truncated && data.truncated.cocited));
         body.innerHTML = h;
         state.concordance = 'ready';
         // Shown BEFORE the map is created: a map made in a hidden (zero-width)
@@ -511,6 +526,58 @@ function render(root, data) {
     }
     status.hidden = true;
     body.hidden = false;
+    syncSections();
+    followHash(true);           // a #concordance_tier* link that arrived before the lists did
+}
+
+// ── folds: test flags, and fragment links into a closed one ─────────────────
+// window.__whgRecord.sections[key] = {total, truncated, toggle, open}; `toggle` false is
+// the zero case (a plain block); `open` null there. data-collapsed mirrors it on the block.
+function syncSections() {
+    const out = {};
+    document.querySelectorAll('#atlas_record [data-section]').forEach((el) => {
+        const toggle = el.tagName === 'DETAILS';
+        if (toggle) el.dataset.collapsed = String(!el.open);
+        out[el.dataset.section] = { total: Number(el.dataset.total), truncated: el.dataset.truncated === 'true',
+            toggle, open: toggle ? el.open : null };
+    });
+    state.sections = out;
+}
+
+// Open every closed fold round `el` (or `el` itself), so a link to it lands on something seen.
+function openFoldsAround(el) {
+    let opened = false;
+    for (let d = el && el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+        if (!d.open) { d.open = true; opened = true; }
+    }
+    if (opened) syncSections();
+    return opened;
+}
+
+function hashTarget(hash) {
+    let id = (hash || '').replace(/^#/, '');
+    try { id = decodeURIComponent(id); } catch (e) { /* keep it raw */ }
+    return id ? document.getElementById(id) : null;
+}
+
+function followHash(scroll) {
+    const t = hashTarget(location.hash);
+    if (t && openFoldsAround(t) && scroll) t.scrollIntoView();
+}
+
+function initFolds() {
+    syncSections();
+    // `toggle` does not bubble: listen in the capture phase for every fold, now and later.
+    document.addEventListener('toggle', (e) => {
+        if (e.target && e.target.matches && e.target.matches('#atlas_record details[data-section]')) syncSections();
+    }, true);
+    // An in-page link: open the fold first, then let the browser follow it to a visible target.
+    document.addEventListener('click', (e) => {
+        const a = e.target.closest && e.target.closest('a[href^="#"]');
+        if (a) openFoldsAround(hashTarget(a.getAttribute('href')));
+    });
+    window.addEventListener('hashchange', () => followHash(true));
+    followHash(true);
 }
 
 function renderError(root, message) {
@@ -579,6 +646,7 @@ function initEnrichment() {
 }
 
 function init() {
+    initFolds();
     const root = document.getElementById('concordance');
     if (root && root.dataset.endpoint) load(root);
     initEnrichment();

@@ -83,6 +83,11 @@ class RecordLayoutTemplateTests(TestCase):
         PlaceLink.objects.create(place=cls.A, jsonb={"type": "seeAlso", "identifier": "javascript:alert(1)"})
         cls.Bare = Place.objects.create(title="Bare Town", src_id="B1", dataset=ds, ccodes=[])
         PlaceLink.objects.create(place=cls.Bare, jsonb={"type": "closeMatch", "identifier": "gn:200"})
+        from places.models import PlaceRelated
+        for label in ("Bigger Region", "Older Province"):
+            PlaceRelated.objects.create(place=cls.A, jsonb={"relationType": "gvp:broaderPartitive",
+                                                            "relationTo": "https://example.org/r/1", "label": label})
+        cls.Empty = Place.objects.create(title="Empty Town", src_id="E1", dataset=ds, ccodes=[])
 
     def page(self, place, user=None):
         self.client.logout()
@@ -98,8 +103,9 @@ class RecordLayoutTemplateTests(TestCase):
         main, side = o.cols["main"], o.cols["side"]
         order = [x for x in main if x in ("<rs-header>", "explore_similar_header", "record", "record_links",
                                           "concordance", "record_gloss")]
-        self.assertEqual(order, ["<rs-header>", "explore_similar_header", "record", "record_links", "concordance",
-                                 "record_gloss"])
+        # Round 2 (review 2026-10-22): Record, then About this group, then the Concordance.
+        self.assertEqual(order, ["<rs-header>", "explore_similar_header", "record", "record_links", "record_gloss",
+                                 "concordance"])
         # The right column: the map first, its notes directly under it, then the cards.
         self.assertEqual(o.side_children, ["concordance_map_box", "concordance_map_notes", "record_elsewhere",
                                            "record_environment"])
@@ -147,7 +153,7 @@ class RecordLayoutTemplateTests(TestCase):
         html = self.page(self.A, self.beta)
         nav = html.split('atlas-record-tabs', 1)[1].split("</ul>", 1)[0]
         hrefs = re.findall(r'href="#([a-z_]+)"', nav)
-        self.assertEqual(hrefs, ["record", "concordance", "record_gloss", "record_environment"])
+        self.assertEqual(hrefs, ["record", "record_gloss", "concordance", "record_environment"])
         for h in hrefs:
             self.assertIn(f'id="{h}"', html)
 
@@ -170,6 +176,69 @@ class RecordLayoutTemplateTests(TestCase):
         self.client.force_login(self.plain)
         self.assertEqual(self.client.get(f"/atlas/place/{self.A.pk}/").status_code, 404)
         self.assertIn('id="record_gloss"', self.page(self.A, self.beta))
+
+    # ---- round 2 (Stephen's review 2026-10-22) ---------------------------------------
+    def _block(self, html, id_):
+        """The opening tag of the element with this id, and its text up to the next block."""
+        m = re.search(r'<(details|div)\b[^>]*\bid="%s"[^>]*>' % id_, html)
+        self.assertIsNotNone(m, id_)
+        return m.group(1), m.group(0), html[m.end():m.end() + 1500]
+
+    def test_links_and_related_are_folds_with_totals(self):
+        html = self.page(self.A, self.beta)
+        tag, head, body = self._block(html, "record_links")
+        self.assertEqual(tag, "details")
+        self.assertNotIn(" open", head)                                     # closed at first
+        self.assertIn('data-total="3"', head)
+        self.assertIn('data-collapsed="true"', head)
+        summary = body.split("</summary>", 1)[0]
+        self.assertIn("<summary", summary)
+        self.assertIn("rec-fold-chevron", summary)
+        self.assertIn("Links, as contributed", summary)
+        self.assertIn("(3)", summary)                                       # the total, in the header
+        self.assertIn("gn:100", body.split("</summary>", 1)[1])             # the list, in the body
+        tag, head, body = self._block(html, "record_related")
+        self.assertEqual(tag, "details")
+        self.assertIn('data-total="2"', head)
+        self.assertIn("Related places <span class=\"rec-fold-count\">(2)</span>", body.split("</summary>", 1)[0])
+        self.assertIn("Older Province", body)
+
+    def test_zero_is_a_plain_block_not_a_fold(self):
+        bare = self.page(self.Bare, self.beta)
+        tag, head, body = self._block(bare, "record_related")
+        self.assertEqual(tag, "div")
+        self.assertIn('data-collapsed="none"', head)
+        self.assertIn("Related places <span class=\"rec-fold-count\">(0)</span>", body)
+        self.assertIn("This record names no related places.", body)
+        self.assertEqual(self._block(bare, "record_links")[0], "details")    # presence: Bare's one link folds
+        self.assertEqual(bare.count("<details"), 1)
+        empty = self.page(self.Empty, self.beta)
+        tag, head, body = self._block(empty, "record_links")
+        self.assertEqual(tag, "div")
+        self.assertIn("(0)", body)
+        self.assertIn("This record cites no other identifiers.", body)
+        self.assertNotIn("<details", empty)
+        self.assertNotIn("<summary", empty)
+
+    def test_sections_carry_the_divider(self):
+        html = self.page(self.A, self.beta)
+        for id_ in ("record", "record_gloss", "concordance"):
+            m = re.search(r'<section id="%s" class="([^"]+)"' % id_, html)
+            self.assertIsNotNone(m, id_)
+            self.assertIn("atlas-record-divided", m.group(1).split(), id_)
+        self.assertEqual(html.count("atlas-record-divided"), 3)
+
+    def test_one_explore_button(self):
+        html = self.page(self.A, self.beta)
+        self.assertEqual(html.count("Explore similar records"), 1)
+        self.assertIn('id="explore_similar_header"', html)
+        self.assertNotIn("data-explore-url", html)                          # the second button's source
+        path = os.path.join(settings.BASE_DIR, "whg", "webpack", "js", "atlasRecord.js")
+        with open(path, encoding="utf-8") as f:
+            src = f.read()
+        self.assertNotIn("exploreButton", src)
+        self.assertNotIn("conc-explore-foot", src)
+        self.assertIn('href="#explore_similar_header"', src)                # the empty state points at it
 
 
 class RecordLayoutSourceTests(TestCase):
