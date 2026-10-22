@@ -155,3 +155,26 @@ footer {
 .place-uri .clip-place-uri {
     white-space: nowrap; /* keep the copy icon off a line of its own */
 }
+
+/* Site nav beta pills (main/base_webpack.html). A beta user's menu expands at xl,
+   but in the 1140 px container of 1200-1399 px it is still ~85 px too wide when
+   the brand text shows (every page but home), and the Atlas and Gazetteers pills
+   wrapped onto three lines each. Tighten the link and pill padding in that range
+   only, and keep each pill on one line once the menu is expanded
+   (main/tests_layout_oddities.py). The pills' padding is an inline style. */
+@media (min-width: 1200px) {
+    .navbar .nav-beta-pill {
+        white-space: nowrap;
+    }
+}
+
+@media (min-width: 1200px) and (max-width: 1399.98px) {
+    .navbar.whg-nav-beta {
+        --bs-navbar-nav-link-padding-x: .25rem;
+    }
+
+    .navbar.whg-nav-beta .nav-beta-pill {
+        padding-left: 5px !important;
+        padding-right: 5px !important;
+    }
+}

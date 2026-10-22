@@ -148,8 +148,11 @@
       page scrolled sideways between 992 and 1199 px. They get the hamburger up to xl (1200 px).
       When those items are ungated, widen this condition to match (main/tests_navbar_overflow.py
       fails if any visitor's menu overflows). The mb-*-0 and d-*-none below follow the same split.
+      Even at xl the beta menu needs ~85 px more than the 1140 px container leaves (with the brand
+      text, i.e. off the home page), so from 1200 to 1399 px .whg-nav-beta tightens the link and
+      pill padding (base.css) and the .nav-beta-pill spans stay on one line (tests_layout_oddities.py).
     {% endcomment %}
-    <nav class="navbar navbar-expand-{% if user.can_access_beta %}xl{% else %}lg{% endif %} bg-white">
+    <nav class="navbar navbar-expand-{% if user.can_access_beta %}xl whg-nav-beta{% else %}lg{% endif %} bg-white">
         <div class="container">
             <a href="/">
                 <img src="{% static 'images/whg_logo.svg' %}" alt="WHG" width="50" height="38">
@@ -160,7 +163,8 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse smallish pt-2" id="navbarSupportedContent">
-                <ul class="navbar-nav me-auto mb-2 mb-{% if user.can_access_beta %}xl{% else %}lg{% endif %}-0">
+                {# A div, not a ul: it holds two divs (swapped by base.js), not list items. #}
+                <div class="navbar-nav me-auto mb-2 mb-{% if user.can_access_beta %}xl{% else %}lg{% endif %}-0">
                     <div id="links_home">
                         <a id="version_badge"
                            href="https://github.com/WorldHistoricalGazetteer/website/releases/latest"
@@ -206,7 +210,7 @@
                         <a class="navbar-brand me-0" href="{% url 'home' %}">&nbsp; World Historical Gazetteer</a>
                         <!--<a data-whg-modal="/contact_modal/" class="hide-on-narrow">contact</a>-->
                     </div>
-                </ul>
+                </div>
                 <ul class="navbar-nav">
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'search-page' %}">Search</a>
@@ -221,14 +225,14 @@
                     {% comment %}Atlas + Gazetteers — BETA preview (place#111). Spatio-temporal explorer + gazetteer-registry browser, ported from the atlas branch. Gated to staff/beta_tester (can_access_beta) until public launch; same burnt-orange pill convention as the Workbench beta menu.{% endcomment %}
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'atlas-page' %}" title="Beta preview — Atlas spatio-temporal explorer (place#111)">
-                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                            <span class="nav-beta-pill" style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
                                 <i class="fas fa-atlas" style="margin-right:4px;"></i>Atlas <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
                             </span>
                         </a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'atlas-page' %}?panel=gazetteers&amp;gmode=explore" title="Beta preview — Gazetteers registry browser (place#111)">
-                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                            <span class="nav-beta-pill" style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
                                 <i class="fas fa-book-open" style="margin-right:4px;"></i>Gazetteers <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
                             </span>
                         </a>
@@ -246,7 +250,7 @@
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
                            aria-expanded="false" title="Beta preview — collaborative Workbench (place#111/#112)">
-                            <span style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
+                            <span class="nav-beta-pill" style="display:inline-block; border-radius:4px; background:#c2410c; color:#fff; padding:1px 9px; font-weight:600;">
                                 <i class="fas fa-flask" style="margin-right:4px;"></i>Workbench <span style="font-size:10px; text-transform:uppercase; letter-spacing:.5px; opacity:.85;">beta</span>
                             </span>
                         </a>
@@ -320,30 +324,30 @@
                                 {% if user.is_authenticated %}
                                 <a class="dropdown-item" href="{% url 'dashboard-user' %}">My Data</a>
                                 {% endif %}
+                            </li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
+                            </li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'submit-dataset' %}">Suggest a Source</a>
+                            </li>
+                            {% if PHONETICS_VISIBLE %}{# hidden while the review UI is unlaunched; the page 404s to the same visitors #}
+                            <li>
+                                <a class="dropdown-item" href="{% url 'phonetics:home' %}">Review phonetic rules
+                                    <span class="badge text-bg-warning">beta</span></a>
+                            </li>
+                            {% endif %}
+                        </ul>
                     </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'swagger-ui' %}">API</a>
-                    </li>
-                    <li>
-                        <hr class="dropdown-divider">
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'datasets:volunteer-requests' %}">Volunteering</a>
-                    </li>
-                    <li>
-                        <a class="dropdown-item" href="{% url 'submit-dataset' %}">Suggest a Source</a>
-                    </li>
-                    {% if PHONETICS_VISIBLE %}{# hidden while the review UI is unlaunched; the page 404s to the same visitors #}
-                    <li>
-                        <a class="dropdown-item" href="{% url 'phonetics:home' %}">Review phonetic rules
-                            <span class="badge text-bg-warning">beta</span></a>
-                    </li>
-                    {% endif %}
-                </ul>
-                </li>
                     <!-- about -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown"
