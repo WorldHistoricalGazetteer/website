@@ -30,7 +30,7 @@ import heroMap from './heroMap';
 // eslint-disable-next-line no-unused-vars — reserved for future per-language titles
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
-import { aatTooltipHtml, aatUrl, ccName, canNativeShare, isLoggedIn } from './gazetteerInteraction.js';
+import { aatTooltipHtml, aatUrl, ccName, canNativeShare, isLoggedIn, recordActionsHtml } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
 import { classifyStatus, failureText, failureHtml } from './atlasNotice.js';
 
@@ -265,7 +265,11 @@ const PlaceList = {
                 if (this.cfg.emailLink) this.cfg.emailLink(invite.dataset.pid);
                 return;
             }
+            // BETA "Search for similar records" runs a search (document delegate
+            // in atlas.js) — not a row-open.
+            if (e.target.closest('.atlas-similar')) return;
             // A click on an AAT type-chip link opens Getty — don't also open the place.
+            // (Same for the beta Record / Cluster links: they open a new tab.)
             if (e.target.closest('a')) return;
             const row = e.target.closest('.placelist-row');
             if (!row) return;
@@ -567,13 +571,18 @@ const PlaceList = {
               + ` title="Email a link to this place" aria-label="Email a link to this place">`
               + `<i class="fas fa-envelope"></i></button>`
             : '';
-        return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
+        // BETA: Record / Cluster / Similar at the bottom-right, level with the
+        // meta chips (the top-right already holds share + invite and the panel is
+        // narrow). '' for everyone else, whose rows are unchanged.
+        const actions = recordActionsHtml(hit.place_id, hit.title, hit.record_url, 'pl');
+        return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}${actions ? ' pl-has-actions' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
             + shareBtn
             + nativeShareBtn
             + inviteBtn
             + `<div class="pl-row-title">${title}</div>`
             + variants
             + `<div class="pl-row-meta">${meta}</div>`
+            + actions
             + `</div>`;
     },
 

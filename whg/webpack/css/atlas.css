@@ -1038,6 +1038,33 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .placelist-row .pl-invite:hover { color: #2980b9; }
 .pl-row-title { padding-right: 44px; }   /* clear of the share + invite buttons */
 
+/* BETA per-record actions (Record / Cluster / Similar; gazetteerInteraction.js
+   recordActionsHtml): bottom-right of the row, level with the meta chips, in the
+   share/invite style. The meta line keeps clear of them. */
+.placelist-row .pl-rec-actions {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    z-index: 1;
+    display: flex;
+    gap: 2px;
+    background: inherit;
+}
+.placelist-row.pl-has-actions .pl-row-meta { padding-right: 66px; }
+.placelist-row .pl-rec-act {
+    border: 0;
+    background: transparent;
+    color: #b6c0c8;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 0.78rem;
+    line-height: 1;
+    text-decoration: none;
+}
+.placelist-row:hover .pl-rec-act { color: #8794a0; }
+.placelist-row .pl-rec-act:hover,
+.placelist-row .pl-rec-act:focus-visible { color: #2980b9; }
+
 /* Bootstrap HTML tooltip content for AAT chips (left-aligned, credit line). */
 .tt-aat { text-align: left; }
 .tt-aat-label { font-weight: 600; }
@@ -1882,6 +1909,31 @@ a.pl-chip.pl-aat { cursor: pointer; }
 .whg-gazetteer-popup .popup-share:hover,
 .whg-gazetteer-popup .popup-nativeshare:hover,
 .whg-gazetteer-popup .popup-invite:hover { color: #2980b9; }
+/* BETA per-record actions: the source-id line, actions at its right end. */
+.whg-gazetteer-popup .popup-id-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.whg-gazetteer-popup .popup-id-row .popup-place-id { flex: 1 1 auto; min-width: 0; }
+.whg-gazetteer-popup .popup-rec-actions {
+    flex: 0 0 auto;
+    margin-left: auto;
+    display: inline-flex;
+    gap: 2px;
+}
+.whg-gazetteer-popup .popup-rec-act {
+    border: 0;
+    background: transparent;
+    color: #6b7885;
+    cursor: pointer;
+    padding: 0 4px;
+    font-size: 0.85rem;
+    line-height: 1;
+    text-decoration: none;
+}
+.whg-gazetteer-popup .popup-rec-act:hover,
+.whg-gazetteer-popup .popup-rec-act:focus-visible { color: #2980b9; }
 
 .whg-gazetteer-popup .popup-body {
     padding: 0 12px 6px;

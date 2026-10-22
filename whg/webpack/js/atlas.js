@@ -21,7 +21,7 @@ import { clusterHits, suggestTheta, DEFAULT_PARAMS } from './clustering.js';
 import { ATLAS_DEFAULT_THETA, ATLAS_DEFAULT_MATCH_MODE, ATLAS_DEFAULT_CLUSTERING } from './atlas_cluster_defaults.js';
 import { encodeRecipeToken, decodeRecipeToken, recipePid, retrievalFromSearchBody, RecipeError } from './locus_recipe.js';
 import PlaceList from './atlasPlaceList.js';
-import { setWebTemplates, renderAttestControl } from './gazetteerInteraction.js';
+import { setWebTemplates, renderAttestControl, isBetaUser, LOCUS_PAGE_URL, LOCUS_TOKEN_PARAM } from './gazetteerInteraction.js';
 import { idbGet, idbPut, loadAatVocab, aatVocabLoadError } from './aatVocab.js';
 import { variantLabels } from './toponyms.js';
 import { atlasNotice, fetchJSON, failureHtml } from './atlasNotice.js';
@@ -788,6 +788,9 @@ function markAtlasBooted(error) {
             booted: !error,
             error: error ? String(error) : null,
             t: Math.round(performance.now()),
+            // Open a gazetteer place popup as a map click would (a harness has
+            // no vector tiles to click: search.tests_atlas_actions_browser).
+            openPlacePopup: (pid, lngLat) => heroMap.openPlacePopup(pid, lngLat),
         };
     } catch (e) { /* */ }
 }
@@ -1021,6 +1024,21 @@ Promise.all([
         if (!invite) return;
         e.preventDefault();
         emailPlaceLink(invite.getAttribute('data-invite-pid'));
+    });
+
+    // BETA "Search for similar records" (map popup and Place List rows; the
+    // button is rendered for beta viewers only, gazetteerInteraction.js
+    // recordActionsHtml): the record's title as a Places search, run here, in
+    // place. Not a navigation to /atlas/<name>, which would reload the page and
+    // lose the explored gazetteer and the focused place.
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest && e.target.closest('.atlas-similar');
+        if (!btn) return;
+        e.preventDefault();
+        const q = btn.getAttribute('data-similar-q');
+        if (!q) return;
+        try { heroMap.closePlacePopup(); } catch (err) { /* map not ready */ }
+        runPlacesSearchFor(q);
     });
 
     // "Attest" is a planned feature: the button is rendered aria-disabled with a
@@ -1413,19 +1431,9 @@ Promise.all([
     });
 
     // ── Handle pre-populated toponym from URL ──
-    // Mode FIRST, then the text: switchSearchMode() ends by clearing the input,
-    // so the old order (text, then mode) searched an empty box and stopped at
-    // "need a search term" with nothing on screen. The mode goes through the
-    // Places toggle's own click so the toggle shows Places, not Areas. The
-    // boot has already waited for the map, so the search runs now, once.
+    // The boot has already waited for the map, so the search runs now, once.
     if (typeof atlas_toponym !== 'undefined' && atlas_toponym) {
-        const placesBtn = document.querySelector(
-            '.search-mode-toggle .btn[data-search-mode="toponyms"]'
-        );
-        if (placesBtn) placesBtn.click();
-        else switchSearchMode('toponyms');
-        searchInput.value = atlas_toponym;
-        initiateToponymSearch();
+        runPlacesSearchFor(atlas_toponym);
     }
 
     // ── Handle Gazetteers deep link from sitewide navbar ──
@@ -1676,6 +1684,22 @@ function initBasemapSwitcher() {
     });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) closeMenu(); });
     updateBasemapMenu();
+}
+
+/** Run ONE Places (toponym) search for ``text``, as if typed: the
+ *  ``/atlas/<toponym>`` deep link and the beta "Search for similar records"
+ *  action. Mode FIRST, then the text: switchSearchMode() ends by clearing the
+ *  input, so the old order (text, then mode) searched an empty box and stopped
+ *  at "need a search term" with nothing on screen. The mode goes through the
+ *  Places toggle's own click so the toggle shows Places, not Areas. */
+function runPlacesSearchFor(text) {
+    const placesBtn = document.querySelector(
+        '.search-mode-toggle .btn[data-search-mode="toponyms"]'
+    );
+    if (placesBtn) placesBtn.click();
+    else switchSearchMode('toponyms');
+    document.getElementById('atlas_search_input').value = text;
+    initiateToponymSearch();
 }
 
 function switchSearchMode(mode) {
@@ -2898,11 +2922,6 @@ function pidsToIndices(pids) {
     return pids.map(p => clusterPidToIndex.get(p)).filter(i => i != null);
 }
 
-function isBetaUser() {
-    const m = document.querySelector('meta[name="beta-user"]');
-    return !!(m && m.content === '1');
-}
-
 // Client-side ceiling for one gateway search. The server already retries a
 // read timeout once against a 10 s CRC_GATEWAY_TIMEOUT (so ~20 s worst case)
 // and then answers 200 + timeout:true; this only catches a request that never
@@ -3048,8 +3067,8 @@ function clusterLicenceFooter(members) {
 // an unknown key fails loudly instead of vanishing from the hash), the LITERAL
 // clustering parameters this render used (the values clusterHits reports back,
 // never a params version), and the cluster's member ids.
-const LOCUS_PAGE_URL = '/atlas/locus/';
-const LOCUS_TOKEN_PARAM = 'r';
+// LOCUS_PAGE_URL / LOCUS_TOKEN_PARAM: imported from gazetteerInteraction.js,
+// which builds the single-record locus link with the same twin.
 
 /** The recipe for `cluster` as rendered with `params` (clusterHits' report of
  *  what it used). Throws RecipeError when a recipe cannot honestly be built. */

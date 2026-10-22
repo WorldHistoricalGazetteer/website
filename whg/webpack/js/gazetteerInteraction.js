@@ -14,6 +14,8 @@
 //
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels } from './toponyms.js';
+import { encodeRecipeToken } from './locus_recipe.js';
+import { ATLAS_DEFAULT_CLUSTERING, ATLAS_DEFAULT_MATCH_MODE } from './atlas_cluster_defaults.js';
 
 // Popup data is fetched from ``/entity/place:{id}/api?variant=popup`` which
 // returns the raw gateway PlaceDetail JSON. Rendering happens client-side
@@ -221,9 +223,22 @@ function renderTimespanList(arr) {
     return arr.map(renderTimespan).join(', ');
 }
 
-function renderHeader(data) {
-    const placeId = data.place_id || '';
-    const title = data.title || placeId;
+/** True for the LPF Feature form the entity view returns for a contributed
+ *  (``whg:``) record (``_legacy_place_to_lpf``): no top-level place_id/title,
+ *  the title under ``properties``. Authority records arrive as the gateway's
+ *  PlaceDetail (top-level place_id/title) and never match. */
+function isLpfFeature(data) {
+    return !!(data && !data.place_id && data.type === 'Feature'
+              && data.properties && typeof data.properties === 'object');
+}
+
+function renderHeader(data, requestedId) {
+    // LPF form (contributed records): the id the popup asked for, and the LPF
+    // title; without these the header rendered blank. The PlaceDetail form
+    // (authority records) is read exactly as before.
+    const lpf = isLpfFeature(data);
+    const placeId = data.place_id || (lpf ? (requestedId || '') : '');
+    const title = data.title || (lpf ? data.properties.title : '') || placeId;
     // Plain title (not a link): the modal-trigger opened an unwanted entity
     // preview, and — being the first focusable element — took a focus outline
     // when the popup opened from a shared ?place= deep link. The "view at source"
@@ -266,6 +281,14 @@ function renderHeader(data) {
     // Title, share button and (when present) the Wikipedia mark share one row
     // (saves vertical space); the source id sits on the line below.
     const wikiHtml = renderWikipediaBadge(data);
+    // BETA: Record / Cluster / Similar, at the right end of the source-id line
+    // ('' for everyone else, so their header is unchanged). A contributed record
+    // arrives as LPF (no top-level place_id/title), hence the fallbacks: the id
+    // the popup asked for, and the LPF properties' title.
+    const actionsHtml = recordActionsHtml(
+        placeId || requestedId,
+        data.title || (lpf ? data.properties.title : '') || '',
+        data.record_url, 'popup');
     return `
         <div class="popup-header">
             <div class="popup-title-row">
@@ -275,7 +298,7 @@ function renderHeader(data) {
                 ${inviteHtml}
                 ${wikiHtml}
             </div>
-            ${idHtml}
+            ${actionsHtml ? `<div class="popup-id-row">${idHtml}${actionsHtml}</div>` : idHtml}
         </div>
     `;
 }
@@ -701,6 +724,83 @@ export function isLoggedIn() {
               document.querySelector('meta[name="user-id"]'));
 }
 
+/** True for a BETA viewer (the page's ``<meta name="beta-user" content="1">``).
+ *  The one reader of that tag in the Atlas: atlas.js imports it from here. */
+export function isBetaUser() {
+    const m = typeof document !== 'undefined' && document.querySelector('meta[name="beta-user"]');
+    return !!(m && m.content === '1');
+}
+
+/* ─── BETA: per-record actions (Record / Cluster / Similar) ──────────────
+   Small icon actions on a single record, in the map popup and on Place List
+   rows, for beta viewers only (everyone else gets no markup at all):
+   • Record  — the beta Record page, new tab. Only when the server sent a
+     ``record_url`` of the form /atlas/place/<pk>/ (a contributed record the
+     viewer may see); authority records have no Record page, so no button.
+   • Cluster — an UNMINTED locus page for this one record, new tab: recipe
+     members=[the id], retrieval = the record's title at the Atlas default match
+     mode and size, clustering = the Atlas default literals. Built here with the
+     recipe twin, so a title the recipe refuses (empty after whitespace folding,
+     a control character or lone surrogate, not a string) gives NO button rather
+     than a link that 400s.
+   • Similar — runs an Atlas Places search for the title in place (no page
+     load): a <button data-similar-q> handled by one delegate in atlas.js. */
+export const LOCUS_PAGE_URL = '/atlas/locus/';
+export const LOCUS_TOKEN_PARAM = 'r';
+// The gateway's default page size (api/crc_client.DEFAULT_SEARCH_SIZE), which a
+// fresh Atlas search sends and the Record page's own cluster link uses.
+export const ATLAS_DEFAULT_SEARCH_SIZE = 100;
+const RECIPE_TOKEN_MAX = 65536;   // locus_recipe TOKEN_MAX_BYTES: a longer token is refused on decode
+const RECORD_URL_RE = /^\/atlas\/place\/\d+\/$/;
+
+/** The recipe of "this one record, clustered at the Atlas defaults". */
+export function singleRecordRecipe(placeId, title) {
+    return {
+        v: 1,
+        retrieval: { query: title, mode: ATLAS_DEFAULT_MATCH_MODE, size: ATLAS_DEFAULT_SEARCH_SIZE },
+        clustering: { ...ATLAS_DEFAULT_CLUSTERING, weights: { ...ATLAS_DEFAULT_CLUSTERING.weights } },
+        members: [placeId],
+    };
+}
+
+/** /atlas/locus/?r=<token> for one record, or null when no valid recipe can be
+ *  built from it (see above): the caller then shows no Cluster button. */
+export function singleRecordLocusUrl(placeId, title) {
+    try {
+        const token = encodeRecipeToken(singleRecordRecipe(placeId, title));
+        if (token.length > RECIPE_TOKEN_MAX) return null;
+        return `${LOCUS_PAGE_URL}?${LOCUS_TOKEN_PARAM}=${token}`;
+    } catch (e) {
+        return null;
+    }
+}
+
+/** The beta actions for one record as HTML ('' for a non-beta viewer).
+ *  ``cls`` is the surface's class prefix ('popup' or 'pl'). */
+export function recordActionsHtml(placeId, title, recordUrl, cls) {
+    if (!isBetaUser() || !placeId) return '';
+    const t = typeof title === 'string' ? title.trim() : '';
+    const parts = [];
+    if (typeof recordUrl === 'string' && RECORD_URL_RE.test(recordUrl)) {
+        parts.push(`<a class="${cls}-rec-act ${cls}-rec-record" href="${esc(recordUrl)}" target="_blank" rel="noopener"`
+            + ` data-bs-toggle="tooltip" data-bs-title="Open the Record page" aria-label="Open the Record page">`
+            + '<i class="fa-solid fa-file-lines"></i></a>');
+    }
+    const locusUrl = t ? singleRecordLocusUrl(placeId, t) : null;
+    if (locusUrl) {
+        parts.push(`<a class="${cls}-rec-act ${cls}-rec-cluster" href="${esc(locusUrl)}" target="_blank" rel="noopener"`
+            + ` data-bs-toggle="tooltip" data-bs-title="Open as a cluster (Locus) page, in a new tab"`
+            + ` aria-label="Open as a cluster (Locus) page, in a new tab">`
+            + '<i class="fa-solid fa-layer-group"></i></a>');
+    }
+    if (t) {
+        parts.push(`<button type="button" class="${cls}-rec-act ${cls}-rec-similar atlas-similar" data-similar-q="${esc(t)}"`
+            + ` data-bs-toggle="tooltip" data-bs-title="Search for similar records" aria-label="Search for similar records">`
+            + '<i class="fa-solid fa-magnifying-glass"></i></button>');
+    }
+    return parts.length ? `<span class="${cls}-rec-actions">${parts.join('')}</span>` : '';
+}
+
 // What an attestation can cover — surfaced in the button tooltip so users
 // understand the breadth.
 const ATTEST_SCOPE = "its name(s), dates, geometry, place types, external links and relations to other places";
@@ -743,10 +843,10 @@ function initPopupTooltips() {
 }
 
 /** Compose the full popup HTML from a gateway PlaceDetail dict. */
-function renderPopup(data) {
+function renderPopup(data, requestedId) {
     return `
 <div class="whg-gazetteer-popup">
-    ${renderHeader(data)}
+    ${renderHeader(data, requestedId)}
     ${renderDepictionHero(data)}
     ${renderChips(data)}
     <div class="popup-body">
@@ -1117,7 +1217,7 @@ export default class GazetteerInteraction {
                 if (typeof console !== 'undefined') {
                     console.log('[WHG popup]', placeId, data);
                 }
-                this._popup.setHTML(renderPopup(data));
+                this._popup.setHTML(renderPopup(data, placeId));
                 initPopupTooltips();
             })
             .catch((err) => {
