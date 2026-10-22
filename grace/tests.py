@@ -1115,3 +1115,100 @@ class ErasureDisplayTests(TestCase):
             f"/grace/admin/grace/person/{self.person.pk}/change/"
         ).content.decode()
         self.assertIn("the engagement history remains", body)
+
+
+class TrackSubmittedDatasetTests(TestCase):
+    """A dataset already submitted to WHG can be tracked without retyping it."""
+
+    def setUp(self):
+        from datasets.models import Dataset
+        self.owner = User.objects.create(
+            username="nobel-1", name="A Contributor", email="c@example.org")
+        self.dataset = Dataset.objects.create(
+            owner=self.owner, label="nobel-places", title="Nobel places",
+            description="x", numrows=321, ds_status="wd-complete")
+
+    def test_creates_an_unlinked_record_when_the_register_has_no_entry(self):
+        from . import tracking
+        tracked, created = tracking.track_dataset(self.dataset)
+        self.assertTrue(created)
+        self.assertEqual(tracked.title, "Nobel places")
+        self.assertIsNone(tracked.registry_id)
+        self.assertEqual(tracked.expected_record_count, 321)
+        # Read-through works before the Register catches up.
+        self.assertEqual(tracked.whg_dataset_id, self.dataset.pk)
+        self.assertEqual(tracked.reconciliation_status,
+                         self.dataset.get_ds_status_display())
+
+    def test_tracking_twice_does_not_duplicate(self):
+        from . import tracking
+        first, _ = tracking.track_dataset(self.dataset)
+        second, created = tracking.track_dataset(self.dataset)
+        self.assertFalse(created)
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(TrackedDataset.objects.count(), 1)
+
+    def test_link_is_upgraded_once_the_register_entry_appears(self):
+        from . import tracking
+        tracked, _ = tracking.track_dataset(self.dataset)
+        entry = GazetteerRegistryEntry.objects.create(
+            id=f"whg:{self.dataset.pk}", name="Nobel places",
+            namespace="whg", entry_class="dataset", record_count=321)
+        again, created = tracking.track_dataset(self.dataset)
+        self.assertFalse(created)
+        again.refresh_from_db()
+        self.assertEqual(again.registry_id, entry.pk)
+
+    def test_the_add_form_fills_everything_from_the_chosen_dataset(self):
+        from .admin import TrackedDatasetForm
+        form = TrackedDatasetForm(data={"start_from": self.dataset.pk})
+        self.assertTrue(form.is_valid(), form.errors)
+        obj = form.save()
+        self.assertEqual(obj.title, "Nobel places")
+        self.assertEqual(obj.whg_dataset_id, self.dataset.pk)
+        self.assertIn(f"[whg-dataset:{self.dataset.pk}]", obj.notes)
+
+    def test_an_already_tracked_dataset_is_not_offered_again(self):
+        from . import tracking
+        from .admin import TrackedDatasetForm
+        self.assertIn(self.dataset,
+                      TrackedDatasetForm().fields["start_from"].queryset)
+        tracking.track_dataset(self.dataset)
+        self.assertNotIn(self.dataset,
+                         TrackedDatasetForm().fields["start_from"].queryset)
+
+    def test_a_hand_typed_prospect_still_needs_a_title(self):
+        from .admin import TrackedDatasetForm
+        form = TrackedDatasetForm(data={})
+        self.assertFalse(form.is_valid())
+        self.assertIn("title", form.errors)
+
+    def test_the_review_form_offers_a_way_to_create_one_in_place(self):
+        staff = User.objects.create_user(
+            username="staff-1", email="s@example.org", password="pw",
+            given_name="S", surname="Taff", name="S Taff")
+        staff.is_staff = staff.is_superuser = True
+        staff.save()
+        self.client.force_login(staff)
+        page = self.client.get("/grace/admin/grace/review/add/")
+        self.assertContains(page, "add_id_dataset")
+        popup = self.client.get(
+            "/grace/admin/grace/trackeddataset/add/?_popup=1"
+            f"&start_from={self.dataset.pk}")
+        self.assertContains(popup, "Start from a dataset already on WHG")
+        self.assertContains(popup, f'value="{self.dataset.pk}" selected')
+
+    def test_the_dataset_admin_action_tracks_the_selection(self):
+        staff = User.objects.create_user(
+            username="staff-2", email="s2@example.org", password="pw",
+            given_name="S", surname="Two", name="S Two")
+        staff.is_staff = staff.is_superuser = True
+        staff.save()
+        self.client.force_login(staff)
+        for _ in range(2):  # the second pass must find it, not duplicate it
+            self.client.post("/admin/datasets/dataset/", {
+                "action": "track_in_grace",
+                "_selected_action": [self.dataset.pk]})
+        tracked = TrackedDataset.objects.get()
+        self.assertEqual(tracked.added_by, staff)
+        self.assertEqual(tracked.whg_dataset_id, self.dataset.pk)
