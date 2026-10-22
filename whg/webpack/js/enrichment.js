@@ -39,12 +39,6 @@
 //     members with X-CSRFToken (the Locus pair), exactly as Stage 3 did.
 // capPostedMembers(members), LOCUS_MAX_POSTED_MEMBERS: unchanged.
 //
-// OLD exports kept as thin wrappers (to be removed by the page agents):
-//   initRecordEnrichment()            -> gloss cards into #record_gloss .enr-body and an
-//                                        environment card into #record_environment .enr-body
-//   loadLocusEnrichment(members, anchor) -> the same into the Stage 3 locus sections
-// Neither fetches EDOPS on page load any more.
-//
 // Wording rules carried from the server: every status is its own sentence, and
 // "could not be reached" is never worded as "no data"; Band D is present-day
 // only; the years used for Band T, and why Band T was not asked for, are shown.
@@ -77,19 +71,6 @@ function yearText(y) {
 function spanText(s) {
     if (!Array.isArray(s) || s.length !== 2) return '';
     return s[0] === s[1] ? yearText(s[0]) : `${yearText(s[0])}–${yearText(s[1])}`;
-}
-
-// Beta users always (place#325 Stage 3). The RECORD page's two sections are also
-// public with the v4 release switch on (ruling 2026-10-21): the server then renders
-// them with data-enrichment="public" for a non-beta visitor, signed in or not, and
-// renders nothing at all with the switch off. The Locus page's sections stay beta.
-function isBetaUser() {
-    const m = document.querySelector('meta[name="beta-user"]');
-    return !!(m && m.getAttribute('content') === '1');
-}
-
-function isPublicSection(el) {
-    return !!(el && el.dataset && el.dataset.enrichment === 'public');
 }
 
 async function getJSON(url, init = {}) {
@@ -555,38 +536,6 @@ export function mountEnvironmentCard(containerEl, {
     return { open, element: card };
 }
 
-// ── OLD exports: thin wrappers, to be removed by the page agents ──────────────────
-/** Record page (Stage 3 template): #record_gloss and #record_environment sections. */
-export function initRecordEnrichment() {
-    const gloss = document.getElementById('record_gloss');
-    const env = document.getElementById('record_environment');
-    if (!isBetaUser() && !(isPublicSection(gloss) || isPublicSection(env))) return;
-    if (gloss && gloss.dataset.endpoint) {
-        loadGlossCards(gloss.querySelector('.enr-body'), recordFetcher(gloss.dataset.endpoint), { kind: 'concordance' });
-    }
-    if (env && env.dataset.endpoint) {
-        mountEnvironmentCard(env.querySelector('.enr-body'), {
-            fetchEnvironment: recordFetcher(env.dataset.endpoint), title: 'Environment', headingTag: 'h3' });
-    }
-}
-
-function ensureLocusSections(anchor) {
-    let wrap = document.getElementById('locus_enrichment');
-    if (wrap) return wrap;
-    wrap = document.createElement('div');
-    wrap.id = 'locus_enrichment';
-    wrap.className = 'enr-locus';
-    wrap.innerHTML = `
-        <section id="locus_gloss" class="enr-section" aria-labelledby="locus_gloss_h">
-            <h2 id="locus_gloss_h" class="locus-h2">About this cluster <span class="enr-badge">generated from the records' data</span></h2>
-            <div class="enr-body"></div></section>
-        <section id="locus_environment" class="enr-section" aria-labelledby="locus_environment_h">
-            <h2 id="locus_environment_h" class="locus-h2">Environmental signature <span class="enr-badge">EDOPS</span></h2>
-            <div class="enr-body"></div></section>`;
-    anchor.insertAdjacentElement('afterend', wrap);
-    return wrap;
-}
-
 /** At most LOCUS_MAX_POSTED_MEMBERS distinct members, the same ones every time for
  * the same cluster: sorted by place id (the cluster's own order follows the search
  * response), then the first 200. ``total`` is the distinct count before the cap. */
@@ -605,14 +554,4 @@ export function capPostedMembers(members) {
         return x < y ? -1 : (x > y ? 1 : 0);
     });
     return { sent: byId.slice(0, LOCUS_MAX_POSTED_MEMBERS), total: distinct.length, capped: true };
-}
-
-/** Locus page (Stage 3 sections): describe ``members`` (the selected cluster's hits). */
-export function loadLocusEnrichment(members, anchor) {
-    if (!isBetaUser() || !anchor || !Array.isArray(members) || !members.length) return;
-    ensureLocusSections(anchor);
-    const f = locusFetchers(members);
-    loadGlossCards(document.querySelector('#locus_gloss .enr-body'), f.gloss, { kind: 'locus', cap: f.cap });
-    mountEnvironmentCard(document.querySelector('#locus_environment .enr-body'), {
-        fetchEnvironment: f.environment, title: 'Environmental signature', cap: f.cap, headingTag: 'h3' });
 }
