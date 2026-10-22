@@ -65,10 +65,6 @@ V4_LANDING_ENABLED = os.environ.get('V4_LANDING_ENABLED', '') == '1' or bool(glo
 CRC_GATEWAY_URL = os.environ.get('CRC_GATEWAY_URL') or globals().get('CRC_GATEWAY_URL', '')
 CRC_GATEWAY_API_KEY = os.environ.get('CRC_GATEWAY_API_KEY') or globals().get('CRC_GATEWAY_API_KEY', '')
 CRC_GATEWAY_TIMEOUT = int(os.environ.get('CRC_GATEWAY_TIMEOUT') or globals().get('CRC_GATEWAY_TIMEOUT', 10))
-# DEPRECATED alias of V4_LANDING_ENABLED (place#325 ruling 2026-10-21: one release switch).
-# Either true turns the switch on (places.v4_landing.v4_landing_enabled); kept only so an env
-# that still sets it (dev) keeps working. Do not set it anywhere new; remove with env_template.
-LOCUS_MINTING_ENABLED = os.environ.get('LOCUS_MINTING_ENABLED', '') == '1' or bool(globals().get('LOCUS_MINTING_ENABLED', False))
 
 # Shared secret used to sign short-lived collab tokens for the Hocuspocus real-time service
 # (Workbench Phase 2, place#112). Same value is passed to the hocuspocus container via .env so it

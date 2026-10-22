@@ -4,7 +4,7 @@
     GDAL_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/libgdal.so.34 \\
         venv/bin/python manage.py test search.tests_locus_mint --settings=whg.settings_localtest
 
-The feature is OFF by default (``LOCUS_MINTING_ENABLED`` False): the first
+The feature is OFF by default (``V4_LANDING_ENABLED`` False): the first
 class proves that with it off nothing public exists, even for a row already
 in the registry. The rest run with it on and are beta-gated as the locus page
 is. The gateway is faked at ``api.crc_client.requests.post`` (same seam as
@@ -49,9 +49,8 @@ class MintBase(LocusBase):
         return self.client.get(f"/entity/locus:{pid}/" + ("api" if api else ""), HTTP_ACCEPT=accept)
 
 
-# Off explicitly (both names: LOCUS_MINTING_ENABLED is the switch's alias), so this
-# holds in an environment that sets either, such as dev (review #5).
-@override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+# Off explicitly, so this holds in an environment that sets the switch, such as dev.
+@override_settings(V4_LANDING_ENABLED=False)
 class OffByDefaultTests(MintBase):
     def test_everything_is_404_when_off(self):
         self.assertFalse(registry.minting_enabled())
@@ -71,7 +70,7 @@ class OffByDefaultTests(MintBase):
         self.assertNotRegex(html, PID_RE)
         self.assertEqual(LocusRegistryEntry.objects.count(), 1)
         # ...and with the flag on, the same requests serve (the pairing that makes this test mean something).
-        with override_settings(LOCUS_MINTING_ENABLED=True), patch(POST, side_effect=self.gateway):
+        with override_settings(V4_LANDING_ENABLED=True), patch(POST, side_effect=self.gateway):
             self.assertEqual(self.preflight(token()).status_code, 200)
             self.assertEqual(self.entity(e.pid).status_code, 200)
 
@@ -95,7 +94,7 @@ class OffMatchesPreBranchTests(MintBase):
             out.append((r.status_code, r.get("WWW-Authenticate"), r.content))
         return out
 
-    @override_settings(LOCUS_MINTING_ENABLED=False, V4_LANDING_ENABLED=False, CACHES={
+    @override_settings(V4_LANDING_ENABLED=False, CACHES={
         **settings.CACHES, "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache",
                                        "LOCATION": "locus-off-review8"}})
     def test_off_is_the_generic_entity_answer(self):
@@ -116,14 +115,14 @@ class OffMatchesPreBranchTests(MintBase):
                         self.assertEqual(status, {401} if who is None else {404}, (who, tail, method, got))
         # Presence: flag on, the locus route answers its OWN 401, unlike the control.
         self.client.logout()
-        with override_settings(LOCUS_MINTING_ENABLED=True):
+        with override_settings(V4_LANDING_ENABLED=True):
             on = self.client.get(f"/entity/locus:{e.pid}/", HTTP_ACCEPT="application/json")
             ctl = self.client.get(f"/entity/zzz:{e.pid}/", HTTP_ACCEPT="application/json")
         self.assertEqual((on.status_code, on.json()["error"]), (401, "authentication required"))
         self.assertNotEqual(on.content, ctl.content)
 
 
-@override_settings(LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class MintGateTests(MintBase):
     def test_mint_routes_are_beta_gated(self):
         tok = token()
@@ -166,7 +165,7 @@ class MintGateTests(MintBase):
         self.assertEqual(self.client.get("/entity/nonsense:1/", HTTP_ACCEPT="application/json").status_code, 404)
 
 
-@override_settings(LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class MintFlowTests(MintBase):
     def setUp(self):
         super().setUp()
@@ -284,7 +283,7 @@ class MintFlowTests(MintBase):
         self.assertEqual(LocusRegistryEntry.objects.get(pid=pid).canonical_bytes, other)
 
 
-@override_settings(LOCUS_MINTING_ENABLED=True)
+@override_settings(V4_LANDING_ENABLED=True)
 class EntityLocusTests(MintBase):
     def setUp(self):
         super().setUp()

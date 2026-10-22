@@ -27,7 +27,8 @@ What it proves, and how it can fail:
 * for a beta user, a signed-in non-beta user and an anonymous visitor, at
   every width in WIDTHS, ``document.documentElement.scrollWidth`` is no wider
   than the viewport, on the home page and on /licenses/ (which shows the brand
-  text; /people_overview/ was not used because its own logos overflow at 768).
+  text; /people_overview/ was not used because its own logos overflowed at 768,
+  since fixed and tested in main/tests_layout_oddities.py).
   Against the unfixed template the beta case on /licenses/ fails at 992, 1024,
   1100 and 1199 px (scrollWidth 1132, 1148, 1186, 1235);
 * where the menu is collapsed (390 px for everyone; 1100 px for a beta user,
@@ -77,7 +78,7 @@ PROBE = """() => {
   const collapse = document.getElementById('navbarSupportedContent');
   const toggler = nav && nav.querySelector('.navbar-toggler');
   const expandClass = nav ? [...nav.classList].find(c => c.startsWith('navbar-expand')) : null;
-  const items = collapse ? [...collapse.querySelectorAll(':scope > ul > li, :scope > ul > div, :scope > ul > div > a')]
+  const items = collapse ? [...collapse.querySelectorAll(':scope > .navbar-nav > li, :scope > .navbar-nav > div, :scope > .navbar-nav > div > a')]
     .filter(el => el.offsetParent !== null)
     .map(el => ({
       what: (el.id || el.querySelector('a, span')?.id || el.textContent.replace(/\\s+/g, ' ').trim().slice(0, 28)

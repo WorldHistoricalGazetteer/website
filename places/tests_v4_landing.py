@@ -28,9 +28,7 @@ from places.v4_landing import PORTAL_REDIRECT_STATUS, PORTAL_REDIRECTS, portal_p
 
 LOCMEM = {**settings.CACHES,
           "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "v4l"}}
-# OFF must clear BOTH names: LOCUS_MINTING_ENABLED is the release switch's alias, and
-# dev's env sets both, so an OFF that cleared only one would still be on there (review #5).
-OFF = override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False, CACHES=LOCMEM)
+OFF = override_settings(V4_LANDING_ENABLED=False, CACHES=LOCMEM)
 ON = override_settings(V4_LANDING_ENABLED=True, CACHES=LOCMEM)
 
 
@@ -207,7 +205,7 @@ class SwitchOnTests(_Fixture):
         (back) to the portal, which then serves the portal's own answer."""
         r = self.anon(f"/places/portal/{self.Pub.pk}/")
         self.assertNotEqual(r.status_code, 301)
-        with override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False):
+        with override_settings(V4_LANDING_ENABLED=False):
             r = self.as_user(self.plain, f"/entity/place:{self.Pub.pk}/")
             self.assertEqual((r.status_code, r["Location"]), (302, f"/places/portal/{self.Pub.pk}/"))
             r = self.as_user(self.plain, f"/places/portal/{self.Pub.pk}/")
@@ -270,30 +268,30 @@ class SwitchOnTests(_Fixture):
 
 
 class OneReleaseSwitchTests(_Fixture):
-    """Ruling 2026-10-21: LOCUS_MINTING_ENABLED merges into V4_LANDING_ENABLED, one
-    release switch. LOCUS_MINTING_ENABLED is honoured as a transitional ALIAS
-    (either true => on), so dev's env (both set) keeps working. Each state is
-    checked through the helpers AND through a route each flag used to govern alone."""
+    """Ruling 2026-10-21: ONE release switch, ``V4_LANDING_ENABLED``. The old
+    ``LOCUS_MINTING_ENABLED`` (a transitional alias until it was removed) does
+    nothing now: setting it must not turn anything on. Each state is checked
+    through the helpers AND through routes the switch governs."""
 
-    STATES = ((False, False, False), (True, False, True), (False, True, True), (True, True, True))
-
-    def test_helpers_in_every_state(self):
+    def test_helpers_follow_only_the_one_switch(self):
         from places.locus_registry import minting_enabled
-        for v4, locus, want in self.STATES:
-            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=locus, CACHES=LOCMEM):
-                self.assertEqual(v4_landing_enabled(), want, (v4, locus))
-                self.assertEqual(minting_enabled(), want, (v4, locus))
+        # (V4_LANDING_ENABLED, the retired LOCUS_MINTING_ENABLED, expected)
+        for v4, retired, want in ((False, False, False), (True, False, True),
+                                  (False, True, False), (True, True, True)):
+            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=retired, CACHES=LOCMEM):
+                self.assertEqual(v4_landing_enabled(), want, (v4, retired))
+                self.assertEqual(minting_enabled(), want, (v4, retired))
 
-    def test_each_flag_alone_drives_both_halves(self):
-        for v4, locus, want in self.STATES:
-            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=locus, CACHES=LOCMEM):
+    def test_the_switch_drives_both_halves_and_the_retired_flag_drives_neither(self):
+        for v4, retired, want in ((False, False, False), (True, False, True), (False, True, False)):
+            with override_settings(V4_LANDING_ENABLED=v4, LOCUS_MINTING_ENABLED=retired, CACHES=LOCMEM):
                 portal = self.anon(f"/places/portal/{self.Pub.pk}/")
                 mint = self.anon("/atlas/locus/mint/")
             if want:
-                self.assertEqual(portal.status_code, PORTAL_REDIRECT_STATUS, (v4, locus))
+                self.assertEqual(portal.status_code, PORTAL_REDIRECT_STATUS, (v4, retired))
                 self.assertEqual(portal["Location"], f"/entity/place:{self.Pub.pk}/")
-                self.assertEqual(mint.status_code, 403, (v4, locus))      # minting exists, beta-gated
+                self.assertEqual(mint.status_code, 403, (v4, retired))    # minting exists, beta-gated
             else:
                 # Off, the legacy portal's own answer (a 302 to /detail for a single match).
-                self.assertEqual(portal.get("Location"), f"/places/{self.Pub.pk}/detail", (v4, locus))
+                self.assertEqual(portal.get("Location"), f"/places/{self.Pub.pk}/detail", (v4, retired))
                 self.assertEqual(mint.status_code, 404)                   # nothing public exists

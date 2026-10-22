@@ -4,8 +4,8 @@ Routed in ``api/urls_root.py`` AHEAD of the generic ``entity/<entity_id>/``
 patterns, so ``place:`` (and every other object type in ``TYPE_MAP``) is
 served exactly as before; this module never sees them.
 
-Unless the v4 release switch is on (``V4_LANDING_ENABLED``; ``LOCUS_MINTING_ENABLED``
-is its deprecated alias), ``locus_entity`` hands the request to
+Unless the v4 release switch is on (``V4_LANDING_ENABLED``),
+``locus_entity`` hands the request to
 the generic entity views, which answered it before this route existed (anonymous
 401, signed-in 404, HEAD as GET): v4 changes nothing public until release. When
 it is on, the route is beta-gated like the

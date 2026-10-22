@@ -1,5 +1,5 @@
 """The v4 release switch (place#325 Stage 4): ONE setting, ``V4_LANDING_ENABLED``
-(``LOCUS_MINTING_ENABLED`` is a deprecated alias; see ``DEPRECATED_ALIAS``).
+(the old ``LOCUS_MINTING_ENABLED`` flag is gone: it no longer does anything).
 
 Off (the default, and the state of every environment until the v4 release):
 nothing public changes. Every route below behaves exactly as it did, because
@@ -49,19 +49,10 @@ SETTING = "V4_LANDING_ENABLED"
 PORTAL_REDIRECT_STATUS = 302
 
 
-# Transitional alias (ruling 2026-10-21: the two flags merge into ONE release
-# switch). DEPRECATED: LOCUS_MINTING_ENABLED used to switch locus minting and
-# /entity/locus: on by itself; it is now honoured only as an alias for
-# V4_LANDING_ENABLED (either true => the switch is on), so an environment that
-# sets both (dev) keeps working. Remove it, and this name, once the host
-# env_template no longer sets it.
-DEPRECATED_ALIAS = "LOCUS_MINTING_ENABLED"
-
-
 def v4_landing_enabled() -> bool:
     """THE v4 release switch: portal retirement, public Record page, #271,
     locus minting and /entity/locus: dereference (still beta-gated), all at once."""
-    return bool(getattr(settings, SETTING, False)) or bool(getattr(settings, DEPRECATED_ALIAS, False))
+    return bool(getattr(settings, SETTING, False))
 
 
 def record_uri(pk) -> str:

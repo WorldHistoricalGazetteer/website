@@ -1,9 +1,8 @@
 """Minting and lookup for the locus registry (place#172, place#325 Stage 4).
 
 Everything here is OFF unless the v4 release switch is on
-(``places.v4_landing.v4_landing_enabled``: ``V4_LANDING_ENABLED``, or its
-deprecated alias ``LOCUS_MINTING_ENABLED``; both absent on prod): v4 changes
-nothing public until release.
+(``places.v4_landing.v4_landing_enabled``: ``V4_LANDING_ENABLED``; absent on
+prod): v4 changes nothing public until release.
 Callers check :func:`minting_enabled` before doing anything that could write.
 
 Two ways a row comes into being, and only two:
@@ -90,8 +89,7 @@ class LegacyMintThrottled(LookupError_):
 
 
 def minting_enabled() -> bool:
-    """The v4 release switch (ruling 2026-10-21: one switch, not two);
-    ``LOCUS_MINTING_ENABLED`` is honoured as its deprecated alias there."""
+    """The v4 release switch (ruling 2026-10-21: one switch, not two)."""
     from places.v4_landing import v4_landing_enabled
     return v4_landing_enabled()
 

@@ -169,7 +169,7 @@ class RecordLayoutTemplateTests(TestCase):
         self.assertIn('id="record_environment"', beta)
         self.assertNotIn("data-enrichment", beta)
 
-    @override_settings(V4_LANDING_ENABLED=False, LOCUS_MINTING_ENABLED=False)
+    @override_settings(V4_LANDING_ENABLED=False)
     def test_switch_off_is_unchanged(self):
         self.client.logout()
         self.assertEqual(self.client.get(f"/atlas/place/{self.A.pk}/").status_code, 302)

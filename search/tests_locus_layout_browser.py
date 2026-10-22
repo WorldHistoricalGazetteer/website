@@ -101,7 +101,7 @@ MEASURE = """() => {
 
 @unittest.skipUnless(HAVE_PLAYWRIGHT, "playwright is not importable here")
 @unittest.skipUnless(os.environ.get("WHG_BROWSER_TESTS") == "1", "set WHG_BROWSER_TESTS=1 to run browser tests")
-@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2, LOCUS_MINTING_ENABLED=True,
+@override_settings(CRC_GATEWAY_URL=GATEWAY, CRC_GATEWAY_TIMEOUT=2, V4_LANDING_ENABLED=True,
                    CACHES=LOCMEM, EDOP_ENABLED=True)
 class LocusLayoutBrowserTests(LiveServerTestCase):
     @classmethod
