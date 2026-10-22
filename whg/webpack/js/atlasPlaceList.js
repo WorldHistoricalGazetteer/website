@@ -41,6 +41,13 @@ const ROW_H = 74;           // px — fixed row height (enables simple virtualis
 const OVERSCAN = 6;         // rows mounted above/below the viewport
 const VIEW_ID = 'atlas_placelists_view';
 
+// A contributed dataset's gazetteer id, ``whg:<dataset_id>`` (place#332). The
+// gateway scopes it by the places' ``dataset_id``, and says it did by echoing
+// ``datasets_searched``; a gateway without that matched it against
+// ``namespace`` (always ``whg``) and so returned nothing, which the list must
+// not present as "this dataset has no places".
+const DATASET_NS = /^whg:\d+$/i;
+
 function esc(s) {
     if (s == null) return '';
     return String(s)
@@ -106,6 +113,7 @@ const PlaceList = {
     cfg: null,
     ns: null, label: '',
     hits: [], aatLabels: {}, total: null,
+    scopeUnsupported: false,   // a dataset scope the gateway did not apply (place#332)
     qstr: '', ccode: '', typeVal: '',   // active Country / Type facet selections
     //  typeVal encodes the Type dropdown pick: '' | 'aat:<id>' | 'src:<identifier>'
     reqSeq: 0, loading: false, hasMore: false,
@@ -127,7 +135,7 @@ const PlaceList = {
         this._ensureDom();
         this.ns = namespace;
         this.label = label || namespace;
-        this.hits = []; this.aatLabels = {}; this.total = null;
+        this.hits = []; this.aatLabels = {}; this.total = null; this.scopeUnsupported = false;
         this.qstr = ''; this.ccode = ''; this.typeVal = ''; this.hasMore = false;
         this.els.search.value = '';
         this.els.ccodeSel.innerHTML = '<option value="">All countries</option>';
@@ -410,6 +418,8 @@ const PlaceList = {
                 // Surface gateway-down to the shared banner (place#125 resilience).
                 if (this.cfg.onGatewayStatus) this.cfg.onGatewayStatus(data.gateway !== false);
                 const page = Array.isArray(data.hits) ? data.hits : [];
+                this.scopeUnsupported = DATASET_NS.test(this.ns || '')
+                    && !page.length && !Array.isArray(data.datasets_searched);
                 this.hits = this.hits.concat(page);
                 this.total = (typeof data.total === 'number') ? data.total : this.hits.length;
                 // Facets are whole-namespace for browse; keep first-seen labels.
@@ -680,9 +690,14 @@ const PlaceList = {
 
     _updateStatus() {
         if (!this.hits.length) {
-            this._setStatus(this.qstr
-                ? 'No matching places.'
-                : 'No places to browse in this gazetteer.');
+            const dataset = DATASET_NS.test(this.ns || '');
+            this._setStatus(this.scopeUnsupported
+                ? "This list can't show a contributed dataset's places yet."
+                  + ' They are on the map: click one there to open it.'
+                : this.qstr
+                    ? 'No matching places.'
+                    : (dataset ? 'No places to list in this dataset.'
+                               : 'No places to browse in this gazetteer.'));
             return;
         }
         let s = `Showing ${this.hits.length.toLocaleString()}`;

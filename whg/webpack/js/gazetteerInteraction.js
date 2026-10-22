@@ -978,6 +978,107 @@ function _bindPopupTooltips() {
     });
 }
 
+/* ─── Popup placement on narrow screens (place#331) ──────────────────── */
+//
+// Below 992 px the floating search bar and date control (#floating_search)
+// cover the top of the map, and MapLibre places a popup only within the map
+// container, knowing nothing of them: a popup opened at the centred place rose
+// UNDER them (header and its buttons untappable) or ran off the right-hand edge.
+// Once its content is in, the popup is fitted into the largest clear part of the
+// visible map: its width capped to that area, its height capped only if it would
+// not otherwise fit; if it is still not wholly in the clear, its anchor is fixed
+// (MapLibre 5.3.1, the CDN pin, has no popup ``padding`` to steer auto-anchoring)
+// and the map panned by the smallest offset that brings the place (and so its
+// popup) into the clear. Nothing moves when the popup already fits. If even
+// the best clear area is too short for the popup (a landscape phone), the
+// floating controls fold down to the search-input row while the popup is open
+// (``#floating_search.popup-compact``, atlas.css). Wide screens are untouched.
+
+const FIT_NARROW_MQ = '(max-width: 991.98px)';
+const FIT_MARGIN = 8;             // px kept between the popup and the clear area's edges
+const FIT_MIN_HEIGHT = 200;       // a popup capped below this folds the controls instead
+const FIT_MAX_WIDTH = 400;        // the popup's own maxWidth (and atlas.css max-width)
+const FIT_MAX_PANS = 2;           // per opening (and per content resize): no runaway loops
+const FIT_COMPACT_CLASS = 'popup-compact';
+
+function _fitIsNarrow() {
+    try { return window.matchMedia(FIT_NARROW_MQ).matches; } catch (e) { return false; }
+}
+
+function _fitBox(el) {
+    const b = el.getBoundingClientRect();
+    return { left: b.left, top: b.top, right: b.right, bottom: b.bottom };
+}
+
+function _fitShown(el) {
+    const b = el.getBoundingClientRect();
+    if (b.width <= 0 || b.height <= 0) return false;
+    const cs = getComputedStyle(el);
+    return cs.display !== 'none' && cs.visibility !== 'hidden';
+}
+
+/** Screen rects of the controls floating over the map: each child of
+ *  #floating_search (search bar, selection chips, date control) and each
+ *  MapLibre control group (zoom/globe, attribution). */
+function _fitObstacles(mapEl) {
+    const out = [];
+    document.querySelectorAll('#floating_search > *').forEach((el) => { if (_fitShown(el)) out.push(_fitBox(el)); });
+    mapEl.querySelectorAll('.maplibregl-ctrl').forEach((el) => { if (_fitShown(el)) out.push(_fitBox(el)); });
+    return out;
+}
+
+function _fitOverlaps(a, b) {
+    return Math.min(a.right, b.right) > Math.max(a.left, b.left)
+        && Math.min(a.bottom, b.bottom) > Math.max(a.top, b.top);
+}
+
+/** Every obstacle-free rectangle of the visible map ``v`` whose edges lie on
+ *  the map's or an obstacle's edges (the maximal clear rectangles among them). */
+function _fitClearRects(v, obstacles) {
+    const xs = [v.left, v.right], ys = [v.top, v.bottom];
+    for (const o of obstacles) {
+        if (o.left > v.left && o.left < v.right) xs.push(o.left);
+        if (o.right > v.left && o.right < v.right) xs.push(o.right);
+        if (o.top > v.top && o.top < v.bottom) ys.push(o.top);
+        if (o.bottom > v.top && o.bottom < v.bottom) ys.push(o.bottom);
+    }
+    const out = [];
+    for (const left of xs) for (const right of xs) {
+        if (right <= left) continue;
+        for (const top of ys) for (const bottom of ys) {
+            if (bottom <= top) continue;
+            const r = { left, top, right, bottom };
+            if (!obstacles.some((o) => _fitOverlaps(r, o))) out.push(r);
+        }
+    }
+    return out;
+}
+
+/** Where the place's screen point ``p`` must go, and with which popup anchor,
+ *  for a w x h popup to lie wholly inside the clear rect ``c`` (already inset by
+ *  the margin): the nearest such point, ``{x, y, d, anchor}``, or null. An anchor
+ *  names the popup edge at the point (MapLibre): 'top' hangs the popup below it,
+ *  'bottom' stands it above; '-left' / '-right' pin its side to the point. */
+function _fitNearestPoint(c, w, h, p) {
+    const ys = { top: [c.top, c.bottom - h], bottom: [c.top + h, c.bottom] };
+    const xs = { '': [c.left + w / 2, c.right - w / 2], '-left': [c.left, c.right - w], '-right': [c.left + w, c.right] };
+    let best = null;
+    for (const [va, [y0, y1]] of Object.entries(ys)) {
+        if (y1 < y0) continue;
+        for (const [ha, [x0, x1]] of Object.entries(xs)) {
+            if (x1 < x0) continue;
+            const x = Math.min(Math.max(p.x, x0), x1), y = Math.min(Math.max(p.y, y0), y1);
+            const d = Math.hypot(x - p.x, y - p.y);
+            if (!best || d < best.d - 0.5) best = { x, y, d, anchor: va + ha };
+        }
+    }
+    return best;
+}
+
+function _fitInside(b, c) {
+    return b.left >= c.left - 0.5 && b.top >= c.top - 0.5 && b.right <= c.right + 0.5 && b.bottom <= c.bottom + 0.5;
+}
+
 /* ─── Controller ─────────────────────────────────────────────────────── */
 
 export default class GazetteerInteraction {
@@ -1185,8 +1286,15 @@ export default class GazetteerInteraction {
             // ?place= deep link so the URL reflects that nothing is focused.
             this._popup.on('close', () => {
                 try { document.dispatchEvent(new CustomEvent('whg:map-popup-close')); } catch (e) {}
+                // Narrow screens: unfold the floating controls, forget the fit.
+                if (this._fitActive) this._fitUndo();
             });
+            // A rotated phone (or any map resize) re-fits an open popup.
+            this.map.on('resize', () => this._scheduleFit());
         }
+        // Fitted (narrow screens) once its content is in, not while "Loading…".
+        this._fitReady = false;
+        this._fitPans = 0;
         this._popup
             .setLngLat(lngLat)
             .setHTML(LOADING_HTML)
@@ -1219,11 +1327,164 @@ export default class GazetteerInteraction {
                 }
                 this._popup.setHTML(renderPopup(data, placeId));
                 initPopupTooltips();
+                this._fitReady = true;
+                this._scheduleFit();
             })
             .catch((err) => {
                 if (err.name === 'AbortError') return;
                 if (signal.aborted) return;
                 this._popup.setHTML(ERROR_HTML);
+                this._fitReady = true;
+                this._scheduleFit();
             });
+    }
+
+    /* ── Narrow-screen placement (place#331; see the helpers above) ── */
+
+    /** Fit the open popup on the next frame (coalesced). No-op on wide screens. */
+    _scheduleFit() {
+        if (this._fitRaf) return;
+        this._fitRaf = requestAnimationFrame(() => {
+            this._fitRaf = null;
+            try { this._fitPopupClear(); } catch (e) { console.warn('popup fit failed', e); }
+        });
+    }
+
+    _fitPopupClear() {
+        const popup = this._popup;
+        if (!this.map || !popup || !popup.isOpen() || !this._fitReady) return;
+        if (!_fitIsNarrow()) {
+            if (this._fitActive) this._fitUndo();   // e.g. a window widened past 992 px
+            return;
+        }
+        // Wait out a camera move (a Place List row's fit, the deep link's jump):
+        // the clear area is judged where the map comes to rest.
+        if (this.map.isMoving()) {
+            if (!this._fitAwaitMove) {
+                this._fitAwaitMove = true;
+                this.map.once('moveend', () => { this._fitAwaitMove = false; this._scheduleFit(); });
+            }
+            return;
+        }
+        const el = popup.getElement();
+        if (!el) return;
+        this._fitActive = true;
+        this._fitWatch(el);
+        const mapEl = this.map.getContainer();
+        const fs = document.getElementById('floating_search');
+        // First with the controls as they are; fold them only if the popup
+        // would otherwise be cut short.
+        if (fs) fs.classList.remove(FIT_COMPACT_CLASS);
+        let plan = this._fitPlan(el, mapEl);
+        if (fs && !(plan && plan.h >= Math.min(plan.natural, FIT_MIN_HEIGHT))) {
+            fs.classList.add(FIT_COMPACT_CLASS);
+            const folded = this._fitPlan(el, mapEl);
+            if (folded && (!plan || folded.h > plan.h)) {
+                plan = folded;
+            } else {   // folding does not help: keep the controls as they are
+                fs.classList.remove(FIT_COMPACT_CLASS);
+                plan = this._fitPlan(el, mapEl);
+            }
+        }
+        if (!plan) {   // nowhere clear enough: leave MapLibre's own placement
+            this._fitUndo();
+            this._fitActive = true;   // keep fitting on later resizes
+            this._fitWatch(el);
+            return;
+        }
+        const { c, h, t, natural, p } = plan;
+        if (h < natural) {
+            // Cap the popup to the clear height; its body scrolls (atlas.css).
+            const inner = el.querySelector('.whg-gazetteer-popup');
+            const chrome = natural - (inner ? inner.offsetHeight : 0);   // tip
+            el.style.setProperty('--whg-popup-max-h', `${Math.max(80, Math.floor(h - chrome))}px`);
+        }
+        this._fitSize = [el.offsetWidth, el.offsetHeight];
+        // Already wholly in the clear (as placed now): leave it, and the map, alone.
+        if (_fitInside(_fitBox(el), c)) return;
+        // Otherwise fix the anchor that lets it fit (MapLibre would re-pick one
+        // against the map's edges, not the controls') and bring the place to
+        // the point that anchor needs.
+        popup.options.anchor = t.anchor;
+        popup.setOffset(popup.options.offset);   // re-place now (Popup._update)
+        const dx = t.x - p.x, dy = t.y - p.y;
+        if (Math.hypot(dx, dy) < 1 || this._fitPans >= FIT_MAX_PANS) return;
+        this._fitPans += 1;
+        let reduce = false;
+        try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+        // Check again where the pan lands (a globe pan is not exactly linear).
+        this.map.once('moveend', () => this._scheduleFit());
+        this.map.panBy([-dx, -dy], { duration: reduce ? 0 : 300 });
+    }
+
+    /** The best placement for the popup in the visible map's clear area:
+     *  ``{c, h, t, natural, p}`` (clear rect inset by the margin, popup height
+     *  to use, target point + anchor, uncapped height, current point), or null
+     *  when no clear rect is wide enough. Sets the popup's max width to the
+     *  widest clear rect as a side effect. */
+    _fitPlan(el, mapEl) {
+        const popup = this._popup;
+        el.style.removeProperty('--whg-popup-max-h');
+        const m = _fitBox(mapEl);
+        const v = {
+            left: Math.max(m.left, 0), top: Math.max(m.top, 0),
+            right: Math.min(m.right, window.innerWidth), bottom: Math.min(m.bottom, window.innerHeight),
+        };
+        const rects = _fitClearRects(v, _fitObstacles(mapEl))
+            .map((r) => ({ left: r.left + FIT_MARGIN, top: r.top + FIT_MARGIN,
+                           right: r.right - FIT_MARGIN, bottom: r.bottom - FIT_MARGIN }))
+            .filter((r) => r.right - r.left >= 64 && r.bottom - r.top >= 64);
+        if (!rects.length) return null;
+        const widest = Math.max(...rects.map((r) => r.right - r.left));
+        popup.setMaxWidth(`${Math.floor(Math.min(FIT_MAX_WIDTH, widest - 4))}px`);
+        const w = el.offsetWidth, natural = el.offsetHeight;
+        const pt = this.map.project(popup.getLngLat());
+        const p = { x: m.left + pt.x, y: m.top + pt.y };
+        let best = null;
+        for (const c of rects) {
+            if (c.right - c.left < w + 4) continue;
+            const h = Math.min(natural, c.bottom - c.top - 4);
+            const t = _fitNearestPoint(c, w, h, p);
+            if (!t) continue;
+            // The whole popup first, then the tallest, then the shortest pan.
+            if (!best || h > best.h || (h === best.h && t.d < best.t.d)) best = { c, h, t };
+        }
+        return best && { ...best, natural, p };
+    }
+
+    /** Re-fit when the popup's own size changes (an image loads, a section is
+     *  expanded), but not for the size the last fit produced. */
+    _fitWatch(el) {
+        if (this._fitObserved === el || typeof ResizeObserver === 'undefined') return;
+        if (this._fitObserver) this._fitObserver.disconnect();
+        this._fitObserver = new ResizeObserver(() => {
+            const s = this._fitSize;
+            if (s && s[0] === el.offsetWidth && s[1] === el.offsetHeight) return;
+            this._fitPans = 0;
+            this._scheduleFit();
+        });
+        this._fitObserver.observe(el);
+        this._fitObserved = el;
+    }
+
+    /** Back to MapLibre's own placement, and the floating controls unfolded. */
+    _fitUndo() {
+        this._fitActive = false;
+        this._fitSize = null;
+        if (this._fitObserver) {
+            this._fitObserver.disconnect();
+            this._fitObserver = null;
+            this._fitObserved = null;
+        }
+        const fs = document.getElementById('floating_search');
+        if (fs) fs.classList.remove(FIT_COMPACT_CLASS);
+        if (this._popup) {
+            const el = this._popup.getElement && this._popup.getElement();
+            if (el) el.style.removeProperty('--whg-popup-max-h');
+            try {
+                delete this._popup.options.anchor;   // MapLibre's auto-anchoring again
+                this._popup.setMaxWidth(`${FIT_MAX_WIDTH}px`);
+            } catch (e) { /* */ }
+        }
     }
 }

@@ -330,6 +330,17 @@ class HeroMap {
                 // Debug hook: expose the map for console/automation when enabled.
                 if (isDebugEnabled()) {
                     try { window.heroMapInstance = this.map; } catch (e) { /* */ }
+                    // Wire the place popup's map-click handler to a layer the harness
+                    // adds itself (no vector tiles offline), so a test clicks the map
+                    // as a user would: search.tests_atlas_popup_position_browser.
+                    try {
+                        window.__whgAttachPopupLayer = (baseId) => {
+                            if (!this._gazetteerInteraction) {
+                                this._gazetteerInteraction = new GazetteerInteraction(this.map);
+                            }
+                            this._gazetteerInteraction.attach(baseId, [baseId]);
+                        };
+                    } catch (e) { /* */ }
                 }
                 resolve(this.map);
             });

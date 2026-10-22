@@ -1451,7 +1451,10 @@ Promise.all([
         const wantPlace = params.get('place');
         let wantGazetteer = params.get('gazetteer');
         if (!wantGazetteer && wantPlace && wantPlace.indexOf(':') > 0) {
-            wantGazetteer = wantPlace.slice(0, wantPlace.indexOf(':'));
+            // A contributed record (whg:<dataset>:<src_id>) belongs to its
+            // dataset's gazetteer, whg:<dataset>; there is no "whg" gazetteer.
+            const ds = /^(whg:\d+):/i.exec(wantPlace);
+            wantGazetteer = ds ? ds[1] : wantPlace.slice(0, wantPlace.indexOf(':'));
         }
         // Shared-view zoom: applied to the focused place, or (gazetteer-only) once
         // the gazetteer's own bounds-fit has settled.

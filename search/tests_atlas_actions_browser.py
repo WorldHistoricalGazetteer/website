@@ -371,8 +371,18 @@ class AtlasRecordActionsTests(LiveServerTestCase):
             with self.subTest(viewer=label):
                 self.assertEqual(render(BUNDLE_DIR, user, CLIO["place_id"], CLIO["repr_point"]),
                                  render(BASELINE_DIR, user, CLIO["place_id"], CLIO["repr_point"]))
-        self.assertNotEqual(render(BUNDLE_DIR, None, self.whg["place_id"], self.whg["repr_point"]),
-                            render(BASELINE_DIR, None, self.whg["place_id"], self.whg["repr_point"]))
+        # place#329: the server now sends the contributed popup in the flat shape, which
+        # both builds render alike; the contrast is made with the LPF answer the popup
+        # got before (the server's popup payload swapped back to it, in-process).
+        def lpf_payload(place, place_id):
+            from django.test import RequestFactory
+            from api.serializers_api import PlaceFeatureSerializer
+            from api.views_entity import _legacy_place_to_lpf
+            req = RequestFactory().get("/")
+            return _legacy_place_to_lpf(PlaceFeatureSerializer(place, context={"request": req}).data, request=req)
+        with patch("api.views_entity._contributed_popup_payload", side_effect=lpf_payload):
+            self.assertNotEqual(render(BUNDLE_DIR, None, self.whg["place_id"], self.whg["repr_point"]),
+                                render(BASELINE_DIR, None, self.whg["place_id"], self.whg["repr_point"]))
 
     def test_place_list_rows(self):
         ctx, page, console = self._page(self.beta)

@@ -610,21 +610,45 @@ class EntityDetailView(PublicEntityReadAPIView):
         return HttpResponseRedirect(url)
 
 
-def _popup_beta_viewer(request):
-    """The signed-in BETA user behind a popup request, or None.
+def _popup_viewer(request):
+    """The user whose rights decide what the Atlas popup may show (place#330).
 
-    The Atlas popup sends ``X-CSRFToken``, so ``TokenQueryOrBearerAuthentication``
-    answers first with a ``CSRFUser`` (anonymous, CSRF already enforced) even for
-    a signed-in visitor, and DRF hands that to ``request.user``. The session
-    behind the same request is read here for the beta check only; which record
-    is served is still decided by ``request.user`` as before."""
+    The popup sends ``X-CSRFToken``, so ``TokenQueryOrBearerAuthentication``
+    answers first with a ``CSRFUser`` (anonymous, ``is_authenticated`` True) even
+    for a signed-in visitor, DRF hands that to ``request.user``, and an owner was
+    refused their own private records (the same session WITHOUT the header got
+    them, through ``SessionAuthentication``).
+
+    Only that case changes: when ``request.user`` IS a ``CSRFUser``, the CSRF check
+    has just passed (``enforce_csrf``), so the request is same-origin, and the
+    session behind it is the one ``SessionAuthentication`` would have read without
+    the header; an active signed-in session user is returned. Everything else is
+    ``request.user`` unchanged: a token user (Bearer / ``?token=``) stays the token
+    user, a session-authenticated user stays themself, and a CSRFUser with no
+    signed-in session stays the CSRFUser, so anonymous rules are untouched.
+    ``request.user`` itself is never replaced (throttles and quota still see what
+    DRF authenticated)."""
+    from api.authentication import CSRFUser
     user = getattr(request, "user", None)
-    if user is None or getattr(user, "is_anonymous", True):
-        from django.contrib.auth import get_user
-        try:
-            user = get_user(request._request)
-        except Exception:  # noqa: BLE001 — no session: no beta viewer
-            return None
+    if not isinstance(user, CSRFUser):
+        return user
+    from django.contrib.auth import get_user
+    try:
+        # DRF has already written the CSRFUser onto request._request.user, so the
+        # session is read afresh (session key + auth hash, as the middleware does).
+        session_user = get_user(request._request)
+    except Exception:  # noqa: BLE001: no readable session: the anonymous rules
+        return user
+    if (getattr(session_user, "is_authenticated", False) and not isinstance(session_user, CSRFUser)
+            and getattr(session_user, "is_active", False)):
+        return session_user
+    return user
+
+
+def _popup_beta_viewer(request):
+    """The signed-in BETA user behind a popup request, or None (``_popup_viewer``,
+    then the beta flag)."""
+    user = _popup_viewer(request)
     if getattr(user, "is_authenticated", False) and getattr(user, "can_access_beta", False):
         return user
     return None
@@ -644,6 +668,149 @@ def _popup_record_url(request, place):
         return reverse("atlas-record", kwargs={"pk": place.pk})
     except (Http404, NoReverseMatch):
         return None
+
+
+def _lpf_year(value):
+    """The year at the start of an LPF bound value (``"1050"``, ``"-200"``,
+    ``"1722-03-01"``, an int), or None."""
+    import re
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.match(r"\s*([-+]?\d+)", str(value or ""))
+    return int(m.group(1)) if m else None
+
+
+def _lpf_timespans(when):
+    """An LPF ``when`` as the gateway's ``[{"start": int, "end": int}]`` (either
+    may be None). ``in`` first, then the outer bound of the range."""
+    out = []
+    spans = when.get("timespans") if isinstance(when, dict) else None
+    for ts in spans if isinstance(spans, list) else []:
+        if not isinstance(ts, dict):
+            continue
+        bounds = {}
+        for bound, keys in (("start", ("in", "earliest", "latest")), ("end", ("in", "latest", "earliest"))):
+            b = ts.get(bound)
+            year = None
+            if isinstance(b, dict):
+                for k in keys:
+                    year = _lpf_year(b.get(k))
+                    if year is not None:
+                        break
+            else:
+                year = _lpf_year(b)
+            bounds[bound] = year
+        if bounds["start"] is not None or bounds["end"] is not None:
+            out.append(bounds)
+    return out
+
+
+def _contributed_popup_payload(place, place_id):
+    """A contributed record in the gateway's flat PlaceDetail shape, the one the
+    Atlas popup renderer reads (place#329), built from the rows already
+    prefetched by ``place_feature_queryset``. ``variant=popup`` only: every
+    other caller still gets the LPF Feature.
+
+    Coordinates are left out on purpose: the popup is for a place already on the
+    map, and the renderer only names a geometry's type when it carries dates
+    (as for authority records). The attribution is the dataset's own
+    (``dataset_attribution``, the block ``/atlas/place/`` attaches to contributed
+    records), licence recorded or not; as there, the licence gates geometry
+    hand-outs, not the record."""
+    from itertools import groupby
+    from api.dataset_access import dataset_attribution
+
+    def jb(row):
+        return row.jsonb if isinstance(getattr(row, "jsonb", None), dict) else {}
+
+    names = []
+    for n in place.names.all():
+        j = jb(n)
+        label = j.get("toponym") or n.toponym
+        if not label:
+            continue
+        name = {"label": label}
+        if j.get("lang"):
+            name["lang"] = j["lang"]
+        spans = _lpf_timespans(j.get("when"))
+        if spans:
+            name["timespans"] = spans
+        names.append(name)
+
+    types = []
+    for t in place.types.all():
+        j = jb(t)
+        typ = {k: j[k] for k in ("identifier", "label", "sourceLabel") if j.get(k)}
+        if getattr(t, "aat_id", None):
+            typ["aat_ids"] = [t.aat_id]
+        if typ:
+            types.append(typ)
+
+    # The record's own dates, as the Record page reads them (Place.timespans),
+    # else the union of its `when` rows.
+    timespans = []
+    raw = place.timespans if isinstance(place.timespans, list) else []
+    for span, _ in groupby(s for s in raw if isinstance(s, (list, tuple)) and len(s) == 2):
+        timespans.append({"start": _lpf_year(span[0]), "end": _lpf_year(span[1])})
+    if not timespans:
+        for w in place.whens.all():
+            timespans.extend(_lpf_timespans(jb(w)))
+
+    geometries = []
+    for g in place.geoms.all():
+        j = jb(g)
+        if not j.get("type"):
+            continue
+        geom = {"geom": {"type": j["type"]}}
+        spans = _lpf_timespans(j.get("when"))
+        if spans:
+            geom["timespans"] = spans
+        geometries.append(geom)
+
+    relations = []
+    for r in place.related.all():
+        j = jb(r)
+        rel = {"relation_type": j.get("relationType") or "",
+               "related_place_id": j.get("relationTo") or "",
+               "label": j.get("label") if isinstance(j.get("label"), str) else ""}
+        spans = _lpf_timespans(j.get("when"))
+        if spans:
+            rel["timespans"] = spans
+        if rel["relation_type"] or rel["related_place_id"]:
+            relations.append(rel)
+
+    links = [{"type": jb(l).get("type") or "", "identifier": jb(l)["identifier"]}
+             for l in place.links.all() if isinstance(jb(l).get("identifier"), str)]
+    descriptions = []
+    for d in place.descriptions.all():
+        j = jb(d)
+        if isinstance(j.get("value"), str) and j["value"].strip():
+            descriptions.append({"value": j["value"], **({"lang": j["lang"]} if j.get("lang") else {})})
+    depictions = []
+    for d in place.depictions.all():
+        j = jb(d)
+        url = j.get("@id") or j.get("id")
+        if isinstance(url, str) and url:
+            depictions.append({"@id": url, "title": j.get("title") or "", "license": j.get("license") or ""})
+
+    return {
+        "place_id": place_id,
+        "title": place.title or "",
+        "namespace": "whg",
+        "ccodes": list(place.ccodes or []),
+        "fclasses": list(place.fclasses or []),
+        "names": names,
+        "types": types,
+        "timespans": timespans,
+        "geometries": geometries,
+        "relations": relations,
+        "links": links,
+        "descriptions": descriptions,
+        "depictions": depictions,
+        "attribution": dataset_attribution(place.dataset),
+    }
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -715,8 +882,25 @@ class EntityFeatureView(PublicEntityReadAPIView):
             return Response(lpf, status=status.HTTP_200_OK)
 
         queryset_fn = config.get("feature_queryset", lambda user: config["model"].objects)
-        qs = queryset_fn(request.user)
+        # place#330: the Atlas popup (a contributed place, variant=popup) is decided
+        # for the signed-in session user behind its CSRF header (``_popup_viewer``),
+        # i.e. by ``visible_places_q`` for the same user the Record page asks
+        # about. Every other request: ``request.user``, as before.
+        popup = obj_type == "place" and request.GET.get('variant') == 'popup'
+        viewer = _popup_viewer(request) if popup else request.user
+        qs = queryset_fn(viewer)
         obj = get_object_or_404(qs, pk=_place_lookup_id(obj_type, obj_id))
+
+        # place#329: the popup gets the flat shape its renderer reads (and the
+        # dataset's attribution), not the LPF Feature; filetype is irrelevant to it.
+        if popup:
+            ds_pk, src_id = obj.dataset.pk, str(obj.src_id or "").strip()
+            pid = f"whg:{ds_pk}:{src_id}" if src_id else f"whg:{obj.pk}"
+            data = _contributed_popup_payload(obj, pid)
+            record_url = _popup_record_url(request, obj)
+            if record_url:
+                data["record_url"] = record_url
+            return Response(data, status=status.HTTP_200_OK)
 
         # Datasets may be flagged non-downloadable (very large bulk/authority
         # datasets to be obtained upstream). Block every export path.
@@ -735,12 +919,6 @@ class EntityFeatureView(PublicEntityReadAPIView):
             # Transform legacy place serializer output into proper LPF
             if obj_type == "place":
                 data = _legacy_place_to_lpf(data, request=request)
-                # place#325: the Atlas popup's beta "Record" action. Popup variant
-                # and beta viewers only; every other response is unchanged.
-                if request.GET.get('variant') == 'popup':
-                    record_url = _popup_record_url(request, obj)
-                    if record_url:
-                        data["record_url"] = record_url
             return Response(data, status=status.HTTP_200_OK)
 
         # Cache-aware streaming response (shared with the Atlas gazetteer-panel
@@ -793,7 +971,10 @@ class EntityPreviewView(AuthenticatedAPIView):
             return HttpResponse(html, content_type="text/html; charset=UTF-8")
 
         queryset_fn = config.get("preview_queryset", lambda user: config["model"].objects)
-        qs = queryset_fn(request.user)
+        # place#330: the Atlas place modal fetches this with X-CSRFToken too, so a
+        # contributed place is decided for the session user behind the CSRFUser
+        # (``_popup_viewer``), as the popup is. Other types: request.user as before.
+        qs = queryset_fn(_popup_viewer(request) if obj_type == "place" else request.user)
         obj = get_object_or_404(qs, pk=_place_lookup_id(obj_type, id))
 
         serializer_class = config["preview_serializer"]
