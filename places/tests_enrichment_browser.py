@@ -24,6 +24,10 @@ from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
 
 from api.tests_edop_client import AREA, BASIN_T, BASIN_T8, FakeTransport
+# place#325 Stage 5: WHG_RECORD_BUNDLE_DIR serves the Record page bundle from a scratch build.
+from places.tests_record_layout_browser import BUNDLE_DIR, bundle_route
+# ...and WHG_LOCUS_BUNDLE_DIR the Locus page bundle (search/tests_locus_layout_support.py).
+from search.tests_locus_layout_support import LOCUS_BUNDLE_DIR, _bundle_route as locus_bundle_route
 
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 SHOTS = os.environ.get("WHG_BROWSER_SHOTS")
@@ -113,6 +117,10 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                 self.external.append(url)       # the page must never call EDOPS itself
             if any(h in url for h in BLOCKED_HOSTS) or (block and block in url):
                 return r.abort()
+            if BUNDLE_DIR and "/atlas_record.bundle." in url:
+                return bundle_route(r, r.request)
+            if LOCUS_BUNDLE_DIR and "/static/webpack/locus.bundle." in url:
+                return locus_bundle_route(r, r.request)
             if "/styles/" in url and url.endswith("style.json"):
                 return r.fulfill(status=200, content_type="application/json",
                                  headers={"Access-Control-Allow-Origin": "*"}, body=json.dumps(FIXTURE_STYLE))
@@ -137,19 +145,51 @@ class EnrichmentBrowserTests(LiveServerTestCase):
             else:
                 page.screenshot(path=os.path.join(SHOTS, f"{name}.png"), full_page=True)
 
+    # Stage 5: the environment is an on-demand card; EDOPS is asked only on a click, and
+    # the answer is shown in a modal (.enr-env-modal). ENV is where its text is read.
+    ENV = ".enr-env-modal .modal-body"
+
+    def show_environment(self, page, wait_ms=30000):
+        """Click "Show environment" (after checking nothing was fetched before it) and
+        wait for the answer. ``idle_before``: the environment state before the click."""
+        idle = page.evaluate("""() => !!(window.__whgEnrichment && window.__whgEnrichment.environment === 'idle'
+            && !(window.__whgEnrichment.environmentFetches) && !document.querySelector('.enr-env-modal'))""")
+        try:
+            page.click("#record_environment .enr-env-show", timeout=min(wait_ms, 10000))
+        except Exception:  # noqa: BLE001 — no button is a finding (the checks fail)
+            return idle, False
+        return idle, self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'",
+                                   wait_ms)
+
+    # Stage 5, Locus page: the gloss is "About this cluster" (#locus_about), and the
+    # environment card sits in #locus_environment_slot; EDOPS only on its button.
+    LOCUS_GLOSS = "#locus_about .locus-about-body"
+
+    def locus_show_environment(self, page, wait_ms=45000):
+        """Wait for the gloss, check nothing environmental was fetched, click, wait.
+        Returns (gloss_ready, idle_before_click, environment_ready)."""
+        gloss = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", wait_ms)
+        idle = page.evaluate("""() => !!(window.__whgEnrichment && window.__whgEnrichment.environment === 'idle'
+            && !(window.__whgEnrichment.environmentFetches))""")
+        try:
+            page.click("#locus_environment_slot .enr-env-show", timeout=10000)
+        except Exception:  # noqa: BLE001 — no button is a finding
+            return gloss, idle, False
+        return gloss, idle, self.wait_for(page, "window.__whgEnrichment.environment === 'ready'", wait_ms)
+
     def record_checks(self, page, wait_ms=30000):
         r = {}
         r["gloss_ready"] = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", wait_ms)
-        r["env_ready"] = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", wait_ms)
-        d = page.evaluate("""() => {
+        r["env_idle_before_click"], r["env_ready"] = self.show_environment(page, wait_ms)
+        d = page.evaluate("""(env) => {
             const t = (s) => (document.querySelector(s) || {}).innerText || '';
-            const a = document.querySelector('#record_environment .enr-attribution a');
-            return {gloss: t('#record_gloss .enr-body'), env: t('#record_environment .enr-body'),
-                    chips: Array.from(document.querySelectorAll('#record_environment .enr-chip')).map(e => e.innerText),
-                    bands: Array.from(document.querySelectorAll('#record_environment .enr-band')).map(e => e.dataset.band),
+            const a = document.querySelector(env + ' .enr-attribution a');
+            return {gloss: t('#record_gloss .enr-body'), env: t(env),
+                    chips: Array.from(document.querySelectorAll(env + ' .enr-chip')).map(e => e.innerText),
+                    bands: Array.from(document.querySelectorAll(env + ' .enr-band')).map(e => e.dataset.band),
                     attr: a && a.getAttribute('href'),
                     status: window.__whgEnrichment && window.__whgEnrichment.environmentStatus};
-        }""")
+        }""", self.ENV)
         r["gloss_text"] = ("This record and 1 attested equivalent" in d["gloss"] and "GeoNames" in d["gloss"]
                            and "Not known from these records" in d["gloss"] and "Record C" not in d["gloss"])
         r["env_area_scope"] = ("an area" in d["env"] and "convex hull" in d["env"] and "one basin" not in d["env"])
@@ -168,8 +208,8 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                 patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             page.goto(f"{self.live_server_url}/atlas/place/{self.A.pk}/#record_environment")
             results, d = self.record_checks(page)
-            page.evaluate("document.querySelectorAll('#record_environment details').forEach(e => e.open = true)")
-            self.shot(page, "record_environment_area", "#record_environment")
+            page.evaluate("document.querySelectorAll('.enr-env-modal details').forEach(e => e.open = true)")
+            self.shot(page, "record_environment_area", ".enr-env-modal .modal-content")
             self.shot(page, "record_gloss", "#record_gloss")
         failed = {k: v for k, v in results.items() if not v}
         self.assertEqual(failed, {}, f"{failed}; dom={d}; errors={self.errors}")
@@ -184,11 +224,12 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         with patch("api.edop_client._requests_transport", side_effect=t), \
                 patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#record_environment")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", 30000)
-            d = page.evaluate("""() => ({env: document.querySelector('#record_environment .enr-body').innerText,
-                t: !!document.querySelector('#record_environment .enr-band[data-band="T"][open]'),
+            self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
+            _idle, ok = self.show_environment(page)
+            d = page.evaluate("""() => ({env: document.querySelector('.enr-env-modal .modal-body').innerText,
+                t: !!document.querySelector('.enr-env-modal .enr-band[data-band="T"][open]'),
                 gloss: document.querySelector('#record_gloss .enr-body').innerText})""")
-            self.shot(page, "record_environment_basin", "#record_environment")
+            self.shot(page, "record_environment_basin", ".enr-env-modal .modal-content")
         self.assertTrue(ok)
         self.assertIn("one basin", d["env"])
         self.assertIn("BasinATLAS level 8", d["env"])                      # the page says which level
@@ -219,9 +260,10 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                 patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch), \
                 patch("places.concordance.INBOUND_LIMIT", 1):
             page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#record_environment")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready' "
-                                     "&& window.__whgEnrichment.gloss === 'ready'", 30000)
-            d = page.evaluate("""() => ({env: document.querySelector('#record_environment .enr-body').innerText,
+            self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
+            _idle, env_ok = self.show_environment(page)
+            ok = env_ok and page.evaluate("window.__whgEnrichment.gloss === 'ready'")
+            d = page.evaluate("""() => ({env: document.querySelector('.enr-env-modal .modal-body').innerText,
                 gloss: document.querySelector('#record_gloss .enr-body').innerText})""")
         self.assertTrue(ok)
         self.assertIn("This group is partial", d["env"])
@@ -233,12 +275,13 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         with patch("api.edop_client._requests_transport", side_effect=FakeTransport((503, ""))), \
                 patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch):
             page.goto(f"{self.live_server_url}/atlas/place/{self.Lonely.pk}/#record_environment")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", 30000)
-            d = page.evaluate("""() => ({env: document.querySelector('#record_environment .enr-body').innerText,
-                chips: document.querySelectorAll('#record_environment .enr-chip').length,
-                card: (document.querySelector('#record_environment .enr-card') || {dataset: {}}).dataset.status,
+            self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.gloss === 'ready'", 30000)
+            _idle, ok = self.show_environment(page)
+            d = page.evaluate("""() => ({env: document.querySelector('.enr-env-modal .modal-body').innerText,
+                chips: document.querySelectorAll('.enr-env-modal .enr-chip').length,
+                card: (document.querySelector('.enr-env-modal .enr-card') || {dataset: {}}).dataset.status,
                 gloss: window.__whgEnrichment.gloss})""")
-            self.shot(page, "record_environment_unavailable", "#record_environment")
+            self.shot(page, "record_environment_unavailable", ".enr-env-modal .modal-content")
         self.assertTrue(ok)
         self.assertEqual(d["card"], "unavailable")
         self.assertIn("could not be reached just now", d["env"])
@@ -256,13 +299,12 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         with patch("api.crc_client.requests.post", side_effect=gw), \
                 patch("api.edop_client._requests_transport", side_effect=t):
             page.goto(f"{self.live_server_url}/atlas/locus/?r={token()}")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready' "
-                                     "&& window.__whgEnrichment.gloss === 'ready'", 45000)
-            d = page.evaluate("""() => ({gloss: (document.querySelector('#locus_gloss') || {}).innerText || '',
-                env: (document.querySelector('#locus_environment') || {}).innerText || '',
-                selected: (window.__whgLocus || {}).selectedIds || []})""")
-            self.shot(page, "locus_enrichment", "#locus_enrichment")
-        self.assertTrue(ok, f"errors={self.errors}")
+            gloss_ok, idle, env_ok = self.locus_show_environment(page)
+            d = page.evaluate("""(g) => ({gloss: (document.querySelector(g) || {}).innerText || '',
+                env: (document.querySelector('.enr-env-modal .modal-body') || {}).innerText || '',
+                selected: (window.__whgLocus || {}).selectedIds || []})""", self.LOCUS_GLOSS)
+            self.shot(page, "locus_enrichment", ".enr-env-modal .modal-content")
+        self.assertTrue(gloss_ok and idle and env_ok, f"{(gloss_ok, idle, env_ok)}; errors={self.errors}")
         self.assertIn("2 records currently in this cluster", d["gloss"])
         self.assertIn("Country code DE in every record.", d["gloss"])
         self.assertNotIn("US", d["gloss"])                  # the other Berlin is another cluster
@@ -289,10 +331,10 @@ class EnrichmentBrowserTests(LiveServerTestCase):
                 patch("api.edop_client.LOCUS_TIGHT_KM", 0.5), \
                 patch("api.edop_client._requests_transport", side_effect=t):
             page.goto(f"{self.live_server_url}/atlas/locus/?r={token()}")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready'", 45000)
-            env = page.evaluate("() => (document.querySelector('#locus_environment') || {}).innerText || ''")
-            self.shot(page, "locus_environment_per_member", "#locus_environment")
-        self.assertTrue(ok, f"errors={self.errors}")
+            _g, idle, ok = self.locus_show_environment(page)
+            env = page.evaluate("() => (document.querySelector('.enr-env-modal .modal-body') || {}).innerText || ''")
+            self.shot(page, "locus_environment_per_member", ".enr-env-modal .modal-content")
+        self.assertTrue(idle and ok, f"errors={self.errors}")
         self.assertIn("each record's own basin", env)
         self.assertIn("BasinATLAS level 8", env)
         self.assertNotIn("level 6", env)
@@ -324,12 +366,13 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         with patch("api.crc_client.requests.post", side_effect=gw), \
                 patch("api.edop_client._requests_transport", side_effect=t):
             page.goto(f"{self.live_server_url}/atlas/locus/?r={tok}")
-            ok = self.wait_for(page, "window.__whgEnrichment && window.__whgEnrichment.environment === 'ready' "
-                                     "&& window.__whgEnrichment.gloss === 'ready'", 60000)
-            d = page.evaluate("""() => ({gloss: (document.querySelector('#locus_gloss') || {}).innerText || '',
-                env: (document.querySelector('#locus_environment') || {}).innerText || '',
-                posted: window.__whgEnrichment.posted, errors: document.querySelectorAll('.enr-error').length})""")
-            self.shot(page, "locus_enrichment_capped", "#locus_enrichment")
+            gloss_ok, idle, env_ok = self.locus_show_environment(page, 60000)
+            ok = gloss_ok and idle and env_ok
+            d = page.evaluate("""(g) => ({gloss: (document.querySelector(g) || {}).innerText || '',
+                env: (document.querySelector('.enr-env-modal .modal-body') || {}).innerText || '',
+                posted: window.__whgEnrichment.posted, errors: document.querySelectorAll('.enr-error').length})""",
+                              self.LOCUS_GLOSS)
+            self.shot(page, "locus_enrichment_capped", ".enr-env-modal .modal-content")
         self.assertTrue(ok, f"errors={self.errors}; d={d}")
         self.assertEqual(d["posted"], {"sent": 200, "total": 205, "capped": True})
         bodies = [json.loads(b) for u, b in posted]
@@ -390,7 +433,7 @@ class EnrichmentBrowserTests(LiveServerTestCase):
         t = FakeTransport(AREA)
         page = self.new_page(anonymous=True)
         r, d = self.public_page_checks(page, f"/atlas/place/{self.A.pk}/", t)
-        self.shot(page, "record_public_anonymous", "#record_environment")
+        self.shot(page, "record_public_anonymous", ".enr-env-modal .modal-content")
         failed = {k: v for k, v in r.items() if not v}
         self.assertEqual(failed, {}, f"{failed}; dom={d}; errors={self.errors}")
         self.assertEqual((d["navAbout"], d["publicAttr"]), (True, "public"))

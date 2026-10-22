@@ -15,16 +15,27 @@
 //    and an unreachable index is never reported as absence (place#272);
 //  - a placeholder identifier (`wd:None`) is flagged as one, never as "not found"
 //    (ruling 2026-10-21: show flagged, never aggregate);
-//  - the empty concordance (the common case) leads with Explore similar records.
+//  - the empty concordance (the common case) leads with Explore similar records;
+//  - records that share a point are never hidden by each other: a click on a point
+//    lists every record at it, and a shared point is ringed and counted (Stage 5).
 //
-// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, baseMap}.
-// `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background).
+// Layout (Stage 5): the shared two-column shell of recordShell.css. The map lives in
+// the right column's square .rs-map box (#concordance_map_box, shown only when there is
+// something to map), its summary and legend directly under it (#concordance_map_notes);
+// the tier lists stay in the left column's #concordance. "About this group" (gloss
+// cards), the Wikipedia block of the "Elsewhere" card and the on-demand Environment
+// card come from enrichment.js; EDOPS is asked only when the visitor clicks.
+//
+// Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, stacks, baseMap}.
+// `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background);
+// `stacks` is the number of points shared by more than one mapped record.
 // `concordance` ends as 'ready' | 'empty' | 'not_public' | 'error'.
 
+// enrichment.js first: it brings the shared shell css, which this page's css refines.
+import { loadGlossCards, mountEnvironmentCard, recordFetcher, renderWikipediaLinks } from './enrichment.js';
 import '../css/atlasRecord.css';
-import { initRecordEnrichment } from './enrichment.js';   // place#325 Stage 3: gloss + EDOPS
 
-const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, baseMap: null });
+const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, stacks: 0, baseMap: null });
 const FETCH_TIMEOUT_MS = 60000;
 const BASEMAP_TIMEOUT_MS = 20000;
 // whg_maplibre's own `load` handler reads style.metadata, so it must exist.
@@ -166,12 +177,16 @@ function inboundItem(e) {
     </li>`;
 }
 
-function cocitedGroups(entries) {
+// Tier 3 grouped BY RECORD (dev walkthrough 2026-10-21: grouped by identifier, the same
+// four records repeated under eight identifiers). Rendering only: the entries are the
+// endpoint's, uncounted and unaggregated, in its order (place id, then link id).
+function cocitedByRecord(entries) {
     const groups = new Map();
     entries.forEach((e) => {
-        const k = e.cocited_identifier || e.identifier;
-        if (!groups.has(k)) groups.set(k, []);
-        groups.get(k).push(e);
+        const rec = e.record || {};
+        const k = String(rec.place_id);
+        if (!groups.has(k)) groups.set(k, { record: rec, links: [] });
+        groups.get(k).links.push(e);
     });
     return groups;
 }
@@ -181,17 +196,18 @@ function cocitedHTML(entries, truncated) {
     let h = `<div class="conc-tier conc-tier-3" id="concordance_tier3">
         <h3 class="h6">Co-cited: also linked to the same identifiers</h3>
         <p class="small text-muted">These records cite an identifier this record also cites. That is co-citation, not identity:
-        nobody has said they are the same place as this record, so they are listed here and left off the map.</p>`;
-    cocitedGroups(entries).forEach((list, ident) => {
-        h += `<div class="conc-cocited-group" data-identifier="${esc(ident)}">
-            <p class="mb-1">Also linked to <code>${esc(ident)}</code> by:</p><ul class="conc-list">`;
-        list.forEach((e) => {
-            const rec = e.record || {};
-            h += `<li class="conc-entry" data-tier="3">${recordLabel(rec, 'postgres')}
-                <div class="conc-meta">its link: ${typeBadge(e)} · ${provenanceBadge(e)}</div></li>`;
-        });
-        h += '</ul></div>';
+        nobody has said they are the same place as this record, so they are listed here and left off the map.</p>
+        <ul class="conc-list">`;
+    cocitedByRecord(entries).forEach(({ record, links }, pid) => {
+        const shared = [...new Set(links.map((e) => e.cocited_identifier || e.identifier))];
+        const items = links.map((e) => `<li data-identifier="${esc(e.cocited_identifier || e.identifier)}">${typeBadge(e)}
+            <code>${esc(e.cocited_identifier || e.identifier)}</code> · ${provenanceBadge(e)}</li>`).join('');
+        h += `<li class="conc-entry conc-cocited-record" data-tier="3" data-place-id="${esc(pid)}"
+                data-identifiers="${esc(shared.join(' '))}">${recordLabel(record, 'postgres')}
+            <div class="conc-meta">shares ${shared.length === 1 ? 'one identifier' : `${shared.length} identifiers`} with this record; its link${links.length === 1 ? '' : 's'}:</div>
+            <ul class="conc-cocited-links">${items}</ul></li>`;
     });
+    h += '</ul>';
     if (truncated) h += '<p class="small text-muted">More records co-cite these identifiers than are listed here.</p>';
     return h + '</div>';
 }
@@ -226,36 +242,86 @@ function emptyStateHTML(root, data) {
     </div>`;
 }
 
-function summaryHTML(data, mappable) {
+// The literal counts (fix a/d of place#325 Stage 5): `mappable` counts attested
+// equivalents with a point and EXCLUDES this record's own point, which the sentence
+// then names separately, and only when the record has one.
+function summaryHTML(data, mappable, recordOnMap) {
     const agg = data.aggregate || [];
     const n = agg.length;
-    return `<p class="conc-summary">
+    const own = mappable
+        ? (recordOnMap ? ', plus this record.' : '. This record itself has no location, so it is not on the map.')
+        : '.';
+    return `<p class="conc-summary mb-1" id="concordance_summary">
         <strong>${n}</strong> attested equivalent${n === 1 ? '' : 's'}
-        <span class="text-muted">(exactMatch or closeMatch, from this record or about it)</span>,
-        <strong>${mappable}</strong> on the map.
-        ${(data.outbound.length + data.inbound.length) > n ? '<span class="text-muted">Other links are listed below with what became of each.</span>' : ''}
+        (exactMatch or closeMatch, from this record or about it),
+        <strong>${mappable}</strong> on the map${own}
+        ${(data.outbound.length + data.inbound.length) > n ? 'Other links are listed with what became of each.' : ''}
     </p>`;
 }
 
 // ── the map: aggregated subset + this record; never tier 3 ──────────────────
+// Records at the SAME point (exact coordinates: e.g. a TGN and a GeoNames record both
+// at 22°E 39°N) are drawn on top of each other, and MapLibre hit-tests the top one only,
+// so the page keeps its own groups by coordinate: `groups` maps a point's key to every
+// record at it, and the popup lists the group, never just the clicked feature.
+function pointKey(p) {
+    return `${p[0]},${p[1]}`;
+}
+
 function aggregateFeatures(data) {
     const feats = [];
+    const groups = new Map();
+    const add = (coords, props, entry) => {
+        const key = pointKey(coords);
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ ...entry, coordinates: coords });
+        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: coords }, properties: { ...props, key } });
+    };
     const rp = data.record && data.record.repr_point;
-    if (Array.isArray(rp) && rp.length === 2) {
-        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: rp },
-            properties: { role: 'record', title: data.record.title || '', href: '' } });
+    if (Array.isArray(rp) && rp.length === 2 && rp.every(Number.isFinite)) {
+        const title = data.record.title || '';
+        add(rp, { role: 'record', title, href: '' }, { role: 'record', title, href: '', where: '' });
     }
     (data.aggregate || []).forEach((m) => {
         const p = m.repr_point;
         if (!(Array.isArray(p) && p.length === 2 && p.every(Number.isFinite))) return;
-        feats.push({ type: 'Feature', geometry: { type: 'Point', coordinates: p },
-            properties: { role: 'member', title: m.title || String(m.place_id), href: memberHref(m, m.via) || '',
-                tiers: (m.tiers || []).join(',') } });
+        const title = m.title || String(m.place_id);
+        const href = memberHref(m, m.via) || '';
+        add(p, { role: 'member', title, href, tiers: (m.tiers || []).join(',') },
+            { role: 'member', title, href, where: m.dataset_title || m.namespace || '' });
     });
-    return { type: 'FeatureCollection', features: feats };
+    groups.forEach((list) => list.sort((a, b) => (a.role === 'record' ? -1 : 0) - (b.role === 'record' ? -1 : 0)));
+    feats.forEach((f) => { f.properties.count = groups.get(f.properties.key).length; });
+    // One point per shared coordinate, for the ring under the stack.
+    const stacks = [];
+    groups.forEach((list, key) => {
+        if (list.length > 1) {
+            stacks.push({ type: 'Feature', geometry: { type: 'Point', coordinates: list[0].coordinates },
+                properties: { key, count: list.length } });
+        }
+    });
+    return { fc: { type: 'FeatureCollection', features: feats },
+        stacks: { type: 'FeatureCollection', features: stacks }, groups };
 }
 
-function drawMap(fc) {
+function popupItem(r) {
+    if (r.role === 'record') return `<li data-role="record">${esc(r.title)} <span class="text-muted">(this record)</span></li>`;
+    const name = r.href ? `<a href="${esc(r.href)}">${esc(r.title)}</a>` : esc(r.title);
+    const where = r.where ? ` <span class="text-muted">${esc(r.where)}</span>` : '';
+    return `<li data-role="member">${name}${where}</li>`;
+}
+
+function popupHTML(records) {
+    const head = records.length > 1
+        ? `<p class="conc-popup-head mb-1"><strong>${records.length} records at this point</strong></p>` : '';
+    return `<div class="conc-popup" data-count="${records.length}">${head}
+        <ul class="conc-popup-list">${records.map(popupItem).join('')}</ul></div>`;
+}
+
+const POINT_LAYERS = ['concordance-stacks', 'concordance-members', 'concordance-record'];
+const HIT_PX = 6;
+
+function drawMap({ fc, stacks, groups }) {
     const whgMaplibre = window.whg_maplibre;
     if (!whgMaplibre || !whgMaplibre.Map) {
         document.getElementById('concordance_map_note').textContent = 'The map could not be loaded on this page.';
@@ -319,6 +385,13 @@ function drawMap(fc) {
         clearTimeout(fallbackTimer);
         if (!fellBack) state.baseMap = 'loaded';
         map.addSource('concordance', { type: 'geojson', data: fc });
+        map.addSource('concordance-stacks', { type: 'geojson', data: stacks });
+        // A shared point: a dark ring round the stack, under the dots, and a count badge.
+        map.addLayer({
+            id: 'concordance-stacks', type: 'circle', source: 'concordance-stacks',
+            paint: { 'circle-radius': 13, 'circle-color': 'rgba(255,255,255,0.65)',
+                'circle-stroke-color': '#1a202c', 'circle-stroke-width': 2 },
+        });
         map.addLayer({
             id: 'concordance-members', type: 'circle', source: 'concordance',
             filter: ['==', ['get', 'role'], 'member'],
@@ -334,16 +407,35 @@ function drawMap(fc) {
         dataOn = true;
         fit();
 
-        const popup = new whgMaplibre.Popup({ closeButton: true });
-        ['concordance-members', 'concordance-record'].forEach((layer) => {
-            map.on('click', layer, (ev) => {
-                const f = ev.features && ev.features[0];
-                if (!f) return;
-                const p = f.properties || {};
-                const label = p.role === 'record' ? `${esc(p.title)} <span class="text-muted">(this record)</span>`
-                    : (p.href ? `<a href="${esc(p.href)}">${esc(p.title)}</a>` : esc(p.title));
-                popup.setLngLat(f.geometry.coordinates).setHTML(label).addTo(map);
+        // The badges are DOM markers, not a symbol layer: the plain-background fallback
+        // style has no glyphs, and the count must show on it too.
+        if (whgMaplibre.Marker) {
+            stacks.features.forEach((f) => {
+                const el = document.createElement('span');
+                el.className = 'conc-stack-badge';
+                el.dataset.key = f.properties.key;
+                el.textContent = String(f.properties.count);
+                el.setAttribute('aria-hidden', 'true');
+                new whgMaplibre.Marker({ element: el, anchor: 'bottom-left', offset: [6, -6] })
+                    .setLngLat(f.geometry.coordinates).addTo(map);
             });
+        }
+
+        // One click handler for all three layers: every point drawn within a few pixels of
+        // the click, then every record of each such point's group (our own array, not the
+        // features MapLibre happened to hit).
+        const popup = new whgMaplibre.Popup({ closeButton: true });
+        window.__whgRecordPopup = popup;
+        map.on('click', (ev) => {
+            const { x, y } = ev.point;
+            const hits = map.queryRenderedFeatures([[x - HIT_PX, y - HIT_PX], [x + HIT_PX, y + HIT_PX]],
+                { layers: POINT_LAYERS });
+            const keys = [...new Set(hits.map((f) => f.properties && f.properties.key).filter((k) => groups.has(k)))];
+            if (!keys.length) return;
+            const records = keys.flatMap((k) => groups.get(k));
+            popup.setLngLat(groups.get(keys[0])[0].coordinates).setHTML(popupHTML(records)).addTo(map);
+        });
+        POINT_LAYERS.forEach((layer) => {
             map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
             map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
         });
@@ -365,20 +457,32 @@ function render(root, data) {
         body.innerHTML = emptyStateHTML(root, data);
         state.concordance = 'empty';
     } else {
-        const fc = aggregateFeatures(data);
+        const mapData = aggregateFeatures(data);
+        const { fc } = mapData;
         const members = fc.features.filter((f) => f.properties.role === 'member').length;
+        const recordOnMap = fc.features.some((f) => f.properties.role === 'record');
         state.mapped = members;
-        let h = summaryHTML(data, members);
+        state.stacks = mapData.stacks.features.length;
+        // The summary and legend go under the map, in the right column (Stage 5).
+        let notes = summaryHTML(data, members, recordOnMap);
         if (members) {
-            h += `<div class="conc-map-wrap"><div id="concordance_map" class="conc-map"></div>
-                <p id="concordance_map_note" class="small text-muted mt-1 mb-0">
+            const ring = state.stacks
+                ? `<br><span class="conc-key conc-key-stack"></span> more than one record at the same point
+                   (the number says how many; click it to list them).` : '';
+            notes += `<p id="concordance_map_note" class="mb-0">
                 <span class="conc-key conc-key-record"></span> this record
                 <span class="conc-key conc-key-member ms-2"></span> attested equivalents (exactMatch, closeMatch).
-                Co-cited records are not shown.</p></div>`;
+                Co-cited records are not shown.${ring}</p>`;
         } else {
-            h += '<p id="concordance_map_note" class="small text-muted">No attested equivalent has a location WHG holds, so there is nothing to map.</p>';
+            notes += '<p id="concordance_map_note" class="mb-0">No attested equivalent has a location WHG holds, so there is nothing to map.</p>';
         }
-        h += `<div class="conc-tier conc-tier-1" id="concordance_tier1">
+        const notesEl = document.getElementById('concordance_map_notes');
+        const box = document.getElementById('concordance_map_box');
+        if (notesEl) {
+            notesEl.innerHTML = notes;
+            notesEl.hidden = false;
+        }
+        let h = `<div class="conc-tier conc-tier-1" id="concordance_tier1">
             <h3 class="h6">Outbound: this record's own attestations</h3>`;
         h += data.outbound.length
             ? `<ul class="conc-list">${data.outbound.map(outboundItem).join('')}</ul>`
@@ -399,7 +503,11 @@ function render(root, data) {
         // container draws a 400x300 canvas (drawMap also tracks later resizes).
         status.hidden = true;
         body.hidden = false;
-        if (members) drawMap(fc);
+        if (members && box) {
+            box.innerHTML = '<div id="concordance_map" class="rs-map-canvas"></div>';
+            box.hidden = false;
+            drawMap(mapData);
+        }
     }
     status.hidden = true;
     body.hidden = false;
@@ -440,10 +548,40 @@ function load(root) {
         });
 }
 
+// ── "About this group", Wikipedia, Environment (place#325 Stage 3, reshaped in Stage 5) ──
+// The server renders #record_gloss and #record_environment only for a beta user, or for
+// anyone with the v4 release switch on (then marked data-enrichment="public" and served
+// by the public, throttled endpoints): their presence is the gate. The gloss loads with
+// the page; the environment endpoint (EDOPS) only when the card's button is clicked.
+function initEnrichment() {
+    const gloss = document.getElementById('record_gloss');
+    const env = document.getElementById('record_environment');
+    if (gloss && gloss.dataset.endpoint) {
+        loadGlossCards(gloss.querySelector('.enr-body'), recordFetcher(gloss.dataset.endpoint), {
+            kind: 'concordance',
+            onData: (json) => {
+                // Wikipedia links held in the group's Wikidata records, following their
+                // visibility (views_enrichment.atlas_record_gloss). Only where known.
+                const card = document.getElementById('record_elsewhere');
+                const slot = document.getElementById('record_wikipedia');
+                if (!card || !slot) return;
+                renderWikipediaLinks(slot, json.wikipedia, { total: json.wikipedia_total, headingTag: 'h3' });
+                if (slot.childElementCount) card.hidden = false;
+            },
+        });
+    }
+    if (env && env.dataset.endpoint) {
+        mountEnvironmentCard(env, { fetchEnvironment: recordFetcher(env.dataset.endpoint), title: 'Environment',
+            invitation: 'River basin, climate and land-use figures for where this group of records lies, from EDOPS, '
+                + 'a research service outside WHG. Nothing is looked up or sent until you ask.',
+            headingTag: 'h2' });
+    }
+}
+
 function init() {
     const root = document.getElementById('concordance');
     if (root && root.dataset.endpoint) load(root);
-    initRecordEnrichment();
+    initEnrichment();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

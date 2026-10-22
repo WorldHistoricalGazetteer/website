@@ -432,6 +432,13 @@ class HubTruncationTests(TestCase):
             p = patch(f"places.concordance.{name}", val)
             p.start()
             self.addCleanup(p.stop)
+        # gn:4242 / gn:4243 are in a gateway namespace: the record group and the environment
+        # endpoint (cached_concordance asks with the gateway on) must never reach the real
+        # gateway from a test (place#325 Stage 5 follow-up).
+        fake_fetch.calls = []
+        p = patch("api.crc_client.crc_fetch_places", side_effect=fake_fetch)
+        p.start()
+        self.addCleanup(p.stop)
 
     def conc(self, place):
         return build_concordance(place, user=None, use_gateway=False)
@@ -473,6 +480,8 @@ class HubTruncationTests(TestCase):
             env = {p.pk: self.client.get(f"/atlas/place/{p.pk}/environment/").json() for p in (self.Hub, self.Small)}
         self.assertEqual((env[self.Hub.pk]["truncated"], env[self.Small.pk]["truncated"]), (True, False))
         self.assertEqual(env[self.Small.pk]["status"], "ok")
+        # The gateway was asked, and only through the fake: the patch is in the path.
+        self.assertIn(["gn:4242"], fake_fetch.calls)
 
 
 @override_settings(CACHES=LOCMEM)

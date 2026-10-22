@@ -29,6 +29,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.gis.geos import Point
 from django.test import Client, LiveServerTestCase, override_settings
 
+# place#325 Stage 5: WHG_RECORD_BUNDLE_DIR serves the page bundle from a scratch build.
+from places.tests_record_layout_browser import BUNDLE_DIR, bundle_route
+
 RUN = os.environ.get("WHG_BROWSER_TESTS") == "1"
 SHOTS = os.environ.get("WHG_BROWSER_SHOTS")
 BLOCKED_HOSTS = ("analytics.whgazetteer.org", "errors.whgazetteer.org", "plausible")
@@ -170,7 +173,8 @@ class RecordPageBrowserTests(LiveServerTestCase):
         page.route("**/*", lambda route: route.abort()
                    if any(h in route.request.url for h in BLOCKED_HOSTS)
                    or (block_bundle and "atlas_record.bundle.js" in route.request.url)
-                   else route.continue_())
+                   else (bundle_route(route, route.request) if BUNDLE_DIR and "/atlas_record.bundle." in route.request.url
+                         else route.continue_()))
         self.page_errors, self.console = [], []
         if base_style == "fixture":
             page.route("**/styles/**/style.json", lambda route: route.fulfill(
@@ -208,8 +212,9 @@ class RecordPageBrowserTests(LiveServerTestCase):
               tier1: t('#concordance_tier1 .conc-entry'),
               tier2: t('#concordance_tier2 .conc-entry'),
               tier3: t('#concordance_tier3 .conc-entry'),
-              groups: Array.from(document.querySelectorAll('#concordance_tier3 .conc-cocited-group'))
-                        .map(g => g.dataset.identifier),
+              // Stage 5: grouped by record, each with the identifiers it shares with this one.
+              groups: Array.from(document.querySelectorAll('#concordance_tier3 .conc-cocited-record'))
+                        .map(g => g.dataset.identifiers),
               tier3intro: (document.querySelector('#concordance_tier3') || {}).textContent || '',
             };
         }""")
@@ -273,7 +278,8 @@ class RecordPageBrowserTests(LiveServerTestCase):
             const c = map.getCanvas();
             return {box: el.clientWidth, boxH: el.clientHeight, css: c.clientWidth, cssH: c.clientHeight}; }""")
         self.map_size = size
-        results["map_canvas_fills_container"] = bool(size) and size["box"] > 600 \
+        # Stage 5: the map is the right column's square box (~450 px at 1280 wide).
+        results["map_canvas_fills_container"] = bool(size) and size["box"] > 300 \
             and abs(size["css"] - size["box"]) <= 2 and abs(size["cssH"] - size["boxH"]) <= 2
         results["map_rendered_members"] = bool(m) and {"Gateway Town", "Record B"} <= set(m["rendered"]) \
             and "Record C" not in m["rendered"]
@@ -291,14 +297,23 @@ class RecordPageBrowserTests(LiveServerTestCase):
                          f"diag={self.map_diag}; errors={self.page_errors}; console={self.console[-25:]}")
         self.assertEqual(self.page_errors, [])
         # ... and keeps tracking it when the container changes size later.
-        page.set_viewport_size({"width": 820, "height": 1000})
-        tracked = self.wait_for(page, """() => { const el = document.getElementById('concordance_map');
-            const c = window.__whgRecordMap.getCanvas();
-            return el.clientWidth < 800 && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""", 5000)
+        # (Stage 5: narrower, still two columns; below 992 px the map takes the full width.)
+        page.set_viewport_size({"width": 1100, "height": 1000})
+        tracked = self._tracked(page, self.map_size["box"])
         after = page.evaluate("""() => [document.getElementById('concordance_map').clientWidth,
                                         window.__whgRecordMap.getCanvas().clientWidth]""")
         self.assertTrue(tracked, f"canvas did not follow its container: {after} (before: {self.map_size})")
         self.assertLess(after[0], self.map_size["box"])                   # the container did shrink
+
+    def _tracked(self, page, before):
+        try:
+            page.wait_for_function("""(before) => { const el = document.getElementById('concordance_map');
+                const c = window.__whgRecordMap.getCanvas();
+                return el.clientWidth < before && Math.abs(c.clientWidth - el.clientWidth) <= 2; }""",
+                                   arg=before, timeout=5000)
+            return True
+        except Exception:  # noqa: BLE001 — a timeout is a finding
+            return False
 
     def test_unreachable_base_map_still_maps(self):
         """The base style failing outright falls back to a plain background, and

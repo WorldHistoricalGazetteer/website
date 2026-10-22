@@ -1,28 +1,40 @@
-/* The beta Record page with its Concordance section (place#325 Stage 2). */
+/* The beta Record page with its Concordance section (place#325 Stage 2). Stage 5: the
+ * two-column shell, cards and map box are recordShell.css's (shared with the Locus page);
+ * the rules here are this page's own. */
 
-.atlas-record { max-width: 960px; }
-
-.atlas-record-header { border-bottom: 1px solid #dee2e6; padding-bottom: .5rem; margin-bottom: 1rem; }
+.atlas-record-header { border-bottom: 1px solid #dee2e6; padding-bottom: .5rem; }
 .atlas-record-tabs .nav-link { padding: .2rem .7rem; font-size: .9rem; }
 
-.atlas-record-section { margin-bottom: 2rem; scroll-margin-top: 80px; }
+.atlas-record-section { margin-bottom: 1rem; scroll-margin-top: 80px; }
 .atlas-record-facts dt { font-weight: 600; color: #555; }
 .atlas-record-facts dd { margin-bottom: .35rem; }
 
 .atlas-record-block { margin-top: 1rem; }
 .atlas-record-block h3 { margin-bottom: .35rem; }
 .atlas-record-description { border-left: 3px solid #dee2e6; padding-left: .75rem; margin: 0 0 .75rem; }
-.atlas-record-links li, .atlas-record-related li, .atlas-record-depictions li { margin-bottom: .2rem; word-break: break-word; }
+.atlas-record-links li, .atlas-record-related li, .atlas-record-depictions li,
+.atlas-record-outward li { margin-bottom: .2rem; word-break: break-word; }
 
 .atlas-record-loading { display: flex; align-items: center; color: #555; padding: .75rem 0; }
+#record_environment { scroll-margin-top: 80px; }
 
-/* the map */
-.conc-map-wrap { margin: .5rem 0 1rem; }
-.conc-map { height: 340px; width: 100%; border: 1px solid #dee2e6; border-radius: 4px; }
+/* the map (right column) and the notes directly under it. Below lg the shell puts the
+ * side column's non-map children after the whole left column; the notes belong to the
+ * map, so they keep its place there (same order as the map; DOM order puts them after). */
+.conc-map-notes { margin-top: calc(var(--rs-gap, 1rem) * -0.5); }
+@media (max-width: 991.98px) {
+  .atlas-record .rs-layout .rs-side > .conc-map-notes { order: 2; }
+}
 .conc-key { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid #fff;
             box-shadow: 0 0 0 1px #aaa; vertical-align: -1px; }
 .conc-key-record { background: #c53030; }
 .conc-key-member { background: #2b6cb0; }
+.conc-key-stack { background: rgba(255, 255, 255, .65); border: 2px solid #1a202c; box-shadow: none; width: 13px; height: 13px; }
+.conc-stack-badge { display: inline-block; min-width: 1.25rem; padding: 0 .3rem; border-radius: .65rem;
+                    background: #1a202c; color: #fff; font-size: .72rem; font-weight: 600; line-height: 1.25rem;
+                    text-align: center; pointer-events: none; box-shadow: 0 0 0 2px #fff; }
+.conc-popup-list { list-style: none; padding-left: 0; margin: 0; }
+.conc-popup-list li { margin-bottom: .15rem; }
 
 /* tiers */
 .conc-summary { margin-bottom: .5rem; }
@@ -46,7 +58,8 @@
 
 .conc-tier-3 { border-top: 1px dashed #ced4da; padding-top: .75rem; }
 .conc-tier-3 .conc-entry { background: #fafafa; }
-.conc-cocited-group { margin-bottom: .75rem; }
+.conc-cocited-links { list-style: none; padding-left: 0; margin: .2rem 0 0; font-size: .85rem; }
+.conc-cocited-links li { margin-bottom: .1rem; }
 
 /* the empty state (the common case: >= 76.7% of non-TGN public records) */
 .conc-empty { border: 1px solid #dee2e6; border-radius: 6px; padding: 1.25rem; background: #f8f9fa; }
@@ -55,5 +68,4 @@
 
 @media (max-width: 576px) {
   .conc-explore-hint { display: block; margin: .35rem 0 0 !important; }
-  .conc-map { height: 260px; }
 }

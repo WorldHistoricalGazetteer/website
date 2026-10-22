@@ -31,7 +31,17 @@
     <span class="badge bg-warning text-dark ms-2">beta preview</span>
   </nav>
 
-  <header class="atlas-record-header">
+  {% comment %}
+    place#325 Stage 5: the shared two-column shell (whg/webpack/css/recordShell.css), as
+    on the Locus page. LEFT: header, the record, the concordance lists, "About this
+    group". RIGHT: the concordance map (square), its summary and legend, "Elsewhere",
+    Environment. Below lg one column: header, map, the rest of the left, the rest of
+    the right. The two columns are plain divs (display: contents below lg).
+  {% endcomment %}
+  <div class="rs-layout">
+  <div class="rs-main">
+
+  <header class="rs-header atlas-record-header">
     <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
       <div>
         <h1 class="h3 mb-1">{{ place.title }}</h1>
@@ -204,29 +214,55 @@
   {% comment %}
     place#325 Stage 3: beta users always; everyone else only with the v4 release switch
     on (ruling 2026-10-21: public at release, anonymous visitors too). The public
-    sections carry data-enrichment="public" (the beta page's bytes are unchanged), and
+    parts carry data-enrichment="public" (the beta page carries no marker), and
     their endpoints describe only what an anonymous caller may see, under their own
     throttle. Both describe the GROUP (this record plus the concordance's
     aggregated subset: exactMatch/closeMatch, tiers 1-2; never co-cited records).
-    Filled by enrichment.js from places/views_enrichment.py.
+    Filled by atlasRecord.js with enrichment.js from places/views_enrichment.py; the
+    environment endpoint (EDOPS) only when the visitor asks (Stage 5).
   {% endcomment %}
-  <section id="record_gloss" class="atlas-record-section enr-section" aria-labelledby="record_gloss_heading"
+  <section id="record_gloss" class="atlas-record-section" aria-labelledby="record_gloss_heading"
            data-endpoint="{% url 'atlas-record-gloss' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
     <h2 id="record_gloss_heading" class="h5">About this group <span class="enr-badge">generated from the records' data</span></h2>
     <p class="small text-muted">This record and its attested equivalents, described only from what the records themselves
       say: names, types, country codes, containing places and dates. Nothing is inferred.</p>
     <div class="enr-body"></div>
   </section>
-
-  <section id="record_environment" class="atlas-record-section enr-section" aria-labelledby="record_environment_heading"
-           data-endpoint="{% url 'atlas-record-environment' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}>
-    <h2 id="record_environment_heading" class="h5">Environmental signature <span class="enr-badge">EDOPS</span></h2>
-    <p class="small text-muted">The environment of the drainage basin (or area) where this group lies, from
-      <a href="https://computingplace.org/" target="_blank" rel="noopener noreferrer">EDOPS, Computing Place</a>.
-      Mostly present-day conditions: read the note on each band.</p>
-    <div class="enr-body"></div>
-  </section>
   {% endif %}
+
+  </div>{# .rs-main #}
+
+  <div class="rs-side">
+    {% comment %}
+      The concordance map: shown (and the map created) only once there is something to
+      map, so the common empty case has no blank square. The notes under it (summary and
+      legend) stay directly under the map in the one-column layout too (atlasRecord.css).
+    {% endcomment %}
+    <div id="concordance_map_box" class="rs-map" hidden></div>
+    <div id="concordance_map_notes" class="conc-map-notes rs-muted small" hidden></div>
+
+    <div id="record_elsewhere" class="rs-card rs-icon-links"{% if not outward_links %} hidden{% endif %}>
+      <h2 class="rs-card-title"><i class="fa-solid fa-arrow-up-right-from-square rs-icon" aria-hidden="true"></i>Elsewhere</h2>
+      <div id="record_wikipedia"></div>
+      {% if outward_links %}
+        <div id="record_outward_links">
+          <h3 class="rs-card-subtitle"><i class="fa-solid fa-link rs-icon" aria-hidden="true"></i>Cited by this record</h3>
+          <p class="small rs-muted mb-1">The web addresses among this record's links, as contributed.</p>
+          <ul class="list-unstyled mb-0 atlas-record-outward">
+            {% for l in outward_links %}
+              <li><span class="badge text-bg-light border me-1">{{ l.type }}</span><a href="{{ l.href }}" target="_blank" rel="noopener noreferrer">{{ l.identifier }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+
+    {% if user.can_access_beta or enrichment_public %}
+      <div id="record_environment" class="atlas-record-env"
+           data-endpoint="{% url 'atlas-record-environment' place.pk %}"{% if not user.can_access_beta %} data-enrichment="public"{% endif %}></div>
+    {% endif %}
+  </div>{# .rs-side #}
+  </div>{# .rs-layout #}
 
 </main>
 {% endblock %}
