@@ -206,7 +206,7 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
         c = d["canvas"]
         r["canvas_fills_box"] = bool(c) and abs(c["w"] - c["boxW"]) <= 2 and abs(c["h"] - c["boxH"]) <= 2 \
             and abs(c["boxW"] - m["w"]) <= 5
-        r["map_capped"] = m["h"] <= 480.5
+        r["map_capped"] = m["h"] <= 560.5
         r["notes_under_map"] = 0 <= d["notes"]["t"] - m["b"] <= 12
         if width >= 992:
             r["two_columns"] = bool(d["main"] and d["side"]) and d["main"]["r"] <= d["side"]["l"] \
@@ -222,7 +222,7 @@ class RecordLayoutBrowserTests(LiveServerTestCase):
                                   and d["record"]["b"] <= d["conc"]["t"] <= d["gloss"]["t"]
                                   and d["gloss"]["b"] <= d["elsewhere"]["t"] <= d["env"]["t"])
             r["map_full_width"] = abs(m["w"] - d["record"]["w"]) <= 2
-            r["map_square_or_capped"] = abs(m["w"] - m["h"]) <= 1 if m["w"] <= 480 else abs(m["h"] - 480) <= 1
+            r["map_square_or_capped"] = abs(m["w"] - m["h"]) <= 1 if m["w"] <= 560 else abs(m["h"] - 560) <= 1
         return r, d
 
     def setUp_transport(self):

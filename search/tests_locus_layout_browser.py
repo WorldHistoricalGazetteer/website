@@ -17,7 +17,7 @@ committed bundle is served, and until it is rebuilt from this source these tests
 What it proves, and how each check can fail:
 
 * at 1280, 992, 768 and 390 px, for a minted recipe locus and an unminted token:
-  the map box is square (or capped at 480 px) and the MapLibre canvas fills it
+  the map box is square (or capped at 560 px) and the MapLibre canvas fills it
   (a canvas left at its creation size, or the old fixed 380 px box, fails); at
   >= 992 the map is in a column right of the header, below that it comes straight
   after the header and before the member list; the page never scrolls sideways;
@@ -204,10 +204,10 @@ class LocusLayoutBrowserTests(LiveServerTestCase):
                     m = page.evaluate(MEASURE)
                     page.screenshot(path=os.path.join(SHOT_DIR, f"locus-layout-{kind}-{width}.png"), full_page=True)
                     mp, hd, res = m["map"], m["header"], m["result"]
-                    # The map: square, or capped at 480 px high; the canvas fills the box.
+                    # The map: square, or capped at 560 px high; the canvas fills the box.
                     self.assertTrue(mp and mp["w"] > 100, m)
-                    self.assertLessEqual(mp["h"], 481, mp)
-                    self.assertTrue(abs(mp["w"] - mp["h"]) <= 2 or (mp["h"] >= 479 and mp["w"] > mp["h"]), mp)
+                    self.assertLessEqual(mp["h"], 561, mp)
+                    self.assertTrue(abs(mp["w"] - mp["h"]) <= 2 or (mp["h"] >= 559 and mp["w"] > mp["h"]), mp)
                     # (.rs-map's 1px border inside; the map container itself carries none)
                     self.assertTrue(abs(m["box"]["w"] - (mp["w"] - 2)) <= 1 and abs(m["box"]["h"] - (mp["h"] - 2)) <= 1,
                                     (m["box"], mp))

@@ -43,7 +43,7 @@
 
 :root {
     --rs-gap: 1rem;
-    --rs-map-max-h: 480px;
+    --rs-map-max-h: 560px;
     --rs-radius: 8px;
     --rs-text: #212529;
     --rs-muted: #565e66;            /* 6.6:1 on #fff, 6.1:1 on the unknown tint */
