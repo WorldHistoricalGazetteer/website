@@ -561,8 +561,50 @@ def atlas_search(request):
         options = json.loads(request.body or b"{}")
     except (ValueError, TypeError):
         options = {}
+    if not isinstance(options, dict):
+        options = {}
 
+    withheld_scope = _withhold_hidden_dataset_scope(options, request.user)
+    if withheld_scope is not None:
+        return withheld_scope
     return _gateway_search_response(options, request.user, hit_record_urls=True)
+
+
+_DATASET_SCOPE_RE = re.compile(r"^whg:(\d+)$", re.IGNORECASE)
+
+
+def _withhold_hidden_dataset_scope(options, user):
+    """place#332: a ``namespaces`` scope entry ``whg:<dataset_id>`` (the Place
+    List browsing one contributed dataset, or the Atlas filtering on one) names
+    a dataset; one outside this user's circle is dropped from the scope BEFORE
+    the gateway is asked. The hits would be withheld afterwards anyway
+    (``_withhold_contributed_hits``), but the gateway's ``total`` and a
+    ``withheld`` count would still give the dataset's size away. When every
+    entry was hidden, the answer is the empty one a dataset with no places
+    gets, and the gateway is not called: dropping the last entry must never
+    turn a scoped request into an unscoped one. Returns that response, or None
+    (``options`` possibly narrowed in place)."""
+    requested = options.get("namespaces")
+    if isinstance(requested, str):
+        requested = [n.strip() for n in requested.split(",") if n.strip()]
+    if not isinstance(requested, list) or not requested:
+        return None
+    ids = {i: int(m.group(1)) for i, n in enumerate(requested)
+           if (m := _DATASET_SCOPE_RE.match(str(n).strip()))}
+    if not ids:
+        return None
+    hidden = hidden_datasets(user)
+    kept = [n for i, n in enumerate(requested) if not (i in ids and ids[i] in hidden.pks)]
+    if kept:
+        options["namespaces"] = kept
+        return None
+    searched = [str(n).strip() for n in requested]
+    return JsonResponse({
+        "hits": [], "total": 0, "edges": [], "facets": {},
+        "clustering_params": None, "toponym_stoplist": [],
+        "namespaces": [], "namespaces_searched": searched, "datasets_searched": searched,
+        "request": None, "gateway": True,
+    })
 
 
 def _gateway_search_response(options, user, extra=None, hit_record_urls=False):
