@@ -265,7 +265,11 @@ class LocusBrowserTests(LiveServerTestCase):
         # The resolver clustered with the gateway's stoplist from ITS response.
         self.assertEqual(state["stoplistCount"], len(STOPLIST))
         self.assertEqual(len(self.gateway.bodies), 2, "the page should have re-run the retrieval once")
-        self.assertEqual(self.gateway.bodies[1], body, "the re-run must send the body the recipe was made from")
+        # The re-run is the Atlas body plus the resolver's own opt-in for hit links, which is
+        # not part of any recipe (locus_recipe._BODY_FIXED); nothing else may differ.
+        self.assertEqual(self.gateway.bodies[1], {**body, "include_links": True},
+                         "the re-run must send the body the recipe was made from, plus include_links")
+        self.assertNotIn("include_links", body)
 
         links = page.evaluate("Array.from(document.querySelectorAll('#locus_result .locus-record-link')).map(a => a.getAttribute('href'))")
         self.assertEqual(sorted(links), ["/entity/place:gn:1/", "/entity/place:wd:Q64/"])
