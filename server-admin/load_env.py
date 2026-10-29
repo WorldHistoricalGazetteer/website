@@ -187,6 +187,13 @@ def load_environment(context='local',
 
     write_env_file(env_vars, output_path)
     load_dotenv(output_path)
+
+    # Directories the compose file bind-mounts for the app containers (uid 1000). If one is missing Docker
+    # creates it root-owned and the container cannot write its logs: the web container then dies in
+    # logging setup on a fresh host. Creating them here makes them the deploy user's (a no-op where they exist).
+    if context != 'local':
+        for sub in (os.path.join('logs', context), 'data_dumps'):
+            os.makedirs(os.path.join(env_vars['SITES_DIR'], sub), exist_ok=True)
     
     # Render files using Jinja2
     render_jinja_template(compose_template_path, env_vars, compose_output_path)
