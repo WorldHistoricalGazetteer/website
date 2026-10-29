@@ -168,6 +168,8 @@ class TemplateAndLoaderTests(unittest.TestCase):
         values = {n: 'x' for n in names}
         values.update(ENV_CONTEXT='whgazetteer-org', BRANCH='main',
                       SITES_DIR='/home/whgadmin/sites', DATABASES_DIR='/home/whgadmin/databases')
+        for k in ('MOUNT_LABEL', 'USERNS_WHG'):
+            values.pop(k, None)   # opt-in; the stand-in value 'x' would switch them on
         values.update(extra)
         return Template((ROOT / template).read_text()).render(values)
 
@@ -247,7 +249,8 @@ class TileserverServiceTests(unittest.TestCase):
         values.update(ENV_CONTEXT='whgazetteer-org', BRANCH='main', SITES_DIR='/s', DATABASES_DIR='/d',
                       SUBNET='10.9.0.0/16')
         for k in ('TILES_DIR', 'TILESERVER_IMAGE', 'TILESERVER_IMAGE_TAG', 'TILESERVER_USER', 'TILESERVER_PORT',
-                  'TILES_MOUNT_OPTS', 'MEM_LIMIT_TILESERVER', 'OLLAMA_NETWORK', 'OLLAMA_HOST_CONTEXT'):
+                  'TILES_MOUNT_OPTS', 'MEM_LIMIT_TILESERVER', 'OLLAMA_NETWORK', 'OLLAMA_HOST_CONTEXT',
+                  'MOUNT_LABEL', 'USERNS_WHG'):
             values.pop(k, None)
         values.update(extra)
         return yaml.safe_load(Template(text).render(values))['services']
@@ -277,3 +280,33 @@ class TileserverServiceTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class RootlessVariantTests(TileserverServiceTests):
+    """MOUNT_LABEL / USERNS_WHG are for rootless Podman on SELinux; unset they must change nothing."""
+
+    def host_binds(self, svc):
+        return [v for v in svc.get('volumes', []) if isinstance(v, str) and v.startswith('/')]
+
+    def test_unset_means_no_label_and_no_userns(self):
+        for name, svc in self.services(DB_DIR='/db', BASE_DIR='/b').items():
+            self.assertNotIn('userns_mode', svc, name)
+            for v in self.host_binds(svc):
+                self.assertNotIn(':z', v, f'{name}: {v}')
+        self.assertIn('/b:/app', self.services(DB_DIR='/db', BASE_DIR='/b')['web']['volumes'])
+
+    def test_label_goes_on_every_host_bind_and_not_on_named_volumes(self):
+        svcs = self.services(MOUNT_LABEL='z', DB_DIR='/db', BASE_DIR='/b', TILES_DIR='/t', TILES_MOUNT_OPTS='ro,z')
+        for name in ('web', 'celery_worker', 'celery_beat', 'flower', 'redis'):
+            binds = self.host_binds(svcs[name])
+            self.assertTrue(binds, name)
+            for v in binds:
+                self.assertTrue(v.endswith(':z'), f'{name}: {v}')
+        self.assertTrue(any(v == '/b:/app:z' for v in svcs['web']['volumes']))
+        self.assertIn('shared-tmp:/var/tmp', svcs['web']['volumes'])      # a named volume is left alone
+        self.assertIn('/t:/data:ro,z', svcs['tileserver']['volumes'])     # tile server keeps its own option
+
+    def test_userns_only_on_the_whg_image_services(self):
+        svcs = self.services(USERNS_WHG='keep-id:uid=1000,gid=1000')
+        with_it = sorted(n for n, s in svcs.items() if s.get('userns_mode'))
+        self.assertEqual(with_it, ['celery_beat', 'celery_worker', 'flower', 'web'])
