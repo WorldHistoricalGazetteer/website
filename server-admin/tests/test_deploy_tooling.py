@@ -233,6 +233,9 @@ class TemplateAndLoaderTests(unittest.TestCase):
         self.assertIn(f'{sites}/logs/whgazetteer-org:/app/whg/logs', compose)
         self.assertIn(f'{tmp}/databases/whgazetteer-org:/var/lib/postgresql/data', compose)
         self.assertTrue((nginx_dir / 'whg.test').is_file(), 'nginx file should land in WHG_NGINX_DIR')
+        for d in ('logs/whgazetteer-org', 'data_dumps'):   # bind-mounted by the app containers; Docker would root-own them
+            self.assertTrue((sites / d).is_dir(), d)
+            self.assertEqual((sites / d).stat().st_uid, os.getuid(), d)
         self.assertNotIn('/home/whgadmin', compose)
 
 
