@@ -174,6 +174,10 @@ class ContributorAttestation(models.Model):
     # that is not indexed yet cannot be minted (place#334 N2); resolved at publish.
     place_a_pk = models.BigIntegerField(null=True, blank=True, db_index=True)
     place_b_pk = models.BigIntegerField(null=True, blank=True, db_index=True)
+    # The suggestion this row was made from, when it came from the contributor feed
+    # (place#338). SET_NULL: regenerating candidates must never touch a person's statement.
+    candidate = models.ForeignKey("datasets.MatchCandidate", null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name="attestations")
 
     class Meta:
         constraints = [
