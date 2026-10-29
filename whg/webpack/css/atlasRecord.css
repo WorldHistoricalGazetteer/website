@@ -83,6 +83,13 @@
 .conc-cocited-links { list-style: none; padding-left: 0; margin: .2rem 0 0; font-size: .85rem; }
 .conc-cocited-links li { margin-bottom: .1rem; }
 
+/* Link controls and link-sourced entries (place#337; attest.js) */
+.conc-link-actions { display: flex; gap: .35rem; margin-top: .3rem; }
+.conc-link-actions .conc-link-btn { font-size: .75rem; padding: .05rem .5rem; }
+.conc-attestation { border-left: 3px solid #7e57c2; }
+.conc-distinct { border-top: 1px dashed #ced4da; padding-top: .75rem; }
+.conc-distinct .conc-entry { background: #fdf6f6; }
+
 /* the empty state (the common case: >= 76.7% of non-TGN public records) */
 .conc-empty { border: 1px solid #dee2e6; border-radius: 6px; padding: 1.25rem; background: #f8f9fa; }
 .conc-empty-lead h3 { font-size: 1.05rem; }

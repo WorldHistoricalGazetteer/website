@@ -110,6 +110,31 @@ class VisibilityTests(SimpleTestCase):
             self._validate(body, namespace_ok=False)
         self.assertEqual(cm.exception.status, 404)
 
+    def test_a_django_pk_id_is_canonicalised_to_the_gateway_form(self):
+        """The Record page names its own record as whg:<pk>; it must reach the same Place
+        as the gateway form, or the same link would be stored twice under two names."""
+        body = {"place_a": "whg:105", "place_b": "wd:Q90", "relation_type": "closeMatch"}
+        with mock.patch("api.attestations._place_ref", return_value=(5, "a1")):
+            via_pk = self._validate(body)
+        via_gateway = self._validate()
+        self.assertEqual((via_pk["place_a"], via_pk["dataset_id"]), ("whg:5:a1", "whg:5"))
+        self.assertEqual((via_pk["place_a"], via_pk["place_b"]), (via_gateway["place_a"], via_gateway["place_b"]))
+
+    def test_a_django_pk_that_names_no_record_is_the_same_404(self):
+        body = {"place_a": "whg:105", "place_b": "wd:Q90", "relation_type": "closeMatch"}
+        with mock.patch("api.attestations._place_ref", return_value=(5, "a1")):
+            self._validate(body)  # control: it resolves
+        with mock.patch("api.attestations._place_ref", return_value=None):
+            with self.assertRaises(attestations.AttestationRefused) as cm:
+                self._validate(body)
+        self.assertEqual((cm.exception.status, cm.exception.message), (404, "not found"))
+
+    def test_the_two_forms_of_one_record_are_a_self_link(self):
+        body = {"place_a": "whg:105", "place_b": "whg:5:a1", "relation_type": "closeMatch"}
+        with mock.patch("api.attestations._place_ref", return_value=(5, "a1")):
+            with self.assertRaises(attestations.AttestationRefused):
+                self._validate(body)
+
     def test_dataset_id_is_blank_when_neither_side_is_contributed(self):
         self.assertEqual(self._validate(dict(self.BODY, place_a="gn:1"))["dataset_id"], "")
 
@@ -132,7 +157,7 @@ class VisibilityTests(SimpleTestCase):
             self._validate(dict(self.BODY, place_b="whg:5:a1"))
 
     def test_malformed_id_refused(self):
-        for bad in ("nocolon", "whg:5", "WD:Q90 ", "x" * 200 + ":1"):
+        for bad in ("nocolon", "whg:", "WD:Q90 ", "x" * 200 + ":1"):
             with self.subTest(bad=bad), self.assertRaises(attestations.AttestationRefused):
                 self._validate(dict(self.BODY, place_b=bad))
 

@@ -1051,6 +1051,8 @@ a.pl-chip.pl-aat { cursor: pointer; }
     background: inherit;
 }
 .placelist-row.pl-has-actions .pl-row-meta { padding-right: 66px; }
+/* With the Link glyph (place#337) there are four. */
+.placelist-row.pl-has-actions:has(.pl-rec-link) .pl-row-meta { padding-right: 88px; }
 .placelist-row .pl-rec-act {
     border: 0;
     background: transparent;

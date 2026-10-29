@@ -67,13 +67,27 @@ def _place_pk(dataset_pk, src_id):
             .values_list("id", flat=True).first())
 
 
+def _place_ref(place_pk):
+    """``(dataset pk, src_id)`` of a Place by its pk, or None."""
+    from places.models import Place
+    return (Place.objects.filter(pk=place_pk).values_list("dataset__id", "src_id").first())
+
+
 def _place_side(pid, user):
     """Check one side and describe it: ``{"pid", "dataset_pk", "place_pk", "public"}``.
-    ``dataset_pk`` / ``place_pk`` are None for an authority id; ``public`` is False when the
-    side belongs to a dataset that is private or embargoed."""
+    ``pid`` is returned canonical: a record may be named by its Django pk (``whg:<pk>``, as
+    the Record page does) or by its gateway id (``whg:<dataset>:<src>``); both become the
+    gateway form. ``dataset_pk`` / ``place_pk`` are None for an authority id; ``public`` is
+    False when the side belongs to a dataset that is private or embargoed."""
     m = _PLACE_ID.match(pid)
     if m is None:
         raise AttestationRefused(400, f"malformed place id: {pid[:40]!r}")
+    if m.group(1) == WHG_NAMESPACE and m.group(2).isdigit():
+        ref = _place_ref(int(m.group(2)))
+        if ref is None:
+            raise _not_found()
+        pid = f"{WHG_NAMESPACE}:{ref[0]}:{ref[1]}"
+        m = _PLACE_ID.match(pid)
     if m.group(1) != WHG_NAMESPACE:
         if not _namespace_visible(m.group(1), user):
             raise _not_found()
@@ -125,6 +139,9 @@ def validate(user, body):
     # Both sides are checked before either answer is given, so the refusal does not
     # reveal which side was the hidden one.
     sides = [_place_side(place_a, user), _place_side(place_b, user)]
+    place_a, place_b = sides[0]["pid"], sides[1]["pid"]
+    if place_a == place_b:
+        raise AttestationRefused(400, "place_a and place_b must differ")
     first_ds = next((x["dataset_pk"] for x in sides if x["dataset_pk"] is not None), None)
     return {
         "dataset_id": f"{WHG_NAMESPACE}:{first_ds}" if first_ds is not None else "",
@@ -288,6 +305,10 @@ def row_dict(row, viewer=None):
         "asserted_at": row.asserted_at.isoformat() if row.asserted_at else None,
         "justification": row.justification,
         "certainty": row.certainty or None,
+        # So a client holding the Django-pk form (``whg:<pk>``) can match a row stored under
+        # the gateway form.
+        "place_a_pk": row.place_a_pk,
+        "place_b_pk": row.place_b_pk,
         "mine": bool(viewer is not None and getattr(viewer, "is_authenticated", False)
                      and row.user_id == viewer.id),
         "attested_by": attester(row.user),
@@ -302,7 +323,7 @@ def rows_about(user, pid):
     if m is None:
         raise AttestationRefused(400, "about must be a place id like 'wd:Q90'")
     try:
-        _place_side(pid, user)
+        pid = _place_side(pid, user)["pid"]
     except AttestationRefused:
         return []
     rows = list(public_rows_about({pid})) + pending_rows_visible_to({pid}, user)

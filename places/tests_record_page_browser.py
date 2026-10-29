@@ -379,7 +379,11 @@ class RecordPageBrowserTests(LiveServerTestCase):
         }""")
         self.assertTrue(ok)
         self.assertEqual(d, {"exists": True, "ref": "Explore similar records", "refHref": "#explore_similar_header",
-                             "buttons": 0, "header": "/atlas/Lonely%20Place", "explore": 1, "map": False,
+                             "buttons": 0,
+                             # The Explore link carries the record it came from, so the Atlas
+                             # results can offer to link back to it (place#337).
+                             "header": "/atlas/Lonely%20Place?link_from=whg%3A5&link_from_label=Lonely+Place",
+                             "explore": 1, "map": False,
                              "tiers": 0})
 
     def test_gateway_unreachable_is_not_absence(self):

@@ -31,6 +31,14 @@
 // at first with their totals in the header, as the template's Links and Related places are;
 // a fragment link into a closed fold opens it first (initFolds).
 //
+// Linking (place#337): for a viewer the page enables linking for (attest.js,
+// <meta name="whg-link-enabled">), every Concordance entry that names another record
+// by a usable id carries "Same place" / "Not the same", which open attest.js's Link
+// sheet with THIS record as the subject; so does each Explore-similar result, by way of
+// ?link_from= on the header's Explore link. Entries the server sourced from links
+// (source 'attestation') say who linked them and when, and `distinct` ones are a
+// separate "Said not to be the same" list, never in the tiers, the counts or the map.
+//
 // Readiness for tests: window.__whgRecord = {concordance, mapDrawn, mapped, stacks, baseMap, sections}.
 // `sections` is keyed links|related|outbound|inbound|cocited: {total, truncated, toggle, open}.
 // `baseMap` is 'loaded' or 'fallback' (base style unreachable: plain background);
@@ -40,6 +48,7 @@
 // enrichment.js first: it brings the shared shell css, which this page's css refines.
 import { loadGlossCards, mountEnvironmentCard, recordFetcher, renderWikipediaLinks } from './enrichment.js';
 import '../css/atlasRecord.css';
+import { attestationProvenanceHtml, isLinkEnabled, isLinkableId, linkButtonHtml, setLinkDoneHandler } from './attest.js';
 
 const state = (window.__whgRecord = { concordance: 'loading', mapDrawn: 0, mapped: 0, stacks: 0, baseMap: null,
     sections: {} });
@@ -50,6 +59,9 @@ const BLANK_STYLE = {
     version: 8, sources: {}, metadata: { 'whg:backgroundcolour': '#eef2f5' },
     layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#eef2f5' } }],
 };
+
+// This record as a Link subject ({id, label}), once the concordance has named it.
+let subject = null;
 
 function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -147,26 +159,79 @@ function identifierHTML(e) {
     return `<code>${esc(shown)}</code>`;
 }
 
+// "Same place" / "Not the same" for one other record, or '' (linking not offered,
+// no usable id, or the record itself).
+function linkActions(targetId, targetLabel) {
+    if (!subject || !isLinkableId(targetId) || targetId === subject.id) return '';
+    const common = { target: targetId, targetLabel: targetLabel || targetId, subject: subject.id,
+        subjectLabel: subject.label, cls: 'btn btn-sm btn-outline-secondary conc-link-btn', icon: false };
+    const same = linkButtonHtml({ ...common, relation: 'closeMatch', text: 'Same place' });
+    if (!same) return '';
+    return `<span class="conc-link-actions">${same}${linkButtonHtml({ ...common, relation: 'distinct', text: 'Not the same' })}</span>`;
+}
+
+const WHG_ID = (pk) => (Number.isInteger(pk) ? `whg:${pk}` : '');
+
+// The other record an entry names, as {id, label}: its own identifier when that is a
+// record id WHG resolved (or a whg: record-to-record link), else the record behind it.
+function entryTarget(e) {
+    const t = e.target || {};
+    const rec = e.record || (t.records && t.records.length === 1 ? t.records[0] : null) || {};
+    const label = rec.title || e.identifier || '';
+    if (e.source === 'close_matches') return { id: e.identifier, label };
+    if (e.record) return { id: WHG_ID(rec.place_id) || e.identifier, label };
+    if (t.status === 'resolved' && !e.placeholder) return { id: e.identifier, label };
+    if (e.source === 'attestation') return { id: e.identifier, label };
+    return { id: '', label };
+}
+
+// An entry the server took from a link someone made with the Link sheet. It has no
+// `record`: `target` resolves the other side and `identifier` is that side's id.
+function attestationItem(e, tier) {
+    const a = e.attestation || {};
+    const tgt = entryTarget(e);
+    const t = e.target || {};
+    const who = e.record ? recordLabel(e.record, 'postgres')
+        : (t.status === 'resolved' && t.records && t.records.length ? t.records.map((r) => recordLabel(r, t.via)).join('; ')
+            : identifierHTML(e));
+    // The viewer's own: the sheet lists it with Withdraw.
+    const change = a.mine && subject
+        ? linkButtonHtml({ target: tgt.id, targetLabel: tgt.label, subject: subject.id, subjectLabel: subject.label,
+            relation: a.relation_type, text: 'Change or withdraw', cls: 'btn btn-sm btn-link p-0 align-baseline conc-link-btn', icon: false })
+        : '';
+    return `<li class="conc-entry conc-attestation" data-tier="${tier}" data-source="attestation"
+            data-attestation-status="${esc(a.status || '')}" data-relation="${esc(a.relation_type || '')}">
+        ${typeBadge(e)} ${who}
+        <div class="conc-meta">${attestationProvenanceHtml(a)}${change ? ` · ${change}` : ''}</div>
+    </li>`;
+}
+
 function outboundItem(e) {
+    if (e.source === 'attestation') return attestationItem(e, 1);
     if (e.source === 'close_matches') {
         const rec = (e.target && e.target.records && e.target.records[0]) || {};
         return `<li class="conc-entry" data-tier="1" data-source="close_matches">
             ${typeBadge(e)} ${recordLabel(rec, 'postgres')}
             <div class="conc-meta">Record-to-record link attested by this record's dataset · ${provenanceBadge(e)}
             ${rec.has_geometry ? '' : ' · <span class="text-muted">not mapped: no geometry</span>'}</div>
+            ${linkActions(e.identifier, rec.title)}
         </li>`;
     }
     const st = targetStatus(e);
+    const tgt = entryTarget(e);
     const flag = e.placeholder ? ' <span class="badge conc-placeholder-badge">placeholder</span>' : '';
     return `<li class="conc-entry${e.placeholder ? ' conc-placeholder' : ''}" data-tier="1" data-source="place_link" data-status="${esc((e.target || {}).status || '')}">
         ${typeBadge(e)} ${identifierHTML(e)}${flag}
         <div class="conc-meta">${provenanceBadge(e)}</div>
         <div class="conc-target conc-target-${st.cls}">${st.html}</div>
+        ${linkActions(tgt.id, tgt.label)}
     </li>`;
 }
 
 function inboundItem(e) {
+    if (e.source === 'attestation') return attestationItem(e, 2);
     const rec = e.record || {};
+    const tgt = entryTarget(e);
     let who;
     if (e.source === 'close_matches' && e.direction === 'unknown') {
         who = `A record-to-record link between this record and ${recordLabel(rec, 'postgres')}; which side attested it is not recorded`;
@@ -181,6 +246,7 @@ function inboundItem(e) {
     return `<li class="conc-entry" data-tier="2" data-source="${esc(e.source)}">
         ${typeBadge(e)} ${who}
         <div class="conc-meta">${provenanceBadge(e)}${notMapped}</div>
+        ${linkActions(tgt.id, tgt.label)}
     </li>`;
 }
 
@@ -228,7 +294,7 @@ function cocitedHTML(entries, truncated) {
         h += `<li class="conc-entry conc-cocited-record" data-tier="3" data-place-id="${esc(pid)}"
                 data-identifiers="${esc(shared.join(' '))}">${recordLabel(record, 'postgres')}
             <div class="conc-meta">shares ${shared.length === 1 ? 'one identifier' : `${shared.length} identifiers`} with this record; its link${links.length === 1 ? '' : 's'}:</div>
-            <ul class="conc-cocited-links">${items}</ul></li>`;
+            <ul class="conc-cocited-links">${items}</ul>${linkActions(WHG_ID(record.place_id), record.title)}</li>`;
     });
     h += '</ul>';
     if (truncated) h += '<p class="small text-muted">More records co-cite these identifiers than are listed here.</p>';
@@ -236,6 +302,24 @@ function cocitedHTML(entries, truncated) {
     return foldHTML({ id: 'concordance_tier3', cls: 'conc-tier-3', key: 'cocited',
         title: 'Co-cited: also linked to the same identifiers', total: groups.size, unit: 'record', truncated,
         body: h, empty: 'No other public record, beyond those listed above, cites an identifier this record cites.' });
+}
+
+// "Said not to be the same": links answering `distinct`, kept apart from the tiers (and
+// so from the counts, the aggregate and the map). Rendered only when there are some.
+function distinctHTML(entries) {
+    if (!entries || !entries.length) return '';
+    const items = entries.map((e) => {
+        const t = e.target || {};
+        const rec = e.record || (t.records && t.records[0]);
+        const name = rec ? recordLabel(rec, e.record ? 'postgres' : t.via) : identifierHTML(e);
+        return `<li class="conc-entry conc-distinct-entry" data-source="${esc(e.source || '')}"
+                data-attestation-status="${esc((e.attestation || {}).status || '')}">${name}
+            <div class="conc-meta">${attestationProvenanceHtml(e.attestation)}</div></li>`;
+    }).join('');
+    return `<div id="concordance_distinct" class="conc-tier conc-distinct" data-total="${entries.length}">
+        <h3 class="h6">Said not to be the same (${entries.length})</h3>
+        <p class="small text-muted mb-1">Someone has linked these records as a different place from this one.</p>
+        <ul class="conc-list">${items}</ul></div>`;
 }
 
 // "Explore similar records" is the header's (#explore_similar_header), once on the page
@@ -464,6 +548,9 @@ function drawMap({ fc, stacks, groups }) {
 function render(root, data) {
     const body = document.getElementById('concordance_body');
     const status = document.getElementById('concordance_status');
+    const rec = data.record || {};
+    subject = isLinkEnabled() && WHG_ID(rec.place_id) ? { id: WHG_ID(rec.place_id), label: rec.title || WHG_ID(rec.place_id) } : null;
+    exploreLinksFrom(subject);
 
     if (!data.public) {
         body.innerHTML = `<div class="conc-empty conc-not-public">
@@ -471,7 +558,7 @@ function render(root, data) {
             Nothing has been looked up.</p></div>`;
         state.concordance = 'not_public';
     } else if (!data.outbound.length && !data.inbound.length) {
-        body.innerHTML = emptyStateHTML(root, data);
+        body.innerHTML = emptyStateHTML(root, data) + distinctHTML(data.distinct);
         state.concordance = 'empty';
     } else {
         const mapData = aggregateFeatures(data);
@@ -512,6 +599,7 @@ function render(root, data) {
                 + (inTrunc ? '<p class="small text-muted">More records attest this than are listed here.</p>' : ''),
             empty: 'No other public record attests that it is this place.' });
         h += cocitedHTML(data.cocited || [], !!(data.truncated && data.truncated.cocited));
+        h += distinctHTML(data.distinct);
         body.innerHTML = h;
         state.concordance = 'ready';
         // Shown BEFORE the map is created: a map made in a hidden (zero-width)
@@ -563,6 +651,20 @@ function hashTarget(hash) {
 function followHash(scroll) {
     const t = hashTarget(location.hash);
     if (t && openFoldsAround(t) && scroll) t.scrollIntoView();
+}
+
+// The header's "Explore similar records" carries this record into the Atlas as the
+// remembered Link subject (attest.js reads ?link_from=), so each result there links with it.
+function exploreLinksFrom(subj) {
+    const a = document.getElementById('explore_similar_header');
+    if (!a) return;
+    if (!a.dataset.baseHref) a.dataset.baseHref = a.getAttribute('href');
+    const url = new URL(a.dataset.baseHref, location.origin);
+    if (subj) {
+        url.searchParams.set('link_from', subj.id);
+        url.searchParams.set('link_from_label', subj.label);
+    }
+    a.setAttribute('href', url.pathname + url.search + url.hash);
 }
 
 function initFolds() {
@@ -649,6 +751,15 @@ function init() {
     initFolds();
     const root = document.getElementById('concordance');
     if (root && root.dataset.endpoint) load(root);
+    // A link made or withdrawn here changes what the Concordance lists: reload it once
+    // the sheet closes (not per answer, which would rebuild the map under an open sheet).
+    if (root && root.dataset.endpoint) {
+        let changed = false;
+        setLinkDoneHandler(() => { changed = true; });
+        document.addEventListener('hidden.bs.modal', (e) => {
+            if (changed && e.target && e.target.id === 'whg_link_sheet') { changed = false; load(root); }
+        });
+    }
     initEnrichment();
 }
 

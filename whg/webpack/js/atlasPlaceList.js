@@ -32,6 +32,7 @@ import { getPreferredLanguage } from './languages.js';
 import { variantLabels, variantsHtml } from './toponyms.js';
 import { aatTooltipHtml, aatUrl, ccName, canNativeShare, isLoggedIn, recordActionsHtml } from './gazetteerInteraction.js';
 import debounce from 'lodash/debounce';
+import { linkButtonHtml } from './attest.js';
 import { classifyStatus, failureText, failureHtml } from './atlasNotice.js';
 
 const PAGE_SIZE = 100;      // per-page fetch size (gateway caps size at 500)
@@ -274,8 +275,8 @@ const PlaceList = {
                 return;
             }
             // BETA "Search for similar records" runs a search (document delegate
-            // in atlas.js) — not a row-open.
-            if (e.target.closest('.atlas-similar')) return;
+            // in atlas.js) — not a row-open. Link likewise (attest.js's delegate).
+            if (e.target.closest('.atlas-similar') || e.target.closest('.whg-link-btn')) return;
             // A click on an AAT type-chip link opens Getty — don't also open the place.
             // (Same for the beta Record / Cluster links: they open a new tab.)
             if (e.target.closest('a')) return;
@@ -584,7 +585,11 @@ const PlaceList = {
         // BETA: Record / Cluster / Similar at the bottom-right, level with the
         // meta chips (the top-right already holds share + invite and the panel is
         // narrow). '' for everyone else, whose rows are unchanged.
-        const actions = recordActionsHtml(hit.place_id, hit.title, hit.record_url, 'pl');
+        // Link (place#337): one step of attest.js's two-step pick, for everyone the page
+        // enables linking for ('' otherwise), so it rides along outside the beta gate.
+        const link = linkButtonHtml({ target: hit.place_id, targetLabel: hit.title || hit.place_id,
+            cls: 'pl-rec-act pl-rec-link', iconOnly: true });
+        const actions = recordActionsHtml(hit.place_id, hit.title, hit.record_url, 'pl', link);
         return `<div class="placelist-row${nogeom ? ' pl-nogeom-row' : ''}${actions ? ' pl-has-actions' : ''}" data-idx="${i}" style="top:${i * ROW_H}px">`
             + shareBtn
             + nativeShareBtn
