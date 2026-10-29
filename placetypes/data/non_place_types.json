@@ -1,0 +1,46 @@
+{
+  "_comment": [
+    "Type sanity for match candidates (place#338, plan place#334 section 4b). A candidate whose",
+    "source type is listed here is a NAMED THING rather than the place it is named after: a",
+    "sewage works, lake, war memorial, station or church named after the settlement it serves.",
+    "The rule only ever DEMOTES a suggestion (it can never reach the confident tier and is shown",
+    "with a warning); it never hides one and never makes a statement.",
+    "It applies only when the record is itself a settlement or administrative unit: its",
+    "fclasses meet settlement_fclasses, or it has no type at all (most contributed records are",
+    "settlements). For GeoNames a record whose own feature class matches the candidate's passes",
+    "(a dataset of lakes may match lakes).",
+    "A candidate carrying ANY settlement type (keep lists below) is never demoted.",
+    "Starting list from the CCEd offenders in place#273: lake, airfield, hospital, castle,",
+    "metro station, sewage works, war memorials, weir, libraries, inn. Wikidata ids are the",
+    "common classes only; extend from calibration (manage.py calibrate_match_tiers)."
+  ],
+  "version": 1,
+  "settlement_fclasses": ["P", "A"],
+  "gn": {
+    "deny_classes": ["S", "H", "R", "T", "U", "V"],
+    "allow_codes": ["S.ANS", "S.HSTS", "S.RUIN"],
+    "keep_classes": ["P", "A"]
+  },
+  "osm": {
+    "deny_tags": ["building", "amenity", "man_made", "natural", "railway", "aeroway", "leisure",
+                  "shop", "tourism", "waterway", "office", "craft", "power", "public_transport",
+                  "historic=memorial", "historic=castle", "historic=wayside_cross"],
+    "keep_tags": ["place", "boundary"]
+  },
+  "ohm": {
+    "deny_tags": ["building", "amenity", "man_made", "natural", "railway", "aeroway", "leisure",
+                  "shop", "tourism", "waterway", "office", "craft", "power", "public_transport",
+                  "historic=memorial", "historic=castle", "historic=manor", "historic=wayside_cross"],
+    "keep_tags": ["place", "boundary"]
+  },
+  "wd": {
+    "deny_qids": ["Q3947", "Q41176", "Q16970", "Q23397", "Q55488", "Q1248784", "Q16917", "Q7075",
+                  "Q23413", "Q27686", "Q12323", "Q575759", "Q5003624", "Q33506", "Q3914", "Q4022",
+                  "Q12280", "Q39614"],
+    "keep_qids": ["Q486972", "Q515", "Q532", "Q3957", "Q5084", "Q1115575", "Q2514025", "Q15284"]
+  },
+  "tgn": {
+    "deny_aat": [],
+    "keep_aat": []
+  }
+}
