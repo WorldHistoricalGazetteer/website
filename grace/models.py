@@ -591,6 +591,15 @@ class TrackedDataset(TimeStampedModel):
                   "rights, counts and coverage are read from here and must "
                   "not be duplicated below.",
     )
+    # The contribution itself, for a WHG upload (place#334 Appendix E, slice G1). Before
+    # this the only link was a ``[whg-dataset:NNNN]`` marker in ``notes``, which no filter
+    # can use; the marker is still written, so older readers keep working. SET_NULL: a
+    # deleted upload leaves its editorial history here.
+    dataset = models.ForeignKey(
+        "datasets.Dataset", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="grace_records", verbose_name="WHG upload",
+        help_text="Set automatically when the contributor submits it for review.",
+    )
     stage = models.ForeignKey(
         Stage, on_delete=models.PROTECT, null=True, blank=True,
         related_name="datasets",
@@ -780,8 +789,11 @@ class TrackedDataset(TimeStampedModel):
         """The ``datasets.Dataset`` id behind a ``whg:NNNN`` Register entry.
 
         Register ids are namespace-derived, so a WHG contribution carries its
-        dataset id in the sub-namespace. Authorities have none.
+        dataset id in the sub-namespace. Authorities have none. The ``dataset``
+        link, where set, wins.
         """
+        if self.dataset_id:
+            return self.dataset_id
         if self.registry_id and str(self.registry_id).startswith("whg:"):
             tail = str(self.registry_id).split(":", 1)[1]
             return int(tail) if tail.isdigit() else None
@@ -887,6 +899,46 @@ class Review(TimeStampedModel):
     def awaiting_share(self):
         """Back, and the author still has not been told."""
         return bool(self.returned_on and not self.shared_with_author_on)
+
+    @property
+    def due_on(self):
+        """When the review is due: ``sent_on`` plus the editorial service level in working
+        days (place#334 Q4). Computed, never stored, so changing the setting moves every
+        open review at once."""
+        if not self.sent_on:
+            return None
+        return add_working_days(self.sent_on, editorial_review_sla_days())
+
+    @property
+    def is_overdue(self):
+        """Out, and past its due date."""
+        return bool(self.is_outstanding and self.due_on
+                    and datetime.date.today() > self.due_on)
+
+
+def editorial_review_sla_days():
+    """The editorial service level in working days (place#334 Q4: 10, "usually")."""
+    return int(getattr(settings, "EDITORIAL_REVIEW_SLA_DAYS", 10))
+
+
+def add_working_days(start, days):
+    """``start`` plus ``days`` working days, Monday to Friday. Public holidays are not
+    counted out: the figure is shown as "usually", not promised."""
+    d = start
+    left = days
+    while left > 0:
+        d += datetime.timedelta(days=1)
+        if d.weekday() < 5:
+            left -= 1
+    return d
+
+
+def overdue_review_q():
+    """A ``Review`` filter for reviews that are out and past their due date. The due date is
+    computed, so it is evaluated in Python over the outstanding reviews (a handful) rather
+    than approximated in SQL, and the filter agrees with ``is_overdue`` by construction."""
+    outstanding = Review.objects.filter(sent_on__isnull=False, returned_on__isnull=True)
+    return Q(pk__in=[r.pk for r in outstanding if r.is_overdue])
 
 
 # ==========================================================================

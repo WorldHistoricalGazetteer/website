@@ -237,6 +237,114 @@ def withdraw_for_dataset(dataset_pk):
 
 
 # ---------------------------------------------------------------------------
+# Publication (place#334 Phase 3): pending <-> active
+# ---------------------------------------------------------------------------
+# Both directions save ONE ROW AT A TIME. The gateway push is queued by the post_save handler
+# in api/signals.py; a QuerySet.update() fires no post_save, so a bulk flip would leave the
+# overlay knowing nothing (place#334 code facts). Called inside the lifecycle transaction, so
+# the forwards run on commit and a rolled-back publish forwards nothing.
+
+def _rows_touching_dataset(dataset_pk, status):
+    from api.models import ContributorAttestation
+    from places.models import Place
+    prefix = f"{WHG_NAMESPACE}:{int(dataset_pk)}"
+    place_pks = Place.objects.filter(dataset__id=dataset_pk).values("id")  # a subquery
+    return (ContributorAttestation.objects
+            .filter(status=status)
+            .filter(Q(dataset_id=prefix) | Q(place_a__startswith=prefix + ":")
+                    | Q(place_b__startswith=prefix + ":")
+                    | Q(place_a_pk__in=place_pks) | Q(place_b_pk__in=place_pks))
+            .order_by("id"))
+
+
+def _resolve_side(pid, place_pk):
+    """``(gateway id, public)`` for one side of a pending row at publish time, or
+    ``(None, reason)`` when it cannot be resolved safely.
+
+    A contributed side is resolved from its stored Place pk (N2), not from the id written
+    when the row was made: the record's src_id may have changed with a revised upload. The
+    gateway id is ``whg:<dataset pk>:<src_id>``; when the dataset holds more than one record
+    with that src_id the indexing pipeline suffixes the id (``processing/whg_id_map.py``,
+    ``id_map.jsonl``), which cannot be predicted from here, so such a row stays pending
+    rather than name the wrong record."""
+    from datasets.models import Dataset
+    from places.models import Place
+    if place_pk is None:
+        m = _PLACE_ID.match(pid or "")
+        if m and m.group(1) == WHG_NAMESPACE:
+            return None, "contributed side has no stored record"
+        return pid, True  # an authority id: public by definition
+    ref = _place_ref(place_pk)
+    if ref is None:
+        return None, "record no longer exists"
+    ds_pk, src_id = ref
+    if not src_id:
+        return None, "record has no source id"
+    if Place.objects.filter(dataset__id=ds_pk, src_id=src_id).count() > 1:
+        return None, "source id is not unique in its dataset"
+    ds = Dataset.objects.filter(pk=ds_pk).values("public").first()
+    public = bool(ds and ds["public"]) and not is_dataset_embargoed(ds_pk)
+    return f"{WHG_NAMESPACE}:{ds_pk}:{src_id}", public
+
+
+def activate_for_dataset(dataset_pk, by=None):
+    """Make public the pending attestations of a dataset that has just been published:
+    each pending row touching it whose two sides are now both public becomes ``active``
+    and is saved on its own, so ``post_save`` queues exactly one gateway push for it.
+
+    Idempotent: a second call finds no pending row to flip and forwards nothing. A row
+    whose other side is still private stays pending (it flips when that dataset is
+    published). Returns ``{"activated": n, "still_pending": n, "unresolved": [(id, why)]}``.
+    """
+    from api.models import ContributorAttestation
+    out = {"activated": 0, "still_pending": 0, "unresolved": []}
+    for row in _rows_touching_dataset(dataset_pk, "pending"):
+        a, a_pub = _resolve_side(row.place_a, row.place_a_pk)
+        b, b_pub = _resolve_side(row.place_b, row.place_b_pk)
+        if a is None or b is None:
+            out["unresolved"].append((row.id, a_pub if a is None else b_pub))
+            continue
+        if not (a_pub is True and b_pub is True):
+            out["still_pending"] += 1
+            continue
+        pks = {a: row.place_a_pk, b: row.place_b_pk}
+        a, b = sorted((a, b))
+        if a == b:
+            out["unresolved"].append((row.id, "both sides now name one record"))
+            continue
+        if (a, b) != (row.place_a, row.place_b):
+            clash = (ContributorAttestation.objects
+                     .filter(user_id=row.user_id, place_a=a, place_b=b,
+                             relation_type=row.relation_type).exclude(pk=row.pk).exists())
+            if clash:
+                out["unresolved"].append((row.id, "the same link already exists"))
+                continue
+            row.place_a, row.place_b = a, b
+            row.place_a_pk, row.place_b_pk = pks[a], pks[b]
+        row.status = "active"
+        row.save()
+        _event(row, by, "status", **{"from": "pending", "to": "active",
+                                     "reason": "dataset published", "dataset": int(dataset_pk)})
+        out["activated"] += 1
+    return out
+
+
+def deactivate_for_dataset(dataset_pk, by=None, reason="dataset withdrawn"):
+    """The reverse of ``activate_for_dataset`` for a dataset made private again: every
+    active row touching it goes back to ``pending``, one save per row, so ``post_save``
+    queues one gateway revocation each and the row leaves the public Concordance in the
+    same request. Withdrawn rows are left alone. Returns the number moved."""
+    n = 0
+    for row in _rows_touching_dataset(dataset_pk, "active"):
+        row.status = "pending"
+        row.save()
+        _event(row, by, "status", **{"from": "active", "to": "pending", "reason": reason,
+                                     "dataset": int(dataset_pk)})
+        n += 1
+    return n
+
+
+# ---------------------------------------------------------------------------
 # Reading
 # ---------------------------------------------------------------------------
 

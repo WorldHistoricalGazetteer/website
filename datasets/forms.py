@@ -304,3 +304,32 @@ class DatasetCreateEmptyModelForm(forms.ModelForm):
         for field in self.fields.values():
             field.error_messages = {'required': 'The field {fieldname} is required'.format(
                 fieldname=field.label)}
+
+
+class SensitivityDeclarationForm(forms.ModelForm):
+    """The two sensitivity questions of place#334 §4e, answered by the owner before review.
+    Both must be answered; a "yes" needs a word on what is sensitive, because that is what
+    the editor reads when deciding on an embargo."""
+
+    class Meta:
+        model = Dataset
+        fields = ('sensitivity_indigenous', 'sensitivity_restricted', 'sensitivity_note')
+        widgets = {
+            'sensitivity_indigenous': forms.RadioSelect,
+            'sensitivity_restricted': forms.RadioSelect,
+            'sensitivity_note': forms.Textarea(attrs={'rows': 2, 'cols': 55}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ('sensitivity_indigenous', 'sensitivity_restricted'):
+            self.fields[name].required = True
+            self.fields[name].choices = [c for c in self.fields[name].choices if c[0]]
+
+    def clean(self):
+        data = super().clean()
+        said_yes = 'yes' in (data.get('sensitivity_indigenous'), data.get('sensitivity_restricted'))
+        if said_yes and not (data.get('sensitivity_note') or '').strip():
+            self.add_error('sensitivity_note', 'Say briefly what is sensitive, so the editor '
+                                               'can decide whether to hold it back.')
+        return data
