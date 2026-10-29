@@ -338,21 +338,27 @@ class ContributorAttestationView(AuthenticatedAPIView):
     the row is kept with status ``withdrawn`` and revoked from the gateway.
     """
 
-    http_method_names = ["get", "post", "delete", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "options"]
 
     def get(self, request, *args, **kwargs):
+        """``?about=<place id>``: the attestations naming that place that the caller may see
+        (active ones, plus pending ones in their circle). Without it: the caller's own rows."""
         if not request.user.is_authenticated:
             return Response({"error": "auth required"},
                             status=status.HTTP_401_UNAUTHORIZED)
-        rows = list(
-            ContributorAttestation.objects
-            .filter(user=request.user)
-            .exclude(status="withdrawn")
-            .order_by("-modified_at")
-            .values("id", "dataset_id", "place_a", "place_b",
-                    "relation_type", "status", "asserted_at",
-                    "modified_at", "justification", "legacy_v3_2")
-        )
+        about = request.GET.get("about")
+        if about:
+            try:
+                rows = attestations.rows_about(request.user, about)
+            except attestations.AttestationRefused as exc:
+                return Response({"error": exc.message}, status=exc.status)
+            return Response({"result": rows, "count": len(rows)})
+        rows = [attestations.row_dict(r, request.user) for r in
+                ContributorAttestation.objects
+                .filter(user=request.user)
+                .exclude(status="withdrawn")
+                .select_related("user")
+                .order_by("-modified_at")]
         return Response({"result": rows, "count": len(rows)})
 
     def post(self, request, *args, **kwargs):
@@ -377,6 +383,17 @@ class ContributorAttestationView(AuthenticatedAPIView):
             "asserted_at": row.asserted_at.isoformat(),
         }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
+    def patch(self, request, *args, **kwargs):
+        """``{"id": N, "status": "withdrawn"}``: the only change a client may make to a row."""
+        if not request.user.is_authenticated:
+            return Response({"error": "auth required"},
+                            status=status.HTTP_401_UNAUTHORIZED)
+        body = _parse_json_body(request) or {}
+        if body.get("status") != "withdrawn":
+            return Response({"error": "the only permitted change is status 'withdrawn'"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        return self.delete(request, *args, **kwargs)
+
     def delete(self, request, *args, **kwargs):
         """Withdraw, not delete: the row is kept as the record and revoked from the gateway."""
         if not request.user.is_authenticated:
@@ -392,5 +409,5 @@ class ContributorAttestationView(AuthenticatedAPIView):
         except (ContributorAttestation.DoesNotExist, ValueError):
             return Response({"error": "not found"},
                             status=status.HTTP_404_NOT_FOUND)
-        attestations.withdraw(row)
+        attestations.withdraw(row, by=request.user)
         return Response({"deleted": row_id, "status": row.status})
