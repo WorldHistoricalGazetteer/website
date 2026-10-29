@@ -394,9 +394,11 @@ def staff_timeline(dataset):
     contributor was given. A returned review whose outcome reached the contributor adds a
     "told" step from GRACE's ``shared_with_author_on``."""
     from grace.admin_links import user_label
-    steps = []
+    steps, concluded = [], {}
     for ev in (DatasetLifecycleEvent.objects.filter(dataset_pk=dataset.pk)
                .select_related("actor").order_by("at", "id")):
+        if ev.to_state in ("accepted", "changes_requested", "declined"):
+            concluded[(ev.payload or {}).get("review")] = ev.at
         steps.append({"state": ev.to_state, "label": _STEP_LABELS.get(ev.to_state, ev.to_state),
                       "at": ev.at, "actor": user_label(ev.actor) if ev.actor_id else "",
                       "note": ev.reason if ev.to_state in ("changes_requested", "declined") else ""})
@@ -404,9 +406,13 @@ def staff_timeline(dataset):
     for r in (Review.objects.filter(dataset__dataset_id=dataset.pk,
                                     review_type__slug=REVIEW_TYPE_SLUG,
                                     shared_with_author_on__isnull=False)):
+        # Only a date is stored; place the step just after the decision it reports.
+        at = datetime.datetime.combine(r.shared_with_author_on, datetime.time.min)
+        decided = concluded.get(r.pk)
+        if decided and decided.date() == r.shared_with_author_on:
+            at = decided + datetime.timedelta(microseconds=1)
         steps.append({"state": "told", "label": "Review outcome sent to the contributor",
-                      "at": datetime.datetime.combine(r.shared_with_author_on, datetime.time.max),
-                      "actor": "", "note": ""})
+                      "at": at, "actor": "", "note": ""})
     steps.sort(key=lambda s: s["at"])
     return steps
 
