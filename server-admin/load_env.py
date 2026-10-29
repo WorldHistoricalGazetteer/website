@@ -12,6 +12,29 @@ from dotenv import load_dotenv
 from collections import OrderedDict
 from jinja2 import Template
 
+# Where the deploy user keeps the server-local files that are not in the repository (env_template.py,
+# logs, data dumps, database directories). The defaults are the paths the current servers have always
+# used, so nothing changes unless a host sets these in its deploy environment (see deploy.sh) -- which
+# is how a host with a different deploy user or data layout, or a Podman host with no root, is served by
+# the same code.
+DEFAULT_SITES_DIR = '/home/whgadmin/sites'
+DEFAULT_DATABASES_DIR = '/home/whgadmin/databases'
+DEFAULT_NGINX_DIR = '/etc/nginx/sites-available/'
+
+
+def sites_dir():
+    return os.environ.get('WHG_SITES_DIR') or DEFAULT_SITES_DIR
+
+
+def databases_dir():
+    return os.environ.get('WHG_DATABASES_DIR') or DEFAULT_DATABASES_DIR
+
+
+def nginx_dir():
+    """Where the rendered nginx site file goes. /etc/nginx/... needs root; a host that deploys without
+    root points this at a directory it owns and has nginx `include`."""
+    return os.environ.get('WHG_NGINX_DIR') or DEFAULT_NGINX_DIR
+
 def get_docker_network_subnet(network_name='whgazetteer-org_whgazetteer-org'):
     try:
         output = subprocess.check_output([
@@ -77,6 +100,8 @@ def apply_context_overrides(template_vars, context):
     context_vars = template_vars.get('base', {}).copy()
     context_vars.update(template_vars.get('sites', {}).get(context, {}))
     context_vars['BASE_DIR'] = os.getcwd()
+    context_vars.setdefault('SITES_DIR', sites_dir())
+    context_vars.setdefault('DATABASES_DIR', databases_dir())
     context_vars['ENV_CONTEXT'] = context 
     context_vars['BRANCH'] = get_git_branch().replace('/', '--')
     context_vars['POSTGRES_USER'] = 'postgres'
@@ -132,12 +157,12 @@ def load_environment(context='local',
         entrypoints_path='../entrypoints',
         python_output_path='../whg/local_settings_autocontext.py',
         nginx_template_path='nginx-template.j2',
-        nginx_output_path='/etc/nginx/sites-available/',
+        nginx_output_path=None,
         scripts_to_make_executable=['./replicate_live_db.sh','./build_docker.py','./restore_db_from_dump.sh']
         ):
     # Ensure paths are relative to the script's directory
     script_dir = os.path.dirname(__file__)
-    template_path = os.path.join(script_dir, template_path) if context == 'local' else f'/home/whgadmin/sites/{template_path}'
+    template_path = os.path.join(script_dir, template_path) if context == 'local' else os.path.join(sites_dir(), template_path)
     output_path = os.path.join(script_dir, output_path)
     compose_template_path = os.path.join(script_dir, compose_template_path)
     compose_output_path = os.path.join(script_dir, compose_output_path)
@@ -146,7 +171,7 @@ def load_environment(context='local',
     entrypoints_path = os.path.join(script_dir, entrypoints_path)    
     python_output_path = os.path.join(script_dir, python_output_path)
     nginx_template_path = os.path.join(script_dir, nginx_template_path)
-    nginx_output_path = os.path.join(script_dir, nginx_output_path)
+    nginx_output_path = os.path.join(script_dir, nginx_output_path or nginx_dir())
     
     # Generate environment variable file
     try:
@@ -167,6 +192,8 @@ def load_environment(context='local',
     render_jinja_template(compose_template_path, env_vars, compose_output_path)
     render_jinja_template(hba_template_path, env_vars, hba_output_path)
     if not context == 'local':
+        if os.environ.get('WHG_NGINX_DIR'):
+            os.makedirs(nginx_output_path, exist_ok=True)  # a directory this deploy user owns
         render_jinja_template(nginx_template_path, env_vars, os.path.join(nginx_output_path, env_vars.get('NGINX_SERVER_NAME')))
         
     update_entrypoints(entrypoints_path)
