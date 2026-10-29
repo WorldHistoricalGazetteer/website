@@ -147,6 +147,16 @@ class WhgImageServicesTests(unittest.TestCase):
             worldhistoricalgazetteer/web|web''')
         self.assertEqual(self.services(rows), ['web'])   # bare image name (no tag) still counts
 
+    def test_podman_registry_qualified_names_match_and_lookalikes_still_do_not(self):
+        rows = textwrap.dedent('''\
+            docker.io/worldhistoricalgazetteer/web:1.0.20|web
+            docker.io/worldhistoricalgazetteer/web|celery_worker
+            localhost/worldhistoricalgazetteer/web:1|celery_beat
+            docker.io/worldhistoricalgazetteer/web-other:1|web2
+            docker.io/xworldhistoricalgazetteer/web:1|imposter
+            docker.io/library/redis:bullseye|redis''')
+        self.assertEqual(self.services(rows), ['celery_beat', 'celery_worker', 'web'])
+
     def test_nothing_running_gives_nothing(self):
         self.assertEqual(self.services('redis:bullseye|redis'), [])
 
