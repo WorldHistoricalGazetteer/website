@@ -339,6 +339,9 @@ LOGGING_LEVELS = {
     'dev-whgazetteer-org': 'DEBUG',
     'whgazetteer-org': 'DEBUG',
 }
+# The file handlers below open their files at import, so a checkout with no whg/logs (it is gitignored;
+# the servers bind-mount a host directory over it) crash-looped on first start.
+os.makedirs(os.path.join(BASE_DIR, 'whg/logs'), exist_ok=True)
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

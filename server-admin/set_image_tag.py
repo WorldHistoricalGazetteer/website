@@ -22,12 +22,14 @@ mis-tagged production stack.
 """
 
 import argparse
+import os
 import re
 import shutil
 import sys
 from pathlib import Path
 
-DEFAULT_TEMPLATE = Path('/home/whgadmin/sites/env_template.py')
+# Same override load_env.py honours, so both always look at the same file.
+DEFAULT_TEMPLATE = Path(os.environ.get('WHG_SITES_DIR') or '/home/whgadmin/sites') / 'env_template.py'
 # Site blocks are nested inside ENV_VARS['sites'], so they sit at eight spaces
 # and their contents at twelve. Matching on that indentation is what keeps the
 # edit inside one site instead of running on into the next.

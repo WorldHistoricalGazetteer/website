@@ -11,11 +11,62 @@ DEV_DIR="$HOME/sites/dev-whgazetteer-org"
 DEV_BRANCH="staging"
 DEV_ENV_CONTEXT="dev-whgazetteer-org"
 
-COMPOSE="docker-compose -f docker-compose-autocontext.yml --env-file ./.env/.env"
+COMPOSE_ARGS="-f docker-compose-autocontext.yml --env-file ./.env/.env"
 
 # The image repo whose services --image= moves; anything else (postgres, redis,
 # hocuspocus, ollama) is infrastructure and must not be recreated with it.
 WHG_IMAGE="worldhistoricalgazetteer/web"
+
+# ─── Host differences ────────────────────────────────────────────────────────
+#
+# These are functions, defined before main(), so they can be tested on their own (see
+# server-admin/tests). Each one preserves what the current servers do and only does something
+# different where the host is genuinely different, so one script serves every host.
+
+# Which compose front end to use. The current servers have the standalone `docker-compose`, and
+# keep using it. A host with only the Docker CE plugin (`docker compose`) gets that. WHG_COMPOSE
+# overrides both.
+pick_compose() {
+    if [ -n "${WHG_COMPOSE:-}" ]; then
+        echo "$WHG_COMPOSE"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        echo "docker-compose"
+    elif docker compose version >/dev/null 2>&1; then
+        echo "docker compose"
+    else
+        echo "docker-compose"   # not found: let the familiar error be the one that appears
+    fi
+}
+
+# Whether the config renderer and image-tag editor run under sudo. They need it only because the
+# current servers keep their nginx file in /etc/nginx and their env_template.py root-owned. A host
+# that deploys without root (WHG_NO_SUDO=1, or no sudo installed) writes to directories its deploy
+# user owns instead; see WHG_NGINX_DIR and WHG_SITES_DIR in load_env.py.
+pick_sudo() {
+    [ "${WHG_NO_SUDO:-0}" = "1" ] && return 0
+    command -v sudo 2>/dev/null || true
+}
+
+# Run one of the server-admin Python scripts, under sudo where this host uses it. The overrides are
+# passed through explicitly because sudo does not keep the environment.
+run_admin_py() {
+    local script="$1"; shift
+    # shellcheck disable=SC2086  # SUDO is either empty or the word "sudo"
+    $SUDO env WHG_SITES_DIR="${WHG_SITES_DIR:-}" WHG_DATABASES_DIR="${WHG_DATABASES_DIR:-}" \
+        WHG_NGINX_DIR="${WHG_NGINX_DIR:-}" python3 "$script" "$@"
+}
+
+# The compose services of THIS site whose running container uses the WHG image, one per line.
+# Derived from what is running, not hand-listed: a hardcoded list goes stale when a service is
+# added, and mapping service names to container names by hand gets it wrong (prod's `flower`
+# service is `celery-flower_<prefix>`). It reads the compose service label off `docker ps` rather
+# than `compose ps -q`, because podman-compose has no `ps -q`; both Docker's compose and
+# podman-compose label containers with com.docker.compose.service. $1 = container-name prefix.
+whg_image_services() {
+    docker ps --filter "name=$1" --format '{{.Image}}|{{.Label "com.docker.compose.service"}}' \
+        | awk -F'|' -v img="$WHG_IMAGE" '$2 != "" && ($1 == img || index($1, img ":") == 1) { print $2 }' \
+        | sort -u
+}
 
 # ─── Usage ───────────────────────────────────────────────────────────────────
 
@@ -107,6 +158,20 @@ for arg in "$@"; do
     esac
 done
 
+# ─── Host settings ───────────────────────────────────────────────────────────
+
+# Optional per-host settings (WHG_NO_SUDO, WHG_SITES_DIR, WHG_NGINX_DIR, WHG_COMPOSE ...). Absent on
+# the current servers, so they behave exactly as before.
+DEPLOY_ENV_FILE="${WHG_DEPLOY_ENV:-$HOME/sites/deploy.env}"
+if [ -f "$DEPLOY_ENV_FILE" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$DEPLOY_ENV_FILE"
+    set +a
+fi
+SUDO="$(pick_sudo)"
+COMPOSE="$(pick_compose) $COMPOSE_ARGS"
+
 # ─── Set environment-specific variables ──────────────────────────────────────
 
 if [ "$ENV" = "prod" ]; then
@@ -174,12 +239,12 @@ fi
 # moved leaves the site running the old one, with nothing to say so.
 if [ -n "$IMAGE_TAG" ]; then
     echo "── Setting image tag to $IMAGE_TAG for $ENV_CONTEXT..."
-    sudo python3 ./server-admin/set_image_tag.py --site "$ENV_CONTEXT" --tag "$IMAGE_TAG"
+    run_admin_py ./server-admin/set_image_tag.py --site "$ENV_CONTEXT" --tag "$IMAGE_TAG"
     echo ""
 fi
 
 echo "── Regenerating config..."
-sudo python3 ./server-admin/load_env.py
+run_admin_py ./server-admin/load_env.py
 echo ""
 
 # ─── Shared LLM network ──────────────────────────────────────────────────────
@@ -229,14 +294,9 @@ case "$ACTION" in
             # `flower_<prefix>`, so a hand-written mapping silently left prod's flower
             # on the old image. Only RUNNING containers are named, so nothing that was
             # deliberately stopped gets started.
+            SVC_LIST="$(whg_image_services "$PREFIX" | tr '\n' ' ')"
             IMAGE_SERVICES=""
-            for svc in $($COMPOSE config --services 2>/dev/null); do
-                cid=$($COMPOSE ps -q "$svc" 2>/dev/null | head -1)
-                [ -n "$cid" ] || continue
-                case "$(docker inspect "$cid" --format '{{.Config.Image}}' 2>/dev/null)" in
-                    "$WHG_IMAGE":*|"$WHG_IMAGE") IMAGE_SERVICES="$IMAGE_SERVICES $svc" ;;
-                esac
-            done
+            [ -z "${SVC_LIST// /}" ] || IMAGE_SERVICES=" $SVC_LIST"
             if [ -z "$IMAGE_SERVICES" ]; then
                 # Nothing recognisable is running; the earlier -z "$RUNNING" branch
                 # should have caught this, so say so rather than guessing wider.

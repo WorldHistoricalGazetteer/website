@@ -32,8 +32,8 @@ services:
       - {{ BASE_DIR }}/entrypoints/entrypoint-web.sh:/entrypoint.sh
       - shared-tmp:/var/tmp
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -89,7 +89,7 @@ services:
       - {{ BASE_DIR }}/entrypoints/entrypoint-postgres-local.sh:/docker-entrypoint-initdb.d/10_postgis.sh
       - {{ BASE_DIR }}/data:/app/data
     {% else %}
-      - /home/whgadmin/databases/{{ ENV_CONTEXT }}:/var/lib/postgresql/data
+      - {{ DATABASES_DIR }}/{{ ENV_CONTEXT }}:/var/lib/postgresql/data
     {% endif %}
       - {{ BASE_DIR }}/server-admin/restore_db_from_dump.sh:/tmp/restore_db_from_dump.sh
       - {{ BASE_DIR }}/compose/pg_hba.conf:/etc/postgresql/pg_hba.conf
@@ -120,7 +120,7 @@ services:
       - "127.0.0.1:{{ REDIS_PORT }}:6379"
     {% if not ENV_CONTEXT == 'local' %}
     volumes:
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs
     {% endif %}
     restart: unless-stopped
     healthcheck:
@@ -147,8 +147,8 @@ services:
       - {{ BASE_DIR }}/entrypoints/entrypoint-celery.sh:/entrypoint.sh
       - shared-tmp:/var/tmp
     {% if ENV_CONTEXT != 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -170,8 +170,8 @@ services:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-celery-beat.sh:/entrypoint.sh
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
@@ -196,8 +196,8 @@ services:
       - {{ BASE_DIR }}:/app
       - {{ BASE_DIR }}/entrypoints/entrypoint-flower.sh:/entrypoint.sh
     {% if not ENV_CONTEXT == 'local' %}
-      - /home/whgadmin/sites/logs/{{ ENV_CONTEXT }}:/app/whg/logs
-      - /home/whgadmin/sites/data_dumps:/app/data_dumps
+      - {{ SITES_DIR }}/logs/{{ ENV_CONTEXT }}:/app/whg/logs
+      - {{ SITES_DIR }}/data_dumps:/app/data_dumps
     {% endif %}
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
