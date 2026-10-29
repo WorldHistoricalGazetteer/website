@@ -1062,6 +1062,10 @@ class DatasetDeleteView(LoginRequiredMixin, DeleteView):
         # already has places in the shared index, and deleting it must withdraw them.
         if ds.ds_status == 'indexed' or ds.has_accessioned_places:
             removePlacesFromIndex(es, 'whg', list(ds.placeids))
+        # Attestations are keyed by a CharField, not a FK, so deleting the dataset would leave
+        # them active in the gateway overlay (place#334).
+        from api.attestations import withdraw_for_dataset
+        withdraw_for_dataset(ds.pk)
         ds.delete()
         return HttpResponseRedirect(self.get_success_url())
 

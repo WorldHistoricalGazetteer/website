@@ -1113,6 +1113,20 @@ def _adapt_hits(data: dict) -> list[dict]:
 # is rebuildable from DO PG at any time).
 
 
+def _link_writes_allowed() -> bool:
+    """Only the production context may write to the gateway's hard-link overlay.
+
+    Dev and local share ``CRC_GATEWAY_URL`` with production, so a link made on dev would
+    land in the live overlay under a user id that does not exist there (place#334, N3).
+    Same context test as ``ES_READ_ONLY`` in settings.py.
+    """
+    if settings.ENV_CONTEXT == "whgazetteer-org":
+        return True
+    logger.info("hard-link write to the gateway skipped (context %r is not production)",
+                settings.ENV_CONTEXT)
+    return False
+
+
 def crc_post_link(payload: dict) -> bool:
     """POST a single hard-link assertion to the gateway.
 
@@ -1132,7 +1146,7 @@ def crc_post_link(payload: dict) -> bool:
     Always returns ``False`` when no gateway is configured — the next
     Batch 12 run will pick the row up.
     """
-    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+    if not getattr(settings, "CRC_GATEWAY_URL", "") or not _link_writes_allowed():
         return False
     try:
         url = f"{_gateway_url()}/api/links"
@@ -1167,7 +1181,7 @@ def crc_delete_link(payload: dict) -> bool:
     Returns ``True`` on 2xx; ``False`` otherwise. Reconciled by the next
     Batch 12 run on failure.
     """
-    if not getattr(settings, "CRC_GATEWAY_URL", ""):
+    if not getattr(settings, "CRC_GATEWAY_URL", "") or not _link_writes_allowed():
         return False
     try:
         url = f"{_gateway_url()}/api/links"

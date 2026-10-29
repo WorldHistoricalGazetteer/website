@@ -80,18 +80,16 @@ class ContributorAttestation(models.Model):
     """A user-asserted hard link between two indexed places.
 
     Canonical store for contributor reconciliation links asserted through
-    the platform. This table is populated only by live ``POST /api/links``
-    writes; it is *not* the source read by the ingest pipeline's Batch 12
-    ``contributor_replay.py``, which replays the legacy corpus from the
-    ``place_link`` / ``close_matches`` tables into the Pitt-side SQLite
-    hard-link overlay queried by the gateway.
+    the platform (``POST /api/links``, rules in ``api/attestations.py``). It is
+    *not* the source read by the ingest pipeline's Batch 12
+    ``contributor_replay.py`` for the legacy corpus (``place_link`` /
+    ``close_matches``); the replay's part B reads this table as well.
 
-    Live forwarding to the gateway is wired via the ``api/signals.py``
-    post_save / post_delete handlers (``crc_post_link`` /
-    ``crc_delete_link``, registered in ``ApiConfig.ready()``), but end-to-end
-    sync is still pending the gateway-side ``/api/links`` receiver, which does
-    not yet exist in the indexing repo. Until that lands, forwarding is a
-    best-effort no-op on the receiving side.
+    Active rows are forwarded to the gateway's ``/api/links`` receiver by the
+    ``api/signals.py`` post_save / post_delete handlers (``crc_post_link`` /
+    ``crc_delete_link``, registered in ``ApiConfig.ready()``), best-effort, and
+    only from the production context (``crc_client._link_writes_allowed``). A
+    row leaving ``active`` (including ``withdrawn``) is revoked there.
 
     Constraints:
       * ``place_a < place_b`` (canonical ordering, enforced both in code
@@ -111,6 +109,7 @@ class ContributorAttestation(models.Model):
         ("pending",    "pending"),    # in-scope for owner only (Master Plan §7.4)
         ("rejected",   "rejected"),   # editorially rejected; timer resumes
         ("superseded", "superseded"), # replaced by a newer assertion
+        ("withdrawn",  "withdrawn"),  # taken back by its author or by dataset deletion
     ]
 
     user = models.ForeignKey(
@@ -137,6 +136,7 @@ class ContributorAttestation(models.Model):
     # (Batch 13b). Propagated through to the SQLite ``source_id`` suffix so
     # the gateway can filter without rejoining DO.
     legacy_v3_2 = models.BooleanField(default=False, db_index=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
