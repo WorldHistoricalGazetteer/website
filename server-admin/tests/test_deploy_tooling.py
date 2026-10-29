@@ -224,5 +224,46 @@ class TemplateAndLoaderTests(unittest.TestCase):
         self.assertNotIn('/home/whgadmin', compose)
 
 
+class TileserverServiceTests(unittest.TestCase):
+    """The tile server service is opt-in (TILES_DIR) and hardened; hosts without TILES_DIR (today's dev and
+    prod) must not get it, because a bind mount of a missing directory would create it root-owned."""
+
+    def services(self, **extra):
+        import yaml
+        from jinja2 import Template
+        text = (ROOT / 'compose/docker-compose-template.j2').read_text()
+        names = set(re.findall(r'{{\s*([A-Za-z_][A-Za-z0-9_]*)', text))
+        values = {n: 'x' for n in names}
+        values.update(ENV_CONTEXT='whgazetteer-org', BRANCH='main', SITES_DIR='/s', DATABASES_DIR='/d',
+                      SUBNET='10.9.0.0/16')
+        for k in ('TILES_DIR', 'TILESERVER_IMAGE', 'TILESERVER_IMAGE_TAG', 'TILESERVER_USER', 'TILESERVER_PORT',
+                  'TILES_MOUNT_OPTS', 'MEM_LIMIT_TILESERVER', 'OLLAMA_NETWORK', 'OLLAMA_HOST_CONTEXT'):
+            values.pop(k, None)
+        values.update(extra)
+        return yaml.safe_load(Template(text).render(values))['services']
+
+    def test_absent_without_tiles_dir(self):
+        self.assertNotIn('tileserver', self.services())
+
+    def test_present_and_hardened_with_tiles_dir(self):
+        svc = self.services(TILES_DIR='/srv/tiles')['tileserver']
+        self.assertEqual(svc['image'], 'maptiler/tileserver-gl-light:v4.7.0')   # pinned, same as the droplet
+        self.assertEqual(svc['user'], '1000:1000')
+        self.assertTrue(svc['read_only'])
+        self.assertEqual(svc['volumes'], ['/srv/tiles:/data:ro'])
+        self.assertEqual(svc['ports'], ['127.0.0.1:8080:8080'])              # loopback only
+        self.assertEqual(svc['command'], ['--config', '/data/configs/config.json'])
+
+    def test_overrides(self):
+        svc = self.services(TILES_DIR='/t', TILESERVER_USER='1001:1001', TILESERVER_PORT='18080',
+                            TILES_MOUNT_OPTS='ro,z', MEM_LIMIT_TILESERVER='512m',
+                            TILESERVER_IMAGE_TAG='v4.8.0')['tileserver']
+        self.assertEqual(svc['user'], '1001:1001')
+        self.assertEqual(svc['volumes'], ['/t:/data:ro,z'])
+        self.assertEqual(svc['ports'], ['127.0.0.1:18080:8080'])
+        self.assertEqual(svc['mem_limit'], '512m')
+        self.assertTrue(svc['image'].endswith(':v4.8.0'))
+
+
 if __name__ == '__main__':
     unittest.main()

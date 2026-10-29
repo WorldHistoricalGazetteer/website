@@ -37,8 +37,12 @@ if ES_READ_ONLY and 'ES_CONN' in globals():
     except Exception as _es_ro_err:  # never let the guard break startup
         print(f'WARNING: ES read-only guard not applied: {_es_ro_err}')
 
+# The DSN comes from the server's env_template.py (GLITCHTIP_DSN) when it sets one, so a rebuilt GlitchTip
+# (which issues a new project key) needs no code change; otherwise it is the production DSN as before.
+# Note the fallback means ANY checkout that boots reports to production GlitchTip unless it sets its own.
 sentry_sdk.init(
-    dsn="https://3e76c8ff5cb9409181fc2ac916b6e0af@errors.whgazetteer.org/1",
+    dsn=globals().get('GLITCHTIP_DSN') or os.environ.get('GLITCHTIP_DSN')
+        or "https://3e76c8ff5cb9409181fc2ac916b6e0af@errors.whgazetteer.org/1",
     integrations=[DjangoIntegration()],
     auto_session_tracking=False,
     traces_sample_rate=0

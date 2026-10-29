@@ -289,6 +289,43 @@ services:
       timeout: 15s
 {% endif %}
 
+{% if TILES_DIR is defined and TILES_DIR %}
+  # Static tile server for tiles.whgazetteer.org (place#335). Rendered only on a host that sets
+  # TILES_DIR in env_template.py, so a host that does not run its own tile server (today's dev and
+  # prod) is unaffected. It serves the MBTiles that the indexing side rsyncs into TILES_DIR; it builds
+  # nothing and writes nothing: the tree is mounted read-only and the container filesystem is
+  # read-only (only /tmp is writable, in memory).
+  #
+  # TILES_DIR has the layout the tile droplet has always had: configs/config.json, fonts/, sprites/,
+  # styles/ and tiles/*.mbtiles (config.json's `options.paths.root` is `../`, i.e. TILES_DIR itself).
+  # It must be owned by the deploy user; the container runs as that uid (TILESERVER_USER, default
+  # 1000:1000) so no root-owned file ever appears in it and the rsync pushes keep working.
+  #
+  # Pinned to the same major version the tile droplet has run (4.7.0). Moving to v5 is a separate,
+  # deliberate step. The port is published on loopback only; the host nginx vhost (deployment repo,
+  # which carries the Origin allow-list and rate limit) is the only way in from outside.
+  # TILES_MOUNT_OPTS lets a SELinux/Podman host say `ro,z`.
+  tileserver:
+    networks:
+      - {{ ENV_CONTEXT }}
+    image: {{ TILESERVER_IMAGE|default('maptiler/tileserver-gl-light') }}:{{ TILESERVER_IMAGE_TAG|default('v4.7.0') }}
+    container_name: tileserver_{{ ENV_CONTEXT }}_{{ BRANCH }}
+    user: "{{ TILESERVER_USER|default('1000:1000') }}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    {% if MEM_LIMIT_TILESERVER is defined %}
+    mem_limit: {{ MEM_LIMIT_TILESERVER }}
+    {% endif %}
+    command: ["--config", "/data/configs/config.json"]
+    volumes:
+      - {{ TILES_DIR }}:/data:{{ TILES_MOUNT_OPTS|default('ro') }}
+    ports:
+      - "127.0.0.1:{{ TILESERVER_PORT|default('8080') }}:8080"
+    restart: unless-stopped
+
+{% endif %}
+
   {% if ENV_CONTEXT == 'local' %}
 
   portainer:
