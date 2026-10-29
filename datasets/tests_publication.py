@@ -183,3 +183,36 @@ class DeleteStillWithdrawsTests(PublicationBase):
         with self.captureOnCommitCallbacks(execute=True):
             self.assertEqual(attestations.withdraw_for_dataset(self.ds.pk), 2)
         self.assertEqual((self.status(active), self.status(pending)), ("withdrawn", "withdrawn"))
+
+
+class V3PrivateRouteTests(PublicationBase):
+    """The v3 metadata form and the admin set ``public`` without datasets.lifecycle. Making
+    a dataset private by those routes must still take its links out of the gateway overlay."""
+
+    def make_private_by_save(self):
+        ds = Dataset.objects.get(pk=self.ds.pk)
+        ds.public = False
+        with mock.patch("datasets.tasks.unindex_from_pub"), \
+                mock.patch("whgmail.messaging.WHGmail"), \
+                mock.patch("datasets.signals.doi"):
+            self.run_on_commit(ds.save)
+
+    def test_a_dataset_made_private_directly_revokes_its_active_links(self):
+        Dataset.objects.filter(pk=self.ds.pk).update(public=True)
+        r = self.row(self.a1, self.b1, status="active")
+        self.m["revoke"].reset_mock()
+        self.make_private_by_save()
+        self.assertEqual(self.status(r), "pending")
+        self.assertEqual(self.m["revoke"].delay.call_count, 1)
+
+    def test_control_a_save_that_leaves_it_public_touches_nothing(self):
+        Dataset.objects.filter(pk=self.ds.pk).update(public=True)
+        r = self.row(self.a1, self.b1, status="active")
+        self.m["revoke"].reset_mock()
+        ds = Dataset.objects.get(pk=self.ds.pk)
+        ds.title = "Renamed"
+        with mock.patch("datasets.tasks.unindex_from_pub"), mock.patch("whgmail.messaging.WHGmail"), \
+                mock.patch("datasets.signals.doi"):
+            self.run_on_commit(ds.save)
+        self.assertEqual(self.status(r), "active")
+        self.m["revoke"].delay.assert_not_called()
