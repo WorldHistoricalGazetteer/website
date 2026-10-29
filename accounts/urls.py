@@ -9,6 +9,7 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
     path('orcid/claim/', views.orcid_claim, name='orcid_claim'),
+    path('orcid/claim/confirm/', views.orcid_claim_confirm, name='orcid_claim_confirm'),
     # Recovering a legacy account that ORCiD enforcement locked its owner out of.
     path('link-legacy/', views_legacy_link.link_legacy, name='link_legacy'),
     path('link-legacy/confirm/', views_legacy_link.link_legacy_confirm, name='link_legacy_confirm'),
