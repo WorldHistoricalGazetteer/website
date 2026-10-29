@@ -184,8 +184,8 @@ def orcid_claim(request):
 # is why it borrows that module's helpers). It never SETS a password: ORCID_ENFORCED exists to
 # retire them, and a reset flow would also bypass the confirmed-address policy.
 CLAIM_SALT = 'accounts.orcid-claim-email'
-CLAIM_MAX_AGE = 60 * 60       # the emailed link is good for an hour; the pending ORCiD sign-in
-CLAIM_SIGNER = TimestampSigner(salt=CLAIM_SALT)  # it completes lives in the session, which is shorter-lived anyway
+CLAIM_MAX_AGE = 60 * 60     # an hour: the pending ORCiD sign-in it completes lives in the session
+CLAIM_SIGNER = TimestampSigner(salt=CLAIM_SALT)
 CLAIM_PER_IP, CLAIM_PER_ORCID = 10, 5
 
 # Identical whether or not an account matched, was confirmed, or the request was throttled.
