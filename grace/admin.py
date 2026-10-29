@@ -21,7 +21,7 @@ from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.db.models import Count
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 
 from users.models import email_lookup_hash
 
@@ -538,6 +538,25 @@ class ProspectFilter(admin.SimpleListFilter):
         return queryset
 
 
+class WhgUploadFilter(admin.SimpleListFilter):
+    """Rows linked to a contributor's upload, and those waiting for an editor
+    (place#334 Appendix E). Reads the upload's ``lifecycle_state`` through the link."""
+
+    title = "WHG upload"
+    parameter_name = "upload"
+
+    def lookups(self, request, model_admin):
+        return [("yes", "Has a WHG upload"),
+                ("awaiting", "Submitted, awaiting an editor")]
+
+    def queryset(self, request, queryset):
+        if self.value() == "yes":
+            return queryset.filter(dataset__isnull=False)
+        if self.value() == "awaiting":
+            return queryset.filter(dataset__lifecycle_state="submitted")
+        return queryset
+
+
 class ReviewInline(admin.TabularInline):
     model = Review
     extra = 0
@@ -587,6 +606,8 @@ class TrackedDatasetForm(forms.ModelForm):
             str(r).split(":", 1)[1] for r in TrackedDataset.objects.filter(
                 registry__id__startswith="whg:").values_list(
                 "registry_id", flat=True))
+        taken.update(str(pk) for pk in TrackedDataset.objects.filter(
+            dataset__isnull=False).values_list("dataset_id", flat=True))
         field = self.fields["start_from"]
         field.queryset = (Dataset.objects.exclude(pk__in=[int(t) for t in taken
                                                           if t.isdigit()])
@@ -621,7 +642,7 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
                     "is_active")
     list_editable = ("stage", "owner", "permission_status")
     #: Widget labels come from UserLabelMixin; this is the read-only column.
-    list_filter = (ProspectFilter, "stage", "permission_status",
+    list_filter = (ProspectFilter, WhgUploadFilter, "stage", "permission_status",
                    ResponsibleFilter, "is_active", "data_format",
                    "geometry_status", "discovery_source", "regions")
     search_fields = ("title", "notes", "registry__id", "registry__name")
@@ -629,13 +650,13 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
                            "permission_status", "discovery_source", "registry",
                            "data_format", "geometry_status", "expected_licence")
     filter_horizontal = ("regions", "people", "reconciled_against")
-    readonly_fields = ("registry_readout", "created_at", "updated_at")
+    readonly_fields = ("registry_readout", "whg_readout", "created_at", "updated_at")
     inlines = [ReviewInline]
     form = TrackedDatasetForm
 
     fieldsets = (
         ("What it is", {
-            "fields": ("title", "registry", "registry_readout"),
+            "fields": ("title", "registry", "registry_readout", "whg_readout"),
             "description": "Leave the Register entry blank while this is a "
                            "prospect. Once set, everything in the read-out is "
                            "maintained by the ingest pipeline — do not retype "
@@ -781,6 +802,52 @@ class TrackedDatasetAdmin(UserLabelMixin, ConnectionsMixin, admin.ModelAdmin):
         url = obj.whg_url
         return format_html('<a href="{}">open</a>', url) if url else "—"
 
+    def save_model(self, request, obj, form, change):
+        # "Start from a dataset already on WHG" also sets the upload link; the
+        # field itself is not on the form (it is set by code, not typed).
+        start = getattr(form, "cleaned_data", {}).get("start_from")
+        if start is not None and obj.dataset_id is None:
+            obj.dataset = start
+        super().save_model(request, obj, form, change)
+
+    @admin.display(description="On WHG")
+    def whg_readout(self, obj):
+        """The contribution as WHG itself holds it, read through the upload link
+        (place#334 Appendix E, slice G0). Nothing here is stored in GRACE. The
+        timeline is the one the contributor sees (``datasets.lifecycle``)."""
+        dataset_id = obj.whg_dataset_id if obj.pk else None
+        if not dataset_id:
+            return "—"
+        from datasets.lifecycle import staff_timeline
+        from datasets.models import Dataset
+        ds = Dataset.objects.filter(pk=dataset_id).select_related("owner").first()
+        if ds is None:
+            # The FK is SET_NULL on delete, so the id comes from the marker; say so
+            # rather than show nothing (Appendix E6).
+            from datasets.models import DatasetLifecycleEvent
+            last = (DatasetLifecycleEvent.objects.filter(dataset_pk=dataset_id)
+                    .order_by("-at").first())
+            when = f" (last recorded {last.at:%d %b %Y})" if last else ""
+            return f"Upload #{dataset_id} has been deleted{when}."
+        rows = [
+            ("Upload", format_html('<a href="/datasets/{}/status">#{} {}</a>',
+                                   ds.pk, ds.pk, ds.label)),
+            ("State", ds.get_lifecycle_state_display() or "not on the v4 lifecycle"),
+            ("v3 status", ds.get_ds_status_display() or "—"),
+            ("Public", "yes" if ds.public else "no"),
+            ("Uploaded", f"{ds.create_date:%d %b %Y}" if ds.create_date else "—"),
+            ("Records", f"{ds.numrows:,}" if ds.numrows else "—"),
+            ("Contributor", user_label(ds.owner) if ds.owner_id else "—"),
+        ]
+        # Values are escaped (format_html_join): the label and names are typed by users.
+        row = "<tr><td style='padding:1px 12px 1px 0;color:#666'>{}</td><td>{}</td></tr>"
+        cells = format_html_join("", row, rows)
+        steps = [(s["at"].strftime("%d %b %Y"),
+                  s["label"] + (f" — {s['actor']}" if s["actor"] else ""))
+                 for s in staff_timeline(ds)]
+        return format_html("<table style='border:0'>{}{}</table>",
+                           cells, format_html_join("", row, steps))
+
     @admin.display(description="Read from the Gazetteer Register")
     def registry_readout(self, obj):
         """Everything the Register already knows. Never stored here."""
@@ -890,10 +957,14 @@ class ReviewOutstandingFilter(admin.SimpleListFilter):
 
     def lookups(self, request, model_admin):
         return [("out", "Out with the reviewer"),
+                ("overdue", "Out, and overdue"),
                 ("unshared", "Returned, author not told"),
                 ("done", "Shared with the author")]
 
     def queryset(self, request, queryset):
+        if self.value() == "overdue":
+            from .models import overdue_review_q
+            return queryset.filter(overdue_review_q())
         if self.value() == "out":
             return queryset.filter(sent_on__isnull=False,
                                    returned_on__isnull=True)

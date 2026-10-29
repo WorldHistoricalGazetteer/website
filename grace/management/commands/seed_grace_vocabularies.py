@@ -141,11 +141,17 @@ SEED = [
     ]),
     (V.ReviewType, [
         ("Internal editorial", 10, {}),
+        # The gate before a contributor may publish (place#334 §4e). Looked up
+        # by its slug, ``pre-publication-qc``, by datasets/lifecycle.py.
+        ("Pre-publication QC", 15, {}),
         # Not worked yet, but the structure allows for it (review §7, Q5).
         ("External peer review", 20, {}),
     ]),
     (V.ReviewRecommendation, [
         ("Pending", 10, {}), ("Approved", 20, {}),
+        # place#334: the outcome that sends a dataset back to its contributor.
+        # "Approved with revisions" keeps its own meaning.
+        ("Changes requested", 25, {}),
         ("Approved with revisions", 30, {}), ("Rejected", 40, {}),
     ]),
     (V.IntakeStatus, [
@@ -253,6 +259,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(
                 "No DiscoverySource with slug 'web-form' — grace.views "
                 "depends on it to mark public submissions."))
+        # datasets/lifecycle.py records the pre-publication review with these.
+        for model, slug in ((V.ReviewType, "pre-publication-qc"),
+                            (V.ReviewRecommendation, "approved"),
+                            (V.ReviewRecommendation, "changes-requested"),
+                            (V.ReviewRecommendation, "rejected")):
+            if not model.objects.filter(slug=slug).exists():
+                self.stdout.write(self.style.ERROR(
+                    f"No {model.__name__} with slug '{slug}' — the dataset "
+                    f"review workflow (datasets.lifecycle) depends on it."))
         for model in (V.Stage, V.EngagementStage, V.ActionItemStatus):
             if not model.objects.filter(is_open=False).exists():
                 self.stdout.write(self.style.WARNING(

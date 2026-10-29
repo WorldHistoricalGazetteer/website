@@ -119,6 +119,9 @@ def _transition(dataset, name, actor, act=None, reason=""):
             dataset=ds, dataset_pk=ds.pk, dataset_label=ds.label or "", from_state=current,
             to_state=to, actor=actor if getattr(actor, "pk", None) else None,
             reason=(reason or "")[:4000], payload=payload)
+    if isinstance(dataset, Dataset) and dataset is not ds:
+        # The caller's instance would otherwise go on reporting the old state.
+        dataset.lifecycle_state, dataset.public = ds.lifecycle_state, ds.public
     return ds, event
 
 
@@ -422,7 +425,8 @@ def status_summary(dataset, viewer):
     the computed "usually by" date while it is waiting. None for strangers."""
     if not dataset.user_has_private_access(viewer):
         return None
-    state = dataset.lifecycle_state
+    state = (Dataset.objects.filter(pk=dataset.pk)
+             .values_list("lifecycle_state", flat=True).first())
     out = {"state": state, "label": STATE_LABELS.get(state), "submitted_on": None,
            "usually_by": None, "sla_days": sla_days()}
     if state in ("submitted", "in_review"):
