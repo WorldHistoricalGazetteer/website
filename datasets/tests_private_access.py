@@ -335,6 +335,31 @@ class DatasetDeleteGateTests(_DatasetRolesMixin, SimpleTestCase):
         dsdel.assert_called_once()
         self.assertEqual(resp.status_code, 302)
 
+    def _delete_with(self, status, accessioned):
+        ds = self.dataset(public=True)
+        ds.ds_status = status
+        view = self._view(make_user(OWNER_ID), ds)
+        view.object = ds
+        with mock.patch("datasets.views.dataset_file_delete"), \
+             mock.patch("datasets.views.removePlacesFromIndex") as unindex, \
+             mock.patch.object(Dataset, "has_accessioned_places", new_callable=mock.PropertyMock,
+                               return_value=accessioned), \
+             mock.patch.object(Dataset, "placeids", new_callable=mock.PropertyMock, return_value=[1, 2]), \
+             mock.patch.object(Dataset, "delete"), \
+             mock.patch("datasets.views.django_reverse", return_value="/dashboard/"):
+            view.form_valid(form=None)
+        return unindex
+
+    def test_a_dataset_part_way_through_accessioning_is_withdrawn_from_the_index(self):
+        """The 2026-10-29 case: status 'accessioning', 4,014 places already in the shared index."""
+        unindex = self._delete_with("accessioning", accessioned=True)
+        unindex.assert_called_once()
+        self.assertEqual(unindex.call_args[0][2], [1, 2])
+
+    def test_a_dataset_never_accessioned_does_not_touch_the_index(self):
+        """Control: the condition is not simply 'always'."""
+        self._delete_with("uploaded", accessioned=False).assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Dataset WRITE endpoints (2026-09-30). Rules: "edit" = Dataset.user_can_edit (owners,
