@@ -80,14 +80,35 @@
                                    placeholder="WHG password" aria-label="WHG password" required>
                         </div>
                         <div class="d-flex align-items-center justify-content-between">
-                            <a href="{% url 'accounts:password_reset' %}" class="text-decoration-none small">
-                                <i class="fas fa-key me-1"></i>Forgot password?
+                            <a class="text-decoration-none small" data-bs-toggle="collapse"
+                               href="#claim-by-email" role="button" aria-expanded="false"
+                               aria-controls="claim-by-email">
+                                <i class="fas fa-envelope me-1"></i>Can't remember your password?
                             </a>
                             <button type="submit" class="btn btn-success py-2">
                                 <i class="fas fa-link me-2"></i>Link my account
                             </button>
                         </div>
                     </form>
+                    <div class="collapse mt-3" id="claim-by-email">
+                        <form method="post" action="{% url 'accounts:orcid_claim' %}" class="border-top pt-3">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="email">
+                            <p class="small text-muted mb-2">
+                                Enter your old WHG username or the email address on that account, and
+                                we will email a link that links the account to your ORCiD iD. We
+                                cannot set a new password: WHG now uses ORCiD to sign in.
+                            </p>
+                            <div class="mb-2">
+                                <input type="text" name="identifier" class="form-control"
+                                       placeholder="WHG username or email address"
+                                       aria-label="WHG username or email address" required>
+                            </div>
+                            <button type="submit" class="btn btn-outline-success py-2">
+                                <i class="fas fa-paper-plane me-2"></i>Email me a link
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>

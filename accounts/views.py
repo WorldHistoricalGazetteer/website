@@ -4,8 +4,9 @@ import traceback
 from django.contrib.auth import get_user_model
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import PasswordResetForm
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.signing import Signer, BadSignature
+from django.core.signing import Signer, BadSignature, TimestampSigner
 from django.http import Http404, JsonResponse
 from django.utils.html import format_html
 from django.views import View
@@ -163,22 +164,10 @@ def orcid_claim(request):
             if legacy is None:
                 messages.error(request, "Invalid WHG username or password.")
                 return redirect('accounts:orcid_claim')
-            if legacy.orcid:
-                messages.error(request, "That WHG account is already linked to an ORCiD.")
-                return redirect('accounts:orcid_claim')
-            if User.objects.filter(orcid=profile['orcid_id']).exclude(pk=legacy.pk).exists():
-                messages.error(request, "This ORCiD is already linked to another account.")
-                return redirect('accounts:orcid_claim')
+            return _complete_claim(request, legacy, profile)
 
-            apply_orcid_profile(legacy, profile)
-            legacy.orcid_linked_at = now()
-            legacy.legacy_login_retired = True
-            legacy.save()
-            request.session.pop('pending_orcid', None)
-            auth.login(request, legacy, backend='django.contrib.auth.backends.ModelBackend')
-            logger.info(f"Linked ORCiD {profile['orcid_identifier']} to legacy account {legacy.pk}")
-            messages.success(request, "Your existing WHG account is now linked to your ORCiD.")
-            return redirect('home')
+        if action == 'email':
+            return _claim_by_email(request, profile)
 
         return redirect('accounts:orcid_claim')
 
@@ -189,6 +178,109 @@ def orcid_claim(request):
     })
 
 
+# Claim by emailed link: for the legacy user who cannot remember the old password. Control of the
+# account's confirmed mailbox stands in for the password, on the same footing as the recovery
+# flow in accounts.views_legacy_link (and sharing its throttles and no-enumeration rules, which
+# is why it borrows that module's helpers). It never SETS a password: ORCID_ENFORCED exists to
+# retire them, and a reset flow would also bypass the confirmed-address policy.
+CLAIM_SALT = 'accounts.orcid-claim-email'
+CLAIM_MAX_AGE = 60 * 60       # the emailed link is good for an hour; the pending ORCiD sign-in
+CLAIM_SIGNER = TimestampSigner(salt=CLAIM_SALT)  # it completes lives in the session, which is shorter-lived anyway
+CLAIM_PER_IP, CLAIM_PER_ORCID = 10, 5
+
+# Identical whether or not an account matched, was confirmed, or the request was throttled.
+CLAIM_EMAIL_SENT = ("If an older WHG account matches what you entered and we can reach it by email, "
+                    "we have sent that address a link. It may take a few minutes; check the spam "
+                    "folder. If nothing arrives, use the Contact link in the page footer and we "
+                    "will help you link the account.")
+
+
+def _complete_claim(request, legacy, profile):
+    """Attach the pending ORCiD to ``legacy``, sign in, and finish. Shared by both proofs."""
+    from accounts.orcid import apply_orcid_profile
+    from django.utils.timezone import now
+
+    if legacy.orcid:
+        messages.error(request, "That WHG account is already linked to an ORCiD.")
+        return redirect('accounts:orcid_claim')
+    if User.objects.filter(orcid=profile['orcid_id']).exclude(pk=legacy.pk).exists():
+        messages.error(request, "This ORCiD is already linked to another account.")
+        return redirect('accounts:orcid_claim')
+
+    apply_orcid_profile(legacy, profile)
+    legacy.orcid_linked_at = now()
+    legacy.legacy_login_retired = True
+    legacy.save()
+    request.session.pop('pending_orcid', None)
+    auth.login(request, legacy, backend='django.contrib.auth.backends.ModelBackend')
+    logger.info(f"Linked ORCiD {profile['orcid_identifier']} to legacy account {legacy.pk}")
+    messages.success(request, "Your existing WHG account is now linked to your ORCiD.")
+    return redirect('home')
+
+
+def _claim_by_email(request, profile):
+    from accounts import views_legacy_link as ll
+
+    identifier = request.POST.get('identifier', '').strip()
+    # Count before looking anything up, so the limits cannot be mapped by what is cheap.
+    over_ip = ll._bump(f'claim-ip:{ll._client_ip(request)}', ll.HOUR) > CLAIM_PER_IP
+    over_orcid = ll._bump(f"claim-orcid:{profile['orcid_id']}", ll.DAY) > CLAIM_PER_ORCID
+    legacy = ll._find_legacy(identifier)
+    if (legacy and legacy.email and legacy.email_confirmed and legacy.is_active
+            and not (over_ip or over_orcid)
+            and ll._bump(f'mail-to:{legacy.email_hash}', ll.MAIL_PER_TARGET_WINDOW) <= ll.MAIL_PER_TARGET):
+        token = CLAIM_SIGNER.sign(f"{legacy.pk}:{profile['orcid_id']}")
+        url = request.build_absolute_uri(reverse('accounts:orcid_claim_confirm') + f'?token={token}')
+        try:
+            WHGmail(request, {
+                'template': 'legacy_claim_verification',
+                'subject': 'Link your World Historical Gazetteer account',
+                'to_email': legacy.email,
+                'greeting_name': legacy.name or legacy.username,
+                'confirm_url': url,
+                'legacy_username': legacy.username,
+                'user': legacy,
+                # A live token and the recipient's address: never mirror this to Zulip.
+                'mirror_to_zulip': False,
+            })
+        except Exception as e:
+            logger.error("orcid-claim email failed for pk=%s: %s", legacy.pk, type(e).__name__)
+    elif legacy:
+        # Not enumerable by the user (the message is the same), but visible to us.
+        logger.info("orcid-claim email NOT sent for pk=%s (confirmed=%s active=%s throttled=%s)",
+                    legacy.pk, legacy.email_confirmed, legacy.is_active, over_ip or over_orcid)
+    messages.info(request, CLAIM_EMAIL_SENT)
+    return redirect('accounts:orcid_claim')
+
+
+def orcid_claim_confirm(request):
+    """Arrive from the emailed link. The pending ORCiD sign-in must be in THIS browser session."""
+    token = request.GET.get('token', '')
+    try:
+        legacy_pk, orcid_id = CLAIM_SIGNER.unsign(token, max_age=CLAIM_MAX_AGE).split(':', 1)
+        legacy_pk = int(legacy_pk)
+    except (BadSignature, ValueError):      # SignatureExpired is a BadSignature
+        messages.error(request, "That link is invalid or has expired. Please start again.")
+        return redirect('accounts:login')
+
+    profile = request.session.get('pending_orcid')
+    if not profile:
+        messages.error(request, "Open this link in the same browser where you signed in with ORCiD. "
+                                "Sign in with ORCiD again, choose \u201cI already have a WHG account\u201d, "
+                                "and request a new link.")
+        return redirect('accounts:login')
+    if profile['orcid_id'] != orcid_id:
+        messages.error(request, "That link was requested for a different ORCiD iD.")
+        return redirect('accounts:orcid_claim')
+
+    legacy = User.objects.filter(pk=legacy_pk).first()
+    if not legacy or not legacy.is_active:
+        messages.error(request, "That account can no longer be linked.")
+        return redirect('accounts:orcid_claim')
+    return _complete_claim(request, legacy, profile)
+
+
+
 def logout(request):
     if request.method == 'POST':
         request.session.pop('username_for_reset', None)
@@ -196,8 +288,33 @@ def logout(request):
         return redirect('home')
 
 
+class WHGPasswordResetForm(PasswordResetForm):
+    """Look the user up by the email lookup hash.
+
+    Django's form filters ``email__iexact``, which can never match the encrypted ``User.email``
+    column, so for every user it found nobody, mailed nobody, and still reported success.
+    """
+
+    def get_users(self, email):
+        user = User.objects.by_email(email)
+        if user and user.is_active and user.has_usable_password():
+            yield user
+
+
 class CustomPasswordResetView(auth_views.PasswordResetView):
     template_name = 'register/password_reset_form.html'
+    form_class = WHGPasswordResetForm
+
+    def dispatch(self, request, *args, **kwargs):
+        # Where ORCiD is enforced a password is worthless for signing in, and a reset would
+        # reopen the password route that the confirmed-address policy on the claim page
+        # deliberately closes. Say so instead of accepting an address and doing nothing.
+        if settings.ORCID_ENFORCED:
+            messages.info(request, "WHG no longer uses passwords: sign in with ORCiD. If you had an "
+                                   "account before ORCiD sign-in, choose \u201cI already have a WHG "
+                                   "account\u201d after signing in with ORCiD.")
+            return redirect('accounts:login')
+        return super().dispatch(request, *args, **kwargs)
 
     def get_success_url(self):
         return reverse('accounts:password_reset_done')

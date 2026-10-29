@@ -1,0 +1,28 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>Someone signed in to World Historical Gazetteer with an ORCiD iD and asked to link it to
+       your older account, <strong>{{ legacy_username }}</strong>.</p>
+
+    <p>If that was you, click below to confirm. Your older account, with its datasets,
+       collections and other work, will be linked to that ORCiD iD, and from then on you will sign
+       in with ORCiD.</p>
+
+    <p>
+      <a href="{{ confirm_url }}" style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px;">
+        Link my account
+      </a>
+    </p>
+
+    <p>Or copy and paste this link into your browser:</p>
+    <p>{{ confirm_url }}</p>
+
+    <p><strong>Open the link in the same browser</strong> where you signed in with ORCiD. If you
+       closed that window, sign in with ORCiD again, choose &ldquo;I already have a WHG
+       account&rdquo; and ask for a new link.</p>
+
+    <p>This link will expire in one hour.</p>
+
+    <p><strong>If this wasn't you, do nothing.</strong> Your account is unchanged and no one can
+       link it without clicking this link.</p>
+{% endblock %}
