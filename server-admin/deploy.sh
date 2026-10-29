@@ -64,7 +64,12 @@ run_admin_py() {
 # podman-compose label containers with com.docker.compose.service. $1 = container-name prefix.
 whg_image_services() {
     docker ps --filter "name=$1" --format '{{.Image}}|{{.Label "com.docker.compose.service"}}' \
-        | awk -F'|' -v img="$WHG_IMAGE" '$2 != "" && ($1 == img || index($1, img ":") == 1) { print $2 }' \
+        | awk -F'|' -v img="$WHG_IMAGE" '
+            # Docker prints the image as written; Podman qualifies it (docker.io/worldhistoricalgazetteer/web:1.0.20).
+            # Accept the repo at the start or after a registry prefix, with or without a tag.
+            { i = index($1, img) }
+            $2 != "" && i > 0 && (i == 1 || substr($1, i - 1, 1) == "/") &&
+              (length($1) == i + length(img) - 1 || substr($1, i + length(img), 1) == ":") { print $2 }' \
         | sort -u
 }
 
