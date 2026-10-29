@@ -153,6 +153,8 @@ services:
     env_file: {{ BASE_DIR }}/.env/.env
     environment:
       - DJANGO_SETTINGS_MODULE=whg.settings
+      # place#338: the default queue plus `recon` (background candidate generation).
+      - CELERY_QUEUES=celery,recon
     depends_on:
       - redis
       - {{ DB_HOST }}
