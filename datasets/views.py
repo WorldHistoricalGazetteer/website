@@ -1058,7 +1058,9 @@ class DatasetDeleteView(LoginRequiredMixin, DeleteView):
     def form_valid(self, form):
         ds = self.object  # set (and permission-checked) by BaseDeleteView.post()
         dataset_file_delete(ds)
-        if ds.ds_status == 'indexed':
+        # Status alone is not enough: a dataset part-way through accessioning ('accessioning')
+        # already has places in the shared index, and deleting it must withdraw them.
+        if ds.ds_status == 'indexed' or ds.has_accessioned_places:
             removePlacesFromIndex(es, 'whg', list(ds.placeids))
         ds.delete()
         return HttpResponseRedirect(self.get_success_url())
