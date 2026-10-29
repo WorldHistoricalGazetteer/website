@@ -327,9 +327,11 @@ class DatasetDeleteGateTests(_DatasetRolesMixin, SimpleTestCase):
              mock.patch("datasets.views.removePlacesFromIndex") as unindex, \
              mock.patch.object(Dataset, "placeids", new_callable=mock.PropertyMock, return_value=[1, 2]), \
              mock.patch.object(Dataset, "delete") as dsdel, \
+             mock.patch("api.attestations.withdraw_for_dataset") as withdraw, \
              mock.patch("datasets.views.django_reverse", return_value="/dashboard/"):
             resp = view.form_valid(form=None)
         files.assert_called_once_with(ds)
+        withdraw.assert_called_once_with(ds.pk)  # its attestations leave the gateway overlay (place#334)
         unindex.assert_called_once()
         self.assertEqual(unindex.call_args[0][2], [1, 2])
         dsdel.assert_called_once()
@@ -346,6 +348,7 @@ class DatasetDeleteGateTests(_DatasetRolesMixin, SimpleTestCase):
                                return_value=accessioned), \
              mock.patch.object(Dataset, "placeids", new_callable=mock.PropertyMock, return_value=[1, 2]), \
              mock.patch.object(Dataset, "delete"), \
+             mock.patch("api.attestations.withdraw_for_dataset"), \
              mock.patch("datasets.views.django_reverse", return_value="/dashboard/"):
             view.form_valid(form=None)
         return unindex

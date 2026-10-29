@@ -27,6 +27,7 @@ from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.response import Response
 
+from api import attestations
 from api.authentication import AuthenticatedAPIView
 from api.models import ContributorAttestation, GazetteerRegistryEntry
 
@@ -327,15 +328,14 @@ class ContributorAttestationView(AuthenticatedAPIView):
           "place_a":        "wd:Q90",
           "place_b":        "gn:2988507",
           "relation_type":  "sameAs",
-          "justification":  "...",
-          "status":         "active"      // optional, default 'active'
+          "justification":  "..."
         }
 
-    The post_save signal on ``ContributorAttestation`` forwards the new
-    row to the gateway's ``/api/links`` endpoint (best-effort) so the
-    Pitt SQLite hard-link overlay stays in sync without waiting for the
-    next batch run. ``DELETE`` revokes by id and triggers the
-    corresponding gateway delete.
+    ``status`` and ``legacy_v3_2`` in the body are ignored. Both places and the
+    dataset must be visible to the caller (``api/attestations.py``). The
+    post_save signal forwards the new row to the gateway's ``/api/links``
+    endpoint (best-effort, production context only). ``DELETE`` withdraws by id:
+    the row is kept with status ``withdrawn`` and revoked from the gateway.
     """
 
     http_method_names = ["get", "post", "delete", "options"]
@@ -347,6 +347,7 @@ class ContributorAttestationView(AuthenticatedAPIView):
         rows = list(
             ContributorAttestation.objects
             .filter(user=request.user)
+            .exclude(status="withdrawn")
             .order_by("-modified_at")
             .values("id", "dataset_id", "place_a", "place_b",
                     "relation_type", "status", "asserted_at",
@@ -363,26 +364,9 @@ class ContributorAttestationView(AuthenticatedAPIView):
             return Response({"error": "JSON body required"},
                             status=status.HTTP_400_BAD_REQUEST)
         try:
-            row = ContributorAttestation.objects.create(
-                user=request.user,
-                dataset_id=str(body["dataset_id"]),
-                place_a=str(body["place_a"]),
-                place_b=str(body["place_b"]),
-                relation_type=str(body["relation_type"]),
-                justification=body.get("justification"),
-                status=str(body.get("status") or "active"),
-                legacy_v3_2=bool(body.get("legacy_v3_2", False)),
-            )
-        except KeyError as exc:
-            return Response(
-                {"error": f"missing field: {exc}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        except Exception as exc:
-            return Response(
-                {"error": f"{type(exc).__name__}: {exc}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            row, created = attestations.create(request.user, body)
+        except attestations.AttestationRefused as exc:
+            return Response({"error": exc.message}, status=exc.status)
         return Response({
             "id": row.id,
             "dataset_id": row.dataset_id,
@@ -391,9 +375,10 @@ class ContributorAttestationView(AuthenticatedAPIView):
             "relation_type": row.relation_type,
             "status": row.status,
             "asserted_at": row.asserted_at.isoformat(),
-        }, status=status.HTTP_201_CREATED)
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     def delete(self, request, *args, **kwargs):
+        """Withdraw, not delete: the row is kept as the record and revoked from the gateway."""
         if not request.user.is_authenticated:
             return Response({"error": "auth required"},
                             status=status.HTTP_401_UNAUTHORIZED)
@@ -404,8 +389,8 @@ class ContributorAttestationView(AuthenticatedAPIView):
                             status=status.HTTP_400_BAD_REQUEST)
         try:
             row = ContributorAttestation.objects.get(id=row_id, user=request.user)
-        except ContributorAttestation.DoesNotExist:
+        except (ContributorAttestation.DoesNotExist, ValueError):
             return Response({"error": "not found"},
                             status=status.HTTP_404_NOT_FOUND)
-        row.delete()
-        return Response({"deleted": row_id})
+        attestations.withdraw(row)
+        return Response({"deleted": row_id, "status": row.status})
