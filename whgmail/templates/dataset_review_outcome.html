@@ -1,0 +1,18 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>The WHG team has reviewed your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>].</p>
+    {% if outcome == "accept" %}
+    <p>It has been <b>accepted</b>. You can now publish it whenever you are ready, from your dataset's page. Publishing makes it public, and makes public the links you have made between its records and others.</p>
+    {% elif outcome == "request_changes" %}
+    <p>Before it can be accepted, the editor has asked for some <b>changes</b>:</p>
+    <blockquote>{{ comments|linebreaksbr }}</blockquote>
+    <p>Once you have made them, submit it for review again from your dataset's page.</p>
+    {% else %}
+    <p>We are sorry: the editor has <b>not accepted</b> this dataset for publication, for this reason:</p>
+    <blockquote>{{ comments|linebreaksbr }}</blockquote>
+    <p>Your dataset is still yours, and still private. If you upload a revised version you can submit it again.</p>
+    {% endif %}
+    {% if outcome == "accept" and comments %}<p>The editor added: {{ comments|linebreaksbr }}</p>{% endif %}
+    <p>If you have any questions, please contact our editor at {{ reply_to }}.</p>
+{% endblock %}
