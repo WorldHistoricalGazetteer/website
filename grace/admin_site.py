@@ -63,7 +63,7 @@ class GraceAdminSite(admin.AdminSite):
         that only counts things is not that.
         """
         from .models import Person, Engagement, Review, SourceSuggestion, \
-            TrackedDataset
+            TrackedDataset, overdue_review_q
 
         import datetime
 
@@ -125,6 +125,24 @@ class GraceAdminSite(admin.AdminSite):
                 "level": "bad",
                 "why": "A reviewer has replied and the contributor has not "
                        "been told. From their side nothing has happened.",
+            },
+            {
+                # place#334: submissions read through the upload link.
+                "label": "submission awaiting an editor",
+                "count": TrackedDataset.objects.filter(
+                    dataset__lifecycle_state="submitted").count(),
+                "url": "/grace/admin/grace/trackeddataset/?upload=awaiting",
+                "level": "warn",
+                "why": "A contributor has asked for review and no editor has "
+                       "started it.",
+            },
+            {
+                "label": "review overdue",
+                "count": Review.objects.filter(overdue_review_q()).count(),
+                "url": "/grace/admin/grace/review/?state=overdue",
+                "level": "bad",
+                "why": "Out for longer than the review service level, in "
+                       "working days. Computed from the date it was sent.",
             },
             {
                 "label": "privacy notice due",

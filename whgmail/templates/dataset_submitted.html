@@ -1,0 +1,8 @@
+{% extends "base_email.html" %}
+
+{% block content %}
+    <p>Thank you for submitting your dataset, "{{ dataset_title }}" [<i>Label: {{ dataset_label }}; ID: {{ dataset_id }}</i>], for review by the WHG team.</p>
+    <p>An editor will read the automatic checks, look at a sample of your records on the map, and check the licence and any sensitivity you declared. Reviews usually take up to {{ sla_days }} working days, so you should hear from us by about {{ usually_by }}.</p>
+    <p>Your dataset stays private meanwhile, and you can go on linking its records. Links you make stay private until your dataset is published.</p>
+    <p>If you have any questions, please contact our editor at {{ reply_to }}.</p>
+{% endblock %}

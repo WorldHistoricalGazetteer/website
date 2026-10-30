@@ -1563,3 +1563,7 @@ def finalise_task(dataset, user, test_mode, hit_summary, logger):
     except Exception as e:
         logger.error(f"Error in finalizing task for dataset {dataset.id}: {e}", exc_info=True)
         raise e
+
+
+# place#338: background candidate generation (queue `recon`); imported so autodiscovery registers it.
+from datasets.tasks_candidates import generate_candidates  # noqa: E402,F401

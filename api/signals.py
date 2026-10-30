@@ -1,11 +1,13 @@
 import logging
 
+from django.db import transaction
 from django.db.models.signals import post_save, post_delete, m2m_changed
 from django.dispatch import receiver
 
-from api.crc_client import crc_delete_link, crc_post_link
+from api.attestations import invalidate_concordances
 from api.download_file import invalidate_and_rebuild_cache, FileCache
 from api.models import ContributorAttestation
+from api.tasks import forward_attestation_post, forward_attestation_revoke
 from collection.models import Collection
 from datasets.models import Dataset
 
@@ -58,57 +60,32 @@ def collection_places_changed(sender, instance, action, pk_set, **kwargs):
 # scope filtering at request time, never via the public hard-link store.
 
 
-def _attestation_payload(instance: ContributorAttestation) -> dict:
-    asserted_at = instance.asserted_at.isoformat() if instance.asserted_at else None
-    return {
-        "place_a": instance.place_a,
-        "place_b": instance.place_b,
-        "relation_type": instance.relation_type,
-        "source_category": "contributor",
-        "source_id": instance.source_id(),
-        "asserted_at": asserted_at,
-        "justification": instance.justification or None,
-    }
+def _forward(task, *args):
+    """Queue a gateway forward after the transaction commits (a rolled-back write must
+    not reach the overlay) and never raise into the caller: a broker outage must not fail
+    an attestation write, and the next replay reconciles."""
+    def run():
+        try:
+            task.delay(*args)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("attestation forward could not be queued: %s", exc)
+    transaction.on_commit(run)
 
 
 @receiver(post_save, sender=ContributorAttestation)
 def attestation_saved(sender, instance, created, **kwargs):
-    # Only the publishable subset is forwarded; pending/rejected stay
-    # in-platform only.
-    if instance.status != "active":
-        # If a previously-active row has been transitioned out of 'active'
-        # we revoke it from the gateway so the public store reflects the
-        # new state.
-        if not created:
-            payload = {
-                "place_a": instance.place_a,
-                "place_b": instance.place_b,
-                "relation_type": instance.relation_type,
-                "source_id": instance.source_id(),
-            }
-            try:
-                crc_delete_link(payload)
-            except Exception as exc:
-                logger.warning("attestation_saved revoke forward failed: %s", exc)
-        return
-    try:
-        crc_post_link(_attestation_payload(instance))
-    except Exception as exc:
-        logger.warning("attestation_saved forward failed: %s", exc)
+    invalidate_concordances(instance)
+    # Only the publishable subset is forwarded; pending/rejected stay in-platform only.
+    if instance.status == "active":
+        _forward(forward_attestation_post, instance.pk)
+    elif not created:
+        # A previously-active row has left 'active': revoke it from the gateway so the
+        # public store reflects the new state. (Revoking a row never forwarded is a no-op.)
+        _forward(forward_attestation_revoke, instance.gateway_key())
 
 
 @receiver(post_delete, sender=ContributorAttestation)
 def attestation_deleted(sender, instance, **kwargs):
-    if instance.status != "active":
-        # Never forwarded in the first place.
-        return
-    payload = {
-        "place_a": instance.place_a,
-        "place_b": instance.place_b,
-        "relation_type": instance.relation_type,
-        "source_id": instance.source_id(),
-    }
-    try:
-        crc_delete_link(payload)
-    except Exception as exc:
-        logger.warning("attestation_deleted forward failed: %s", exc)
+    invalidate_concordances(instance)
+    if instance.status == "active":
+        _forward(forward_attestation_revoke, instance.gateway_key())

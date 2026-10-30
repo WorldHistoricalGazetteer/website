@@ -97,6 +97,12 @@ def handle_public_flag(sender, instance, **kwargs):
             else:
                 # Changed from True to False, remove the records from the index
                 transaction.on_commit(lambda: unindex_from_pub.delay(instance.id))
+                # Links that name this dataset's records go back to pending and are revoked
+                # from the gateway overlay, whichever route made the dataset private (the
+                # v3 metadata form and admin do not go through datasets.lifecycle). One save
+                # per row, so each revocation is queued (place#334).
+                from api.attestations import deactivate_for_dataset
+                deactivate_for_dataset(instance.id, reason="dataset made private")
                 # notify the owner
                 owner = instance.owner
                 WHGmail(context={

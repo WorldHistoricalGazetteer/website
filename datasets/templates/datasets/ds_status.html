@@ -4,6 +4,7 @@
 
 {% load mathfilters %}
 {% load dataset_extras %}
+{% load match_feed_tags %}
 
 {% block extra_head %}
   <script src="{% static 'celery_progress/celery_progress.js' %}"></script>
@@ -337,6 +338,7 @@
                   {% endif %}
               </table>
             </div>
+            {% links_progress ds %}
             <div id="ds_options" class="pt-0 px-0 ds-card">
               <p class="ds-card-header">Options</p>
               <div class="form-check form-switch">

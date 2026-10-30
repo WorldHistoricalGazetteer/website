@@ -45,6 +45,7 @@
     <meta name="user-affiliation" content="{{ user.affiliation|default:'' }}">
     <meta name="beta-user" content="{% if user.can_access_beta %}1{% else %}0{% endif %}">
     <meta name="user-role" content="{% if user.is_staff %}staff{% elif user.can_access_beta %}beta{% endif %}">
+    {% if user.is_authenticated and user.can_access_beta %}<meta name="whg-link-enabled" content="1">{% endif %}
     <link rel="shortcut icon" type="image/png" href="{% static 'images/favicon.ico' %}"/>
     {% block schema_org %}
     <script type="application/ld+json">

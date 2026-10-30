@@ -15,6 +15,7 @@
 import { getPreferredLanguage } from './languages.js';
 import { variantLabels } from './toponyms.js';
 import { encodeRecipeToken } from './locus_recipe.js';
+import { linkButtonHtml } from './attest.js';
 import { ATLAS_DEFAULT_CLUSTERING, ATLAS_DEFAULT_MATCH_MODE } from './atlas_cluster_defaults.js';
 
 // Popup data is fetched from ``/entity/place:{id}/api?variant=popup`` which
@@ -693,12 +694,6 @@ function renderAttribution(data) {
         </div>`;
 }
 
-/** Per-place action bar for the popup: an "Attest" button for asserting
- *  attestations (hard links) about this place. The authoring flow is being
- *  built as part of the Collaborative Workbench; for now the button is enabled
- *  for signed-in users (click explains what's coming) and disabled with an
- *  explanatory tooltip for anonymous users. Shared with the geometry-less
- *  overlay via renderAttestControl(). */
 /* Native share sheet available *and* worth offering (place#155 follow-up).
    `navigator.share()` opens the OS share sheet — Messages/SMS, WhatsApp, Signal,
    email — which is what "share a pin" means on a phone. The message is sent by the
@@ -777,8 +772,10 @@ export function singleRecordLocusUrl(placeId, title) {
 
 /** The beta actions for one record as HTML ('' for a non-beta viewer).
  *  ``cls`` is the surface's class prefix ('popup' or 'pl'). */
-export function recordActionsHtml(placeId, title, recordUrl, cls) {
-    if (!isBetaUser() || !placeId) return '';
+export function recordActionsHtml(placeId, title, recordUrl, cls, extra = '') {
+    // ``extra``: a control shown whatever the beta flag says (the Place List's Link).
+    if (!placeId) return '';
+    if (!isBetaUser()) return extra ? `<span class="${cls}-rec-actions">${extra}</span>` : '';
     const t = typeof title === 'string' ? title.trim() : '';
     const parts = [];
     if (typeof recordUrl === 'string' && RECORD_URL_RE.test(recordUrl)) {
@@ -798,28 +795,24 @@ export function recordActionsHtml(placeId, title, recordUrl, cls) {
             + ` data-bs-toggle="tooltip" data-bs-title="Search for similar records" aria-label="Search for similar records">`
             + '<i class="fa-solid fa-magnifying-glass"></i></button>');
     }
+    if (extra) parts.push(extra);
     return parts.length ? `<span class="${cls}-rec-actions">${parts.join('')}</span>` : '';
 }
 
-// What an attestation can cover — surfaced in the button tooltip so users
-// understand the breadth.
-const ATTEST_SCOPE = "its name(s), dates, geometry, place types, external links and relations to other places";
-
-export function renderAttestControl(placeId) {
-    if (!placeId) return '';
-    // Attestation is planned, not built (Collaborative Workbench). Shown, but
-    // visibly disabled and tagged "planned", for everyone. aria-disabled (not
-    // the `disabled` attribute, which sets pointer-events:none and would kill
-    // the hover) so the advisory tooltip still fires; tt-advisory so the "Show
-    // control tooltips" opt-out doesn't suppress it.
-    return `<button type="button" class="btn btn-sm whg-attest-btn whg-attest-off" aria-disabled="true"
-                    data-bs-toggle="tooltip" data-bs-custom-class="tt-advisory"
-                    data-bs-title="Planned, not yet available: attesting a place, to assert or correct ${esc(ATTEST_SCOPE)}.">`
-        + '<i class="fas fa-file-signature me-1"></i>Attest <span class="whg-planned-tag">planned</span></button>';
+/** The popup's "Link" control (place#337): one step of attest.js's two-step pick,
+ *  so this place can be linked with another ("Same place" / "Not the same place").
+ *  '' unless the page enables linking (<meta name="whg-link-enabled">) and the
+ *  place has a usable id. Shared with the geometry-less overlay (atlas.js). */
+export function renderAttestControl(placeId, title) {
+    return linkButtonHtml({ target: placeId, targetLabel: title || placeId,
+        cls: 'btn btn-sm whg-attest-btn' });
 }
 
-function renderActions(data) {
-    const control = renderAttestControl(data && data.place_id);
+function renderActions(data, requestedId) {
+    const lpf = isLpfFeature(data);
+    const placeId = (data && data.place_id) || (lpf ? requestedId : '');
+    const title = (data && data.title) || (lpf ? data.properties.title : '') || placeId;
+    const control = renderAttestControl(placeId, title);
     if (!control) return '';
     return `<div class="popup-actions">${control}</div>`;
 }
@@ -859,7 +852,7 @@ function renderPopup(data, requestedId) {
         ${renderDepictionGallery(data)}
     </div>
     ${renderAttribution(data)}
-    ${renderActions(data)}
+    ${renderActions(data, requestedId)}
 </div>`;
 }
 

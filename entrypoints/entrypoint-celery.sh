@@ -12,5 +12,7 @@ source /app/entrypoints/wait_for_db.sh
 wait_for_db
 
 echo "Starting Celery worker..."
-exec celery -A whg worker --loglevel=debug
+# place#338: also consume the `recon` queue (background candidate generation, CELERY_TASK_ROUTES).
+# Override with CELERY_QUEUES to run a dedicated recon worker.
+exec celery -A whg worker --loglevel=debug -Q "${CELERY_QUEUES:-celery,recon}"
 

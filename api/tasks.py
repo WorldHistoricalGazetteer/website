@@ -17,3 +17,24 @@ def release_embargoes():
     if released:
         logger.info("release_embargoes: released %d embargoed gazetteer(s)", released)
     return released
+
+
+@shared_task
+def forward_attestation_post(attestation_id):
+    """Send one active attestation to the gateway's hard-link overlay. The row is re-read
+    here, so one withdrawn between being queued and being run is not sent. Best-effort: a
+    failure is logged by ``crc_post_link`` and reconciled by the next ``contributor_replay``
+    run (the overlay is rebuildable from Postgres)."""
+    from api.crc_client import crc_post_link
+    from api.models import ContributorAttestation
+    row = ContributorAttestation.objects.filter(pk=attestation_id, status="active").first()
+    if row is None:
+        return False
+    return crc_post_link(row.gateway_payload())
+
+
+@shared_task
+def forward_attestation_revoke(key):
+    """Remove one attestation from the gateway overlay (``key`` = ``gateway_key()``)."""
+    from api.crc_client import crc_delete_link
+    return crc_delete_link(key)

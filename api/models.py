@@ -76,6 +76,22 @@ class UserAPIProfile(models.Model):
 # ---------------------------------------------------------------------------
 
 
+class AttestationBundle(models.Model):
+    """A set of attestations made in one act (a Locus acceptance, a feed page, an
+    import), so they can be shown, explained and withdrawn together (place#334 §4a)."""
+
+    KIND_CHOICES = [("locus", "locus"), ("feed", "feed"), ("import", "import")]
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                             related_name="attestation_bundles")
+    kind = models.CharField(max_length=12, choices=KIND_CHOICES)
+    note = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.kind} bundle {self.pk} by {self.user_id}"
+
+
 class ContributorAttestation(models.Model):
     """A user-asserted hard link between two indexed places.
 
@@ -119,7 +135,8 @@ class ContributorAttestation(models.Model):
     )
     # Sub-namespaced WHG dataset id (e.g. "whg:1234"). Used by
     # processing/retention_sweep.py to scope the 11/12-month timers.
-    dataset_id = models.CharField(max_length=64, db_index=True)
+    # Blank when neither side is a contributed record (e.g. wd: <-> gn:).
+    dataset_id = models.CharField(max_length=64, db_index=True, blank=True, default="")
 
     place_a = models.CharField(max_length=128, db_index=True)
     place_b = models.CharField(max_length=128, db_index=True)
@@ -137,6 +154,30 @@ class ContributorAttestation(models.Model):
     # the gateway can filter without rejoining DO.
     legacy_v3_2 = models.BooleanField(default=False, db_index=True)
     withdrawn_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+")
+
+    CERTAINTY_CHOICES = [("sure", "sure"), ("probable", "probable"), ("unsure", "unsure")]
+    SUGGESTED_BY_CHOICES = [("manual", "manual"), ("candidate", "candidate"), ("import", "import")]
+    OWNER_REVIEW_CHOICES = [("", "not reviewed"), ("confirmed", "confirmed"), ("disputed", "disputed")]
+    certainty = models.CharField(max_length=8, choices=CERTAINTY_CHOICES, blank=True, default="")
+    suggested_by = models.CharField(max_length=10, choices=SUGGESTED_BY_CHOICES, default="manual")
+    # Frozen evidence shown to the attester when they decided (candidate score, labels, ...).
+    evidence = models.JSONField(default=dict, blank=True)
+    bundle = models.ForeignKey(AttestationBundle, null=True, blank=True,
+                               on_delete=models.SET_NULL, related_name="attestations")
+    superseded_by = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL,
+                                      related_name="supersedes")
+    owner_review = models.CharField(max_length=10, choices=OWNER_REVIEW_CHOICES, blank=True, default="")
+    # Django Place pks of contributed sides, stored because the gateway id of a record
+    # that is not indexed yet cannot be minted (place#334 N2); resolved at publish.
+    place_a_pk = models.BigIntegerField(null=True, blank=True, db_index=True)
+    place_b_pk = models.BigIntegerField(null=True, blank=True, db_index=True)
+    # The suggestion this row was made from, when it came from the contributor feed
+    # (place#338). SET_NULL: regenerating candidates must never touch a person's statement.
+    candidate = models.ForeignKey("datasets.MatchCandidate", null=True, blank=True,
+                                  on_delete=models.SET_NULL, related_name="attestations")
 
     class Meta:
         constraints = [
@@ -169,8 +210,36 @@ class ContributorAttestation(models.Model):
         base = f"contributor:{self.user_id}"
         return f"{base}:legacy_v3_2" if self.legacy_v3_2 else base
 
+    def gateway_key(self) -> dict:
+        """The fields that identify this row in the gateway overlay (its UNIQUE key)."""
+        return {"place_a": self.place_a, "place_b": self.place_b,
+                "relation_type": self.relation_type, "source_id": self.source_id()}
+
+    def gateway_payload(self) -> dict:
+        """The body ``crc_post_link`` sends for this row."""
+        return {**self.gateway_key(), "source_category": "contributor",
+                "asserted_at": self.asserted_at.isoformat() if self.asserted_at else None,
+                "justification": self.justification or None}
+
     def __str__(self):
         return f"{self.user_id}: {self.place_a} <{self.relation_type}> {self.place_b}"
+
+
+class AttestationEvent(models.Model):
+    """Append-only history of an attestation: who did what, when. Rows are never
+    updated or deleted by application code; ``attestation`` is SET_NULL so the history
+    survives a hard delete from the admin."""
+
+    attestation = models.ForeignKey(ContributorAttestation, null=True, on_delete=models.SET_NULL,
+                                    related_name="events")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
+                             related_name="+")
+    action = models.CharField(max_length=20)  # created | reactivated | withdrawn | status
+    at = models.DateTimeField(default=timezone.now)
+    detail = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["id"]
 
 
 class GazetteerRegistryEntryQuerySet(models.QuerySet):

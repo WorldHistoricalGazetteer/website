@@ -1090,6 +1090,10 @@ class AuthorityDatasetsView(AuthenticatedAPIView):
             )
         else:
             qs = Dataset.objects.filter(authority=True)
+        # place#334: a dataset published under the v4 lifecycle is listed whether or not it is
+        # an authority, so the indexing side can select it (lifecycle_state is NULL for every
+        # v3-era dataset: no backfill).
+        qs = qs | Dataset.objects.filter(lifecycle_state="published")
         # place#310: a pending (non-public) dataset is listed only to its circle; the
         # indexing rebuild runs as staff and sees everything, as before.
         qs = qs.filter(visible_datasets_q(request.user))
@@ -1099,7 +1103,7 @@ class AuthorityDatasetsView(AuthenticatedAPIView):
               .order_by("id")
               .values(
                   "id", "title", "label", "description",
-                  "ds_status", "public", "authority",
+                  "ds_status", "public", "authority", "lifecycle_state",
                   "owner_id", "place_count",
                   # place#121: per-item "view at source" template — flows on to
                   # the registry (indexing whg-places sidecar → inventory push).
@@ -1115,7 +1119,7 @@ class AuthorityDatasetsView(AuthenticatedAPIView):
                 d.get("authority") is True
                 and d.get("public") is True
                 and d.get("ds_status") in {"accessioning", "indexed"}
-            )
+            ) or (d.get("lifecycle_state") == "published" and d.get("public") is True)
             d["dataset_status"] = "published" if published else "pending"
 
         results = {"result": datasets}

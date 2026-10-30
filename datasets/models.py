@@ -14,6 +14,7 @@ from django.db.models import JSONField, Exists, OuterRef, Q, Func, CharField, Mi
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.urls import reverse
+from django.utils import timezone
 
 # from django.shortcuts import get_object_or_404
 
@@ -67,6 +68,23 @@ def default_vis_parameters():
     }
 
 
+LIFECYCLE_STATES = [
+    ("uploaded", "Uploaded"),
+    ("validating", "Checking the file"),
+    ("validation_failed", "File needs fixing"),
+    ("draft", "Draft"),
+    ("submitted", "Submitted for review"),
+    ("in_review", "In review"),
+    ("changes_requested", "Changes requested"),
+    ("declined", "Declined"),
+    ("accepted", "Accepted"),
+    ("published", "Published"),
+    ("withdrawn", "Withdrawn"),
+]
+
+SENSITIVITY_ANSWERS = [("no", "No"), ("yes", "Yes"), ("unsure", "Not sure")]
+
+
 # owner = models.ForeignKey('auth.User', related_name='snippets', on_delete=models.CASCADE)
 class Dataset(models.Model):
     owner = models.ForeignKey(
@@ -100,6 +118,12 @@ class Dataset(models.Model):
 
     ds_status = models.CharField(
         max_length=12, null=True, blank=True, choices=STATUS_DS
+    )
+    # v4 lifecycle (place#334 §4e), beside ds_status, which the v3 pages keep reading. Written
+    # only by datasets/lifecycle.py, one transaction per transition, with a DatasetLifecycleEvent
+    # for each. NULL = never entered the v4 lifecycle (every v3-era dataset; no backfill, E6).
+    lifecycle_state = models.CharField(
+        max_length=20, null=True, blank=True, choices=LIFECYCLE_STATES, db_index=True
     )
     featured = models.IntegerField(null=True, blank=True)  #
     core = models.BooleanField(default=False)  # e.g. tgn, geonames, physical geography
@@ -166,6 +190,19 @@ class Dataset(models.Model):
     # plan-record-suggestions §1c). When True the owner is surfaced pending suggestions on their
     # gazetteer (queue + digest); when False, WHG staff remain the review backstop so nothing is lost.
     accept_suggestions = models.BooleanField(default=False)
+
+    # Sensitivity self-declaration (place#334 §4e): two questions the owner answers before
+    # review; a "yes" or "unsure" is flagged to the editor, who considers an embargo. NULL =
+    # not answered. Never copied into GRACE (Appendix E4).
+    sensitivity_indigenous = models.CharField(
+        max_length=8, null=True, blank=True, choices=SENSITIVITY_ANSWERS,
+        help_text="Does this dataset include information about Indigenous peoples, lands or "
+                  "places that their communities may wish to control?")
+    sensitivity_restricted = models.CharField(
+        max_length=8, null=True, blank=True, choices=SENSITIVITY_ANSWERS,
+        help_text="Does it include locations that could cause harm if widely known "
+                  "(sacred or burial sites, vulnerable heritage, private homes)?")
+    sensitivity_note = models.TextField(blank=True, default="")
 
     # these are back-filled
     numlinked = models.IntegerField(null=True, blank=True)
@@ -602,6 +639,34 @@ class Dataset(models.Model):
         ]
 
 
+class DatasetLifecycleEvent(models.Model):
+    """Append-only record of one v4 lifecycle transition (place#334 §4k, Appendix E2).
+
+    Written only by ``datasets/lifecycle.py``, in the same transaction as the state change.
+    ``dataset`` is SET_NULL so the history outlives a deleted dataset; ``dataset_pk`` and
+    ``dataset_label`` say which one it was. ``actor`` NULL with a ``reason`` is the system.
+    ``at`` is naive, like every DateTimeField here (USE_TZ is unset)."""
+
+    dataset = models.ForeignKey(Dataset, null=True, blank=True, on_delete=models.SET_NULL,
+                                related_name="lifecycle_events")
+    dataset_pk = models.IntegerField(db_index=True)
+    dataset_label = models.CharField(max_length=20)
+    from_state = models.CharField(max_length=20, null=True, blank=True)
+    to_state = models.CharField(max_length=20)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name="+")
+    at = models.DateTimeField(default=timezone.now)
+    reason = models.TextField(blank=True, default="")
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "dataset_lifecycle_event"
+        ordering = ["at", "id"]
+
+    def __str__(self):
+        return f"{self.dataset_label}: {self.from_state or '-'} -> {self.to_state}"
+
+
 # TODO: FK to dataset, not dataset_id
 class DatasetFile(models.Model):
     dataset_id = models.ForeignKey(
@@ -687,3 +752,7 @@ def remove_files(**kwargs):
     ds_instance = kwargs.get("instance")
     files = DatasetFile.objects.filter(dataset_id_id=ds_instance.id)
     files.delete()
+
+
+# place#338 (v4 reconciliation Phase 2): match candidates and the contributor feed.
+from datasets.models_matching import CandidateGeneration, MatchCandidate, RecordReviewState  # noqa: E402,F401

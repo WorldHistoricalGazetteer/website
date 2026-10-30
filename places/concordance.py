@@ -109,6 +109,7 @@ PROVENANCE_LABELS = {
     "authid": "matched on a shared authority id",
     "unknown": "provenance unknown",
     "contributed": "in the contributed data",
+    "attested": "linked by a WHG user",
 }
 
 # URL forms of the identifiers the resolver can do something with. Others are
@@ -569,14 +570,14 @@ def cached_concordance(place, user=None) -> Optional[dict]:
     if isinstance(hit, dict):
         if not Place.objects.filter(id=place.id).filter(_visible_places_q()).exists():
             return None
-        return copy.deepcopy(hit)
+        return decorate_for_user(copy.deepcopy(hit), place, user)
     conc = build_concordance(place, user=user)
     if conc is not None and _cacheable(conc):
         try:
             cache.set(key, conc, CONCORDANCE_CACHE_TTL)
         except Exception:  # noqa: BLE001
             pass
-    return copy.deepcopy(conc)
+    return decorate_for_user(copy.deepcopy(conc), place, user)
 
 
 # ---------------------------------------------------------------------------
@@ -615,6 +616,84 @@ def _link_provenance(row) -> dict:
     return {"basis": basis, "label": PROVENANCE_LABELS[basis]}
 
 
+def add_attestation_entries(out, place, rows, user, use_gateway=True, viewer=None):
+    """Add attestation ``rows`` about ``place`` to ``out``: an attester inside the record's
+    dataset circle speaks outbound (tier 1), anyone else inbound (tier 2), and a ``distinct``
+    goes to ``out["distinct"]`` and never aggregates. Each entry carries ``target``, the
+    resolution of the OTHER side, like an outbound place_link. ``attestation._uid`` is the
+    attester's user id for ``decorate_for_user`` to turn into ``mine`` and then remove."""
+    from api.attestations import AGGREGATING, record_ids, row_dict
+    rows = list(rows)
+    if not rows:
+        return
+    mine_ids = record_ids(place)
+    dataset = place.dataset  # Place.dataset_id is the label (FK to_field), not the pk
+    circle = {}
+
+    def in_circle(u):
+        if u.id not in circle:
+            circle[u.id] = bool(dataset and dataset.user_has_private_access(u))
+        return circle[u.id]
+
+    # The other side is resolved by its stored Django pk when it is a WHG record (a
+    # ``whg:<dataset>:<src>`` id is not something ``resolve_targets`` can look up in
+    # Postgres), else by its id.
+    others, lookup = {}, {}
+    for r in rows:
+        a_is_me = r.place_a in mine_ids
+        other = r.place_b if a_is_me else r.place_a
+        if other in mine_ids:
+            continue
+        others[r.id] = other
+        pk = r.place_b_pk if a_is_me else r.place_a_pk
+        lookup[other] = f"{WHG_NS}:{pk}" if pk else other
+    resolved = resolve_targets(sorted(set(lookup.values())), user=user,
+                               use_gateway=use_gateway, exclude_place_id=place.id)
+    resolutions = {other: resolved.get(key) for other, key in lookup.items()}
+    for r in rows:
+        other = others.get(r.id)
+        if other is None:
+            continue
+        d = row_dict(r, viewer)
+        d["_uid"] = r.user_id
+        distinct = r.relation_type == "distinct"
+        tier = 1 if (not distinct and in_circle(r.user)) else 2
+        entry = {
+            "tier": tier, "source": "attestation", "identifier": other, "identifier_raw": None,
+            "namespace": other.split(":", 1)[0], "link_type": r.relation_type, "link_type_raw": None,
+            "aggregates": r.relation_type in AGGREGATING,
+            "provenance": {"basis": "attested", "label": PROVENANCE_LABELS["attested"]},
+            "attested_by": out["record"], "attestation": d,
+            "target": resolutions.get(other),
+        }
+        if distinct:
+            out["distinct"].append(entry)
+        elif tier == 1:
+            out["outbound"].append(entry)
+        else:
+            out["inbound"].append(entry)
+
+
+def decorate_for_user(conc, place, user):
+    """The per-user part of a cached concordance: ``mine`` on attestation entries, and the
+    viewer's own pending attestations (visible to them and their dataset circle only, never
+    cached). Mutates and returns ``conc``."""
+    from api.attestations import pending_rows_visible_to, record_ids
+    if conc is None:
+        return None
+    pending = pending_rows_visible_to(record_ids(place), user)
+    if pending:
+        add_attestation_entries(conc, place, pending, user, viewer=user)
+    uid = getattr(user, "id", None) if getattr(user, "is_authenticated", False) else None
+    for key in ("outbound", "inbound", "distinct"):
+        for e in conc.get(key) or []:
+            a = e.get("attestation")
+            if a is not None:
+                a["mine"] = a.get("mine") or (uid is not None and a.get("_uid") == uid)
+                a.pop("_uid", None)
+    return conc
+
+
 def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[dict]:
     """The concordance of ``place`` as a plain dict, or None when the record
     is not public (private and embargoed datasets never render).
@@ -628,7 +707,7 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
          "outbound": [entry], "inbound": [entry], "cocited": [entry],
          "aggregate": [member], "truncated": {"inbound": bool, "cocited": bool}}
 
-    entry: ``tier, source ("place_link"|"close_matches"), identifier,
+    entry: ``tier, source ("place_link"|"close_matches"|"attestation"), identifier,
     identifier_raw, namespace, link_type, link_type_raw, aggregates,
     provenance {basis, label}, attested_by {record...}`` plus, for tier 1,
     ``target`` (a ``resolve_targets`` resolution) and, for tiers 2-3,
@@ -645,7 +724,7 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
 
     record = _record_summary(place)
     out = {"record": record, "self_identifiers": [], "excluded_self_links": 0,
-           "outbound": [], "inbound": [], "cocited": [], "aggregate": [],
+           "outbound": [], "inbound": [], "cocited": [], "distinct": [], "aggregate": [],
            "truncated": {"inbound": False, "cocited": False}}
 
     # ---- tier 1: outbound place_link ------------------------------------
@@ -813,6 +892,12 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
     out["inbound"].extend(inbound_rows)
     out["cocited"].extend(cocited_rows)
 
+    # ---- attestations (place#334): active ones only here, which are viewer-independent;
+    # the viewer's own pending rows and "mine" are added by ``decorate_for_user``, after
+    # the cache, so a per-user fact never lands in a shared cache entry.
+    from api.attestations import public_rows_about, record_ids
+    add_attestation_entries(out, place, public_rows_about(record_ids(place)), user, use_gateway)
+
     # ---- the aggregated subset: tiers 1-2, exact/closeMatch, resolved ----
     agg: dict = {}
     for e in out["outbound"]:
@@ -825,6 +910,14 @@ def build_concordance(place, user=None, use_gateway: bool = True) -> Optional[di
             agg.setdefault((t["via"], rec["place_id"]), {**rec, "via": t["via"], "tiers": set()})["tiers"].add(1)
     for e in out["inbound"]:
         if not e["aggregates"]:
+            continue
+        if e["source"] == "attestation":
+            # A user's statement, not another record's: it aggregates what it points AT.
+            t = e.get("target") or {}
+            if t.get("status") == "resolved":
+                for rec in t["records"]:
+                    agg.setdefault((t["via"], rec["place_id"]),
+                                   {**rec, "via": t["via"], "tiers": set()})["tiers"].add(2)
             continue
         rec = e["record"]
         agg.setdefault(("postgres", rec["place_id"]), {**rec, "via": "postgres", "tiers": set()})["tiers"].add(2)

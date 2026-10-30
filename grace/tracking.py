@@ -29,8 +29,10 @@ def marker(dataset_id):
 
 
 def tracked_for(dataset_id):
-    """The TrackedDataset already standing for this WHG dataset, if any."""
-    found = TrackedDataset.objects.filter(registry_id=f"whg:{dataset_id}").first()
+    """The TrackedDataset already standing for this WHG dataset, if any: by the
+    upload link first, then the Register entry, then the notes marker."""
+    found = (TrackedDataset.objects.filter(dataset_id=dataset_id).first()
+             or TrackedDataset.objects.filter(registry_id=f"whg:{dataset_id}").first())
     return found or TrackedDataset.objects.filter(
         notes__contains=marker(dataset_id)).first()
 
@@ -39,19 +41,25 @@ def _registry_entry(dataset_id):
     return GazetteerRegistryEntry.objects.filter(pk=f"whg:{dataset_id}").first()
 
 
-def fill_from_dataset(tracked, dataset, added_by=None):
+def fill_from_dataset(tracked, dataset, added_by=None, copy_count=True):
     """Populate blank fields of ``tracked`` from the submitted ``dataset``.
 
     Fills, never overwrites: the form may already carry something a person
     typed. Does not save. Only facts GRACE cannot read through are copied —
     the title and a count are stand-ins for a prospect, and the Register wins
     wherever it has an answer.
+
+    ``copy_count=False`` leaves ``expected_record_count`` empty: that field is
+    what someone *told* us, and an automatic track (at submission, place#334)
+    has been told nothing; the arrived count is read through the upload link.
     """
     if not tracked.title:
         tracked.title = dataset.title
+    if tracked.dataset_id is None:
+        tracked.dataset = dataset
     if tracked.registry_id is None:
         tracked.registry = _registry_entry(dataset.pk)
-    if tracked.expected_record_count is None and dataset.numrows:
+    if copy_count and tracked.expected_record_count is None and dataset.numrows:
         tracked.expected_record_count = dataset.numrows
     if tracked.on_radar_since is None and dataset.create_date:
         tracked.on_radar_since = dataset.create_date.date()
@@ -65,21 +73,28 @@ def fill_from_dataset(tracked, dataset, added_by=None):
     return tracked
 
 
-def track_dataset(dataset, added_by=None):
+def track_dataset(dataset, added_by=None, copy_count=True):
     """Create — or find and tidy — the TrackedDataset for ``dataset``.
 
     Returns ``(tracked, created)``. Idempotent: an existing record is returned
-    as it is, except that a missing Register link is filled in if the entry
-    has since appeared.
+    as it is, except that a missing upload link or Register link is filled in
+    (the latter once the entry has appeared).
     """
     existing = tracked_for(dataset.pk)
     if existing is not None:
+        changed = []
+        if existing.dataset_id is None:
+            existing.dataset = dataset
+            changed.append("dataset")
         if existing.registry_id is None:
             entry = _registry_entry(dataset.pk)
             if entry is not None:
                 existing.registry = entry
-                existing.save(update_fields=["registry", "updated_at"])
+                changed.append("registry")
+        if changed:
+            existing.save(update_fields=changed + ["updated_at"])
         return existing, False
-    tracked = fill_from_dataset(TrackedDataset(), dataset, added_by=added_by)
+    tracked = fill_from_dataset(TrackedDataset(), dataset, added_by=added_by,
+                                copy_count=copy_count)
     tracked.save()
     return tracked, True

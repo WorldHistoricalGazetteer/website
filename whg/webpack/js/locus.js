@@ -29,12 +29,16 @@
 // is fetched (themed cards, enrichment.js), the Wikipedia block is shown only when
 // the gloss payload carries links, and the Environment card is mounted, fetching
 // EDOPS only when someone clicks (its own button, or the cluster card's).
+//
+// Linking (place#337): where the page enables it, each member row carries attest.js's
+// Link pick: Link on one member, then on another, opens the Link sheet for the pair.
 
 import bbox from '@turf/bbox';
 import { fetchJSON, failureHtml, atlasNotice } from './atlasNotice.js';
 import { resolveRecipe, canonicalMemberId } from './locus_resolve.js';
 import '../css/locus.css';
 import { loadGlossCards, locusFetchers, mountEnvironmentCard, renderWikipediaLinks } from './enrichment.js';
+import { linkButtonHtml } from './attest.js';
 
 const RESOLVE_TIMEOUT_MS = 35000;
 
@@ -207,6 +211,7 @@ function renderResult(recipe, data, out) {
             + (range ? `<span class="locus-temporal" title="Attested date range">${escapeHtml(range)}</span>` : '')
             + `<span class="locus-ns">${escapeHtml(m.namespace || '')}</span>`
             + (recipeSet.has(pid) ? `<span class="locus-was-member" title="Listed in the recipe">in recipe</span>` : `<span class="locus-was-member" style="background:#f1f3f5;color:#5a5f64" title="Joined since the recipe was made">new</span>`)
+            + linkButtonHtml({ target: pid, targetLabel: m.title || pid, cls: 'btn btn-link btn-sm p-0 ms-2 align-baseline locus-link-btn' })
             + `</li>`;
     });
     h += `</ul>${counts}${withheld}</div>`;

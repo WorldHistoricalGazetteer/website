@@ -4,7 +4,7 @@ from django.urls import path
 from django.conf.urls.static import static
 from django.conf import settings
 
-from . import views
+from . import views, views_feed, views_lifecycle
 from datasets.utils import download_file, download_dataset, UpdateCountsView, toggle_volunteers
 from .services import write_wd_pass0
 
@@ -38,6 +38,20 @@ urlpatterns = [
   ## MANAGE/VIEW
   # dataset owner pages (tabs); names correspond to template names
   path('<int:id>/status', views.DatasetStatusView.as_view(), name='ds_status'),
+
+  # v4 lifecycle, beta only (place#334 Phase 3): JSON
+  path('<int:dsid>/lifecycle/', views_lifecycle.lifecycle_state, name='lifecycle'),
+  path('<int:dsid>/lifecycle/submit/', views_lifecycle.lifecycle_submit, name='lifecycle-submit'),
+  path('<int:dsid>/lifecycle/publish/', views_lifecycle.lifecycle_publish, name='lifecycle-publish'),
+  path('<int:dsid>/lifecycle/withdraw/', views_lifecycle.lifecycle_withdraw, name='lifecycle-withdraw'),
+  path('<int:dsid>/lifecycle/review/start/', views_lifecycle.lifecycle_review_start,
+       name='lifecycle-review-start'),
+  path('<int:dsid>/lifecycle/review/conclude/', views_lifecycle.lifecycle_review_conclude,
+       name='lifecycle-review-conclude'),
+  path('<int:dsid>/lifecycle/strip-placeholders/', views_lifecycle.lifecycle_strip_placeholders,
+       name='lifecycle-strip-placeholders'),
+  path('<int:dsid>/lifecycle/sensitivity/', views_lifecycle.lifecycle_sensitivity,
+       name='lifecycle-sensitivity'),
   path('<int:id>/metadata', views.DatasetMetadataView.as_view(), name='ds_metadata'),
   path('<int:id>/citation', views.dataset_citation, name='dataset-citation'),
   path('<int:id>/contributions/add', views.dataset_contribution_add, name='ds_contribution_add'),
@@ -47,6 +61,13 @@ urlpatterns = [
   path('<int:id>/collab', views.DatasetCollabView.as_view(), name='ds_collab'),
   path('<int:id>/addtask', views.DatasetAddTaskView.as_view(), name='ds_addtask'),
   path('<int:id>/log', views.DatasetLogView.as_view(), name='ds_log'),
+  # place#338: the contributor feed, "Link your records" (beta-gated, owner circle only)
+  path('<int:id>/matches/', views_feed.feed_page, name='ds_matches'),
+  path('<int:id>/matches/candidates/', views_feed.feed_candidates, name='ds_matches_candidates'),
+  path('<int:id>/matches/review/', views_feed.feed_review, name='ds_matches_review'),
+  path('<int:id>/matches/search/', views_feed.feed_search, name='ds_matches_search'),
+  path('<int:id>/matches/progress/', views_feed.feed_progress, name='ds_matches_progress'),
+  path('<int:id>/matches/regenerate/', views_feed.feed_regenerate, name='ds_matches_regenerate'),
 
   # public dataset pages (tabs): metadata, browse
   # path('<int:pk>', views.DatasetPublicView.as_view(), name='ds_meta'),

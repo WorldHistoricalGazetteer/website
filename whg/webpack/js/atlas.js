@@ -1041,9 +1041,8 @@ Promise.all([
         runPlacesSearchFor(q);
     });
 
-    // "Attest" is a planned feature: the button is rendered aria-disabled with a
-    // "planned" tag (gazetteerInteraction.renderAttestControl), so it needs no
-    // click handler and no "coming soon" toast.
+    // "Link" (gazetteerInteraction.renderAttestControl) is handled by attest.js's
+    // own document delegate, so it needs no handler here.
     // Keep the ?place= link in step with map-driven selections + popup close.
     document.addEventListener('whg:map-place-click', (e) => {
         if (e.detail && e.detail.placeId) updatePlaceUrl(e.detail.placeId);
@@ -2827,9 +2826,9 @@ function renderPortal(place, pid) {
     } else {
         h += `<hr><p class="text-muted small">Not grouped with any other place at the current merge settings.</p>`;
     }
-    // Per-place actions (Attest) — same control as the map popup, for records
+    // Per-place actions (Link) — same control as the map popup, for records
     // that lack geometry and so open in this overlay instead of a popup.
-    const attest = renderAttestControl(pid);
+    const attest = renderAttestControl(pid, place.title || pid);
     if (attest) h += `<div class="portal-actions mt-2 pt-2 border-top">${attest}</div>`;
     document.getElementById('atlas_portal_body').innerHTML = h;
     // Advisory tooltips (e.g. the disabled-anon Attest explanation) need their own
